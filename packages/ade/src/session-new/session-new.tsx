@@ -61,19 +61,63 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
 
   return (
     <section data-component="session-new">
-      <header data-slot="new-bar">
-        <span data-slot="new-workspace">{props.workspace}</span>
-        <span data-slot="new-title">Nuova sessione</span>
-        <Show when={props.path}>{(path) => <span data-slot="new-path">{path()}</span>}</Show>
-        <div data-slot="new-spacer" />
-        <Show when={props.onClose}>
-          <button type="button" data-slot="new-close" onClick={() => props.onClose?.()} aria-label="Chiudi">
-            ✕
-          </button>
-        </Show>
-      </header>
+      <div data-slot="new-column">
+        <header data-slot="new-bar">
+          <div data-slot="new-heading">
+            <h1 data-slot="new-title">Nuova sessione</h1>
+            <span data-slot="new-where">
+              <span data-slot="new-workspace">{props.workspace}</span>
+              <Show when={props.path}>{(path) => <span data-slot="new-path">{path()}</span>}</Show>
+            </span>
+          </div>
+          <div data-slot="new-spacer" />
+          <Show when={props.onClose}>
+            <button type="button" data-slot="new-close" onClick={() => props.onClose?.()} aria-label="Chiudi">
+              ✕
+            </button>
+          </Show>
+        </header>
 
-      <div data-slot="new-body">
+        {/* The task is the whole point of the screen, so it comes first and is
+            the only field big enough to invite typing. Everything below it is a
+            refinement of a launch that already has a default. */}
+        <div data-slot="new-compose">
+          <textarea
+            data-slot="new-task"
+            rows={2}
+            value={task()}
+            onInput={(e) => setTask(e.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) return
+              event.preventDefault()
+              launch()
+            }}
+            placeholder="Su cosa devono lavorare gli agenti?"
+            spellcheck={false}
+            autofocus
+          />
+          <div data-slot="new-compose-foot">
+            <span data-slot="new-summary">
+              {label()} · {count()} {count() === 1 ? "sessione" : "sessioni"} in {props.workspace}
+            </span>
+            <div data-slot="new-spacer" />
+            <Show when={props.onClose}>
+              <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
+                Annulla
+              </button>
+            </Show>
+            {/* The button states the size of what it is about to start: pressing
+                "Avvia" and getting four sessions is a surprise worth removing. */}
+            <button type="button" data-slot="new-launch-btn" onClick={launch}>
+              {count() === 1 ? "Avvia 1 sessione" : `Avvia ${count()} sessioni`}
+              <span data-slot="new-launch-hint" aria-hidden="true">
+                ⏎
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div data-slot="new-body">
         <fieldset data-slot="new-section">
           <legend data-slot="new-legend">Preset</legend>
           <div data-slot="new-presets">
@@ -148,18 +192,6 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
         </fieldset>
 
         <fieldset data-slot="new-section">
-          <legend data-slot="new-legend">Task — va a ogni agente, opzionale</legend>
-          <input
-            type="text"
-            data-slot="new-task"
-            value={task()}
-            onInput={(e) => setTask(e.currentTarget.value)}
-            placeholder="Su cosa devono lavorare?"
-            spellcheck={false}
-          />
-        </fieldset>
-
-        <fieldset data-slot="new-section">
           <legend data-slot="new-legend">Partirà</legend>
           <div data-slot="new-launch">
             <For each={entries()}>
@@ -178,24 +210,8 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
             </For>
           </div>
         </fieldset>
+        </div>
       </div>
-
-      <footer data-slot="new-footer">
-        <span data-slot="new-summary">
-          {label()} · {count()} {count() === 1 ? "sessione" : "sessioni"} in {props.workspace}
-        </span>
-        <div data-slot="new-spacer" />
-        <Show when={props.onClose}>
-          <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
-            Annulla
-          </button>
-        </Show>
-        {/* The button states the size of what it is about to start: pressing
-            "Avvia" and getting four sessions is a surprise worth removing. */}
-        <button type="button" data-slot="new-launch-btn" onClick={launch}>
-          {count() === 1 ? "Avvia 1 sessione" : `Avvia ${count()} sessioni`}
-        </button>
-      </footer>
     </section>
   )
 }

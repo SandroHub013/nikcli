@@ -41,7 +41,7 @@
   gap: var(--ade-space-3);
   padding: var(--ade-space-3) var(--ade-space-4);
   border-bottom: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   flex: 0 0 auto;
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
@@ -192,7 +192,7 @@
 [data-slot="browser-mode-btn"][data-active],
 [data-slot="browser-device-btn"][data-active],
 [data-slot="browser-rotate-btn"][data-active] {
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   color: var(--ade-text);
   font-weight: 600;
 }
@@ -315,7 +315,7 @@
 [data-slot="browser-retry-btn"] {
   margin-top: var(--ade-space-2);
   padding: var(--ade-space-2) var(--ade-space-6);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   border: 1px solid var(--ade-border);
   border-radius: 4px;
   color: var(--ade-text);
@@ -336,7 +336,7 @@
   align-items: center;
   gap: var(--ade-space-4);
   padding: var(--ade-space-2) var(--ade-space-5);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   border-top: 1px solid var(--ade-border);
   flex: 0 0 auto;
   font-family: var(--ade-sans);
@@ -453,7 +453,7 @@
   padding: var(--ade-space-2) var(--ade-space-4);
   border: 1px solid var(--ade-border);
   border-radius: 4px;
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
@@ -481,7 +481,7 @@
   gap: var(--ade-space-4);
   padding: var(--ade-space-2) var(--ade-space-5);
   border-top: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);

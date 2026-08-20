@@ -22,7 +22,7 @@
   gap: var(--ade-space-5);
   padding: var(--ade-space-4) var(--ade-space-6);
   border-bottom: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   flex: 0 0 auto;
 }
 
@@ -264,7 +264,7 @@
   gap: var(--ade-space-5);
   padding: var(--ade-space-4) var(--ade-space-6);
   border-top: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
   flex: 0 0 auto;
 }
 

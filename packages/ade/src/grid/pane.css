@@ -79,12 +79,13 @@
   background: linear-gradient(
     to right,
     var(--pane-status) 0%,
-    color-mix(in srgb, var(--pane-status) 35%, transparent) 45%,
+    var(--pane-status) 40%,
+    color-mix(in srgb, var(--pane-status) 45%, transparent) 75%,
     transparent 100%
   );
-  opacity: 0.9;
   pointer-events: none;
 }
+
 
 /* Inner highlight: a faint light line inside the border, which is what makes a
    hairline card read as a physical surface instead of a drawn rectangle. */
@@ -132,7 +133,14 @@
   align-items: center;
   gap: var(--ade-space-4);
   padding: var(--ade-space-3) var(--ade-space-3) var(--ade-space-3) var(--ade-space-5);
-  background: var(--ade-raised);
+  /*
+   * The header carries the status hue at a whisper. Alone, the 2px top edge
+   * lost to the card border two columns away; the tinted ground is what makes
+   * the status readable from across a six-pane grid.
+   */
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--pane-status) 10%, transparent), transparent),
+    var(--ade-raised);
   border-bottom: 1px solid var(--ade-border-subtle);
   flex: 0 0 auto;
   min-height: 36px;

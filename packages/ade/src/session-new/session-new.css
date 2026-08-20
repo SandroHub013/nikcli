@@ -1,95 +1,234 @@
 /*
- * Start-session screen.
+ * The start screen.
  *
- * Uses the shared `--ade-*` tokens only. Spacing comes from `--ade-space-*`; the
- * one value below the scale floor is called out where it appears.
+ * This is what an empty ADE looks like, so it is the screen that has to make
+ * the case for the product. Three decisions shape it:
  *
- * The sections are a fixed vertical order — shape, agent, count, task, preview —
- * because each answer narrows the next, and the preview only means anything once
- * the three above it are settled.
+ *   1. The task field comes first and is the only element sized like an
+ *      invitation. Everything under it refines a launch that already has a
+ *      working default, so a user who types a sentence and hits Enter is done.
+ *   2. One centred column, not a full-width form. A settings sheet stretched
+ *      across 1600px reads as configuration; a column reads as a decision.
+ *   3. Choices are cards and chips with real states — chosen, available,
+ *      missing — because "which agents do I actually have" is half the question
+ *      this screen answers.
+ *
+ * Uses the shared `--ade-*` tokens only.
  */
 
 [data-component="session-new"] {
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: var(--ade-bg);
+  overflow-y: auto;
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--ade-accent) 5%, transparent), transparent 70%),
+    var(--ade-bg);
   color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
 }
 
-[data-slot="new-bar"] {
+[data-slot="new-column"] {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 48px var(--ade-space-6) var(--ade-space-6);
   display: flex;
-  align-items: center;
-  gap: var(--ade-space-4);
-  padding: var(--ade-space-4) var(--ade-space-6);
-  border-bottom: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
-  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--ade-space-6);
 }
 
-[data-slot="new-workspace"] {
-  padding: var(--ade-space-1) var(--ade-space-4);
-  border-radius: 4px;
-  background: var(--ade-active);
-  color: var(--ade-accent);
-  font-size: var(--ade-font-sm);
+/* ── heading ───────────────────────────────────────────────────────────────── */
+
+[data-slot="new-bar"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-heading"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  min-width: 0;
 }
 
 [data-slot="new-title"] {
-  font-size: var(--ade-font-md);
+  margin: 0;
+  font-size: var(--ade-font-3xl);
+  font-weight: var(--ade-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--ade-text);
+}
+
+[data-slot="new-where"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  min-width: 0;
+}
+
+[data-slot="new-workspace"] {
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-accent-soft);
+  color: var(--ade-accent);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
 }
 
 [data-slot="new-path"] {
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 [data-slot="new-spacer"] {
   flex: 1;
 }
 
-[data-slot="new-close"],
-[data-slot="new-launch-btn"] {
+[data-slot="new-close"] {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--ade-border);
-  border-radius: 4px;
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="new-close"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+/* ── the task, and the launch ──────────────────────────────────────────────── */
+
+[data-slot="new-compose"] {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-xl);
+  background: var(--ade-surface);
+  box-shadow: var(--ade-shadow-md);
+  overflow: hidden;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur) var(--ade-ease);
+}
+
+[data-slot="new-compose"]:focus-within {
+  border-color: var(--ade-accent);
+  box-shadow: var(--ade-shadow-lg), 0 0 0 4px var(--ade-accent-soft);
+}
+
+[data-slot="new-task"] {
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xl);
+  line-height: 1.45;
+  padding: var(--ade-space-6) var(--ade-space-6) var(--ade-space-4);
+  resize: none;
+  min-height: 72px;
+}
+
+[data-slot="new-task"]:focus {
+  outline: none;
+}
+
+[data-slot="new-task"]::placeholder {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="new-compose-foot"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-4) var(--ade-space-3) var(--ade-space-6);
+  border-top: 1px solid var(--ade-border-subtle);
+  background: var(--ade-raised);
+}
+
+[data-slot="new-summary"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="new-cancel"] {
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border: 0;
+  border-radius: var(--ade-radius-md);
   background: transparent;
   color: var(--ade-text-soft);
   font-family: inherit;
-  font-size: var(--ade-font-sm);
-  padding: var(--ade-space-2) var(--ade-space-4);
+  font-size: var(--ade-font-md);
   cursor: pointer;
 }
 
-[data-slot="new-launch-btn"] {
-  border-color: var(--ade-accent);
-  color: var(--ade-accent);
+[data-slot="new-cancel"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
 }
 
-[data-slot="new-close"]:hover,
-[data-slot="new-launch-btn"]:hover {
-  background: var(--ade-hover);
+[data-slot="new-launch-btn"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-6);
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-family: inherit;
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
 }
+
+[data-slot="new-launch-btn"]:hover {
+  background: var(--ade-accent-strong);
+}
+
+[data-slot="new-launch-hint"] {
+  font-family: var(--ade-mono);
+  opacity: 0.65;
+}
+
+[data-slot="new-close"]:focus-visible,
+[data-slot="new-cancel"]:focus-visible,
+[data-slot="new-launch-btn"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* ── refinements ───────────────────────────────────────────────────────────── */
 
 [data-slot="new-body"] {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--ade-space-6);
   display: flex;
   flex-direction: column;
-  /* One step above the section's internal rhythm, so sections read as separate
-     without the gap doing the work a heading should do. */
-  gap: 20px;
+  gap: var(--ade-space-6);
 }
 
 [data-slot="new-section"] {
-  border: 0;
   margin: 0;
   padding: 0;
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-4);
@@ -99,9 +238,12 @@
   padding: 0;
   color: var(--ade-text-weak);
   font-size: var(--ade-font-xs);
-  letter-spacing: 0.08em;
+  font-weight: var(--ade-weight-medium);
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
+
+/* ── presets ───────────────────────────────────────────────────────────────── */
 
 [data-slot="new-presets"] {
   display: grid;
@@ -112,85 +254,143 @@
 [data-slot="new-preset"] {
   display: flex;
   flex-direction: column;
-  gap: var(--ade-space-3);
+  gap: var(--ade-space-2);
   padding: var(--ade-space-5);
   border: 1px solid var(--ade-border);
-  border-radius: 6px;
+  border-radius: var(--ade-radius-lg);
   background: var(--ade-surface);
-  color: inherit;
-  font-family: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="new-preset"]:hover {
-  background: var(--ade-hover);
+  background: var(--ade-raised);
+  border-color: var(--ade-border-strong);
 }
 
 [data-slot="new-preset"][data-active] {
   border-color: var(--ade-accent);
-  background: var(--ade-active);
+  background: var(--ade-raised);
+  box-shadow: 0 0 0 3px var(--ade-accent-soft);
+}
+
+[data-slot="new-preset"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="new-preset-head"] {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--ade-space-4);
 }
 
 [data-slot="new-preset-label"] {
   flex: 1;
+  color: var(--ade-text);
   font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-medium);
 }
 
+/* The session count is the fact that separates one preset from another, so it
+   reads as a number rather than as part of the sentence. */
 [data-slot="new-preset-count"] {
-  color: var(--ade-text-weak);
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--ade-space-2);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-active);
+  color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="new-preset"][data-active] [data-slot="new-preset-count"] {
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
 }
 
 [data-slot="new-preset-desc"] {
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-sm);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-md);
   line-height: var(--ade-leading);
 }
 
+/* ── agents ────────────────────────────────────────────────────────────────── */
+
 [data-slot="new-agents"] {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--ade-space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
 }
 
 [data-slot="new-agent"] {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--ade-space-4);
-  padding: var(--ade-space-4) var(--ade-space-5);
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-3) var(--ade-space-5);
   border: 1px solid var(--ade-border);
-  border-radius: 6px;
+  border-radius: var(--ade-radius-full);
   background: var(--ade-surface);
-  color: inherit;
+  color: var(--ade-text-soft);
   font-family: inherit;
   font-size: var(--ade-font-md);
-  text-align: left;
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="new-agent"]:hover {
-  background: var(--ade-hover);
+[data-slot="new-agent"]:hover:not(:disabled) {
+  background: var(--ade-raised);
+  color: var(--ade-text);
 }
 
 [data-slot="new-agent"][data-active] {
   border-color: var(--ade-accent);
-  background: var(--ade-active);
+  background: var(--ade-accent-soft);
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-medium);
+}
+
+/* An agent this machine does not have is shown, not hidden: knowing it exists
+   and is missing is the difference between choosing and wondering. */
+[data-slot="new-agent"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-slot="new-agent"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="new-agent-glyph"] {
-  color: var(--ade-accent);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-active);
+  font-size: var(--ade-font-sm);
+  line-height: 1;
 }
 
-[data-slot="new-agent-label"] {
-  flex: 1;
+[data-slot="new-agent"][data-active] [data-slot="new-agent-glyph"] {
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+}
+
+[data-slot="new-agent-missing"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
 }
 
 [data-slot="new-agent-check"] {
@@ -198,87 +398,97 @@
   font-size: var(--ade-font-sm);
 }
 
+/* ── count ─────────────────────────────────────────────────────────────────── */
+
 [data-slot="new-counts"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-3);
+  gap: var(--ade-space-4);
 }
 
+/* A segmented control: one enclosure, seams inside, so the choice reads as one
+   scale rather than six separate buttons. */
 [data-slot="new-count"] {
-  min-width: 28px;
-  padding: var(--ade-space-2) var(--ade-space-4);
+  width: 34px;
+  height: 30px;
   border: 1px solid var(--ade-border);
-  border-radius: 4px;
+  border-radius: 0;
+  margin-left: -1px;
   background: var(--ade-surface);
   color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-md);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="new-count"]:first-of-type {
+  margin-left: 0;
+  border-radius: var(--ade-radius-md) 0 0 var(--ade-radius-md);
+}
+
+[data-slot="new-count"]:last-of-type {
+  border-radius: 0 var(--ade-radius-md) var(--ade-radius-md) 0;
 }
 
 [data-slot="new-count"]:hover {
-  background: var(--ade-hover);
+  background: var(--ade-raised);
+  color: var(--ade-text);
 }
 
 [data-slot="new-count"][data-active] {
+  position: relative;
+  z-index: 1;
   border-color: var(--ade-accent);
-  background: var(--ade-active);
-  color: var(--ade-accent);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="new-count"]:focus-visible {
+  outline: none;
+  position: relative;
+  z-index: 2;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="new-counts-label"] {
-  margin-left: var(--ade-space-2);
   color: var(--ade-text-weak);
-  font-size: var(--ade-font-sm);
-}
-
-[data-slot="new-task"] {
-  width: 100%;
-  padding: var(--ade-space-5);
-  border: 1px solid var(--ade-border);
-  border-radius: 6px;
-  background: var(--ade-surface);
-  color: var(--ade-text);
-  font-family: inherit;
   font-size: var(--ade-font-md);
 }
 
-[data-slot="new-task"]::placeholder {
-  color: var(--ade-text-weak);
-}
-
-[data-slot="new-task"]:focus {
-  outline: none;
-  border-color: var(--ade-accent);
-}
+/* ── what will launch ──────────────────────────────────────────────────────── */
 
 [data-slot="new-launch"] {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--ade-space-4);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-surface);
+  overflow: hidden;
 }
 
 [data-slot="new-launch-row"] {
   display: flex;
   align-items: center;
   gap: var(--ade-space-4);
-  padding: var(--ade-space-4) var(--ade-space-5);
-  border: 1px solid var(--ade-border);
-  border-radius: 6px;
-  background: var(--ade-surface);
-  font-size: var(--ade-font-md);
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border-top: 1px solid var(--ade-border-subtle);
 }
 
-/* A shell is not an agent: the preview would otherwise read as N identical
-   sessions, which is the thing this section exists to disprove. */
-[data-slot="new-launch-row"][data-role="shell"] {
-  border-style: dashed;
+[data-slot="new-launch-row"]:first-child {
+  border-top: 0;
 }
 
 [data-slot="new-launch-index"] {
+  width: 16px;
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-slot="new-launch-glyph"] {
@@ -286,60 +496,27 @@
 }
 
 [data-slot="new-launch-agent"] {
-  flex: 1;
+  color: var(--ade-text);
 }
 
+/* A shell in slot two is not a second agent, and the row has to say so. */
 [data-slot="new-launch-role"] {
+  padding: 0 var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-active);
   color: var(--ade-text-weak);
-  font-size: var(--ade-font-sm);
-}
-
-[data-slot="new-footer"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-4);
-  padding: var(--ade-space-4) var(--ade-space-6);
-  border-top: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-sm);
-  flex: 0 0 auto;
-}
-
-[data-slot="new-cancel"] {
-  height: 26px;
-  padding: 0 var(--ade-space-5);
-  border: 1px solid var(--ade-border);
-  border-radius: 5px;
-  background: var(--ade-surface);
-  color: var(--ade-text-soft);
-  font-family: inherit;
-  font-size: var(--ade-font-sm);
-  cursor: pointer;
-}
-
-[data-slot="new-cancel"]:hover {
-  background: var(--ade-hover);
-}
-
-/* The launch button is the one commitment on this screen, so it is the only
-   filled control: everything above it is a choice that can still be changed. */
-[data-slot="new-launch-btn"] {
-  border-color: transparent;
-  background: var(--ade-accent);
-  color: var(--ade-bg);
-  font-weight: 500;
-}
-
-/* An agent that is not installed stays visible and refuses, rather than
-   vanishing: a list whose shape changes per machine cannot be described to
-   anyone, and "why is it missing" is a worse question than "why is it grey". */
-[data-slot="new-agent"][data-availability="assente"] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-[data-slot="new-agent-missing"] {
-  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="new-preset"],
+  [data-slot="new-agent"],
+  [data-slot="new-count"],
+  [data-slot="new-compose"],
+  [data-slot="new-launch-btn"],
+  [data-slot="new-close"],
+  [data-slot="new-cancel"] {
+    transition: none;
+  }
 }
