@@ -1,0 +1,345 @@
+/*
+ * Start-session screen.
+ *
+ * Uses the shared `--ade-*` tokens only. Spacing comes from `--ade-space-*`; the
+ * one value below the scale floor is called out where it appears.
+ *
+ * The sections are a fixed vertical order — shape, agent, count, task, preview —
+ * because each answer narrows the next, and the preview only means anything once
+ * the three above it are settled.
+ */
+
+[data-component="session-new"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="new-bar"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+}
+
+[data-slot="new-workspace"] {
+  padding: var(--ade-space-1) var(--ade-space-4);
+  border-radius: 4px;
+  background: var(--ade-active);
+  color: var(--ade-accent);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-title"] {
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="new-path"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-spacer"] {
+  flex: 1;
+}
+
+[data-slot="new-close"],
+[data-slot="new-launch-btn"] {
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  padding: var(--ade-space-2) var(--ade-space-4);
+  cursor: pointer;
+}
+
+[data-slot="new-launch-btn"] {
+  border-color: var(--ade-accent);
+  color: var(--ade-accent);
+}
+
+[data-slot="new-close"]:hover,
+[data-slot="new-launch-btn"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="new-body"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-6);
+  display: flex;
+  flex-direction: column;
+  /* One step above the section's internal rhythm, so sections read as separate
+     without the gap doing the work a heading should do. */
+  gap: 20px;
+}
+
+[data-slot="new-section"] {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-legend"] {
+  padding: 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+[data-slot="new-presets"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-preset"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  background: var(--ade-surface);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="new-preset"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="new-preset"][data-active] {
+  border-color: var(--ade-accent);
+  background: var(--ade-active);
+}
+
+[data-slot="new-preset-head"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-preset-label"] {
+  flex: 1;
+  font-size: var(--ade-font-lg);
+}
+
+[data-slot="new-preset-count"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-preset-desc"] {
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+}
+
+[data-slot="new-agents"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-agent"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  background: var(--ade-surface);
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="new-agent"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="new-agent"][data-active] {
+  border-color: var(--ade-accent);
+  background: var(--ade-active);
+}
+
+[data-slot="new-agent-glyph"] {
+  color: var(--ade-accent);
+}
+
+[data-slot="new-agent-label"] {
+  flex: 1;
+}
+
+[data-slot="new-agent-check"] {
+  color: var(--ade-accent);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-counts"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="new-count"] {
+  min-width: 28px;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-slot="new-count"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="new-count"][data-active] {
+  border-color: var(--ade-accent);
+  background: var(--ade-active);
+  color: var(--ade-accent);
+}
+
+[data-slot="new-counts-label"] {
+  margin-left: var(--ade-space-2);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-task"] {
+  width: 100%;
+  padding: var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  background: var(--ade-surface);
+  color: var(--ade-text);
+  font-family: inherit;
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="new-task"]::placeholder {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="new-task"]:focus {
+  outline: none;
+  border-color: var(--ade-accent);
+}
+
+[data-slot="new-launch"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--ade-space-4);
+}
+
+[data-slot="new-launch-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  background: var(--ade-surface);
+  font-size: var(--ade-font-md);
+}
+
+/* A shell is not an agent: the preview would otherwise read as N identical
+   sessions, which is the thing this section exists to disprove. */
+[data-slot="new-launch-row"][data-role="shell"] {
+  border-style: dashed;
+}
+
+[data-slot="new-launch-index"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-launch-glyph"] {
+  color: var(--ade-accent);
+}
+
+[data-slot="new-launch-agent"] {
+  flex: 1;
+}
+
+[data-slot="new-launch-role"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="new-footer"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+  flex: 0 0 auto;
+}
+
+[data-slot="new-cancel"] {
+  height: 26px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: 5px;
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="new-cancel"]:hover {
+  background: var(--ade-hover);
+}
+
+/* The launch button is the one commitment on this screen, so it is the only
+   filled control: everything above it is a choice that can still be changed. */
+[data-slot="new-launch-btn"] {
+  border-color: transparent;
+  background: var(--ade-accent);
+  color: var(--ade-bg);
+  font-weight: 500;
+}
+
+/* An agent that is not installed stays visible and refuses, rather than
+   vanishing: a list whose shape changes per machine cannot be described to
+   anyone, and "why is it missing" is a worse question than "why is it grey". */
+[data-slot="new-agent"][data-availability="assente"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-slot="new-agent-missing"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}

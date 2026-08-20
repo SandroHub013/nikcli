@@ -1,0 +1,147 @@
+/* Chrome for the standalone harness only. Not part of the shipped surface. */
+
+[data-component="ade-shell"] {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* 36px: tall enough for 22px controls with 4px air above and below, no more. */
+[data-slot="ade-bar"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-6);
+  padding: 0 var(--ade-space-6);
+  height: 36px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+}
+
+[data-slot="ade-brand"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ade-accent);
+}
+
+/* A hairline separates identity (left) from session state and controls. */
+[data-slot="ade-divider"] {
+  width: 1px;
+  height: 14px;
+  background: var(--ade-border-strong);
+  flex: 0 0 auto;
+}
+
+[data-slot="ade-count"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="ade-selected-file"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-accent);
+  background: var(--ade-bg);
+  padding: var(--ade-space-1) var(--ade-space-4);
+  border-radius: 4px;
+  border: 1px solid var(--ade-border);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="ade-spacer"] {
+  flex: 1;
+}
+
+[data-slot="ade-columns"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+}
+
+[data-slot="ade-label"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ade-text-weak);
+  margin-right: var(--ade-space-3);
+}
+
+[data-slot="ade-chip"] {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="ade-chip"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+/* The pinned chip is state, not focus, so it gets the fill rather than the hue. */
+[data-slot="ade-chip"][data-active] {
+  background: var(--ade-active);
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="ade-chip"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: 1px;
+  color: var(--ade-text);
+}
+
+[data-slot="ade-add"] {
+  height: 22px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="ade-add"]:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-text-weak);
+}
+
+[data-slot="ade-add"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: 1px;
+}
+
+[data-slot="ade-body"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+[data-slot="ade-main"] {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

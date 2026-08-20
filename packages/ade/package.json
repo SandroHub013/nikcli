@@ -1,0 +1,44 @@
+{
+  "name": "@nikcli-ai/ade",
+  "version": "1.287.0",
+  "description": "Agent development environment: many live agent sessions, side by side.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./index.css": "./src/index.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "dev": "vite",
+    "build": "vite build",
+    "test": "bun run test:unit",
+    "test:unit": "bun test --conditions=browser --preload ./happydom.ts ./src",
+    "test:unit:watch": "bun test --watch --conditions=browser --preload ./happydom.ts ./src",
+    "native:dev": "tauri dev",
+    "native:build": "tauri build"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.10.6",
+    "@tsconfig/bun": "1.0.9",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:",
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@nikcli-ai/sdk": "workspace:*",
+    "@nikcli-ai/ui": "workspace:*",
+    "@nikcli-ai/util": "workspace:*",
+    "@solid-primitives/storage": "catalog:",
+    "solid-js": "catalog:",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-shell": "~2"
+  },
+  "main": "./src/index.ts"
+}

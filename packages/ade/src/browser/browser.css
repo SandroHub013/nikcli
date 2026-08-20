@@ -1,0 +1,505 @@
+/*
+ * Browser pane styling for the Agent Development Environment (ADE).
+ *
+ * Sits alongside session panes in the grid. Kept in a dedicated stylesheet
+ * to allow independent iteration and parallel editing. Uses the shared
+ * `--ade-*` design tokens.
+ */
+
+[data-component="browser-pane"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 120ms ease;
+  position: relative;
+  /* Inline-size container so the toolbar responds to the pane width the grid
+     gives it, not the window width — at three columns the pane is 431px. */
+  container-type: inline-size;
+}
+
+[data-component="browser-pane"][data-focused] {
+  border-color: var(--ade-accent);
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+/* ── header ───────────────────────────────────────────────────────────────── */
+
+[data-slot="browser-header"] {
+  display: flex;
+  align-items: center;
+  /* Below ~650px the toolbar overruns the pane, and the pane clips: the close button
+     becomes unreachable and the URL shows eight characters. Wrapping keeps every
+     control hittable at any pane width the grid produces. */
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+/* Narrow panes: the URL bar drops to a deliberate full-width second row
+   instead of being squeezed to a few characters between the button groups.
+   Row one then holds nav, mode, device and pane actions on a single line. */
+@container (max-width: 560px) {
+  [data-slot="browser-url-bar"] {
+    order: 10;
+    flex-basis: 100%;
+  }
+}
+
+[data-slot="browser-nav-group"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-nav-btn"] {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+[data-slot="browser-nav-btn"]:hover {
+  background: var(--ade-border);
+  color: var(--ade-text);
+}
+
+[data-slot="browser-nav-btn"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+[data-slot="browser-url-bar"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  flex: 1;
+  min-width: 80px;
+  height: 24px;
+  padding: 0 var(--ade-space-4);
+  background: var(--ade-bg);
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  transition: border-color 120ms ease;
+}
+
+[data-slot="browser-url-bar"]:focus-within {
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="browser-status-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--ade-text-weak);
+}
+
+[data-slot="browser-status-dot"][data-status="ready"] {
+  background: var(--ade-done);
+}
+
+[data-slot="browser-status-dot"][data-status="loading"] {
+  background: var(--ade-working);
+}
+
+[data-slot="browser-status-dot"][data-status="unreachable"] {
+  background: var(--ade-error);
+}
+
+[data-slot="browser-url-input"] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  padding: 0;
+}
+
+[data-slot="browser-url-input"]:focus {
+  outline: none;
+}
+
+[data-slot="browser-mode-group"],
+[data-slot="browser-device-group"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  background: var(--ade-bg);
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  /* 1px is a hairline inset so the active button's fill reads as a plate
+     inside the group; it sits below the 2px scale floor, so it stays literal. */
+  padding: 1px;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-mode-btn"],
+[data-slot="browser-device-btn"],
+[data-slot="browser-rotate-btn"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 var(--ade-space-3);
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease;
+}
+
+/* Device presets and rotate are icon-only, so they sit square like the
+   nav buttons instead of taking text-button padding. */
+[data-slot="browser-device-btn"],
+[data-slot="browser-rotate-btn"] {
+  width: 22px;
+  padding: 0;
+}
+
+[data-slot="browser-mode-btn"]:hover,
+[data-slot="browser-device-btn"]:hover,
+[data-slot="browser-rotate-btn"]:hover {
+  color: var(--ade-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-slot="browser-mode-btn"][data-active],
+[data-slot="browser-device-btn"][data-active],
+[data-slot="browser-rotate-btn"][data-active] {
+  background: var(--ade-surface-raised);
+  color: var(--ade-text);
+  font-weight: 600;
+}
+
+/* Inspect mode changes what every click on the page does, so while it is
+   active the mode group wears the accent: the control that hijacks clicks
+   must be unmissable even at a glance. */
+[data-component="browser-pane"][data-mode="edit"] [data-slot="browser-mode-group"] {
+  border-color: var(--ade-accent);
+}
+
+[data-component="browser-pane"][data-mode="edit"] [data-slot="browser-mode-btn"][data-active] {
+  color: var(--ade-accent);
+}
+
+[data-slot="browser-actions"] {
+  display: flex;
+  gap: var(--ade-space-1);
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-action"] {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+[data-slot="browser-action"]:hover {
+  background: var(--ade-border);
+  color: var(--ade-text);
+}
+
+/* ── body & viewport ──────────────────────────────────────────────────────── */
+
+[data-slot="browser-body"] {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+[data-slot="browser-viewport-container"] {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #111111;
+  position: relative;
+}
+
+[data-slot="browser-frame"] {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #ffffff;
+}
+
+[data-slot="browser-viewport-scaler"] {
+  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-viewport-scaler"] [data-slot="browser-frame"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+[data-slot="browser-error-overlay"] {
+  position: absolute;
+  inset: 0;
+  background: var(--ade-surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ade-space-4);
+  /* 24px stays literal: the overlay is a centered dialog whose padding is two
+     space-6 steps of air around the message, not part of the pane rhythm. */
+  padding: 24px;
+  text-align: center;
+  z-index: 10;
+}
+
+/* The overlay reports a page that failed to load, not a failure of ADE
+   itself: the error colour lives on the glyph, the title stays neutral. */
+[data-slot="browser-error-icon"] {
+  display: flex;
+  color: var(--ade-error);
+}
+
+[data-slot="browser-error-title"] {
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: 600;
+  color: var(--ade-text);
+}
+
+[data-slot="browser-error-msg"] {
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text-soft);
+  max-width: 280px;
+}
+
+[data-slot="browser-retry-btn"] {
+  margin-top: var(--ade-space-2);
+  padding: var(--ade-space-2) var(--ade-space-6);
+  background: var(--ade-surface-raised);
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+[data-slot="browser-retry-btn"]:hover {
+  background: var(--ade-border);
+}
+
+/* ── selection strip ──────────────────────────────────────────────────────── */
+
+[data-slot="browser-selection-strip"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  background: var(--ade-surface-raised);
+  border-top: 1px solid var(--ade-border);
+  flex: 0 0 auto;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  overflow-x: auto;
+}
+
+[data-slot="browser-selection-label"] {
+  color: var(--ade-text-weak);
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-chips"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+[data-slot="browser-chip"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  padding: var(--ade-space-1) var(--ade-space-3);
+  background: var(--ade-bg);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: 4px;
+  color: var(--ade-accent);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-chip-tag"] {
+  font-weight: 600;
+}
+
+[data-slot="browser-chip-id"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="browser-chip-remove"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+[data-slot="browser-chip-remove"]:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ade-text);
+}
+
+[data-slot="browser-clear-selection"] {
+  background: transparent;
+  border: 0;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  cursor: pointer;
+  padding: var(--ade-space-1) var(--ade-space-2);
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-clear-selection"]:hover {
+  color: var(--ade-text);
+}
+
+/* ── prompt row ───────────────────────────────────────────────────────────── */
+
+[data-slot="browser-prompt"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-surface);
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-prompt-caret"] {
+  display: flex;
+  align-items: center;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-prompt-input"] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  padding: 0;
+}
+
+[data-slot="browser-prompt-input"]:focus {
+  outline: none;
+}
+
+[data-slot="browser-send-btn"] {
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: 4px;
+  background: var(--ade-surface-raised);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease, opacity 100ms ease;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-send-btn"]:hover:not(:disabled) {
+  background: var(--ade-border);
+}
+
+[data-slot="browser-send-btn"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── footer ───────────────────────────────────────────────────────────────── */
+
+[data-slot="browser-footer"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-fidelity"] {
+  color: var(--ade-text-soft);
+}
+
+[data-fidelity="native"] [data-slot="browser-fidelity"] {
+  color: var(--ade-done);
+}
+
+[data-fidelity="mirror"] [data-slot="browser-fidelity"] {
+  color: var(--ade-working);
+}
+
+[data-fidelity="none"] [data-slot="browser-fidelity"] {
+  color: var(--ade-text-weak);
+}

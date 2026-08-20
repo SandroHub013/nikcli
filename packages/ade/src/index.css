@@ -1,0 +1,950 @@
+/*
+ * The agent development environment.
+ *
+ * Tokens are defined here rather than pulled from the app so the grid can be
+ * developed and screenshotted on its own. They are named for their role, so
+ * swapping in the host theme later is a matter of redefining this block.
+ *
+ * Type scale: 10px micro labels and footer meta, 11px mono meta, 12px UI base
+ * and transcript. Hierarchy comes from weight (400/500/600) and the text ramp,
+ * not from scattering sizes — half-pixel sizes were dropped because they round
+ * differently per platform and blur at these sizes.
+ *
+ * Spacing: 4px base unit, with 2px half-steps allowed for vertical padding of
+ * compact rows only. Sidebar rows, pane chrome and grid gutters all derive from
+ * it so the whole shell shares one rhythm.
+ */
+:root {
+  /* Warm-neutral dark ramp, deepest to raised. */
+  --ade-bg: #131111;
+  --ade-surface: #1a1818;
+  --ade-surface-raised: #211e1e;
+  --ade-border: #2b2727;
+  --ade-border-strong: #3a3535;
+
+  /*
+   * Text ramp, each step measured against --ade-surface-raised (#211e1e), the
+   * lightest ground any text sits on:
+   *   text  13.91:1 — primary content
+   *   soft   6.72:1 — secondary content
+   *   weak   4.86:1 — meta (counts, timestamps, token counters at 10-11px)
+   * weak was #7d7878, which measured 3.81:1 on raised — under the WCAG AA floor
+   * of 4.5:1 for the small text it carries. #8f8a8a is the lightest step down
+   * from soft that still clears the floor with margin on every surface
+   * (5.19:1 on surface, 5.53:1 on bg).
+   */
+  --ade-text: #ecebeb;
+  --ade-text-soft: #a9a4a4;
+  --ade-text-weak: #8f8a8a;
+
+  --ade-accent: #7fd6c4;
+
+  /*
+   * Status set, chosen as one family: near-equal perceived lightness so no
+   * status shouts over another at 7px dot size, and every one clears 6.3:1 on
+   * all three surfaces — double the AA floor — because the same hues double as
+   * the 11px activity words in the pane footer strip.
+   *   working 7.43:1 · waiting 6.83:1 · done 7.88:1 · error 6.38:1 (on raised)
+   */
+  --ade-working: #d9a45f;
+  --ade-waiting: #7da9e4;
+  --ade-done: #71c491;
+  --ade-error: #e0879a;
+
+  /*
+   * Interaction fills are alpha ramps, not extra solid steps: they composite
+   * identically over bg, surface and raised, which a fourth solid token could
+   * not. 4.5% reads as hover, 8% as selected.
+   */
+  --ade-hover: rgba(255, 255, 255, 0.045);
+  --ade-active: rgba(255, 255, 255, 0.08);
+
+  /* Locked to GRID_GAP in grid/layout.ts — the layout math bakes 12px in. */
+  --ade-grid-gap: 12px;
+
+  /*
+   * Type scale, taken from the sizes already in use rather than invented:
+   * 10px footer meta, 11px controls and mono meta, 12px UI base, 13px the one
+   * display size (browser error title). xl is unused today; it reserves the
+   * next step so future emphasis does not reintroduce ad-hoc sizes.
+   */
+  --ade-font-xs: 10px;
+  --ade-font-sm: 11px;
+  --ade-font-md: 12px;
+  --ade-font-lg: 13px;
+
+  /*
+   * One relative leading for running text. The fixed 15px/16px line-heights on
+   * the footer and the count badge are box heights that land those rows on
+   * 24px/16px, not text rhythm, so they stay literal at their call sites.
+   */
+  --ade-leading: 1.5;
+
+  /*
+   * Spacing scale in 2px steps, taken from the padding/margin/gap values
+   * already in use. Values off the scale (1px hairline seams, 24px structural
+   * indents) stay literal with a note at the call site.
+   */
+  --ade-space-1: 2px;
+  --ade-space-2: 4px;
+  --ade-space-3: 6px;
+  --ade-space-4: 8px;
+  --ade-space-5: 10px;
+  --ade-space-6: 12px;
+
+  --ade-mono: "IBM Plex Mono", "SF Mono", "Cascadia Mono", ui-monospace, monospace;
+  --ade-sans: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── grid ─────────────────────────────────────────────────────────────────── */
+
+[data-component="session-grid"] {
+  display: grid;
+  gap: var(--ade-grid-gap);
+  width: 100%;
+  height: 100%;
+  padding: var(--ade-grid-gap);
+  overflow-y: auto;
+  align-content: start;
+}
+
+[data-component="session-grid"][data-empty] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-slot="grid-cell"] {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* ── pane ─────────────────────────────────────────────────────────────────── */
+
+[data-component="session-pane"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+
+/*
+ * The focus ring is an outline pulled inward, not an inset box-shadow.
+ *
+ * A shadow paints below the element's own children, and both the header and the
+ * footer carry a background of their own — so the ring came out drawn along the
+ * transcript and erased everywhere else, which read as a rendering fault rather
+ * than a focused pane. An outline paints above the children, and the negative
+ * offset keeps it inside the border box so gaining focus never nudges layout.
+ */
+[data-component="session-pane"][data-focused] {
+  border-color: var(--ade-accent);
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+/* 8px vertical + 12px font at 16px line-height lands the header on a 32px row. */
+[data-slot="pane-header"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-4) var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-dot"] {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--ade-text-weak);
+}
+
+[data-status="working"] [data-slot="pane-dot"] {
+  background: var(--ade-working);
+}
+[data-status="waiting"] [data-slot="pane-dot"] {
+  background: var(--ade-waiting);
+}
+[data-status="done"] [data-slot="pane-dot"] {
+  background: var(--ade-done);
+}
+[data-status="error"] [data-slot="pane-dot"] {
+  background: var(--ade-error);
+}
+
+/*
+ * Working and provisioning are the only statuses that change without user
+ * input, so they are the only ones allowed to move: a slow opacity breathe
+ * reads as liveness, not alarm. Provisioning keeps the neutral dot on purpose —
+ * the agent has not started, so no status colour is earned yet; the words in
+ * the footer carry what is happening.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-status="working"] [data-slot="pane-dot"],
+  [data-status="working"] [data-slot="session-dot"],
+  [data-status="provisioning"] [data-slot="pane-dot"],
+  [data-status="provisioning"] [data-slot="session-dot"] {
+    animation: ade-dot-breathe 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes ade-dot-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+[data-slot="pane-title"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: 600;
+  color: var(--ade-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+[data-slot="pane-actions"] {
+  display: flex;
+  gap: var(--ade-space-1);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-action"] {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+}
+
+[data-slot="pane-action"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="pane-action"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+  color: var(--ade-text);
+}
+
+/*
+ * The transcript and prompt sit on --ade-bg, a well sunk one step below the
+ * pane surface: the depth makes the empty area below a short transcript read
+ * as an intentional viewport waiting for output instead of leftover space.
+ */
+[data-slot="pane-transcript"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-5) var(--ade-space-6);
+  background: var(--ade-bg);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+  display: flex;
+  flex-direction: column;
+  align-content: start;
+  gap: var(--ade-space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ade-border-strong) transparent;
+}
+
+[data-slot="pane-line"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  align-items: baseline;
+  min-width: 0;
+}
+
+[data-slot="pane-line"][data-kind="step"] [data-slot="pane-text"] {
+  color: var(--ade-text);
+}
+
+[data-slot="pane-line"][data-kind="shell"] {
+  padding-left: var(--ade-space-3);
+}
+
+[data-slot="pane-line"][data-kind="shell"] [data-slot="pane-text"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="pane-line"][data-kind="note"] [data-slot="pane-text"] {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-bullet"] {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ade-text-soft);
+  flex: 0 0 auto;
+  transform: translateY(-2px);
+}
+
+[data-slot="pane-elbow"] {
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-text"] {
+  min-width: 0;
+  /* A transcript line is a command or a sentence; breaking mid-word turns a path
+     into confetti, so it wraps at whitespace and scrolls only as a last resort. */
+  overflow-wrap: break-word;
+}
+
+[data-slot="pane-activity"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-6);
+  background: var(--ade-bg);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  border-top: 1px solid var(--ade-border);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-activity-word"] {
+  color: var(--ade-working);
+}
+
+[data-status="waiting"] [data-slot="pane-activity-word"] {
+  color: var(--ade-waiting);
+}
+[data-status="done"] [data-slot="pane-activity-word"] {
+  color: var(--ade-done);
+}
+[data-status="error"] [data-slot="pane-activity-word"] {
+  color: var(--ade-error);
+}
+
+[data-slot="pane-meta"] {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-prompt"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  background: var(--ade-bg);
+  border-top: 1px solid var(--ade-border);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-caret"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="pane-input"] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  padding: 0;
+}
+
+[data-slot="pane-input"]:focus {
+  outline: none;
+}
+
+[data-slot="pane-input"]::placeholder {
+  color: var(--ade-text-weak);
+}
+
+/* 10px meta at 16px line-height plus 4px padding lands the footer on 24px. */
+[data-slot="pane-footer"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-2) var(--ade-space-6);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  line-height: 16px;
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-mode"] {
+  color: var(--ade-text-soft);
+}
+
+/* Model is the least actionable fact in the footer, so it parks at the far end. */
+[data-slot="pane-model"] {
+  margin-left: auto;
+}
+
+/* ── sidebar ──────────────────────────────────────────────────────────────── */
+
+[data-component="ade-sidebar"] {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  height: 100%;
+  background: var(--ade-surface);
+  border-right: 1px solid var(--ade-border);
+  position: relative;
+  user-select: none;
+  min-width: 0;
+}
+
+[data-slot="sidebar-header"] {
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+}
+
+[data-slot="sidebar-tabs"] {
+  display: flex;
+  gap: var(--ade-space-1);
+  background: var(--ade-bg);
+  border: 1px solid var(--ade-border);
+  border-radius: 5px;
+  padding: var(--ade-space-1);
+}
+
+[data-slot="sidebar-tab"] {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  font-weight: 500;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 100ms ease, background 100ms ease;
+}
+
+[data-slot="sidebar-tab"]:hover {
+  color: var(--ade-text);
+  background: var(--ade-hover);
+}
+
+[data-slot="sidebar-tab"][data-active] {
+  background: var(--ade-surface-raised);
+  color: var(--ade-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+[data-slot="sidebar-tab"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+[data-slot="sidebar-content"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--ade-space-2) 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ade-border-strong) transparent;
+}
+
+/*
+ * The resize handle extends outside the sidebar box to provide a comfortable
+ * hit target without shifting the internal content layout.
+ */
+[data-slot="sidebar-resize-handle"] {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+  transition: background 150ms ease;
+}
+
+[data-slot="sidebar-resize-handle"]:hover,
+[data-component="ade-sidebar"][data-resizing] [data-slot="sidebar-resize-handle"] {
+  background: var(--ade-accent);
+  opacity: 0.7;
+}
+
+/* ── workspace tree ───────────────────────────────────────────────────────── */
+
+/*
+ * The 1px gap is a hairline seam, not spacing: the rows read as one continuous
+ * list, and the scale floor (2px) would double the seam into a visible gutter.
+ */
+[data-component="workspace-tree"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+}
+
+/* 6px vertical + 12px font at 16px line-height lands section headers on 28px. */
+[data-slot="workspace-header"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-6);
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+[data-slot="workspace-header"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="workspace-header"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+[data-slot="workspace-chevron"] {
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+[data-slot="workspace-header"][data-expanded] [data-slot="workspace-chevron"] {
+  transform: rotate(90deg);
+}
+
+[data-slot="workspace-name"] {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="workspace-count"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-soft);
+  background: var(--ade-bg);
+  border: 1px solid var(--ade-border);
+  border-radius: 999px;
+  padding: 0 var(--ade-space-2);
+  line-height: 15px;
+  height: 16px;
+  min-width: 16px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+/*
+ * A zero count sheds the pill: the chrome around a number implies there is
+ * something to count, so an empty workspace renders a bare dim 0 and a
+ * populated one keeps the badge — the two states no longer read the same.
+ */
+[data-slot="workspace-count"][data-empty] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ade-text-weak);
+}
+
+/*
+ * The 24px left indent plus the 6px dot and 8px gap places session titles one
+ * dot-width under the workspace name above — nesting reads from position, not
+ * from an extra guide line. The indent stays literal: it is two space-6 steps
+ * marking hierarchy, not keeping the rhythm.
+ */
+[data-slot="session-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  width: 100%;
+  padding: var(--ade-space-2) var(--ade-space-6) var(--ade-space-2) 24px;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+  position: relative;
+}
+
+[data-slot="session-row"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+/*
+ * Selection is position (the accent bar) plus fill, never accent-colored text:
+ * the accent hue is reserved for focus and interactive affordances, and
+ * recoloring content made a selected row compete with the status dots.
+ */
+[data-slot="session-row"][data-selected] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+  font-weight: 500;
+}
+
+[data-slot="session-row"][data-selected]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--ade-accent);
+  border-radius: 0 2px 2px 0;
+}
+
+[data-slot="session-row"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+[data-slot="session-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--ade-text-weak);
+}
+
+[data-status="working"] [data-slot="session-dot"] {
+  background: var(--ade-working);
+}
+[data-status="waiting"] [data-slot="session-dot"] {
+  background: var(--ade-waiting);
+}
+[data-status="done"] [data-slot="session-dot"] {
+  background: var(--ade-done);
+}
+[data-status="error"] [data-slot="session-dot"] {
+  background: var(--ade-error);
+}
+
+[data-slot="session-title"] {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ade-sans);
+}
+
+/* ── file tree ────────────────────────────────────────────────────────────── */
+
+/* Same 1px hairline seam as the workspace tree — see the note there. */
+[data-component="file-tree"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+}
+
+[data-slot="tree-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  width: 100%;
+  padding: var(--ade-space-2) var(--ade-space-6);
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+  position: relative;
+}
+
+[data-slot="tree-row"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="tree-row"][data-selected] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+  font-weight: 500;
+}
+
+[data-slot="tree-row"][data-selected]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--ade-accent);
+  border-radius: 0 2px 2px 0;
+}
+
+[data-slot="tree-row"]:focus-visible {
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
+}
+
+[data-slot="tree-indent"] {
+  display: flex;
+  align-self: stretch;
+  flex: 0 0 auto;
+}
+
+/*
+ * Vertical guide lines provide visual alignment cues across deeply nested
+ * directories, mirroring standard IDE tree navigation.
+ */
+[data-slot="tree-guide"] {
+  width: 14px;
+  flex: 0 0 14px;
+  position: relative;
+  align-self: stretch;
+}
+
+[data-slot="tree-guide"]::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ade-border);
+}
+
+[data-slot="tree-chevron"] {
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+  transition: transform 120ms ease;
+}
+
+/*
+ * Holds the chevron's 12x12 box for rows that have no chevron (files, empty
+ * directories). Measured against the chevron svg: without it a depth-0 file sat
+ * 17px left of a depth-0 directory and read as shallower than its siblings.
+ */
+[data-slot="tree-spacer"] {
+  width: 12px;
+  flex: 0 0 12px;
+  align-self: stretch;
+}
+
+[data-slot="tree-row"][data-expanded] [data-slot="tree-chevron"] {
+  transform: rotate(90deg);
+}
+
+[data-slot="tree-icon"] {
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+}
+
+[data-slot="tree-row"][data-kind="directory"] [data-slot="tree-icon"] {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="tree-label"] {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ade-sans);
+}
+
+/*
+ * Board card grammar.
+ *
+ * The token budget sits in the header because it is the one number that decides
+ * whether a session can continue, and the header is the only row never scrolled
+ * away. The footer carries who is running it and what it is doing — read down a
+ * column across the grid, those two lines answer "which one needs me".
+ */
+
+[data-slot="pane-tokens"] {
+  flex: 0 0 auto;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="pane-answers"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  padding: 0 var(--ade-space-5) var(--ade-space-3);
+}
+
+[data-slot="pane-answer"] {
+  flex: 1;
+  height: 26px;
+  border: 1px solid var(--ade-border);
+  border-radius: 5px;
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="pane-answer"]:hover {
+  background: var(--ade-hover);
+}
+
+/* The action that resolves the wait carries the accent; the one that refuses it
+   stays neutral, so the eye lands on the way forward. */
+[data-slot="pane-answer"][data-tone="primary"] {
+  flex: 0 0 auto;
+  padding: 0 var(--ade-space-6);
+  border-color: transparent;
+  background: var(--ade-accent);
+  color: var(--ade-bg);
+  font-weight: 500;
+}
+
+[data-slot="pane-footer"] {
+  justify-content: space-between;
+}
+
+[data-slot="pane-who"],
+[data-slot="pane-state"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+}
+
+[data-component="session-pane"][data-status="working"] [data-slot="pane-state"] {
+  color: var(--ade-working);
+}
+
+[data-component="session-pane"][data-status="waiting"] [data-slot="pane-state"] {
+  color: var(--ade-waiting);
+}
+
+[data-component="session-pane"][data-status="error"] [data-slot="pane-state"] {
+  color: var(--ade-error);
+}
+
+[data-component="session-pane"][data-status="done"] [data-slot="pane-state"] {
+  color: var(--ade-done);
+}
+
+/* A session waiting on the user is the only card that cannot be ignored, so it
+   is the only one whose border leaves the neutral palette. */
+[data-component="session-pane"][data-status="waiting"] {
+  border-color: var(--ade-accent);
+}
+
+/* Agent and mode, activity and elapsed, are two facts each — without a mark
+   between them they read as one broken phrase ("agy auto", "Ragionando 41s"). */
+[data-slot="pane-agent"]::after,
+[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
+  content: " ·";
+  color: var(--ade-text-weak);
+}
+
+/*
+ * The tree segment joins the footer's identity group (agent · mode) as a third
+ * fact. The separator mirrors the one above; it drops when the tree stands
+ * alone so an orphaned dot never opens the row.
+ */
+[data-slot="pane-tree"]::before {
+  content: "·";
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-tree"]:first-child::before {
+  content: none;
+}
+
+[data-slot="pane-tree"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  min-width: 0;
+  color: var(--ade-text-weak);
+}
+
+/*
+ * A degraded tree is caution, not failure — the session is working, only with
+ * less isolation than was asked for. Amber (--ade-working) marks the three
+ * degradations; a fully isolated tree stays on the quiet text ramp, because
+ * the absence of amber is the all-clear and that is what makes six panes
+ * scannable at once. --ade-error would lie, and so would silence.
+ */
+[data-slot="pane-tree"][data-fidelity="stale"],
+[data-slot="pane-tree"][data-fidelity="no-deps"],
+[data-slot="pane-tree"][data-fidelity="project"] {
+  color: var(--ade-working);
+}
+
+/* Running in the project directory is the riskiest of the degradations, and
+   the one most worth spotting across a full grid — so its word is the only
+   one in the footer allowed weight. */
+[data-slot="pane-tree"][data-fidelity="project"] [data-slot="pane-tree-note"] {
+  font-weight: 600;
+}
+
+[data-slot="pane-tree-branch"] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Branch names are identity, not prose; past this they yield to ellipsis
+     rather than crowd the state out of the footer. The title carries all of it. */
+  max-width: 28ch;
+}

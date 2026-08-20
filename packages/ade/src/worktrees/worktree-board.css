@@ -1,0 +1,319 @@
+/*
+ * Worktree board.
+ *
+ * Column widths are fixed so the rows of different projects line up: the board
+ * is read down a column ("who is inside what"), not across a single row.
+ */
+
+[data-component="worktree-board"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="wt-bar"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+}
+
+[data-slot="wt-title"] {
+  font-size: var(--ade-font-lg);
+}
+
+[data-slot="wt-count"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="wt-body"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-5);
+}
+
+[data-slot="wt-head"],
+[data-slot="wt-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  padding: 0 var(--ade-space-5);
+}
+
+[data-slot="wt-head"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-slot="wt-col-tree"] {
+  width: 220px;
+  flex: 0 0 auto;
+  text-align: left;
+  /* The column is fixed so rows align down the page; a long tree name must
+     give way inside it, visibly, instead of pushing the branch column over. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="wt-col-branch"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  width: 240px;
+  flex: 0 0 auto;
+  min-width: 0;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="wt-branch"] {
+  /* A flex item will not shrink below its content's width by default; without
+     min-width: 0 a long branch name overflows the column and the ellipsis
+     never engages. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ahead/behind counts are facts, not text: they never wrap or clip. */
+[data-slot="wt-ahead"],
+[data-slot="wt-behind"] {
+  flex: 0 0 auto;
+}
+
+[data-slot="wt-ahead"] {
+  color: var(--ade-waiting);
+}
+
+[data-slot="wt-behind"] {
+  color: var(--ade-error);
+}
+
+[data-slot="wt-col-state"] {
+  width: 96px;
+  flex: 0 0 auto;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-done);
+  text-align: left;
+}
+
+[data-slot="wt-col-state"][data-dirty] {
+  color: var(--ade-waiting);
+}
+
+[data-slot="wt-col-who"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+[data-slot="wt-col-when"] {
+  width: 64px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="wt-group"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="wt-project"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: 0 var(--ade-space-2);
+}
+
+[data-slot="wt-project-name"] {
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="wt-project-rule"] {
+  flex: 1;
+  height: 1px;
+  background: var(--ade-border);
+}
+
+[data-slot="wt-row"] {
+  min-height: 38px;
+  border: 1px solid var(--ade-border);
+  border-radius: 6px;
+  background: var(--ade-surface);
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-slot="wt-row"]:hover {
+  background: var(--ade-hover);
+}
+
+/* A contested tree is the one thing on this screen that cannot wait, so it is
+   the only row that carries a colour of its own. One tinted 1px border does not
+   survive a board of twenty rows, so its warn chip is also the only solid chip
+   on the board — the eye lands on the row, not on the outline. */
+[data-slot="wt-row"][data-risk="conflitto"] {
+  border-color: var(--ade-waiting);
+}
+
+[data-slot="wt-row"][data-risk="conflitto"] [data-slot="wt-warn"] {
+  background: var(--ade-waiting);
+  border-color: transparent;
+  color: var(--ade-bg);
+  font-weight: 500;
+}
+
+[data-slot="wt-occupant"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  height: 20px;
+  padding: 0 var(--ade-space-4);
+  border-radius: 10px;
+  background: var(--ade-active);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="wt-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ade-text-weak);
+}
+
+/*
+ * State is carried by shape as well as colour, so the three states stay
+ * distinct without relying on hue: working is a filled circle, waiting a
+ * hollow ring (the work is paused, not dead), stopped a square.
+ */
+[data-slot="wt-occupant"][data-state="working"] [data-slot="wt-dot"] {
+  background: var(--ade-working);
+}
+
+[data-slot="wt-occupant"][data-state="waiting"] [data-slot="wt-dot"] {
+  background: transparent;
+  border: 1px solid var(--ade-waiting);
+}
+
+[data-slot="wt-occupant"][data-state="stopped"] [data-slot="wt-dot"] {
+  border-radius: 1px;
+  background: var(--ade-error);
+}
+
+[data-slot="wt-free"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="wt-warn"] {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid var(--ade-waiting);
+  border-radius: 10px;
+  color: var(--ade-waiting);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="wt-new"] {
+  min-height: 34px;
+  border: 1px dashed var(--ade-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ade-text-weak);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+}
+
+[data-slot="wt-new"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="wt-alert"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-surface-raised);
+  flex: 0 0 auto;
+}
+
+[data-slot="wt-alert-text"] {
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+/*
+ * The relocation is an offer, not an error bar: the button uses the same
+ * grammar as the pane's primary answer — the action that resolves the
+ * conflict is the one that carries the accent, the reason stays plain text.
+ */
+[data-slot="wt-alert-action"] {
+  margin-left: auto;
+  height: 24px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--ade-accent);
+  color: var(--ade-bg);
+  font-family: inherit;
+  font-size: var(--ade-font-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Waiting and absent are different things: one resolves by itself, the other
+   never will, so the reason is only shown for the second. */
+[data-slot="wt-empty"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-6);
+  text-align: center;
+}
+
+[data-slot="wt-empty-title"] {
+  font-size: var(--ade-font-lg);
+  color: var(--ade-text);
+}
+
+[data-slot="wt-empty-reason"] {
+  max-width: 420px;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+}

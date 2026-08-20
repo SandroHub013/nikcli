@@ -1,0 +1,104 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities for the ADE window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true
+        },
+        {
+          "name": "codex",
+          "cmd": "codex",
+          "args": true
+        },
+        {
+          "name": "gemini",
+          "cmd": "gemini",
+          "args": true
+        },
+        {
+          "name": "opencode",
+          "cmd": "opencode",
+          "args": true
+        },
+        {
+          "name": "nikcli",
+          "cmd": "nikcli",
+          "args": true
+        },
+        {
+          "name": "agy",
+          "cmd": "agy",
+          "args": true
+        },
+        {
+          "name": "kimi",
+          "cmd": "kimi",
+          "args": true
+        },
+        {
+          "name": "git",
+          "cmd": "git",
+          "args": true
+        }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "claude",
+          "cmd": "claude",
+          "args": true
+        },
+        {
+          "name": "codex",
+          "cmd": "codex",
+          "args": true
+        },
+        {
+          "name": "gemini",
+          "cmd": "gemini",
+          "args": true
+        },
+        {
+          "name": "opencode",
+          "cmd": "opencode",
+          "args": true
+        },
+        {
+          "name": "nikcli",
+          "cmd": "nikcli",
+          "args": true
+        },
+        {
+          "name": "agy",
+          "cmd": "agy",
+          "args": true
+        },
+        {
+          "name": "kimi",
+          "cmd": "kimi",
+          "args": true
+        },
+        {
+          "name": "git",
+          "cmd": "git",
+          "args": true
+        }
+      ]
+    },
+    "shell:allow-kill",
+    "shell:allow-stdin-write"
+  ]
+}

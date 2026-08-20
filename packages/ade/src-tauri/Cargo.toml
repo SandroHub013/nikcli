@@ -1,0 +1,23 @@
+[package]
+name = "ade-desktop"
+version = "0.0.0"
+description = "Agent Development Environment"
+authors = ["Nikcli"]
+edition = "2021"
+
+[lib]
+name = "ade_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.9.5", features = ["devtools"] }
+tauri-plugin-shell = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Directory junctions need no elevation, unlike symlinks. One small crate is a
+# far narrower grant than putting `cmd` on the shell allowlist, which would be
+# arbitrary execution for anything the page decides to run.
+junction = "1"
