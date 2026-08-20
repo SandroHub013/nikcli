@@ -17,6 +17,7 @@ export interface SidebarSession {
   status: WorkspaceSessionStatus
   workspaceId?: string
   activity?: string
+  startTime?: number
 }
 
 export interface Workspace {

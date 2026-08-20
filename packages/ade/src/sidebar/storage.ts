@@ -6,6 +6,8 @@
  */
 
 export const STORAGE_KEY_WIDTH = "ade:sidebar:width"
+export const STORAGE_KEY_SESSIONS_HEIGHT = "ade:sidebar:sessions-height"
+export const STORAGE_KEY_SESSIONS_COLLAPSED = "ade:sidebar:sessions-collapsed"
 export const STORAGE_KEY_EXPANDED_WORKSPACES = "ade:sidebar:expanded-workspaces"
 export const STORAGE_KEY_EXPANDED_DIRS = "ade:sidebar:expanded-dirs"
 export const STORAGE_KEY_TAB = "ade:sidebar:tab"

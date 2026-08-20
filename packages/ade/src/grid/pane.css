@@ -1,0 +1,677 @@
+/*
+ * The session pane.
+ *
+ * The card the user stares at for hours, six at a time. Three rules shape it:
+ *
+ *   1. Status is structural, not a decoration. It tints the card's top edge and
+ *      the activity word, so a glance across the grid answers "who needs me?"
+ *      without reading a single label.
+ *   2. Output sits at the bottom, like a terminal. A three-line session floating
+ *      in the middle of an empty card reads as broken; anchored to the prompt it
+ *      reads as ready.
+ *   3. Chrome recedes. Window actions appear on hover or focus, metrics are
+ *      quiet until you look for them, and nothing but the agent's own output
+ *      uses the full text colour.
+ *
+ * Every value comes from the token layer in index.css. The one exception is the
+ * ANSI palette below, which is scoped to this component because it exists only
+ * to render what a terminal process emitted.
+ */
+
+[data-component="session-pane"] {
+  /*
+   * Terminal colours, retuned for this shell's warm dark ground. They are not
+   * sRGB primaries: an agent printing red should look like it belongs in this
+   * window rather than like a screenshot pasted into it.
+   */
+  --ade-ansi-black: #4a4444;
+  --ade-ansi-red: #e0879a;
+  --ade-ansi-green: #71c491;
+  --ade-ansi-yellow: #d9a45f;
+  --ade-ansi-blue: #7da9e4;
+  --ade-ansi-magenta: #c79bdc;
+  --ade-ansi-cyan: #7fd6c4;
+  --ade-ansi-white: #a9a4a4;
+  --ade-ansi-brightBlack: #6d6666;
+  --ade-ansi-brightRed: #f0a0b0;
+  --ade-ansi-brightGreen: #8fd8a8;
+  --ade-ansi-brightYellow: #ecbc7c;
+  --ade-ansi-brightBlue: #9cc0ee;
+  --ade-ansi-brightMagenta: #d9b5e8;
+  --ade-ansi-brightCyan: #9fe3d5;
+  --ade-ansi-brightWhite: #ecebeb;
+
+  /* The status hue for this card. Redefined per status below, once, so every
+     rule that needs it — edge, pulse, activity word — reads the same value. */
+  --pane-status: var(--ade-text-weak);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--ade-shadow-sm);
+  /* Children query the card's own width to decide what to drop when it gets
+     narrow — a four-column grid halves this card twice. */
+  container-type: inline-size;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur) var(--ade-ease),
+    transform var(--ade-dur) var(--ade-ease);
+}
+
+/*
+ * The status edge: a hairline across the top that fades toward the middle.
+ * Painted on ::before rather than as a border so it can sit above the header's
+ * own background and follow the card's radius.
+ */
+[data-component="session-pane"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 1;
+  background: linear-gradient(
+    to right,
+    var(--pane-status) 0%,
+    color-mix(in srgb, var(--pane-status) 35%, transparent) 45%,
+    transparent 100%
+  );
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* Inner highlight: a faint light line inside the border, which is what makes a
+   hairline card read as a physical surface instead of a drawn rectangle. */
+[data-component="session-pane"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 var(--ade-highlight);
+  pointer-events: none;
+}
+
+[data-component="session-pane"][data-status="working"],
+[data-component="session-pane"][data-status="provisioning"] {
+  --pane-status: var(--ade-working);
+}
+[data-component="session-pane"][data-status="waiting"] {
+  --pane-status: var(--ade-waiting);
+}
+[data-component="session-pane"][data-status="done"] {
+  --pane-status: var(--ade-done);
+}
+[data-component="session-pane"][data-status="error"] {
+  --pane-status: var(--ade-error);
+}
+
+/*
+ * The focused card has to be findable from across the screen, so focus is three
+ * signals at once: an accent ring, a real lift, and a brighter ground. One of
+ * them alone loses to a status edge two cards away.
+ */
+[data-component="session-pane"][data-focused] {
+  background: var(--ade-surface);
+  border-color: var(--ade-accent);
+  box-shadow:
+    var(--ade-shadow-lg),
+    0 0 0 1px var(--ade-accent),
+    0 0 0 5px var(--ade-accent-soft);
+}
+
+/* ── header ────────────────────────────────────────────────────────────────── */
+
+[data-slot="pane-header"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-3) var(--ade-space-3) var(--ade-space-5);
+  background: var(--ade-raised);
+  border-bottom: 1px solid var(--ade-border-subtle);
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+/* The agent's mark, in a chip that keeps it legible when the card is half a
+   column wide and the name itself has been dropped. */
+[data-slot="pane-identity"] {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: var(--ade-radius-sm);
+  background: color-mix(in srgb, var(--pane-status) 16%, transparent);
+  color: var(--pane-status);
+  font-size: var(--ade-font-sm);
+  line-height: 1;
+}
+
+[data-slot="pane-title"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-medium);
+  color: var(--ade-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  letter-spacing: -0.012em;
+}
+
+[data-slot="pane-tokens"],
+[data-slot="pane-cost"] {
+  flex: 0 0 auto;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+[data-slot="pane-actions"] {
+  display: flex;
+  gap: var(--ade-space-1);
+  flex: 0 0 auto;
+  /* Held in the layout but invisible: revealing them must not shift the title. */
+  opacity: 0;
+  transition: opacity var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-component="session-pane"]:hover [data-slot="pane-actions"],
+[data-component="session-pane"][data-focused] [data-slot="pane-actions"],
+[data-slot="pane-actions"]:focus-within {
+  opacity: 1;
+}
+
+[data-slot="pane-action"] {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="pane-action"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="pane-action"]:active {
+  background: var(--ade-active);
+}
+
+[data-slot="pane-action"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+  color: var(--ade-text);
+}
+
+/* ── liveness ──────────────────────────────────────────────────────────────── */
+
+/*
+ * A 2px lane under the header. It keeps its height when idle so starting work
+ * never nudges the transcript; only the travelling band appears.
+ */
+[data-slot="pane-pulse"] {
+  position: relative;
+  height: 2px;
+  flex: 0 0 auto;
+  background: var(--ade-sunken);
+  overflow: hidden;
+}
+
+[data-slot="pane-pulse"][data-busy]::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  background: linear-gradient(to right, transparent, var(--pane-status), transparent);
+  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite;
+}
+
+@keyframes ade-pane-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(386%);
+  }
+}
+
+/* ── transcript ────────────────────────────────────────────────────────────── */
+
+/*
+ * The transcript is a well sunk below the card surface: the depth makes the
+ * space under a short session read as a viewport waiting for output rather than
+ * as leftover card.
+ */
+[data-slot="pane-transcript"] {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--ade-space-4) var(--ade-space-5);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Short output falls to the bottom, next to the prompt, the way a terminal
+   behaves. Long output simply overflows upward and scrolls. */
+[data-slot="pane-lines"] {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  min-width: 0;
+}
+
+[data-slot="pane-line"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  align-items: baseline;
+  min-width: 0;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="pane-line"][data-kind="step"] {
+  color: var(--ade-text);
+}
+
+[data-slot="pane-line"][data-kind="shell"] {
+  padding-left: var(--ade-space-3);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="pane-line"][data-kind="note"] {
+  color: var(--ade-text-weak);
+}
+
+/*
+ * Diff and error are the two line kinds that carry a verdict, so they get a
+ * ground of their own: scanning a wall of mono for a stack trace is exactly the
+ * work the pane should be doing for the reader.
+ */
+[data-slot="pane-line"][data-kind="diff"] {
+  padding-left: var(--ade-space-3);
+  border-left: 2px solid var(--ade-border-strong);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="pane-line"][data-kind="error"] {
+  padding: 0 var(--ade-space-3);
+  margin-left: calc(var(--ade-space-3) * -1);
+  border-left: 2px solid var(--ade-error);
+  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
+  background: var(--ade-error-bg);
+  color: var(--ade-error);
+}
+
+[data-slot="pane-bullet"] {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--ade-radius-full);
+  background: var(--pane-status);
+  flex: 0 0 auto;
+  transform: translateY(-2px);
+}
+
+[data-slot="pane-elbow"] {
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-text"] {
+  min-width: 0;
+  /* A transcript line is a command or a sentence; breaking mid-word turns a path
+     into confetti, so it wraps at whitespace and scrolls only as a last resort. */
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Progress bars emit the same line hundreds of times; the count is the whole
+   information, and it belongs beside the line rather than in place of it. */
+[data-slot="pane-repeat"] {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 0 var(--ade-space-2);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-active);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Appears only once the reader has scrolled away from the live edge. */
+[data-slot="pane-tail"] {
+  position: sticky;
+  bottom: 0;
+  align-self: center;
+  margin-top: var(--ade-space-3);
+  padding: var(--ade-space-1) var(--ade-space-4);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-overlay);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  cursor: pointer;
+  box-shadow: var(--ade-shadow-md);
+  transition: color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="pane-tail"]:hover {
+  color: var(--ade-text);
+}
+
+[data-slot="pane-tail"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* ── prompt ────────────────────────────────────────────────────────────────── */
+
+[data-slot="pane-prompt"] {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-5);
+  background: var(--ade-sunken);
+  border-top: 1px solid var(--ade-border-subtle);
+  flex: 0 0 auto;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="pane-prompt"]:focus-within {
+  background: var(--ade-surface);
+}
+
+[data-slot="pane-caret"] {
+  color: var(--ade-accent);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  line-height: 18px;
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-prompt"][data-disabled] [data-slot="pane-caret"] {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-input"] {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  line-height: 18px;
+  padding: 0;
+  resize: none;
+  max-height: 120px;
+}
+
+[data-slot="pane-input"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+[data-slot="pane-input"]::placeholder {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-send-hint"] {
+  flex: 0 0 auto;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+  line-height: 18px;
+}
+
+/* ── answers ───────────────────────────────────────────────────────────────── */
+
+/*
+ * A permission question is a decision, not a form. The bar is compact and right
+ * aligned, with the affirmative last, where the eye and the pointer finish.
+ */
+[data-slot="pane-answers"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-3) var(--ade-space-5);
+  background: var(--ade-sunken);
+  border-top: 1px solid var(--ade-border-subtle);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-answer"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-md);
+  border: 1px solid var(--ade-border-strong);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="pane-answer"]:hover {
+  background: var(--ade-overlay);
+  color: var(--ade-text);
+}
+
+[data-slot="pane-answer"][data-tone="primary"] {
+  border-color: transparent;
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="pane-answer"][data-tone="primary"]:hover {
+  background: var(--ade-accent-strong);
+  color: var(--ade-accent-fg);
+}
+
+[data-slot="pane-answer"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="pane-answer-hint"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  opacity: 0.7;
+}
+
+/* ── footer ────────────────────────────────────────────────────────────────── */
+
+[data-slot="pane-footer"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-top: 1px solid var(--ade-border);
+  background: var(--ade-raised);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  line-height: 18px;
+  color: var(--ade-text-weak);
+  flex: 0 0 auto;
+  box-shadow: inset 0 1px 0 var(--ade-highlight);
+}
+
+[data-slot="pane-who"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  min-width: 0;
+  flex: 1;
+}
+
+[data-slot="pane-agent"] {
+  color: var(--ade-text-soft);
+}
+
+/* Agent and mode, activity and elapsed, are two facts each — without a mark
+   between them they read as one broken phrase ("agy auto", "Ragionando 41s"). */
+[data-slot="pane-agent"]::after,
+[data-slot="pane-tree"]::before,
+[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
+  content: "·";
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-agent"]::after,
+[data-slot="pane-state"] > span:first-child:not(:only-child)::after {
+  margin-left: var(--ade-space-2);
+}
+
+[data-slot="pane-tree"]::before {
+  margin-right: var(--ade-space-2);
+}
+
+/* An orphaned separator would open the row with a dot that separates nothing. */
+[data-slot="pane-tree"]:first-child::before {
+  content: none;
+}
+
+[data-slot="pane-mode"] {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-tree"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  min-width: 0;
+  padding: 0 var(--ade-space-2);
+  border-radius: var(--ade-radius-sm);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="pane-tree-branch"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28ch;
+}
+
+/*
+ * A degraded tree is caution, not failure — the session is working, only with
+ * less isolation than was asked for. Amber marks the two milder degradations;
+ * a fully isolated tree stays on the quiet text ramp.
+ */
+[data-slot="pane-tree"][data-fidelity="stale"],
+[data-slot="pane-tree"][data-fidelity="no-deps"] {
+  color: var(--ade-working);
+}
+
+[data-slot="pane-tree-note"] {
+  color: var(--ade-working);
+}
+
+/*
+ * "senza isolamento" means the agent is editing the user's own files. It is the
+ * single most consequential thing this card can say, so it is the only footer
+ * segment allowed to look like a warning.
+ */
+[data-slot="pane-tree"][data-fidelity="project"] {
+  background: var(--ade-error-bg);
+  color: var(--ade-error);
+}
+
+[data-slot="pane-tree"][data-fidelity="project"] [data-slot="pane-tree-note"] {
+  color: inherit;
+}
+
+[data-slot="pane-state"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-4);
+  flex: 0 0 auto;
+}
+
+[data-slot="pane-activity-word"] {
+  color: var(--pane-status);
+}
+
+[data-slot="pane-meta"] {
+  color: var(--ade-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── narrow cards ──────────────────────────────────────────────────────────── */
+
+/*
+ * Four columns on a laptop leaves each card around 300px. Secondary facts go
+ * first and the status word goes last: a card that cannot say what it is doing
+ * has stopped being useful, while one without a token count has not.
+ */
+@container (max-width: 340px) {
+  [data-slot="pane-cost"],
+  [data-slot="pane-tree-note"],
+  [data-slot="pane-mode"] {
+    display: none;
+  }
+}
+
+@container (max-width: 260px) {
+  [data-slot="pane-tokens"],
+  [data-slot="pane-agent"],
+  [data-slot="pane-tree"] {
+    display: none;
+  }
+}
+
+/* ── reduced motion ────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-pane"],
+  [data-slot="pane-actions"],
+  [data-slot="pane-action"],
+  [data-slot="pane-answer"],
+  [data-slot="pane-prompt"] {
+    transition: none;
+  }
+
+  /* Liveness still has to be visible without movement: the lane fills instead
+     of sweeping. */
+  [data-slot="pane-pulse"][data-busy]::after {
+    position: static;
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--pane-status);
+    opacity: 0.5;
+    animation: none;
+  }
+}

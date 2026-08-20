@@ -1,4 +1,12 @@
-import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, createEffect } from "solid-js"
+import "./sidebar.css"
+import { getHost } from "../host/shell"
+import { discoverProject, type Project } from "../host/project"
+import { toDisplayPath } from "../host/path"
+import { fuzzyMatch } from "../command/match"
+import { formatDuration, elapsed } from "../session/metrics"
+import { FilePreview } from "./file-preview"
+
 import {
   type FileNode,
   type FlatFileNode,
@@ -13,9 +21,9 @@ import {
   STORAGE_KEY_EXPANDED_WORKSPACES,
   STORAGE_KEY_TAB,
   STORAGE_KEY_WIDTH,
-  type SidebarTab,
+  STORAGE_KEY_SESSIONS_COLLAPSED,
+  STORAGE_KEY_SESSIONS_HEIGHT,
   deserializeSet,
-  parseSidebarTab,
   safeGetStorage,
   safeSetStorage,
   serializeSet,
@@ -28,6 +36,13 @@ import {
   parseSidebarWidth,
 } from "./width"
 import {
+  DEFAULT_SESSIONS_HEIGHT,
+  MAX_SESSIONS_HEIGHT,
+  MIN_SESSIONS_HEIGHT,
+  calculateHeightResize,
+  parseSessionsHeight,
+} from "./height"
+import {
   type FlatSessionChildRow,
   type FlatWorkspaceHeaderRow,
   type FlatWorkspaceRow,
@@ -35,6 +50,7 @@ import {
   flattenWorkspaces,
   toggleWorkspaceExpansion,
 } from "./workspace-tree"
+import { mergeChildren, markDirectoryError } from "./fs-tree"
 
 export interface SidebarProps {
   workspaces: Workspace[]
@@ -43,7 +59,6 @@ export interface SidebarProps {
   files?: FileNode[]
   selectedFilePath?: string
   onSelectFile?: (path: string) => void
-  defaultTab?: SidebarTab
   initialWidth?: number
   minWidth?: number
   maxWidth?: number
@@ -90,8 +105,26 @@ function WorkspaceHeaderRow(props: {
   )
 }
 
+function highlightMatch(text: string, ranges?: [number, number][]) {
+  if (!ranges || ranges.length === 0) return text
+  const res = []
+  let last = 0
+  for (const [start, end] of ranges) {
+    if (start > last) {
+      res.push(text.slice(last, start))
+    }
+    res.push(<span class="highlight-match">{text.slice(start, end)}</span>)
+    last = end
+  }
+  if (last < text.length) {
+    res.push(text.slice(last))
+  }
+  return res
+}
+
 function SessionChildRow(props: {
   row: FlatSessionChildRow
+  now: number
   onSelect?: (id: string) => void
 }) {
   return (
@@ -109,23 +142,34 @@ function SessionChildRow(props: {
       <span data-slot="session-title" title={props.row.session.title}>
         {props.row.session.title}
       </span>
+      <Show when={props.row.session.activity}>
+        <span data-slot="session-activity">
+          {props.row.session.activity}
+          <Show when={props.row.session.startTime}>
+            {" • "}{formatDuration(elapsed(props.row.session.startTime!, props.now))}
+          </Show>
+        </span>
+      </Show>
     </button>
   )
 }
 
 function WorkspaceTreeRow(props: {
   row: FlatWorkspaceRow
+  now: number
   onToggleWorkspace: (id: string) => void
   onSelectSession?: (id: string) => void
 }) {
   if (props.row.type === "workspace") {
     return <WorkspaceHeaderRow row={props.row} onToggle={props.onToggleWorkspace} />
   }
-  return <SessionChildRow row={props.row} onSelect={props.onSelectSession} />
+  return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} />
 }
 
+type FlatFileNodeWithRanges = FlatFileNode & { ranges?: [number, number][] }
+
 function FileTreeRow(props: {
-  item: FlatFileNode
+  item: FlatFileNodeWithRanges
   onToggleDir: (path: string) => void
   onSelectFile?: (path: string) => void
 }) {
@@ -162,8 +206,6 @@ function FileTreeRow(props: {
         when={props.item.kind === "directory"}
         fallback={
           <>
-            {/* Files have no chevron; the spacer holds the chevron's 12px box so
-                same-depth rows align (chevron svg measures 12x12). */}
             <span data-slot="tree-spacer" aria-hidden="true" />
             <svg
             data-slot="tree-icon"
@@ -188,8 +230,6 @@ function FileTreeRow(props: {
           </>
         }
       >
-        {/* A directory without children also has no chevron to show, so it gets
-            the same 12px spacer a file gets — depth must read from indent alone. */}
         <Show
           when={props.item.hasChildren}
           fallback={<span data-slot="tree-spacer" aria-hidden="true" />}
@@ -229,19 +269,12 @@ function FileTreeRow(props: {
       </Show>
 
       <span data-slot="tree-label" title={props.item.name}>
-        {props.item.name}
+        {highlightMatch(props.item.name, props.item.ranges)}
       </span>
     </button>
   )
 }
 
-/**
- * The ADE sidebar shell component.
- *
- * Provides workspace/session management and an IDE-style file navigator.
- * Sits to the left of the live session grid with persisted resizable width
- * and expansion states.
- */
 export function Sidebar(props: SidebarProps) {
   const storage = props.storage ?? (typeof window !== "undefined" ? window.localStorage : undefined)
 
@@ -254,13 +287,12 @@ export function Sidebar(props: SidebarProps) {
   const [width, setWidth] = createSignal(initialWidth)
   const [isResizing, setIsResizing] = createSignal(false)
 
-  const initialTab = parseSidebarTab(
-    safeGetStorage(storage, STORAGE_KEY_TAB),
-    props.defaultTab ?? "sessions",
-  )
-  const [tab, setTab] = createSignal<SidebarTab>(initialTab)
+  const initialSessionsHeight = parseSessionsHeight(safeGetStorage(storage, STORAGE_KEY_SESSIONS_HEIGHT))
+  const [sessionsHeight, setSessionsHeight] = createSignal(initialSessionsHeight)
+  const [isResizingSessions, setIsResizingSessions] = createSignal(false)
+  const initialSessionsCollapsed = safeGetStorage(storage, STORAGE_KEY_SESSIONS_COLLAPSED) === "true"
+  const [sessionsCollapsed, setSessionsCollapsed] = createSignal(initialSessionsCollapsed)
 
-  // Default all workspaces to expanded so active work is visible on first launch
   const initialExpandedWorkspaces = deserializeSet(
     safeGetStorage(storage, STORAGE_KEY_EXPANDED_WORKSPACES),
     props.workspaces.map((w) => w.id),
@@ -275,10 +307,57 @@ export function Sidebar(props: SidebarProps) {
   )
   const [expandedDirs, setExpandedDirs] = createSignal<Set<string>>(initialExpandedDirs)
 
-  const switchTab = (nextTab: SidebarTab) => {
-    setTab(nextTab)
-    safeSetStorage(storage, STORAGE_KEY_TAB, nextTab)
+  const [project, setProject] = createSignal<Project | undefined>()
+  const [rootNode, setRootNode] = createSignal<FileNode | undefined>()
+  const [searchQuery, setSearchQuery] = createSignal("")
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const loadDir = async (dirPath: string) => {
+    const host = await getHost()
+    if (!host?.readDir) return
+    try {
+      const entries = await host.readDir(dirPath)
+      setRootNode(prev => {
+        if (!prev) return prev
+        return mergeChildren(prev, dirPath, entries, false)
+      })
+    } catch {
+      setRootNode(prev => {
+        if (!prev) return prev
+        return markDirectoryError(prev, dirPath)
+      })
+    }
   }
+
+  const [home, setHome] = createSignal("")
+
+  createEffect(() => {
+    getHost().then(host => {
+      if (host) {
+        host.homeDir?.().then(setHome)
+        if (host.currentDir) {
+          host.currentDir().then(dir => {
+            discoverProject(host, dir).then(p => {
+              setProject(p)
+              const r: FileNode = {
+                id: p.root,
+                name: p.name,
+                path: p.root,
+                kind: "directory"
+              }
+              setRootNode(r)
+              loadDir(p.root)
+            })
+          })
+        }
+      }
+    })
+  })
 
   const toggleWorkspace = (workspaceId: string) => {
     const next = toggleWorkspaceExpansion(expandedWorkspaces(), workspaceId)
@@ -290,6 +369,15 @@ export function Sidebar(props: SidebarProps) {
     const next = toggleDirectoryExpansion(expandedDirs(), dirPath)
     setExpandedDirs(next)
     safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next))
+    if (next.has(dirPath)) {
+      loadDir(dirPath)
+    }
+  }
+
+  const toggleSessionsCollapsed = () => {
+    const next = !sessionsCollapsed()
+    setSessionsCollapsed(next)
+    safeSetStorage(storage, STORAGE_KEY_SESSIONS_COLLAPSED, next ? "true" : "false")
   }
 
   const flatWorkspaces = createMemo(() =>
@@ -298,21 +386,48 @@ export function Sidebar(props: SidebarProps) {
   const keyedWorkspaces = createKeyedList(flatWorkspaces, (row) => `${row.type}:${row.id}`)
 
   const flatFiles = createMemo(() =>
-    flattenFileTree(props.files ?? [], expandedDirs(), props.selectedFilePath),
+    flattenFileTree(rootNode() ? [rootNode()!] : (props.files ?? []), expandedDirs(), props.selectedFilePath),
   )
-  const keyedFiles = createKeyedList(flatFiles, (item) => item.path)
+
+  const searchFilteredFiles = createMemo(() => {
+    const query = searchQuery()
+    const all = flatFiles()
+    if (!query) return all
+
+    const matches = new Map<string, [number, number][]>()
+    const parentsToKeep = new Set<string>()
+
+    for (const node of all) {
+      const match = fuzzyMatch(query, node.name)
+      if (match) {
+        matches.set(node.path, match.ranges)
+        let parentPath = node.parentPath
+        while (parentPath) {
+          parentsToKeep.add(parentPath)
+          const p = all.find(n => n.path === parentPath)
+          parentPath = p?.parentPath
+        }
+      }
+    }
+
+    return all.filter(node => matches.has(node.path) || parentsToKeep.has(node.path)).map(node => ({
+      ...node,
+      ranges: matches.get(node.path)
+    }))
+  })
+
+  const keyedFiles = createKeyedList(searchFilteredFiles, (item) => item.path)
 
   let activeResizeCleanup: (() => void) | undefined
+  let activeHeightResizeCleanup: (() => void) | undefined
 
-  // Detach window event listeners if the component unmounts mid-drag gesture
   onCleanup(() => {
     activeResizeCleanup?.()
+    activeHeightResizeCleanup?.()
   })
 
   const onResizePointerDown = (event: PointerEvent) => {
-    // Prevent text selection during continuous drag gestures
     event.preventDefault()
-    // Clean up any stale drag listeners if a previous gesture did not finish
     activeResizeCleanup?.()
 
     const startX = event.clientX
@@ -320,13 +435,7 @@ export function Sidebar(props: SidebarProps) {
     setIsResizing(true)
 
     const onPointerMove = (e: PointerEvent) => {
-      const nextWidth = calculateResize(
-        startX,
-        e.clientX,
-        startWidth,
-        props.minWidth ?? MIN_SIDEBAR_WIDTH,
-        props.maxWidth ?? MAX_SIDEBAR_WIDTH,
-      )
+      const nextWidth = calculateResize(startX, e.clientX, startWidth, props.minWidth ?? MIN_SIDEBAR_WIDTH, props.maxWidth ?? MAX_SIDEBAR_WIDTH)
       setWidth(nextWidth)
     }
 
@@ -343,9 +452,61 @@ export function Sidebar(props: SidebarProps) {
     }
 
     activeResizeCleanup = cleanupDrag
-
     window.addEventListener("pointermove", onPointerMove)
     window.addEventListener("pointerup", onPointerUp)
+  }
+
+  const onHeightResizePointerDown = (event: PointerEvent) => {
+    event.preventDefault()
+    activeHeightResizeCleanup?.()
+
+    const startY = event.clientY
+    const startHeight = sessionsHeight()
+    setIsResizingSessions(true)
+
+    const onPointerMove = (e: PointerEvent) => {
+      const nextHeight = calculateHeightResize(startY, e.clientY, startHeight)
+      setSessionsHeight(nextHeight)
+    }
+
+    const cleanupDrag = () => {
+      setIsResizingSessions(false)
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerUp)
+      activeHeightResizeCleanup = undefined
+    }
+
+    const onPointerUp = () => {
+      cleanupDrag()
+      safeSetStorage(storage, STORAGE_KEY_SESSIONS_HEIGHT, String(sessionsHeight()))
+    }
+
+    activeHeightResizeCleanup = cleanupDrag
+    window.addEventListener("pointermove", onPointerMove)
+    window.addEventListener("pointerup", onPointerUp)
+  }
+
+  const aggregateStats = createMemo(() => {
+    let working = 0, waiting = 0, failed = 0
+    for (const ws of props.workspaces) {
+      for (const s of ws.sessions) {
+        if (s.status === "working" || s.status === "provisioning") working++
+        else if (s.status === "waiting") waiting++
+        else if (s.status === "error") failed++
+      }
+    }
+    return { working, waiting, failed }
+  })
+
+  const onSearchInput = (e: Event) => {
+    setSearchQuery((e.target as HTMLInputElement).value)
+  }
+
+  const onSearchKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setSearchQuery("")
+    }
+    // basic arrows / enter navigation could be added here
   }
 
   return (
@@ -354,48 +515,80 @@ export function Sidebar(props: SidebarProps) {
       data-resizing={isResizing() ? "true" : undefined}
       style={{ width: `${width()}px` }}
     >
-      <header data-slot="sidebar-header">
-        <nav data-slot="sidebar-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            data-slot="sidebar-tab"
-            data-active={tab() === "sessions" ? "true" : undefined}
-            aria-selected={tab() === "sessions"}
-            onClick={() => switchTab("sessions")}
-          >
-            Sessioni
-          </button>
-          <button
-            type="button"
-            role="tab"
-            data-slot="sidebar-tab"
-            data-active={tab() === "files" ? "true" : undefined}
-            aria-selected={tab() === "files"}
-            onClick={() => switchTab("files")}
-          >
-            File
-          </button>
-        </nav>
-      </header>
-
-      <div data-slot="sidebar-content">
-        <Show when={tab() === "sessions"}>
-          <div data-component="workspace-tree" role="tree">
-            <For each={keyedWorkspaces()}>
-              {(entry) => (
-                <WorkspaceTreeRow
-                  row={entry.data()}
-                  onToggleWorkspace={toggleWorkspace}
-                  onSelectSession={props.onSelectSession}
-                />
-              )}
-            </For>
+      <header data-slot="sidebar-header-project">
+        <Show when={project()}>
+          <div data-slot="project-name">
+            {project()!.name}
+            <Show when={project()!.branch}>
+              <span data-slot="project-branch">{project()!.branch}</span>
+            </Show>
           </div>
+          <span data-slot="project-path" title={project()!.root}>
+            {toDisplayPath(project()!.root, home())}
+          </span>
+        </Show>
+      </header>
+      
+      <div data-slot="sidebar-stats">
+        <div data-slot="stat-item">Lavorando: <strong>{aggregateStats().working}</strong></div>
+        <div data-slot="stat-item">Attesa: <strong>{aggregateStats().waiting}</strong></div>
+        <div data-slot="stat-item">Errori: <strong>{aggregateStats().failed}</strong></div>
+      </div>
+
+      <div data-slot="sidebar-sections">
+        <div 
+          data-slot="sidebar-section-sessions" 
+          style={{ height: sessionsCollapsed() ? "auto" : `${sessionsHeight()}px`, "flex-shrink": 0 }}
+        >
+          <button data-slot="section-header" onClick={toggleSessionsCollapsed}>
+            <span>Sessioni</span>
+            <svg viewBox="0 0 12 12" width="12" height="12" style={{ transform: sessionsCollapsed() ? "rotate(-90deg)" : "none", transition: "transform 0.15s ease" }}>
+              <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          
+          <Show when={!sessionsCollapsed()}>
+            <div data-slot="section-content" data-component="workspace-tree" role="tree">
+              <For each={keyedWorkspaces()}>
+                {(entry) => (
+                  <WorkspaceTreeRow
+                    row={entry.data()}
+                    now={now()}
+                    onToggleWorkspace={toggleWorkspace}
+                    onSelectSession={props.onSelectSession}
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+
+        <Show when={!sessionsCollapsed()}>
+          <div
+            data-slot="sidebar-horizontal-resize-handle"
+            onPointerDown={onHeightResizePointerDown}
+            role="separator"
+            aria-orientation="horizontal"
+          />
         </Show>
 
-        <Show when={tab() === "files"}>
-          <div data-component="file-tree" role="tree">
+        <div data-slot="sidebar-section-files">
+          <button data-slot="section-header">
+            <span>File</span>
+          </button>
+          
+          <div data-slot="search-box">
+            <input 
+              type="text" 
+              data-slot="search-input" 
+              placeholder="Cerca fra i file aperti..." 
+              value={searchQuery()}
+              onInput={onSearchInput}
+              onKeyDown={onSearchKeyDown}
+            />
+          </div>
+
+          <div data-slot="section-content" data-component="file-tree" role="tree">
             <For each={keyedFiles()}>
               {(entry) => (
                 <FileTreeRow
@@ -406,7 +599,7 @@ export function Sidebar(props: SidebarProps) {
               )}
             </For>
           </div>
-        </Show>
+        </div>
       </div>
 
       <div
