@@ -6,7 +6,11 @@
   height: 100vh;
 }
 
-/* 36px: tall enough for 22px controls with 4px air above and below, no more. */
+/* ── top bar ──────────────────────────────────────────────────────────────── */
+/*
+ * 36px: tall enough for 22px controls with 4px air above and below, no more.
+ * The inner highlight gives the bar a raised-surface feel.
+ */
 [data-slot="ade-bar"] {
   display: flex;
   align-items: center;
@@ -15,15 +19,16 @@
   height: 36px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--ade-border);
-  background: var(--ade-surface-raised);
+  background: var(--ade-raised);
+  box-shadow: inset 0 -1px 0 var(--ade-highlight);
 }
 
+/* Brand mark — the one element that earns the accent hue in the bar. */
 [data-slot="ade-brand"] {
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-sm);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-bold);
+  letter-spacing: -0.02em;
   color: var(--ade-accent);
 }
 
@@ -35,9 +40,14 @@
   flex: 0 0 auto;
 }
 
+/*
+ * Session count: informational meta, not an action. Small caps + weak colour
+ * keep it out of the visual hierarchy of controls.
+ */
 [data-slot="ade-count"] {
-  font-family: var(--ade-mono);
+  font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ade-text-weak);
@@ -49,7 +59,7 @@
   color: var(--ade-accent);
   background: var(--ade-bg);
   padding: var(--ade-space-1) var(--ade-space-4);
-  border-radius: 4px;
+  border-radius: var(--ade-radius-sm);
   border: 1px solid var(--ade-border);
   max-width: 320px;
   white-space: nowrap;
@@ -61,37 +71,59 @@
   flex: 1;
 }
 
+/*
+ * Column selector group: configuration, not primary action. It weighs
+ * visually less than the "add session" button.
+ */
 [data-slot="ade-columns"] {
   display: flex;
   align-items: center;
   gap: var(--ade-space-1);
 }
 
+/*
+ * Labels for configuration groups. Micro-caps with positive letter-spacing
+ * to read as a category heading, not content.
+ */
 [data-slot="ade-label"] {
-  font-family: var(--ade-mono);
+  font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ade-text-weak);
   margin-right: var(--ade-space-3);
 }
 
+/* ── chip buttons: silent level ───────────────────────────────────────────── */
+/*
+ * Chips are configuration toggles — the quietest button level. No border until
+ * active, ghost hover, and a focus ring that doesn't fight the active state.
+ */
 [data-slot="ade-chip"] {
   min-width: 26px;
   height: 22px;
   padding: 0 var(--ade-space-4);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--ade-radius-sm);
   background: transparent;
   color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-chip"]:hover {
   background: var(--ade-hover);
   color: var(--ade-text);
+}
+
+[data-slot="ade-chip"]:active {
+  background: var(--ade-active);
 }
 
 /* The pinned chip is state, not focus, so it gets the fill rather than the hue. */
@@ -102,32 +134,45 @@
 }
 
 [data-slot="ade-chip"]:focus-visible {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: 1px;
+  box-shadow: var(--ade-focus-ring);
   color: var(--ade-text);
 }
 
+/* ── add session button: primary level ────────────────────────────────────── */
+/*
+ * The one primary action in the bar. It must be the single most visible
+ * interactive element: accent fill, contrast foreground, prominent on hover.
+ */
 [data-slot="ade-add"] {
   height: 22px;
   padding: 0 var(--ade-space-5);
-  border: 1px solid var(--ade-border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ade-text);
-  font-family: var(--ade-mono);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-medium);
   cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-add"]:hover {
-  background: var(--ade-hover);
-  border-color: var(--ade-text-weak);
+  background: var(--ade-accent-strong);
+  box-shadow: var(--ade-shadow-sm);
+}
+
+[data-slot="ade-add"]:active {
+  filter: brightness(0.9);
 }
 
 [data-slot="ade-add"]:focus-visible {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: 1px;
+  box-shadow: var(--ade-focus-ring);
 }
+
+/* ── body layout ──────────────────────────────────────────────────────────── */
 
 [data-slot="ade-body"] {
   flex: 1;

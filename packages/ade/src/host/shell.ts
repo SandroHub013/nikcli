@@ -26,6 +26,20 @@ export interface RunResult {
   stderr: string
 }
 
+export interface DirEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+  modified_ms: number
+}
+
+export interface FileRead {
+  text: string
+  truncated: boolean
+  bytes: number
+}
+
 export interface Host {
   /** Runs `command arg` and returns its output, or null when it cannot run. */
   probe: (command: string, arg: string) => Promise<string | null>
@@ -58,6 +72,16 @@ export interface Host {
     onLine: (line: string, stream: "out" | "err") => void
     onExit: (code: number | null) => void
   }) => Promise<SpawnedSession>
+
+  // -- Filesystem access (backed by dedicated Tauri commands) ---------------
+  readDir?: (path: string) => Promise<DirEntry[]>
+  readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
+  currentDir?: () => Promise<string>
+  homeDir?: () => Promise<string>
+  exists?: (path: string) => Promise<boolean>
+
+  /** Opens a native directory picker. Returns the chosen path, or undefined when the user cancels. */
+  pickDirectory?: (title?: string) => Promise<string | undefined>
 }
 
 const inTauri = () =>
@@ -134,6 +158,57 @@ export async function getHost(): Promise<Host | undefined> {
           void handle.write(`${line}
 `).catch(() => undefined)
         },
+      }
+    },
+
+    // -- Filesystem access (backed by dedicated Tauri commands) -------------
+
+    async readDir(path) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<DirEntry[]>("read_dir", { path })
+      } catch {
+        return []
+      }
+    },
+
+    async readTextFile(path, maxBytes = 1_048_576) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<FileRead>("read_text_file", { path, maxBytes })
+      } catch (error) {
+        return { text: "", truncated: false, bytes: 0 }
+      }
+    },
+
+    async currentDir() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string>("current_dir")
+    },
+
+    async homeDir() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string>("home_dir")
+    },
+
+    async exists(path) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<boolean>("path_exists", { path })
+      } catch {
+        return false
+      }
+    },
+
+    async pickDirectory(title) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const selected = await open({ directory: true, title: title ?? "Scegli cartella" })
+        // open() returns string | string[] | null depending on `multiple`
+        if (typeof selected === "string") return selected
+        return undefined
+      } catch {
+        return undefined
       }
     },
   }

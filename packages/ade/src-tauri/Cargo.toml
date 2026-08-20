@@ -15,6 +15,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2.9.5", features = ["devtools"] }
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+# home_dir() is not in std anymore; this small crate is the canonical replacement.
+dirs = "6"
 
 [target.'cfg(windows)'.dependencies]
 # Directory junctions need no elevation, unlike symlinks. One small crate is a

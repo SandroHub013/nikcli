@@ -10,6 +10,8 @@
 /// machine, or a sandboxed parent — set WEBVIEW2_USER_DATA_FOLDER before launch.
 /// WebView2 reads that itself, so nothing here needs to know about it.
 use std::path::Path;
+use serde::Serialize;
+use std::time::UNIX_EPOCH;
 
 /// Points `link` at `target`, so an isolated worktree can reach the project's
 /// installed dependencies without a copy.
@@ -48,10 +50,111 @@ fn link_directory(link: String, target: String) -> Result<(), String> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Filesystem commands — let the frontend read the disk without shelling out
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+struct DirEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+    modified_ms: f64,
+}
+
+/// Lists the contents of `path`, directories first, then files, both sorted
+/// alphabetically (case-insensitive). Entries the OS refuses to stat are
+/// silently skipped instead of aborting the whole listing.
+#[tauri::command]
+fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    let rd = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
+    let mut dirs: Vec<DirEntry> = Vec::new();
+    let mut files: Vec<DirEntry> = Vec::new();
+
+    for entry in rd {
+        let Ok(entry) = entry else { continue };
+        let Ok(meta) = entry.metadata() else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let full = entry.path().to_string_lossy().into_owned();
+        let modified_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs_f64() * 1000.0)
+            .unwrap_or(0.0);
+        let de = DirEntry {
+            name,
+            path: full,
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+            modified_ms,
+        };
+        if meta.is_dir() {
+            dirs.push(de);
+        } else {
+            files.push(de);
+        }
+    }
+
+    dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    dirs.append(&mut files);
+    Ok(dirs)
+}
+
+#[derive(Serialize, Clone)]
+struct FileRead {
+    text: String,
+    truncated: bool,
+    bytes: usize,
+}
+
+/// Reads up to `max_bytes` of a text file. Returns an explicit error for
+/// binary content so the frontend can tell the user instead of showing
+/// mojibake.
+#[tauri::command]
+fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
+    let data = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+    let total = data.len();
+    let truncated = total > max_bytes;
+    let slice = if truncated { &data[..max_bytes] } else { &data[..] };
+    let text = String::from_utf8(slice.to_vec())
+        .map_err(|_| "file binario".to_string())?;
+    Ok(FileRead { text, truncated, bytes: total })
+}
+
+#[tauri::command]
+fn current_dir() -> Result<String, String> {
+    std::env::current_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn home_dir() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .ok_or_else(|| "impossibile determinare la home".to_string())
+}
+
+#[tauri::command]
+fn path_exists(path: String) -> bool {
+    Path::new(&path).exists()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![link_directory])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            link_directory,
+            read_dir,
+            read_text_file,
+            current_dir,
+            home_dir,
+            path_exists,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running ADE");
 }
