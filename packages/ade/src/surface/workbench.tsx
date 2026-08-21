@@ -50,6 +50,7 @@ import {
   type PermissionRequest,
 } from "../session/permission"
 import { readReportLine, type SessionReport } from "../session/report"
+import { findByName, walkProject } from "../search"
 import { formatCost, formatTokens } from "../session/metrics"
 import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
@@ -361,6 +362,28 @@ export function Workbench() {
 
     void refetchWorktrees()
     void refreshProjectDirty()
+  }
+
+  /*
+   * The project's file list, walked once and kept.
+   *
+   * Walking a repository costs seconds; doing it on every keystroke would make
+   * the search box unusable on exactly the projects where search matters. The
+   * list is read on the first query and reused until the project changes.
+   */
+  let walked: { root: string; files: string[] } | undefined
+
+  const searchProjectFiles = async (query: string) => {
+    const host = await getHost()
+    const current = project()
+    if (!host || !current) return []
+
+    if (walked?.root !== current.root) {
+      const result = await walkProject({ host, root: current.root })
+      walked = { root: current.root, files: result.files }
+    }
+
+    return findByName(walked.files, query, 40).map((hit) => ({ path: hit.path, ranges: hit.ranges }))
   }
 
   /*
@@ -836,6 +859,7 @@ export function Workbench() {
           selectedSessionId={wb().focusedId}
           onSelectSession={(id) => setWb(w => ({ ...w, focusedId: id }))}
           project={project()}
+          searchFiles={hasHost() ? searchProjectFiles : undefined}
           selectedFilePath={selectedFile()}
           onSelectFile={(path) => void openFile(path)}
         />

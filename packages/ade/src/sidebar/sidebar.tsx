@@ -61,6 +61,11 @@ export interface SidebarProps {
   onSelectFile?: (path: string) => void
   /** The project whose files to show. Discovered from the host when absent. */
   project?: Project
+  /**
+   * Searches the whole project by path. Absent when there is no disk to walk,
+   * and then the box says it is only filtering what is already open.
+   */
+  searchFiles?: (query: string) => Promise<{ path: string; ranges: [number, number][] }[]>
   initialWidth?: number
   minWidth?: number
   maxWidth?: number
@@ -430,6 +435,38 @@ export function Sidebar(props: SidebarProps) {
 
   const keyedFiles = createKeyedList(searchFilteredFiles, (item) => item.path)
 
+  /*
+   * Searching the whole project, not only what happens to be expanded.
+   *
+   * The loaded tree is a handful of directories the user clicked open; a
+   * repository is tens of thousands of files. Filtering the first and calling
+   * it search is the kind of half-truth that makes people stop trusting the
+   * box. The walk is asked for once per query, debounced, and its results
+   * replace the tree while the query stands.
+   */
+  const [projectHits, setProjectHits] = createSignal<{ path: string; ranges: [number, number][] }[]>([])
+  const [searching, setSearching] = createSignal(false)
+
+  createEffect(() => {
+    const query = searchQuery().trim()
+    const search = props.searchFiles
+    if (!search || query.length < 2) {
+      setProjectHits([])
+      setSearching(false)
+      return
+    }
+
+    setSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        setProjectHits(await search(query))
+      } finally {
+        setSearching(false)
+      }
+    }, 160)
+    onCleanup(() => clearTimeout(timer))
+  })
+
   let activeResizeCleanup: (() => void) | undefined
   let activeHeightResizeCleanup: (() => void) | undefined
 
@@ -599,14 +636,52 @@ export function Sidebar(props: SidebarProps) {
             <input 
               type="text" 
               data-slot="search-input" 
-              placeholder="Cerca fra i file aperti..." 
+              placeholder={props.searchFiles ? "Cerca nel progetto…" : "Cerca fra i file aperti…"}
               value={searchQuery()}
               onInput={onSearchInput}
               onKeyDown={onSearchKeyDown}
             />
           </div>
 
-          <div data-slot="section-content" data-component="file-tree" role="tree">
+          {/* While a project-wide query stands, its results take the tree's
+              place: showing both would make the same file appear twice with
+              two different meanings. */}
+          <Show when={props.searchFiles && searchQuery().trim().length >= 2}>
+            <div data-slot="section-content" data-component="file-results" role="listbox">
+              <Show
+                when={projectHits().length > 0}
+                fallback={
+                  <p data-slot="section-empty">
+                    {searching() ? "Cerco nel progetto…" : "Nessun file corrisponde."}
+                  </p>
+                }
+              >
+                <For each={projectHits()}>
+                  {(hit) => (
+                    <button
+                      type="button"
+                      data-slot="file-result"
+                      role="option"
+                      aria-selected={props.selectedFilePath === hit.path}
+                      data-selected={props.selectedFilePath === hit.path ? "true" : undefined}
+                      title={hit.path}
+                      onClick={() => props.onSelectFile?.(hit.path)}
+                    >
+                      <span data-slot="file-result-name">{hit.path.split("/").pop()}</span>
+                      <span data-slot="file-result-path">{hit.path}</span>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </Show>
+
+          <div
+            data-slot="section-content"
+            data-component="file-tree"
+            role="tree"
+            data-hidden={props.searchFiles && searchQuery().trim().length >= 2 ? "true" : undefined}
+          >
             <Show
               when={keyedFiles().length > 0}
               fallback={

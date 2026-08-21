@@ -60,6 +60,74 @@
   border-bottom: 1px solid var(--ade-border);
 }
 
+/* ── project search results ───────────────────────────────────────────────── */
+
+[data-component="file-results"] {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+[data-slot="file-result"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  padding: var(--ade-space-3) var(--ade-space-6);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="file-result"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="file-result"][data-selected] {
+  background: var(--ade-active);
+}
+
+[data-slot="file-result"][data-selected]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--ade-space-1);
+  bottom: var(--ade-space-1);
+  width: 2px;
+  background: var(--ade-accent);
+  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
+}
+
+[data-slot="file-result"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="file-result-name"] {
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+/* The path is the disambiguator - three files named index.ts are otherwise
+   three identical rows - so it stays, quiet and truncated from the left. */
+[data-slot="file-result-path"] {
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-component="file-tree"][data-hidden] {
+  display: none;
+}
+
 /* What a section says when it has nothing: quiet, but never blank. */
 [data-slot="section-empty"] {
   margin: 0;
