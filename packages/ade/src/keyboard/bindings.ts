@@ -36,25 +36,22 @@ export const DEFAULT_BINDINGS: BindingEntry[] = [
   { chord: "mod+w", commandId: "pane.close" },
   { chord: "mod+shift+m", commandId: "pane.expand" },
 
-  // Focus navigation between panes — arrow keys with mod, covering all four
-  // directions. Alt would be more natural on some platforms but mod is already
-  // the ADE modifier, and mixing two meta-keys for related commands is worse
-  // than being slightly unconventional with one.
-  { chord: "mod+arrowup", commandId: "focus.up" },
-  { chord: "mod+arrowdown", commandId: "focus.down" },
-  { chord: "mod+arrowleft", commandId: "focus.left" },
-  { chord: "mod+arrowright", commandId: "focus.right" },
-
   // Views and theme
   { chord: "mod+shift+v", commandId: "view.toggle" },
   { chord: "mod+shift+t", commandId: "theme.toggle" },
-
-  // File search
-  { chord: "mod+shift+f", commandId: "files.search" },
-
-  // Prompt
-  { chord: "mod+enter", commandId: "prompt.send" },
 ]
+
+/*
+ * Moving focus between panes is deliberately absent from this list. The grid
+ * measures its own columns and already answers Alt+Arrow with the real
+ * geometry; a second binding here would either duplicate that or, worse,
+ * swallow the arrow keys with a guess about the layout.
+ *
+ * Bindings for commands nobody implements are absent for a sharper reason: the
+ * listener calls preventDefault on anything it resolves, so an unimplemented
+ * binding does not do nothing — it takes the key away from whatever would have
+ * handled it.
+ */
 
 /**
  * Resolve the raw binding entries into platform-specific `Binding` objects.

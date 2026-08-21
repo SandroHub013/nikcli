@@ -37,14 +37,18 @@ describe("DEFAULT_BINDINGS", () => {
     expect(ids).toContain("palette.open")
     expect(ids).toContain("session.new")
     expect(ids).toContain("pane.close")
-    expect(ids).toContain("prompt.send")
   })
 
-  test("includes all four directional focus bindings", () => {
+  /*
+   * The list must not grow keys for commands the surface does not run. The
+   * listener calls preventDefault on whatever resolves here, so an aspirational
+   * binding is not inert — it takes the key from whoever would have used it.
+   */
+  test("binds nothing the surface cannot execute", () => {
     const ids = DEFAULT_BINDINGS.map(b => b.commandId)
-    expect(ids).toContain("focus.up")
-    expect(ids).toContain("focus.down")
-    expect(ids).toContain("focus.left")
-    expect(ids).toContain("focus.right")
+    expect(ids).not.toContain("prompt.send")
+    expect(ids).not.toContain("files.search")
+    // Pane focus belongs to the grid, which measures its own columns.
+    expect(ids.filter(id => id.startsWith("focus."))).toEqual([])
   })
 })

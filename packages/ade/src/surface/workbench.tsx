@@ -36,6 +36,24 @@ import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
+/** Every command `runCommand` below actually implements. */
+const HANDLED_COMMANDS = new Set([
+  "palette.open",
+  "session.new",
+  "project.open",
+  "pane.close",
+  "pane.expand",
+  "view.toggle",
+  "theme.toggle",
+  "browser.new",
+  "worktrees.reload",
+  "process.kill",
+])
+
+function isHandledCommand(id: string): boolean {
+  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.")
+}
+
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
   const bindings = resolveDefaultBindings(platform)
@@ -139,9 +157,12 @@ export function Workbench() {
       if (isInput && !e.ctrlKey && !e.metaKey && !e.altKey) return
       
       const id = resolveBinding(bindings, e, platform)
-      if (id) {
+      // Only swallow the key when something will actually happen: a binding
+      // that resolves to a command nobody handles would otherwise take the
+      // keystroke away from the browser and give nothing back.
+      if (id && isHandledCommand(id)) {
         e.preventDefault()
-        runCommand(id)
+        void runCommand(id)
       }
     }
     window.addEventListener("keydown", handleKeyDown)
