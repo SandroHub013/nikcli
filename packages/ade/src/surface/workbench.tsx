@@ -31,6 +31,7 @@ import {
   type Pane
 } from "./state"
 import { buildCommands, type SurfaceCommand } from "./commands"
+import { loadSessionDiff, type SessionDiff } from "../review"
 import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -54,6 +55,15 @@ export function Workbench() {
   const prefersDark = () =>
     typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)").matches : true
   const theme = createMemo(() => resolveTheme(themePref(), prefersDark()))
+
+  /*
+   * Review state lives outside the persisted workbench: a diff is a reading of
+   * the disk at a moment, and restoring yesterday's one would be showing a
+   * picture of a checkout that has moved since.
+   */
+  const [paneView, setPaneView] = createSignal<Record<string, "transcript" | "diff">>({})
+  const [paneDiff, setPaneDiff] = createSignal<Record<string, SessionDiff>>({})
+  const [diffLoading, setDiffLoading] = createSignal<Record<string, boolean>>({})
 
   const running = new Map<string, SpawnedSession>()
   const [runningTick, setRunningTick] = createSignal(0)
@@ -241,6 +251,37 @@ export function Workbench() {
       activity: code === 0 ? "Fatto" : `Uscito con ${code}`
     }))
     void refetchWorktrees()
+    // A finished session is exactly when its changes are worth counting, and
+    // the count is what makes the review tab worth pressing.
+    void refreshDiff(id)
+  }
+
+  /** Reads what the session actually changed, from git, in its own checkout. */
+  const refreshDiff = async (paneId: string) => {
+    const pane = wb().panes.find((p) => p.id === paneId)
+    const host = await getHost()
+    if (!pane?.cwd || !host) return
+
+    setDiffLoading((current) => ({ ...current, [paneId]: true }))
+    try {
+      const diff = await loadSessionDiff({
+        host,
+        cwd: pane.cwd,
+        // Without a recorded base the session is running in the project itself,
+        // where HEAD is the only honest thing to compare against.
+        baseRef: pane.tree?.base ?? "HEAD",
+      })
+      setPaneDiff((current) => ({ ...current, [paneId]: diff }))
+    } finally {
+      setDiffLoading((current) => ({ ...current, [paneId]: false }))
+    }
+  }
+
+  const showPaneView = (paneId: string, view: "transcript" | "diff") => {
+    setPaneView((current) => ({ ...current, [paneId]: view }))
+    // Always re-read on entry: the agent has usually written something since
+    // the last look, and a stale diff is the one thing a review must not be.
+    if (view === "diff") void refreshDiff(paneId)
   }
 
   const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note") => {
@@ -279,9 +320,9 @@ export function Workbench() {
       })
 
       appendLine(paneId, tree.note)
-      setWb(w => updatePane(w, paneId, { 
-        cwd: tree.cwd, 
-        tree: { branch: tree.branch, fidelity: tree.fidelity, note: tree.note },
+      setWb(w => updatePane(w, paneId, {
+        cwd: tree.cwd,
+        tree: { branch: tree.branch, fidelity: tree.fidelity, note: tree.note, base: tree.baseCommit },
         status: "working",
         activity: "In esecuzione"
       }))
@@ -418,6 +459,11 @@ export function Workbench() {
                     : undefined
                 }
                 lines={current().lines}
+                view={paneView()[current().id] ?? "transcript"}
+                onViewChange={current().cwd ? (view) => showPaneView(current().id, view) : undefined}
+                diff={paneDiff()[current().id]}
+                diffLoading={diffLoading()[current().id]}
+                changedFiles={paneDiff()[current().id]?.files.length}
                 focused={current().id === wb().focusedId}
                 onFocus={() => setWb(w => ({ ...w, focusedId: current().id }))}
                 onClose={() => close(current().id)}

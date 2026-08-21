@@ -64,6 +64,12 @@ export interface Provisioned {
   fidelity: "full" | "stale" | "no-deps" | "project"
   /** Branch the session runs on, for the pane's footer. */
   branch: string
+  /**
+   * The commit the checkout started from. Reviewing what a session changed is
+   * a diff against this and nothing else: the branch name would also drag in
+   * whatever the user committed elsewhere in the meantime.
+   */
+  baseCommit: string
 }
 
 /**
@@ -102,6 +108,8 @@ export async function provisionSessionTree(input: {
       created: false,
       fidelity: "stale",
       branch: plan.reuse.branch,
+      // A reused tree sits at its branch tip, so that tip is what it was cut from.
+      baseCommit: plan.reuse.branch,
     }
   }
 
@@ -115,6 +123,7 @@ export async function provisionSessionTree(input: {
       created: false,
       fidelity: "project",
       branch: projectBranch,
+      baseCommit: input.baseBranch,
     }
   }
 
@@ -176,6 +185,7 @@ export async function provisionSessionTree(input: {
       created: false,
       fidelity: "project",
       branch: projectBranch,
+      baseCommit: input.baseBranch,
     }
   }
 
@@ -216,8 +226,16 @@ export async function provisionSessionTree(input: {
       created: true,
       fidelity,
       branch: plan.branch,
+      baseCommit: baseCommitOrBranch,
     }
   }
 
-  return { cwd: worktreePath, note: baseNote, created: true, fidelity, branch: plan.branch }
+  return {
+    cwd: worktreePath,
+    note: baseNote,
+    created: true,
+    fidelity,
+    branch: plan.branch,
+    baseCommit: baseCommitOrBranch,
+  }
 }

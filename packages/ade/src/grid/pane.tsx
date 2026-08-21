@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
+import { DiffView, type SessionDiff } from "../review"
 import "./pane.css"
 
 /*
@@ -27,6 +28,8 @@ export interface PaneTree {
   fidelity: PaneTreeFidelity
   /** The full provisioning note; surfaced through the segment's title. */
   note?: string
+  /** Commit the checkout started from; what the review diffs against. */
+  base?: string
 }
 
 /*
@@ -145,6 +148,17 @@ export interface SessionPaneProps {
   onClose?: () => void
   onExpand?: () => void
   onFocus?: () => void
+  /**
+   * Which face of the session is showing. The transcript is what the agent
+   * says; the diff is what it did, and the two disagree often enough that the
+   * pane has to be able to show either without losing its place.
+   */
+  view?: "transcript" | "diff"
+  onViewChange?: (view: "transcript" | "diff") => void
+  diff?: SessionDiff
+  diffLoading?: boolean
+  /** Number of changed files, shown on the tab so it is worth pressing. */
+  changedFiles?: number
 }
 
 /*
@@ -252,6 +266,35 @@ export function SessionPane(props: SessionPaneProps) {
         <h2 data-slot="pane-title" title={props.title}>
           {props.title}
         </h2>
+        {/* Offered whenever the session has a checkout to diff. The count
+            appears once it is known; the view itself says when nothing changed. */}
+        <Show when={props.onViewChange}>
+          <div data-slot="pane-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              data-slot="pane-tab"
+              data-active={(props.view ?? "transcript") === "transcript" ? "true" : undefined}
+              aria-selected={(props.view ?? "transcript") === "transcript"}
+              onClick={() => props.onViewChange?.("transcript")}
+            >
+              sessione
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-slot="pane-tab"
+              data-active={props.view === "diff" ? "true" : undefined}
+              aria-selected={props.view === "diff"}
+              onClick={() => props.onViewChange?.("diff")}
+            >
+              modifiche
+              <Show when={(props.changedFiles ?? 0) > 0}>
+                <span data-slot="pane-tab-count">{props.changedFiles}</span>
+              </Show>
+            </button>
+          </div>
+        </Show>
         <Show when={props.tokens}>
           <span data-slot="pane-tokens">{props.tokens}</span>
         </Show>
@@ -282,8 +325,15 @@ export function SessionPane(props: SessionPaneProps) {
           eye finds motion long before it reads six activity labels. */}
       <div data-slot="pane-pulse" data-busy={busy() ? "true" : undefined} aria-hidden="true" />
 
+      <Show when={props.view === "diff"}>
+        <div data-slot="pane-diff">
+          <DiffView diff={props.diff} loading={props.diffLoading} />
+        </div>
+      </Show>
+
       <div
         data-slot="pane-transcript"
+        data-hidden={props.view === "diff" ? "true" : undefined}
         ref={(element) => (scroller = element)}
         onScroll={(event) => setFollowing(atBottom(event.currentTarget))}
       >

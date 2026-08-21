@@ -175,6 +175,71 @@
   letter-spacing: -0.012em;
 }
 
+/* ── transcript / diff tabs ───────────────────────────────────────────────── */
+
+[data-slot="pane-tabs"] {
+  display: flex;
+  gap: 1px;
+  flex: 0 0 auto;
+  padding: 1px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-active);
+}
+
+[data-slot="pane-tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  padding: 1px var(--ade-space-4);
+  border: 0;
+  border-radius: calc(var(--ade-radius-sm) - 1px);
+  background: transparent;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="pane-tab"]:hover {
+  color: var(--ade-text-soft);
+}
+
+[data-slot="pane-tab"][data-active] {
+  background: var(--ade-surface);
+  color: var(--ade-text);
+}
+
+[data-slot="pane-tab"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="pane-tab-count"] {
+  color: var(--ade-accent);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The transcript keeps its scroll position while the diff is showing, which is
+ * why it is hidden rather than unmounted: coming back to a session that jumped
+ * to the bottom loses the line you were reading.
+ */
+[data-slot="pane-transcript"][data-hidden] {
+  display: none;
+}
+
+[data-slot="pane-diff"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--ade-sunken);
+}
+
 [data-slot="pane-tokens"],
 [data-slot="pane-cost"] {
   flex: 0 0 auto;

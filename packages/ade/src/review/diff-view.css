@@ -1,0 +1,217 @@
+.ade-diff-view {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-font-sans);
+}
+
+.ade-diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ade-text-muted);
+}
+
+.ade-diff-empty.ade-diff-error {
+  color: var(--ade-error);
+}
+
+.ade-diff-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--ade-border);
+  background-color: var(--ade-bg-alt);
+}
+
+.ade-diff-header {
+  padding: 12px;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--ade-border);
+  color: var(--ade-text);
+}
+
+.ade-diff-file-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ade-diff-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ade-text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--ade-font-sans);
+  transition: background-color 120ms ease;
+}
+
+@media (prefers-reduced-motion) {
+  .ade-diff-file-item {
+    transition: none;
+  }
+}
+
+.ade-diff-file-item:hover {
+  background-color: var(--ade-hover-bg);
+}
+
+.ade-diff-file-item.is-selected {
+  background-color: var(--ade-selected-bg);
+}
+
+.ade-diff-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ade-diff-status.is-added { background-color: var(--ade-done); }
+.ade-diff-status.is-modified { background-color: var(--ade-accent); }
+.ade-diff-status.is-deleted { background-color: var(--ade-error); }
+.ade-diff-status.is-renamed { background-color: var(--ade-accent); }
+
+.ade-diff-file-path {
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ade-diff-stats {
+  display: flex;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.ade-diff-added {
+  color: var(--ade-done);
+}
+
+.ade-diff-removed {
+  color: var(--ade-error);
+}
+
+.ade-diff-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ade-diff-banner {
+  padding: 12px;
+  background-color: var(--ade-warning-bg);
+  color: var(--ade-warning);
+  font-size: 13px;
+  border-bottom: 1px solid var(--ade-border);
+}
+
+.ade-diff-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-grow: 1;
+  color: var(--ade-text-muted);
+}
+
+.ade-diff-file-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ade-diff-file-header {
+  padding: 12px;
+  font-weight: 600;
+  font-family: var(--ade-font-mono);
+  font-size: 13px;
+  border-bottom: 1px solid var(--ade-border);
+  background-color: var(--ade-bg);
+}
+
+.ade-diff-rename {
+  color: var(--ade-text-muted);
+  font-weight: normal;
+}
+
+.ade-diff-hunks {
+  flex-grow: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.ade-diff-hunk {
+  margin-bottom: 16px;
+}
+
+.ade-diff-hunk-header {
+  padding: 4px 12px;
+  font-family: var(--ade-font-mono);
+  font-size: 12px;
+  color: var(--ade-text-muted);
+  background-color: var(--ade-bg-alt);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+.ade-diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--ade-font-mono);
+  font-size: 13px;
+}
+
+.ade-diff-line {
+  line-height: 1.5;
+}
+
+.ade-diff-line.is-add {
+  background-color: var(--ade-done-bg);
+}
+
+.ade-diff-line.is-remove {
+  background-color: var(--ade-error-bg);
+}
+
+.ade-diff-line-number {
+  width: 40px;
+  min-width: 40px;
+  padding: 0 8px;
+  text-align: right;
+  color: var(--ade-text-muted);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ade-diff-line-number::before {
+  content: attr(data-line-number);
+}
+
+.ade-diff-line.is-add .ade-diff-line-number {
+  color: var(--ade-done);
+}
+
+.ade-diff-line.is-remove .ade-diff-line-number {
+  color: var(--ade-error);
+}
+
+.ade-diff-line-text {
+  padding: 0 8px;
+  white-space: pre;
+  word-break: normal;
+}
