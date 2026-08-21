@@ -7,8 +7,9 @@
  *
  * All rules live in `model.ts` and `relocate.ts`; this file only renders them.
  */
-import { For, Show, createMemo, type JSX } from "solid-js"
+import { For, Show, createMemo, createSignal, type JSX } from "solid-js"
 import { conflicts, riskOf, sortForBoard, type Occupant, type Worktree } from "./model"
+import { planIntegration, type IntegrationMode } from "./integrate"
 import { planRelocation } from "./relocate"
 
 export interface WorktreeBoardProps {
@@ -24,8 +25,25 @@ export interface WorktreeBoardProps {
   now: number
   onOpen?: (tree: Worktree) => void
   onRelocate?: (input: { tree: Worktree; occupant: Occupant }) => void
-  onCreate?: (projectId: string) => void
+  /**
+   * Brings a tree's work back into the project. Absent when there is no host to
+   * run git, and then the control is not offered at all.
+   */
+  onIntegrate?: (input: { tree: Worktree; mode: IntegrationMode }) => void
+  /** Branch the project itself is on: what a tree gets integrated into. */
+  projectBranch?: string
+  /** Uncommitted files in the project, which make every integration riskier. */
+  projectDirty?: number
+  /** What happened to the last integration, in one sentence. */
+  notice?: string
 }
+
+const MODES: { id: IntegrationMode; label: string }[] = [
+  { id: "merge", label: "merge" },
+  { id: "rebase", label: "rebase" },
+  { id: "cherry-pick", label: "cherry-pick" },
+  { id: "patch", label: "senza commit" },
+]
 
 const RISK_LABEL: Record<string, string> = {
   conflitto: "due agenti nello stesso albero",
@@ -67,6 +85,21 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
     return [...byProject.entries()]
   })
 
+  // One chosen mode per tree, kept here because it is a question about this
+  // screen and nothing outside it needs the answer.
+  const [modes, setModes] = createSignal<Record<string, IntegrationMode>>({})
+  const modeFor = (tree: Worktree): IntegrationMode => modes()[tree.path] ?? "merge"
+
+  const integrationFor = (tree: Worktree) =>
+    planIntegration({
+      branch: tree.branch,
+      onto: props.projectBranch ?? "HEAD",
+      mode: modeFor(tree),
+      treeDirty: tree.dirty,
+      projectDirty: props.projectDirty ?? 0,
+      ahead: tree.ahead,
+    })
+
   const firstPlan = createMemo(() => {
     const tree = inConflict()[0]
     if (!tree) return undefined
@@ -85,6 +118,11 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
             <span data-slot="wt-count-conflict"> · {inConflict().length} in conflitto</span>
           </Show>
         </span>
+        {/* The outcome of the last integration stays until the next one: git's
+            answer is the whole point of having pressed the button. */}
+        <Show when={props.notice}>
+          {(notice) => <span data-slot="wt-notice">{notice()}</span>}
+        </Show>
       </header>
 
       {/* The board owns its own empty state: an emptiness explained elsewhere is
@@ -111,12 +149,7 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
               <div data-slot="wt-grid">
                 <For each={trees}>
                   {(tree) => (
-                    <button
-                      type="button"
-                      data-slot="wt-card"
-                      data-risk={riskOf(tree)}
-                      onClick={() => props.onOpen?.(tree)}
-                    >
+                    <div data-slot="wt-card" data-risk={riskOf(tree)}>
                       <div data-slot="wt-card-header">
                         <span data-slot="wt-card-title" title={tree.name}>
                           {tree.name}
@@ -160,13 +193,53 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
                           <span data-slot="wt-warn">{RISK_LABEL.conflitto}</span>
                         </Show>
                       </div>
-                    </button>
+
+                      {/* Isolation is only half the job: the work has to come
+                          back. Offered only where there is something to bring,
+                          and never for the project's own checkout. */}
+                      <Show
+                        when={
+                          props.onIntegrate &&
+                          (tree.ahead > 0 || tree.dirty > 0) &&
+                          tree.branch !== props.projectBranch
+                        }
+                      >
+                        <div data-slot="wt-card-integrate">
+                          <label data-slot="wt-mode">
+                            <span data-slot="wt-mode-label">come</span>
+                            <select
+                              data-slot="wt-mode-select"
+                              value={modeFor(tree)}
+                              onChange={(event) =>
+                                setModes((current) => ({
+                                  ...current,
+                                  [tree.path]: event.currentTarget.value as IntegrationMode,
+                                }))
+                              }
+                            >
+                              <For each={MODES}>
+                                {(mode) => <option value={mode.id}>{mode.label}</option>}
+                              </For>
+                            </select>
+                          </label>
+
+                          <button
+                            type="button"
+                            data-slot="wt-integrate"
+                            title={integrationFor(tree).summary}
+                            onClick={() => props.onIntegrate?.({ tree, mode: modeFor(tree) })}
+                          >
+                            Integra
+                          </button>
+                        </div>
+
+                        <For each={integrationFor(tree).warnings}>
+                          {(warning) => <p data-slot="wt-card-warning">{warning}</p>}
+                        </For>
+                      </Show>
+                    </div>
                   )}
                 </For>
-
-                <button type="button" data-slot="wt-new" onClick={() => props.onCreate?.(projectId)}>
-                  + Nuovo albero da un branch
-                </button>
               </div>
             </div>
           )}

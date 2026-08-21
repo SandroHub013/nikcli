@@ -9,6 +9,8 @@ import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { agentById, agentGlyph } from "../session-new/agents"
 import { loadWorktrees, provisionSessionTree } from "../worktrees/provision"
+import { planIntegration, runIntegration, type IntegrationMode } from "../worktrees/integrate"
+import type { Worktree } from "../worktrees/model"
 import { WorktreeBoard } from "../worktrees/worktree-board"
 import { Sidebar } from "../sidebar"
 import { BrowserPane } from "../browser"
@@ -79,6 +81,11 @@ export function Workbench() {
    * the disk at a moment, and restoring yesterday's one would be showing a
    * picture of a checkout that has moved since.
    */
+  const [integrationNotice, setIntegrationNotice] = createSignal<string>()
+  // How dirty the project is, which decides how loudly the board warns before
+  // an integration. Read from git rather than assumed.
+  const [projectDirty, setProjectDirty] = createSignal(0)
+
   const [paneView, setPaneView] = createSignal<Record<string, "transcript" | "diff">>({})
   const [paneDiff, setPaneDiff] = createSignal<Record<string, SessionDiff>>({})
   const [diffLoading, setDiffLoading] = createSignal<Record<string, boolean>>({})
@@ -131,6 +138,18 @@ export function Workbench() {
     saveTimeout = setTimeout(() => {
       localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(state)))
     }, 1000)
+  })
+
+  const refreshProjectDirty = async () => {
+    const host = await getHost()
+    const current = project()
+    if (!host || !current) return
+    const status = await host.run("git", ["status", "--porcelain"], current.root)
+    setProjectDirty(status.code === 0 ? status.stdout.split("\n").filter((line) => line.trim()).length : 0)
+  }
+
+  createEffect(() => {
+    if (project()) void refreshProjectDirty()
   })
 
   // Worktrees resource
@@ -275,6 +294,47 @@ export function Workbench() {
     // A finished session is exactly when its changes are worth counting, and
     // the count is what makes the review tab worth pressing.
     void refreshDiff(id)
+  }
+
+  /**
+   * Brings one tree's work back into the project.
+   *
+   * The plan is built from what git currently says about both sides, run step
+   * by step, and whatever comes back — success, refusal, or a conflict git has
+   * left half-done — is reported in one sentence rather than swallowed.
+   */
+  const integrate = async (tree: Worktree, mode: IntegrationMode) => {
+    const host = await getHost()
+    const current = project()
+    if (!host || !current) return
+
+    const dirty = await host.run("git", ["status", "--porcelain"], current.root)
+    const projectDirtyNow = dirty.code === 0 ? dirty.stdout.split("\n").filter((l) => l.trim()).length : 0
+
+    const plan = planIntegration({
+      branch: tree.branch,
+      onto: current.branch ?? "HEAD",
+      mode,
+      treeDirty: tree.dirty,
+      projectDirty: projectDirtyNow,
+      ahead: tree.ahead,
+    })
+
+    setIntegrationNotice(`Integro ${tree.branch}…`)
+    const result = await runIntegration({ host, projectPath: current.root, treePath: tree.path, plan })
+
+    if (result.ok) {
+      setIntegrationNotice(`${tree.branch} integrato in ${plan.onto}.`)
+    } else if (result.conflict) {
+      setIntegrationNotice(
+        `${tree.branch}: ${result.conflicts.length} file in conflitto (${result.conflicts.slice(0, 3).join(", ")}). Git ha lasciato il lavoro a metà: risolvi e concludi.`,
+      )
+    } else {
+      setIntegrationNotice(`${tree.branch} non integrato: ${result.reason}`)
+    }
+
+    void refetchWorktrees()
+    void refreshProjectDirty()
   }
 
   /** Reads what the session actually changed, from git, in its own checkout. */
@@ -606,10 +666,14 @@ export function Workbench() {
           <Show when={wb().view === "alberi"}>
             <WorktreeBoard
               loading={worktrees.loading}
-              emptyReason="Nel browser ADE non puo' leggere git: gli alberi si vedono solo nell'app desktop."
+              emptyReason="Nel browser ADE non può leggere git: gli alberi di lavoro si vedono solo nell'app desktop."
               trees={worktrees() || []}
               projectName={(id) => project()?.name || id}
               now={Date.now()}
+              projectBranch={project()?.branch}
+              projectDirty={projectDirty()}
+              notice={integrationNotice()}
+              onIntegrate={hasHost() ? (input) => void integrate(input.tree, input.mode) : undefined}
               /*
                * Relocating means killing a live agent and restarting it in
                * another checkout. The board finds the move; carrying it out is
