@@ -60,6 +60,16 @@
   border-bottom: 1px solid var(--ade-border);
 }
 
+/* What a section says when it has nothing: quiet, but never blank. */
+[data-slot="section-empty"] {
+  margin: 0;
+  padding: var(--ade-space-5) var(--ade-space-6);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+}
+
 [data-slot="section-header"] {
   display: flex;
   justify-content: space-between;

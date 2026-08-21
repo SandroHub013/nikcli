@@ -1,26 +1,109 @@
-/* Chrome for the standalone harness only. Not part of the shipped surface. */
+/*
+ * The shell chrome: the bar above everything, and the body beneath it.
+ *
+ * The bar reads left to right as identity → where you are → what you can do.
+ * The command field sits in the middle because it is the primary way to drive
+ * ADE, not an accelerator for people who already know the shortcuts; the column
+ * chips sit at the far end because they are configuration and must never
+ * outweigh the button that starts a session.
+ */
 
 [data-component="ade-shell"] {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
+  background: var(--ade-bg);
+  color: var(--ade-text);
 }
 
 /* ── top bar ──────────────────────────────────────────────────────────────── */
-/*
- * 36px: tall enough for 22px controls with 4px air above and below, no more.
- * The inner highlight gives the bar a raised-surface feel.
- */
+/* 44px: room for a 26px field with 9px of air, which is what stops the bar from
+   reading as a toolbar crammed against the content. */
 [data-slot="ade-bar"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-6);
+  gap: var(--ade-space-5);
   padding: 0 var(--ade-space-6);
-  height: 36px;
+  height: 44px;
   flex: 0 0 auto;
   border-bottom: 1px solid var(--ade-border);
   background: var(--ade-raised);
   box-shadow: inset 0 -1px 0 var(--ade-highlight);
+}
+
+/* ── command field ────────────────────────────────────────────────────────── */
+
+[data-slot="ade-search"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  width: min(360px, 40vw);
+  height: 26px;
+  padding: 0 var(--ade-space-3) 0 var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-bg);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="ade-search"]:hover {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="ade-search"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="ade-search-label"] {
+  flex: 1;
+  text-align: left;
+}
+
+[data-slot="ade-kbd"] {
+  padding: 1px var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  line-height: 14px;
+}
+
+/* ── icon button ──────────────────────────────────────────────────────────── */
+
+[data-slot="ade-icon"] {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="ade-icon"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="ade-icon"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* Brand mark — the one element that earns the accent hue in the bar. */
@@ -138,29 +221,45 @@
   color: var(--ade-text);
 }
 
-/* ── add session button: primary level ────────────────────────────────────── */
+/* ── bar actions ──────────────────────────────────────────────────────────── */
 /*
- * The one primary action in the bar. It must be the single most visible
- * interactive element: accent fill, contrast foreground, prominent on hover.
+ * Two levels, and only one of them is primary. Opening a browser preview and
+ * starting an agent are not the same size of decision, and a bar with two
+ * accent-filled buttons says they are.
  */
 [data-slot="ade-add"] {
-  height: 22px;
+  height: 26px;
   padding: 0 var(--ade-space-5);
-  border: 1px solid transparent;
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-sm);
+  font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease),
     box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-add"]:hover {
+  background: var(--ade-overlay);
+  color: var(--ade-text);
+}
+
+[data-slot="ade-add"][data-tone="primary"] {
+  border-color: transparent;
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="ade-add"][data-tone="primary"]:hover {
   background: var(--ade-accent-strong);
+  color: var(--ade-accent-fg);
   box-shadow: var(--ade-shadow-sm);
 }
 
@@ -169,6 +268,119 @@
 }
 
 [data-slot="ade-add"]:focus-visible {
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* ── project ──────────────────────────────────────────────────────────────── */
+
+[data-slot="ade-project"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  min-width: 0;
+}
+
+[data-slot="ade-project-name"] {
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="ade-project-branch"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  max-width: 22ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The one warning the bar can carry, so it is allowed to look like one. */
+[data-slot="ade-project-warning"] {
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-error-bg);
+  color: var(--ade-error);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  white-space: nowrap;
+}
+
+/* ── no project ───────────────────────────────────────────────────────────── */
+
+[data-component="ade-empty"] {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--ade-space-9);
+  background: var(--ade-bg);
+}
+
+[data-slot="empty-card"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ade-space-5);
+  max-width: 420px;
+  text-align: center;
+}
+
+[data-slot="empty-mark"] {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="empty-title"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-2xl);
+  font-weight: var(--ade-weight-semibold);
+  letter-spacing: -0.015em;
+  color: var(--ade-text);
+}
+
+[data-slot="empty-text"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-lg);
+  line-height: var(--ade-leading);
+}
+
+[data-slot="empty-action"] {
+  margin-top: var(--ade-space-2);
+  padding: var(--ade-space-4) var(--ade-space-7);
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-semibold);
+  cursor: pointer;
+  transition: background var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="empty-action"]:hover {
+  background: var(--ade-accent-strong);
+}
+
+[data-slot="empty-action"]:focus-visible {
+  outline: none;
   box-shadow: var(--ade-focus-ring);
 }
 

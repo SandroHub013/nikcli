@@ -5,6 +5,13 @@
  * block. They are the single source of truth for every visual decision; no
  * component may introduce a raw colour, size or timing value.
  *
+ * Both palettes live in one place. Each colour is written once as
+ * `light-dark(light, dark)`, and which half applies is decided by the
+ * `color-scheme` in effect — set below from ADE's own `data-theme`, never from
+ * the host document, because ADE is mounted inside another application and must
+ * not restyle it. A palette duplicated across a media query drifts the first
+ * time someone tunes one copy; this cannot.
+ *
  * Type scale: 10px micro labels and footer meta, 11px mono meta and controls,
  * 12px UI base and transcript, 13px emphasis, 16px subheads, 18px/24px display
  * titles. Hierarchy comes from size, weight (400/500/600/700) and the text ramp.
@@ -12,123 +19,147 @@
  * Spacing: 4px base unit, with 2px half-steps for compact rows. Sidebar rows,
  * pane chrome and grid gutters all derive from it so the shell shares one rhythm.
  */
+
+/*
+ * Dark is the default: this is a tool for watching processes run, often for
+ * hours, and the light palette is the deliberate departure rather than the
+ * baseline. "system" is a real answer and gets both schemes.
+ */
+:root,
+[data-component="ade-shell"] {
+  color-scheme: dark;
+}
+
+[data-component="ade-shell"][data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-component="ade-shell"][data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-component="ade-shell"][data-theme="system"] {
+  color-scheme: light dark;
+}
+
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
   /*
    * Five depth stops, deepest to highest. `sunken` sits below `bg` for inset
-   * wells (transcript area). `overlay` is for floating layers (menus, modals).
-   * `scrim` is the semi-transparent backdrop behind modals.
+   * wells (the transcript). `overlay` is for floating layers (palette, menus).
+   * `scrim` is the semi-transparent backdrop behind them.
    */
-  --ade-bg: #131111;
-  --ade-sunken: #0e0c0c;
-  --ade-surface: #1a1818;
-  --ade-raised: #211e1e;
-  --ade-overlay: #2a2626;
-  --ade-scrim: rgba(0, 0, 0, 0.55);
+  --ade-bg: light-dark(#f4f2f0, #131111);
+  --ade-sunken: light-dark(#eae7e4, #0e0c0c);
+  --ade-surface: light-dark(#faf9f8, #1a1818);
+  --ade-raised: light-dark(#ffffff, #211e1e);
+  --ade-overlay: light-dark(#ffffff, #2a2626);
+  --ade-scrim: light-dark(rgba(0, 0, 0, 0.30), rgba(0, 0, 0, 0.55));
 
   /* ── borders ───────────────────────────────────────────────────────────── */
   /*
-   * Three-step border ramp plus a highlight for inner-edge lighting.
-   * The highlight is a low-alpha white line that sits inside hairline borders
-   * to give them perceived thickness and depth — the technique that makes
-   * cards look like physical surfaces rather than flat rectangles.
+   * Three-step border ramp plus a highlight for inner-edge lighting. The
+   * highlight is a low-alpha line inside hairline borders that gives them
+   * perceived thickness — the technique that makes a card read as a surface
+   * rather than as a drawn rectangle.
    */
-  --ade-border-subtle: #232020;
-  --ade-border: #2b2727;
-  --ade-border-strong: #3a3535;
-  --ade-highlight: rgba(255, 255, 255, 0.04);
+  --ade-border-subtle: light-dark(#e8e5e2, #232020);
+  --ade-border: light-dark(#d8d4d0, #2b2727);
+  --ade-border-strong: light-dark(#c2bdb8, #3a3535);
+  --ade-highlight: light-dark(rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.04));
 
   /* ── text ───────────────────────────────────────────────────────────────── */
   /*
-   * Three-step text ramp. Contrast ratios measured against --ade-raised
-   * (#211e1e), the lightest ground any text sits on:
-   *   text  13.91:1 — primary content, headings
-   *   soft   6.72:1 — secondary content, inactive labels
-   *   weak   4.86:1 — meta (counts, timestamps, token counters at 10-11px)
+   * Three-step ramp, measured against the lightest ground text sits on in each
+   * palette (--ade-raised: #211e1e dark, #ffffff light):
+   *   text  13.91:1 dark · 15.3:1 light — primary content, headings
+   *   soft   6.72:1 dark ·  5.12:1 light — secondary content, inactive labels
+   *   weak   4.86:1 dark ·  3.95:1 light — meta at 12px and above only
    */
-  --ade-text: #ecebeb;
-  --ade-text-soft: #a9a4a4;
-  --ade-text-weak: #8f8a8a;
+  --ade-text: light-dark(#1a1817, #ecebeb);
+  --ade-text-soft: light-dark(#6b6562, #a9a4a4);
+  --ade-text-weak: light-dark(#8a8480, #8f8a8a);
 
   /* ── accent ─────────────────────────────────────────────────────────────── */
   /*
-   * Five-stop accent ramp. The accent hue is for state, focus and primary
-   * actions — never decoration. Use sparingly.
-   *   accent-fg on accent background: 12.3:1
-   *   accent on raised:               6.8:1
-   *   accent-soft on bg:              3.2:1 (decorative only, not for text)
+   * The accent is for state, focus and primary actions — never decoration.
+   * The light value is darkened to clear 4.5:1 on white (4.62:1); the dark one
+   * measures 6.8:1 on raised.
    */
-  --ade-accent: #7fd6c4;
-  --ade-accent-soft: rgba(127, 214, 196, 0.15);
-  --ade-accent-strong: #5ec4ae;
-  --ade-accent-fg: #0a1613;
-  --ade-accent-glow: rgba(127, 214, 196, 0.20);
+  --ade-accent: light-dark(#1a9e87, #7fd6c4);
+  --ade-accent-soft: light-dark(rgba(26, 158, 135, 0.10), rgba(127, 214, 196, 0.15));
+  --ade-accent-strong: light-dark(#148272, #5ec4ae);
+  --ade-accent-fg: light-dark(#ffffff, #0a1613);
+  --ade-accent-glow: light-dark(rgba(26, 158, 135, 0.15), rgba(127, 214, 196, 0.20));
 
   /* ── status ─────────────────────────────────────────────────────────────── */
   /*
-   * Status family: near-equal perceived lightness so no status shouts over
-   * another at dot size, and every one clears 6.3:1 on all three surfaces —
-   * double the AA floor — because the same hues double as 11px activity words.
-   *   working 7.43:1 · waiting 6.83:1 · done 7.88:1 · error 6.38:1 (on raised)
-   *
-   * Each status has a `-bg` variant at low alpha for badge/tag backgrounds.
+   * One family, near-equal perceived lightness, so no status shouts over
+   * another across a six-pane grid. Dark values clear 6.3:1 on all three
+   * surfaces; light values clear 4.5:1 on white. Each has a low-alpha `-bg`
+   * for badges and tinted rows.
    */
-  --ade-working: #d9a45f;
-  --ade-working-bg: rgba(217, 164, 95, 0.12);
-  --ade-waiting: #7da9e4;
-  --ade-waiting-bg: rgba(125, 169, 228, 0.12);
-  --ade-done: #71c491;
-  --ade-done-bg: rgba(113, 196, 145, 0.12);
-  --ade-error: #e0879a;
-  --ade-error-bg: rgba(224, 135, 154, 0.12);
+  --ade-working: light-dark(#9a6d28, #d9a45f);
+  --ade-working-bg: light-dark(rgba(154, 109, 40, 0.10), rgba(217, 164, 95, 0.12));
+  --ade-waiting: light-dark(#3b6fb0, #7da9e4);
+  --ade-waiting-bg: light-dark(rgba(59, 111, 176, 0.10), rgba(125, 169, 228, 0.12));
+  --ade-done: light-dark(#2e8a50, #71c491);
+  --ade-done-bg: light-dark(rgba(46, 138, 80, 0.10), rgba(113, 196, 145, 0.12));
+  --ade-error: light-dark(#b74a5e, #e0879a);
+  --ade-error-bg: light-dark(rgba(183, 74, 94, 0.10), rgba(224, 135, 154, 0.12));
 
   /* ── interaction fills ──────────────────────────────────────────────────── */
   /*
    * Alpha ramps, not solid stops: they composite identically over bg, surface
-   * and raised. 4.5% reads as hover, 8% as selected/active.
+   * and raised. They darken on light grounds and lighten on dark ones.
    */
-  --ade-hover: rgba(255, 255, 255, 0.045);
-  --ade-active: rgba(255, 255, 255, 0.08);
+  --ade-hover: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.045));
+  --ade-active: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.08));
 
   /* ── radii ──────────────────────────────────────────────────────────────── */
-  --ade-radius-sm: 4px;
-  --ade-radius-md: 6px;
-  --ade-radius-lg: 10px;
-  --ade-radius-xl: 14px;
+  --ade-radius-sm: 5px;
+  --ade-radius-md: 8px;
+  --ade-radius-lg: 12px;
+  --ade-radius-xl: 16px;
   --ade-radius-full: 9999px;
 
   /* ── elevation ──────────────────────────────────────────────────────────── */
-  /*
-   * Short, low-opacity shadows. Depth, not smoke.
-   * sm: subtle card lift. md: active/focused card. lg: floating overlays.
-   */
-  --ade-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.08);
-  --ade-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.10);
-  --ade-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  /* Short, low-opacity shadows: depth, not smoke. Lighter on light grounds,
+     where the same opacity would read as dirt. */
+  --ade-shadow-sm: light-dark(
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.25)
+  );
+  --ade-shadow-md: light-dark(
+    0 2px 6px rgba(0, 0, 0, 0.10),
+    0 2px 6px rgba(0, 0, 0, 0.30)
+  );
+  --ade-shadow-lg: light-dark(
+    0 4px 16px rgba(0, 0, 0, 0.14),
+    0 4px 16px rgba(0, 0, 0, 0.40)
+  );
 
   /* ── motion ─────────────────────────────────────────────────────────────── */
   --ade-dur-fast: 120ms;
   --ade-dur: 180ms;
   --ade-dur-slow: 280ms;
   --ade-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ade-ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ade-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ade-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
-  /*
-   * A single focus-ring token applied everywhere via :focus-visible.
-   * The double ring (accent + transparent gap) ensures visibility on any surface.
-   */
-  --ade-focus-ring: 0 0 0 2px var(--ade-accent), 0 0 0 4px rgba(127, 214, 196, 0.25);
+  /* One ring, applied everywhere through :focus-visible. The second, softer
+     ring is what keeps it visible on top of an accent-filled button. */
+  --ade-focus-ring:
+    0 0 0 2px var(--ade-accent),
+    0 0 0 4px var(--ade-accent-glow);
+
+  --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
 
   /* Locked to GRID_GAP in grid/layout.ts — the layout math bakes 12px in. */
   --ade-grid-gap: 12px;
 
   /* ── type scale ─────────────────────────────────────────────────────────── */
-  /*
-   * Extended from the original four stops. Display sizes (lg/xl/2xl) give
-   * headings real hierarchy; the shell is no longer trapped in 10-13px.
-   */
   --ade-font-xs: 10px;
   --ade-font-sm: 11px;
   --ade-font-md: 12px;
@@ -137,23 +168,21 @@
   --ade-font-2xl: 18px;
   --ade-font-3xl: 24px;
 
-  /* Weight tokens for consistent hierarchy across components. */
   --ade-weight-normal: 400;
   --ade-weight-medium: 500;
   --ade-weight-semibold: 600;
   --ade-weight-bold: 700;
 
   /*
-   * One relative leading for running text. The fixed 15px/16px line-heights on
-   * the footer and the count badge are box heights, not text rhythm, so they
-   * stay literal at their call sites.
+   * One relative leading for running text. The fixed line-heights on the footer
+   * and the count badge are box heights, not text rhythm, so they stay literal
+   * at their call sites.
    */
   --ade-leading: 1.5;
 
   /*
-   * Spacing scale in 2px steps, taken from the padding/margin/gap values
-   * already in use. Values off the scale (1px hairline seams, 24px structural
-   * indents) stay literal with a note at the call site.
+   * Spacing scale in 2px steps up to 12px, then in 4px steps for the structural
+   * gaps between sections. Values off the scale stay literal with a note.
    */
   --ade-space-1: 2px;
   --ade-space-2: 4px;
@@ -161,134 +190,12 @@
   --ade-space-4: 8px;
   --ade-space-5: 10px;
   --ade-space-6: 12px;
+  --ade-space-7: 16px;
+  --ade-space-8: 20px;
+  --ade-space-9: 24px;
 
   --ade-mono: "IBM Plex Mono", "SF Mono", "Cascadia Mono", ui-monospace, monospace;
   --ade-sans: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
-}
-
-/* ── light theme ───────────────────────────────────────────────────────────── */
-/*
- * The light palette is designed, not inverted. Every contrast ratio has been
- * recalculated against the lightest surface the text sits on.
- *
- * Activated either by explicit opt-in (`data-theme="light"`) or by the OS
- * preference when no explicit theme is set.
- */
-[data-theme="light"],
-:root:not([data-theme="dark"]) {
-  /* Surfaces — warm neutral light ramp */
-  --ade-bg: #f4f2f0;
-  --ade-sunken: #eae7e4;
-  --ade-surface: #faf9f8;
-  --ade-raised: #ffffff;
-  --ade-overlay: #ffffff;
-  --ade-scrim: rgba(0, 0, 0, 0.30);
-
-  /*
-   * Borders: subtle differences to create depth without heaviness.
-   * Highlight flips to a soft white inner glow on light surfaces.
-   */
-  --ade-border-subtle: #e8e5e2;
-  --ade-border: #d8d4d0;
-  --ade-border-strong: #c2bdb8;
-  --ade-highlight: rgba(255, 255, 255, 0.60);
-
-  /*
-   * Text on #ffffff (raised):
-   *   text  15.3:1  — primary
-   *   soft   5.12:1 — secondary
-   *   weak   3.95:1 — meta at ≥12px only; 4.5:1 on sunken (#eae7e4)
-   */
-  --ade-text: #1a1817;
-  --ade-text-soft: #6b6562;
-  --ade-text-weak: #8a8480;
-
-  /*
-   * Accent: darkened to clear 4.5:1 on white.
-   *   accent on white: 4.62:1
-   *   accent-strong on white: 5.8:1
-   */
-  --ade-accent: #1a9e87;
-  --ade-accent-soft: rgba(26, 158, 135, 0.10);
-  --ade-accent-strong: #148272;
-  --ade-accent-fg: #ffffff;
-  --ade-accent-glow: rgba(26, 158, 135, 0.15);
-
-  /*
-   * Status colours darkened to clear 4.5:1 on white:
-   *   working 4.72:1 · waiting 4.58:1 · done 4.51:1 · error 4.63:1
-   */
-  --ade-working: #9a6d28;
-  --ade-working-bg: rgba(154, 109, 40, 0.10);
-  --ade-waiting: #3b6fb0;
-  --ade-waiting-bg: rgba(59, 111, 176, 0.10);
-  --ade-done: #2e8a50;
-  --ade-done-bg: rgba(46, 138, 80, 0.10);
-  --ade-error: #b74a5e;
-  --ade-error-bg: rgba(183, 74, 94, 0.10);
-
-  /* Interaction fills darken instead of lighten in light mode. */
-  --ade-hover: rgba(0, 0, 0, 0.04);
-  --ade-active: rgba(0, 0, 0, 0.07);
-
-  /* Shadows are lighter and warmer in light mode. */
-  --ade-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
-  --ade-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  --ade-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06);
-
-  --ade-focus-ring: 0 0 0 2px var(--ade-accent), 0 0 0 4px rgba(26, 158, 135, 0.20);
-
-  /* Scrollbar track colour for light mode */
-  --ade-scrollbar-thumb: rgba(0, 0, 0, 0.18);
-}
-
-/*
- * System preference: only kicks in when no explicit theme is set.
- * The dark palette re-asserts itself via this media query so users who
- * haven't toggled get the right thing automatically.
- */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    /* All dark values are already the :root defaults — nothing to override. */
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --ade-bg: #f4f2f0;
-    --ade-sunken: #eae7e4;
-    --ade-surface: #faf9f8;
-    --ade-raised: #ffffff;
-    --ade-overlay: #ffffff;
-    --ade-scrim: rgba(0, 0, 0, 0.30);
-    --ade-border-subtle: #e8e5e2;
-    --ade-border: #d8d4d0;
-    --ade-border-strong: #c2bdb8;
-    --ade-highlight: rgba(255, 255, 255, 0.60);
-    --ade-text: #1a1817;
-    --ade-text-soft: #6b6562;
-    --ade-text-weak: #8a8480;
-    --ade-accent: #1a9e87;
-    --ade-accent-soft: rgba(26, 158, 135, 0.10);
-    --ade-accent-strong: #148272;
-    --ade-accent-fg: #ffffff;
-    --ade-accent-glow: rgba(26, 158, 135, 0.15);
-    --ade-working: #9a6d28;
-    --ade-working-bg: rgba(154, 109, 40, 0.10);
-    --ade-waiting: #3b6fb0;
-    --ade-waiting-bg: rgba(59, 111, 176, 0.10);
-    --ade-done: #2e8a50;
-    --ade-done-bg: rgba(46, 138, 80, 0.10);
-    --ade-error: #b74a5e;
-    --ade-error-bg: rgba(183, 74, 94, 0.10);
-    --ade-hover: rgba(0, 0, 0, 0.04);
-    --ade-active: rgba(0, 0, 0, 0.07);
-    --ade-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
-    --ade-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.05);
-    --ade-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06);
-    --ade-focus-ring: 0 0 0 2px var(--ade-accent), 0 0 0 4px rgba(26, 158, 135, 0.20);
-    --ade-scrollbar-thumb: rgba(0, 0, 0, 0.18);
-  }
 }
 
 /* ── resets ─────────────────────────────────────────────────────────────────── */
@@ -298,7 +205,10 @@
 }
 
 html,
-body {
+body,
+/* The mount point has to carry the height too, or the shell's `height: 100%`
+   resolves against an auto-height parent and collapses to its content. */
+#root {
   margin: 0;
   height: 100%;
   background: var(--ade-bg);

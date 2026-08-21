@@ -549,16 +549,22 @@ export function Sidebar(props: SidebarProps) {
           
           <Show when={!sessionsCollapsed()}>
             <div data-slot="section-content" data-component="workspace-tree" role="tree">
-              <For each={keyedWorkspaces()}>
-                {(entry) => (
-                  <WorkspaceTreeRow
-                    row={entry.data()}
-                    now={now()}
-                    onToggleWorkspace={toggleWorkspace}
-                    onSelectSession={props.onSelectSession}
-                  />
-                )}
-              </For>
+              {/* An empty box teaches nothing. The list says what would be in it. */}
+              <Show
+                when={keyedWorkspaces().length > 0}
+                fallback={<p data-slot="section-empty">Nessuna sessione attiva.</p>}
+              >
+                <For each={keyedWorkspaces()}>
+                  {(entry) => (
+                    <WorkspaceTreeRow
+                      row={entry.data()}
+                      now={now()}
+                      onToggleWorkspace={toggleWorkspace}
+                      onSelectSession={props.onSelectSession}
+                    />
+                  )}
+                </For>
+              </Show>
             </div>
           </Show>
         </div>
@@ -589,15 +595,28 @@ export function Sidebar(props: SidebarProps) {
           </div>
 
           <div data-slot="section-content" data-component="file-tree" role="tree">
-            <For each={keyedFiles()}>
-              {(entry) => (
-                <FileTreeRow
-                  item={entry.data()}
-                  onToggleDir={toggleDir}
-                  onSelectFile={props.onSelectFile}
-                />
-              )}
-            </For>
+            <Show
+              when={keyedFiles().length > 0}
+              fallback={
+                <p data-slot="section-empty">
+                  {/* Two different absences: nothing matched, or there is no
+                      disk to read at all. Saying "vuoto" for both is a lie. */}
+                  {searchQuery()
+                    ? "Nessun file corrisponde."
+                    : "Apri un progetto per vedere i file."}
+                </p>
+              }
+            >
+              <For each={keyedFiles()}>
+                {(entry) => (
+                  <FileTreeRow
+                    item={entry.data()}
+                    onToggleDir={toggleDir}
+                    onSelectFile={props.onSelectFile}
+                  />
+                )}
+              </For>
+            </Show>
           </div>
         </div>
       </div>
