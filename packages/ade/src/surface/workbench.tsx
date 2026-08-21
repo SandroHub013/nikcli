@@ -49,6 +49,8 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
 } from "../session/permission"
+import { readReportLine, type SessionReport } from "../session/report"
+import { formatCost, formatTokens } from "../session/metrics"
 import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -96,6 +98,9 @@ export function Workbench() {
    * the disk at a moment, and restoring yesterday's one would be showing a
    * picture of a checkout that has moved since.
    */
+  /** What each session has told us about its own spending, by pane id. */
+  const [reports, setReports] = createSignal<Record<string, SessionReport>>({})
+
   /** Open file buffers, by pane id. */
   const [buffers, setBuffers] = createSignal<Record<string, Buffer>>({})
   const [bufferLoading, setBufferLoading] = createSignal<Record<string, boolean>>({})
@@ -452,6 +457,14 @@ export function Workbench() {
       return updatePane(w, id, { lines: [...pane.lines, { kind, text }].slice(-200) })
     })
     watchForPermission(id, text)
+
+    // Agents print what they are spending in among everything else. Reading it
+    // here is the only way the pane's counters are real rather than decorative.
+    setReports((current) => {
+      const before = current[id] ?? {}
+      const after = readReportLine(before, text)
+      return after === before ? current : { ...current, [id]: after }
+    })
   }
 
   /*
@@ -652,9 +665,17 @@ export function Workbench() {
               <SessionPane
                 title={current().title}
                 status={current().status}
-                activity={current().activity}
+                /* What the agent says it is doing beats the label ADE guessed. */
+                activity={reports()[current().id]?.activity ?? current().activity}
                 elapsed={current().elapsed}
-                tokens={current().tokens}
+                tokens={(() => {
+                  const count = reports()[current().id]?.tokens
+                  return count === undefined ? current().tokens : `${formatTokens(count)} token`
+                })()}
+                cost={(() => {
+                  const spent = reports()[current().id]?.costUsd
+                  return spent === undefined ? undefined : formatCost(spent)
+                })()}
                 model={current().model}
                 mode={current().mode}
                 agent={current().agent}

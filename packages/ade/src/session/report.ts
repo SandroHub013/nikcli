@@ -186,7 +186,7 @@ const STATE_VERBS = new Set([
 function isActivityVerb(word: string): boolean {
   if (STATE_VERBS.has(word)) return true;
   // Gerundio italiano (-ando/-endo) o inglese (-ing); la lunghezza minima
-  // scarta falsi amici corti tipo "doing"→ok ma "undo"→no.
+  // scarta falsi amici corti tipo "undo".
   return (
     word.length >= 5 &&
     (word.endsWith("ando") || word.endsWith("endo") || word.endsWith("ing"))
@@ -201,29 +201,36 @@ function truncateAtWord(text: string, max: number): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const lastSpace = cut.lastIndexOf(" ");
-  return lastSpace > 0 ? cut.slice(0, lastSpace) : cut.trimEnd();
+  return lastSpace > 0 ? cut.slice(0, lastSpace).trimEnd() : cut.trimEnd();
 }
 
-/** Riga di attività ("Ragionando…"), oppure `undefined` se non è attività. */
+/**
+ * Riga di attività ("Ragionando…"), oppure `undefined` se non è attività.
+ *
+ * L'ellipsis fa parte dell'attività: dice "in corso". Viene tolta solo per
+ * validare il verbo iniziale e poi rimessa, prima del troncamento.
+ */
 function parseActivity(line: string): string | undefined {
   const trimmed = line.trim();
 
-  let body: string;
+  let stem: string;
+  let ellipsis: string;
   if (trimmed.endsWith(ELLIPSIS_HEAVY)) {
-    body = trimmed.slice(0, -ELLIPSIS_HEAVY.length);
+    stem = trimmed.slice(0, -ELLIPSIS_HEAVY.length).trimEnd();
+    ellipsis = ELLIPSIS_HEAVY;
   } else if (trimmed.endsWith(ELLIPSIS_ASCII)) {
-    body = trimmed.slice(0, -ELLIPSIS_ASCII.length);
+    stem = trimmed.slice(0, -ELLIPSIS_ASCII.length).trimEnd();
+    ellipsis = ELLIPSIS_ASCII;
   } else {
     return undefined;
   }
 
-  body = body.trimEnd();
-  if (!body) return undefined;
+  if (!stem) return undefined;
 
-  const firstWord = body.split(/\s+/)[0].toLowerCase();
+  const firstWord = stem.split(/\s+/)[0].toLowerCase();
   if (!isActivityVerb(firstWord)) return undefined;
 
-  return truncateAtWord(body, MAX_ACTIVITY_LENGTH);
+  return truncateAtWord(stem + ellipsis, MAX_ACTIVITY_LENGTH);
 }
 
 // ---------------------------------------------------------------------------
