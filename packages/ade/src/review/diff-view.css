@@ -4,7 +4,7 @@
   overflow: hidden;
   background-color: var(--ade-bg);
   color: var(--ade-text);
-  font-family: var(--ade-font-sans);
+  font-family: var(--ade-sans);
 }
 
 .ade-diff-empty {
@@ -13,7 +13,7 @@
   justify-content: center;
   width: 100%;
   height: 100%;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
 }
 
 .ade-diff-empty.ade-diff-error {
@@ -26,7 +26,7 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--ade-border);
-  background-color: var(--ade-bg-alt);
+  background-color: var(--ade-raised);
 }
 
 .ade-diff-header {
@@ -55,7 +55,7 @@
   text-align: left;
   cursor: pointer;
   font-size: 13px;
-  font-family: var(--ade-font-sans);
+  font-family: var(--ade-sans);
   transition: background-color 120ms ease;
 }
 
@@ -66,11 +66,11 @@
 }
 
 .ade-diff-file-item:hover {
-  background-color: var(--ade-hover-bg);
+  background-color: var(--ade-hover);
 }
 
 .ade-diff-file-item.is-selected {
-  background-color: var(--ade-selected-bg);
+  background-color: var(--ade-active);
 }
 
 .ade-diff-status {
@@ -116,8 +116,8 @@
 
 .ade-diff-banner {
   padding: 12px;
-  background-color: var(--ade-warning-bg);
-  color: var(--ade-warning);
+  background-color: var(--ade-working-bg);
+  color: var(--ade-working);
   font-size: 13px;
   border-bottom: 1px solid var(--ade-border);
 }
@@ -127,7 +127,7 @@
   align-items: center;
   justify-content: center;
   flex-grow: 1;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
 }
 
 .ade-diff-file-detail {
@@ -139,14 +139,14 @@
 .ade-diff-file-header {
   padding: 12px;
   font-weight: 600;
-  font-family: var(--ade-font-mono);
+  font-family: var(--ade-mono);
   font-size: 13px;
   border-bottom: 1px solid var(--ade-border);
   background-color: var(--ade-bg);
 }
 
 .ade-diff-rename {
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   font-weight: normal;
 }
 
@@ -162,17 +162,17 @@
 
 .ade-diff-hunk-header {
   padding: 4px 12px;
-  font-family: var(--ade-font-mono);
+  font-family: var(--ade-mono);
   font-size: 12px;
-  color: var(--ade-text-muted);
-  background-color: var(--ade-bg-alt);
+  color: var(--ade-text-weak);
+  background-color: var(--ade-raised);
   border-bottom: 1px solid var(--ade-border);
 }
 
 .ade-diff-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: var(--ade-font-mono);
+  font-family: var(--ade-mono);
   font-size: 13px;
 }
 
@@ -193,7 +193,7 @@
   min-width: 40px;
   padding: 0 8px;
   text-align: right;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   user-select: none;
   white-space: nowrap;
 }

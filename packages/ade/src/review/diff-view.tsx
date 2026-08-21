@@ -13,7 +13,12 @@ export interface DiffViewProps {
 export function DiffView(props: DiffViewProps) {
   const [internalPath, setInternalPath] = createSignal<string | undefined>()
 
-  const selected = () => props.selectedPath ?? internalPath()
+  /*
+   * The first file is selected by default. A review that opens on "pick a file"
+   * costs a click before it has said anything, and in the common case — one or
+   * two files changed — that click has only one possible answer.
+   */
+  const selected = () => props.selectedPath ?? internalPath() ?? props.diff?.files[0]?.path
   
   const selectFile = (path: string) => {
     setInternalPath(path)

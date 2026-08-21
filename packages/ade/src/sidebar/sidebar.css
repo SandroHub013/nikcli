@@ -17,14 +17,14 @@
 }
 
 [data-slot="project-branch"] {
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   margin-left: 6px;
   font-size: 12px;
 }
 
 [data-slot="project-path"] {
   display: block;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   font-size: 11px;
   margin-top: 4px;
   white-space: nowrap;
@@ -78,7 +78,7 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   background: transparent;
   border: none;
   width: 100%;
@@ -115,7 +115,7 @@
 [data-slot="search-input"] {
   width: 100%;
   padding: 4px 8px;
-  background: var(--ade-bg-input);
+  background: var(--ade-sunken);
   border: 1px solid var(--ade-border);
   border-radius: 4px;
   color: var(--ade-text);
@@ -129,7 +129,7 @@
 [data-slot="session-activity"] {
   display: block;
   font-size: 11px;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -156,7 +156,7 @@
   border-bottom: 1px solid var(--ade-border);
   font-size: 13px;
   font-weight: 500;
-  background: var(--ade-bg-panel);
+  background: var(--ade-surface);
 }
 
 [data-slot="preview-body"] {
@@ -167,7 +167,7 @@
 
 [data-slot="preview-message"] {
   font-size: 13px;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
 }
 [data-slot="preview-message"][data-error="true"] {
   color: var(--ade-error);
@@ -187,7 +187,7 @@
 [data-slot="preview-line-num"] {
   width: 40px;
   flex-shrink: 0;
-  color: var(--ade-text-muted);
+  color: var(--ade-text-weak);
   text-align: right;
   padding-right: 12px;
   user-select: none;

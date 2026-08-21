@@ -29,7 +29,13 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
   let oldLineCounter = 0
   let newLineCounter = 0
 
-  const lines = text.split("\n")
+  /*
+   * Carriage returns are stripped before anything else. Git on Windows hands
+   * back CRLF, and a trailing \r turns every parsed path into a string that
+   * matches nothing — the file list renders, and clicking a row selects a file
+   * that, as far as every comparison is concerned, does not exist.
+   */
+  const lines = text.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
   let i = 0
 
   while (i < lines.length) {
