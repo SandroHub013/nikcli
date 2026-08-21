@@ -35,6 +35,15 @@ import {
 import { buildCommands, type SurfaceCommand } from "./commands"
 import { loadSessionDiff, type SessionDiff } from "../review"
 import {
+  FilePane,
+  editBuffer,
+  markSaved,
+  openBuffer,
+  revertBuffer,
+  saveBlockedReason,
+  type Buffer,
+} from "../editor"
+import {
   detectPermission,
   isResolved,
   type PermissionAnswer,
@@ -87,6 +96,10 @@ export function Workbench() {
    * the disk at a moment, and restoring yesterday's one would be showing a
    * picture of a checkout that has moved since.
    */
+  /** Open file buffers, by pane id. */
+  const [buffers, setBuffers] = createSignal<Record<string, Buffer>>({})
+  const [bufferLoading, setBufferLoading] = createSignal<Record<string, boolean>>({})
+
   /** The question each pane is currently stopped on, if any. */
   const [permissions, setPermissions] = createSignal<Record<string, PermissionRequest>>({})
   const [integrationNotice, setIntegrationNotice] = createSignal<string>()
@@ -345,6 +358,65 @@ export function Workbench() {
     void refreshProjectDirty()
   }
 
+  /*
+   * Opening a file makes a pane, like everything else here. A file already
+   * open is focused rather than opened twice: two panes over one path would
+   * let the user edit the same file against itself.
+   */
+  const openFile = async (path: string) => {
+    setSelectedFile(path)
+
+    const existing = wb().panes.find((pane) => pane.filePath === path)
+    if (existing) {
+      setWb((w) => ({ ...w, focusedId: existing.id }))
+      return
+    }
+
+    const host = await getHost()
+    if (!host?.readTextFile) return
+
+    const id = `f${Date.now()}`
+    setWb((w) =>
+      addPane(w, {
+        id,
+        title: path.split(/[\\/]/).pop() ?? path,
+        status: "done",
+        model: "—",
+        mode: "file",
+        filePath: path,
+        lines: [],
+        workspaceId: project()?.name ?? "workspace",
+      }),
+    )
+
+    setBufferLoading((current) => ({ ...current, [id]: true }))
+    try {
+      const read = await host.readTextFile(path)
+      setBuffers((current) => ({
+        ...current,
+        [id]: openBuffer({ path, text: read.text, truncated: read.truncated }),
+      }))
+    } catch (error) {
+      appendLine(id, error instanceof Error ? error.message : String(error))
+    } finally {
+      setBufferLoading((current) => ({ ...current, [id]: false }))
+    }
+  }
+
+  const saveFile = async (paneId: string) => {
+    const buffer = buffers()[paneId]
+    const host = await getHost()
+    if (!buffer || !host?.writeTextFile) return
+    if (saveBlockedReason(buffer)) return
+
+    const error = await host.writeTextFile(buffer.path, buffer.draft)
+    if (error) {
+      setIntegrationNotice(`Salvataggio fallito: ${error}`)
+      return
+    }
+    setBuffers((current) => ({ ...current, [paneId]: markSaved(buffer, buffer.draft) }))
+  }
+
   /** Reads what the session actually changed, from git, in its own checkout. */
   const refreshDiff = async (paneId: string) => {
     const pane = wb().panes.find((p) => p.id === paneId)
@@ -520,6 +592,34 @@ export function Workbench() {
           id: p.id,
           render: () => {
             const current = () => wb().panes.find(x => x.id === p.id) ?? p
+
+            if (current().filePath) {
+              return (
+                <FilePane
+                  path={current().filePath!}
+                  buffer={buffers()[current().id]}
+                  loading={bufferLoading()[current().id]}
+                  focused={current().id === wb().focusedId}
+                  onFocus={() => setWb(w => ({ ...w, focusedId: current().id }))}
+                  onChange={(draft) =>
+                    setBuffers((all) => {
+                      const buffer = all[current().id]
+                      return buffer ? { ...all, [current().id]: editBuffer(buffer, draft) } : all
+                    })
+                  }
+                  onSave={() => void saveFile(current().id)}
+                  onRevert={() =>
+                    setBuffers((all) => {
+                      const buffer = all[current().id]
+                      return buffer ? { ...all, [current().id]: revertBuffer(buffer) } : all
+                    })
+                  }
+                  onClose={() => close(current().id)}
+                  onExpand={() => setWb(w => expandPane(w, current().id))}
+                />
+              )
+            }
+
             if (current().browserUrl) {
               return (
                 <BrowserPane
@@ -716,7 +816,7 @@ export function Workbench() {
           onSelectSession={(id) => setWb(w => ({ ...w, focusedId: id }))}
           project={project()}
           selectedFilePath={selectedFile()}
-          onSelectFile={setSelectedFile}
+          onSelectFile={(path) => void openFile(path)}
         />
 
         <main data-slot="ade-main">

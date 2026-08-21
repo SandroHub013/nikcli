@@ -76,6 +76,7 @@ export interface Host {
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
+  writeTextFile?: (path: string, contents: string) => Promise<string | null>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
@@ -178,6 +179,16 @@ export async function getHost(): Promise<Host | undefined> {
         return await invoke<FileRead>("read_text_file", { path, maxBytes })
       } catch (error) {
         return { text: "", truncated: false, bytes: 0 }
+      }
+    },
+
+    async writeTextFile(path, contents) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        await invoke("write_text_file", { path, contents })
+        return null
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
       }
     },
 

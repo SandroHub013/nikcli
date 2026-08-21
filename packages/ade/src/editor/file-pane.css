@@ -1,0 +1,97 @@
+/*
+ * A file pane borrows the session pane's chrome deliberately: same card, same
+ * header height, same focus treatment. Only the body differs, because only the
+ * body is a different thing.
+ */
+
+[data-component="file-pane"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--ade-surface);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--ade-shadow-sm);
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur) var(--ade-ease);
+}
+
+[data-component="file-pane"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 var(--ade-highlight);
+  pointer-events: none;
+}
+
+[data-component="file-pane"][data-focused] {
+  border-color: var(--ade-accent);
+  box-shadow:
+    var(--ade-shadow-lg),
+    0 0 0 1px var(--ade-accent),
+    0 0 0 5px var(--ade-accent-soft);
+}
+
+[data-component="file-pane"] [data-slot="pane-header"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-3) var(--ade-space-3) var(--ade-space-3) var(--ade-space-5);
+  background: var(--ade-raised);
+  border-bottom: 1px solid var(--ade-border-subtle);
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+[data-component="file-pane"] [data-slot="pane-identity"] {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-active);
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="pane-title"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-medium);
+  letter-spacing: -0.012em;
+  color: var(--ade-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The unsaved mark: the one thing a header must never make you hunt for. */
+[data-slot="pane-dirty"] {
+  color: var(--ade-accent);
+  font-size: var(--ade-font-xl);
+  line-height: 0;
+}
+
+[data-component="file-pane"] [data-slot="pane-editor"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="file-pane"] {
+    transition: none;
+  }
+}

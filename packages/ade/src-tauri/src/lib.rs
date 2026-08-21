@@ -124,6 +124,47 @@ fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
     Ok(FileRead { text, truncated, bytes: total })
 }
 
+/// Writes `contents` to `path` atomically. Refuses to write if the path is a
+/// directory. Creates any missing parent directories. Writes first to a sibling
+/// temporary file and then renames it over the target to prevent partial writes
+/// on interrupted saves.
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    if target.is_dir() {
+        return Err(format!("il percorso è una directory: {path}"));
+    }
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{path}: {e}"))?;
+        }
+    }
+
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = target
+        .file_name()
+        .map(|n| n.to_string_lossy())
+        .unwrap_or_else(|| "file".into());
+    let now_nanos = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_name = format!(".{file_name}.tmp_{}_{now_nanos}", std::process::id());
+    let temp_path = parent.join(temp_name);
+
+    if let Err(e) = std::fs::write(&temp_path, contents.as_bytes()) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("{path}: {e}"));
+    }
+
+    if let Err(e) = std::fs::rename(&temp_path, target) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("{path}: {e}"));
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 fn current_dir() -> Result<String, String> {
     std::env::current_dir()
@@ -151,6 +192,7 @@ pub fn run() {
             link_directory,
             read_dir,
             read_text_file,
+            write_text_file,
             current_dir,
             home_dir,
             path_exists,

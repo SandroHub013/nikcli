@@ -22,6 +22,8 @@ export interface Pane {
   cwd?: string
   tree?: PaneTree
   workspaceId: string
+  /** Set when the pane holds a file being edited rather than a session. */
+  filePath?: string
   /**
    * What this session was asked to do, kept so a retry restarts the same work.
    * Without it "Riprova" relaunches the agent with an empty prompt, which is a
