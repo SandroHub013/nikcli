@@ -7,26 +7,26 @@
 }
 
 [data-slot="sidebar-header-project"] {
-  padding: 8px 12px;
+  padding: var(--ade-space-4) var(--ade-space-6);
   border-bottom: 1px solid var(--ade-border);
-  font-size: 13px;
+  font-size: var(--ade-font-lg);
 }
 
 [data-slot="project-name"] {
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 [data-slot="project-branch"] {
   color: var(--ade-text-weak);
-  margin-left: 6px;
-  font-size: 12px;
+  margin-left: var(--ade-space-3);
+  font-size: var(--ade-font-md);
 }
 
 [data-slot="project-path"] {
   display: block;
   color: var(--ade-text-weak);
-  font-size: 11px;
-  margin-top: 4px;
+  font-size: var(--ade-font-sm);
+  margin-top: var(--ade-space-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -34,16 +34,16 @@
 
 [data-slot="sidebar-stats"] {
   display: flex;
-  gap: 12px;
-  padding: 8px 12px;
-  font-size: 12px;
+  gap: var(--ade-space-6);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  font-size: var(--ade-font-md);
   border-bottom: 1px solid var(--ade-border);
 }
 
 [data-slot="stat-item"] {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--ade-space-2);
 }
 
 [data-slot="sidebar-sections"] {
@@ -74,9 +74,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: var(--ade-space-2) var(--ade-space-6);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
   text-transform: uppercase;
   color: var(--ade-text-weak);
   background: transparent;
@@ -108,38 +108,52 @@
 }
 
 [data-slot="search-box"] {
-  padding: 6px 12px;
+  padding: var(--ade-space-3) var(--ade-space-6);
   border-bottom: 1px solid var(--ade-border);
 }
 
 [data-slot="search-input"] {
   width: 100%;
-  padding: 4px 8px;
+  padding: var(--ade-space-2) var(--ade-space-4);
   background: var(--ade-sunken);
   border: 1px solid var(--ade-border);
-  border-radius: 4px;
+  border-radius: var(--ade-radius-sm);
   color: var(--ade-text);
-  font-size: 12px;
+  font-size: var(--ade-font-md);
 }
 [data-slot="search-input"]:focus {
   outline: 1px solid var(--ade-accent);
   border-color: var(--ade-accent);
 }
 
+/* Override index.css density for sidebar rows */
+[data-slot="session-row"],
+[data-slot="tree-row"],
+[data-slot="workspace-header"] {
+  min-height: 32px;
+}
+
+[data-slot="session-title"],
+[data-slot="tree-label"],
+[data-slot="workspace-name"] {
+  color: var(--ade-text);
+}
+
 [data-slot="session-activity"] {
   display: block;
-  font-size: 11px;
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-left: 16px;
+  margin-left: var(--ade-space-8);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Highlight match */
 .highlight-match {
   color: var(--ade-accent);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 [data-component="file-preview"] {
@@ -152,21 +166,21 @@
 }
 
 [data-slot="preview-header"] {
-  padding: 8px 16px;
+  padding: var(--ade-space-4) var(--ade-space-8);
   border-bottom: 1px solid var(--ade-border);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-medium);
   background: var(--ade-surface);
 }
 
 [data-slot="preview-body"] {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: var(--ade-space-8);
 }
 
 [data-slot="preview-message"] {
-  font-size: 13px;
+  font-size: var(--ade-font-lg);
   color: var(--ade-text-weak);
 }
 [data-slot="preview-message"][data-error="true"] {
@@ -175,9 +189,9 @@
 
 [data-slot="preview-content"] {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
 }
 
 [data-slot="preview-line"] {
@@ -189,7 +203,7 @@
   flex-shrink: 0;
   color: var(--ade-text-weak);
   text-align: right;
-  padding-right: 12px;
+  padding-right: var(--ade-space-6);
   user-select: none;
 }
 

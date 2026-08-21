@@ -1,6 +1,5 @@
 import { createSignal, createMemo, createEffect, Show, For } from "solid-js"
 import { type Command, type CommandHit, filterCommands, moveSelection } from "./registry"
-import { parseChord, formatChord } from "../keyboard/keymap"
 import "./palette.css"
 
 export interface CommandPaletteProps {
@@ -115,32 +114,32 @@ export function CommandPalette(props: CommandPaletteProps) {
     const parts = []
     let last = 0
     for (const [s, e] of ranges) {
-      if (s > last) parts.push(<span class="ade-cp-text">{text.slice(last, s)}</span>)
-      parts.push(<span class="ade-cp-highlight">{text.slice(s, e)}</span>)
+      if (s > last) parts.push(<span data-slot="text">{text.slice(last, s)}</span>)
+      parts.push(<span data-slot="highlight">{text.slice(s, e)}</span>)
       last = e
     }
-    if (last < text.length) parts.push(<span class="ade-cp-text">{text.slice(last)}</span>)
+    if (last < text.length) parts.push(<span data-slot="text">{text.slice(last)}</span>)
     return parts
   }
 
   return (
     <Show when={props.open}>
       <div 
-        class="ade-cp-backdrop" 
+        data-component="palette" 
         onPointerDown={(e) => {
           if (e.target === e.currentTarget) props.onClose()
         }}
       >
         <div 
-          class="ade-cp-dialog" 
+          data-slot="dialog" 
           role="dialog" 
           aria-modal="true"
           aria-label="Command Palette"
         >
-          <div class="ade-cp-input-wrap">
+          <div data-slot="input-wrap">
             <input
               ref={inputRef}
-              class="ade-cp-input"
+              data-slot="input"
               role="combobox"
               aria-expanded="true"
               aria-controls="ade-cp-listbox"
@@ -151,15 +150,15 @@ export function CommandPalette(props: CommandPaletteProps) {
               placeholder="Cerca un comando…"
             />
           </div>
-          <div class="ade-cp-listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>
+          <div data-slot="listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>
             <Show 
               when={hits().length > 0} 
-              fallback={<div class="ade-cp-empty">{props.emptyLabel ?? "No commands found."}</div>}
+              fallback={<div data-slot="empty">{props.emptyLabel ?? "No commands found."}</div>}
             >
               <For each={groups()}>
                 {(group) => (
-                  <div class="ade-cp-group">
-                    <div class="ade-cp-group-title">
+                  <div data-slot="group">
+                    <div data-slot="group-title">
                       {group.hits.length > 0 ? highlightText(group.name, group.hits[0].hit.groupRanges) : group.name}
                     </div>
                     <For each={group.hits}>
@@ -170,8 +169,9 @@ export function CommandPalette(props: CommandPaletteProps) {
                           <div
                             id={`ade-cp-option-${index}`}
                             data-index={index}
-                            class="ade-cp-option"
+                            data-slot="option"
                             role="option"
+                            data-selected={isSelected() ? "true" : undefined}
                             aria-selected={isSelected()}
                             aria-disabled={disabled}
                             onPointerEnter={() => !disabled && setSelectedIndex(index)}
@@ -179,13 +179,14 @@ export function CommandPalette(props: CommandPaletteProps) {
                               if (!disabled) props.onRun(hit.command.id)
                             }}
                           >
-                            <div class="ade-cp-option-title">
+                            <div data-slot="option-title">
                               {highlightText(hit.command.title, hit.titleRanges)}
                             </div>
                             <Show when={hit.command.shortcut}>
-                              <div class="ade-cp-option-shortcut">
-                                {formatChord(parseChord(hit.command.shortcut!, props.platform), props.platform)}
-                              </div>
+                              {/* Already formatted for this platform by whoever
+                                  built the command: re-parsing it would only
+                                  work by accident, and not on mac at all. */}
+                              <div data-slot="option-shortcut">{hit.command.shortcut}</div>
                             </Show>
                           </div>
                         )

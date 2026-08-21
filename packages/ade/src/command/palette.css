@@ -1,4 +1,4 @@
-.ade-cp-backdrop {
+[data-component="palette"] {
   position: absolute;
   inset: 0;
   background: var(--ade-scrim);
@@ -9,7 +9,7 @@
   padding-top: 12vh;
 }
 
-.ade-cp-dialog {
+[data-component="palette"] [data-slot="dialog"] {
   width: 100%;
   max-width: 640px;
   background: var(--ade-overlay);
@@ -34,23 +34,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ade-cp-dialog {
+  [data-component="palette"] [data-slot="dialog"] {
     animation: none;
   }
 }
 
-/*
- * The query row is the dialog's own top edge, not a field sitting inside it.
- * A bordered input here would draw a box within a box, and the palette already
- * has the user's whole attention — it does not need a second frame to say the
- * cursor is there.
- */
-.ade-cp-input-wrap {
+[data-component="palette"] [data-slot="input-wrap"] {
   padding: 0;
   border-bottom: 1px solid var(--ade-border);
 }
 
-.ade-cp-input {
+[data-component="palette"] [data-slot="input"] {
   width: 100%;
   background: transparent;
   color: var(--ade-text);
@@ -62,37 +56,37 @@
   outline: none;
 }
 
-.ade-cp-input:focus {
+[data-component="palette"] [data-slot="input"]:focus {
   outline: none;
   box-shadow: none;
 }
 
-.ade-cp-input::placeholder {
+[data-component="palette"] [data-slot="input"]::placeholder {
   color: var(--ade-text-weak);
 }
 
-.ade-cp-listbox {
+[data-component="palette"] [data-slot="listbox"] {
   max-height: 400px;
   overflow-y: auto;
   padding: var(--ade-space-2) 0;
 }
 
-.ade-cp-empty {
+[data-component="palette"] [data-slot="empty"] {
   padding: var(--ade-space-6);
   text-align: center;
   color: var(--ade-text-soft);
   font-size: var(--ade-font-md);
 }
 
-.ade-cp-group {
+[data-component="palette"] [data-slot="group"] {
   margin-bottom: var(--ade-space-2);
 }
 
-.ade-cp-group:last-child {
+[data-component="palette"] [data-slot="group"]:last-child {
   margin-bottom: 0;
 }
 
-.ade-cp-group-title {
+[data-component="palette"] [data-slot="group-title"] {
   padding: var(--ade-space-2) var(--ade-space-6);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-semibold);
@@ -102,36 +96,60 @@
   user-select: none;
 }
 
-.ade-cp-option {
+[data-component="palette"] [data-slot="option"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--ade-space-3) var(--ade-space-6);
+  padding: var(--ade-space-2) var(--ade-space-6);
+  min-height: 32px;
   cursor: pointer;
   color: var(--ade-text-soft);
+  position: relative;
+  transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
 }
 
-.ade-cp-option[aria-selected="true"] {
-  background: var(--ade-active);
+[data-component="palette"] [data-slot="option"]:hover {
+  background: var(--ade-hover);
   color: var(--ade-text);
 }
 
-.ade-cp-option[aria-disabled="true"] {
+[data-component="palette"] [data-slot="option"][data-selected] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-component="palette"] [data-slot="option"][data-selected]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--ade-space-1);
+  bottom: var(--ade-space-1);
+  width: 3px;
+  background: var(--ade-accent);
+  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
+}
+
+[data-component="palette"] [data-slot="option"]:focus-visible {
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-component="palette"] [data-slot="option"][aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.ade-cp-option-title {
+[data-component="palette"] [data-slot="option-title"] {
   font-size: var(--ade-font-md);
-  font-weight: var(--ade-weight-medium);
+  font-weight: inherit;
 }
 
-.ade-cp-highlight {
+[data-component="palette"] [data-slot="highlight"] {
   color: var(--ade-accent);
   font-weight: var(--ade-weight-bold);
 }
 
-.ade-cp-option-shortcut {
+[data-component="palette"] [data-slot="option-shortcut"] {
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
