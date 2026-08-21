@@ -34,6 +34,12 @@ import {
 } from "./state"
 import { buildCommands, type SurfaceCommand } from "./commands"
 import { loadSessionDiff, type SessionDiff } from "../review"
+import {
+  detectPermission,
+  isResolved,
+  type PermissionAnswer,
+  type PermissionRequest,
+} from "../session/permission"
 import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -81,6 +87,8 @@ export function Workbench() {
    * the disk at a moment, and restoring yesterday's one would be showing a
    * picture of a checkout that has moved since.
    */
+  /** The question each pane is currently stopped on, if any. */
+  const [permissions, setPermissions] = createSignal<Record<string, PermissionRequest>>({})
   const [integrationNotice, setIntegrationNotice] = createSignal<string>()
   // How dirty the project is, which decides how loudly the board warns before
   // an integration. Read from git rather than assumed.
@@ -371,6 +379,52 @@ export function Workbench() {
       if (!pane) return w
       return updatePane(w, id, { lines: [...pane.lines, { kind, text }].slice(-200) })
     })
+    watchForPermission(id, text)
+  }
+
+  /*
+   * An agent that stops to ask something looks, from the outside, exactly like
+   * one that is thinking: the process is alive and the output has stopped. The
+   * difference is in the last few lines, which is why every line is read for a
+   * question before it scrolls away.
+   */
+  const watchForPermission = (paneId: string, text: string) => {
+    const pane = wb().panes.find((p) => p.id === paneId)
+    if (!pane) return
+
+    const pending = permissions()[paneId]
+    if (pending) {
+      if (!isResolved(pending, [text])) return
+      setPermissions((current) => {
+        const next = { ...current }
+        delete next[paneId]
+        return next
+      })
+      // The agent moved on by itself, so the pane is working again.
+      setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+      return
+    }
+
+    const request = detectPermission(pane.lines.slice(-8).map((line) => line.text), pane.agent ?? pane.model)
+    if (!request) return
+
+    setPermissions((current) => ({ ...current, [paneId]: request }))
+    setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "In attesa di permesso" }))
+  }
+
+  /** Answers a pending question on the process's own stdin, where it was asked. */
+  const answerPermission = (paneId: string, answer: PermissionAnswer) => {
+    const session = running.get(paneId)
+    if (!session) return
+
+    session.write(answer.send)
+    appendLine(paneId, `> ${answer.label}`, "shell")
+    setPermissions((current) => {
+      const next = { ...current }
+      delete next[paneId]
+      return next
+    })
+    setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
   }
 
   const startProcess = async (paneId: string, agentId: string, task: string) => {
@@ -516,15 +570,18 @@ export function Workbench() {
                 }
                 actions={
                   /*
-                   * There is no "grant permission" button, and there will not be
-                   * one until ADE can recognise a permission request in an
-                   * agent's output. A pair of buttons that write a word nobody
-                   * asked for into stdin is worse than no buttons: it looks like
-                   * an answer and is not one. The prompt below the transcript is
-                   * the real answer channel, and it goes to the process.
+                   * The buttons exist only when the agent actually asked
+                   * something: they are its own choices, in its own order, and
+                   * pressing one writes exactly the string it is waiting for.
                    */
-                  current().status === "error"
-                    ? [
+                  permissions()[current().id]
+                    ? permissions()[current().id].answers.map((answer) => ({
+                        label: answer.label,
+                        tone: answer.tone,
+                        onClick: () => answerPermission(current().id, answer),
+                      }))
+                    : current().status === "error"
+                      ? [
                           {
                             label: "Riprova",
                             tone: "primary" as const,
@@ -536,8 +593,8 @@ export function Workbench() {
                               )
                             },
                           },
-                      ]
-                    : undefined
+                        ]
+                      : undefined
                 }
                 lines={current().lines}
                 view={paneView()[current().id] ?? "transcript"}
