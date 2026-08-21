@@ -184,10 +184,56 @@ fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+/// Opens ADE's window, and says out loud if it cannot.
+///
+/// Built here instead of declared in tauri.conf.json because a window that
+/// fails to create from the config fails quietly: the process stays up, owning
+/// nothing but its event-target window, and neither the log nor the exit code
+/// mentions it. Building it explicitly turns that into an error with a reason.
+fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+        .title("ADE")
+        .inner_size(1440.0, 900.0)
+        .min_inner_size(960.0, 600.0)
+        .resizable(true)
+        .center();
+
+    /*
+     * An escape hatch for machines where WebView2 will not start.
+     *
+     * When msedgewebview2.exe dies during creation it takes the window with it,
+     * and the app keeps running with nothing on screen: the least debuggable
+     * failure a desktop app can have. Flags like `--disable-gpu` or
+     * `--no-sandbox` fix whole classes of that, but naming any argument
+     * replaces Tauri's own defaults, so this stays opt-in rather than becoming
+     * a permanent cost for everyone:
+     *
+     *   set ADE_BROWSER_ARGS=--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-gpu
+     */
+    #[cfg(windows)]
+    let builder = match std::env::var("ADE_BROWSER_ARGS") {
+        Ok(args) if !args.trim().is_empty() => builder.additional_browser_args(&args),
+        _ => builder,
+    };
+
+    let window = builder.build()?;
+
+    window.show()?;
+    window.set_focus()?;
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            if let Err(error) = open_main_window(app.handle()) {
+                eprintln!("ADE: impossibile aprire la finestra: {error}");
+                return Err(Box::new(error));
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             link_directory,
             read_dir,
