@@ -11,10 +11,10 @@
 
 .ade-cp-dialog {
   width: 100%;
-  max-width: 600px;
-  background: var(--ade-surface);
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-lg);
+  max-width: 640px;
+  background: var(--ade-overlay);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-xl);
   box-shadow: var(--ade-shadow-lg), inset 0 1px 0 var(--ade-highlight);
   display: flex;
   flex-direction: column;
@@ -39,26 +39,32 @@
   }
 }
 
+/*
+ * The query row is the dialog's own top edge, not a field sitting inside it.
+ * A bordered input here would draw a box within a box, and the palette already
+ * has the user's whole attention — it does not need a second frame to say the
+ * cursor is there.
+ */
 .ade-cp-input-wrap {
-  padding: var(--ade-space-4);
+  padding: 0;
   border-bottom: 1px solid var(--ade-border);
 }
 
 .ade-cp-input {
   width: 100%;
-  background: var(--ade-sunken);
+  background: transparent;
   color: var(--ade-text);
-  border: 1px solid var(--ade-border-strong);
-  border-radius: var(--ade-radius-sm);
-  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 0;
+  border-radius: 0;
+  padding: var(--ade-space-6) var(--ade-space-7);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-lg);
+  font-size: var(--ade-font-xl);
   outline: none;
 }
 
 .ade-cp-input:focus {
-  border-color: var(--ade-accent);
-  box-shadow: var(--ade-focus-ring);
+  outline: none;
+  box-shadow: none;
 }
 
 .ade-cp-input::placeholder {

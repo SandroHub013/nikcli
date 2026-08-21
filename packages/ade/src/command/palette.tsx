@@ -148,7 +148,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={onKeyDown}
-              placeholder="Search commands..."
+              placeholder="Cerca un comando…"
             />
           </div>
           <div class="ade-cp-listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>

@@ -80,7 +80,10 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
         <span data-slot="wt-title">Alberi di lavoro</span>
         <span data-slot="wt-count">
           {groups().length} progetti · {(props.trees ?? []).length} alberi ·{" "}
-          {(props.trees ?? []).reduce((n, tree) => n + tree.occupants.length, 0)} agenti dentro
+          {(props.trees ?? []).reduce((n, tree) => n + tree.occupants.length, 0)} occupati
+          <Show when={inConflict().length > 0}>
+            <span data-slot="wt-count-conflict"> · {inConflict().length} in conflitto</span>
+          </Show>
         </span>
       </header>
 
@@ -97,14 +100,6 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
         </div>
       }>
       <div data-slot="wt-body">
-        <div data-slot="wt-head">
-          <span data-slot="wt-col-tree">Albero</span>
-          <span data-slot="wt-col-branch">Branch</span>
-          <span data-slot="wt-col-state">Stato</span>
-          <span data-slot="wt-col-who">Chi ci lavora</span>
-          <span data-slot="wt-col-when">Ultima</span>
-        </div>
-
         <For each={groups()}>
           {([projectId, trees]) => (
             <div data-slot="wt-group">
@@ -113,65 +108,66 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
                 <span data-slot="wt-project-rule" aria-hidden="true" />
               </div>
 
-              <For each={trees}>
-                {(tree) => (
-                  <button
-                    type="button"
-                    data-slot="wt-row"
-                    data-risk={riskOf(tree)}
-                    onClick={() => props.onOpen?.(tree)}
-                  >
-                    {/* The column is fixed-width, so a long name clips — the
-                        title keeps the full name one hover away. */}
-                    <span data-slot="wt-col-tree" title={tree.name}>
-                      {tree.name}
-                    </span>
+              <div data-slot="wt-grid">
+                <For each={trees}>
+                  {(tree) => (
+                    <button
+                      type="button"
+                      data-slot="wt-card"
+                      data-risk={riskOf(tree)}
+                      onClick={() => props.onOpen?.(tree)}
+                    >
+                      <div data-slot="wt-card-header">
+                        <span data-slot="wt-card-title" title={tree.name}>
+                          {tree.name}
+                        </span>
+                        <span data-slot="wt-card-when">{elapsed(tree.updatedAt, props.now)}</span>
+                      </div>
 
-                    <span data-slot="wt-col-branch">
-                      <span data-slot="wt-branch" title={tree.branch}>
-                        {tree.branch}
-                      </span>
-                      <Show when={tree.ahead > 0}>
-                        <span data-slot="wt-ahead">↑{tree.ahead}</span>
-                      </Show>
-                      <Show when={tree.behind > 0}>
-                        <span data-slot="wt-behind">↓{tree.behind}</span>
-                      </Show>
-                    </span>
+                      <div data-slot="wt-card-branch">
+                        <span data-slot="wt-branch" title={tree.branch}>
+                          {tree.branch}
+                        </span>
+                        <Show when={tree.ahead > 0}>
+                          <span data-slot="wt-ahead">↑{tree.ahead}</span>
+                        </Show>
+                        <Show when={tree.behind > 0}>
+                          <span data-slot="wt-behind">↓{tree.behind}</span>
+                        </Show>
+                      </div>
 
-                    <span data-slot="wt-col-state" data-dirty={tree.dirty > 0 ? "true" : undefined}>
-                      {tree.dirty === 0 ? "pulito" : `${tree.dirty} modificati`}
-                    </span>
+                      <div data-slot="wt-card-state" data-dirty={tree.dirty > 0 ? "true" : undefined}>
+                        {tree.dirty === 0 ? "pulito" : `${tree.dirty} modificati`}
+                      </div>
 
-                    <span data-slot="wt-col-who">
-                      <For each={tree.occupants}>
-                        {(occupant) => (
-                          <span
-                            data-slot="wt-occupant"
-                            data-state={occupant.state}
-                            title={`${occupant.agentId} — ${OCCUPANT_STATE_LABEL[occupant.state]}`}
-                          >
-                            <span data-slot="wt-dot" aria-hidden="true" />
-                            {occupant.agentId}
-                          </span>
-                        )}
-                      </For>
-                      <Show when={tree.occupants.length === 0}>
-                        <span data-slot="wt-free">libero</span>
-                      </Show>
-                      <Show when={riskOf(tree) === "conflitto"}>
-                        <span data-slot="wt-warn">{RISK_LABEL.conflitto}</span>
-                      </Show>
-                    </span>
+                      <div data-slot="wt-card-occupants">
+                        <For each={tree.occupants}>
+                          {(occupant) => (
+                            <span
+                              data-slot="wt-occupant"
+                              data-state={occupant.state}
+                              title={`${occupant.agentId} — ${OCCUPANT_STATE_LABEL[occupant.state]}`}
+                            >
+                              <span data-slot="wt-dot" aria-hidden="true" />
+                              {occupant.agentId}
+                            </span>
+                          )}
+                        </For>
+                        <Show when={tree.occupants.length === 0}>
+                          <span data-slot="wt-free">libero</span>
+                        </Show>
+                        <Show when={riskOf(tree) === "conflitto"}>
+                          <span data-slot="wt-warn">{RISK_LABEL.conflitto}</span>
+                        </Show>
+                      </div>
+                    </button>
+                  )}
+                </For>
 
-                    <span data-slot="wt-col-when">{elapsed(tree.updatedAt, props.now)}</span>
-                  </button>
-                )}
-              </For>
-
-              <button type="button" data-slot="wt-new" onClick={() => props.onCreate?.(projectId)}>
-                + Nuovo albero da un branch
-              </button>
+                <button type="button" data-slot="wt-new" onClick={() => props.onCreate?.(projectId)}>
+                  + Nuovo albero da un branch
+                </button>
+              </div>
             </div>
           )}
         </For>

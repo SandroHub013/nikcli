@@ -59,6 +59,8 @@ export interface SidebarProps {
   files?: FileNode[]
   selectedFilePath?: string
   onSelectFile?: (path: string) => void
+  /** The project whose files to show. Discovered from the host when absent. */
+  project?: Project
   initialWidth?: number
   minWidth?: number
   maxWidth?: number
@@ -337,25 +339,35 @@ export function Sidebar(props: SidebarProps) {
   const [home, setHome] = createSignal("")
 
   createEffect(() => {
-    getHost().then(host => {
-      if (host) {
-        host.homeDir?.().then(setHome)
-        if (host.currentDir) {
-          host.currentDir().then(dir => {
-            discoverProject(host, dir).then(p => {
-              setProject(p)
-              const r: FileNode = {
-                id: p.root,
-                name: p.name,
-                path: p.root,
-                kind: "directory"
-              }
-              setRootNode(r)
-              loadDir(p.root)
-            })
-          })
-        }
-      }
+    void getHost().then((host) => host?.homeDir?.().then(setHome))
+  })
+
+  /*
+   * The project comes from the caller when it has one. Discovering it here as
+   * well would give the shell two answers to the same question, and the moment
+   * the user opened a second project the sidebar would still be showing the
+   * first one's files.
+   */
+  createEffect(() => {
+    const given = props.project
+    if (given) {
+      setProject(given)
+      setRootNode({ id: given.root, name: given.name, path: given.root, kind: "directory" })
+      void loadDir(given.root)
+      return
+    }
+
+    void getHost().then(async (host) => {
+      if (!host?.currentDir) return
+      const discovered = await discoverProject(host, await host.currentDir())
+      setProject(discovered)
+      setRootNode({
+        id: discovered.root,
+        name: discovered.name,
+        path: discovered.root,
+        kind: "directory",
+      })
+      void loadDir(discovered.root)
     })
   })
 

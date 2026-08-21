@@ -45,102 +45,16 @@
   gap: var(--ade-space-5);
 }
 
-[data-slot="wt-head"],
-[data-slot="wt-row"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-5);
-  padding: 0 var(--ade-space-5);
-}
-
-[data-slot="wt-head"] {
-  color: var(--ade-text-weak);
-  font-size: var(--ade-font-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-[data-slot="wt-col-tree"] {
-  width: 220px;
-  flex: 0 0 auto;
-  text-align: left;
-  /* The column is fixed so rows align down the page; a long tree name must
-     give way inside it, visibly, instead of pushing the branch column over. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-[data-slot="wt-col-branch"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  width: 240px;
-  flex: 0 0 auto;
-  min-width: 0;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-sm);
-}
-
-[data-slot="wt-branch"] {
-  /* A flex item will not shrink below its content's width by default; without
-     min-width: 0 a long branch name overflows the column and the ellipsis
-     never engages. */
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Ahead/behind counts are facts, not text: they never wrap or clip. */
-[data-slot="wt-ahead"],
-[data-slot="wt-behind"] {
-  flex: 0 0 auto;
-}
-
-[data-slot="wt-ahead"] {
-  color: var(--ade-waiting);
-}
-
-[data-slot="wt-behind"] {
+[data-slot="wt-count-conflict"] {
   color: var(--ade-error);
-}
-
-[data-slot="wt-col-state"] {
-  width: 96px;
-  flex: 0 0 auto;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-sm);
-  color: var(--ade-done);
-  text-align: left;
-}
-
-[data-slot="wt-col-state"][data-dirty] {
-  color: var(--ade-waiting);
-}
-
-[data-slot="wt-col-who"] {
-  display: flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  flex: 1;
-  min-width: 0;
-}
-
-[data-slot="wt-col-when"] {
-  width: 64px;
-  flex: 0 0 auto;
-  text-align: right;
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
-  color: var(--ade-text-weak);
+  font-weight: 500;
 }
 
 [data-slot="wt-group"] {
   display: flex;
   flex-direction: column;
-  gap: var(--ade-space-3);
+  gap: var(--ade-space-4);
+  margin-bottom: var(--ade-space-6);
 }
 
 [data-slot="wt-project"] {
@@ -152,6 +66,7 @@
 
 [data-slot="wt-project-name"] {
   font-size: var(--ade-font-md);
+  font-weight: 500;
 }
 
 [data-slot="wt-project-rule"] {
@@ -160,45 +75,124 @@
   background: var(--ade-border);
 }
 
-[data-slot="wt-row"] {
-  min-height: 38px;
+[data-slot="wt-grid"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--ade-space-4);
+}
+
+[data-slot="wt-card"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4);
   border: 1px solid var(--ade-border);
   border-radius: 6px;
   background: var(--ade-surface);
   color: inherit;
   font-family: inherit;
-  font-size: var(--ade-font-md);
+  text-align: left;
   cursor: pointer;
+  transition: border-color var(--ade-dur-fast) var(--ade-ease), background var(--ade-dur-fast) var(--ade-ease), transform var(--ade-dur-fast) var(--ade-ease);
+  position: relative;
 }
 
-[data-slot="wt-row"]:hover {
+[data-slot="wt-card"]:hover {
   background: var(--ade-hover);
 }
 
-/* A contested tree is the one thing on this screen that cannot wait, so it is
-   the only row that carries a colour of its own. One tinted 1px border does not
-   survive a board of twenty rows, so its warn chip is also the only solid chip
-   on the board — the eye lands on the row, not on the outline. */
-[data-slot="wt-row"][data-risk="conflitto"] {
-  border-color: var(--ade-waiting);
+[data-slot="wt-card"][data-risk="conflitto"] {
+  border-color: var(--ade-error);
+  background: var(--ade-raised);
+  border-width: 2px;
+  padding: calc(var(--ade-space-4) - 1px); /* compensate border */
+}
+[data-slot="wt-card"][data-risk="conflitto"]:hover {
+  background: var(--ade-hover);
 }
 
-[data-slot="wt-row"][data-risk="conflitto"] [data-slot="wt-warn"] {
-  background: var(--ade-waiting);
-  border-color: transparent;
-  color: var(--ade-bg);
-  font-weight: 500;
+[data-slot="wt-card-header"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="wt-card-title"] {
+  font-size: var(--ade-font-lg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="wt-card-when"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  flex-shrink: 0;
+}
+
+[data-slot="wt-card-branch"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="wt-branch"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="wt-ahead"] {
+  color: var(--ade-working);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+[data-slot="wt-behind"] {
+  color: var(--ade-error);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+[data-slot="wt-card-state"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+[data-slot="wt-card-state"][data-dirty] {
+  color: var(--ade-working);
+}
+
+[data-slot="wt-card-occupants"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-2);
+  margin-top: var(--ade-space-2);
+  /* L'occupazione è la prima cosa che si legge: let's visually reorder it to the top */
+  order: -1;
+  margin-top: 0;
+  margin-bottom: var(--ade-space-2);
 }
 
 [data-slot="wt-occupant"] {
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-3);
-  height: 20px;
+  height: 24px;
   padding: 0 var(--ade-space-4);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--ade-active);
   font-size: var(--ade-font-xs);
+  font-weight: 500;
 }
 
 [data-slot="wt-dot"] {
@@ -208,11 +202,6 @@
   background: var(--ade-text-weak);
 }
 
-/*
- * State is carried by shape as well as colour, so the three states stay
- * distinct without relying on hue: working is a filled circle, waiting a
- * hollow ring (the work is paused, not dead), stopped a square.
- */
 [data-slot="wt-occupant"][data-state="working"] [data-slot="wt-dot"] {
   background: var(--ade-working);
 }
@@ -235,16 +224,21 @@
 [data-slot="wt-warn"] {
   display: inline-flex;
   align-items: center;
-  height: 20px;
+  height: 24px;
   padding: 0 var(--ade-space-4);
-  border: 1px solid var(--ade-waiting);
-  border-radius: 10px;
-  color: var(--ade-waiting);
+  border: 1px solid var(--ade-error);
+  border-radius: 12px;
+  color: var(--ade-error);
   font-size: var(--ade-font-xs);
+  font-weight: 600;
+  background: transparent;
 }
 
 [data-slot="wt-new"] {
-  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
   border: 1px dashed var(--ade-border);
   border-radius: 6px;
   background: transparent;
@@ -252,10 +246,12 @@
   font-family: inherit;
   font-size: var(--ade-font-sm);
   cursor: pointer;
+  transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="wt-new"]:hover {
   background: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="wt-alert"] {

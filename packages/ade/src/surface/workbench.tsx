@@ -33,6 +33,8 @@ import {
 import { buildCommands, type SurfaceCommand } from "./commands"
 import { parseTheme, resolveTheme, serializeTheme, type Theme } from "../theme"
 
+const DEFAULT_PREVIEW_URL = "http://localhost:3000"
+
 export function Workbench() {
   const platform = navigator.userAgent.includes("Mac") ? "mac" : "other"
   const bindings = resolveDefaultBindings(platform)
@@ -112,7 +114,7 @@ export function Workbench() {
     const occupants = buildOccupantsByPath(wb().panes, p.root)
     return loadWorktrees({
       host,
-      projectId: "ade-project",
+      projectId: p.name,
       projectPath: p.root,
       occupantsByPath: occupants,
       now: Date.now()
@@ -176,7 +178,9 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "browser",
-        browserUrl: "http://localhost:3000",
+        // Where a dev server usually is. The pane has an address bar, so this is
+        // a starting point rather than a decision the user is stuck with.
+        browserUrl: DEFAULT_PREVIEW_URL,
         workspaceId: "ws-browser",
         lines: []
       }))
@@ -258,7 +262,7 @@ export function Workbench() {
     try {
       const trees = await loadWorktrees({
         host,
-        projectId: "ade-project",
+        projectId: p.name,
         projectPath: p.root,
         occupantsByPath: buildOccupantsByPath(wb().panes, p.root),
         now: Date.now()
@@ -266,7 +270,7 @@ export function Workbench() {
 
       const tree = await provisionSessionTree({
         host,
-        projectId: "ade-project",
+        projectId: p.name,
         projectPath: p.root,
         trees,
         sessionId: paneId,
@@ -526,7 +530,7 @@ export function Workbench() {
           workspaces={deriveWorkspaces(wb().panes)}
           selectedSessionId={wb().focusedId}
           onSelectSession={(id) => setWb(w => ({ ...w, focusedId: id }))}
-          files={[]}
+          project={project()}
           selectedFilePath={selectedFile()}
           onSelectFile={setSelectedFile}
         />

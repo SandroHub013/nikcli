@@ -551,75 +551,88 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               </button>
             </div>
           </Show>
-        </div>
-      </div>
-
-      <Show when={selection().length > 0}>
-        <div data-slot="browser-selection-strip">
-          <span data-slot="browser-selection-label">Selezionati:</span>
-          <div data-slot="browser-chips">
-            <For each={selection()}>
-              {(el) => (
-                <div data-slot="browser-chip">
-                  <span data-slot="browser-chip-tag">&lt;{el.tagName}&gt;</span>
-                  <Show when={el.id}>
-                    <span data-slot="browser-chip-id">#{el.id}</span>
-                  </Show>
+          
+          <Show when={mode() === "edit" || selection().length > 0}>
+            <div data-slot="browser-prompt-popover">
+              <Show when={selection().length > 0}>
+                <div data-slot="browser-selection-list">
+                  <span data-slot="browser-selection-label">Contesto catturato:</span>
+                  <div data-slot="browser-context-blocks">
+                    <For each={selection()}>
+                      {(el) => (
+                        <div data-slot="browser-context-block">
+                          <div data-slot="browser-context-header">
+                            <span data-slot="browser-context-tag">&lt;{el.tagName}&gt;</span>
+                            <Show when={el.id}>
+                              <span data-slot="browser-context-id">#{el.id}</span>
+                            </Show>
+                            <button
+                              type="button"
+                              data-slot="browser-context-remove"
+                              onClick={() => removeElement(el.selector)}
+                              aria-label={`Rimuovi ${el.selector}`}
+                            >
+                              <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                                <path d="M4 4l8 8M12 4l-8 8" />
+                              </svg>
+                            </button>
+                          </div>
+                          <Show when={el.outerHTML}>
+                            <pre data-slot="browser-context-code"><code>{el.outerHTML}</code></pre>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
                   <button
                     type="button"
-                    data-slot="browser-chip-remove"
-                    onClick={() => removeElement(el.selector)}
-                    aria-label={`Rimuovi ${el.selector}`}
+                    data-slot="browser-clear-selection"
+                    onClick={clearSelection}
                   >
-                    <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-                      <path d="M4 4l8 8M12 4l-8 8" />
-                    </svg>
+                    Deseleziona tutto
                   </button>
                 </div>
-              )}
-            </For>
-          </div>
-          <button
-            type="button"
-            data-slot="browser-clear-selection"
-            onClick={clearSelection}
-          >
-            Deseleziona tutto
-          </button>
-        </div>
-      </Show>
+              </Show>
 
-      <div data-slot="browser-prompt">
-        <span data-slot="browser-prompt-caret" aria-hidden="true">
-          <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 3l5 5-5 5" />
-          </svg>
-        </span>
-        <input
-          type="text"
-          data-slot="browser-prompt-input"
-          value={promptText()}
-          onInput={(e) => setPromptText(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              sendPromptWithContext()
-            }
-          }}
-          placeholder={
-            selection().length > 0
-              ? "Descrivi cosa modificare negli elementi selezionati..."
-              : "Scrivi un'istruzione per la pagina web..."
-          }
-          spellcheck={false}
-        />
-        <button
-          type="button"
-          data-slot="browser-send-btn"
-          onClick={sendPromptWithContext}
-          disabled={!promptText().trim() && selection().length === 0}
-        >
-          Invia
-        </button>
+              <div data-slot="browser-prompt-input-row">
+                <span data-slot="browser-prompt-caret" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 3l5 5-5 5" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  data-slot="browser-prompt-input"
+                  value={promptText()}
+                  onInput={(e) => setPromptText(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      sendPromptWithContext()
+                    } else if (e.key === "Escape") {
+                      clearSelection()
+                      setPromptText("")
+                      setMode("browse")
+                    }
+                  }}
+                  placeholder={
+                    selection().length > 0
+                      ? "Descrivi cosa modificare..."
+                      : "Punta un elemento nella pagina o scrivi un'istruzione..."
+                  }
+                  spellcheck={false}
+                />
+                <button
+                  type="button"
+                  data-slot="browser-send-btn"
+                  onClick={sendPromptWithContext}
+                  disabled={!promptText().trim() && selection().length === 0}
+                >
+                  Invia
+                </button>
+              </div>
+            </div>
+          </Show>
+        </div>
       </div>
 
       <footer data-slot="browser-footer">
