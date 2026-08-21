@@ -81,6 +81,73 @@
   gap: var(--ade-space-4);
 }
 
+/* ── cleanup ──────────────────────────────────────────────────────────────── */
+
+[data-slot="wt-cleanup"] {
+  margin-left: var(--ade-space-4);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="wt-cleanup"]:hover {
+  background: var(--ade-overlay);
+  color: var(--ade-text);
+}
+
+[data-slot="wt-cleanup"]:focus-visible,
+[data-slot="wt-cleanup-run"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The plan sits above the trees it is about, and reads as a sentence rather
+   than as a list: what it would do, and one button to let it. */
+[data-slot="wt-cleanup-plan"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  margin: 0 var(--ade-space-6) var(--ade-space-4);
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+}
+
+[data-slot="wt-cleanup-text"] {
+  flex: 1;
+  min-width: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+}
+
+[data-slot="wt-cleanup-run"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-error);
+  color: var(--ade-bg);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-semibold);
+  cursor: pointer;
+}
+
+[data-slot="wt-cleanup-run"]:hover {
+  filter: brightness(1.08);
+}
+
 /* ── integration ──────────────────────────────────────────────────────────── */
 
 [data-slot="wt-card-integrate"] {

@@ -36,6 +36,17 @@ export interface WorktreeBoardProps {
   projectDirty?: number
   /** What happened to the last integration, in one sentence. */
   notice?: string
+  /**
+   * Works out which trees could be removed. The plan is shown before anything
+   * runs: deleting checkouts is not something to discover afterwards.
+   */
+  onPlanCleanup?: () => void
+  /** Carries out the plan the user just read. */
+  onRunCleanup?: () => void
+  /** The plan in one sentence, once asked for. */
+  cleanupSummary?: string
+  /** How many trees the plan would remove. Zero means nothing to confirm. */
+  cleanupCount?: number
 }
 
 const MODES: { id: IntegrationMode; label: string }[] = [
@@ -123,7 +134,27 @@ export function WorktreeBoard(props: WorktreeBoardProps): JSX.Element {
         <Show when={props.notice}>
           {(notice) => <span data-slot="wt-notice">{notice()}</span>}
         </Show>
+        <Show when={props.onPlanCleanup}>
+          <button type="button" data-slot="wt-cleanup" onClick={() => props.onPlanCleanup?.()}>
+            Pulisci alberi
+          </button>
+        </Show>
       </header>
+
+      {/* The plan is read before it runs, and confirming is a separate press:
+          removing checkouts is not a thing to find out about afterwards. */}
+      <Show when={props.cleanupSummary}>
+        {(summary) => (
+          <div data-slot="wt-cleanup-plan">
+            <span data-slot="wt-cleanup-text">{summary()}</span>
+            <Show when={(props.cleanupCount ?? 0) > 0}>
+              <button type="button" data-slot="wt-cleanup-run" onClick={() => props.onRunCleanup?.()}>
+                Rimuovi {props.cleanupCount}
+              </button>
+            </Show>
+          </div>
+        )}
+      </Show>
 
       {/* The board owns its own empty state: an emptiness explained elsewhere is
           an emptiness the next caller forgets to explain. */}

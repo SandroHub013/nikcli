@@ -10,6 +10,7 @@ import { SessionNew } from "../session-new/session-new"
 import { agentById, agentGlyph } from "../session-new/agents"
 import { loadWorktrees, provisionSessionTree } from "../worktrees/provision"
 import { planIntegration, runIntegration, type IntegrationMode } from "../worktrees/integrate"
+import { planCleanup, type CleanupPlan } from "../worktrees/cleanup"
 import type { Worktree } from "../worktrees/model"
 import { WorktreeBoard } from "../worktrees/worktree-board"
 import { Sidebar } from "../sidebar"
@@ -109,6 +110,8 @@ export function Workbench() {
   /** The question each pane is currently stopped on, if any. */
   const [permissions, setPermissions] = createSignal<Record<string, PermissionRequest>>({})
   const [integrationNotice, setIntegrationNotice] = createSignal<string>()
+  /** The cleanup the user has been shown but not yet confirmed. */
+  const [cleanupPlan, setCleanupPlan] = createSignal<CleanupPlan>()
   // How dirty the project is, which decides how loudly the board warns before
   // an integration. Read from git rather than assumed.
   const [projectDirty, setProjectDirty] = createSignal(0)
@@ -321,6 +324,39 @@ export function Workbench() {
     // A finished session is exactly when its changes are worth counting, and
     // the count is what makes the review tab worth pressing.
     void refreshDiff(id)
+  }
+
+  /** Works out what could be cleaned up, without touching anything yet. */
+  const planTreeCleanup = () => {
+    const current = project()
+    const trees = worktrees()
+    if (!current || !trees) return
+    setCleanupPlan(planCleanup({ trees, projectPath: current.root, now: Date.now() }))
+  }
+
+  const runTreeCleanup = async () => {
+    const plan = cleanupPlan()
+    const host = await getHost()
+    const current = project()
+    if (!plan || !host || !current) return
+
+    for (const step of plan.steps) {
+      const result = await host.run("git", step.args, current.root)
+      if (result.code !== 0) {
+        // git refusing to drop a tree is information, not an obstacle: it stops
+        // here and says which step and why, leaving the rest untouched.
+        setIntegrationNotice(
+          `Pulizia interrotta su "${step.args[2] ?? step.args[1]}": ${(result.stderr || result.stdout).split("\n")[0]}`,
+        )
+        setCleanupPlan(undefined)
+        void refetchWorktrees()
+        return
+      }
+    }
+
+    setIntegrationNotice(plan.steps.length > 0 ? "Alberi rimossi." : "Niente da rimuovere.")
+    setCleanupPlan(undefined)
+    void refetchWorktrees()
   }
 
   /**
@@ -875,6 +911,10 @@ export function Workbench() {
               projectBranch={project()?.branch}
               projectDirty={projectDirty()}
               notice={integrationNotice()}
+              cleanupSummary={cleanupPlan()?.summary}
+              cleanupCount={cleanupPlan()?.steps.filter((step) => step.args[1] === "remove").length}
+              onPlanCleanup={hasHost() ? () => planTreeCleanup() : undefined}
+              onRunCleanup={hasHost() ? () => void runTreeCleanup() : undefined}
               onIntegrate={hasHost() ? (input) => void integrate(input.tree, input.mode) : undefined}
               /*
                * Relocating means killing a live agent and restarting it in
