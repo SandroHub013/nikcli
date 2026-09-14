@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.353.0 (September 2026)
+
+## Core
+
+- Enhance QR code handling and pairing link visibility (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mobile): enhance QR code handling and pairing link visibility
+
 ## v1.352.0 (September 2026)
 
 - No notable changes
