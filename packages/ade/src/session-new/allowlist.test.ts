@@ -57,11 +57,12 @@ describe("the agent catalogue and the Rust allowlist", () => {
   })
 
   test("the shells the form can choose are on the list for both platforms", () => {
-    // `systemShell()` answers "cmd" on Windows and "sh" elsewhere, and the
-    // test process runs on one of them — so both are asserted by name rather
-    // than by calling it.
+    // `systemShell()` answers "cmd" on Windows, "zsh" on macOS and "sh"
+    // elsewhere, and the test process runs on one of them — so all are asserted
+    // by name rather than by calling it.
     const allowed = new Set(allowedShells.map((name) => name.toLowerCase()))
     expect(allowed.has("cmd")).toBe(true)
+    expect(allowed.has("zsh")).toBe(true)
     expect(allowed.has("sh")).toBe(true)
   })
 

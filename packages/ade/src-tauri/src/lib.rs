@@ -442,9 +442,65 @@ async fn git_run(
 
 #[tauri::command]
 async fn current_dir() -> Result<String, String> {
-    std::env::current_dir()
-        .map(|p| p.to_string_lossy().into_owned())
-        .map_err(|e| e.to_string())
+    let dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    // An app opened from Finder or the Dock starts in `/`, which is nobody's
+    // project; the home directory is where a terminal would have started.
+    if dir.parent().is_none() {
+        if let Some(home) = dirs::home_dir() {
+            return Ok(home.to_string_lossy().into_owned());
+        }
+    }
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Gives a GUI launch the PATH the user's shell would have.
+///
+/// macOS starts apps from Finder or the Dock with launchd's PATH
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`), so `nikcli`, `bun`, Homebrew and every
+/// agent CLI are missing from the terminal panes and from `nikcli serve`
+/// alike. Asking the login shell once, before anything is spawned, fixes all
+/// of them. A launch from a terminal already has the PATH and is left alone.
+#[cfg(target_os = "macos")]
+fn import_login_path() {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let current = std::env::var("PATH").unwrap_or_default();
+    if current.split(':').any(|p| p.starts_with("/opt/homebrew") || p.contains("/.bun/") || p.starts_with("/usr/local/bin")) {
+        return;
+    }
+    let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
+    let Ok(mut child) = Command::new(&shell)
+        .args(["-ilc", "printf '__ADE_PATH__%s' \"$PATH\""])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return;
+    };
+    // A profile that waits on input or the network must not hold the window.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
+            _ => {
+                let _ = child.kill();
+                return;
+            }
+        }
+    }
+    let mut out = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        let _ = stdout.read_to_string(&mut out);
+    }
+    if let Some((_, path)) = out.rsplit_once("__ADE_PATH__") {
+        let path = path.trim();
+        if !path.is_empty() {
+            std::env::set_var("PATH", path);
+        }
+    }
 }
 
 #[tauri::command]
@@ -573,6 +629,9 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    import_login_path();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

@@ -43,6 +43,11 @@
   position: relative;
 }
 
+/* The native traffic lights sit over the bar's left edge on macOS. */
+[data-slot="ade-bar"][data-platform="macos"] {
+  padding-left: 80px;
+}
+
 [data-slot="ade-bar-side"] {
   display: flex;
   align-items: center;

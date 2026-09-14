@@ -63,9 +63,13 @@ export const AGENTS: AgentOption[] = [
  * `src-tauri/src/pty.rs`, which decides what may actually be started.
  */
 export function systemShell(): string {
-  const isWindows =
-    typeof navigator !== "undefined" && /win/i.test(navigator.userAgent ?? "")
-  return isWindows ? "cmd" : "sh"
+  const agent = typeof navigator !== "undefined" ? (navigator.userAgent ?? "") : ""
+  if (/win/i.test(agent)) return "cmd"
+  // macOS has shipped zsh as the login shell since Catalina; its `sh` is a
+  // bash 3.2 that reads none of the user's profile, so the prompt came up as
+  // `sh-3.2$` without the PATH anything in the terminal is installed on.
+  if (/mac/i.test(agent)) return "zsh"
+  return "sh"
 }
 
 export function agentById(id: string): AgentOption | undefined {

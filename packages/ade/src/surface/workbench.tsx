@@ -49,6 +49,13 @@ const isTauriDesktop = () =>
   typeof window !== "undefined" &&
   ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
+/**
+ * On macOS the window keeps its native traffic lights, drawn over the bar
+ * (`TitleBarStyle::Overlay` in lib.rs), so the bar draws no controls of its
+ * own and leaves room for the lights on the left.
+ */
+const isMacOS = () => typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent ?? "")
+
 async function adeWindowMinimize() {
   try {
     const { invoke } = await import("@tauri-apps/api/core")
@@ -2968,6 +2975,7 @@ export function Workbench() {
 
       <header
         data-slot="ade-bar"
+        data-platform={isTauriDesktop() && isMacOS() ? "macos" : undefined}
         data-tauri-drag-region
         onDblClick={(e) => {
           if (e.target === e.currentTarget) void adeWindowToggleMaximize()
@@ -3125,7 +3133,7 @@ export function Workbench() {
           </div>
         </Show>
 
-        <Show when={isTauriDesktop()}>
+        <Show when={isTauriDesktop() && !isMacOS()}>
           <div data-slot="ade-window-controls" aria-label="Controlli finestra">
             <button
               type="button"
