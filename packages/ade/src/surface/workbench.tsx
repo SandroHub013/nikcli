@@ -629,19 +629,11 @@ export function Workbench() {
       }
       const brief = message.text.replace(/\s+/g, " ").trim()
       const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${brief.length > 48 ? `${brief.slice(0, 48)}…` : brief}`
-      const owner = project()?.name
-      /*
-       * A subagent works in its caller's project. Sessions start in the project
-       * open in ADE, so a caller from another one is told, rather than getting
-       * a helper in a directory it knows nothing about.
-       */
-      if (sender?.project && owner && sender.project !== owner) {
-        await answer(`errore: la tua sessione è nel progetto "${sender.project}", ma in ADE è aperto "${owner}": spawn avvia sessioni solo nel progetto aperto`)
-        return true
-      }
-      const index =(owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      // A subagent works in its caller's project, whichever one is open in ADE.
+      const owner = sender?.project || project()?.name
+      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
       const created = addAgent(
-        { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title },
+        { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title, workspaceId: owner },
         { index, agentId: agent.id, role: "agent" },
       )
       openRequests.set(id, { from: message.from, to: created.id, at: Date.now() })
@@ -1351,7 +1343,8 @@ export function Workbench() {
         const p = await openProject(host)
         if (p) {
           setProject(p)
-          setWb(w => ({ ...createWorkbench(), projectPath: p.root })) // clear workspace on new project
+          // The panes of the project being left stay: their sessions keep running, and keep talking to the others.
+          setWb(w => ({ ...w, projectPath: p.root, expandedId: undefined }))
           const newRecents = addRecent(recents(), { root: p.root, name: p.name })
           setRecents(newRecents)
           localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -1434,7 +1427,7 @@ export function Workbench() {
       if (host) {
         const p = await discoverProject(host, root)
         setProject(p)
-        setWb(w => ({ ...createWorkbench(), projectPath: p.root }))
+        setWb(w => ({ ...w, projectPath: p.root, expandedId: undefined }))
         const newRecents = addRecent(recents(), { root: p.root, name: p.name })
         setRecents(newRecents)
         localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -1996,6 +1989,23 @@ export function Workbench() {
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
   }
 
+  /**
+   * The project a pane's process runs in: its own, not whichever is open.
+   *
+   * Panes of every project stay in the workbench and keep talking to each
+   * other, so a session of a project that is not on screen — restarted, or
+   * spawned by one of its agents — has to start in its own root. Found by
+   * name among the known projects; the open one when the pane's is unknown.
+   */
+  const projectOfPane = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<Project | undefined> => {
+    const open = project()
+    const owner = wb().panes.find((pane) => pane.id === paneId)?.workspaceId
+    if (!owner || owner === open?.name) return open
+    const entry = recents().find((candidate) => candidate.name === owner)
+    if (!entry) return open
+    return discoverProject(host, entry.root).catch(() => open)
+  }
+
   const startProcess = async (
     paneId: string,
     agentId: string,
@@ -2015,7 +2025,7 @@ export function Workbench() {
   ) => {
     const agent = agentById(agentId)
     const host = await getHost()
-    const p = project()
+    const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
 
     /*
@@ -2283,7 +2293,7 @@ export function Workbench() {
   }
 
   const addAgent = (
-    input: { agentId: string; count: number; task: string; preset?: string; title?: string },
+    input: { agentId: string; count: number; task: string; preset?: string; title?: string; workspaceId?: string },
     entry: LaunchEntry,
   ) => {
     const id = `n${Date.now()}-${entry.index}-${++paneSequence}`
@@ -2292,7 +2302,9 @@ export function Workbench() {
     const task = entry.role === "shell" ? "" : input.task
     const hasInitialTask = Boolean(task.trim())
     const title = input.title || task || `${ROLE_LABEL[entry.role]} ${entry.index} — ${agentLabel(entry.agentId)}`
-    const currentProj = project()
+    const open = project()
+    // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
+    const currentProj = input.workspaceId && input.workspaceId !== open?.name ? undefined : open
     setWb(w => addPane(w, {
       id,
       title,
@@ -2304,7 +2316,7 @@ export function Workbench() {
       mode: input.preset ?? "custom",
       task,
       lines: [{ kind: "note", text: task || "Nessun task iniziale" }],
-      workspaceId: currentProj?.name || "workspace",
+      workspaceId: input.workspaceId || currentProj?.name || "workspace",
       cwd: currentProj?.root,
       tree: currentProj?.branch ? { branch: currentProj.branch, fidelity: "project" } : undefined,
     }))
