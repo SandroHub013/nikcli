@@ -18,6 +18,7 @@ mod media;
 mod pty;
 mod serve;
 mod shots;
+mod mailbox;
 mod stats;
 
 use serde::Serialize;
@@ -607,6 +608,8 @@ pub fn run() {
             frontend::ensure(app.handle());
             // Reports nobody came back for, from sessions that are long gone.
             agent_link::sweep(app.handle());
+            // `ade-msg` on disk before any session can look for it.
+            mailbox::install(app.handle());
             if let Err(error) = open_main_window(app.handle()) {
                 eprintln!("ADE: impossibile aprire la finestra: {error}");
                 return Err(Box::new(error));
@@ -624,6 +627,9 @@ pub fn run() {
             home_dir,
             path_exists,
             stats::system_stats,
+            mailbox::mailbox_take,
+            mailbox::mailbox_receipt,
+            mailbox::mailbox_publish,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,

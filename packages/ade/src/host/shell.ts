@@ -95,7 +95,17 @@ export interface Host {
      * `session-new/agent-link.ts`.
      */
     link?: { pane: string; nonce: string }
+    /** The pane this process belongs to: what `ade-msg` calls the session. */
+    pane?: string
   }) => Promise<SpawnedSession>
+
+  // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
+  /** Takes every message `ade-msg send` has dropped since the last call. */
+  mailboxTake?: () => Promise<{ id: string; body: string }[]>
+  /** Answers the `ade-msg send` that is waiting on message `id`. */
+  mailboxReceipt?: (id: string, text: string) => Promise<void>
+  /** Replaces the list `ade-msg list` prints. */
+  mailboxPublish?: (text: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -266,7 +276,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -327,6 +337,7 @@ export async function getHost(): Promise<Host | undefined> {
           cols: cols ?? 120,
           rows: rows ?? 30,
           link: link ?? null,
+          pane: pane ?? null,
         })
       } catch (error) {
         dead = true
@@ -424,6 +435,21 @@ export async function getHost(): Promise<Host | undefined> {
     async systemStats() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<SystemStats>("system_stats")
+    },
+
+    async mailboxTake() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ id: string; body: string }[]>("mailbox_take")
+    },
+
+    async mailboxReceipt(id, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("mailbox_receipt", { id, text })
+    },
+
+    async mailboxPublish(text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("mailbox_publish", { text })
     },
 
     async pickDirectory(title) {

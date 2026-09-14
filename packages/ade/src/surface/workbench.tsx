@@ -118,6 +118,7 @@ import {
 import { readReportLine } from "../session/report"
 import { asSubmittedLine } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
+import { formatDelivery, parseMessage, resolveTarget, sessionsTable, type MailPane } from "../session/mailbox"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -457,6 +458,65 @@ export function Workbench() {
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick(n => n + 1)
   const isRunning = (id: string) => { runningTick(); return running.has(id) }
+
+  /*
+   * Messages between sessions. See `session/mailbox.ts` and `mailbox.rs`.
+   *
+   * The sessions are the agent panes in grid order — the same order, and so
+   * the same numbers, that `ade-msg list` prints — and only a running one
+   * can receive: typing into a pane with no process reaches nobody.
+   */
+  const mailPanes = (): MailPane[] =>
+    wb()
+      .panes.filter((pane) => !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model))
+      .map((pane) => ({
+        id: pane.id,
+        title: pane.title,
+        agent: pane.agent ?? pane.model,
+        status: running.has(pane.id) ? pane.status : "chiusa",
+      }))
+
+  const deliverMail = async () => {
+    const host = await getHost()
+    if (!host?.mailboxTake || !host.mailboxReceipt) return
+    const incoming = await host.mailboxTake().catch(() => [])
+    for (const { id, body } of incoming) {
+      const message = parseMessage(body)
+      const panes = mailPanes()
+      const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
+      if (!message) {
+        await answer("errore: messaggio non valido")
+        continue
+      }
+      const sender = panes.find((pane) => pane.id === message.from)
+      const target = resolveTarget(panes, message.to, message.from)
+      if ("error" in target) {
+        await answer(`errore: ${target.error}`)
+        continue
+      }
+      const session = running.get(target.pane.id)
+      if (!session) {
+        await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
+        continue
+      }
+      session.write(`${formatDelivery(message, sender)}\r`)
+      appendLine(target.pane.id, `Messaggio ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
+      if (sender) appendLine(sender.id, `Messaggio inviato a ${target.pane.title}: ${message.text}`, "note")
+      await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
+    }
+  }
+
+  onMount(() => {
+    const timer = setInterval(() => void deliverMail(), 700)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  // The list `ade-msg list` prints, rewritten when a session opens, closes or changes state.
+  createEffect(() => {
+    runningTick()
+    const table = sessionsTable(mailPanes())
+    void getHost().then((host) => host?.mailboxPublish?.(table).catch(() => {}))
+  })
 
   /*
    * What voice needs is a microphone, and nothing more.
@@ -1850,6 +1910,7 @@ export function Workbench() {
         },
         onExit: (code) => finish(paneId, code),
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
+        pane: paneId,
       })
 
       running.set(paneId, session)

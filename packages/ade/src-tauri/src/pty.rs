@@ -252,6 +252,12 @@ pub async fn pty_spawn(
      * `src/session-new/agent-link.ts`.
      */
     link: Option<SpawnLink>,
+    /*
+     * The pane this process belongs to, for `ade-msg`. The pty id is ADE's
+     * own handle and means nothing to another session; the pane id is what
+     * `ade-msg list` shows and what a reply is addressed to.
+     */
+    pane: Option<String>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
@@ -341,6 +347,26 @@ pub async fn pty_spawn(
      * The directory is resolved here rather than sent by the frontend, so the
      * only place a hook can write is ADE's own application data.
      */
+    /*
+     * Messages between sessions: `ade-msg` first on PATH, the mailbox, and
+     * who this session is. Also after the scrub, for the same reason as the
+     * hook variables below. See `mailbox.rs`.
+     */
+    if let (Some(pane), Some(bin), Some(box_dir)) = (
+        pane.as_ref().filter(|p| !p.is_empty()),
+        crate::mailbox::bin_dir(&app),
+        crate::mailbox::mailbox_dir(&app),
+    ) {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        let mut parts = vec![bin];
+        parts.extend(std::env::split_paths(&path));
+        if let Ok(joined) = std::env::join_paths(parts) {
+            builder.env("PATH", joined);
+        }
+        builder.env("ADE_PANE_ID", pane);
+        builder.env("ADE_MAILBOX", box_dir.as_os_str());
+    }
+
     if let Some(link) = link.as_ref() {
         if let Some(dir) = crate::agent_link::link_dir(&app) {
             builder.env("ADE_PANE_ID", &link.pane);
