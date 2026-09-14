@@ -321,7 +321,8 @@ describe("Defect 6: hasChildren computation", () => {
     const rootFile = flat.find((n) => n.id === "f-root")
 
     expect(emptyDir?.hasChildren).toBe(false)
-    expect(noChildrenDir?.hasChildren).toBe(false)
+    // Not read yet, so it may hold anything: it has to stay expandable.
+    expect(noChildrenDir?.hasChildren).toBe(true)
     expect(withChildrenDir?.hasChildren).toBe(true)
     expect(rootFile?.hasChildren).toBe(false)
   })

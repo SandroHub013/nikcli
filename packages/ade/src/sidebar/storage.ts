@@ -19,6 +19,30 @@ export const STORAGE_KEY_WIDTH = "ade:sidebar:width"
 export const STORAGE_KEY_SECTIONS = "ade:sidebar:sections"
 export const STORAGE_KEY_EXPANDED_WORKSPACES = "ade:sidebar:expanded-workspaces"
 export const STORAGE_KEY_EXPANDED_DIRS = "ade:sidebar:expanded-dirs"
+export const STORAGE_KEY_SEARCH_KINDS = "ade:sidebar:search-kinds"
+
+export type EntryKind = "file" | "directory"
+
+/** Which kinds the file search shows. Never empty: a filter that hides everything is a broken box. */
+export function deserializeKinds(raw: string | null | undefined): Set<EntryKind> {
+  const kinds = new Set<EntryKind>()
+  for (const part of (raw ?? "").split(",")) {
+    if (part === "file" || part === "directory") kinds.add(part)
+  }
+  return kinds.size > 0 ? kinds : new Set<EntryKind>(["file", "directory"])
+}
+
+/**
+ * Turns one kind on or off. Turning off the last one turns the other on
+ * instead, so the two chips behave like a pair that can never both be off.
+ */
+export function toggleKind(kinds: ReadonlySet<EntryKind>, kind: EntryKind): Set<EntryKind> {
+  const next = new Set(kinds)
+  if (next.has(kind)) next.delete(kind)
+  else next.add(kind)
+  if (next.size === 0) next.add(kind === "file" ? "directory" : "file")
+  return next
+}
 export const STORAGE_KEY_TAB = "ade:sidebar:tab"
 
 export type SidebarTab = "sessions" | "files"

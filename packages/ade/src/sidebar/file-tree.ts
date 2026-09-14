@@ -144,7 +144,15 @@ export function flattenFileTree(
 
   for (const node of sorted) {
     const isDir = node.kind === "directory"
-    const hasChildren = isDir && Boolean(node.children && node.children.length > 0)
+    /*
+     * A directory whose children were never read may hold anything.
+     *
+     * The tree is loaded one level at a time, so every subdirectory arrives
+     * with `children` undefined. Counting that as "empty" hid the chevron and
+     * made the click do nothing — no subfolder could ever be opened. Only a
+     * directory that was read and found empty has nothing to expand.
+     */
+    const hasChildren = isDir && (node.children === undefined || node.children.length > 0)
     const isExpanded = isDir && expanded.has(node.path)
     const isSelected = node.path === selectedPath
 

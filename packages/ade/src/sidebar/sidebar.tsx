@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX 
 import "./sidebar.css"
 import { getHost } from "../host/shell"
 import { discoverProject, type Project } from "../host/project"
-import { toDisplayPath, basename } from "../host/path"
+import { toDisplayPath, basename, normalizePath } from "../host/path"
 import { fuzzyMatch } from "../command/match"
 import { formatDuration, elapsed } from "../session/metrics"
 /*
@@ -31,6 +31,10 @@ import {
   STORAGE_KEY_EXPANDED_WORKSPACES,
   STORAGE_KEY_WIDTH,
   STORAGE_KEY_SECTIONS,
+  STORAGE_KEY_SEARCH_KINDS,
+  type EntryKind,
+  deserializeKinds,
+  toggleKind,
   deserializeSet,
   safeGetStorage,
   safeSetStorage,
@@ -66,6 +70,7 @@ import {
   normalizeAgentId,
 } from "./workspace-tree"
 import { mergeChildren, markDirectoryError } from "./fs-tree"
+import { describeStats, type StatView } from "./system-stats"
 
 export interface SidebarProps {
   workspaces: Workspace[]
@@ -130,7 +135,10 @@ export interface SidebarProps {
    * Searches the whole project by path. Absent when there is no disk to walk,
    * and then the box says it is only filtering what is already open.
    */
-  searchFiles?: (query: string) => Promise<{ path: string; ranges: [number, number][] }[]>
+  searchFiles?: (
+    query: string,
+    kinds: ReadonlySet<EntryKind>,
+  ) => Promise<{ path: string; kind: EntryKind; rel: string; ranges: [number, number][] }[]>
   initialWidth?: number
   minWidth?: number
   maxWidth?: number
@@ -197,6 +205,17 @@ function highlightMatch(text: string, ranges?: [number, number][]) {
     res.push(text.slice(last))
   }
   return res
+}
+
+/** The part of `ranges` that falls inside `[start, end)`, shifted to start at 0. */
+function rangesWithin(ranges: [number, number][], start: number, end: number): [number, number][] {
+  const out: [number, number][] = []
+  for (const [s, e] of ranges) {
+    const from = Math.max(s, start)
+    const to = Math.min(e, end)
+    if (from < to) out.push([from - start, to - start])
+  }
+  return out
 }
 
 function SessionChildRow(props: {
@@ -586,6 +605,20 @@ export function Sidebar(props: SidebarProps) {
         if (!prev) return prev
         return mergeChildren(prev, dirPath, entries, false)
       })
+      /*
+       * The folders that were left open last time, opened again.
+       *
+       * The expanded set is remembered across launches but the tree is read
+       * one level at a time, so a folder remembered as open came back showing
+       * a chevron pointing down over nothing. Reading each such child as its
+       * parent arrives walks the tree back to where the user left it.
+       */
+      const open = expandedDirs()
+      for (const entry of entries) {
+        if (!entry.is_dir) continue
+        const path = normalizePath(entry.path)
+        if (open.has(path)) void loadDir(path)
+      }
     } catch {
       setRootNode(prev => {
         if (!prev) return prev
@@ -593,6 +626,34 @@ export function Sidebar(props: SidebarProps) {
       })
     }
   }
+
+  /*
+   * CPU, RAM and ADE's memory, every two seconds.
+   *
+   * Absent in the browser, where there is no host to ask: the strip then
+   * simply shows the three buttons. A failed read keeps the last numbers
+   * rather than blinking the row away.
+   */
+  const [stats, setStats] = createSignal<StatView | undefined>()
+  createEffect(() => {
+    let alive = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const tick = async () => {
+      const host = await getHost()
+      if (!alive || !host?.systemStats) return
+      try {
+        setStats(describeStats(await host.systemStats()))
+      } catch {
+        // keep the last reading
+      }
+      if (alive) timer = setTimeout(tick, 2000)
+    }
+    void tick()
+    onCleanup(() => {
+      alive = false
+      clearTimeout(timer)
+    })
+  })
 
   const [home, setHome] = createSignal("")
 
@@ -697,11 +758,13 @@ export function Sidebar(props: SidebarProps) {
     const query = searchQuery()
     const all = flatFiles()
     if (!query) return all
+    const wanted = kinds()
 
     const matches = new Map<string, [number, number][]>()
     const parentsToKeep = new Set<string>()
 
     for (const node of all) {
+      if (!wanted.has(node.kind)) continue
       const match = fuzzyMatch(query, node.name)
       if (match) {
         matches.set(node.path, match.ranges)
@@ -731,12 +794,29 @@ export function Sidebar(props: SidebarProps) {
    * box. The walk is asked for once per query, debounced, and its results
    * replace the tree while the query stands.
    */
-  const [projectHits, setProjectHits] = createSignal<{ path: string; ranges: [number, number][] }[]>([])
+  const [projectHits, setProjectHits] = createSignal<
+    { path: string; kind: EntryKind; rel: string; ranges: [number, number][] }[]
+  >([])
   const [searching, setSearching] = createSignal(false)
+  const [activeHit, setActiveHit] = createSignal(0)
+
+  /*
+   * Files, folders, or both — remembered, because whoever looks only for
+   * folders does so every time.
+   */
+  const [kinds, setKinds] = createSignal<Set<EntryKind>>(
+    deserializeKinds(safeGetStorage(storage, STORAGE_KEY_SEARCH_KINDS)),
+  )
+  const flipKind = (kind: EntryKind) => {
+    const next = toggleKind(kinds(), kind)
+    setKinds(next)
+    safeSetStorage(storage, STORAGE_KEY_SEARCH_KINDS, Array.from(next).join(","))
+  }
 
   createEffect(() => {
     const query = searchQuery().trim()
     const search = props.searchFiles
+    const wanted = kinds()
     if (!search || query.length < 1) {
       setProjectHits([])
       setSearching(false)
@@ -744,15 +824,52 @@ export function Sidebar(props: SidebarProps) {
     }
 
     setSearching(true)
+    // A result list from an older query is thrown away when it lands late.
+    let stale = false
     const timer = setTimeout(async () => {
       try {
-        setProjectHits(await search(query))
+        const hits = await search(query, wanted)
+        if (stale) return
+        setProjectHits(hits)
+        setActiveHit(0)
+      } catch {
+        if (!stale) setProjectHits([])
       } finally {
-        setSearching(false)
+        if (!stale) setSearching(false)
       }
     }, 80)
-    onCleanup(() => clearTimeout(timer))
+    onCleanup(() => {
+      stale = true
+      clearTimeout(timer)
+    })
   })
+
+  /*
+   * A folder picked from the results is shown where it lives, open.
+   *
+   * Opening a folder "as a file" has no meaning, and dropping the user back
+   * into a closed tree would lose the thing they searched for. So its
+   * ancestors and itself are expanded, the search is cleared, and the tree
+   * reads its way down to it.
+   */
+  const revealDirectory = (path: string) => {
+    const root = rootNode()
+    const rootKey = root ? normalizePath(root.path).toLowerCase() : ""
+    // Only the folders inside the project: `C:/Users` has no row to open.
+    const chain = [...expandDirectoryParents(`${normalizePath(path)}/x`, new Set())].filter((dir) =>
+      dir.toLowerCase().startsWith(`${rootKey}/`),
+    )
+    const next = new Set([...expandedDirs(), ...chain, ...(root ? [root.path] : [])])
+    setExpandedDirs(next)
+    safeSetStorage(storage, STORAGE_KEY_EXPANDED_DIRS, serializeSet(next))
+    setSearchQuery("")
+    if (root) void loadDir(root.path)
+  }
+
+  const pickHit = (hit: { path: string; kind: EntryKind }) => {
+    if (hit.kind === "directory") revealDirectory(hit.path)
+    else props.onSelectFile?.(hit.path)
+  }
 
   let activeResizeCleanup: (() => void) | undefined
 
@@ -801,8 +918,22 @@ export function Sidebar(props: SidebarProps) {
   const onSearchKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       setSearchQuery("")
+      return
     }
-    // basic arrows / enter navigation could be added here
+    const hits = projectHits()
+    if (hits.length === 0) return
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      const step = e.key === "ArrowDown" ? 1 : -1
+      setActiveHit((i) => (i + step + hits.length) % hits.length)
+      document
+        .querySelector(`[data-component="file-results"] [data-index="${activeHit()}"]`)
+        ?.scrollIntoView({ block: "nearest" })
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      const hit = hits[activeHit()]
+      if (hit) pickHit(hit)
+    }
   }
 
   return (
@@ -1050,10 +1181,48 @@ export function Sidebar(props: SidebarProps) {
                 type="text"
                 data-slot="search-input"
                 placeholder={props.searchFiles ? "Cerca nel progetto…" : "Cerca fra i file aperti…"}
+                title="Più parole: devono comparire tutte. Una parola con / cerca nel percorso (es. grid/pane)."
                 value={searchQuery()}
                 onInput={onSearchInput}
                 onKeyDown={onSearchKeyDown}
               />
+              <Show when={searchQuery()}>
+                <button
+                  type="button"
+                  data-slot="search-clear"
+                  aria-label="Cancella la ricerca"
+                  onClick={() => setSearchQuery("")}
+                >
+                  ×
+                </button>
+              </Show>
+            </div>
+            {/* Two chips that cannot both be off: turning off the last one
+                turns the other on (`toggleKind`). */}
+            <div data-slot="search-kinds" role="group" aria-label="Mostra">
+              <button
+                type="button"
+                data-slot="search-kind"
+                aria-pressed={kinds().has("file")}
+                data-active={kinds().has("file") ? "true" : undefined}
+                onClick={() => flipKind("file")}
+              >
+                File
+              </button>
+              <button
+                type="button"
+                data-slot="search-kind"
+                aria-pressed={kinds().has("directory")}
+                data-active={kinds().has("directory") ? "true" : undefined}
+                onClick={() => flipKind("directory")}
+              >
+                Cartelle
+              </button>
+              <Show when={props.searchFiles && searchQuery().trim() && !searching()}>
+                <span data-slot="search-count">
+                  {projectHits().length >= 200 ? "200+" : projectHits().length}
+                </span>
+              </Show>
             </div>
           </div>
 
@@ -1066,43 +1235,68 @@ export function Sidebar(props: SidebarProps) {
                 when={projectHits().length > 0}
                 fallback={
                   <p data-slot="section-empty">
-                    {searching() ? "Cerco nel progetto…" : "Nessun file corrisponde."}
+                    {searching()
+                      ? "Cerco nel progetto…"
+                      : kinds().size === 2
+                        ? "Nessun file o cartella corrisponde."
+                        : kinds().has("file")
+                          ? "Nessun file corrisponde."
+                          : "Nessuna cartella corrisponde."}
                   </p>
                 }
               >
                 <For each={projectHits()}>
-                  {(hit) => {
-                    const name = hit.path.split(/[/\\]/).pop() ?? hit.path
-                    const displayPath = (() => {
-                      const root = props.project?.root
-                      if (root && hit.path.startsWith(root)) {
-                        return hit.path.slice(root.length).replace(/^[/\\]+/, "")
-                      }
-                      return hit.path
-                    })()
+                  {(hit, index) => {
+                    const nameStart = hit.rel.lastIndexOf("/") + 1
+                    const name = hit.rel.slice(nameStart)
+                    const folder = hit.rel.slice(0, Math.max(0, nameStart - 1))
+                    const isDir = hit.kind === "directory"
                     return (
                       <div
                         role="option"
-                        tabindex={0}
+                        tabindex={-1}
                         data-slot="file-result"
-                        aria-selected={props.selectedFilePath === hit.path}
+                        data-kind={hit.kind}
+                        data-index={index()}
+                        data-active={activeHit() === index() ? "true" : undefined}
+                        aria-selected={activeHit() === index()}
                         data-selected={props.selectedFilePath === hit.path ? "true" : undefined}
                         title={hit.path}
                         draggable={true}
                         onDragStart={(event) => {
                           if (!event.dataTransfer) return
-                          writeDraggedPaths(event.dataTransfer, [hit.path])
+                          // A folder leaves with its trailing slash, as from the tree.
+                          writeDraggedPaths(event.dataTransfer, [isDir ? `${hit.path.replace(/[/\\]+$/, "")}/` : hit.path])
                           event.dataTransfer.effectAllowed = "copy"
                         }}
-                        onClick={() => props.onSelectFile?.(hit.path)}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter" && event.key !== " ") return
-                          event.preventDefault()
-                          props.onSelectFile?.(hit.path)
-                        }}
+                        onPointerEnter={() => setActiveHit(index())}
+                        onClick={() => pickHit(hit)}
                       >
-                        <span data-slot="file-result-name">{name}</span>
-                        <span data-slot="file-result-path">{displayPath}</span>
+                        <span data-slot="file-result-icon" aria-hidden="true">
+                          <Show
+                            when={isDir}
+                            fallback={
+                              <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.1">
+                                <path d="M3 1.5h5.5l3 3V12.5C11.5 13.05 11.05 13.5 10.5 13.5H3C2.45 13.5 2 13.05 2 12.5V2.5C2 1.95 2.45 1.5 3 1.5z" />
+                                <path d="M8.5 1.5V4.5H11.5" />
+                              </svg>
+                            }
+                          >
+                            <svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round">
+                              <path d="M1.5 3.5C1.5 2.67 2.17 2 3 2h2.5c.4 0 .78.16 1.06.44l1 1c.28.28.66.44 1.06.44H11c.83 0 1.5.67 1.5 1.5v5.5c0 .83-.67 1.5-1.5 1.5H3c-.83 0-1.5-.67-1.5-1.5v-7z" />
+                            </svg>
+                          </Show>
+                        </span>
+                        <span data-slot="file-result-name">
+                          {highlightMatch(name, rangesWithin(hit.ranges, nameStart, hit.rel.length))}
+                        </span>
+                        <Show when={folder}>
+                          <span data-slot="file-result-path">
+                            {/* Isolated LTR inside the RTL box: the box truncates from the
+                                left, the path still reads left to right. */}
+                            <bdi dir="ltr">{highlightMatch(folder, rangesWithin(hit.ranges, 0, folder.length))}</bdi>
+                          </span>
+                        </Show>
                       </div>
                     )
                   }}
@@ -1171,6 +1365,9 @@ export function Sidebar(props: SidebarProps) {
          */}
         <Show when={props.onOpenSettings ?? props.footerActions}>
           <div data-slot="sidebar-settings-strip">
+            {/* Gear, theme and bell as one tight group on the left; what the
+                machine is spending fills the rest of the row. */}
+            <div data-slot="sidebar-footer-group">
             <Show when={props.onOpenSettings}>
             <button
               type="button"
@@ -1198,6 +1395,25 @@ export function Sidebar(props: SidebarProps) {
             </Show>
             <Show when={props.footerActions}>
               <div data-slot="sidebar-footer-actions">{props.footerActions}</div>
+            </Show>
+            </div>
+            <Show when={stats()}>
+              {(view) => (
+                <div data-slot="sidebar-stats" aria-label="Risorse usate da ADE">
+                  <span data-slot="sidebar-stat" data-load={view().cpu.load} title={view().cpu.title}>
+                    <span data-slot="sidebar-stat-label">CPU</span>
+                    {view().cpu.text}
+                  </span>
+                  <span data-slot="sidebar-stat" data-load={view().ram.load} title={view().ram.title}>
+                    <span data-slot="sidebar-stat-label">RAM</span>
+                    {view().ram.text}
+                  </span>
+                  <span data-slot="sidebar-stat" data-load={view().mem.load} title={view().mem.title}>
+                    <span data-slot="sidebar-stat-label">MEM</span>
+                    {view().mem.text}
+                  </span>
+                </div>
+              )}
             </Show>
           </div>
         </Show>

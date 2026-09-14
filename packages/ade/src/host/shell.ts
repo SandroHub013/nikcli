@@ -168,6 +168,19 @@ export interface Host {
    * configuration pointing at a script that is not there.
    */
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
+  /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
+  systemStats?: () => Promise<SystemStats>
+}
+
+/** ADE only: this app, its webview and every agent it started. */
+export interface SystemStats {
+  /** CPU used by ADE's processes, 0–100 of the machine's capacity. */
+  cpu: number
+  /** Resident memory of ADE's processes, in bytes. */
+  appMem: number
+  /** The machine's RAM, as the base for the percentage. */
+  ramTotal: number
+  processes: number
 }
 
 /** What `readAgentHook` answers. Mirrors `HookFiles` in `agent_link.rs`. */
@@ -406,6 +419,11 @@ export async function getHost(): Promise<Host | undefined> {
       } catch {
         return false
       }
+    },
+
+    async systemStats() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<SystemStats>("system_stats")
     },
 
     async pickDirectory(title) {

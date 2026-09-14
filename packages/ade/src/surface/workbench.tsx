@@ -105,7 +105,6 @@ import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { loadSessionDiff } from "../review"
 import {
   markSaved,
   openBuffer,
@@ -118,7 +117,7 @@ import {
 } from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asSubmittedLine } from "../session/typing"
-import { findByName, walkProject } from "../search"
+import { searchPaths, walkProject } from "../search"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -343,7 +342,7 @@ export function Workbench() {
    * See `pane-records.ts` for why that matters.
    */
   const records = createPaneRecords()
-  const { reports, buffers, bufferLoading, permissions, paneView, paneDiff, diffLoading } = records
+  const { reports, buffers, bufferLoading, permissions } = records
 
   /*
    * One line for things the user has to be told but must not be stopped for.
@@ -542,7 +541,6 @@ export function Workbench() {
     getRunningSession: (id) => running.get(id),
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
-    setPaneView: (id, view) => showPaneView(id, view),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
     getHost,
@@ -1209,6 +1207,29 @@ export function Workbench() {
    * A session in a collapsed pane keeps running, and coming back to it must
    * show what happened while you were away rather than a gap.
    */
+  /*
+   * Working until the output goes quiet.
+   *
+   * Nothing else says when an interactive agent has finished its turn: the
+   * process stays alive, so `finish` never runs, and a pane marked working
+   * stayed working forever. Silence is the signal — an agent that is busy
+   * animates, one waiting for the user does not.
+   */
+  const QUIET_MS = 2500
+  const quietTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const settleWhenQuiet = (paneId: string) => {
+    clearTimeout(quietTimers.get(paneId))
+    quietTimers.set(paneId, setTimeout(() => {
+      quietTimers.delete(paneId)
+      if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
+      setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+    }, QUIET_MS))
+  }
+  const forgetQuiet = (paneId: string) => {
+    clearTimeout(quietTimers.get(paneId))
+    quietTimers.delete(paneId)
+  }
+
   const feedTerminal = (paneId: string, chunk: string) => {
     /*
      * Nothing is written to a pane that no longer exists.
@@ -1220,7 +1241,12 @@ export function Workbench() {
      * way to reach it. It was then never disposed, because `close` had
      * already run.
      */
-    if (!wb().panes.some((pane) => pane.id === paneId)) return
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane) return
+
+    // A working agent keeps repainting (spinner, streamed text); every chunk
+    // pushes back the moment the pane is declared idle again.
+    if (pane.status === "working") settleWhenQuiet(paneId)
 
     writeToTerminal(paneId, chunk)
     if (!liveTerminals().has(paneId)) {
@@ -1298,6 +1324,7 @@ export function Workbench() {
   const forgetPane = (id: string) => {
     records.forget(id)
     rawWindows.forget(id)
+    forgetQuiet(id)
   }
 
   const close = (id: string) => {
@@ -1337,13 +1364,11 @@ export function Workbench() {
   const finish = (id: string, code: number | null) => {
     running.delete(id)
     touchRunning()
+    forgetQuiet(id)
     setWb(w => updatePane(w, id, {
       status: code === 0 ? "done" : "error",
       activity: code === 0 ? "Fatto" : `Uscito con ${code}`
     }))
-    // A finished session is exactly when its changes are worth counting, and
-    // the count is what makes the review tab worth pressing.
-    void refreshDiff(id)
   }
 
   /*
@@ -1351,21 +1376,34 @@ export function Workbench() {
    *
    * Walking a repository costs seconds; doing it on every keystroke would make
    * the search box unusable on exactly the projects where search matters. The
-   * list is read on the first query and reused until the project changes.
+   * list is read on the first query and reused until the project changes —
+   * or until it is old enough that files created since would be missing. A
+   * stale list still answers at once; the fresh one replaces it for the next
+   * keystroke.
    */
-  let walked: { root: string; files: string[] } | undefined
-  let walkingPromise: Promise<{ root: string; files: string[] }> | undefined
+  type Walked = { root: string; at: number; entries: { path: string; kind: "file" | "directory" }[] }
+  const WALK_FRESH_MS = 30_000
+  let walked: Walked | undefined
+  let walkingPromise: Promise<Walked> | undefined
 
-  const searchProjectFiles = async (query: string) => {
+  const searchProjectFiles = async (query: string, kinds: ReadonlySet<"file" | "directory">) => {
     const host = await getHost()
     const current = project()
     if (!host || !current) return []
 
-    if (walked?.root !== current.root) {
+    const sameRoot = walked?.root === current.root
+    if (!sameRoot || Date.now() - walked!.at > WALK_FRESH_MS) {
       if (!walkingPromise) {
         walkingPromise = walkProject({ host, root: current.root })
           .then((result) => {
-            const entry = { root: current.root, files: result.files }
+            const entry: Walked = {
+              root: current.root,
+              at: Date.now(),
+              entries: [
+                ...(result.dirs ?? []).map((path) => ({ path, kind: "directory" as const })),
+                ...result.files.map((path) => ({ path, kind: "file" as const })),
+              ],
+            }
             walked = entry
             walkingPromise = undefined
             return entry
@@ -1375,11 +1413,12 @@ export function Workbench() {
             throw err
           })
       }
-      await walkingPromise
+      // Only a different project has to wait; a merely old list answers now.
+      if (!sameRoot) await walkingPromise
     }
 
     if (!walked) return []
-    return findByName(walked.files, query, 50).map((hit) => ({ path: hit.path, ranges: hit.ranges }))
+    return searchPaths(walked.entries, query, { root: current.root, kinds, limit: 200 })
   }
 
   /*
@@ -1496,34 +1535,6 @@ export function Workbench() {
      * and the buffer was marked clean while holding text nobody had saved.
      */
     buffers.update(paneId, (now) => (now ? markSaved(now, written) : now))
-  }
-
-  /** Reads what the session actually changed, from git, in its own checkout. */
-  const refreshDiff = async (paneId: string) => {
-    const pane = wb().panes.find((p) => p.id === paneId)
-    const host = await getHost()
-    if (!pane?.cwd || !host) return
-
-    diffLoading.set(paneId, true)
-    try {
-      const diff = await loadSessionDiff({
-        host,
-        cwd: pane.cwd,
-        // Without a recorded base the session is running in the project itself,
-        // where HEAD is the only honest thing to compare against.
-        baseRef: pane.tree?.base ?? "HEAD",
-      })
-      paneDiff.set(paneId, diff)
-    } finally {
-      diffLoading.set(paneId, false)
-    }
-  }
-
-  const showPaneView = (paneId: string, view: "transcript" | "diff") => {
-    paneView.set(paneId, view)
-    // Always re-read on entry: the agent has usually written something since
-    // the last look, and a stale diff is the one thing a review must not be.
-    if (view === "diff") void refreshDiff(paneId)
   }
 
   const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note") => {
@@ -2090,7 +2101,6 @@ export function Workbench() {
     appendLine,
     close,
     saveFile: (id) => void saveFile(id),
-    showPaneView,
     answerPermission,
     restart: (pane, line) => void reopen(pane, line),
     pickVideo,
