@@ -1,6 +1,9 @@
-import { createSignal, createMemo, createEffect, Show, For } from "solid-js"
+import { createSignal, createMemo, createEffect, on, untrack, Show, For } from "solid-js"
 import { type Command, type CommandHit, filterCommands, moveSelection } from "./registry"
+import { groupHits, type GroupedHits } from "./group-hits"
 import "./palette.css"
+
+export type { GroupedHits }
 
 export interface CommandPaletteProps {
   open: boolean
@@ -14,29 +17,6 @@ export interface CommandPaletteProps {
   emptyLabel?: string
 }
 
-export interface GroupedHits {
-  name: string
-  hits: { hit: CommandHit; index: number }[]
-}
-
-export function groupHits(hits: CommandHit[]): GroupedHits[] {
-  const result: GroupedHits[] = []
-  const groupMap = new Map<string, number>()
-
-  for (let i = 0; i < hits.length; i++) {
-    const hit = hits[i]
-    const gName = hit.command.group
-    let gIdx = groupMap.get(gName)
-    if (gIdx === undefined) {
-      gIdx = result.length
-      groupMap.set(gName, gIdx)
-      result.push({ name: gName, hits: [] })
-    }
-    result[gIdx].hits.push({ hit, index: i })
-  }
-  return result
-}
-
 export function CommandPalette(props: CommandPaletteProps) {
   const [query, setQuery] = createSignal("")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -47,25 +27,48 @@ export function CommandPalette(props: CommandPaletteProps) {
   const hits = createMemo(() => filterCommands(props.commands, query()))
   const groups = createMemo(() => groupHits(hits()))
 
-  createEffect(() => {
-    const list = hits()
-    setSelectedIndex(moveSelection(list, -1, 1))
-  })
+  /*
+   * Why both effects below track so carefully.
+   *
+   * `props.commands` is rebuilt from the workbench, and the workbench changes
+   * on every line an agent prints. Reading it inside an effect subscribes that
+   * effect to the transcript: with a session running, these two ran several
+   * times a second. One of them called `setQuery("")`, so the palette erased
+   * what the user was typing; the other reset the selection, so three presses
+   * of ArrowDown came back to the first row and Enter ran the wrong command.
+   */
 
-  createEffect(() => {
-    if (props.open) {
-      previousFocus = document.activeElement as HTMLElement
-      setQuery("")
-      const initialHits = filterCommands(props.commands, "")
-      setSelectedIndex(moveSelection(initialHits, -1, 1))
-      setTimeout(() => inputRef?.focus(), 0)
-    } else {
-      if (previousFocus) {
-        previousFocus.focus()
-        previousFocus = null
-      }
-    }
-  })
+  // The selection follows the query, not the list. A list that changed shape
+  // underneath — because a command became available — must not move the
+  // highlight the user has put somewhere.
+  createEffect(
+    on(query, () => {
+      setSelectedIndex(moveSelection(hits(), -1, 1))
+    }),
+  )
+
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        if (!open) {
+          if (previousFocus) {
+            previousFocus.focus()
+            previousFocus = null
+          }
+          return
+        }
+
+        previousFocus = document.activeElement as HTMLElement
+        setQuery("")
+        // Read untracked: this is the list as it is at the moment of opening,
+        // not a subscription to every later version of it.
+        const initialHits = untrack(() => filterCommands(props.commands, ""))
+        setSelectedIndex(moveSelection(initialHits, -1, 1))
+        setTimeout(() => inputRef?.focus(), 0)
+      },
+    ),
+  )
 
   createEffect(() => {
     const idx = selectedIndex()

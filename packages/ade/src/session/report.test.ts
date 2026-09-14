@@ -76,6 +76,26 @@ describe("readReportLine — cost", () => {
     expect(readReportLine({}, "$ export PATH=$HOME/bin")).toEqual({});
     expect(readReportLine({}, "$ npm run build")).toEqual({});
   });
+
+  /*
+   * I parametri posizionali. `$2` in una riga di awk impostava il costo della
+   * sessione a 2,00 $, e siccome il contatore è monotono restava lì fino alla
+   * fine — indistinguibile da una spesa vera.
+   */
+  test("i parametri posizionali di shell non sono costi", () => {
+    expect(readReportLine({}, "awk '{print $2}' file.txt")).toEqual({});
+    expect(readReportLine({}, "cut -d, -f $3 dati.csv")).toEqual({});
+    expect(readReportLine({}, "echo $1 $2 $3")).toEqual({});
+    expect(readReportLine({}, 'sed -n "${1}p" x')).toEqual({});
+    expect(readReportLine({}, "for i in $(seq 1 10); do echo $i; done")).toEqual({});
+  });
+
+  test("un intero tondo senza unità non viene preso per un prezzo", () => {
+    // Direzione voluta: un costo mancato si nota, uno inventato no.
+    expect(readReportLine({}, "il file costa $5 di spazio").costUsd).toBeUndefined();
+    // Con l'unità scritta per esteso invece si legge.
+    expect(readReportLine({}, "totale 5 USD").costUsd).toBeCloseTo(5);
+  });
 });
 
 describe("readReportLine — model", () => {

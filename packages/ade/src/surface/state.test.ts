@@ -6,8 +6,6 @@ import {
   updatePane,
   expandPane,
   setColumns,
-  paneStatusToOccupantState,
-  buildOccupantsByPath,
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
@@ -51,20 +49,13 @@ describe("surface state", () => {
     expect(wb.panes[0].title).toBe("New Title")
   })
 
-  test("paneStatusToOccupantState maps correctly", () => {
-    expect(paneStatusToOccupantState("working")).toBe("working")
-    expect(paneStatusToOccupantState("provisioning")).toBe("working")
-    expect(paneStatusToOccupantState("waiting")).toBe("waiting")
-    expect(paneStatusToOccupantState("done")).toBe("stopped")
-    expect(paneStatusToOccupantState("error")).toBe("stopped")
-  })
-
-  test("buildOccupantsByPath maps absolute and relative paths", () => {
-    const map = buildOccupantsByPath([mockPane], "C:/project")
-    const occupantList = map.get("test/path")
-    expect(occupantList).toBeDefined()
-    expect(occupantList![0].sessionId).toBe("p1")
-  })
+  /*
+   * `paneStatusToOccupantState` and `buildOccupantsByPath` were tested here
+   * and used nowhere else. They existed for the worktree board, which was
+   * removed from the interface: the two functions, the `Occupant` model and
+   * the whole `worktrees/` subsystem went with it. Their tests were the last
+   * thing calling them, which is the shape this clean-up is about.
+   */
 
   test("deriveWorkspaces groups panes", () => {
     const panes: Pane[] = [
@@ -89,8 +80,14 @@ describe("surface state", () => {
     const restored = fromWorkspaceState(state)
     expect(restored.panes).toHaveLength(1)
     expect(restored.panes[0].id).toBe("p1")
-    expect(restored.panes[0].status).toBe("working")
-    // Note: in fromWorkspaceState we actually don't restore exact running status
-    // but the test will verify the properties we assigned.
+    /*
+     * "done", not "working". The pane was saved mid-run, but a pty is a child
+     * of the app: by the time this state is read back the process is gone,
+     * whether the user closed the window or the machine restarted. Restoring
+     * "working" showed a running session with no pid behind it, with the
+     * liveness sweep animating under it. This test used to assert exactly
+     * that, and its own comment noted the status was not really restored.
+     */
+    expect(restored.panes[0].status).toBe("done")
   })
 })

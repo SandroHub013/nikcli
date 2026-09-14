@@ -36,21 +36,28 @@ describe("normalizeUrl", () => {
 
   describe("hosts and domains without scheme", () => {
     test("normalizes localhost and IP addresses", () => {
-      expect(normalizeUrl("localhost")).toBe("http://localhost")
-      expect(normalizeUrl("localhost:3000")).toBe("http://localhost:3000")
+      expect(normalizeUrl("localhost")).toBe("http://localhost/")
+      /*
+       * The canonical form, which is what `new URL` produces: an empty path
+       * is written as `/`. The function used to validate the parsed URL and
+       * then return the raw string it was handed, so anything `new URL`
+       * would have percent-encoded came out intact — see the escaping test
+       * below for why that mattered.
+       */
+      expect(normalizeUrl("localhost:3000")).toBe("http://localhost:3000/")
       expect(normalizeUrl("localhost:5173/app")).toBe("http://localhost:5173/app")
-      expect(normalizeUrl("127.0.0.1:8080")).toBe("http://127.0.0.1:8080")
-      expect(normalizeUrl("0.0.0.0:3000")).toBe("http://0.0.0.0:3000")
-      expect(normalizeUrl("[::1]:3000")).toBe("http://[::1]:3000")
+      expect(normalizeUrl("127.0.0.1:8080")).toBe("http://127.0.0.1:8080/")
+      expect(normalizeUrl("0.0.0.0:3000")).toBe("http://0.0.0.0:3000/")
+      expect(normalizeUrl("[::1]:3000")).toBe("http://[::1]:3000/")
     })
 
     test("normalizes domain names", () => {
-      expect(normalizeUrl("example.com")).toBe("http://example.com")
+      expect(normalizeUrl("example.com")).toBe("http://example.com/")
       expect(normalizeUrl("example.com/test")).toBe("http://example.com/test")
       expect(normalizeUrl("sub.domain.org:8080/path?query=1")).toBe(
         "http://sub.domain.org:8080/path?query=1",
       )
-      expect(normalizeUrl("my-app.local:3000")).toBe("http://my-app.local:3000")
+      expect(normalizeUrl("my-app.local:3000")).toBe("http://my-app.local:3000/")
     })
 
     test("refuses invalid ports in host strings", () => {
@@ -63,24 +70,58 @@ describe("normalizeUrl", () => {
 
   describe("explicit http and https schemes", () => {
     test("preserves valid http and https URLs", () => {
-      expect(normalizeUrl("http://localhost:3000")).toBe("http://localhost:3000")
+      expect(normalizeUrl("http://localhost:3000")).toBe("http://localhost:3000/")
       expect(normalizeUrl("https://x.dev/a?b=c")).toBe("https://x.dev/a?b=c")
       expect(normalizeUrl("http://127.0.0.1:8080/api")).toBe("http://127.0.0.1:8080/api")
+      // The default port for the scheme is dropped, as every browser does.
       expect(normalizeUrl("https://example.com:443/test#anchor")).toBe(
-        "https://example.com:443/test#anchor",
+        "https://example.com/test#anchor",
       )
-      expect(normalizeUrl("http://[::1]:3000")).toBe("http://[::1]:3000")
+      expect(normalizeUrl("http://[::1]:3000")).toBe("http://[::1]:3000/")
     })
 
     test("handles case-insensitive scheme matching", () => {
-      expect(normalizeUrl("HTTP://localhost:3000")).toBe("HTTP://localhost:3000")
-      expect(normalizeUrl("HTTPS://x.dev/a?b=c")).toBe("HTTPS://x.dev/a?b=c")
+      // Canonicalised, scheme included: `HTTP:` and `http:` are the same
+      // scheme, and returning the typed casing meant two spellings of one
+      // address compared unequal everywhere downstream.
+      expect(normalizeUrl("HTTP://localhost:3000")).toBe("http://localhost:3000/")
+      expect(normalizeUrl("HTTPS://x.dev/a?b=c")).toBe("https://x.dev/a?b=c")
     })
 
     test("refuses explicit http/https with invalid ports", () => {
       expect(normalizeUrl("http://localhost:0")).toBeUndefined()
       expect(normalizeUrl("http://localhost:65536")).toBeUndefined()
       expect(normalizeUrl("https://example.com:99999")).toBeUndefined()
+    })
+
+    /*
+     * The function validated the parsed URL and returned the *raw* string,
+     * so every character `new URL` would have percent-encoded survived.
+     * `loadMirror` interpolates the result into `<base href="…">` with no
+     * escaping, so a double quote closed the attribute and the rest became
+     * markup in a document that — before the sandbox was fixed — ran in
+     * ADE's own origin.
+     */
+    test("escapes what an attribute would otherwise let out", () => {
+      const out = normalizeUrl('http://localhost:3000/"><script>alert(1)</script>')
+      expect(out).toBeDefined()
+      expect(out).not.toContain('"')
+      expect(out).not.toContain("<")
+      expect(out).not.toContain(">")
+      expect(out).toContain("%22")
+    })
+
+    /*
+     * `http://localhost:3000@evil.com/` is a valid URL whose host is
+     * evil.com — everything before the `@` is a username. The address bar
+     * showed the part the eye stops at, the frame loaded the other site, and
+     * the whole string reached the agent's prompt through
+     * `formatSelectionContext`, telling the agent it was on localhost too.
+     */
+    test("refuses the userinfo form, which is a disguise and not a credential", () => {
+      expect(normalizeUrl("http://localhost:3000@evil.com/")).toBeUndefined()
+      expect(normalizeUrl("https://user:pass@example.com/")).toBeUndefined()
+      expect(normalizeUrl("localhost:3000@evil.com")).toBeUndefined()
     })
   })
 

@@ -75,14 +75,24 @@ function parseTokens(line: string): number | undefined {
  * Due ancore, entrambe con unità esplicita: simbolo `$` attaccato al numero,
  * oppure suffisso `USD`/`dollari`. Un numero senza una delle due non è un
  * costo — dimensioni di file e percentuali restano fuori.
+ *
+ * `$` attaccato a una cifra non basta però, ed è il punto:
+ * `awk '{print $2}'`, `echo $1`, `cut -f $3` sono normalissimi nell'output di
+ * un agente, e ognuno impostava il costo della sessione — `$2` diventava
+ * «2,00 $». Il contatore è monotono, quindi il numero restava lì per tutta la
+ * sessione, e non c'era modo di distinguerlo da una spesa vera.
+ *
+ * Quindi il simbolo da solo non basta più: o ci sono i decimali — nessuno
+ * scrive `$2.50` per un parametro posizionale — oppure l'unità è scritta per
+ * esteso. Un `$5` tondo e isolato viene perso, ed è la direzione giusta: un
+ * costo mancato si nota guardando il pannello, uno inventato resta lì
+ * indistinguibile da una spesa vera per tutta la sessione.
  */
-const COST_DOLLAR_RE = /\$(\d+(?:[.,]\d+)?)/;
+const COST_DOLLAR_RE = /\$\s?(\d+[.,]\d+)/;
 const COST_USD_RE = /\b(\d+(?:[.,]\d+)?)\s*(?:usd|dollari)\b/i;
 
 /** Primo costo in dollari nella riga, oppure `undefined` se non c'è. */
 function parseCost(line: string): number | undefined {
-  // `$` prima: nei comandi shell il simbolo compare spesso, ma qui deve essere
-  // attaccato a una cifra per valere come prezzo.
   const dollar = COST_DOLLAR_RE.exec(line);
   if (dollar) return parseDecimal(dollar[1]);
 

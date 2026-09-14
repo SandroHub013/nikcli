@@ -6,8 +6,17 @@
  */
 
 export const STORAGE_KEY_WIDTH = "ade:sidebar:width"
-export const STORAGE_KEY_SESSIONS_HEIGHT = "ade:sidebar:sessions-height"
-export const STORAGE_KEY_SESSIONS_COLLAPSED = "ade:sidebar:sessions-collapsed"
+
+/**
+ * Which sections are open, as a comma-separated list.
+ *
+ * Replaces `sessions-height` and `sessions-collapsed`, which between them
+ * stored a pixel height that no longer exists — sections are sized to their
+ * content now. A new key rather than a reused one, so an old value cannot be
+ * read as a new one; the two old keys are simply left behind in storage and
+ * ignored.
+ */
+export const STORAGE_KEY_SECTIONS = "ade:sidebar:sections"
 export const STORAGE_KEY_EXPANDED_WORKSPACES = "ade:sidebar:expanded-workspaces"
 export const STORAGE_KEY_EXPANDED_DIRS = "ade:sidebar:expanded-dirs"
 export const STORAGE_KEY_TAB = "ade:sidebar:tab"

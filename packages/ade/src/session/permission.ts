@@ -28,7 +28,17 @@ export interface PermissionRequest {
 export interface PermissionAnswer {
   /** Etichetta per il bottone, in italiano. */
   label: string
-  /** Esattamente ciò che va scritto nello stdin del processo. */
+  /**
+   * The keystrokes that choose this answer — without the Enter that submits
+   * them.
+   *
+   * The terminator is the caller's, added once by `asSubmittedLine`, because
+   * whether an answer is submitted at all is a decision about the session and
+   * not about the question. What must not happen again is what happened
+   * before: this string written to stdin verbatim, so `y` sat unread in the
+   * agent's input buffer while ADE cleared the request and reported the pane
+   * as running.
+   */
   send: string
   tone: "primary" | "secondary"
 }
@@ -453,16 +463,45 @@ export function detectPermission(lines: string[], agentId: string): PermissionRe
   return undefined
 }
 
-/** Quando una richiesta smette di essere valida perché è arrivato altro output. */
-export function isResolved(request: PermissionRequest, newLines: string[]): boolean {
-  if (!newLines || newLines.length === 0) return false
+/**
+ * Quando una richiesta smette di essere valida perché l'agente è andato avanti.
+ *
+ * The question is answered when it is no longer on screen — which is a
+ * different test from "something new arrived", and the difference is the whole
+ * point. Claude Code, codex and gemini all draw their menus with Ink or
+ * ratatui, which means they repaint the entire frame several times a second
+ * while they wait: option lines, hints, a spinner. Every one of those repaints
+ * is new output. Treating new output as an answer meant the first repaint after
+ * a question was detected cleared the request and set the pane back to "In
+ * esecuzione", while the agent sat there still waiting for a keystroke.
+ *
+ * So the last lines are read again the way they were read the first time. If
+ * the same question is still there, nothing has been answered.
+ *
+ * `recentLines` is the same trailing window `detectPermission` was given, not
+ * just the one line that arrived: a frame is many lines, and one of them says
+ * nothing about whether the prompt is gone.
+ */
+export function isResolved(
+  request: PermissionRequest,
+  recentLines: string[],
+  agentId: string,
+): boolean {
+  if (!recentLines || recentLines.length === 0) return false
 
   // Strip ANSI and filter empty lines
-  const stripped = newLines.map(stripAnsi).map(l => l.trim()).filter(l => l.length > 0)
+  const stripped = recentLines.map(stripAnsi).map(l => l.trim()).filter(l => l.length > 0)
   if (stripped.length === 0) return false
 
-  // If the new lines only echo the prompt or question itself, it is not resolved
   const reqWhatTrimmed = stripAnsi(request.what).trim()
+
+  // Still being asked, by the same reading that found it: not resolved.
+  const stillAsking = detectPermission(recentLines, agentId)
+  if (stillAsking && stripAnsi(stillAsking.what).trim() === reqWhatTrimmed) {
+    return false
+  }
+
+  // If the new lines only echo the prompt or question itself, it is not resolved
   const isOnlyPromptEcho = stripped.every(
     line => line === reqWhatTrimmed || line === ">" || line === ":" || line === "?"
   )

@@ -1,0 +1,376 @@
+import { Show, createMemo } from "solid-js"
+import { BrowserPane } from "../browser"
+import { FilePane, editBuffer, revertBuffer } from "../editor"
+import { SessionPane } from "../grid/pane"
+import type { GridPane } from "../grid/session-grid"
+import type { SpawnedSession } from "../host/shell"
+import type { Project } from "../host/project"
+import { PluginPane } from "../plugin/pane"
+import type { AdePluginRuntime } from "../plugin/runtime"
+import { AgentMark } from "../session-new/agent-mark"
+import { formatCost, formatTokens } from "../session/metrics"
+import type { PermissionAnswer } from "../session/permission"
+import { asOneLine } from "../session/typing"
+import { formatDroppedPaths } from "../sidebar/file-drag"
+import { runVideoCommand } from "../video/commands"
+import { VIDEO_VERBS } from "../video/video"
+import { VideoPane } from "../video/video-pane"
+import type { PanelRouter } from "../panels/router"
+import type { PaneRecords } from "./pane-records"
+import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+
+/**
+ * What each tile in the grid actually draws.
+ *
+ * Five kinds of pane — a session, a file, a browser, a video, a plugin's own
+ * body — chosen from the pane's own shape and wired to the surface around
+ * them. It was three hundred lines in the middle of `workbench.tsx`, which is
+ * where it grew every time a kind was added and where the two `<Show>` chains
+ * that pick between them were easiest to get wrong.
+ *
+ * A `.tsx`, so none of it is reachable from `bun test` in this repo. That is
+ * the honest cost of moving it: what this file buys is a boundary, not
+ * coverage. Everything it decides that *can* be tested has been pushed out
+ * already — `pane-records.ts` for the per-pane state, `video/commands.ts` for
+ * what the video panel does, `panels/router.ts` for who answers an agent.
+ */
+
+export interface PaneRendererDeps {
+  wb: () => WorkbenchState
+  setWb: (next: WorkbenchState | ((current: WorkbenchState) => WorkbenchState)) => void
+  project: () => Project | undefined
+  /** The seven maps keyed by pane id. */
+  records: PaneRecords
+  /** Which panes have an xterm worth drawing. */
+  liveTerminals: () => Set<string>
+  isRunning: (id: string) => boolean
+  /** The live process behind a pane, if there is one. */
+  sessionFor: (id: string) => SpawnedSession | undefined
+  appendLine: (id: string, text: string, kind?: "step" | "shell" | "note") => void
+  close: (id: string) => void
+  saveFile: (id: string) => void
+  showPaneView: (id: string, view: "transcript" | "diff") => void
+  answerPermission: (id: string, answer: PermissionAnswer) => void
+  /** "Riprova" on a session that failed. */
+  /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
+  restart: (pane: Pane, line?: string) => void
+  /** The native file picker, narrowed to what the player can open. */
+  pickVideo: () => Promise<string | undefined>
+  /** Writes a captured frame and resolves to where it went. */
+  captureFrame: (name: string, png: Uint8Array) => Promise<string>
+  /** Where an agent's `@ade …` requests are routed. */
+  panels: PanelRouter
+  /** Tells every running session that a panel it can drive has opened. */
+  announceToAll: (panel: string) => void
+  pluginRuntime: AdePluginRuntime
+}
+
+export function createPaneRenderer(deps: PaneRendererDeps) {
+  const { wb, setWb, project, records, panels, pluginRuntime } = deps
+  const { buffers, bufferLoading, reports, permissions, paneView, paneDiff, diffLoading } = records
+
+  /*
+   * The rendered tile is built once per pane and kept.
+   *
+   * The grid calls `render()` from a reactive position, so rebuilding the
+   * entry would throw the pane's DOM away and build it again on every
+   * workbench change — focus included. See the comment on `current` below for
+   * what that cost.
+   */
+  const cache = new Map<string, GridPane>()
+
+  return createMemo<GridPane[]>(() => {
+    const state = wb()
+    const activeIds = new Set(state.panes.map((p) => p.id))
+    for (const id of cache.keys()) {
+      if (!activeIds.has(id)) cache.delete(id)
+    }
+
+    /*
+     * One project's sessions at a time.
+     *
+     * A grid mixing two projects tiles six terminals that share nothing — and
+     * every one of them looks alike. The sessions of the projects you are not
+     * in keep running and keep their scrollback; the sidebar still counts
+     * them, and switching project brings them straight back.
+     */
+    const owner = project()?.name
+    const mine = owner ? state.panes.filter((p) => p.workspaceId === owner) : state.panes
+    const currentPanes = state.expandedId ? mine.filter((p) => p.id === state.expandedId) : mine
+
+    return currentPanes.map((p) => {
+      let entry = cache.get(p.id)
+      if (!entry) {
+        entry = { id: p.id, render: () => renderPane(deps, p) }
+        cache.set(p.id, entry)
+      }
+      return entry
+    })
+  })
+
+  function renderPane(deps: PaneRendererDeps, p: Pane) {
+    /*
+     * The pane as it is now, not as it was when the tile was built.
+     *
+     * Which kind of pane this is has to be asked through <Show>, not an `if`.
+     * The grid calls `render()` from a reactive position, so an `if` reading
+     * the workbench here subscribes the whole pane to every workbench change
+     * — and focus is a workbench change. Pressing a pane fires pointerdown,
+     * which focuses it, which threw the pane's DOM away and built it again:
+     * mouseup then landed on a node that no longer existed, so no click was
+     * ever produced and the header buttons did nothing. <Show> keeps the read
+     * inside its own memo, so only an actual change of kind rebuilds anything.
+     */
+    const current = () => wb().panes.find((x) => x.id === p.id) ?? p
+    const focus = () => setWb((w) => ({ ...w, focusedId: current().id }))
+    const expand = () => setWb((w) => expandPane(w, current().id))
+    const isFocused = () => current().id === wb().focusedId
+
+    const filePane = () => (
+      <FilePane
+        path={current().filePath!}
+        buffer={buffers()[current().id]}
+        loading={bufferLoading()[current().id]}
+        focused={isFocused()}
+        onFocus={focus}
+        onChange={(draft) =>
+          buffers.update(current().id, (buffer) => (buffer ? editBuffer(buffer, draft) : buffer))
+        }
+        onSave={() => deps.saveFile(current().id)}
+        onRevert={() =>
+          buffers.update(current().id, (buffer) => (buffer ? revertBuffer(buffer) : buffer))
+        }
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const browserPane = () => (
+      <BrowserPane
+        id={current().id}
+        title={current().title}
+        initialUrl={current().browserUrl}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+        /*
+         * A browser pane has no agent of its own, so what it collects goes to
+         * the session the user was last in. With nothing running there is
+         * nowhere for it to land, and saying so beats swallowing it.
+         */
+        onSendPrompt={(prompt, context) => {
+          const target = wb().panes.find((pane) => !pane.browserUrl && deps.isRunning(pane.id))
+          if (!target) return
+          const text = asOneLine(context || prompt)
+          deps.appendLine(target.id, `> ${text}`, "shell")
+          /*
+           * One line, and no terminator: the user still presses Enter
+           * themselves. `replace(/\n/g, " ")` used to stand here, which left
+           * carriage returns alone — and a CR is what a tty reads as Enter, so
+           * a page could put a second command in a style property and have it
+           * submitted along with the first.
+           */
+          deps.sessionFor(target.id)?.write(text)
+          setWb((w) => ({ ...w, focusedId: target.id }))
+        }}
+      />
+    )
+
+    const videoPane = () => (
+      <VideoPane
+        id={current().id}
+        title={current().title}
+        path={current().videoPath ?? ""}
+        focused={isFocused()}
+        onOpen={(path) => setWb((w) => updatePane(w, current().id, { videoPath: path }))}
+        onPick={() => deps.pickVideo()}
+        onCapture={(name, png) => deps.captureFrame(name, png)}
+        onController={(controller) => {
+          /*
+           * One panel name, not one per pane.
+           *
+           * The agent writes `@ade video play`; it has no pane id and no way
+           * to get one. With two video panes open the second to mount is the
+           * one that answers, which is the one the user just opened — the
+           * least surprising of the wrong answers available.
+           */
+          if (controller) {
+            panels.register("video", {
+              verbs: VIDEO_VERBS,
+              run: (request) => runVideoCommand(controller, request),
+            })
+            deps.announceToAll("video")
+          } else {
+            panels.unregister("video")
+          }
+        }}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    /* A session whose process is gone — exited, failed, or restored from disk. */
+    const restartable = () =>
+      !deps.isRunning(current().id) &&
+      Boolean(current().agent ?? current().model) &&
+      (current().status === "done" || current().status === "error")
+
+    const sessionPane = () => (
+      <SessionPane
+        id={current().id}
+        title={current().title}
+        status={current().status}
+        /* What the agent says it is doing beats the label ADE guessed. */
+        activity={reports()[current().id]?.activity ?? current().activity}
+        elapsed={current().elapsed}
+        tokens={(() => {
+          const count = reports()[current().id]?.tokens
+          return count === undefined ? current().tokens : `${formatTokens(count)} token`
+        })()}
+        cost={(() => {
+          const spent = reports()[current().id]?.costUsd
+          return spent === undefined ? undefined : formatCost(spent)
+        })()}
+        model={current().model}
+        mode={current().mode}
+        agent={current().agent}
+        glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
+        tree={current().tree}
+        terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
+        onInput={(data) => deps.sessionFor(current().id)?.write(data)}
+        /*
+         * The paths, and not a keystroke more.
+         *
+         * Relative to the project when they are inside it, quoted when they
+         * contain a space — a screenshot filename carries spaces and a date,
+         * and an unquoted one reaches the agent as three arguments. No
+         * newline: the drag said which agent gets the file, it did not say
+         * what to ask about it.
+         *
+         * Offered on every session, not only a running one. A drop onto a
+         * finished session used to be discarded in silence, which is
+         * indistinguishable from a drop that missed; now it says so in the
+         * transcript.
+         */
+        onDropPath={(paths) => {
+          const text = formatDroppedPaths(paths, project()?.root)
+          if (!text) return
+
+          focus()
+
+          const session = deps.sessionFor(current().id)
+          if (session) {
+            session.write(`${text} `)
+            return
+          }
+          deps.appendLine(
+            current().id,
+            `Nessun processo in ascolto: ${text} non è stato consegnato.`,
+            "note",
+          )
+        }}
+        onResize={(cols, rows) => deps.sessionFor(current().id)?.resize(cols, rows)}
+        onSubmit={
+          deps.isRunning(current().id)
+            ? (line) => {
+                // The composer types into the terminal like a keyboard would,
+                // carriage return included: the CLI cannot tell the
+                // difference, which is the point.
+                deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+                deps.sessionFor(current().id)?.write(`${line}\r`)
+              }
+            : restartable()
+              ? // No process: writing to the session starts it again, the way
+                // pressing Enter in a closed terminal tab would reopen it.
+                (line) => deps.restart(current(), line)
+              : undefined
+        }
+        actions={
+          /*
+           * The buttons exist only when the agent actually asked something:
+           * they are its own choices, in its own order, and pressing one
+           * writes exactly the string it is waiting for.
+           */
+          permissions()[current().id]
+            ? permissions()[current().id].answers.map((answer) => ({
+                label: answer.label,
+                tone: answer.tone,
+                onClick: () => deps.answerPermission(current().id, answer),
+              }))
+            : restartable()
+              ? [
+                  {
+                    label: current().status === "error" ? "Riprova" : "Riprendi",
+                    tone: "primary" as const,
+                    onClick: () => deps.restart(current()),
+                  },
+                ]
+              : undefined
+        }
+        lines={current().lines}
+        view={paneView()[current().id] ?? "transcript"}
+        onViewChange={current().cwd ? (view) => deps.showPaneView(current().id, view) : undefined}
+        diff={paneDiff()[current().id]}
+        diffLoading={diffLoading()[current().id]}
+        changedFiles={paneDiff()[current().id]?.files.length}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    /*
+     * The plugin's own body, looked up every time it is drawn.
+     *
+     * `definitionFor` reads the registry signal, so a plugin torn down while
+     * one of its tiles is open makes this fall to the "not available" branch
+     * rather than calling a `render` whose closure belongs to a disposed
+     * plugin.
+     */
+    const pluginPane = () => (
+      <PluginPane
+        id={current().id}
+        title={current().title}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+        render={() => {
+          const definition = pluginRuntime.registry.definitionFor(current().id)
+          if (!definition) {
+            return <div data-slot="pane-plugin-error">Il plugin non è più caricato.</div>
+          }
+          const tile = pluginRuntime.registry.open().find((item) => item.id === current().id)
+          return definition.render({ data: tile?.data })
+        }}
+      />
+    )
+
+    return (
+      <Show when={current().plugin} fallback={
+        <Show when={current().filePath} fallback={
+          <Show when={current().browserUrl} fallback={
+            /*
+             * Tested on the mode, not on the path: a video pane opens empty
+             * and `videoPath` is "" until a file is chosen, so asking for the
+             * path drew a terminal in a pane with no session behind it and no
+             * way to get one.
+             */
+            <Show when={current().mode === "video"} fallback={sessionPane()}>
+              {videoPane()}
+            </Show>
+          }>
+            {browserPane()}
+          </Show>
+        }>
+          {filePane()}
+        </Show>
+      }>
+        {pluginPane()}
+      </Show>
+    )
+  }
+}

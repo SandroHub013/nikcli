@@ -1,11 +1,73 @@
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
-import type { WorkspaceState, PaneState } from "../session/persist"
-import type { Occupant } from "../worktrees/model"
+import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
+import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/transcript-budget"
+import { cleanTranscript } from "../session/transcript-line"
 import type { TranscriptLine, PaneTree } from "../grid/pane"
 import type { Workspace, SidebarSession } from "../sidebar"
 
-export type PaneStatus = "provisioning" | "working" | "waiting" | "done" | "error"
+export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
+
+/**
+ * ADE's top-level sections.
+ *
+ * - `agent` — the voice assistant's console: what it was asked, what it did.
+ * - `code`  — the grid of agent terminals. Called "plancia" until 2026-09-12.
+ * - `chat`  — a conversation with a language model, with no terminal behind it.
+ * - `bot`   — the roster of named, persistent bots, and the rooms they share.
+ *
+ * `chat` and `bot` are not the same thing and the difference is worth keeping:
+ * a chat is one conversation with a model, thrown away when it stops being
+ * useful. A bot is a *someone* — a name, a persona, a model it is pinned to,
+ * and a memory of its own that outlives any one conversation — and several of
+ * them can be put in a room together.
+ *
+ * Mirrored, not imported, by `@nikcli-ai/voice`: the voice package already
+ * depends on this one, so importing the type back would close a cycle. Four
+ * string literals are the cheaper price, which is the same trade that file
+ * makes for `PaneStatus`.
+ */
+export type AdeView = "agent" | "code" | "chat" | "bot"
+
+export const ADE_VIEWS: readonly AdeView[] = ["agent", "code", "chat", "bot"]
+
+/**
+ * The one place a section is named.
+ *
+ * The chrome, the palette and the voice readback all read from here, so a
+ * rename cannot leave two of them disagreeing about what the user is looking
+ * at — which is exactly how "plancia" survived in the palette long after the
+ * design had stopped using the word.
+ */
+export const ADE_VIEW_LABELS: Record<AdeView, string> = {
+  agent: "agent",
+  code: "code",
+  chat: "chat",
+  bot: "bot",
+}
+
+/** Cycles forward through the sections, wrapping at the end. */
+export function nextView(current: AdeView): AdeView {
+  const index = ADE_VIEWS.indexOf(current)
+  return ADE_VIEWS[(index + 1) % ADE_VIEWS.length]
+}
+
+/**
+ * Reads a persisted view name, tolerating one that no longer exists.
+ *
+ * Necessary rather than defensive: `ade.workspace` on machines that ran an
+ * earlier build holds `"plancia"` or `"alberi"`, and a workbench restored
+ * into a view that no branch renders is a blank window with working chrome —
+ * the worst shape a bug can take, because nothing looks broken.
+ *
+ * Both retired names land on `code`. For "plancia" that is the same view
+ * renamed; for "alberi" it is the closest thing left, since the worktree
+ * board was removed rather than moved.
+ */
+export function restoreView(raw: unknown): AdeView {
+  if (raw === "plancia" || raw === "alberi") return "code"
+  return ADE_VIEWS.find((view) => view === raw) ?? "code"
+}
 
 export interface Pane {
   id: string
@@ -19,17 +81,42 @@ export interface Pane {
   agent?: string
   lines: TranscriptLine[]
   browserUrl?: string
+  /**
+   * The video panel's file, empty when the panel is open with nothing in it.
+   *
+   * Present rather than absent for an empty panel, because "" is what
+   * distinguishes a video pane waiting for a file from a session pane, and
+   * the two are laid out by different components.
+   */
+  videoPath?: string
   cwd?: string
   tree?: PaneTree
   workspaceId: string
   /** Set when the pane holds a file being edited rather than a session. */
   filePath?: string
   /**
+   * Set when the tile is drawn by a plugin.
+   *
+   * A plugin pane is a full member of the workbench — it is focused, expanded,
+   * closed and laid out like any other — but it is not a session and not a
+   * file, so everything that counts sessions or persists them has to skip it.
+   * Kept as an object rather than a flag because closing the tile has to tell
+   * the plugin registry which registration it belonged to.
+   */
+  plugin?: { pluginId: string; name: string }
+  /**
    * What this session was asked to do, kept so a retry restarts the same work.
    * Without it "Riprova" relaunches the agent with an empty prompt, which is a
    * different session wearing the same title.
    */
   task?: string
+  /**
+   * The agent's own conversation id, when its CLI let ADE choose one.
+   *
+   * The difference between a session that comes back and a session that
+   * starts again wearing the old name. See `session-new/resume.ts`.
+   */
+  resumeId?: string
 }
 
 export interface Workbench {
@@ -37,7 +124,7 @@ export interface Workbench {
   focusedId?: string
   pinnedColumns?: number
   expandedId?: string
-  view: "plancia" | "alberi"
+  view: AdeView
   sidebarWidth: number
   projectPath?: string
 }
@@ -45,56 +132,11 @@ export interface Workbench {
 export function createWorkbench(): Workbench {
   return {
     panes: [],
-    view: "plancia",
+    // The terminals, because that is what ADE is for. `agent` and `chat` are
+    // where you go on purpose; `code` is where you already were.
+    view: "code",
     sidebarWidth: 260
   }
-}
-
-export function paneStatusToOccupantState(status: PaneStatus): Occupant["state"] {
-  if (status === "waiting") return "waiting"
-  if (status === "working" || status === "provisioning") return "working"
-  return "stopped"
-}
-
-export function buildOccupantsByPath(panes: Pane[], projectPath: string): Map<string, Occupant[]> {
-  const map = new Map<string, Occupant[]>()
-  
-  const add = (key: string, occupant: Occupant) => {
-    const list = map.get(key)
-    if (list) {
-      if (!list.some(o => o.sessionId === occupant.sessionId)) {
-        list.push(occupant)
-      }
-    } else {
-      map.set(key, [occupant])
-    }
-  }
-
-  for (const pane of panes) {
-    if (pane.browserUrl || !pane.cwd) continue
-
-    const occupant: Occupant = {
-      sessionId: pane.id,
-      agentId: pane.agent ?? pane.model ?? "agent",
-      state: paneStatusToOccupantState(pane.status),
-    }
-
-    const raw = pane.cwd
-    const norm = normalizePath(raw)
-    
-    add(raw, occupant)
-    add(norm, occupant)
-    add(raw.replace(/\//g, "\\"), occupant)
-
-    if (!isAbsolutePath(raw)) {
-      const full = `${projectPath.replace(/[/\\]+$/, "")}/${raw}`
-      add(full, occupant)
-      add(normalizePath(full), occupant)
-      add(full.replace(/\//g, "\\"), occupant)
-    }
-  }
-
-  return map
 }
 
 export function addPane(workbench: Workbench, pane: Pane): Workbench {
@@ -143,43 +185,144 @@ export function setColumns(workbench: Workbench, columns?: number): Workbench {
   }
 }
 
-export function deriveWorkspaces(panes: Pane[]): Workspace[] {
+/**
+ * The projects to list, with their sessions nested under them.
+ *
+ * `known` is every project the user has opened, so one they opened and have not
+ * started an agent in yet still appears. Derived from the panes alone, a project
+ * would vanish the moment its last session closed — which makes the list a
+ * report on what is running rather than the place you switch projects from.
+ */
+function inferAgent(model: string, title: string): string {
+  const t = (title + " " + model).toLowerCase()
+  if (t.includes("claude")) return "claude-code"
+  if (t.includes("codex") || t.includes("openai")) return "codex"
+  if (t.includes("opencode")) return "opencode"
+  if (t.includes("agy") || t.includes("antigravity")) return "agy"
+  if (t.includes("hermes") || t.includes("nous")) return "hermes"
+  if (t.includes("kimi") || t.includes("moonshot")) return "kimi"
+  if (t.includes("prime")) return "prime"
+  if (t.includes("ohmypi")) return "ohmypi"
+  if (t.includes("pi")) return "pi"
+  if (t.includes("shell") || t.includes("term") || t.includes("bash") || t.includes("zsh") || t.includes("powershell")) return "terminal"
+  return "nikcli"
+}
+
+export function deriveWorkspaces(
+  panes: Pane[],
+  known: ReadonlyArray<{ root: string; name: string; branch?: string }> = [],
+): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
-  
+
+  for (const project of known) {
+    workspaces[project.name] = {
+      id: project.name,
+      name: project.name,
+      path: project.root,
+      branch: project.branch,
+      sessions: [],
+    }
+  }
+
   for (const pane of panes) {
-    if (pane.browserUrl) continue
-    
+    // Neither a browser nor a plugin tile is a session, and the sidebar is a
+    // list of sessions: counting them there would make "3 sessioni" mean
+    // something different from the number of agents running.
+    if (pane.browserUrl || pane.plugin) continue
+
     if (!workspaces[pane.workspaceId]) {
       workspaces[pane.workspaceId] = {
         id: pane.workspaceId,
         name: pane.workspaceId,
-        sessions: []
+        sessions: [],
       }
     }
-    
+
+    const ws = workspaces[pane.workspaceId]
+    const branch = pane.tree?.branch || ws?.branch
+
     workspaces[pane.workspaceId].sessions.push({
       id: pane.id,
       title: pane.title,
       status: pane.status,
       workspaceId: pane.workspaceId,
-      activity: pane.activity
+      activity: pane.activity,
+      agent: pane.agent ?? (pane.model ? inferAgent(pane.model, pane.title) : undefined),
+      branch,
+      cwd: pane.cwd || ws?.path,
     })
   }
   
   return Object.values(workspaces)
 }
 
+/** The project's name, as the folder it lives in calls it. */
+function lastSegment(path: string | undefined): string | undefined {
+  if (!path) return undefined
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1]
+}
+
+/**
+ * A session that was alive when the app went away, and can be started again.
+ *
+ * "Alive" is not "not finished": a session that errored has nothing to
+ * resume, and one still provisioning never got as far as a process. Both of
+ * the live states qualify — a pane that was waiting on a permission prompt
+ * was mid-work, and the work is the thing being resumed.
+ *
+ * Either a task or a conversation id is required, because one of the two is
+ * what makes the restart a continuation. With a `resumeId` the agent is
+ * handed back its own conversation and needs nothing typed; without one the
+ * task is all there is, and restarting an agent with an empty prompt is not
+ * resuming a session, it is opening a new one that happens to share a name.
+ */
+export function isResumable(
+  pane: Pick<Pane, "status" | "task" | "resumeId" | "browserUrl" | "filePath" | "plugin">,
+): boolean {
+  if (pane.browserUrl || pane.filePath || pane.plugin) return false
+  const hasTask = (pane.task ?? "").trim().length > 0
+  const hasConversation = (pane.resumeId ?? "").trim().length > 0
+  if (!hasTask && !hasConversation) return false
+  return pane.status === "working" || pane.status === "waiting" || pane.status === "idle"
+}
+
 export function toWorkspaceState(workbench: Workbench): WorkspaceState {
-  return {
-    version: 2, // CURRENT_VERSION
-    panes: workbench.panes.filter(p => !p.browserUrl).map((p) => ({
+  /*
+   * Plugin tiles are not saved, and that is deliberate rather than an
+   * oversight. What would be restored is a tile belonging to a plugin that
+   * may not be declared any more, may have been renamed, or may simply have
+   * failed to load — and an empty pane with a plugin's name on it is a worse
+   * answer than no pane. The plugin opens its own tiles when it loads.
+   */
+  const saved = workbench.panes
+    .filter((p) => !p.browserUrl && !p.plugin)
+    .map((p) => ({
       id: p.id,
       title: p.title,
       agent: p.agent ?? p.model ?? "",
       cwd: p.cwd ?? "",
       branch: p.tree?.branch ?? "",
-      status: p.status
-    })),
+      status: p.status,
+      ...(p.task ? { task: p.task } : {}),
+      ...(p.model ? { model: p.model } : {}),
+      ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+      /*
+       * Recorded at save time, not derived at restore time.
+       *
+       * By the time the state is read back the status has been rewritten to
+       * something truthful about a process that no longer exists, so the one
+       * moment this can be known is while the session is still running.
+       */
+      wasRunning: isResumable(p),
+      // Cleaned before it is bounded: the budget should be spent on lines
+      // somebody will read, not on the frame that was redrawn under them.
+      lines: boundPaneTranscript(cleanTranscript(p.lines.map((line) => ({ ...line })))),
+    }))
+
+  return {
+    version: CURRENT_VERSION,
+    panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -188,26 +331,148 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
   }
 }
 
-export function fromWorkspaceState(state: WorkspaceState): Workbench {
+/**
+ * Rebuilds a workbench from what was saved.
+ *
+ * `projectName` is the project those panes belonged to. It matters because the
+ * grid shows one project's sessions at a time: a restored pane filed under a
+ * placeholder name belongs to no project, so it would be listed in the sidebar
+ * and then shown by nothing. The saved state records the project's path, and
+ * its last segment is the name every live pane is filed under.
+ */
+const PANE_STATUSES: PaneStatus[] = ["idle", "provisioning", "working", "waiting", "done", "error"]
+
+const LINE_KINDS: TranscriptLine["kind"][] = ["step", "shell", "note", "diff", "error"]
+
+/** Anything the store cannot vouch for reads as a plain note. */
+function toLineKind(kind: string): TranscriptLine["kind"] {
+  return LINE_KINDS.find((known) => known === kind) ?? "note"
+}
+
+/**
+ * The status a restored pane should actually show.
+ *
+ * The saved value is copied only where it still describes something true. A
+ * session saved as "working" has no process behind it once the app has been
+ * closed — whether by the user or by the machine shutting down — so showing
+ * "working" is a claim about a pid that does not exist, and the grid's own
+ * liveness sweep animates under it. Anything that was live becomes "done",
+ * which is what it is: over, with its transcript intact. "error" is kept,
+ * because how a session ended survives the app that ran it.
+ */
+export function restoredStatus(saved: string): PaneStatus {
+  if (saved === "error") return "error"
+  if (!PANE_STATUSES.includes(saved as PaneStatus)) return "done"
+  if (saved === "working" || saved === "waiting" || saved === "provisioning" || saved === "idle") return "done"
+  return saved as PaneStatus
+}
+
+/** Windows hands the same directory back with either slash and any case. */
+function samePath(a: string, b: string): boolean {
+  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(a) === norm(b)
+}
+
+export function fromWorkspaceState(state: WorkspaceState, projectName?: string): Workbench {
+  const owner = projectName ?? lastSegment(state.projectPath) ?? "ws-restored"
   return {
-    panes: state.panes.map((p): Pane => ({
-      id: p.id,
-      title: p.title,
-      status: p.status as PaneStatus, // We might need to validate it
-      activity: "Ripristinato",
-      model: p.agent,
-      mode: "auto",
-      agent: p.agent,
-      cwd: p.cwd,
-      lines: [{ kind: "note", text: "Sessione ripristinata dal riavvio. Il processo non è più attivo." }],
-      workspaceId: "ws-restored", // placeholder, maybe infer from cwd or keep fixed
-      tree: p.branch ? { branch: p.branch, fidelity: "stale", note: "Ripristinato" } : undefined
-    })),
+    panes: state.panes.map((p): Pane => {
+      /*
+       * The transcript comes back with the process's death appended, rather
+       * than replacing it. Before, every restored pane held exactly one line
+       * saying the process was gone — which is true, and is also the only
+       * thing a user could no longer check, because the output that would
+       * have told them what the agent had done was discarded with it.
+       */
+      /*
+       * Cleaned on the way back in, not only on the way out.
+       *
+       * The transcripts already on disk were captured before anything
+       * filtered them, and they are the ones being looked at right now: a
+       * restored nikcli session opened on a thousand braille spinner frames,
+       * a flattened banner and a stray `+q4d73Gi=…` from a DCS reply. Doing
+       * it here means they read correctly on the next launch rather than on
+       * the next session.
+       */
+      const history = cleanTranscript(
+        (p.lines ?? [])
+          // The note below is appended on every launch; the previous launches'
+          // copies say nothing the new one does not.
+          .filter((line) => !(line.kind === "note" && line.text.startsWith("Sessione ripristinata.")))
+          .map((line): TranscriptLine => ({
+          // Narrowed here as well as in the store's sanitiser: the kind reaches
+          // the DOM as a class name, and the type that says so should not rest
+          // on an assertion about what some other module promised to check.
+          kind: toLineKind(line.kind),
+          text: line.text,
+          ...(line.repeat !== undefined ? { repeat: line.repeat } : {}),
+        })),
+      )
+
+      return {
+        id: p.id,
+        title: p.title,
+        status: restoredStatus(p.status),
+        activity: p.wasRunning ? "Da riprendere" : "Ripristinato",
+        model: p.model ?? p.agent,
+        mode: "auto",
+        agent: p.agent,
+        cwd: p.cwd,
+        task: p.task,
+        lines: [
+          ...history,
+          {
+            kind: "note",
+            /*
+             * Three sentences, because three things can have happened and
+             * telling them apart is the whole point. Reopening the agent's
+             * own conversation is not the same as running the task again,
+             * and a line that said "riprendo il compito" for both left the
+             * user unable to tell which one they got.
+             */
+            text: !p.wasRunning
+              ? "Sessione ripristinata. Il processo non è più attivo: scrivi o premi Riprendi per riaprirla."
+              : p.resumeId
+                ? "Sessione ripristinata. Riapro la conversazione dell'agente dov'era rimasta."
+                : "Sessione ripristinata. Il processo non è sopravvissuto alla chiusura: riprendo il compito.",
+          },
+        ],
+        workspaceId: owner,
+        /*
+         * Sessions run in the project itself now; only a pane saved from one of
+         * the old per-session worktrees is a tree that may be behind.
+         */
+        tree: p.branch
+          ? {
+              branch: p.branch,
+              fidelity: p.cwd && state.projectPath && samePath(p.cwd, state.projectPath) === false ? "stale" : "project",
+              note: "Ripristinato",
+            }
+          : undefined
+      }
+    }),
     focusedId: state.focusedPaneId,
     pinnedColumns: state.pinnedColumns,
     expandedId: undefined,
-    view: (state.currentView as "plancia" | "alberi") || "plancia",
+    view: restoreView(state.currentView),
     sidebarWidth: state.sidebarWidth,
     projectPath: state.projectPath
   }
+}
+
+/**
+ * The sessions a restore should start again, in the order they were saved.
+ *
+ * Read from the saved state rather than from the restored panes, because the
+ * restored panes have deliberately forgotten they were running — that is the
+ * point of `restoredStatus`.
+ */
+export function sessionsToResume(state: WorkspaceState): PaneState[] {
+  return state.panes.filter(
+    (pane) =>
+      pane.wasRunning === true &&
+      // Either half is enough: the conversation id reopens the session with
+      // everything in it, and the task is what is typed when there is none.
+      ((pane.task ?? "").trim().length > 0 || (pane.resumeId ?? "").trim().length > 0),
+  )
 }

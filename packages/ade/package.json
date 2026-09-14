@@ -8,7 +8,19 @@
       "import": "./src/index.ts",
       "types": "./src/index.ts"
     },
-    "./index.css": "./src/index.css"
+    "./index.css": "./src/index.css",
+    "./command/match": {
+      "import": "./src/command/match.ts",
+      "types": "./src/command/match.ts"
+    },
+    "./keyboard/keymap": {
+      "import": "./src/keyboard/keymap.ts",
+      "types": "./src/keyboard/keymap.ts"
+    },
+    "./keyboard/bindings": {
+      "import": "./src/keyboard/bindings.ts",
+      "types": "./src/keyboard/bindings.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc -b",
@@ -28,18 +40,24 @@
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/three": "^0.186.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@nikcli-ai/plugin": "workspace:*",
     "@nikcli-ai/sdk": "workspace:*",
     "@nikcli-ai/ui": "workspace:*",
     "@nikcli-ai/util": "workspace:*",
+    "@nikcli-ai/voice": "workspace:*",
     "@solid-primitives/storage": "catalog:",
-    "solid-js": "catalog:",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-shell": "~2"
+    "@tauri-apps/plugin-shell": "~2",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "solid-js": "catalog:",
+    "three": "^0.186.0"
   },
   "main": "./src/index.ts"
 }

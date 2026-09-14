@@ -12,13 +12,24 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+# Tauri turns the web inspector on by itself in a debug build, so naming the
+# feature unconditionally bought nothing in development and shipped an inspector
+# in the release binary — one that anything running in the browser pane's frame
+# could open over the whole application. Opt in explicitly when a release build
+# really needs it: `cargo build --release --features devtools`.
+devtools = ["tauri/devtools"]
+
 [dependencies]
-tauri = { version = "2.9.5", features = ["devtools"] }
+tauri = { version = "2.9.5", features = [] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
+portable-pty = "0.9.0"
 
 [target.'cfg(windows)'.dependencies]
 # Directory junctions need no elevation, unlike symlinks. One small crate is a

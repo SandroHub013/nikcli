@@ -7,8 +7,7 @@ function fakeHost(overrides: Partial<Host> = {}): Host {
   return {
     probe: async () => null,
     run: async () => ({ code: 1, stdout: "", stderr: "" }),
-    linkDirectory: async () => null,
-    spawn: async () => ({ kill: () => {}, write: () => {} }),
+    spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
     readDir: async () => [],
     readTextFile: async () => ({ text: "", truncated: false, bytes: 0 }),
     currentDir: async () => "C:/",

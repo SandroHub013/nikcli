@@ -45,6 +45,24 @@ describe("stripAnsi", () => {
   test("strips multiple sequences in one line", () => {
     expect(stripAnsi("\x1b[1m\x1b[31merror\x1b[0m: bad")).toBe("error: bad")
   })
+
+  /*
+   * crossterm opens every ratatui session with `ESC[>1u`, and the parameter
+   * class was `[0-9;]`: the match broke at the `>`, so `1u` was the first
+   * thing the session appeared to say — in the transcript, in the permission
+   * detector, and in the token counter.
+   */
+  test("strips private-parameter sequences", () => {
+    expect(stripAnsi("\x1b[>1upronto")).toBe("pronto")
+    expect(stripAnsi("\x1b[?25lciao\x1b[?25h")).toBe("ciao")
+    expect(stripAnsi("\x1b[?1049htesto")).toBe("testo")
+  })
+
+  test("strips a final byte outside A-Za-z", () => {
+    // `ESC[?1000;1006$p` asks the terminal about a mode; `$` is an
+    // intermediate and `p` the final, but `@-~` also covers `{`, `|`, `~`.
+    expect(stripAnsi("\x1b[2 qtesto")).toBe("testo")
+  })
 })
 
 describe("parseAnsi", () => {

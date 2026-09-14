@@ -22,15 +22,36 @@ export interface FormatSelectionOptions {
   instruction?: string
 }
 
+/*
+ * Every string below comes from the inspected page, and the page is not ADE's.
+ *
+ * The block these values land in is typed into an agent's terminal, where a
+ * carriage return submits the line: a style property answered as
+ * `red<CR>git push --force<CR>` used to arrive as two things typed, the second
+ * of which the user never saw. Only `innerText` was ever cleaned, which covered
+ * the one field nobody would think to attack.
+ *
+ * So nothing is interpolated raw. Control characters are removed rather than
+ * escaped — a selector with a carriage return in it is not a selector — and
+ * every field is capped, so one long attribute cannot push the rest of the
+ * prompt out of the window.
+ */
+const CONTROL_CHARS = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+", "g")
+
+/** A page-supplied value, made safe to put in a line of prompt text. */
+function field(value: unknown, maxLen = 120): string {
+  if (typeof value !== "string") return ""
+  const flat = value.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim()
+  if (flat.length <= maxLen) return flat
+  return `${flat.slice(0, maxLen)}...`
+}
+
 /**
  * Sanitizes a text snippet for prompt context by stripping line breaks and
  * capping length so large text nodes do not dominate the prompt.
  */
 function cleanTextSnippet(text: unknown, maxLen = 100): string {
-  if (typeof text !== "string") return ""
-  const singleLine = text.replace(/[\r\n\t]+/g, " ").trim()
-  if (singleLine.length <= maxLen) return singleLine
-  return `${singleLine.slice(0, maxLen)}...`
+  return field(text, maxLen)
 }
 
 /**
@@ -44,13 +65,13 @@ export function describeElement(
     return index !== undefined ? `${index + 1}. <unknown>` : "<unknown>"
   }
 
-  const tagName = (element.tagName || "element").toLowerCase()
-  const id = element.id ? `#${element.id}` : ""
-  
+  const tagName = (field(element.tagName, 40) || "element").toLowerCase()
+  const id = field(element.id, 60) ? `#${field(element.id, 60)}` : ""
+
   let classes = ""
-  if (typeof element.className === "string" && element.className.trim()) {
-    const classList = element.className
-      .trim()
+  const className = field(element.className, 200)
+  if (className) {
+    const classList = className
       .split(/\s+/)
       .filter((c) => c && !c.startsWith("__nikcli"))
       .slice(0, 3)
@@ -59,28 +80,30 @@ export function describeElement(
     }
   }
 
-  const lang = element.detectedLanguage || "html"
+  const lang = field(element.detectedLanguage, 20) || "html"
   const prefix = index !== undefined ? `${index + 1}. ` : ""
   const headerLine = `${prefix}<${tagName}${id}${classes}> (${lang})`
 
-  const selector = element.selector || `${tagName}${id}${classes}`
+  const selector = field(element.selector, 200) || `${tagName}${id}${classes}`
   const selectorLine = `   selector: ${selector}`
 
   const rect = element.rect ?? { width: 0, height: 0, top: 0, left: 0 }
   const styles = element.styles ?? ({} as Partial<NonNullable<InspectedElement["styles"]>>)
 
-  const width = Math.round(rect.width ?? 0)
-  const height = Math.round(rect.height ?? 0)
-  const display = styles.display || "block"
-  const padding = styles.padding || "0"
-  const margin = styles.margin || "0"
+  // Geometry is arithmetic, so it needs no cleaning — but it does need to be a
+  // number: `Math.round` of a string the page chose returns NaN, not the string.
+  const width = Math.round(Number(rect.width) || 0)
+  const height = Math.round(Number(rect.height) || 0)
+  const display = field(styles.display, 40) || "block"
+  const padding = field(styles.padding, 40) || "0"
+  const margin = field(styles.margin, 40) || "0"
   const boxLine = `   box: ${width}×${height} · display: ${display} · padding: ${padding} · margin: ${margin}`
 
-  const color = styles.color || "-"
-  const fontSize = styles.fontSize || "-"
-  const fontWeight = styles.fontWeight || "-"
-  const bg = styles.backgroundColor || "-"
-  const radius = styles.borderRadius || "-"
+  const color = field(styles.color, 40) || "-"
+  const fontSize = field(styles.fontSize, 40) || "-"
+  const fontWeight = field(styles.fontWeight, 40) || "-"
+  const bg = field(styles.backgroundColor, 40) || "-"
+  const radius = field(styles.borderRadius, 40) || "-"
   const styleLine = `   text: ${color} ${fontSize}/${fontWeight} · background: ${bg} · radius: ${radius}`
 
   const lines = [headerLine, selectorLine, boxLine, styleLine]
@@ -105,7 +128,10 @@ export function formatSelectionContext(
 
   const count = elements.length
   const countLabel = `${count} element${count === 1 ? "" : "s"}`
-  const urlLabel = options?.url ? ` on ${options.url}` : ""
+  // The address bar is the user's, but the page can put ADE on a URL it chose
+  // by navigating the frame, so the header gets the same treatment as the body.
+  const url = field(options?.url, 300)
+  const urlLabel = url ? ` on ${url}` : ""
   const header = `[Design Mode · ${countLabel}${urlLabel}]`
 
   const body = elements.map((el, i) => describeElement(el, i)).join("\n")

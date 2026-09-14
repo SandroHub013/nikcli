@@ -110,6 +110,35 @@ describe("editor buffer model", () => {
     expect(saveBlockedReason(dirtyBuf)).toBeUndefined()
   })
 
+  /*
+   * Writing to disk is a round trip, and the user keeps typing during it.
+   * `saveFile` used to capture the buffer before the await and put that same
+   * object back afterwards, which threw away every character typed in between
+   * and then marked the buffer clean — so the text was gone from the editor
+   * and the pane showed nothing left to save.
+   */
+  test("markSaved on a buffer edited during the write keeps the newer draft", () => {
+    const opened = openBuffer({ path: "a.ts", text: "vecchio", truncated: false })
+    const whenSaveStarted = editBuffer(opened, "nuovo")
+
+    // The save writes "nuovo"; meanwhile the user types one more character.
+    const whileWriting = editBuffer(whenSaveStarted, "nuovo!")
+    const afterSave = markSaved(whileWriting, whenSaveStarted.draft)
+
+    expect(afterSave.draft).toBe("nuovo!")
+    expect(afterSave.saved).toBe("nuovo")
+    // Still dirty, because the last character was never written.
+    expect(afterSave.dirty).toBe(true)
+  })
+
+  test("markSaved on an untouched buffer leaves nothing to save", () => {
+    const edited = editBuffer(openBuffer({ path: "a.ts", text: "x", truncated: false }), "y")
+    const afterSave = markSaved(edited, edited.draft)
+
+    expect(afterSave.dirty).toBe(false)
+    expect(afterSave.saved).toBe("y")
+  })
+
   test("lineCount counts lines accurately", () => {
     expect(lineCount("")).toBe(1)
     expect(lineCount("one line")).toBe(1)

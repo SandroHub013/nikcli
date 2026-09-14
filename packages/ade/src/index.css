@@ -156,8 +156,47 @@
 
   --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
 
-  /* Locked to GRID_GAP in grid/layout.ts — the layout math bakes 12px in. */
-  --ade-grid-gap: 12px;
+  /* Locked to GRID_GAP in grid/layout.ts. A separating line, not a gutter:
+     every pixel between two panes is a pixel not showing a terminal. */
+  --ade-grid-gap: 1px;
+
+  /* ── terminal ───────────────────────────────────────────────────────────── */
+  /*
+   * The emulator's own ground, and the sixteen colours an agent can ask for.
+   *
+   * These live on `:root` rather than on the pane, because two different
+   * renderers need them: xterm, which is handed concrete values at creation,
+   * and the transcript fallback, which resolves `var(--ade-ansi-*)` per span.
+   * They were defined only inside `[data-component="session-pane"]`, which no
+   * probe outside a pane could read — and xterm was never given them at all.
+   *
+   * They are not sRGB primaries. An agent printing red should look like it
+   * belongs in this window rather than like a screenshot pasted into it, so
+   * each hue is retuned for the ground it sits on: the dark values are tuned
+   * for the warm dark terminal, the light ones darkened to stay legible on a
+   * near-white one. A single set cannot do both — at 4.5:1 on dark, the same
+   * pink is 1.9:1 on white.
+   */
+  --ade-terminal-bg: light-dark(#fdfcfc, #0e0c0c);
+  --ade-terminal-fg: light-dark(#1a1817, #ecebeb);
+  --ade-selection: light-dark(rgba(10, 124, 107, 0.22), rgba(122, 215, 195, 0.26));
+
+  --ade-ansi-black: light-dark(#3b3634, #4a4444);
+  --ade-ansi-red: light-dark(#b03651, #e0879a);
+  --ade-ansi-green: light-dark(#2f7d4f, #71c491);
+  --ade-ansi-yellow: light-dark(#8a5d12, #d9a45f);
+  --ade-ansi-blue: light-dark(#2f5fa8, #7da9e4);
+  --ade-ansi-magenta: light-dark(#7d4b9c, #c79bdc);
+  --ade-ansi-cyan: light-dark(#1f7a6c, #7fd6c4);
+  --ade-ansi-white: light-dark(#6b6562, #a9a4a4);
+  --ade-ansi-brightBlack: light-dark(#8a8480, #6d6666);
+  --ade-ansi-brightRed: light-dark(#c8475f, #f0a0b0);
+  --ade-ansi-brightGreen: light-dark(#3c9760, #8fd8a8);
+  --ade-ansi-brightYellow: light-dark(#a3711f, #ecbc7c);
+  --ade-ansi-brightBlue: light-dark(#3f74c2, #9cc0ee);
+  --ade-ansi-brightMagenta: light-dark(#9260b4, #d9b5e8);
+  --ade-ansi-brightCyan: light-dark(#2a9184, #9fe3d5);
+  --ade-ansi-brightWhite: light-dark(#1a1817, #ecebeb);
 
   /* ── type scale ─────────────────────────────────────────────────────────── */
   --ade-font-xs: 10px;
@@ -249,20 +288,31 @@ body,
 
 /* ── grid ──────────────────────────────────────────────────────────────────── */
 
+/*
+ * The grid has no padding and no gutter: it is a wall of terminals.
+ *
+ * Its ground is the border colour, and the one-pixel gap is what shows through
+ * — so the lines between panes are the gap itself rather than borders drawn on
+ * each card, which would double up wherever two panes meet and leave the outer
+ * edge bordered against the window frame.
+ */
 [data-component="session-grid"] {
   display: grid;
   gap: var(--ade-grid-gap);
   width: 100%;
   height: 100%;
-  padding: var(--ade-grid-gap);
   overflow-y: auto;
   align-content: start;
+  background: var(--ade-border);
 }
 
+/* With no panes there is nothing for the gaps to separate, so the ground goes
+   back to being a background rather than a sheet of line colour. */
 [data-component="session-grid"][data-empty] {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--ade-bg);
 }
 
 [data-slot="grid-cell"] {
@@ -616,6 +666,33 @@ body,
 
 [data-slot="tree-row"]:focus-visible {
   box-shadow: var(--ade-focus-ring);
+}
+
+/*
+ * The row is a div now, not a button.
+ *
+ * Chromium's button swallows the press that would start a drag, so a
+ * draggable file row had to stop being one. A button brought two things with
+ * it that a div does not: `box-sizing: border-box`, without which `width:
+ * 100%` plus the padding above overflows the sidebar, and a default of not
+ * selecting its own text — which while dragging a filename is exactly the
+ * blue smear you do not want.
+ */
+[data-slot="tree-row"] {
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Both files and directories can be picked up and dragged. */
+[data-slot="tree-row"][data-kind="file"],
+[data-slot="tree-row"][data-kind="directory"] {
+  cursor: grab;
+}
+
+[data-slot="tree-row"][data-kind="file"]:active,
+[data-slot="tree-row"][data-kind="directory"]:active {
+  cursor: grabbing;
 }
 
 [data-slot="tree-indent"] {

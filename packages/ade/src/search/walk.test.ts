@@ -2,12 +2,27 @@ import { describe, it, expect } from "bun:test"
 import { walkProject, DEFAULT_SKIP_DIRS } from "./walk"
 import type { Host, DirEntry } from "../host/shell"
 
+const dir = (name: string, path: string): DirEntry => ({
+  name,
+  path,
+  is_dir: true,
+  size: 0,
+  modified_ms: 0,
+})
+
+const file = (name: string, path: string): DirEntry => ({
+  name,
+  path,
+  is_dir: false,
+  size: 1,
+  modified_ms: 0,
+})
+
 function createFakeHost(fileSystem: Record<string, DirEntry[]>): Host {
   return {
     probe: async () => null,
     run: async () => ({ code: 1, stdout: "", stderr: "" }),
-    linkDirectory: async () => null,
-    spawn: async () => ({ kill: () => {}, write: () => {} }),
+    spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
     readDir: async (path: string) => {
       const normalized = path.replace(/\\/g, "/")
       if (normalized in fileSystem) {
@@ -206,13 +221,54 @@ describe("walkProject", () => {
     const host: Host = {
       probe: async () => null,
       run: async () => ({ code: 1, stdout: "", stderr: "" }),
-      linkDirectory: async () => null,
-      spawn: async () => ({ kill: () => {}, write: () => {} }),
+      spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
     }
 
     const result = await walkProject({ host, root: "C:/repo" })
     expect(result.files).toEqual([])
     expect(result.stopped).toBe(false)
+  })
+
+  /*
+   * On Windows a junction pointing at one of its own ancestors is an
+   * ordinary directory entry: `is_dir` is true and nothing marks it. The
+   * walk went round it forever, and because only the *file* limit stopped
+   * the loop, a cycle with no files in it did not stop it at all — the
+   * search hung with no output and no error while the queue ate the heap.
+   */
+  it("terminates on a junction pointing back at an ancestor", async () => {
+    const host: Host = {
+      probe: async () => null,
+      run: async () => ({ code: 1, stdout: "", stderr: "" }),
+      spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
+      readDir: async (path: string) => {
+        if (path === "C:/repo") return [dir("src", "C:/repo/src")]
+        // `loop` is a junction back to the root, and there is not one file
+        // anywhere in the cycle.
+        if (path === "C:/repo/src") return [dir("loop", "C:/repo")]
+        return []
+      },
+    }
+
+    const result = await walkProject({ host, root: "C:/repo" })
+    expect(result.files).toEqual([])
+    expect(result.stopped).toBe(false)
+  })
+
+  it("visits a directory once even when two paths reach it", async () => {
+    const host: Host = {
+      probe: async () => null,
+      run: async () => ({ code: 1, stdout: "", stderr: "" }),
+      spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
+      readDir: async (path: string) => {
+        if (path === "C:/repo") return [dir("a", "C:/repo/shared"), dir("b", "C:/repo/shared")]
+        if (path === "C:/repo/shared") return [file("f.ts", "C:/repo/shared/f.ts")]
+        return []
+      },
+    }
+
+    const result = await walkProject({ host, root: "C:/repo" })
+    expect(result.files).toEqual(["C:/repo/shared/f.ts"])
   })
 
   it("exports standard DEFAULT_SKIP_DIRS", () => {

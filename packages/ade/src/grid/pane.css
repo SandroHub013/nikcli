@@ -20,31 +20,27 @@
 
 [data-component="session-pane"] {
   /*
-   * Terminal colours, retuned for this shell's warm dark ground. They are not
-   * sRGB primaries: an agent printing red should look like it belongs in this
-   * window rather than like a screenshot pasted into it.
+   * The ANSI palette used to be declared here, scoped to this element. It had
+   * to move to `:root` in index.css: xterm is handed concrete colours at
+   * creation time and cannot read a `var()`, so the values have to be readable
+   * from a probe that is not inside a pane. Scoped here, they were invisible to
+   * the one renderer that needed them most — see `terminal/registry.ts`.
    */
-  --ade-ansi-black: #4a4444;
-  --ade-ansi-red: #e0879a;
-  --ade-ansi-green: #71c491;
-  --ade-ansi-yellow: #d9a45f;
-  --ade-ansi-blue: #7da9e4;
-  --ade-ansi-magenta: #c79bdc;
-  --ade-ansi-cyan: #7fd6c4;
-  --ade-ansi-white: #a9a4a4;
-  --ade-ansi-brightBlack: #6d6666;
-  --ade-ansi-brightRed: #f0a0b0;
-  --ade-ansi-brightGreen: #8fd8a8;
-  --ade-ansi-brightYellow: #ecbc7c;
-  --ade-ansi-brightBlue: #9cc0ee;
-  --ade-ansi-brightMagenta: #d9b5e8;
-  --ade-ansi-brightCyan: #9fe3d5;
-  --ade-ansi-brightWhite: #ecebeb;
 
   /* The status hue for this card. Redefined per status below, once, so every
      rule that needs it — edge, pulse, activity word — reads the same value. */
   --pane-status: var(--ade-text-weak);
 
+  /*
+   * No border, no radius, no shadow.
+   *
+   * This card used to be a card: a hairline frame, rounded corners, a lift off
+   * the ground. Tiled six across that costs two pixels of frame and four of
+   * corner radius on every edge, and it buys nothing a terminal needs — the
+   * grid's one-pixel gap already says where one session ends and the next
+   * begins. Everything here that still draws is either information or a
+   * control; the pane's whole remaining job is to hand its height to xterm.
+   */
   position: relative;
   display: flex;
   flex-direction: column;
@@ -52,50 +48,41 @@
   min-width: 0;
   min-height: 0;
   background: var(--ade-surface);
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-lg);
   overflow: hidden;
-  box-shadow: var(--ade-shadow-sm);
   /* Children query the card's own width to decide what to drop when it gets
      narrow — a four-column grid halves this card twice. */
   container-type: inline-size;
-  transition:
-    border-color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur) var(--ade-ease),
-    transform var(--ade-dur) var(--ade-ease);
 }
 
 /*
- * The status edge: a hairline across the top that fades toward the middle.
- * Painted on ::before rather than as a border so it can sit above the header's
- * own background and follow the card's radius.
+ * The status edge, and the liveness signal, in one hairline across the top.
+ *
+ * It was a 2px edge plus a separate 2px "pulse" lane under the header — four
+ * pixels of every pane spent saying something one line can say. Absolutely
+ * positioned, so it overlays the header instead of taking a row of its own and
+ * costs no layout height at all.
  */
 [data-component="session-pane"]::before {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 2px;
-  z-index: 1;
-  background: linear-gradient(
-    to right,
-    var(--pane-status) 0%,
-    var(--pane-status) 40%,
-    color-mix(in srgb, var(--pane-status) 45%, transparent) 75%,
-    transparent 100%
-  );
+  height: 1px;
+  z-index: 2;
+  background: var(--pane-status);
+  opacity: 0.6;
   pointer-events: none;
 }
 
-
-/* Inner highlight: a faint light line inside the border, which is what makes a
-   hairline card read as a physical surface instead of a drawn rectangle. */
-[data-component="session-pane"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 1px 0 var(--ade-highlight);
-  pointer-events: none;
+/* Work in progress needs a sign that is not a word: across six panes the eye
+   finds motion long before it reads six activity labels. */
+[data-component="session-pane"][data-status="working"]::before,
+[data-component="session-pane"][data-status="provisioning"]::before {
+  opacity: 1;
+  background-image: linear-gradient(to right, transparent, var(--pane-status), transparent);
+  background-color: color-mix(in srgb, var(--pane-status) 25%, transparent);
+  background-size: 35% 100%;
+  background-repeat: no-repeat;
+  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite;
 }
 
 [data-component="session-pane"][data-status="working"],
@@ -113,37 +100,48 @@
 }
 
 /*
- * The focused card has to be findable from across the screen, so focus is three
- * signals at once: an accent ring, a real lift, and a brighter ground. One of
- * them alone loses to a status edge two cards away.
+ * Focus is an outline drawn inside the pane, not a ring around it.
+ *
+ * A ring and a lift both need room outside the card, and there is no outside
+ * any more — the next terminal starts one pixel away. `outline-offset: -1px`
+ * paints the accent over the pane's own first pixel row, so the focused
+ * session is findable from across the screen without costing a single column
+ * or line of terminal.
  */
 [data-component="session-pane"][data-focused] {
-  background: var(--ade-surface);
-  border-color: var(--ade-accent);
-  box-shadow:
-    var(--ade-shadow-lg),
-    0 0 0 1px var(--ade-accent),
-    0 0 0 5px var(--ade-accent-soft);
+  outline: 1px solid var(--ade-accent);
+  outline-offset: -1px;
 }
 
 /* ── header ────────────────────────────────────────────────────────────────── */
 
+/*
+ * The pane's only row of chrome.
+ *
+ * It used to be one of three — header, pulse lane, and a dock carrying the
+ * composer and a footer — and the three together took about seventy pixels off
+ * every tile, which at six panes is a whole terminal's worth of the window.
+ * Identity, tabs, tree, state and the window buttons all fit on one 22px line
+ * because none of them is ever more than a few words wide; what does not fit
+ * at a given width is dropped by the container queries at the end of this
+ * file, in order of how little it matters.
+ */
 [data-slot="pane-header"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-4);
-  padding: var(--ade-space-3) var(--ade-space-3) var(--ade-space-3) var(--ade-space-5);
+  gap: var(--ade-space-3);
+  padding: 0 var(--ade-space-2);
   /*
-   * The header carries the status hue at a whisper. Alone, the 2px top edge
-   * lost to the card border two columns away; the tinted ground is what makes
-   * the status readable from across a six-pane grid.
+   * The header carries the status hue at a whisper. Alone, the top edge lost
+   * to the card border two columns away; the tinted ground is what makes the
+   * status readable from across a six-pane grid.
    */
   background:
     linear-gradient(to bottom, color-mix(in srgb, var(--pane-status) 10%, transparent), transparent),
     var(--ade-raised);
   border-bottom: 1px solid var(--ade-border-subtle);
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 22px;
 }
 
 /* The agent's mark, in a chip that keeps it legible when the card is half a
@@ -151,8 +149,8 @@
 [data-slot="pane-identity"] {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   border-radius: var(--ade-radius-sm);
   background: color-mix(in srgb, var(--pane-status) 16%, transparent);
@@ -164,13 +162,18 @@
 [data-slot="pane-title"] {
   margin: 0;
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-lg);
+  font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
   color: var(--ade-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
+  /*
+   * The title gives way first and the controls never do. Sharing the row with
+   * the tree and the state means something has to shrink, and a truncated
+   * session name is still recognisable while a clipped close button is gone.
+   */
+  flex: 1 1 0;
   min-width: 0;
   letter-spacing: -0.012em;
 }
@@ -240,6 +243,69 @@
   background: var(--ade-sunken);
 }
 
+/*
+ * A plugin's tile body. `overflow: auto` is the boundary that matters here:
+ * a plugin's markup is not reviewed, and without it a tall element would grow
+ * the grid cell and push every other session out of the viewport.
+ */
+[data-slot="pane-plugin"] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--ade-sunken);
+}
+
+[data-slot="pane-plugin-error"] {
+  padding: var(--ade-space-4) var(--ade-space-6);
+  color: var(--ade-error);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="pane-plugin-error"] code {
+  display: block;
+  margin-top: var(--ade-space-2);
+  font-family: var(--ade-mono);
+  word-break: break-word;
+}
+
+/* ── the live terminal ─────────────────────────────────────────────────────── */
+
+/*
+ * The emulator measures itself against this box, so it has to be a box with a
+ * real size before xterm looks at it: `flex: 1; min-height: 0` and nothing that
+ * grows with its contents. The fit addon reads clientWidth/clientHeight, and a
+ * height that depends on the terminal that depends on the height never settles.
+ */
+[data-slot="pane-terminal"] {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  /*
+   * None at all. Padding here is bought with terminal columns, and at two
+   * panes across, four characters of gutter is a wrapped line in every
+   * paragraph the agent writes. There is no border left for the text to sit
+   * off, so the emulator gets the whole box.
+   */
+  padding: 0;
+  background: var(--ade-terminal-bg, var(--ade-sunken));
+}
+
+[data-slot="pane-terminal"][data-hidden] {
+  display: none;
+}
+
+/* xterm draws its own scrollbar; the pane's chrome must not add a second. */
+[data-slot="pane-terminal"] .xterm-viewport {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: transparent !important;
+}
+
+[data-slot="pane-terminal"] .xterm {
+  height: 100%;
+}
+
 [data-slot="pane-tokens"],
 [data-slot="pane-cost"] {
   flex: 0 0 auto;
@@ -268,8 +334,10 @@
 [data-slot="pane-action"] {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  /* Sized to sit inside the 22px header row with a pixel to spare, rather than
+     forcing the row to be taller than the text on it needs. */
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
   border-radius: var(--ade-radius-sm);
@@ -299,32 +367,16 @@
 /* ── liveness ──────────────────────────────────────────────────────────────── */
 
 /*
- * A 2px lane under the header. It keeps its height when idle so starting work
- * never nudges the transcript; only the travelling band appears.
+ * The band travels by moving its background rather than the element, because
+ * the element it lives on is the pane's own ::before: there is no lane to
+ * translate inside any more, and none to pay for either.
  */
-[data-slot="pane-pulse"] {
-  position: relative;
-  height: 2px;
-  flex: 0 0 auto;
-  background: var(--ade-sunken);
-  overflow: hidden;
-}
-
-[data-slot="pane-pulse"][data-busy]::after {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 35%;
-  background: linear-gradient(to right, transparent, var(--pane-status), transparent);
-  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite;
-}
-
 @keyframes ade-pane-sweep {
   0% {
-    transform: translateX(-100%);
+    background-position: -35% 0;
   }
   100% {
-    transform: translateX(386%);
+    background-position: 135% 0;
   }
 }
 
@@ -341,7 +393,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: var(--ade-space-4) var(--ade-space-5);
+  padding: var(--ade-space-2) var(--ade-space-3);
   background: var(--ade-sunken);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-md);
@@ -468,10 +520,10 @@
 [data-slot="pane-prompt"] {
   display: flex;
   align-items: flex-end;
-  gap: var(--ade-space-4);
-  padding: var(--ade-space-3) var(--ade-space-5);
-  background: var(--ade-sunken);
-  border-top: 1px solid var(--ade-border-subtle);
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-1) var(--ade-space-3);
+  /* The dock draws the strip; the composer only tints itself when in use. */
+  background: transparent;
   flex: 0 0 auto;
   transition: background var(--ade-dur-fast) var(--ade-ease);
 }
@@ -528,13 +580,13 @@
  * A permission question is a decision, not a form. The bar is compact and right
  * aligned, with the affirmative last, where the eye and the pointer finish.
  */
+/* No border and no ground of its own: the dock already draws the single line
+   that separates this strip from the terminal above it. */
 [data-slot="pane-answers"] {
   display: flex;
   justify-content: flex-end;
   gap: var(--ade-space-3);
-  padding: var(--ade-space-3) var(--ade-space-5);
-  background: var(--ade-sunken);
-  border-top: 1px solid var(--ade-border-subtle);
+  padding: var(--ade-space-2) var(--ade-space-3);
   flex: 0 0 auto;
 }
 
@@ -587,27 +639,52 @@
 
 /* ── footer ────────────────────────────────────────────────────────────────── */
 
-[data-slot="pane-footer"] {
+/*
+ * A dock, only when there is something a terminal cannot do itself.
+ *
+ * It used to be permanent: a composer and a status strip under every pane,
+ * about twenty-six pixels each, paid six times over in a tiled window. But a
+ * live terminal already takes typing — the composer wrote into the same pty
+ * the emulator does — so below a running session it was a second keyboard for
+ * the same machine, charged in terminal rows. It now appears for a pane with
+ * no terminal to type into, and for the answer buttons of a permission
+ * question, which are real choices and cannot be typed blind.
+ */
+[data-slot="pane-dock"] {
   display: flex;
-  align-items: center;
-  gap: var(--ade-space-5);
-  padding: var(--ade-space-2) var(--ade-space-5);
+  align-items: flex-end;
+  flex: 0 0 auto;
+  min-width: 0;
   border-top: 1px solid var(--ade-border);
   background: var(--ade-raised);
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
-  line-height: 18px;
-  color: var(--ade-text-weak);
-  flex: 0 0 auto;
-  box-shadow: inset 0 1px 0 var(--ade-highlight);
 }
 
+[data-slot="pane-dock"] > [data-slot="pane-prompt"],
+[data-slot="pane-dock"] > [data-slot="pane-answers"] {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/*
+ * Identity, tree and state ride in the header now.
+ *
+ * As a footer they were a row of their own for a handful of short words, and
+ * the row cost more height than the words needed. The identity group still
+ * truncates and the state still never does: what the session is doing right
+ * now is the thing worth keeping whole.
+ */
 [data-slot="pane-who"] {
   display: flex;
   align-items: center;
-  gap: var(--ade-space-4);
+  gap: var(--ade-space-3);
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
 }
 
 [data-slot="pane-agent"] {
@@ -672,25 +749,17 @@
   color: var(--ade-working);
 }
 
-/*
- * "senza isolamento" means the agent is editing the user's own files. It is the
- * single most consequential thing this card can say, so it is the only footer
- * segment allowed to look like a warning.
- */
-[data-slot="pane-tree"][data-fidelity="project"] {
-  background: var(--ade-error-bg);
-  color: var(--ade-error);
-}
-
-[data-slot="pane-tree"][data-fidelity="project"] [data-slot="pane-tree-note"] {
-  color: inherit;
-}
-
+/* The state never truncates and never wraps: everything else on the row gives
+   way to it, because a pane that cannot say what it is doing is not useful. */
 [data-slot="pane-state"] {
   display: flex;
-  align-items: baseline;
-  gap: var(--ade-space-4);
+  align-items: center;
+  gap: var(--ade-space-3);
   flex: 0 0 auto;
+  white-space: nowrap;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
 }
 
 [data-slot="pane-activity-word"] {
@@ -705,11 +774,14 @@
 /* ── narrow cards ──────────────────────────────────────────────────────────── */
 
 /*
- * Four columns on a laptop leaves each card around 300px. Secondary facts go
+ * Four columns on a laptop leaves each card around 300px, and now every fact
+ * the pane carries shares one row with the window buttons. Secondary facts go
  * first and the status word goes last: a card that cannot say what it is doing
- * has stopped being useful, while one without a token count has not.
+ * has stopped being useful, while one without a token count has not. The two
+ * buttons are never dropped — they are the only way to resize or close the
+ * pane with a pointer.
  */
-@container (max-width: 340px) {
+@container (max-width: 420px) {
   [data-slot="pane-cost"],
   [data-slot="pane-tree-note"],
   [data-slot="pane-mode"] {
@@ -717,9 +789,15 @@
   }
 }
 
-@container (max-width: 260px) {
+@container (max-width: 340px) {
   [data-slot="pane-tokens"],
   [data-slot="pane-agent"],
+  [data-slot="pane-meta"] {
+    display: none;
+  }
+}
+
+@container (max-width: 260px) {
   [data-slot="pane-tree"] {
     display: none;
   }
@@ -736,15 +814,12 @@
     transition: none;
   }
 
-  /* Liveness still has to be visible without movement: the lane fills instead
+  /* Liveness still has to be visible without movement: the edge fills instead
      of sweeping. */
-  [data-slot="pane-pulse"][data-busy]::after {
-    position: static;
-    display: block;
-    width: 100%;
-    height: 100%;
-    background: var(--pane-status);
-    opacity: 0.5;
+  [data-component="session-pane"][data-status="working"]::before,
+  [data-component="session-pane"][data-status="provisioning"]::before {
+    background-image: none;
+    background-color: var(--pane-status);
     animation: none;
   }
 }

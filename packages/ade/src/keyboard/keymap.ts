@@ -40,6 +40,67 @@ export interface Binding {
 }
 
 // ---------------------------------------------------------------------------
+// Key names
+// ---------------------------------------------------------------------------
+
+/**
+ * Spellings that mean the same physical key as the name they map to.
+ *
+ * `plus` is here because `+` is the separator: a chord string can never carry
+ * the character itself, so the only way to bind it is by name.
+ */
+const KEY_ALIASES: Record<string, string> = {
+  spacebar: "space",
+  esc: "escape",
+  return: "enter",
+  del: "delete",
+  ins: "insert",
+  up: "arrowup",
+  down: "arrowdown",
+  left: "arrowleft",
+  right: "arrowright",
+  plus: "+",
+  controlleft: "control",
+  controlright: "control",
+  shiftleft: "shift",
+  shiftright: "shift",
+  altleft: "alt",
+  altright: "alt",
+  metaleft: "meta",
+  metaright: "meta",
+}
+
+/**
+ * Reduce any spelling of a key to the one this module compares on.
+ *
+ * Three vocabularies meet here and none of them agree. A chord is *written* by
+ * a human ("space"), *stored* as text, and then compared against a live
+ * `KeyboardEvent` — whose `key` for the space bar is a literal `" "`, a
+ * character that cannot survive a `"+"`-separated chord string at all, and
+ * whose `code` calls the letter row "KeyK" and the number row "Digit1".
+ *
+ * Without one spelling in the middle a chord recorded by pressing the space bar
+ * is stored as "space" and then matches nothing, for ever, silently — which is
+ * exactly what a rebindable shortcut must never do.
+ */
+export function normalizeKeyName(key: string): string {
+  const lower = key.toLowerCase()
+  // Checked before trimming: the space bar's own `event.key` is " ".
+  if (lower === " ") return "space"
+
+  const name = lower.trim()
+  if (name.length === 0) return ""
+
+  // `KeyboardEvent.code` spellings for the two rows that have one.
+  const letter = /^key([a-z])$/.exec(name)
+  if (letter) return letter[1]
+  const digit = /^digit([0-9])$/.exec(name)
+  if (digit) return digit[1]
+
+  return KEY_ALIASES[name] ?? name
+}
+
+// ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
 
@@ -53,7 +114,9 @@ export interface Binding {
  *   parseChord("Ctrl+K", "other")     → { key: "k", ctrl: true, ... }
  */
 export function parseChord(raw: string, platform: Platform): Chord {
-  const parts = raw.toLowerCase().split("+").map(s => s.trim()).filter(Boolean)
+  const parts = raw.includes("+")
+    ? raw.toLowerCase().split("+").map(s => s.trim()).filter(Boolean)
+    : raw.toLowerCase().split(/[\s-]+/).map(s => s.trim()).filter(Boolean)
 
   let ctrl = false
   let meta = false
@@ -86,7 +149,7 @@ export function parseChord(raw: string, platform: Platform): Chord {
         break
       default:
         // Last non-modifier part wins — allows "ctrl+shift+p" order
-        key = part
+        key = normalizeKeyName(part)
     }
   }
 
@@ -103,10 +166,14 @@ export function parseChord(raw: string, platform: Platform): Chord {
  * All four modifier flags must agree — a chord that specifies Ctrl without
  * Shift must not fire when Shift is held, because that might mean a different
  * binding.
+ *
+ * The event's key goes through `normalizeKeyName` for the same reason the
+ * chord's did at parse time: both sides must be speaking the one vocabulary,
+ * or a perfectly valid stored chord never fires.
  */
 export function matchesChord(chord: Chord, event: KeyInput): boolean {
   return (
-    event.key.toLowerCase() === chord.key &&
+    normalizeKeyName(event.key) === chord.key &&
     event.ctrlKey === chord.ctrl &&
     event.metaKey === chord.meta &&
     event.shiftKey === chord.shift &&

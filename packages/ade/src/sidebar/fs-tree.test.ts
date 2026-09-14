@@ -47,4 +47,33 @@ describe("fs-tree", () => {
     const nextRoot = markDirectoryError(root, "/root")
     expect(nextRoot.children).toEqual([])
   })
+
+  it("handles Windows backslashes and case-insensitive matching in mergeChildren and markDirectoryError", () => {
+    const root = {
+      id: "C:/project",
+      name: "project",
+      path: "C:/project",
+      kind: "directory" as const,
+      children: [
+        { id: "C:/project/src", name: "src", path: "C:/project/src", kind: "directory" as const },
+      ],
+    }
+
+    const entries: DirEntry[] = [
+      { name: "index.ts", path: "C:\\project\\src\\index.ts", is_dir: false, size: 100, modified_ms: 0 },
+      { name: "components", path: "C:\\project\\src\\components", is_dir: true, size: 0, modified_ms: 0 },
+    ]
+
+    // parentPath with backslashes and lowercase drive letter
+    const nextRoot = mergeChildren(root, "c:\\project\\src", entries, false)
+    const srcChild = nextRoot.children?.[0]
+    expect(srcChild?.children?.length).toBe(2)
+    expect(srcChild?.children?.[0].path).toBe("C:/project/src/components")
+    expect(srcChild?.children?.[1].path).toBe("C:/project/src/index.ts")
+
+    // markDirectoryError with backslashes
+    const erroredRoot = markDirectoryError(nextRoot, "c:\\project\\src\\components")
+    const componentsChild = erroredRoot.children?.[0].children?.[0]
+    expect(componentsChild?.children).toEqual([])
+  })
 })

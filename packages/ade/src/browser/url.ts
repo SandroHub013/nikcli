@@ -90,11 +90,22 @@ export function normalizeUrl(raw: string): string | undefined {
       const parsed = new URL(sanitized)
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined
       if (!isValidHostname(parsed.hostname)) return undefined
+      if (hasCredentials(parsed)) return undefined
       if (parsed.port) {
         const portNum = Number.parseInt(parsed.port, 10)
         if (portNum < MIN_PORT || portNum > MAX_PORT) return undefined
       }
-      return sanitized
+      /*
+       * The canonical form, not the string that was typed.
+       *
+       * This validated `parsed` and then returned `sanitized` — the raw
+       * input — so every character `new URL` would have percent-encoded
+       * survived: `"`, `<`, `>`, backtick. `loadMirror` interpolates the
+       * result into `<base href="…">` with no escaping, so a quote closed
+       * the attribute and the rest of the "URL" became markup in a document
+       * that, before the sandbox fix, ran in ADE's own origin.
+       */
+      return parsed.href
     } catch {
       return undefined
     }
@@ -109,15 +120,35 @@ export function normalizeUrl(raw: string): string | undefined {
     const parsed = new URL(candidate)
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined
     if (!isValidHostname(parsed.hostname)) return undefined
+    if (hasCredentials(parsed)) return undefined
     // Validate port if explicitly provided in host
     if (parsed.port) {
       const portNum = Number.parseInt(parsed.port, 10)
       if (portNum < MIN_PORT || portNum > MAX_PORT) return undefined
     }
-    return candidate
+    return parsed.href
   } catch {
     return undefined
   }
+}
+
+/**
+ * Refuses the userinfo form, which is a disguise rather than a credential.
+ *
+ * `http://localhost:3000@evil.com/` is a perfectly valid URL whose host is
+ * `evil.com`; everything before the `@` is a username. It passed every check
+ * here because `parsed.hostname` really is a valid hostname, the address bar
+ * showed the part a reader's eye stops at, and the frame loaded the other
+ * site. The full string then reached the agent's prompt through
+ * `formatSelectionContext`, so the agent was told it was looking at
+ * localhost too.
+ *
+ * Nothing ADE's browser pane is for — previewing a local dev server — needs
+ * userinfo, so it is refused rather than stripped: stripping would silently
+ * load a different page than the one that was typed.
+ */
+function hasCredentials(parsed: URL): boolean {
+  return parsed.username.length > 0 || parsed.password.length > 0
 }
 
 /**

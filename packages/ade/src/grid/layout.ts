@@ -42,8 +42,16 @@ export const TARGET_ASPECT = 1.6
  */
 export const WASTE_PENALTY = 0.6
 
-/** Gutter between panes, in px. Must match `--ade-grid-gap` in the stylesheet. */
-export const GRID_GAP = 12
+/**
+ * Gutter between panes, in px. Must match `--ade-grid-gap` in the stylesheet.
+ *
+ * A hairline, not a gutter. Twelve pixels of background between panes is twelve
+ * pixels not showing a terminal, paid for on all four sides of every tile: at
+ * six panes it costs more of the window than the header rows do. What the eye
+ * needs to separate two terminals is a line, and a line is one pixel — so the
+ * grid paints its ground in the border colour and lets the gap be that line.
+ */
+export const GRID_GAP = 1
 
 export interface GridInput {
   /** Panes to place. */

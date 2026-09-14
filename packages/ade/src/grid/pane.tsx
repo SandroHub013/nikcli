@@ -1,6 +1,13 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
 import { DiffView, type SessionDiff } from "../review"
+import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
+import { focusPane, holdsFocus } from "./focus-input"
+import { attachTerminal } from "../terminal/registry"
+
+/** The screenshot tray's own drag type. See the drop handler for why. */
+const SHOT_MIME = "application/x-ade-shot"
+import "@xterm/xterm/css/xterm.css"
 import "./pane.css"
 
 /*
@@ -8,7 +15,7 @@ import "./pane.css"
  * before the process starts, and a card stuck on `waiting` there reads as
  * "needs an answer" — which this session is not asking for.
  */
-export type PaneStatus = "provisioning" | "working" | "waiting" | "done" | "error"
+export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
 /*
  * How faithfully the tree a session runs in matches what the user asked for.
@@ -42,7 +49,12 @@ const FIDELITY_LABEL: Record<PaneTreeFidelity, string | undefined> = {
   full: undefined,
   stale: "solo l'ultimo commit",
   "no-deps": "senza dipendenze",
-  project: "senza isolamento",
+  /*
+   * Quiet too: sessions run in the project on purpose now (see `startProcess`),
+   * so marking every pane as a failure was an alarm with nothing to act on.
+   * The folder glyph and the title still say where the agent is.
+   */
+  project: undefined,
 }
 
 /** Spoken/inspected form of each fidelity, used when no provisioning note arrives. */
@@ -129,11 +141,28 @@ export interface SessionPaneProps {
   cost?: string
   model?: string
   mode?: string
+  /**
+   * The pane's own id, stamped on the element as `data-pane-id`.
+   *
+   * The composer is uncontrolled — it owns its textarea and clears it itself —
+   * so voice dictation reaches it through the DOM. Without an id on the element
+   * that lookup has to count panes by position, which silently targets the
+   * wrong session the moment one is closed.
+   */
+  id?: string
   lines: TranscriptLine[]
   /** Who is running this session, shown in the footer beside the mode. */
   agent?: string
-  /** Single-glyph mark for the agent, so identity survives at small sizes. */
-  glyph?: string
+  /**
+   * The agent's mark, so identity survives at small sizes.
+   *
+   * A node rather than a character: with six panes open the header glyph is
+   * the fastest way to tell which agent is which, and six geometric
+   * stand-ins are six things that look alike. The caller passes the drawn
+   * mark (`session-new/agent-mark.tsx`); a plain string still works for
+   * anything that has no mark of its own.
+   */
+  glyph?: JSX.Element
   /**
    * Where the session actually runs, shown in the footer after the mode.
    * Absent while provisioning is still deciding — the footer holds the slot
@@ -148,6 +177,31 @@ export interface SessionPaneProps {
   onClose?: () => void
   onExpand?: () => void
   onFocus?: () => void
+  /**
+   * The terminal to draw in this pane, when it has one.
+   *
+   * Absent for a pane whose process never started, or one restored from a
+   * previous run: there is nothing live to attach to, and the line transcript
+   * that was saved with the session is the honest thing to show instead.
+   */
+  terminalId?: string
+  /** Keystrokes from the terminal, on their way to the process. */
+  onInput?: (data: string) => void
+  /**
+   * Files were dropped on this session: from the project tree, from the
+   * screenshot tray, or from the system's own file manager.
+   *
+   * Paths only, and only when something is listening: dropping a file on a
+   * pane whose process has ended would otherwise look like it worked and
+   * reach nobody.
+   *
+   * Plural because a multi-file drop is one gesture, and delivering the
+   * first path and discarding the rest is the sort of half-success that
+   * takes longer to notice than a refusal.
+   */
+  onDropPath?: (paths: string[]) => void
+  /** The terminal's size in cells, whenever the pane changes shape. */
+  onResize?: (cols: number, rows: number) => void
   /**
    * Which face of the session is showing. The transcript is what the agent
    * says; the diff is what it did, and the two disagree often enough that the
@@ -201,6 +255,7 @@ function LineSpans(props: { text: string }) {
 export function SessionPane(props: SessionPaneProps) {
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
+  let root: HTMLElement | undefined
 
   /*
    * Following means: new output pulls the view down. It stops the moment the
@@ -231,7 +286,19 @@ export function SessionPane(props: SessionPaneProps) {
     onCleanup(() => cancelAnimationFrame(frame))
   })
 
-  const busy = () => props.status === "working" || props.status === "provisioning"
+  const [dropping, setDropping] = createSignal(false)
+  let dragDepth = 0
+
+  /*
+   * Whether the pane needs a row under the terminal at all.
+   *
+   * Answers first: a permission question is a set of exact strings the agent
+   * is waiting for, and pressing one is not the same as typing it blind into a
+   * redrawing menu. Otherwise the composer earns its row only when there is no
+   * emulator to type into — with one attached it wrote to the very same pty,
+   * so it was costing every pane a row of terminal to duplicate the keyboard.
+   */
+  const showDock = () => (props.actions?.length ?? 0) > 0 || !props.terminalId
 
   /* A textarea that grows with its content, bounded so one long paste cannot
      swallow the transcript it belongs to. */
@@ -250,12 +317,101 @@ export function SessionPane(props: SessionPaneProps) {
     grow()
   }
 
+  /*
+   * Focus follows the highlight, instead of only looking like it does.
+   *
+   * Alt+Arrow updates `focusedId`, which moves the border — and nothing moved
+   * the DOM focus, so the keys kept arriving at the pane the user had just
+   * navigated away from. Typing went to the previous terminal while the
+   * highlight sat on the next one, which is the most confusing shape this can
+   * take: the interface says one thing and the keyboard does another.
+   *
+   * The terminal first when there is one, because that is what a session pane
+   * is for; otherwise the composer.
+   */
+  createEffect(() => {
+    if (!props.focused || !root) return
+    // Already inside this pane — a click, or the focus arriving on its own.
+    if (holdsFocus(root, document.activeElement)) return
+    focusPane(root)
+  })
+
   return (
     <article
+      ref={root}
       data-component="session-pane"
+      data-pane-id={props.id}
       data-status={props.status}
       data-focused={props.focused ? "true" : undefined}
+      data-dropping={dropping() ? "true" : undefined}
+      onPointerDown={() => props.onFocus?.()}
       onFocusIn={() => props.onFocus?.()}
+      onDragEnter={(event) => {
+        if (!props.onDropPath) return
+        const dt = event.dataTransfer
+        if (dt) {
+          const types = Array.from(dt.types ?? [])
+          if (!dragCarriesPaths(dt) && !types.includes(SHOT_MIME)) return
+        }
+        event.preventDefault()
+        dragDepth++
+        setDropping(true)
+      }}
+      onDragOver={(event) => {
+        if (!props.onDropPath) return
+        const dt = event.dataTransfer
+        if (dt) {
+          const types = Array.from(dt.types ?? [])
+          if (!dragCarriesPaths(dt) && !types.includes(SHOT_MIME)) return
+          dt.dropEffect = "copy"
+        }
+        event.preventDefault()
+        setDropping(true)
+      }}
+      onDragLeave={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+        dragDepth = Math.max(0, dragDepth - 1)
+        if (dragDepth === 0) {
+          setDropping(false)
+        }
+      }}
+      onDrop={(event) => {
+        dragDepth = 0
+        setDropping(false)
+        if (!props.onDropPath || !event.dataTransfer) return
+        event.preventDefault()
+
+        /*
+         * A screenshot first, then anything the file tree or the system file
+         * manager put in the drag.
+         *
+         * The tray's own type is checked on its own because a screenshot is
+         * identified by a path ADE wrote and no project owns, so it must not
+         * be made relative to the project like a source file is.
+         */
+        const shot = event.dataTransfer.getData(SHOT_MIME)
+        const paths = shot ? [shot] : readDraggedPaths(event.dataTransfer)
+        if (paths.length === 0) return
+
+        props.onDropPath(paths)
+
+        /*
+         * The caret comes with the file. Explicitly, and not via the effect
+         * above.
+         *
+         * A drag leaves the focus on whatever was dragged — the screenshot in
+         * the tray — so after the drop the keyboard is still pointed at the
+         * tray and the next thing typed goes nowhere. The `focused` effect
+         * cannot fix it: dropping onto the pane you are already working in
+         * does not change `focusedId`, so the effect has no reason to re-run,
+         * and that is the common case.
+         *
+         * After the caller, because it writes the path into the terminal, and
+         * the caret belongs at the end of what it wrote.
+         */
+        props.onFocus?.()
+        focusPane(root)
+      }}
     >
       <header data-slot="pane-header">
         <span data-slot="pane-identity" title={props.agent}>
@@ -266,6 +422,54 @@ export function SessionPane(props: SessionPaneProps) {
         <h2 data-slot="pane-title" title={props.title}>
           {props.title}
         </h2>
+        {/*
+          Agent, mode, tree and state used to be a footer of their own, under
+          the composer. Both rows are gone: everything below the terminal is a
+          tax paid once per pane and this window is built to hold six, so the
+          few short words they carry ride here instead, on the row that had to
+          exist anyway for the title and the window buttons.
+        */}
+        <span data-slot="pane-who">
+          <Show when={props.agent}>{(agent) => <span data-slot="pane-agent">{agent()}</span>}</Show>
+          <Show when={props.mode}>
+            <span data-slot="pane-mode">{props.mode}</span>
+          </Show>
+          {/* While provisioning decides, the same slot holds a placeholder so
+              the handover to a real branch never reshapes the row. */}
+          <Show
+            when={props.tree}
+            fallback={
+              <Show when={props.status === "provisioning"}>
+                <span data-slot="pane-tree" data-fidelity="pending">
+                  <BranchGlyph />
+                  <span data-slot="pane-tree-branch">preparazione albero…</span>
+                </span>
+              </Show>
+            }
+          >
+            {(tree) => (
+              <span
+                data-slot="pane-tree"
+                data-fidelity={tree().fidelity}
+                title={tree().note ?? FIDELITY_TITLE[tree().fidelity]}
+              >
+                {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
+                <span data-slot="pane-tree-branch">{tree().branch}</span>
+                <Show when={FIDELITY_LABEL[tree().fidelity]}>
+                  {(label) => <span data-slot="pane-tree-note">{label()}</span>}
+                </Show>
+              </span>
+            )}
+          </Show>
+        </span>
+        <span data-slot="pane-state">
+          <Show when={props.activity}>
+            {(activity) => <span data-slot="pane-activity-word">{activity()}</span>}
+          </Show>
+          <Show when={props.elapsed}>
+            <span data-slot="pane-meta">{props.elapsed}</span>
+          </Show>
+        </span>
         {/* Offered whenever the session has a checkout to diff. The count
             appears once it is known; the view itself says when nothing changed. */}
         <Show when={props.onViewChange}>
@@ -321,9 +525,9 @@ export function SessionPane(props: SessionPaneProps) {
         </div>
       </header>
 
-      {/* Work in progress needs a sign that is not a word: across six panes the
-          eye finds motion long before it reads six activity labels. */}
-      <div data-slot="pane-pulse" data-busy={busy() ? "true" : undefined} aria-hidden="true" />
+      {/* The liveness sweep used to be a 2px lane of its own here. It is now
+          the pane's own top edge, keyed off `data-status`, which says the same
+          thing without taking a row — see `pane.css`. */}
 
       <Show when={props.view === "diff"}>
         <div data-slot="pane-diff">
@@ -331,9 +535,34 @@ export function SessionPane(props: SessionPaneProps) {
         </div>
       </Show>
 
+      {/*
+        The live session, drawn by a real terminal emulator.
+
+        An agent CLI does not print lines, it paints a screen: it moves the
+        cursor, rewrites what it already wrote, opens an alternate buffer for a
+        menu. Rendering that as a list of strings shows the user the machinery
+        instead of the program. The emulator lives in the registry, not here, so
+        scrollback survives collapsing, expanding and re-tiling the pane.
+      */}
+      <Show when={props.terminalId}>
+        <div
+          data-slot="pane-terminal"
+          data-hidden={props.view === "diff" ? "true" : undefined}
+          ref={(element) => {
+            const id = props.terminalId
+            if (!id) return
+            const detach = attachTerminal(id, element, {
+              onInput: (data) => props.onInput?.(data),
+              onResize: (cols, rows) => props.onResize?.(cols, rows),
+            })
+            onCleanup(detach)
+          }}
+        />
+      </Show>
+
       <div
         data-slot="pane-transcript"
-        data-hidden={props.view === "diff" ? "true" : undefined}
+        data-hidden={props.view === "diff" || props.terminalId ? "true" : undefined}
         ref={(element) => (scroller = element)}
         onScroll={(event) => setFollowing(atBottom(event.currentTarget))}
       >
@@ -372,103 +601,71 @@ export function SessionPane(props: SessionPaneProps) {
         </Show>
       </div>
 
-      {/* A session that is asking something needs an answer, not an instruction:
-          the buttons take the prompt's place rather than sitting beside it. */}
-      <Show
-        when={props.actions && props.actions.length > 0}
-        fallback={
-          <div data-slot="pane-prompt" data-disabled={props.onSubmit ? undefined : "true"}>
-            <span data-slot="pane-caret" aria-hidden="true">
-              ›
-            </span>
-            <textarea
-              ref={(element) => (field = element)}
-              rows={1}
-              data-slot="pane-input"
-              placeholder={props.onSubmit ? "Scrivi all'agente…" : "nessun processo in ascolto"}
-              disabled={!props.onSubmit}
-              spellcheck={false}
-              onInput={grow}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.shiftKey) return
-                event.preventDefault()
-                send()
-              }}
-            />
-            <Show when={props.onSubmit}>
-              <span data-slot="pane-send-hint" aria-hidden="true">
-                ⏎
-              </span>
-            </Show>
-          </div>
-        }
-      >
-        <div data-slot="pane-answers">
-          <For each={props.actions}>
-            {(action) => (
-              <button
-                type="button"
-                data-slot="pane-answer"
-                data-tone={action.tone ?? "secondary"}
-                onClick={() => action.onClick()}
-              >
-                {action.label}
-                <Show when={action.hint}>
-                  <span data-slot="pane-answer-hint" aria-hidden="true">
-                    {action.hint}
+      {/*
+        The dock appears only when a terminal cannot do the job itself.
+
+        A live emulator already takes typing and sends it to the same pty the
+        composer wrote to, so under a running session the composer was a second
+        keyboard for the same machine — charged in terminal rows, once per pane,
+        in a window built to hold six. It is still the only way to talk to a
+        pane that has no terminal, and the answer buttons are still the only way
+        to answer a permission question, so those two cases keep the row.
+      */}
+      <Show when={showDock()}>
+        <div data-slot="pane-dock">
+          {/* A session that is asking something needs an answer, not an
+              instruction: the buttons take the prompt's place. */}
+          <Show
+            when={props.actions && props.actions.length > 0}
+            fallback={
+              <div data-slot="pane-prompt" data-disabled={props.onSubmit ? undefined : "true"}>
+                <span data-slot="pane-caret" aria-hidden="true">
+                  ›
+                </span>
+                <textarea
+                  ref={(element) => (field = element)}
+                  rows={1}
+                  data-slot="pane-input"
+                  placeholder={props.onSubmit ? "Scrivi all'agente…" : "nessun processo in ascolto"}
+                  disabled={!props.onSubmit}
+                  spellcheck={false}
+                  onInput={grow}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.shiftKey) return
+                    event.preventDefault()
+                    send()
+                  }}
+                />
+                <Show when={props.onSubmit}>
+                  <span data-slot="pane-send-hint" aria-hidden="true">
+                    ⏎
                   </span>
                 </Show>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
-
-      <footer data-slot="pane-footer">
-        <span data-slot="pane-who">
-          <Show when={props.agent}>{(agent) => <span data-slot="pane-agent">{agent()}</span>}</Show>
-          <Show when={props.mode}>
-            <span data-slot="pane-mode">{props.mode}</span>
-          </Show>
-          {/* The tree lives in the footer's identity group, not the transcript:
-              a note line scrolls away after three messages, the footer does not.
-              While provisioning decides, the same slot holds a placeholder so
-              the row's shape — and therefore the grid's — never changes. */}
-          <Show
-            when={props.tree}
-            fallback={
-              <Show when={props.status === "provisioning"}>
-                <span data-slot="pane-tree" data-fidelity="pending">
-                  <BranchGlyph />
-                  <span data-slot="pane-tree-branch">preparazione albero…</span>
-                </span>
-              </Show>
+              </div>
             }
           >
-            {(tree) => (
-              <span
-                data-slot="pane-tree"
-                data-fidelity={tree().fidelity}
-                title={tree().note ?? FIDELITY_TITLE[tree().fidelity]}
-              >
-                {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
-                <span data-slot="pane-tree-branch">{tree().branch}</span>
-                <Show when={FIDELITY_LABEL[tree().fidelity]}>
-                  {(label) => <span data-slot="pane-tree-note">{label()}</span>}
-                </Show>
-              </span>
-            )}
+            <div data-slot="pane-answers">
+              <For each={props.actions}>
+                {(action) => (
+                  <button
+                    type="button"
+                    data-slot="pane-answer"
+                    data-tone={action.tone ?? "secondary"}
+                    onClick={() => action.onClick()}
+                  >
+                    {action.label}
+                    <Show when={action.hint}>
+                      <span data-slot="pane-answer-hint" aria-hidden="true">
+                        {action.hint}
+                      </span>
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </div>
           </Show>
-        </span>
-        <span data-slot="pane-state">
-          <Show when={props.activity}>
-            {(activity) => <span data-slot="pane-activity-word">{activity()}</span>}
-          </Show>
-          <Show when={props.elapsed}>
-            <span data-slot="pane-meta">{props.elapsed}</span>
-          </Show>
-        </span>
-      </footer>
+        </div>
+      </Show>
     </article>
   )
 }

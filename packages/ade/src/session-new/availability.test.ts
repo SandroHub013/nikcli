@@ -3,14 +3,14 @@ import { AGENTS } from "./agents"
 import { defaultAgentId, detectAgents, isProbeable, startable } from "./availability"
 
 const answeringFor = (installed: string[]) => async (command: string) =>
-  installed.includes(command) ? `${command} 1.2.3\n` : null
+  installed.includes(command) ? `C:\\bin\\${command}.exe\n` : null
 
 describe("detectAgents", () => {
-  test("an agent whose probe answers is present, and carries its version", async () => {
+  test("an agent the lookup finds is present, and carries where it was found", async () => {
     const statuses = await detectAgents(answeringFor(["claude", "agy"]))
     const claude = statuses.find((s) => s.agent.command === "claude")
     expect(claude?.availability).toBe("presente")
-    expect(claude?.version).toBe("claude 1.2.3")
+    expect(claude?.path).toBe("C:\\bin\\claude.exe")
   })
 
   test("an agent whose probe does not answer is absent, not merely unlisted", async () => {
@@ -33,21 +33,35 @@ describe("detectAgents", () => {
     expect(statuses.filter((s) => isProbeable(s.agent)).every((s) => s.availability === "sconosciuto")).toBe(true)
   })
 
-  test("the terminal is not probed: it is the shell, not an agent", async () => {
-    let probed = 0
+  /*
+   * The terminal is probed like everything else now, because it finally names
+   * a real program. It used to carry an empty command and be reported present
+   * on that basis — and `startProcess` refuses an empty command, so choosing
+   * Terminal produced a pane stuck at "Inizializzazione" with no error.
+   */
+  test("the terminal names a shell, and is probed for it", async () => {
+    const probed: string[] = []
     const statuses = await detectAgents(async (command) => {
-      probed += 1
-      return command === "" ? null : "ok"
+      probed.push(command)
+      return "ok"
     })
+
     const terminal = statuses.find((s) => s.agent.id === "terminal")
+    expect(terminal?.agent.command.length).toBeGreaterThan(0)
+    expect(probed).toContain(terminal?.agent.command ?? "")
     expect(terminal?.availability).toBe("presente")
-    expect(probed).toBe(AGENTS.filter(isProbeable).length)
+  })
+
+  test("a shell PATH cannot find is reported absent, not silently broken", async () => {
+    const statuses = await detectAgents(answeringFor(["claude"]))
+    expect(statuses.find((s) => s.agent.id === "terminal")?.availability).toBe("assente")
   })
 })
 
 describe("startable", () => {
   test("drops only the agents known to be absent", async () => {
-    const statuses = await detectAgents(answeringFor(["claude"]))
+    const shell = AGENTS.find((a) => a.id === "terminal")?.command ?? ""
+    const statuses = await detectAgents(answeringFor(["claude", shell]))
     const ids = startable(statuses).map((s) => s.agent.id)
     expect(ids).toContain("claude-code")
     expect(ids).toContain("terminal")

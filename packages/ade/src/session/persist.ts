@@ -17,6 +17,13 @@
 // Schema
 // ---------------------------------------------------------------------------
 
+/** One saved transcript line. Mirrors `TranscriptLine` without importing a `.tsx`. */
+export interface SavedLine {
+  kind: string
+  text: string
+  repeat?: number
+}
+
 export interface PaneState {
   id: string
   title: string
@@ -25,6 +32,36 @@ export interface PaneState {
   branch: string
   /** "idle" | "running" | "paused" | "done" | "error" */
   status: string
+  /**
+   * What the session was asked to do.
+   *
+   * Without it a restored session is a title and nothing else: "Riprova"
+   * relaunches the agent with an empty prompt, which is a different session
+   * wearing the same name. It is also what makes restarting on open possible
+   * at all, because it is the only record of the work.
+   */
+  task?: string
+  /**
+   * The tail of the transcript.
+   *
+   * The process cannot survive the app closing, let alone the machine
+   * restarting, so what is worth keeping is what it said. Bounded by the
+   * writer, not here: a reader must accept whatever it finds.
+   */
+  lines?: SavedLine[]
+  /** The model label the pane showed, so the restored header is not blank. */
+  model?: string
+  /** Whether this session was live when the app went away, so it can be resumed. */
+  wasRunning?: boolean
+  /**
+   * The agent's own conversation id, when the CLI let ADE choose one.
+   *
+   * This is what makes a restore a *resume* rather than a new session with
+   * the old title: the agent is asked for this exact conversation back, with
+   * everything it had worked out. Absent for the CLIs that will not take an
+   * id — see `session-new/resume.ts`, which is where the difference lives.
+   */
+  resumeId?: string
 }
 
 export interface WorkspaceState {
@@ -38,7 +75,7 @@ export interface WorkspaceState {
 }
 
 /** The version this code writes. */
-export const CURRENT_VERSION = 2
+export const CURRENT_VERSION = 4
 
 // ---------------------------------------------------------------------------
 // Defaults — every field has one, so partial restores always produce a usable state
@@ -93,9 +130,39 @@ function asOptionalNumber(v: unknown): number | undefined {
   return typeof v === "number" && Number.isFinite(v) ? v : undefined
 }
 
+/**
+ * The kinds a transcript line may claim to be.
+ *
+ * Checked rather than trusted because the value reaches the DOM as a CSS
+ * class and a style hook: an unknown kind renders unstyled, and a crafted one
+ * would be a selector written by whatever wrote the store.
+ */
+const LINE_KINDS = new Set(["step", "shell", "note", "diff", "error"])
+
+function sanitiseLines(raw: unknown): SavedLine[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const lines: SavedLine[] = []
+  for (const entry of raw) {
+    if (!isObject(entry)) continue
+    if (typeof entry.text !== "string") continue
+    const kind = asString(entry.kind, "note")
+    const repeat = asOptionalNumber(entry.repeat)
+    lines.push({
+      kind: LINE_KINDS.has(kind) ? kind : "note",
+      text: entry.text,
+      ...(repeat !== undefined && repeat > 1 ? { repeat: Math.floor(repeat) } : {}),
+    })
+  }
+  return lines
+}
+
 function sanitisePane(raw: unknown): PaneState {
   if (!isObject(raw)) return defaultPane()
   const def = defaultPane()
+  const task = asOptionalString(raw.task)
+  const model = asOptionalString(raw.model)
+  const resumeId = asOptionalString(raw.resumeId)
+  const lines = sanitiseLines(raw.lines)
   return {
     id: asString(raw.id, def.id),
     title: asString(raw.title, def.title),
@@ -103,6 +170,11 @@ function sanitisePane(raw: unknown): PaneState {
     cwd: asString(raw.cwd, def.cwd),
     branch: asString(raw.branch, def.branch),
     status: asString(raw.status, def.status),
+    ...(task !== undefined ? { task } : {}),
+    ...(model !== undefined ? { model } : {}),
+    ...(resumeId !== undefined ? { resumeId } : {}),
+    ...(lines !== undefined ? { lines } : {}),
+    ...(typeof raw.wasRunning === "boolean" ? { wasRunning: raw.wasRunning } : {}),
   }
 }
 
@@ -136,8 +208,30 @@ const migrateV1toV2: Migration = (raw) => {
   return out
 }
 
+/**
+ * v2 → v3: panes carry their task, their transcript and whether they were live.
+ *
+ * Nothing to rename and nothing to compute: a v2 store simply has no record
+ * of what any session was asked to do. Those panes restore as they always
+ * did — visible, inert, and not restarted, because restarting a session
+ * whose task is unknown would launch an agent with an empty prompt.
+ */
+const migrateV2toV3: Migration = (raw) => ({ ...raw, version: 3 })
+
+/**
+ * v3 → v4: panes carry the agent's own conversation id.
+ *
+ * Nothing to compute. A v3 store has no record of any conversation, so its
+ * sessions restore the way they always did — the agent started again and the
+ * task typed in — and the ones that can be resumed properly are the ones
+ * started after this version.
+ */
+const migrateV3toV4: Migration = (raw) => ({ ...raw, version: 4 })
+
 const MIGRATIONS: Record<number, Migration> = {
   1: migrateV1toV2,
+  2: migrateV2toV3,
+  3: migrateV3toV4,
 }
 
 /** Apply all migrations from `fromVersion` up to `CURRENT_VERSION`. */

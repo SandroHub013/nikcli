@@ -11,6 +11,42 @@ import type { PaneStatus } from "../grid/pane"
 
 export type WorkspaceSessionStatus = PaneStatus
 
+export type AgentDisplayStatus = "disponibile" | "a lavoro" | "in attesa di input" | "task completata" | "errore"
+
+export function mapAgentStatus(status: WorkspaceSessionStatus): AgentDisplayStatus {
+  switch (status) {
+    case "working":
+      return "a lavoro"
+    case "waiting":
+      return "in attesa di input"
+    case "done":
+      return "task completata"
+    case "error":
+      return "errore"
+    case "idle":
+    case "provisioning":
+    default:
+      return "disponibile"
+  }
+}
+
+export function normalizeAgentId(raw?: string): string {
+  if (!raw) return "nikcli"
+  const s = raw.toLowerCase().trim()
+  if (s.includes("claude")) return "claude-code"
+  if (s.includes("codex") || s.includes("openai")) return "codex"
+  if (s.includes("opencode")) return "opencode"
+  if (s.includes("agy") || s.includes("antigravity")) return "agy"
+  if (s.includes("hermes") || s.includes("nous")) return "hermes"
+  if (s.includes("kimi") || s.includes("moonshot")) return "kimi"
+  if (s.includes("prime")) return "prime"
+  if (s.includes("ohmypi")) return "ohmypi"
+  if (s.includes("pi")) return "pi"
+  if (s.includes("shell") || s.includes("term") || s.includes("bash") || s.includes("zsh") || s.includes("powershell")) return "terminal"
+  if (s.includes("nik")) return "nikcli"
+  return "nikcli"
+}
+
 export interface SidebarSession {
   id: string
   title: string
@@ -18,12 +54,16 @@ export interface SidebarSession {
   workspaceId?: string
   activity?: string
   startTime?: number
+  agent?: string
+  branch?: string
+  cwd?: string
 }
 
 export interface Workspace {
   id: string
   name: string
   path?: string
+  branch?: string
   sessions: SidebarSession[]
 }
 

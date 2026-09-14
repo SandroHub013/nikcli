@@ -60,14 +60,13 @@ export function SessionGrid(props: SessionGridProps) {
 
   const focusedIndex = createMemo(() => props.panes.findIndex((pane) => pane.id === props.focused))
 
-  const close = (id: string) => {
-    const next = focusAfterClose({
-      panes: props.panes.map((pane) => pane.id),
-      focused: props.focused,
-      closing: id,
-    })
-    props.onClose?.(id, next)
-  }
+  /*
+   * `close` used to be declared here and never called: the grid does not draw
+   * the close control, the pane does, and the pane calls the workbench
+   * directly. Removed rather than left as a helper nobody reaches — dead code
+   * next to live code reads as a code path, and someone will eventually
+   * reason about the system as though this one ran.
+   */
 
   const onKeyDown = (event: KeyboardEvent) => {
     const direction = ARROWS[event.key]

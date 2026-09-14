@@ -8,46 +8,131 @@
 ///
 /// Where WebView2 cannot write its profile under %LOCALAPPDATA% — a locked-down
 /// machine, or a sandboxed parent — set WEBVIEW2_USER_DATA_FOLDER before launch.
-/// WebView2 reads that itself, so nothing here needs to know about it.
-use std::path::Path;
+/// WebView2 reads that variable itself, but never gets the chance here: Tauri
+/// always passes a data directory derived from the bundle identifier, and an
+/// explicit path wins over the environment. So `open_main_window` reads the
+/// variable and forwards it, which is what makes the escape hatch real.
+mod agent_link;
+mod frontend;
+mod media;
+mod pty;
+mod serve;
+mod shots;
+
 use serde::Serialize;
+use std::ffi::OsStr;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
-/// Points `link` at `target`, so an isolated worktree can reach the project's
-/// installed dependencies without a copy.
-///
-/// This exists as its own command rather than as a shell call because the shell
-/// allowlist names seven agent binaries and git, on purpose: adding `cmd` so it
-/// could run `mklink` would hand every page in this window arbitrary execution,
-/// which is a far larger grant than "make one directory point at another".
-///
-/// Windows uses a junction: unlike a symlink it needs no elevation, and unlike
-/// a copy it costs no disk. Elsewhere a directory symlink does the same job.
+// ---------------------------------------------------------------------------
+// Where this window may write
+// ---------------------------------------------------------------------------
+
+/*
+ * The commands below reach the disk directly, and the page that calls them is
+ * not only ADE's own interface: the browser pane loads pages the user points it
+ * at, and whatever runs in that frame can invoke everything registered here.
+ * Reading is left open — the sidebar has to be able to open any project the
+ * user names — but writing, linking and deleting are confined to directories
+ * the user has actually opened, because those three are how a page turns "I can
+ * call a command" into "I own this machine".
+ *
+ * The frontend registers a root when it discovers a project (`host/project.ts`).
+ * Nothing is writable until it does, which is the safe direction to fail: an
+ * editor that refuses to save says so, while a silent grant says nothing.
+ */
+#[derive(Default)]
+pub struct WriteRoots(Mutex<Vec<PathBuf>>);
+
+/*
+ * Every command in this file is `async`, and none of them awaits anything.
+ *
+ * That reads like a mistake and is not: a synchronous `#[tauri::command]` is
+ * dispatched on the thread that owns the window, so a `read_dir` on a cold
+ * network share or a `git status` on a large repository stops the window from
+ * drawing until it finishes. Declaring them `async` moves them onto Tauri's
+ * async runtime, which is all these need — they are bounded pieces of work,
+ * unlike `nikcli_serve_start`, which waits up to forty-five seconds and goes
+ * further onto a blocking worker. `pty.rs` reached the same conclusion first
+ * and documents it on `pty_write`.
+ */
+
+/// Adds a directory to the set this window may write inside.
 #[tauri::command]
-fn link_directory(link: String, target: String) -> Result<(), String> {
-    let link_path = Path::new(&link);
-    let target_path = Path::new(&target);
+async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
+    let resolved = Path::new(&path)
+        .canonicalize()
+        .map_err(|e| format!("{path}: {e}"))?;
+    if !resolved.is_dir() {
+        return Err(format!("non è una cartella: {path}"));
+    }
+    let mut allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
+    if !allowed.contains(&resolved) {
+        allowed.push(resolved);
+    }
+    Ok(())
+}
 
-    if !target_path.exists() {
-        return Err(format!("sorgente inesistente: {target}"));
-    }
-    // Already linked from an earlier session: nothing to do, and re-creating it
-    // would fail on a path that is already correct.
-    if link_path.exists() {
-        return Ok(());
-    }
-    if let Some(parent) = link_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+/// Resolves `path` to a form that can be compared against a root, without
+/// requiring it to exist yet.
+///
+/// `canonicalize` is the only thing that follows a junction or a symlink, and
+/// following them is the point: a link planted inside the project and aimed at
+/// the user's startup folder would sail through a textual prefix check. But it
+/// needs the path to exist, and a file being saved for the first time does not.
+/// So the deepest existing ancestor is canonicalised and the names below it are
+/// appended — with `..` refused rather than resolved, since a `..` that climbs
+/// out of the root is exactly what this is here to stop.
+fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| e.to_string())?
+            .join(path)
+    };
+
+    let mut existing = absolute.as_path();
+    let mut below: Vec<&OsStr> = Vec::new();
+    while !existing.exists() {
+        let (Some(name), Some(parent)) = (existing.file_name(), existing.parent()) else {
+            return Err(format!("percorso irrisolvibile: {}", absolute.display()));
+        };
+        below.push(name);
+        existing = parent;
     }
 
-    #[cfg(windows)]
-    {
-        junction::create(target_path, link_path).map_err(|e| e.to_string())
+    let mut resolved = existing
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", absolute.display()))?;
+    for name in below.iter().rev() {
+        if *name == OsStr::new("..") {
+            return Err(format!("percorso risalente: {}", absolute.display()));
+        }
+        if *name == OsStr::new(".") {
+            continue;
+        }
+        resolved.push(name);
     }
-    #[cfg(not(windows))]
-    {
-        std::os::unix::fs::symlink(target_path, link_path).map_err(|e| e.to_string())
+    Ok(resolved)
+}
+
+/// The resolved path, when it falls inside a registered root; an error naming
+/// the refusal otherwise.
+fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
+    let resolved = resolve_for_check(Path::new(path))?;
+    let allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
+    if allowed.is_empty() {
+        return Err("nessun progetto aperto: scrittura non consentita".to_string());
     }
+    // `starts_with` on a Path compares whole components, so a root of
+    // `/work/app` does not also cover `/work/app-backup`.
+    if allowed.iter().any(|root| resolved.starts_with(root)) {
+        return Ok(resolved);
+    }
+    Err(format!("fuori dal progetto: {path}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +152,7 @@ struct DirEntry {
 /// alphabetically (case-insensitive). Entries the OS refuses to stat are
 /// silently skipped instead of aborting the whole listing.
 #[tauri::command]
-fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+async fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let rd = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     let mut dirs: Vec<DirEntry> = Vec::new();
     let mut files: Vec<DirEntry> = Vec::new();
@@ -103,7 +188,7 @@ fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(dirs)
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 struct FileRead {
     text: String,
     truncated: bool,
@@ -114,13 +199,53 @@ struct FileRead {
 /// binary content so the frontend can tell the user instead of showing
 /// mojibake.
 #[tauri::command]
-fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
-    let data = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
-    let total = data.len();
-    let truncated = total > max_bytes;
+async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
+    read_text(&path, max_bytes)
+}
+
+/// The reading itself, as a plain function so the tests below can call it.
+fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
+    /*
+     * One byte past the cap, rather than the whole file. The sidebar makes it
+     * one click to open a 2 GB pack file, and reading it whole would allocate
+     * all of it — on the thread drawing the window — before this function got
+     * the chance to say it was too big.
+     */
+    let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
+    let meta = file.metadata().map_err(|e| format!("{path}: {e}"))?;
+    if meta.is_dir() {
+        return Err(format!("il percorso è una directory: {path}"));
+    }
+    let total = meta.len() as usize;
+
+    let mut data: Vec<u8> = Vec::new();
+    file.take(max_bytes as u64 + 1)
+        .read_to_end(&mut data)
+        .map_err(|e| format!("{path}: {e}"))?;
+
+    let truncated = data.len() > max_bytes;
     let slice = if truncated { &data[..max_bytes] } else { &data[..] };
-    let text = String::from_utf8(slice.to_vec())
-        .map_err(|_| "file binario".to_string())?;
+
+    /*
+     * Cut on a character boundary, not a byte one.
+     *
+     * A perfectly good UTF-8 file whose millionth byte lands inside an accented
+     * letter is not binary, and calling it one did real damage: the error came
+     * back as an empty buffer, the "truncated" flag that guards against saving
+     * a partial file was false, and one keystroke plus Ctrl+S wrote the empty
+     * buffer over the original. An incomplete character at the very end is the
+     * cut this function made; anything else really is not text.
+     */
+    let text = match std::str::from_utf8(slice) {
+        Ok(whole) => whole.to_string(),
+        Err(error)
+            if truncated && error.error_len().is_none() && error.valid_up_to() > 0 =>
+        {
+            String::from_utf8_lossy(&slice[..error.valid_up_to()]).into_owned()
+        }
+        Err(_) => return Err("file binario".to_string()),
+    };
+
     Ok(FileRead { text, truncated, bytes: total })
 }
 
@@ -129,8 +254,32 @@ fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
 /// temporary file and then renames it over the target to prevent partial writes
 /// on interrupted saves.
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    let target = Path::new(&path);
+async fn write_text_file(
+    roots: tauri::State<'_, WriteRoots>,
+    path: String,
+    contents: String,
+) -> Result<(), String> {
+    write_atomic(&roots, &path, contents.as_bytes())
+}
+
+/// The same write, for content that is not text.
+///
+/// The video panel's frame captures are PNGs, and there was no way to put one
+/// on disk: base64 through `write_text_file` would have written the text of
+/// the image. Same confinement, same atomic rename — only the bytes differ,
+/// which is why both go through one function.
+#[tauri::command]
+async fn write_bytes(
+    roots: tauri::State<'_, WriteRoots>,
+    path: String,
+    contents: Vec<u8>,
+) -> Result<(), String> {
+    write_atomic(&roots, &path, &contents)
+}
+
+fn write_atomic(roots: &WriteRoots, path: &str, bytes: &[u8]) -> Result<(), String> {
+    let target = within_roots(roots, path)?;
+    let target = target.as_path();
     if target.is_dir() {
         return Err(format!("il percorso è una directory: {path}"));
     }
@@ -152,7 +301,7 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
     let temp_name = format!(".{file_name}.tmp_{}_{now_nanos}", std::process::id());
     let temp_path = parent.join(temp_name);
 
-    if let Err(e) = std::fs::write(&temp_path, contents.as_bytes()) {
+    if let Err(e) = std::fs::write(&temp_path, bytes) {
         let _ = std::fs::remove_file(&temp_path);
         return Err(format!("{path}: {e}"));
     }
@@ -165,23 +314,188 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// git, behind a gate of its own
+// ---------------------------------------------------------------------------
+
+/*
+ * Why git does not go through the shell plugin any more.
+ *
+ * The plugin validates arguments by position: an allowlist entry describes
+ * argument one, argument two, and so on, for a fixed count. ADE calls git with
+ * anything from two arguments to seven, so the only entry that fit was
+ * `"args": true` — and `"args": true` on git is arbitrary execution, because
+ * git takes a command as data in several places:
+ *
+ *   git -c core.pager=<anything> log
+ *   git -c protocol.ext.allow=always clone ext::sh -c <anything>
+ *   git --exec-path=<dir> <anything in that dir>
+ *
+ * Here the check can be about meaning instead of position. The first argument
+ * must be a subcommand ADE actually uses, which leaves no room in front of it
+ * for a `-c`; the handful of per-subcommand options that also carry a command
+ * are refused wherever they appear; and the environment is narrowed to the one
+ * variable ADE sets, so GIT_PAGER and friends cannot arrive that way either.
+ */
+const GIT_SUBCOMMANDS: &[&str] = &[
+    "status",
+    "worktree",
+    "rev-parse",
+    "rev-list",
+    "branch",
+    "add",
+    "commit",
+    "commit-tree",
+    "write-tree",
+    "merge",
+    "rebase",
+    "cherry-pick",
+    "diff",
+    "show",
+    "log",
+    "ls-files",
+];
+
+/// Options that hand git something to run. Refused at any position.
+const GIT_EXECUTING_FLAGS: &[&str] = &[
+    "-c",
+    "--config-env",
+    "--exec-path",
+    "--upload-pack",
+    "--receive-pack",
+    "--exec",
+];
+
+/// The only variable ADE sets for git: the throwaway index a snapshot stages
+/// into, so the user's real index is never touched.
+const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
+
+#[derive(Serialize, Clone, Debug)]
+struct ShellOutput {
+    code: Option<i32>,
+    stdout: String,
+    stderr: String,
+}
+
+fn check_git_args(args: &[String]) -> Result<(), String> {
+    let Some(subcommand) = args.first() else {
+        return Err("git senza sottocomando".to_string());
+    };
+    if !GIT_SUBCOMMANDS.contains(&subcommand.as_str()) {
+        return Err(format!("sottocomando git non consentito: {subcommand}"));
+    }
+    for arg in args {
+        // `--exec-path=/tmp/x` and `--exec-path /tmp/x` are the same option.
+        let head = arg.split('=').next().unwrap_or(arg);
+        if GIT_EXECUTING_FLAGS.contains(&head) {
+            return Err(format!("opzione git non consentita: {arg}"));
+        }
+    }
+    Ok(())
+}
+
+/// Runs one git command and hands back what it printed.
 #[tauri::command]
-fn current_dir() -> Result<String, String> {
+async fn git_run(
+    args: Vec<String>,
+    cwd: Option<String>,
+    env: Option<std::collections::HashMap<String, String>>,
+) -> Result<ShellOutput, String> {
+    check_git_args(&args)?;
+
+    let mut command = std::process::Command::new("git");
+    command.args(&args);
+    if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
+        command.current_dir(dir);
+    }
+    for (key, value) in env.unwrap_or_default() {
+        if !GIT_ENV_KEYS.contains(&key.as_str()) {
+            return Err(format!("variabile non consentita: {key}"));
+        }
+        command.env(key, value);
+    }
+
+    /*
+     * No console window. Without this flag every git call from a windowed
+     * application flashes a black rectangle on screen, and ADE makes several
+     * per keystroke-worth of activity.
+     */
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = command
+        .output()
+        .map_err(|e| format!("git non eseguibile: {e}"))?;
+
+    Ok(ShellOutput {
+        code: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+#[tauri::command]
+async fn current_dir() -> Result<String, String> {
     std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn home_dir() -> Result<String, String> {
+async fn home_dir() -> Result<String, String> {
     dirs::home_dir()
         .map(|p| p.to_string_lossy().into_owned())
         .ok_or_else(|| "impossibile determinare la home".to_string())
 }
 
 #[tauri::command]
-fn path_exists(path: String) -> bool {
+async fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
+}
+
+#[tauri::command]
+fn ade_window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ade_window_toggle_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.is_maximized().unwrap_or(false) {
+        window.unmaximize().map_err(|e| e.to_string())
+    } else {
+        window.maximize().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn ade_window_close(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn write_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn register_global_voice_shortcut(app: tauri::AppHandle, chord: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    use std::str::FromStr;
+    let shortcut = Shortcut::from_str(&chord).map_err(|e| format!("Scorciatoia non valida '{chord}': {e}"))?;
+    app.global_shortcut().register(shortcut).map_err(|e| format!("Registrazione fallita per '{chord}': {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Opens ADE's window, and says out loud if it cannot.
@@ -196,7 +510,16 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
+        .disable_drag_drop_handler()
         .center();
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.decorations(false);
 
     /*
      * An escape hatch for machines where WebView2 will not start.
@@ -216,6 +539,23 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         _ => builder,
     };
 
+    /*
+     * Where the profile lives, when %LOCALAPPDATA% will not take it.
+     *
+     * Tauri's default is %LOCALAPPDATA%\<identifier>, and on a machine whose
+     * anti-ransomware policy keys on the executable, an unsigned locally built
+     * ade-desktop.exe cannot create it: `build()` fails with os error 5. Worse,
+     * when the directory already exists but the browser process still cannot
+     * write inside it, WebView2 gets far enough to show the window and then
+     * dies a few seconds later with a Chromium CHECK — a window that opens and
+     * vanishes, with nothing on stderr.
+     */
+    #[cfg(windows)]
+    let builder = match std::env::var("WEBVIEW2_USER_DATA_FOLDER") {
+        Ok(dir) if !dir.trim().is_empty() => builder.data_directory(PathBuf::from(dir.trim())),
+        _ => builder,
+    };
+
     let window = builder.build()?;
 
     window.show()?;
@@ -227,7 +567,44 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri::Emitter;
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = app.emit("nikcli-global-voice", shortcut.to_string());
+                    }
+                })
+                .build(),
+        )
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(pty::Registry::default())
+        .manage(frontend::DevServer::default())
+        .manage(serve::Server::default())
+        .manage(shots::Watch::default())
+        .manage(WriteRoots::default())
+        /*
+         * The video panel's files.
+         *
+         * Confined to the same roots everything else writes inside: a scheme
+         * that served an arbitrary path would let anything in the browser
+         * pane's frame read the disk through a `<video>` tag.
+         */
+        .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
+            use tauri::Manager;
+            let state = ctx.app_handle().state::<WriteRoots>();
+            let roots = match state.0.lock() {
+                Ok(guard) => guard.clone(),
+                Err(_) => Vec::new(),
+            };
+            media::respond(&roots, &request)
+        })
         .setup(|app| {
+            // Before the window, not after: a webview pointed at a port that
+            // is not listening yet shows its own error page and stays on it.
+            frontend::ensure(app.handle());
+            // Reports nobody came back for, from sessions that are long gone.
+            agent_link::sweep(app.handle());
             if let Err(error) = open_main_window(app.handle()) {
                 eprintln!("ADE: impossibile aprire la finestra: {error}");
                 return Err(Box::new(error));
@@ -235,14 +612,203 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            link_directory,
+            allow_write_root,
+            git_run,
             read_dir,
             read_text_file,
             write_text_file,
+            write_bytes,
             current_dir,
             home_dir,
             path_exists,
+            agent_link::agent_link_read,
+            agent_link::agent_link_clear,
+            agent_link::agent_hook_read,
+            agent_link::agent_hook_write,
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
+            pty::pty_which,
+            serve::nikcli_serve_start,
+            serve::nikcli_serve_status,
+            serve::nikcli_serve_stop,
+            shots::shots_dir,
+            shots::shots_recent,
+            shots::shots_watch,
+            shots::shot_bytes,
+            shots::shot_delete,
+            ade_window_minimize,
+            ade_window_toggle_maximize,
+            ade_window_close,
+            write_clipboard,
+            register_global_voice_shortcut,
+            unregister_global_voice_shortcuts,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running ADE");
+        .build(tauri::generate_context!())
+        .expect("error while running ADE")
+        /*
+         * Every process this window started is a child of it, so they die
+         * with it.
+         *
+         * Without this they do not: they are detached processes holding
+         * ports, and a few restarts of ADE leave several of them running
+         * against the same workspace. `Exit` rather than `ExitRequested` so
+         * it also covers the paths that do not go through a window close.
+         */
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                app.state::<serve::Server>().shutdown();
+                app.state::<frontend::DevServer>().shutdown();
+            }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A throwaway directory that cleans itself up, so these tests need no
+    /// fixture crate and leave nothing behind when one of them fails.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        /*
+         * Under the crate's own target directory rather than %TEMP%. On the
+         * machine this was written on, %TEMP% answers a create with "Accesso
+         * negato" (os error 5) for anything not launched from the user's own
+         * folder tree, and eight tests failing on that says nothing about the
+         * code. `target/` is writable wherever cargo can build at all, and
+         * `cargo clean` takes these with it.
+         */
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("target")
+                .join("test-tmp")
+                .join(format!("{tag}-{nanos}"));
+            std::fs::create_dir_all(&path).expect("temp dir");
+            TempDir(path)
+        }
+
+        fn join(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+
+        /// This directory registered as the one writable root, canonicalised
+        /// the same way `allow_write_root` would do it.
+        fn roots(&self) -> WriteRoots {
+            let roots = WriteRoots::default();
+            roots
+                .0
+                .lock()
+                .unwrap()
+                .push(self.0.canonicalize().expect("canonical temp dir"));
+            roots
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_path_inside_a_root_is_accepted_even_when_it_does_not_exist_yet() {
+        let dir = TempDir::new("inside");
+        let roots = dir.roots();
+        let target = dir.join("nested").join("new-file.txt");
+
+        let resolved = within_roots(&roots, &target.to_string_lossy())
+            .expect("a new file under the project is writable");
+        assert!(resolved.ends_with("new-file.txt"));
+    }
+
+    #[test]
+    fn a_path_outside_every_root_is_refused() {
+        let dir = TempDir::new("outside");
+        let other = TempDir::new("elsewhere");
+        let roots = dir.roots();
+
+        let error = within_roots(&roots, &other.join("stolen.txt").to_string_lossy())
+            .expect_err("a file outside the project is not writable");
+        assert!(error.contains("fuori dal progetto"), "{error}");
+    }
+
+    #[test]
+    fn climbing_out_with_dot_dot_is_refused() {
+        let dir = TempDir::new("climb");
+        let roots = dir.roots();
+        // `..` below the deepest existing directory is never resolved, because
+        // resolving it is how a path escapes a prefix check.
+        let sneaky = dir.join("missing").join("..").join("..").join("evil.txt");
+
+        assert!(within_roots(&roots, &sneaky.to_string_lossy()).is_err());
+    }
+
+    #[test]
+    fn a_sibling_root_with_a_shared_prefix_is_not_covered() {
+        let dir = TempDir::new("app");
+        let roots = dir.roots();
+        // `<dir>-backup` shares every character of `<dir>` but not a component,
+        // which is the case a string prefix check gets wrong.
+        let sibling = PathBuf::from(format!("{}-backup", dir.0.to_string_lossy()));
+        std::fs::create_dir_all(&sibling).expect("sibling dir");
+
+        let result = within_roots(&roots, &sibling.join("f.txt").to_string_lossy());
+        let _ = std::fs::remove_dir_all(&sibling);
+        assert!(result.is_err(), "a sibling directory is not inside the root");
+    }
+
+    #[test]
+    fn nothing_is_writable_before_a_project_is_opened() {
+        let dir = TempDir::new("noroot");
+        let roots = WriteRoots::default();
+
+        let error = within_roots(&roots, &dir.join("f.txt").to_string_lossy())
+            .expect_err("an empty root set grants nothing");
+        assert!(error.contains("nessun progetto aperto"), "{error}");
+    }
+
+    #[test]
+    fn a_multibyte_character_split_by_the_cap_is_still_text() {
+        let dir = TempDir::new("utf8");
+        let path = dir.join("accents.txt");
+        // "è" is two bytes; cutting at 5 lands inside the third one.
+        std::fs::write(&path, "aaaaèèè").expect("write");
+
+        let read = read_text(&path.to_string_lossy(), 5)
+            .expect("a cut accent is not a binary file");
+        assert_eq!(read.text, "aaaa");
+        assert!(read.truncated);
+        assert_eq!(read.bytes, 10);
+    }
+
+    #[test]
+    fn a_real_binary_is_still_refused() {
+        let dir = TempDir::new("binary");
+        let path = dir.join("blob.bin");
+        std::fs::write(&path, [0xff, 0xfe, 0x00, 0x01, 0x02]).expect("write");
+
+        let error = read_text(&path.to_string_lossy(), 1024)
+            .expect_err("invalid bytes are not a truncated character");
+        assert_eq!(error, "file binario");
+    }
+
+    #[test]
+    fn a_file_under_the_cap_is_not_reported_as_truncated() {
+        let dir = TempDir::new("small");
+        let path = dir.join("small.txt");
+        std::fs::write(&path, "ciao").expect("write");
+
+        let read = read_text(&path.to_string_lossy(), 1024).expect("read");
+        assert_eq!(read.text, "ciao");
+        assert!(!read.truncated);
+        assert_eq!(read.bytes, 4);
+    }
 }

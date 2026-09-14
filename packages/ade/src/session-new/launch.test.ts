@@ -1,7 +1,32 @@
 import { describe, expect, test } from "bun:test"
+import { AGENTS } from "./agents"
 import { willLaunch } from "./launch"
 
 describe("willLaunch", () => {
+  /*
+   * These assertions only mean something now.
+   *
+   * `willLaunch` drew the "Partirà" preview while the launch itself ran
+   * `for (i < count) addAgent(input, i)`, ignoring roles and slots entirely —
+   * so "Banco di lavoro" promised an agent and a shell and started two copies
+   * of the same agent. The preview and the launch now read the same list, and
+   * the case below is the one where they used to disagree.
+   */
+  test("every id a preset invents is an agent the catalogue can actually start", () => {
+    const invented = willLaunch({ preset: "workbench", agentId: "agy", count: 2 })
+      .map((entry) => entry.agentId)
+      .filter((id) => id !== "agy")
+
+    expect(invented.length).toBeGreaterThan(0)
+    for (const id of invented) {
+      const agent = AGENTS.find((a) => a.id === id)
+      expect(agent).toBeDefined()
+      // An empty command is what `startProcess` refuses in silence, leaving
+      // the pane on "Inizializzazione" for the rest of the session.
+      expect(agent?.command.length).toBeGreaterThan(0)
+    }
+  })
+
   describe("without preset", () => {
     test("assigns agent role and agentId to all entries", () => {
       const entries = willLaunch({ agentId: "claude-3-5-sonnet", count: 3 })

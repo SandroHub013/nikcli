@@ -13,10 +13,9 @@
   min-width: 0;
   min-height: 0;
   background: var(--ade-surface);
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-md);
+  /* Frameless, like the session pane it sits beside: the grid's one-pixel gap
+     is the only line between two tiles, and a border here would double it. */
   overflow: hidden;
-  transition: border-color var(--ade-dur-fast) var(--ade-ease);
   position: relative;
   /* Inline-size container so the toolbar responds to the pane width the grid
      gives it, not the window width — at three columns the pane is 431px. */
@@ -24,7 +23,6 @@
 }
 
 [data-component="browser-pane"][data-focused] {
-  border-color: var(--ade-accent);
   outline: 1px solid var(--ade-accent);
   outline-offset: -1px;
 }
@@ -266,6 +264,24 @@
   background: #ffffff;
 }
 
+/*
+ * The frame is mounted once and reshaped, never remounted.
+ *
+ * There used to be two iframes in mutually exclusive `<Show>`s, so changing
+ * device preset reloaded the guest page from scratch. Now one iframe sits
+ * inside two wrappers that are sized reactively: `-fit` reserves the space
+ * the scaled frame really occupies, `-scaler` does the scaling.
+ */
+[data-slot="browser-viewport-fit"] {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+[data-slot="browser-viewport-fit"][data-responsive] {
+  width: 100%;
+  height: 100%;
+}
+
 [data-slot="browser-viewport-scaler"] {
   position: relative;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -273,7 +289,18 @@
   flex: 0 0 auto;
 }
 
-[data-slot="browser-viewport-scaler"] [data-slot="browser-frame"] {
+/*
+ * In responsive mode the wrappers are pure pass-throughs: no size of their
+ * own, no shadow, so the frame fills the pane exactly as it did when it was
+ * a direct child.
+ */
+[data-slot="browser-viewport-scaler"][data-responsive] {
+  width: 100%;
+  height: 100%;
+  box-shadow: none;
+}
+
+[data-slot="browser-viewport-scaler"]:not([data-responsive]) [data-slot="browser-frame"] {
   position: absolute;
   top: 0;
   left: 0;

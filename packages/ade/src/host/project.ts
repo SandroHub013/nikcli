@@ -38,16 +38,31 @@ export async function discoverProject(
   if (toplevel.code !== 0 || !toplevel.stdout.trim()) {
     // Not a git repo — still a valid project, just without isolation.
     const root = normalizePath(startDir)
+    await allowWrites(host, root)
     return { root, name: basename(root), git: false }
   }
 
   const root = normalizePath(toplevel.stdout.trim())
+  await allowWrites(host, root)
   const branchResult = await host.run("git", ["rev-parse", "--abbrev-ref", "HEAD"], root)
   const rawBranch = branchResult.stdout.trim()
   // "HEAD" is what git returns when detached.
   const branch = rawBranch && rawBranch !== "HEAD" ? rawBranch : undefined
 
   return { root, name: basename(root), branch, git: true }
+}
+
+/**
+ * Tells the host this root may be written to.
+ *
+ * Here rather than at each call site because this function is the only way a
+ * Project comes into existence — opening one, reopening a recent one, restoring
+ * the last session — and a root that is granted in three places out of four is
+ * a save that fails on a Tuesday. The host decides what the grant means; the
+ * browser harness has no such method and needs none.
+ */
+async function allowWrites(host: Host, root: string): Promise<void> {
+  await host.allowWriteRoot?.(root)
 }
 
 /**

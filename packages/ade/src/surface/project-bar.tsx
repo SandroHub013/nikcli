@@ -18,7 +18,9 @@ export function ProjectBar(props: ProjectBarProps) {
     <Show when={props.project}>
       {(project) => (
         <div data-slot="ade-project">
-          <span data-slot="ade-project-name">{project().name}</span>
+          <Show when={project().name && project().name.toLowerCase() !== "nikcli"}>
+            <span data-slot="ade-project-name">{project().name}</span>
+          </Show>
           <Show when={project().branch}>
             {(branch) => (
               <span data-slot="ade-project-branch">

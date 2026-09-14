@@ -100,6 +100,39 @@ describe("expandDirectoryParents", () => {
     const result = expandDirectoryParents("README.md", initial)
     expect(Array.from(result)).toEqual(["existing"])
   })
+
+  /*
+   * The tree holds whatever paths the host handed back, and outside this repo
+   * those are absolute. Rebuilding the ancestors from `split().filter(Boolean)`
+   * dropped the leading empty segment of a POSIX path and glued a drive letter
+   * to the next name, so every path produced here was one the tree could never
+   * contain — the reveal silently expanded nothing.
+   */
+  test("keeps the leading slash of an absolute POSIX path", () => {
+    const expanded = expandDirectoryParents("/home/ale/progetti/ade/src/main.ts", new Set<string>())
+    expect(Array.from(expanded).sort()).toEqual([
+      "/home",
+      "/home/ale",
+      "/home/ale/progetti",
+      "/home/ale/progetti/ade",
+      "/home/ale/progetti/ade/src",
+    ])
+  })
+
+  test("keeps the drive of a Windows path, and stops at its root", () => {
+    const expanded = expandDirectoryParents("C:\\Users\\39349\\nikcli\\src\\main.ts", new Set<string>())
+    expect(Array.from(expanded).sort()).toEqual([
+      "C:/Users",
+      "C:/Users/39349",
+      "C:/Users/39349/nikcli",
+      "C:/Users/39349/nikcli/src",
+    ])
+  })
+
+  test("a file sitting directly on a root expands nothing", () => {
+    expect(Array.from(expandDirectoryParents("/README.md", new Set<string>()))).toEqual([])
+    expect(Array.from(expandDirectoryParents("C:\\README.md", new Set<string>()))).toEqual([])
+  })
 })
 
 describe("flattenFileTree", () => {

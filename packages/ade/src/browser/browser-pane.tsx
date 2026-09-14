@@ -17,12 +17,19 @@ import {
   type JSX,
 } from "solid-js"
 import { formatSelectionContext } from "./element-context"
-import { HANDSHAKE_TIMEOUT_MS, type Fidelity } from "./handshake"
+import {
+  HANDSHAKE_TIMEOUT_MS,
+  INITIAL_HANDSHAKE_STATE,
+  reduceFidelity,
+  type Fidelity,
+  type HandshakeEvent,
+} from "./handshake"
 import {
   INSPECTOR_BRIDGE_SCRIPT,
   type BridgeMessage,
   type InspectedElement,
 } from "./protocol"
+import { escapeAttribute, withLoadToken } from "./frame-url"
 import { normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 
@@ -82,7 +89,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [loadToken, setLoadToken] = createSignal(1)
   const [loadState, setLoadState] = createSignal<LoadState>("idle")
   const [loadError, setLoadError] = createSignal<string>()
-  const [fidelity, setFidelity] = createSignal<Fidelity>("pending")
+  /*
+   * Fidelity is decided by the reducer in `handshake.ts`, not here.
+   *
+   * That reducer, and the forty assertions pinning it, were imported by
+   * nothing but their own test: this component reimplemented the same
+   * transitions inline, and the two had already drifted — the reducer treats
+   * `load-error` as terminal, and the component had no way to reach that
+   * state at all. A tested state machine that production does not use is not
+   * coverage, it is a second opinion nobody asked for.
+   */
+  const [fidelity, setFidelityRaw] = createSignal<Fidelity>(INITIAL_HANDSHAKE_STATE.fidelity)
+  const handshake = (event: HandshakeEvent) => setFidelityRaw((current) => reduceFidelity(current, event))
 
   const [mode, setMode] = createSignal<"browse" | "edit">("browse")
   const [device, setDevice] = createSignal<DevicePreset>("responsive")
@@ -97,9 +115,28 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined
   let loadGeneration = 0
 
+  /**
+   * Where a message to the frame is allowed to be delivered.
+   *
+   * For a page loaded by URL that is the page's own origin, so a redirect
+   * somewhere else stops receiving what the user selected. A mirror has no
+   * origin to name — it is sandboxed without `allow-same-origin`, so its
+   * document is opaque and matches nothing but `"*"` — and there `"*"` is safe
+   * for the same reason it is necessary: that document is a sealed copy with
+   * nobody else inside it.
+   */
+  const frameOrigin = (): string => {
+    if (srcdoc() !== null) return "*"
+    try {
+      return new URL(url()).origin
+    } catch {
+      return "*"
+    }
+  }
+
   const post = (message: unknown) => {
     try {
-      iframeRef?.contentWindow?.postMessage(message, "*")
+      iframeRef?.contentWindow?.postMessage(message, frameOrigin())
     } catch {
       // Frame might be detached or cross-origin restricted
     }
@@ -135,7 +172,15 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
         // Inject base tag so relative asset URLs resolve against the target server,
         // and inject the bridge script into the document head.
-        const baseHref = target.endsWith("/") ? target : `${target}/`
+        /*
+         * Escaped, because it goes into an attribute.
+         *
+         * `normalizeUrl` now returns the canonical form, in which a quote is
+         * already `%22`, so this is the belt to that braces: `target` also
+         * arrives here from a redirect the page chose, and one unescaped `"`
+         * closes the `href` and turns the rest into markup.
+         */
+        const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
         const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${INSPECTOR_BRIDGE_SCRIPT}<\/script>`
 
         let injected = html
@@ -147,31 +192,44 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           injected = `${headInjection}\n${injected}`
         }
 
-        setFidelity("mirror")
+        handshake({ type: "ready", mode: "mirror" })
         setSrcdoc(injected)
         setLoadState("ready")
         setLoadError(undefined)
         setLoadToken((v) => v + 1)
         return
       }
+      /*
+       * A reply that is not ok is an answer, so the probe below must not run.
+       *
+       * It used to fall through: the 404 was recorded, then the `no-cors`
+       * probe reached the very same server, succeeded, and cleared the error
+       * it had just set. The pane said "ready" over a blank frame with no
+       * mention of the 404 anywhere — the one case where the user needs to
+       * be told the path is wrong, not that everything is fine.
+       */
+      handshake({ type: "load-error", error: `${res.status} ${res.statusText}` })
+      setLoadState("ready")
       setLoadError(`${res.status} ${res.statusText}`)
+      return
     } catch (err) {
       if (!isCurrent()) return
       setLoadError(err instanceof Error ? err.message : String(err))
     }
 
-    // CORS fetch failed; probe with no-cors to distinguish "server alive without CORS"
-    // from "server not running".
+    // The CORS fetch threw, which says nothing about the server: a page with
+    // no CORS headers throws exactly like one that is not running. The
+    // `no-cors` probe tells the two apart.
     try {
       await fetch(target, { mode: "no-cors" })
       if (!isCurrent()) return
       // Server is reachable, but cross-origin without bridge
       setLoadError(undefined)
-      setFidelity("none")
+      handshake({ type: "load-error" })
       setLoadState("ready")
     } catch {
       if (!isCurrent()) return
-      setFidelity("none")
+      handshake({ type: "load-error", error: "Server non raggiungibile" })
       setLoadState("unreachable")
       setLoadError("Server non raggiungibile")
     }
@@ -182,6 +240,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     handshakeTimer = setTimeout(() => {
       if (generation !== loadGeneration) return
       if (fidelity() === "pending") {
+        // The reducer's own demotion: pending → mirror. Dispatched before the
+        // fetch because the decision to mirror is what the timeout *is*; the
+        // fetch only decides whether the mirror succeeds, and a failure comes
+        // back through `load-error`.
+        handshake({ type: "timeout" })
         void loadMirror(target, generation)
       }
     }, HANDSHAKE_TIMEOUT_MS)
@@ -195,7 +258,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     setLoadState("loading")
     setLoadError(undefined)
     setSelection([])
-    setFidelity("pending")
+    handshake({ type: "navigate", url: target })
     setSrcdoc(null)
     setLoadToken((v) => v + 1)
 
@@ -219,18 +282,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       startHandshake(url(), loadGeneration)
     }
 
-    // Try same-origin direct script injection if possible
-    try {
-      const doc = iframeRef?.contentDocument
-      if (doc && !doc.getElementById("__nikcli_hover_outline")) {
-        const script = doc.createElement("script")
-        script.textContent = INSPECTOR_BRIDGE_SCRIPT
-        ;(doc.head ?? doc.body)?.appendChild(script)
-      }
-    } catch {
-      // Cross-origin iframe rejects contentDocument access
-    }
-
+    /*
+     * There used to be an attempt to reach into `contentDocument` here and
+     * append the bridge script directly. It cannot work any more, and it should
+     * not: the frame is sandboxed without `allow-same-origin`, so its document
+     * has an opaque origin and is unreachable from here by design. That is the
+     * point — a `srcdoc` document inherits the embedder's origin unless the
+     * sandbox denies it, and this frame is filled with HTML fetched from
+     * whatever server the address bar names.
+     *
+     * A page that does not ship the bridge itself still gets one: the handshake
+     * times out, `loadMirror` takes a copy, and the bridge is injected into that
+     * copy, where it belongs.
+     */
     syncMode()
   }
 
@@ -244,13 +308,24 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
     if (data.type === "visual-editor:ready") {
       if (handshakeTimer) clearTimeout(handshakeTimer)
-      setFidelity(srcdoc() === null ? "native" : "mirror")
+      handshake({ type: "ready", mode: srcdoc() === null ? "native" : "mirror" })
       setLoadState("ready")
       syncMode()
       return
     }
 
     if (data.type === "visual-editor:element-selected") {
+      /*
+       * Only while the user has design mode on.
+       *
+       * The message says "the user clicked an element", but nothing about it
+       * proves that: the page is the one sending it, and the page is not ADE's.
+       * Outside edit mode the user has not asked this page for anything, so an
+       * unprompted selection is a page writing text into a prompt box on its
+       * own — and that prompt goes to an agent.
+       */
+      if (mode() !== "edit") return
+
       const element = data.element
       if (element && typeof element.selector === "string") {
         setSelection((prev) =>
@@ -495,39 +570,89 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       <div data-slot="browser-body">
         <div ref={viewportContainerRef} data-slot="browser-viewport-container">
-          <Show when={viewportFit().isResponsive}>
+          {/*
+            * One iframe, always mounted.
+            *
+            * There used to be two, in mutually exclusive `<Show>`s sharing a
+            * single `ref`: switching device preset unmounted one and mounted
+            * the other, so the guest page reloaded from scratch — losing its
+            * scroll, its form state and anything it had fetched — merely to
+            * change the frame's width. For an instant between the two,
+            * `iframeRef` also pointed at a detached node, and any
+            * `postMessage` in that window went nowhere.
+            *
+            * The wrapper's geometry is computed reactively instead. In
+            * responsive mode it carries no sizing at all, so the frame fills
+            * the pane as it did before.
+            */}
+          <div
+            data-slot="browser-viewport-fit"
+            data-responsive={viewportFit().isResponsive ? "true" : undefined}
+            style={
+              viewportFit().isResponsive
+                ? undefined
+                : {
+                    /*
+                     * The space the *scaled* frame actually occupies.
+                     *
+                     * A transform does not change an element's layout box,
+                     * so without this the flex parent reserved the full
+                     * unscaled device height and centred that — pushing a
+                     * shrunk Desktop preview off the top of the pane.
+                     */
+                    width: `${viewportFit().renderedWidth}px`,
+                    height: `${viewportFit().renderedHeight}px`,
+                  }
+            }
+          >
+          <div
+            data-slot="browser-viewport-scaler"
+            data-responsive={viewportFit().isResponsive ? "true" : undefined}
+            style={
+              viewportFit().isResponsive
+                ? undefined
+                : {
+                    width: `${viewportFit().viewportWidth}px`,
+                    height: `${viewportFit().viewportHeight}px`,
+                    transform: `scale(${viewportFit().scale})`,
+                    /*
+                     * Top left, and the box shrinks with the scale.
+                     *
+                     * With `top center` and a full-size box, a Desktop
+                     * preview in a narrow pane scaled below 1 and the
+                     * untransformed layout box stayed full height — so the
+                     * scaled frame was laid out for a box far taller than
+                     * what it drew, and the preview sat entirely above the
+                     * visible area. `renderedWidth`/`renderedHeight` are
+                     * what `fitViewport` computes for exactly this, and
+                     * nothing used them.
+                     */
+                    "transform-origin": "top left",
+                  }
+            }
+          >
             <iframe
               ref={iframeRef}
               data-slot="browser-frame"
-              src={srcdoc() ? undefined : url()}
+              /*
+               * Keyed on the load token so Reload actually reloads.
+               *
+               * `setLoadToken` was incremented and never read. In `native`
+               * fidelity the Reload button rewrote `src` with the same
+               * string, Solid saw no change and wrote nothing, so the frame
+               * did not renavigate — and the handshake timer then fired at
+               * 1500 ms and replaced a perfectly live page with a static
+               * mirror of it.
+               */
+              data-load={loadToken()}
+              src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+              sandbox="allow-scripts allow-forms allow-popups allow-modals"
               title={props.title || "Browser preview"}
             />
-          </Show>
-
-          <Show when={!viewportFit().isResponsive}>
-            <div
-              data-slot="browser-viewport-scaler"
-              style={{
-                width: `${viewportFit().viewportWidth}px`,
-                height: `${viewportFit().viewportHeight}px`,
-                transform: `scale(${viewportFit().scale})`,
-                "transform-origin": "top center",
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                data-slot="browser-frame"
-                src={srcdoc() ? undefined : url()}
-                srcdoc={srcdoc() ?? undefined}
-                onLoad={onFrameLoad}
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-                title={props.title || "Browser preview"}
-              />
-            </div>
-          </Show>
+          </div>
+          </div>
 
           <Show when={loadState() === "unreachable"}>
             <div data-slot="browser-error-overlay">

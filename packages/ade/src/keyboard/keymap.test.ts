@@ -1,5 +1,34 @@
 import { describe, expect, test } from "bun:test"
-import { parseChord, matchesChord, formatChord, resolveBinding, findConflicts, type Binding, type KeyInput } from "./keymap"
+import { parseChord, matchesChord, formatChord, normalizeKeyName, resolveBinding, findConflicts, type Binding, type KeyInput } from "./keymap"
+
+describe("normalizeKeyName", () => {
+  test("the space bar's own event.key becomes the name a chord can carry", () => {
+    // " " cannot survive a "+"-separated chord string, so it must have a name.
+    expect(normalizeKeyName(" ")).toBe("space")
+    expect(normalizeKeyName("Space")).toBe("space")
+    expect(normalizeKeyName("Spacebar")).toBe("space")
+  })
+
+  test("reduces KeyboardEvent.code spellings to the event.key one", () => {
+    expect(normalizeKeyName("KeyK")).toBe("k")
+    expect(normalizeKeyName("Digit1")).toBe("1")
+    expect(normalizeKeyName("Escape")).toBe("escape")
+    expect(normalizeKeyName("ArrowUp")).toBe("arrowup")
+  })
+
+  test("folds legacy and shorthand names onto one spelling", () => {
+    expect(normalizeKeyName("Esc")).toBe("escape")
+    expect(normalizeKeyName("Return")).toBe("enter")
+    expect(normalizeKeyName("Del")).toBe("delete")
+    expect(normalizeKeyName("Up")).toBe("arrowup")
+  })
+
+  test("leaves an unknown key as its lowercase self", () => {
+    expect(normalizeKeyName("F5")).toBe("f5")
+    expect(normalizeKeyName("!")).toBe("!")
+    expect(normalizeKeyName("")).toBe("")
+  })
+})
 
 describe("parseChord", () => {
   test("mod maps to meta on mac", () => {
@@ -52,6 +81,16 @@ describe("parseChord", () => {
     expect(chord.ctrl).toBe(true)
     expect(chord.meta).toBe(false)
   })
+
+  test("parses space-separated and hyphen-separated chords like 'ctrl space' and 'ctrl-space'", () => {
+    const chordSpace = parseChord("ctrl space", "other")
+    expect(chordSpace.ctrl).toBe(true)
+    expect(chordSpace.key).toBe("space")
+
+    const chordHyphen = parseChord("ctrl-space", "other")
+    expect(chordHyphen.ctrl).toBe(true)
+    expect(chordHyphen.key).toBe("space")
+  })
 })
 
 describe("matchesChord", () => {
@@ -77,6 +116,29 @@ describe("matchesChord", () => {
     const chord = parseChord("mod+p", "other")
     const event: KeyInput = { key: "P", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }
     expect(matchesChord(chord, event)).toBe(true)
+  })
+
+  test("a chord written with the space bar fires on the space bar", () => {
+    // The browser reports " " for this key; the chord is stored as "space".
+    // These two disagreeing is what made a rebound Ctrl+Shift+Space dead.
+    const chord = parseChord("mod+shift+space", "other")
+    const event: KeyInput = { key: " ", ctrlKey: true, metaKey: false, shiftKey: true, altKey: false }
+    expect(matchesChord(chord, event)).toBe(true)
+  })
+
+  test("matches a chord written in code spelling against a key-spelled event", () => {
+    const chord = parseChord("mod+KeyK", "other")
+    const event: KeyInput = { key: "k", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }
+    expect(matchesChord(chord, event)).toBe(true)
+  })
+
+  test("modifier order in the written chord does not change what it matches", () => {
+    const a = parseChord("shift+mod+alt+p", "other")
+    const b = parseChord("Alt+Shift+Mod+P", "other")
+    expect(a).toEqual(b)
+    const event: KeyInput = { key: "P", ctrlKey: true, metaKey: false, shiftKey: true, altKey: true }
+    expect(matchesChord(a, event)).toBe(true)
+    expect(matchesChord(b, event)).toBe(true)
   })
 
   test("distinguishes Ctrl and Meta on mac", () => {

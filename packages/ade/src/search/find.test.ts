@@ -6,8 +6,7 @@ function createFakeHost(files: Record<string, string | Error | FileRead>): Host 
   return {
     probe: async () => null,
     run: async () => ({ code: 1, stdout: "", stderr: "" }),
-    linkDirectory: async () => null,
-    spawn: async () => ({ kill: () => {}, write: () => {} }),
+    spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
     readDir: async () => [],
     readTextFile: async (path: string, _maxBytes?: number) => {
       const normalized = path.replace(/\\/g, "/")
@@ -260,8 +259,7 @@ describe("findInFiles", () => {
     const host: Host = {
       probe: async () => null,
       run: async () => ({ code: 1, stdout: "", stderr: "" }),
-      linkDirectory: async () => null,
-      spawn: async () => ({ kill: () => {}, write: () => {} }),
+      spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
       readTextFile: async (_path, maxBytes) => {
         receivedMaxBytes = maxBytes
         return { text: "target string", truncated: false, bytes: 13 }
@@ -282,8 +280,7 @@ describe("findInFiles", () => {
     const host: Host = {
       probe: async () => null,
       run: async () => ({ code: 1, stdout: "", stderr: "" }),
-      linkDirectory: async () => null,
-      spawn: async () => ({ kill: () => {}, write: () => {} }),
+      spawn: async () => ({ kill: () => {}, write: () => {}, resize: () => {} }),
     }
 
     const res = await findInFiles({

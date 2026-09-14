@@ -1,11 +1,20 @@
-import { For, Show, createMemo, createSignal, onCleanup, createEffect } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
 import "./sidebar.css"
 import { getHost } from "../host/shell"
 import { discoverProject, type Project } from "../host/project"
-import { toDisplayPath } from "../host/path"
+import { toDisplayPath, basename } from "../host/path"
 import { fuzzyMatch } from "../command/match"
 import { formatDuration, elapsed } from "../session/metrics"
-import { FilePreview } from "./file-preview"
+/*
+ * `FilePreview` is deliberately not imported here.
+ *
+ * It was, and was never rendered — an import that made the sidebar look like
+ * it had a preview pane while clicking a file opened the editor pane
+ * instead. The component still exists and still works (its cancellation bug
+ * is fixed), but nothing in the sidebar shows it, and an import that only
+ * pulls code into the bundle is worse than an absent feature: it hides the
+ * absence.
+ */
 
 import {
   type FileNode,
@@ -15,19 +24,27 @@ import {
   flattenFileTree,
   toggleDirectoryExpansion,
 } from "./file-tree"
+import { writeDraggedPaths } from "./file-drag"
 import { createKeyedList } from "./keyed"
 import {
   STORAGE_KEY_EXPANDED_DIRS,
   STORAGE_KEY_EXPANDED_WORKSPACES,
-  STORAGE_KEY_TAB,
   STORAGE_KEY_WIDTH,
-  STORAGE_KEY_SESSIONS_COLLAPSED,
-  STORAGE_KEY_SESSIONS_HEIGHT,
+  STORAGE_KEY_SECTIONS,
   deserializeSet,
   safeGetStorage,
   safeSetStorage,
   serializeSet,
 } from "./storage"
+import {
+  countSessions,
+  deserializeSections,
+  scrollingSection,
+  serializeSections,
+  statPills,
+  toggleSection,
+  type SectionId,
+} from "./sections"
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -35,20 +52,18 @@ import {
   calculateResize,
   parseSidebarWidth,
 } from "./width"
-import {
-  DEFAULT_SESSIONS_HEIGHT,
-  MAX_SESSIONS_HEIGHT,
-  MIN_SESSIONS_HEIGHT,
-  calculateHeightResize,
-  parseSessionsHeight,
-} from "./height"
+import { beginResizeDrag } from "./sidebar-logic"
+import { AgentMark } from "../session-new/agent-mark"
 import {
   type FlatSessionChildRow,
   type FlatWorkspaceHeaderRow,
   type FlatWorkspaceRow,
   type Workspace,
+  type SidebarSession,
   flattenWorkspaces,
   toggleWorkspaceExpansion,
+  mapAgentStatus,
+  normalizeAgentId,
 } from "./workspace-tree"
 import { mergeChildren, markDirectoryError } from "./fs-tree"
 
@@ -56,6 +71,56 @@ export interface SidebarProps {
   workspaces: Workspace[]
   selectedSessionId?: string
   onSelectSession?: (id: string) => void
+  /**
+   * Opens the system's directory picker and adds what the user chooses.
+   *
+   * Absent in the browser harness, where there is no disk to pick from — and
+   * then the button is not drawn at all, rather than drawn and refusing.
+   */
+  onAddProject?: () => void
+  /** Switches to a project already in the list. */
+  onSelectProject?: (id: string) => void
+  /** Launches a new agent session screen. */
+  onNewSession?: () => void
+  /**
+   * A last section, under the file tree.
+   *
+   * Passed in rather than built here so the sidebar keeps knowing about
+   * projects and files and nothing else — what currently goes in it is the
+   * screenshot tray, which has its own reasons to exist and its own host.
+   */
+  bottom?: JSX.Element
+  /**
+   * Extra sections between the file tree and `bottom`.
+   *
+   * Passed in already rendered, for the same reason as `bottom`: what
+   * currently fills it is whatever plugins have registered, and the sidebar
+   * has no business knowing that plugins exist. Above `bottom` rather than
+   * below it because the tray is picked up on the way out and these are
+   * navigation, which belongs nearer the rest of the navigation.
+   */
+  sections?: JSX.Element
+  /**
+   * Opens the settings panel, from the gear at the foot of the column.
+   *
+   * The one place in ADE that answers "where are the settings". It sits at
+   * the very bottom because settings are the last thing anybody looks for
+   * and the first that has to always be in the same place — and outside the
+   * scrolling area, so it is there whatever the tree is doing.
+   */
+  onOpenSettings?: () => void
+  /**
+   * The controls that sit beside the gear on the bottom strip.
+   *
+   * The theme toggle and the notification bell live here rather than in the
+   * top bar: neither does anything to the project, and next to the buttons
+   * that open panes and start sessions they were two switches in a row of
+   * verbs. Down here they are what they are — the state of the window.
+   *
+   * Passed in rather than built here because both belong to the workbench:
+   * the theme is its signal and the notices are its list.
+   */
+  footerActions?: JSX.Element
   files?: FileNode[]
   selectedFilePath?: string
   onSelectFile?: (path: string) => void
@@ -74,6 +139,7 @@ export interface SidebarProps {
 
 function WorkspaceHeaderRow(props: {
   row: FlatWorkspaceHeaderRow
+  isActive?: boolean
   onToggle: (id: string) => void
 }) {
   return (
@@ -83,6 +149,7 @@ function WorkspaceHeaderRow(props: {
       aria-level={1}
       data-slot="workspace-header"
       data-expanded={props.row.isExpanded ? "true" : undefined}
+      data-active={props.isActive ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
     >
@@ -105,6 +172,9 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-name" title={props.row.workspace.name}>
         {props.row.workspace.name}
       </span>
+      <Show when={props.isActive}>
+        <span data-slot="space-active-badge">attivo</span>
+      </Show>
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>
         {props.row.sessionCount}
       </span>
@@ -134,6 +204,16 @@ function SessionChildRow(props: {
   now: number
   onSelect?: (id: string) => void
 }) {
+  const displayStatus = () => mapAgentStatus(props.row.session.status)
+  const folder = () => {
+    if (props.row.session.cwd) {
+      const base = basename(props.row.session.cwd)
+      if (base && base !== "/" && base !== ".") return base
+    }
+    return props.row.session.workspaceId || props.row.workspaceId || "progetto"
+  }
+  const branch = () => props.row.session.branch
+
   return (
     <button
       type="button"
@@ -141,22 +221,127 @@ function SessionChildRow(props: {
       aria-level={2}
       data-slot="session-row"
       data-status={props.row.session.status}
+      data-agent-status={displayStatus()}
       data-selected={props.row.isSelected ? "true" : undefined}
       aria-selected={props.row.isSelected}
       onClick={() => props.onSelect?.(props.row.id)}
+      title={
+        props.row.session.activity && props.row.session.activity !== "Disponibile"
+          ? `${props.row.session.title} — ${props.row.session.activity}`
+          : props.row.session.title
+      }
     >
-      <span data-slot="session-dot" aria-hidden="true" />
-      <span data-slot="session-title" title={props.row.session.title}>
-        {props.row.session.title}
-      </span>
-      <Show when={props.row.session.activity}>
-        <span data-slot="session-activity">
-          {props.row.session.activity}
+      <div data-slot="session-mark-wrap">
+        <AgentMark id={normalizeAgentId(props.row.session.agent)} size={16} colored />
+      </div>
+      <div data-slot="session-main">
+        <div data-slot="session-top">
+          <span data-slot="session-title">
+            {props.row.session.title}
+          </span>
+          <span
+            data-slot="agent-status-dot"
+            data-status={props.row.session.status}
+            data-agent-status={displayStatus()}
+            title={`Stato: ${displayStatus()}`}
+            aria-label={`Stato: ${displayStatus()}`}
+          />
+        </div>
+        <div data-slot="session-meta">
+          <span data-slot="agent-card-loc">
+            <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
+              <path d="M1.5 3.5C1.5 2.67 2.17 2 3 2H5.5L7 3.5H11C11.83 3.5 12.5 4.17 12.5 5V10.5C12.5 11.33 11.83 12 11 12H3C2.17 12 1.5 11.33 1.5 10.5V3.5Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+            </svg>
+            <span data-slot="agent-card-folder" title={props.row.session.cwd || folder()}>{folder()}</span>
+            <Show when={branch()}>
+              <span data-slot="agent-card-sep">•</span>
+              <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
+                <path d="M4 3.5a1.5 1.5 0 1 1 3 0v4a1.5 1.5 0 1 1-1.5 1.5V6a2 2 0 0 1 2-2h1.5M10.5 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span data-slot="agent-card-branch" title={branch()}>{branch()}</span>
+            </Show>
+          </span>
           <Show when={props.row.session.startTime}>
-            {" • "}{formatDuration(elapsed(props.row.session.startTime!, props.now))}
+            <span data-slot="agent-card-time" title="Tempo trascorso">
+              {formatDuration(elapsed(props.row.session.startTime!, props.now))}
+            </span>
           </Show>
-        </span>
-      </Show>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ActiveAgentRow(props: {
+  session: SidebarSession
+  workspaceName: string
+  isSelected: boolean
+  now: number
+  onSelect?: (id: string) => void
+}) {
+  const displayStatus = () => mapAgentStatus(props.session.status)
+  const folder = () => {
+    if (props.session.cwd) {
+      const base = basename(props.session.cwd)
+      if (base && base !== "/" && base !== ".") return base
+    }
+    return props.workspaceName || props.session.workspaceId || "progetto"
+  }
+  const branch = () => props.session.branch
+
+  return (
+    <button
+      type="button"
+      role="listitem"
+      data-slot="active-agent-card"
+      data-status={props.session.status}
+      data-agent-status={displayStatus()}
+      data-selected={props.isSelected ? "true" : undefined}
+      aria-selected={props.isSelected}
+      onClick={() => props.onSelect?.(props.session.id)}
+      title={
+        props.session.activity && props.session.activity !== "Disponibile"
+          ? `${props.session.title} — ${props.session.activity}`
+          : props.session.title
+      }
+    >
+      <div data-slot="active-agent-avatar">
+        <AgentMark id={normalizeAgentId(props.session.agent)} size={16} colored />
+      </div>
+      <div data-slot="active-agent-body">
+        <div data-slot="active-agent-top">
+          <span data-slot="active-agent-title">
+            {props.session.title}
+          </span>
+          <span
+            data-slot="agent-status-dot"
+            data-status={props.session.status}
+            data-agent-status={displayStatus()}
+            title={`Stato: ${displayStatus()}`}
+            aria-label={`Stato: ${displayStatus()}`}
+          />
+        </div>
+        <div data-slot="active-agent-meta">
+          <span data-slot="agent-card-loc">
+            <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
+              <path d="M1.5 3.5C1.5 2.67 2.17 2 3 2H5.5L7 3.5H11C11.83 3.5 12.5 4.17 12.5 5V10.5C12.5 11.33 11.83 12 11 12H3C2.17 12 1.5 11.33 1.5 10.5V3.5Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+            </svg>
+            <span data-slot="agent-card-folder" title={props.session.cwd || folder()}>{folder()}</span>
+            <Show when={branch()}>
+              <span data-slot="agent-card-sep">•</span>
+              <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
+                <path d="M4 3.5a1.5 1.5 0 1 1 3 0v4a1.5 1.5 0 1 1-1.5 1.5V6a2 2 0 0 1 2-2h1.5M10.5 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span data-slot="agent-card-branch" title={branch()}>{branch()}</span>
+            </Show>
+          </span>
+          <Show when={props.session.startTime}>
+            <span data-slot="agent-card-time" title="Tempo trascorso">
+              {formatDuration(elapsed(props.session.startTime!, props.now))}
+            </span>
+          </Show>
+        </div>
+      </div>
     </button>
   )
 }
@@ -164,11 +349,18 @@ function SessionChildRow(props: {
 function WorkspaceTreeRow(props: {
   row: FlatWorkspaceRow
   now: number
+  isActiveSpace?: boolean
   onToggleWorkspace: (id: string) => void
   onSelectSession?: (id: string) => void
 }) {
   if (props.row.type === "workspace") {
-    return <WorkspaceHeaderRow row={props.row} onToggle={props.onToggleWorkspace} />
+    return (
+      <WorkspaceHeaderRow
+        row={props.row}
+        isActive={props.isActiveSpace}
+        onToggle={props.onToggleWorkspace}
+      />
+    )
   }
   return <SessionChildRow row={props.row} now={props.now} onSelect={props.onSelectSession} />
 }
@@ -180,10 +372,29 @@ function FileTreeRow(props: {
   onToggleDir: (path: string) => void
   onSelectFile?: (path: string) => void
 }) {
+  const activate = () => {
+    if (props.item.kind === "directory") {
+      if (props.item.hasChildren) props.onToggleDir(props.item.path)
+    } else {
+      props.onSelectFile?.(props.item.path)
+    }
+  }
+
   return (
-    <button
-      type="button"
+    /*
+     * A div carrying the role, not a <button>.
+     *
+     * In Chromium a button swallows the press that would have started a drag,
+     * so `draggable` on it is simply never honoured — the row looks draggable
+     * and is not. The screenshot tray hit this first and solved it the same
+     * way; the comment there records the symptom.
+     *
+     * Everything a button gave for free is therefore written out: the role,
+     * the tab stop, and Enter/Space activation.
+     */
+    <div
       role="treeitem"
+      tabindex={0}
       aria-level={props.item.depth + 1}
       data-slot="tree-row"
       data-kind={props.item.kind}
@@ -191,14 +402,35 @@ function FileTreeRow(props: {
       data-selected={props.item.isSelected ? "true" : undefined}
       aria-selected={props.item.isSelected}
       aria-expanded={props.item.kind === "directory" ? (props.item.hasChildren ? props.item.isExpanded : undefined) : undefined}
-      onClick={() => {
-        if (props.item.kind === "directory") {
-          if (props.item.hasChildren) {
-            props.onToggleDir(props.item.path)
-          }
-        } else {
-          props.onSelectFile?.(props.item.path)
-        }
+      /*
+       * Both files and directories can be dragged onto a session.
+       *
+       * Directories used to be held back on the grounds that an agent cannot
+       * read one. That premise was wrong: every agent CLI here takes a
+       * directory perfectly well — "guarda in packages/ade/" is the most
+       * ordinary instruction there is, and handing over the folder is how you
+       * scope a task without listing its files.
+       *
+       * The path leaves with a trailing slash, which is what says "directory"
+       * to the reader and to the agent, and which `formatDroppedPaths` keeps.
+       */
+      draggable={true}
+      onDragStart={(event) => {
+        if (!event.dataTransfer) return
+        const path =
+          props.item.kind === "directory" && !props.item.path.endsWith("/")
+            ? `${props.item.path}/`
+            : props.item.path
+        writeDraggedPaths(event.dataTransfer, [path])
+        event.dataTransfer.effectAllowed = "copy"
+      }}
+      onClick={activate}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        // Space scrolls the tree otherwise, which is the opposite of selecting
+        // the row the user is standing on.
+        event.preventDefault()
+        activate()
       }}
     >
       <Show when={props.item.depth > 0}>
@@ -278,7 +510,11 @@ function FileTreeRow(props: {
       <span data-slot="tree-label" title={props.item.name}>
         {highlightMatch(props.item.name, props.item.ranges)}
       </span>
-    </button>
+      {/* The row is draggable and nothing said so. Two dots, lit only under
+          the pointer: enough to answer "can I pick this up" without adding a
+          mark to every row of a tree that is mostly read, not dragged. */}
+      <span data-slot="row-grip" aria-hidden="true" />
+    </div>
   )
 }
 
@@ -294,11 +530,28 @@ export function Sidebar(props: SidebarProps) {
   const [width, setWidth] = createSignal(initialWidth)
   const [isResizing, setIsResizing] = createSignal(false)
 
-  const initialSessionsHeight = parseSessionsHeight(safeGetStorage(storage, STORAGE_KEY_SESSIONS_HEIGHT))
-  const [sessionsHeight, setSessionsHeight] = createSignal(initialSessionsHeight)
-  const [isResizingSessions, setIsResizingSessions] = createSignal(false)
-  const initialSessionsCollapsed = safeGetStorage(storage, STORAGE_KEY_SESSIONS_COLLAPSED) === "true"
-  const [sessionsCollapsed, setSessionsCollapsed] = createSignal(initialSessionsCollapsed)
+  /*
+   * Which sections are open, and nothing about how tall they are.
+   *
+   * The stored pixel height and its drag handle are gone on purpose: a
+   * section told to be 320px tall stays 320px tall holding one row, which is
+   * where the column's empty middle came from. Height is the content's
+   * business, and `scrollingSection` decides which one gives way when the
+   * content does not fit — no section is ever made taller than what it holds.
+   */
+  const [openSections, setOpenSections] = createSignal(
+    deserializeSections(safeGetStorage(storage, STORAGE_KEY_SECTIONS)),
+  )
+  const isOpen = (id: SectionId) => openSections().has(id)
+  const scrolls = createMemo(() => scrollingSection(openSections()))
+
+  const toggleOpen = (id: SectionId) => {
+    const next = toggleSection(openSections(), id)
+    setOpenSections(next)
+    safeSetStorage(storage, STORAGE_KEY_SECTIONS, serializeSections(next))
+  }
+
+  const pills = createMemo(() => statPills(countSessions(props.workspaces)))
 
   const initialExpandedWorkspaces = deserializeSet(
     safeGetStorage(storage, STORAGE_KEY_EXPANDED_WORKSPACES),
@@ -355,24 +608,38 @@ export function Sidebar(props: SidebarProps) {
    */
   createEffect(() => {
     const given = props.project
+    /*
+     * A cancellation flag, because this effect has a slow branch.
+     *
+     * At mount `props.project` is undefined, so discovery from the working
+     * directory starts. A moment later the workbench passes down the project
+     * it restored from `ade.workspace` — which need not be the working
+     * directory — and this effect runs again and sets the right one. Then the
+     * first promise resolves and overwrites it. The result was the file tree
+     * of one project beside the grid and the ProjectBar of another, with
+     * nothing on screen to explain the mismatch.
+     */
+    let cancelled = false
+    onCleanup(() => {
+      cancelled = true
+    })
+
+    const show = (p: Project) => {
+      if (cancelled) return
+      setProject(p)
+      setRootNode({ id: p.root, name: p.name, path: p.root, kind: "directory" })
+      void loadDir(p.root)
+    }
+
     if (given) {
-      setProject(given)
-      setRootNode({ id: given.root, name: given.name, path: given.root, kind: "directory" })
-      void loadDir(given.root)
+      show(given)
       return
     }
 
     void getHost().then(async (host) => {
-      if (!host?.currentDir) return
+      if (cancelled || !host?.currentDir) return
       const discovered = await discoverProject(host, await host.currentDir())
-      setProject(discovered)
-      setRootNode({
-        id: discovered.root,
-        name: discovered.name,
-        path: discovered.root,
-        kind: "directory",
-      })
-      void loadDir(discovered.root)
+      show(discovered)
     })
   })
 
@@ -391,16 +658,36 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
-  const toggleSessionsCollapsed = () => {
-    const next = !sessionsCollapsed()
-    setSessionsCollapsed(next)
-    safeSetStorage(storage, STORAGE_KEY_SESSIONS_COLLAPSED, next ? "true" : "false")
-  }
-
   const flatWorkspaces = createMemo(() =>
     flattenWorkspaces(props.workspaces, expandedWorkspaces(), props.selectedSessionId),
   )
   const keyedWorkspaces = createKeyedList(flatWorkspaces, (row) => `${row.type}:${row.id}`)
+
+  const allSessions = createMemo(() => {
+    const list: Array<{ session: SidebarSession; workspaceName: string; isSelected: boolean }> = []
+    for (const ws of props.workspaces) {
+      for (const session of ws.sessions) {
+        list.push({
+          session: {
+            ...session,
+            branch: session.branch || ws.branch || (props.project?.name === ws.name ? props.project?.branch : undefined),
+          },
+          workspaceName: ws.name,
+          isSelected: session.id === props.selectedSessionId,
+        })
+      }
+    }
+    return list
+  })
+
+  const isWorkspaceActive = (wsId: string, wsPath?: string, wsName?: string) => {
+    const currentRoot = project()?.root ?? props.project?.root
+    const currentName = project()?.name ?? props.project?.name
+    return Boolean(
+      (currentRoot && (wsId === currentRoot || (wsPath && wsPath === currentRoot))) ||
+      (currentName && wsName === currentName),
+    )
+  }
 
   const flatFiles = createMemo(() =>
     flattenFileTree(rootNode() ? [rootNode()!] : (props.files ?? []), expandedDirs(), props.selectedFilePath),
@@ -450,7 +737,7 @@ export function Sidebar(props: SidebarProps) {
   createEffect(() => {
     const query = searchQuery().trim()
     const search = props.searchFiles
-    if (!search || query.length < 2) {
+    if (!search || query.length < 1) {
       setProjectHits([])
       setSearching(false)
       return
@@ -463,89 +750,49 @@ export function Sidebar(props: SidebarProps) {
       } finally {
         setSearching(false)
       }
-    }, 160)
+    }, 80)
     onCleanup(() => clearTimeout(timer))
   })
 
   let activeResizeCleanup: (() => void) | undefined
-  let activeHeightResizeCleanup: (() => void) | undefined
 
   onCleanup(() => {
     activeResizeCleanup?.()
-    activeHeightResizeCleanup?.()
   })
 
+  /*
+   * Both drags run through `beginResizeDrag` in `sidebar-logic.ts`.
+   *
+   * The gesture lifecycle — capture the pointer, listen on the handle rather
+   * than on `window`, tear down exactly once — was written out twice here and
+   * could not be tested, because this file is a `.tsx` and bun test has no
+   * automatic JSX runtime in this package. It now lives in a plain `.ts`
+   * module that both this component and `sidebar-logic.test.ts` import; the
+   * reasoning about pointer capture and the iframe moved there with it.
+   */
   const onResizePointerDown = (event: PointerEvent) => {
     event.preventDefault()
     activeResizeCleanup?.()
 
+    const handle = event.currentTarget as HTMLElement | null
     const startX = event.clientX
     const startWidth = width()
     setIsResizing(true)
 
-    const onPointerMove = (e: PointerEvent) => {
-      const nextWidth = calculateResize(startX, e.clientX, startWidth, props.minWidth ?? MIN_SIDEBAR_WIDTH, props.maxWidth ?? MAX_SIDEBAR_WIDTH)
-      setWidth(nextWidth)
-    }
-
-    const cleanupDrag = () => {
-      setIsResizing(false)
-      window.removeEventListener("pointermove", onPointerMove)
-      window.removeEventListener("pointerup", onPointerUp)
-      activeResizeCleanup = undefined
-    }
-
-    const onPointerUp = () => {
-      cleanupDrag()
-      safeSetStorage(storage, STORAGE_KEY_WIDTH, String(width()))
-    }
-
-    activeResizeCleanup = cleanupDrag
-    window.addEventListener("pointermove", onPointerMove)
-    window.addEventListener("pointerup", onPointerUp)
+    activeResizeCleanup = beginResizeDrag({
+      handle,
+      pointerId: event.pointerId,
+      coordinate: (e) => e.clientX,
+      onMove: (clientX) => {
+        setWidth(calculateResize(startX, clientX, startWidth, props.minWidth ?? MIN_SIDEBAR_WIDTH, props.maxWidth ?? MAX_SIDEBAR_WIDTH))
+      },
+      onEnd: () => {
+        setIsResizing(false)
+        activeResizeCleanup = undefined
+      },
+      onCommit: () => safeSetStorage(storage, STORAGE_KEY_WIDTH, String(width())),
+    })
   }
-
-  const onHeightResizePointerDown = (event: PointerEvent) => {
-    event.preventDefault()
-    activeHeightResizeCleanup?.()
-
-    const startY = event.clientY
-    const startHeight = sessionsHeight()
-    setIsResizingSessions(true)
-
-    const onPointerMove = (e: PointerEvent) => {
-      const nextHeight = calculateHeightResize(startY, e.clientY, startHeight)
-      setSessionsHeight(nextHeight)
-    }
-
-    const cleanupDrag = () => {
-      setIsResizingSessions(false)
-      window.removeEventListener("pointermove", onPointerMove)
-      window.removeEventListener("pointerup", onPointerUp)
-      activeHeightResizeCleanup = undefined
-    }
-
-    const onPointerUp = () => {
-      cleanupDrag()
-      safeSetStorage(storage, STORAGE_KEY_SESSIONS_HEIGHT, String(sessionsHeight()))
-    }
-
-    activeHeightResizeCleanup = cleanupDrag
-    window.addEventListener("pointermove", onPointerMove)
-    window.addEventListener("pointerup", onPointerUp)
-  }
-
-  const aggregateStats = createMemo(() => {
-    let working = 0, waiting = 0, failed = 0
-    for (const ws of props.workspaces) {
-      for (const s of ws.sessions) {
-        if (s.status === "working" || s.status === "provisioning") working++
-        else if (s.status === "waiting") waiting++
-        else if (s.status === "error") failed++
-      }
-    }
-    return { working, waiting, failed }
-  })
 
   const onSearchInput = (e: Event) => {
     setSearchQuery((e.target as HTMLInputElement).value)
@@ -564,89 +811,256 @@ export function Sidebar(props: SidebarProps) {
       data-resizing={isResizing() ? "true" : undefined}
       style={{ width: `${width()}px` }}
     >
-      <header data-slot="sidebar-header-project">
-        <Show when={project()}>
+      {/*
+        The whole header, and not only its contents, is behind the guard.
+        It used to be mounted always with a `<Show>` inside it, so with no
+        project open the column opened on an empty raised card — which at the
+        top of a sidebar reads as a search field that will not take text.
+        Nothing to say, nothing drawn.
+      */}
+      <Show when={project()}>
+        <header data-slot="sidebar-header-project">
           <div data-slot="project-name">
-            {project()!.name}
+            <span data-slot="project-name-text" title={project()!.name}>{project()!.name}</span>
             <Show when={project()!.branch}>
-              <span data-slot="project-branch">{project()!.branch}</span>
+              {/* Truncated at the end rather than the start, and given the
+                  whole leftover width: a branch called
+                  `feat/browser-visual-editor-cursor` overflows 260px, and the
+                  half that identifies it is the half that was being cut. */}
+              <span data-slot="project-branch" title={project()!.branch}>{project()!.branch}</span>
             </Show>
           </div>
           <span data-slot="project-path" title={project()!.root}>
             {toDisplayPath(project()!.root, home())}
           </span>
-        </Show>
-      </header>
-      
-      <div data-slot="sidebar-stats">
-        <div data-slot="stat-item">Lavorando: <strong>{aggregateStats().working}</strong></div>
-        <div data-slot="stat-item">Attesa: <strong>{aggregateStats().waiting}</strong></div>
-        <div data-slot="stat-item">Errori: <strong>{aggregateStats().failed}</strong></div>
-      </div>
+
+          {/* Only what is actually happening. Three permanent zeroes used to
+              own a full row of a 260px column to report the absence of news. */}
+          <Show when={pills().length > 0}>
+            <div data-slot="sidebar-pills">
+              <For each={pills()}>
+                {(pill) => (
+                  <span data-slot="sidebar-pill" data-tone={pill.tone}>
+                    <i data-slot="sidebar-pill-dot" />
+                    {pill.count} {pill.label}
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
+        </header>
+      </Show>
 
       <div data-slot="sidebar-sections">
-        <div 
-          data-slot="sidebar-section-sessions" 
-          style={{ height: sessionsCollapsed() ? "auto" : `${sessionsHeight()}px`, "flex-shrink": 0 }}
+        {/*
+          Sized to its content, never to a stored pixel height and never to
+          the leftover space. `data-scrolls` marks the one section allowed to
+          shrink and scroll inside itself when the column runs out of room,
+          which `scrollingSection` decides — see the note there.
+        */}
+        <section
+          data-slot="sidebar-section"
+          data-section="progetti"
+          data-open={isOpen("progetti") ? "true" : undefined}
+          data-scrolls={scrolls() === "progetti" ? "true" : undefined}
         >
-          <button data-slot="section-header" onClick={toggleSessionsCollapsed}>
-            <span>Sessioni</span>
-            <svg viewBox="0 0 12 12" width="12" height="12" style={{ transform: sessionsCollapsed() ? "rotate(-90deg)" : "none", transition: "transform 0.15s ease" }}>
-              <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
-          
-          <Show when={!sessionsCollapsed()}>
+          {/*
+            The header is a row, not a button: adding a project and collapsing
+            the list are two different actions, and one button cannot be both.
+            The collapse keeps the whole width it had, so the hit target does not
+            shrink to the width of the word.
+          */}
+          <div data-slot="section-header-row">
+            <button
+              type="button"
+              data-slot="section-header"
+              aria-expanded={isOpen("progetti")}
+              onClick={() => toggleOpen("progetti")}
+            >
+              <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span data-slot="section-label">Spaces</span>
+              <span data-slot="section-count">{props.workspaces.length}</span>
+            </button>
+            <Show when={props.onAddProject}>
+              <button
+                type="button"
+                data-slot="section-add"
+                aria-label="Aggiungi space"
+                title="Aggiungi space"
+                onClick={() => props.onAddProject?.()}
+              >
+                <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                  <path d="M6 2v8M2 6h8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+              </button>
+            </Show>
+          </div>
+
+          <Show when={isOpen("progetti")}>
             <div data-slot="section-content" data-component="workspace-tree" role="tree">
               {/* An empty box teaches nothing. The list says what would be in it. */}
               <Show
                 when={keyedWorkspaces().length > 0}
-                fallback={<p data-slot="section-empty">Nessuna sessione attiva.</p>}
+                fallback={<p data-slot="section-empty">Nessuno space aperto.</p>}
               >
                 <For each={keyedWorkspaces()}>
-                  {(entry) => (
-                    <WorkspaceTreeRow
-                      row={entry.data()}
-                      now={now()}
-                      onToggleWorkspace={toggleWorkspace}
-                      onSelectSession={props.onSelectSession}
-                    />
-                  )}
+                  {(entry) => {
+                    const row = entry.data()
+                    const isActive = row.type === "workspace"
+                      ? isWorkspaceActive(row.id, row.workspace.path, row.workspace.name)
+                      : undefined
+                    return (
+                      <WorkspaceTreeRow
+                        row={row}
+                        now={now()}
+                        isActiveSpace={isActive}
+                        /* Pressing a project both opens its row and makes it the
+                           one being worked in: the two are the same intent, and
+                           asking for a separate click to switch would be asking
+                           the user to say it twice. */
+                        onToggleWorkspace={(id) => {
+                          props.onSelectProject?.(id)
+                          toggleWorkspace(id)
+                        }}
+                        onSelectSession={props.onSelectSession}
+                      />
+                    )
+                  }}
                 </For>
               </Show>
             </div>
           </Show>
-        </div>
+        </section>
 
-        <Show when={!sessionsCollapsed()}>
-          <div
-            data-slot="sidebar-horizontal-resize-handle"
-            onPointerDown={onHeightResizePointerDown}
-            role="separator"
-            aria-orientation="horizontal"
-          />
-        </Show>
+        <section
+          data-slot="sidebar-section"
+          data-section="agenti"
+          data-open={isOpen("agenti") ? "true" : undefined}
+          data-scrolls={scrolls() === "agenti" ? "true" : undefined}
+        >
+          <div data-slot="section-header-row">
+            <button
+              type="button"
+              data-slot="section-header"
+              aria-expanded={isOpen("agenti")}
+              onClick={() => toggleOpen("agenti")}
+            >
+              <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span data-slot="section-label">Agenti attivi</span>
+              <span data-slot="section-count">{allSessions().length}</span>
+            </button>
+            <Show when={props.onNewSession}>
+              <button
+                type="button"
+                data-slot="section-add"
+                aria-label="Nuova sessione agente"
+                title="Nuova sessione agente"
+                onClick={() => props.onNewSession?.()}
+              >
+                <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                  <path d="M6 2v8M2 6h8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+              </button>
+            </Show>
+          </div>
 
-        <div data-slot="sidebar-section-files">
-          <button data-slot="section-header">
-            <span>File</span>
-          </button>
-          
+          <Show when={isOpen("agenti")}>
+            <div data-slot="section-content" data-component="active-agents" role="list">
+              <Show
+                when={allSessions().length > 0}
+                fallback={
+                  <div data-slot="active-agents-empty">
+                    <p data-slot="section-empty">Nessun agente attivo.</p>
+                    <Show when={props.onNewSession}>
+                      <button
+                        type="button"
+                        data-slot="empty-action-btn"
+                        onClick={() => props.onNewSession?.()}
+                      >
+                        + Avvia nuovo agente
+                      </button>
+                    </Show>
+                  </div>
+                }
+              >
+                <div data-slot="active-agents-list">
+                  <For each={allSessions()}>
+                    {(item) => (
+                      <ActiveAgentRow
+                        session={item.session}
+                        workspaceName={item.workspaceName}
+                        isSelected={item.isSelected}
+                        now={now()}
+                        onSelect={props.onSelectSession}
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+          </Show>
+        </section>
+
+        <section
+          data-slot="sidebar-section"
+          data-section="file"
+          data-open={isOpen("file") ? "true" : undefined}
+          data-scrolls={scrolls() === "file" ? "true" : undefined}
+        >
+          <div data-slot="section-header-row">
+            <button
+              type="button"
+              data-slot="section-header"
+              aria-expanded={isOpen("file")}
+              onClick={() => toggleOpen("file")}
+            >
+              <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span data-slot="section-label">File</span>
+            </button>
+          </div>
+
+          <Show when={isOpen("file")}>
+
           <div data-slot="search-box">
-            <input 
-              type="text" 
-              data-slot="search-input" 
-              placeholder={props.searchFiles ? "Cerca nel progetto…" : "Cerca fra i file aperti…"}
-              value={searchQuery()}
-              onInput={onSearchInput}
-              onKeyDown={onSearchKeyDown}
-            />
+            {/* The input sits inside a field rather than being one: on a card
+                a bare input has no edge of its own, and the focus ring has
+                nothing to sit on. The magnifier is what makes it read as
+                search before the placeholder is read. */}
+            <div data-slot="search-field">
+              <svg
+                data-slot="search-leading"
+                viewBox="0 0 16 16"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+              >
+                <circle cx="7" cy="7" r="4.2" />
+                <path d="M10.2 10.2L14 14" stroke-linecap="round" />
+              </svg>
+              <input
+                type="text"
+                data-slot="search-input"
+                placeholder={props.searchFiles ? "Cerca nel progetto…" : "Cerca fra i file aperti…"}
+                value={searchQuery()}
+                onInput={onSearchInput}
+                onKeyDown={onSearchKeyDown}
+              />
+            </div>
           </div>
 
           {/* While a project-wide query stands, its results take the tree's
               place: showing both would make the same file appear twice with
               two different meanings. */}
-          <Show when={props.searchFiles && searchQuery().trim().length >= 2}>
+          <Show when={props.searchFiles && searchQuery().trim().length >= 1}>
             <div data-slot="section-content" data-component="file-results" role="listbox">
               <Show
                 when={projectHits().length > 0}
@@ -657,20 +1071,41 @@ export function Sidebar(props: SidebarProps) {
                 }
               >
                 <For each={projectHits()}>
-                  {(hit) => (
-                    <button
-                      type="button"
-                      data-slot="file-result"
-                      role="option"
-                      aria-selected={props.selectedFilePath === hit.path}
-                      data-selected={props.selectedFilePath === hit.path ? "true" : undefined}
-                      title={hit.path}
-                      onClick={() => props.onSelectFile?.(hit.path)}
-                    >
-                      <span data-slot="file-result-name">{hit.path.split("/").pop()}</span>
-                      <span data-slot="file-result-path">{hit.path}</span>
-                    </button>
-                  )}
+                  {(hit) => {
+                    const name = hit.path.split(/[/\\]/).pop() ?? hit.path
+                    const displayPath = (() => {
+                      const root = props.project?.root
+                      if (root && hit.path.startsWith(root)) {
+                        return hit.path.slice(root.length).replace(/^[/\\]+/, "")
+                      }
+                      return hit.path
+                    })()
+                    return (
+                      <div
+                        role="option"
+                        tabindex={0}
+                        data-slot="file-result"
+                        aria-selected={props.selectedFilePath === hit.path}
+                        data-selected={props.selectedFilePath === hit.path ? "true" : undefined}
+                        title={hit.path}
+                        draggable={true}
+                        onDragStart={(event) => {
+                          if (!event.dataTransfer) return
+                          writeDraggedPaths(event.dataTransfer, [hit.path])
+                          event.dataTransfer.effectAllowed = "copy"
+                        }}
+                        onClick={() => props.onSelectFile?.(hit.path)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return
+                          event.preventDefault()
+                          props.onSelectFile?.(hit.path)
+                        }}
+                      >
+                        <span data-slot="file-result-name">{name}</span>
+                        <span data-slot="file-result-path">{displayPath}</span>
+                      </div>
+                    )
+                  }}
                 </For>
               </Show>
             </div>
@@ -680,7 +1115,7 @@ export function Sidebar(props: SidebarProps) {
             data-slot="section-content"
             data-component="file-tree"
             role="tree"
-            data-hidden={props.searchFiles && searchQuery().trim().length >= 2 ? "true" : undefined}
+            data-hidden={props.searchFiles && searchQuery().trim().length >= 1 ? "true" : undefined}
           >
             <Show
               when={keyedFiles().length > 0}
@@ -705,7 +1140,67 @@ export function Sidebar(props: SidebarProps) {
               </For>
             </Show>
           </div>
-        </div>
+          </Show>
+        </section>
+
+        <Show when={props.sections}>
+          <div data-slot="sidebar-section-extra">{props.sections}</div>
+        </Show>
+      </div>
+
+      {/*
+       * The foot of the column: the screenshots, and the way into settings.
+       *
+       * Outside the scrolling area on purpose. The tray used to be the last
+       * card inside it, which meant that with a project open and the file
+       * tree scrolled down it was not on screen — and a screenshot you have
+       * to go looking for is one you screenshot again. The strip is reserved
+       * for it, so it is always in the same place.
+       */}
+      <div data-slot="sidebar-footer">
+        <div data-slot="sidebar-shots">{props.bottom}</div>
+        {/*
+         * Settings on their own strip under the screenshots, not tucked in
+         * beside them.
+         *
+         * Sharing the row made the gear look like a control *of* the tray —
+         * the thing you press to configure screenshots — and it cost the
+         * thumbnails 26px of a column that has none to spare. On its own
+         * line it is what it is: the way out of the sidebar and into the
+         * application's settings.
+         */}
+        <Show when={props.onOpenSettings ?? props.footerActions}>
+          <div data-slot="sidebar-settings-strip">
+            <Show when={props.onOpenSettings}>
+            <button
+              type="button"
+              data-slot="sidebar-settings"
+              onClick={() => props.onOpenSettings?.()}
+              aria-label="Impostazioni"
+              title="Impostazioni"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              <span data-slot="sidebar-settings-label">Impostazioni</span>
+            </button>
+            </Show>
+            <Show when={props.footerActions}>
+              <div data-slot="sidebar-footer-actions">{props.footerActions}</div>
+            </Show>
+          </div>
+        </Show>
       </div>
 
       <div

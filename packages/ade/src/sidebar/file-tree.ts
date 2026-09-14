@@ -6,6 +6,8 @@
  * lines when their parent directory is expanded.
  */
 
+import { dirname, normalizePath } from "../host/path"
+
 export type FileNodeKind = "file" | "directory"
 
 export interface FileNode {
@@ -61,20 +63,28 @@ export function isDirectoryExpanded(
  * Used when revealing an active or newly opened file in the tree so the user
  * can see where the selection sits inside the project hierarchy.
  * Handles both POSIX and Windows path separators.
+ *
+ * The ancestors are peeled off the normalised path with `dirname` rather than
+ * rebuilt from its segments. Rebuilding dropped the root — `filter(Boolean)`
+ * eats the empty first segment of `/home/x`, and a drive letter came back as
+ * `C:` joined to the next name with a slash it never had — so the paths this
+ * produced matched nothing in the tree, and `deriveDefaultExpandedDirs` sat
+ * there expanding directories that did not exist.
  */
 export function expandDirectoryParents(
   targetPath: string,
   expanded: ReadonlySet<string>,
 ): Set<string> {
   const next = new Set(expanded)
-  // Split on both forward slash and backslash to support POSIX and Windows paths
-  const segments = targetPath.split(/[/\\]+/).filter(Boolean)
+  let current = dirname(normalizePath(targetPath))
 
-  let current = ""
-  // Expand all segments except the last one (which is the file or target itself)
-  for (let i = 0; i < segments.length - 1; i++) {
-    current = current ? `${current}/${segments[i]}` : segments[i]
+  // `dirname` is a fixed point at every root — `/`, `C:/`, `.` — which is what
+  // ends the walk, and the root itself is not a directory the tree can expand.
+  while (current !== "." && current !== "/" && !/^[A-Za-z]:\/$/.test(current)) {
     next.add(current)
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
   }
 
   return next

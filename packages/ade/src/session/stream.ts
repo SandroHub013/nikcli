@@ -25,7 +25,19 @@
  * sequences from partial flushes, and failing to strip one is worse than
  * stripping too aggressively.
  */
-const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[^[\]]/g
+/*
+ * The CSI parameter class is `[0-9;:<=>?]` and the final byte is `[@-~]`, not
+ * `[A-Za-z]`.
+ *
+ * Both were too narrow for what agents actually send. crossterm opens with
+ * `ESC[>1u` — push keyboard enhancement flags — whose `>` is a private
+ * parameter and whose `u` is in range either way; matched against `[0-9;]`
+ * the sequence broke at the `>`, and `1u` appeared in the transcript as the
+ * first thing the session said. `ESC[?25l` (hide cursor) failed the same way.
+ * The intermediate bytes `[ -/]` are matched too, which is what `ESC[?1049h`
+ * and the DEC private modes need.
+ */
+const ANSI_RE = /\x1b\[[0-9;:<=>?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[^[\]]/g
 
 /** Remove all ANSI escape sequences, returning plain text. */
 export function stripAnsi(line: string): string {
@@ -122,10 +134,16 @@ export function parseAnsi(line: string): Span[] {
       // CSI sequence: ESC [
       if (i + 1 < line.length && line[i + 1] === "[") {
         let j = i + 2
-        // Collect parameter bytes (digits and semicolons)
-        while (j < line.length && ((line[j] >= "0" && line[j] <= "9") || line[j] === ";")) {
-          j++
-        }
+        /*
+         * Parameter bytes are `0x30-0x3F` and intermediates `0x20-0x2F`, not
+         * just digits and semicolons. `ESC[>1u` from crossterm and `ESC[?25l`
+         * both begin with a private-parameter byte, so the scan stopped
+         * immediately, the final byte was read as `>` or `?`, and the rest of
+         * the sequence was rendered as text: every ratatui agent's first line
+         * of "output" was the tail of its own keyboard-mode handshake.
+         */
+        while (j < line.length && line[j] >= "\x30" && line[j] <= "\x3f") j++
+        while (j < line.length && line[j] >= "\x20" && line[j] <= "\x2f") j++
         if (j < line.length) {
           const finalByte = line[j]
           if (finalByte === "m") {

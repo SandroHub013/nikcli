@@ -1,4 +1,4 @@
-import { Show, createSignal, createEffect } from "solid-js"
+import { Show, createSignal, createEffect, onCleanup } from "solid-js"
 import { getHost } from "../host/shell"
 import { basename } from "../host/path"
 
@@ -15,7 +15,21 @@ export function FilePreview(props: FilePreviewProps) {
     const path = props.path
     if (!path) return
 
+    /*
+     * Cancellation registered through `onCleanup`, not returned.
+     *
+     * Returning a function from a Solid effect is a React habit that Solid
+     * reads as a value: the return becomes the `prev` argument of the next
+     * run, and is never called. So `cancelled` was never set, and switching
+     * files fast meant two reads in flight with no ordering between them —
+     * the slower one won, and the preview showed a different file from the
+     * one selected in the tree.
+     */
     let cancelled = false
+    onCleanup(() => {
+      cancelled = true
+    })
+
     setLoading(true)
     setError(null)
     setContent(null)
@@ -44,10 +58,6 @@ export function FilePreview(props: FilePreviewProps) {
         setLoading(false)
       })
     })
-
-    return () => {
-      cancelled = true
-    }
   })
 
   return (

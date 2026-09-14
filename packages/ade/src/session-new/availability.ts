@@ -18,16 +18,33 @@ export type Availability = "presente" | "assente" | "sconosciuto"
 export interface AgentStatus {
   agent: AgentOption
   availability: Availability
-  /** First line of the probe's output, when it answered. */
-  version?: string
+  /**
+   * Where the binary was found, when it was. Shown as the button's tooltip:
+   * with eleven agents and several installed twice over — an npm shim and a
+   * native build of the same name — which one a session will actually start is
+   * worth being able to check without leaving the form.
+   */
+  path?: string
 }
 
-/** Runs `command probe` and resolves its first output line, or null when absent. */
+/**
+ * Resolves `command` to its path on PATH, or null when it is not installed.
+ *
+ * A lookup rather than a run. Asking eleven CLIs for their version costs a
+ * visible pause on the new-session form, wakes whatever update check each of
+ * them does at startup, and answers a question nobody asked — the form wants to
+ * know whether the agent exists, not what release it is.
+ */
 export type Probe = (command: string, arg: string) => Promise<string | null>
 
 /**
- * `terminal` is not an agent and has no command to probe, so it is always
- * available: the shell is there whenever the host can run anything at all.
+ * Whether this entry has a command worth looking up.
+ *
+ * `terminal` now names a real shell (`agents.ts`), so it is probed like the
+ * rest — a shell that PATH cannot find is worth knowing about before the user
+ * presses Avvia. An entry with no command at all is still treated as present
+ * rather than absent: there is nothing to look for, and claiming it is missing
+ * would be a stronger statement than the evidence supports.
  */
 export function isProbeable(agent: AgentOption): boolean {
   return agent.command.length > 0
@@ -47,16 +64,16 @@ export async function detectAgents(probe: Probe | undefined): Promise<AgentStatu
   return Promise.all(
     AGENTS.map(async (agent) => {
       if (!isProbeable(agent)) return { agent, availability: "presente" as const }
-      const answer = await probe(agent.command, agent.probe).catch(() => null)
+      const answer = await probe(agent.command, "--version").catch(() => null)
       if (answer === null) return { agent, availability: "assente" as const }
-      return { agent, availability: "presente" as const, version: firstLine(answer) }
+      return { agent, availability: "presente" as const, path: firstLine(answer) }
     }),
   )
 }
 
 function firstLine(text: string): string | undefined {
   const line = text.split("\n")[0]?.trim()
-  return line && line.length > 0 ? line.slice(0, 40) : undefined
+  return line && line.length > 0 ? line : undefined
 }
 
 /** The agents that can be started, in catalogue order. */

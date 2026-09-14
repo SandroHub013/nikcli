@@ -1,8 +1,11 @@
 import type { Host } from "../host/shell"
 import { fuzzyMatch } from "../command/match"
 
+export type PathInput = string | { path: string; kind?: "file" | "directory" }
+
 export interface FileHit {
   path: string
+  kind?: "file" | "directory"
   /** Punteggio del match sul percorso, per l'ordinamento. */
   score: number
   /** Intervalli da evidenziare nel percorso. */
@@ -65,26 +68,67 @@ function trimLine(
  * Searches for files by path using fuzzy subsequence matching.
  * Pure and instantaneous over already collected paths.
  */
-export function findByName(paths: string[], query: string, limit?: number): FileHit[] {
-  if (query.length === 0) {
-    const allHits: FileHit[] = paths.map((path) => ({
-      path,
-      score: 0,
-      ranges: [],
-    }))
+export function findByName(paths: PathInput[], query: string, limit?: number): FileHit[] {
+  const q = query.trim()
+  if (q.length === 0) {
+    const allHits: FileHit[] = paths.map((item) => {
+      const path = typeof item === "string" ? item : item.path
+      const kind = typeof item === "object" ? item.kind : (item.endsWith("/") ? "directory" : undefined)
+      return {
+        path,
+        kind,
+        score: 0,
+        ranges: [],
+      }
+    })
     return typeof limit === "number" && limit >= 0 ? allHits.slice(0, limit) : allHits
   }
 
+  const lowerQ = q.toLowerCase()
   const hits: FileHit[] = []
-  for (const path of paths) {
-    const match = fuzzyMatch(query, path)
-    if (match) {
-      hits.push({
-        path,
-        score: match.score,
-        ranges: match.ranges,
-      })
+
+  for (const item of paths) {
+    const path = typeof item === "string" ? item : item.path
+    const kind = typeof item === "object" ? item.kind : (item.endsWith("/") ? "directory" : undefined)
+    const cleanPath = path.replace(/[/\\]+$/, "")
+    const filename = cleanPath.split(/[/\\]/).pop() || cleanPath
+    const lowerFilename = filename.toLowerCase()
+    const lowerPath = cleanPath.toLowerCase()
+
+    const fnMatch = fuzzyMatch(q, filename)
+    const pathMatch = fuzzyMatch(q, cleanPath)
+
+    if (!fnMatch && !pathMatch) continue
+
+    let score = 0
+    let ranges: [number, number][] = []
+
+    // Priority bonuses: exact filename match > filename prefix > filename substring > path substring
+    if (lowerFilename === lowerQ) {
+      score += 2000
+    } else if (lowerFilename.startsWith(lowerQ)) {
+      score += 1500
+    } else if (lowerFilename.includes(lowerQ)) {
+      score += 1000
+    } else if (lowerPath.includes(lowerQ)) {
+      score += 500
     }
+
+    if (fnMatch) {
+      score += fnMatch.score + 200
+      const fnOffset = cleanPath.length - filename.length
+      ranges = fnMatch.ranges.map(([s, e]) => [s + fnOffset, e + fnOffset])
+    } else if (pathMatch) {
+      score += pathMatch.score
+      ranges = pathMatch.ranges
+    }
+
+    hits.push({
+      path,
+      kind,
+      score,
+      ranges,
+    })
   }
 
   // Sort descending by score. Native sort is stable for equal scores.

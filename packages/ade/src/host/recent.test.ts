@@ -29,6 +29,19 @@ describe("addRecent", () => {
     expect(list).toHaveLength(1)
   })
 
+  /*
+   * The doc said "normalised" and the code only lower-cased. On Windows the
+   * same project opened once from the sidebar and once from a shell path
+   * became two rows pointing at one directory, each with its own "last
+   * opened" time.
+   */
+  it("deduplicates across separators and a trailing slash", () => {
+    const old: RecentEntry[] = [{ root: "C:/Users/x/repo", name: "repo", openedAt: 1 }]
+    expect(addRecent(old, entry("C:\\Users\\x\\repo", "repo"))).toHaveLength(1)
+    expect(addRecent(old, entry("C:/Users/x/repo/", "repo"))).toHaveLength(1)
+    expect(removeRecent(old, "C:\\Users\\x\\repo")).toHaveLength(0)
+  })
+
   it("respects the limit", () => {
     const old: RecentEntry[] = Array.from({ length: 5 }, (_, i) => ({
       root: `C:/${i}`,

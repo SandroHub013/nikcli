@@ -273,18 +273,20 @@ describe("isResolved", () => {
     ],
   }
 
+  const resolved = (lines: string[]) => isResolved(dummyRequest, lines, "claude-code")
+
   test("returns false when newLines is empty", () => {
-    expect(isResolved(dummyRequest, [])).toBe(false)
+    expect(resolved([])).toBe(false)
   })
 
   test("returns false when newLines contains only empty strings or whitespace", () => {
-    expect(isResolved(dummyRequest, ["", "   ", "\n"])).toBe(false)
+    expect(resolved(["", "   ", "\n"])).toBe(false)
   })
 
   test("returns false when newLines only echoes the prompt or question", () => {
-    expect(isResolved(dummyRequest, ["Do you want to run this command? [y/N]"])).toBe(false)
-    expect(isResolved(dummyRequest, [">"])).toBe(false)
-    expect(isResolved(dummyRequest, [":"])).toBe(false)
+    expect(resolved(["Do you want to run this command? [y/N]"])).toBe(false)
+    expect(resolved([">"])).toBe(false)
+    expect(resolved([":"])).toBe(false)
   })
 
   test("returns true when newLines contains actual process output", () => {
@@ -293,12 +295,44 @@ describe("isResolved", () => {
       "$ git status",
       "On branch main",
     ]
-    expect(isResolved(dummyRequest, newLines)).toBe(true)
+    expect(resolved(newLines)).toBe(true)
   })
 
   test("returns true when newLines contains user response or error", () => {
-    expect(isResolved(dummyRequest, ["Action denied by user."])).toBe(true)
-    expect(isResolved(dummyRequest, ["1"])).toBe(true)
-    expect(isResolved(dummyRequest, ["y"])).toBe(true)
+    expect(resolved(["Action denied by user."])).toBe(true)
+    expect(resolved(["1"])).toBe(true)
+    expect(resolved(["y"])).toBe(true)
+  })
+
+  /*
+   * The agents that ask these questions draw them with Ink or ratatui, which
+   * repaint the whole frame several times a second while they wait. Every
+   * repaint is new output, and "new output" used to mean "answered": the first
+   * frame after a question was detected cleared the request and set the pane
+   * back to "In esecuzione" while the agent was still waiting for a keystroke.
+   */
+  describe("a redrawn frame is not an answer", () => {
+    test("the question repainted among other lines is still the question", () => {
+      const frame = [
+        "  Esecuzione comando",
+        "  $ git status",
+        "Do you want to run this command? [y/N]",
+      ]
+      expect(resolved(frame)).toBe(false)
+    })
+
+    test("a spinner drawn under the question does not resolve it", () => {
+      expect(resolved(["Do you want to run this command? [y/N]", ""])).toBe(false)
+    })
+
+    test("the question gone means answered", () => {
+      expect(resolved(["On branch main", "nothing to commit"])).toBe(true)
+    })
+
+    test("a different question means the old one is done", () => {
+      // Resolved from this request's point of view; the next read picks the
+      // new one up as a request of its own.
+      expect(resolved(["Vuoi sovrascrivere src/app.ts? [y/N]"])).toBe(true)
+    })
   })
 })

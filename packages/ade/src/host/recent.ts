@@ -7,6 +7,8 @@
  * starts even if localStorage was wiped or the schema changed.
  */
 
+import { normalizePath } from "./path"
+
 export interface RecentEntry {
   root: string
   name: string
@@ -23,10 +25,10 @@ export function addRecent(
   entry: Omit<RecentEntry, "openedAt">,
   limit = 20,
 ): RecentEntry[] {
-  const key = entry.root.toLowerCase()
+  const key = recentKey(entry.root)
   const next: RecentEntry[] = [
     { root: entry.root, name: entry.name, openedAt: Date.now() },
-    ...list.filter((e) => e.root.toLowerCase() !== key),
+    ...list.filter((e) => recentKey(e.root) !== key),
   ]
   return next.slice(0, limit)
 }
@@ -36,8 +38,21 @@ export function removeRecent(
   list: readonly RecentEntry[],
   root: string,
 ): RecentEntry[] {
-  const key = root.toLowerCase()
-  return list.filter((e) => e.root.toLowerCase() !== key)
+  const key = recentKey(root)
+  return list.filter((e) => recentKey(e.root) !== key)
+}
+
+/**
+ * The identity of a project root, for deduplication.
+ *
+ * The doc above says "normalised" and the code only lower-cased, so on
+ * Windows the same project opened once from the sidebar (`C:/Users/x/repo`)
+ * and once from a shell path (`C:\Users\x\repo`) became two entries in the
+ * list, pointing at the same directory, with two different "last opened"
+ * times. A trailing separator did the same.
+ */
+function recentKey(root: string): string {
+  return normalizePath(root).replace(/\/+$/, "").toLowerCase()
 }
 
 /** Serialises the list to a JSON string. */

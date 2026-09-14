@@ -13,11 +13,22 @@ export interface SpawnedSession {
   /** Kills the process. Safe to call more than once. */
   kill: () => void
   /**
-   * Sends a line to the process's stdin, newline included.
-   * This is what makes a pane a session rather than a transcript: an agent that
-   * asks a question can be answered where it asked it.
+   * Types into the session's terminal, exactly as given.
+   *
+   * Nothing is appended. What a pty receives is keystrokes, and Enter, Ctrl-C,
+   * an arrow key and the "y" that answers a permission prompt are all
+   * keystrokes: deciding where a line ends belongs to whoever is typing, so
+   * callers send their own "\r".
    */
-  write: (line: string) => void
+  write: (data: string) => void
+  /**
+   * Tells the CLI how big its terminal is.
+   *
+   * An agent that draws a full-screen interface asks this and nothing else. Left
+   * at whatever the pane measured on the first frame, every later redraw wraps
+   * against a width that stopped being true the moment anything was dragged.
+   */
+  resize: (cols: number, rows: number) => void
 }
 
 export interface RunResult {
@@ -55,35 +66,123 @@ export interface Host {
    */
   run: (command: string, args: string[], cwd?: string, env?: Record<string, string>) => Promise<RunResult>
   /**
-   * Starts `command args` in `cwd`, streaming stdout and stderr as they arrive.
-   * Every line reaches `onLine`; `onExit` fires once with the status code.
+   * Starts `command args` in `cwd` under a real pseudo-terminal.
+   *
+   * A pty rather than pipes because every agent CLI asks whether it is talking
+   * to a terminal and becomes a different program when the answer is no —
+   * Claude Code switches itself into `--print` and exits, the others drop their
+   * prompt or their colours. `onData` carries the raw stream, escape sequences
+   * included, for whatever emulator is drawing it; `onLine` is the same stream
+   * read a second way, stripped and split, for the code that only wants to
+   * notice what the agent said.
    */
-  /**
-   * Points `link` at `target`. Implemented as a purpose-built command rather
-   * than a shell call: allowing `cmd` so it could run `mklink` would hand the
-   * page arbitrary execution, which is a far larger grant than one directory
-   * pointing at another. Resolves to an error string, or null on success.
-   */
-  linkDirectory: (link: string, target: string) => Promise<string | null>
   spawn: (input: {
     command: string
     args: string[]
     cwd?: string
+    /** Terminal size at start. The CLI draws its first frame against this. */
+    cols?: number
+    rows?: number
+    onData?: (chunk: string) => void
     onLine: (line: string, stream: "out" | "err") => void
     onExit: (code: number | null) => void
+    /**
+     * Lets the CLI report which conversation it opened.
+     *
+     * Passed only for an agent whose reporting hook is installed. The host
+     * turns it into three environment variables the hook looks for; without
+     * it they are not set, and a hook that is installed does nothing. See
+     * `session-new/agent-link.ts`.
+     */
+    link?: { pane: string; nonce: string }
   }) => Promise<SpawnedSession>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
   writeTextFile?: (path: string, contents: string) => Promise<string | null>
+  /**
+   * The same write for content that is not text; resolves to the failure.
+   *
+   * Needed by the video panel, whose frame captures are PNGs: base64 through
+   * `writeTextFile` would write the text of the image rather than the image.
+   */
+  writeBytes?: (path: string, contents: Uint8Array) => Promise<string | null>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
 
+  /**
+   * Declares a directory this window may write inside.
+   *
+   * Writing, linking and deleting are refused outside the roots declared here,
+   * and nothing is declared until a project is discovered. The gate exists
+   * because the commands behind `writeTextFile` and `writeBytes` answer to
+   * whatever is running in the window — including a page loaded in the browser
+   * pane, which is not ADE's own interface and should not be able to drop a
+   * file into the user's startup folder.
+   *
+   * Absent in the browser harness, which cannot write at all.
+   */
+  allowWriteRoot?: (path: string) => Promise<void>
+
   /** Opens a native directory picker. Returns the chosen path, or undefined when the user cancels. */
   pickDirectory?: (title?: string) => Promise<string | undefined>
+
+  /**
+   * Opens a native file picker, narrowed to the extensions given.
+   *
+   * Separate from `pickDirectory` rather than a flag on it, because the two
+   * are used by different panels and a caller that passed the wrong flag
+   * would get a dialog that cannot select what it is asking for.
+   */
+  pickFile?: (options?: {
+    title?: string
+    /** e.g. `{ name: "Video", extensions: ["mp4", "webm"] }` */
+    filters?: { name: string; extensions: string[] }[]
+  }) => Promise<string | undefined>
+
+  // -- The agent's own report of its session id ------------------------------
+
+  /**
+   * The report a CLI's hook left for this spawn, as text, or null.
+   *
+   * Text and not a parsed object: the file is written by a shell script, and
+   * deciding whether to believe it belongs in `session-new/agent-link.ts`,
+   * where it is tested, rather than in the host or in Rust.
+   */
+  readAgentLink?: (nonce: string) => Promise<string | null>
+  /** Forgets a report that has been taken. */
+  clearAgentLink?: (nonce: string) => Promise<void>
+  /**
+   * One CLI's hook configuration, so ADE can show its state and merge into it.
+   *
+   * `agent` is an id from `HOOK_TARGETS`; anything else is refused by the
+   * command, which is what keeps this from being a way to read any file.
+   */
+  readAgentHook?: (agent: string) => Promise<AgentHookFiles>
+  /**
+   * Writes the merged configuration back, installing or removing the script.
+   *
+   * `script: null` removes it. Both halves in one call, so there is never a
+   * configuration pointing at a script that is not there.
+   */
+  writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
 }
+
+/** What `readAgentHook` answers. Mirrors `HookFiles` in `agent_link.rs`. */
+export interface AgentHookFiles {
+  configPath: string
+  configText: string | null
+  scriptPath: string
+  scriptPresent: boolean
+}
+
+// Moved to `./ansi` so `./line-stream` can use it without importing the host,
+// which would be a cycle. Re-exported because callers already import it here.
+export { stripAnsi } from "./ansi"
+
+import { createLineAccumulator } from "./line-stream"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -98,30 +197,44 @@ export async function getHost(): Promise<Host | undefined> {
     return undefined
   }
 
-  const { Command } = await import("@tauri-apps/plugin-shell")
-
   cached = {
-    async probe(command, arg) {
+    async probe(command, _arg) {
+      /*
+       * Looked up on PATH rather than run.
+       *
+       * The new-session form asks this about every agent at once, and running
+       * ten CLIs to find out which exist costs a visible pause, wakes up
+       * whatever update checks they each do at startup, and — for the ones that
+       * are shell shims rather than executables — is refused by the shell
+       * allowlist anyway. PATHEXT resolution lives on the Rust side, which is
+       * what makes an npm-installed `opencode.cmd` answer to `opencode`.
+       */
+      const { invoke } = await import("@tauri-apps/api/core")
       try {
-        const result = await Command.create(command, [arg]).execute()
-        // A CLI that answers a version flag on stderr is still installed, so
-        // both streams count; only a failure to run at all means absent.
-        const text = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim()
-        return text.length > 0 ? text : `${command} presente`
+        return await invoke<string | null>("pty_which", { command })
       } catch {
         return null
       }
     },
 
     async run(command, args, cwd, env) {
+      /*
+       * git, and only git.
+       *
+       * Every caller of `run` in this package runs git — the agents go through
+       * `spawn` and a pty instead — so rather than keep a general "run a
+       * program" door open for one program, this goes to a command that knows
+       * it is running git and can check the arguments accordingly. The shell
+       * plugin could only check them by position, which for git meant allowing
+       * any argument at all, and `git -c core.pager=<anything>` runs anything.
+       */
+      if (command !== "git") {
+        return { code: null, stdout: "", stderr: `comando non consentito: ${command}` }
+      }
+
+      const { invoke } = await import("@tauri-apps/api/core")
       try {
-        const options = cwd || env ? { ...(cwd ? { cwd } : {}), ...(env ? { env } : {}) } : undefined
-        const result = await Command.create(command, args, options).execute()
-        return {
-          code: result.code ?? null,
-          stdout: result.stdout ?? "",
-          stderr: result.stderr ?? "",
-        }
+        return await invoke<RunResult>("git_run", { args, cwd, env })
       } catch (error) {
         // A command that cannot start at all is reported like one that ran and
         // failed, so callers have a single shape to handle.
@@ -129,35 +242,100 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async linkDirectory(link, target) {
+    async allowWriteRoot(path) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
-        await invoke("link_directory", { link, target })
-        return null
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error)
+        await invoke("allow_write_root", { path })
+      } catch {
+        // Not fatal here: the write itself will refuse, with a message that
+        // names the path, which is a better place to learn about it than a
+        // silent failure during project discovery.
       }
     },
 
-    async spawn({ command, args, cwd, onLine, onExit }) {
-      const child = Command.create(command, args, cwd ? { cwd } : undefined)
-      child.stdout.on("data", (line: string) => onLine(line, "out"))
-      child.stderr.on("data", (line: string) => onLine(line, "err"))
-      child.on("close", (payload: { code: number | null }) => onExit(payload?.code ?? null))
-      const handle = await child.spawn()
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link }) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      const { listen } = await import("@tauri-apps/api/event")
+
+      // The pane already has an id and the listeners are attached before the
+      // spawn call, so a CLI that greets in under a millisecond cannot outrun
+      // them.
+      const id = `pty-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
       let dead = false
+      const lineStream = createLineAccumulator()
+      const unlisten: Array<() => void> = []
+
+      const stop = () => {
+        for (const off of unlisten.splice(0)) off()
+      }
+
+      unlisten.push(
+        /*
+         * This session's own topic, not a shared one every pane filters.
+         *
+         * With six sessions running, `pty:data` woke six listeners for every
+         * chunk so that five of them could compare an id and return — per
+         * chunk, per frame, on the thread that draws. The id is still on the
+         * payload, because the event carries what it is about.
+         *
+         * Must match `data_topic` in `src-tauri/src/pty.rs`.
+         */
+        await listen<{ id: string; data: string }>(`pty:data:${id}`, (event) => {
+          onData?.(event.payload.data)
+          /*
+           * The second reading of the same bytes. Escape sequences are removed
+           * and the remainder split on newlines, so the parts of ADE that only
+           * want to notice what an agent *said* — a permission question, a token
+           * count — do not have to understand cursor movement to find it.
+           */
+          for (const line of lineStream.push(event.payload.data)) onLine(line, "out")
+        }),
+      )
+
+      unlisten.push(
+        await listen<{ id: string; code: number | null }>("pty:exit", (event) => {
+          if (event.payload.id !== id) return
+          dead = true
+          // Whatever was still in flight when the process ended is the last
+          // thing it said, and it is usually the reason it ended.
+          for (const line of lineStream.flush()) onLine(line, "out")
+          stop()
+          onExit(event.payload.code ?? null)
+        }),
+      )
+
+      try {
+        await invoke("pty_spawn", {
+          id,
+          command,
+          args,
+          cwd,
+          cols: cols ?? 120,
+          rows: rows ?? 30,
+          link: link ?? null,
+        })
+      } catch (error) {
+        dead = true
+        stop()
+        onLine(error instanceof Error ? error.message : String(error), "err")
+        onExit(null)
+      }
+
       return {
         kill: () => {
           if (dead) return
           dead = true
-          void handle.kill().catch(() => undefined)
+          stop()
+          void invoke("pty_kill", { id }).catch(() => undefined)
         },
-        write: (line) => {
+        write: (data) => {
           if (dead) return
-          // Most CLIs read a line at a time and will sit there forever without
-          // the terminator, looking like they ignored the answer.
-          void handle.write(`${line}
-`).catch(() => undefined)
+          void invoke("pty_write", { id, data }).catch(() => undefined)
+        },
+        resize: (nextCols, nextRows) => {
+          if (dead) return
+          void invoke("pty_resize", { id, cols: nextCols, rows: nextRows }).catch(() => undefined)
         },
       }
     },
@@ -175,17 +353,36 @@ export async function getHost(): Promise<Host | undefined> {
 
     async readTextFile(path, maxBytes = 1_048_576) {
       const { invoke } = await import("@tauri-apps/api/core")
-      try {
-        return await invoke<FileRead>("read_text_file", { path, maxBytes })
-      } catch (error) {
-        return { text: "", truncated: false, bytes: 0 }
-      }
+      /*
+       * The failure is thrown, not turned into an empty file.
+       *
+       * It used to return `{ text: "", truncated: false }`, and that shape is
+       * indistinguishable from an empty file that read fine. The editor opened
+       * a blank buffer, the `truncated` guard that refuses to save a partial
+       * file saw `false` and stayed out of the way, and one keystroke plus a
+       * save wrote the blank buffer over the user's file. Every caller here
+       * already has a catch that puts the message on screen.
+       */
+      return await invoke<FileRead>("read_text_file", { path, maxBytes })
     },
 
     async writeTextFile(path, contents) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
         await invoke("write_text_file", { path, contents })
+        return null
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    },
+
+    async writeBytes(path, contents) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        // Sent as a plain array: Tauri's IPC serialises a typed array as an
+        // object of index keys, which arrives in Rust as something that is
+        // not a `Vec<u8>` and fails at the boundary with no useful message.
+        await invoke("write_bytes", { path, contents: Array.from(contents) })
         return null
       } catch (error) {
         return error instanceof Error ? error.message : String(error)
@@ -221,6 +418,60 @@ export async function getHost(): Promise<Host | undefined> {
       } catch {
         return undefined
       }
+    },
+
+    async pickFile(options) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog")
+        const selected = await open({
+          directory: false,
+          multiple: false,
+          title: options?.title ?? "Scegli file",
+          ...(options?.filters ? { filters: options.filters } : {}),
+        })
+        if (typeof selected === "string") return selected
+        return undefined
+      } catch {
+        return undefined
+      }
+    },
+
+    // -- The agent's own report of its session id ---------------------------
+
+    async readAgentLink(nonce) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return (await invoke<string | null>("agent_link_read", { nonce })) ?? null
+      } catch {
+        /*
+         * Polled once a second while a session starts, so a failure here must
+         * not be noise. There is nothing the user could do about it either:
+         * the consequence is a pane that resumes from its last conversation
+         * instead of by id, which is the behaviour they had before the hook.
+         */
+        return null
+      }
+    },
+
+    async clearAgentLink(nonce) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        await invoke("agent_link_clear", { nonce })
+      } catch {
+        // A report left behind is swept at the next start.
+      }
+    },
+
+    async readAgentHook(agent) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<AgentHookFiles>("agent_hook_read", { agent })
+    },
+
+    async writeAgentHook(agent, configText, script) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // Not swallowed: this one the user asked for, and if it fails they need
+      // to know that the file they were told would change did not.
+      await invoke("agent_hook_write", { agent, configText, script })
     },
   }
 

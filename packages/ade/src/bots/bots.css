@@ -1,0 +1,414 @@
+/* ── the bot section ──────────────────────────────────────────────────────── */
+
+/*
+ * Roster on the left, one bot on the right. The same shape as the voice
+ * settings panel's rail, deliberately: both are "pick one of a list, then
+ * work on it", and ADE should not have two answers to that.
+ */
+[data-component="ade-bots"] {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  background: var(--ade-bg);
+  font-family: var(--ade-sans);
+  color: var(--ade-text);
+}
+
+[data-slot="bots-roster"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 0 0 auto;
+  width: 220px;
+  padding: var(--ade-space-3);
+  border-right: 1px solid var(--ade-border);
+  background: var(--ade-surface);
+  overflow-y: auto;
+}
+
+[data-slot="bots-roster-head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ade-space-2) var(--ade-space-3) var(--ade-space-4);
+}
+
+[data-slot="bots-roster-title"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="bots-new"] {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-slot="bots-new"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="bots-roster-empty"],
+[data-slot="bots-blank"] {
+  margin: 0;
+  padding: var(--ade-space-4);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+}
+
+[data-slot="bots-row"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  width: 100%;
+  padding: var(--ade-space-3);
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="bots-row"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="bots-row"][data-active="true"] {
+  background: var(--ade-selected, var(--ade-hover));
+}
+
+[data-slot="bots-row"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The mark. An ink disc with the initial knocked out, which is what the
+   roster is scanned by once there are more than three of them. */
+[data-slot="bots-glyph"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  border: 1px solid var(--ade-border);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="bots-glyph"][data-large="true"] {
+  width: 40px;
+  height: 40px;
+  font-size: var(--ade-font-lg);
+}
+
+[data-slot="bots-row-text"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+[data-slot="bots-row-name"] {
+  font-size: var(--ade-font-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A model id is long and the roster is narrow: it is here to distinguish two
+   bots with similar names, so the end of it is the half that matters. */
+[data-slot="bots-row-model"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+/* ── the one on the right ─────────────────────────────────────────────────── */
+
+[data-slot="bots-main"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-7);
+}
+
+[data-slot="bots-detail"],
+[data-slot="bots-form"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-5);
+  width: 100%;
+  max-width: 640px;
+}
+
+[data-slot="bots-detail-head"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+}
+
+[data-slot="bots-detail-text"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+[data-slot="bots-detail-name"] {
+  margin: 0;
+  font-size: var(--ade-font-xl, 18px);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="bots-detail-model"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="bots-persona"] {
+  margin: 0;
+  padding: var(--ade-space-5);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+  white-space: pre-wrap;
+}
+
+[data-slot="bots-confirm"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+}
+
+/* ── the form ─────────────────────────────────────────────────────────────── */
+
+[data-slot="bots-form-title"] {
+  margin: 0;
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="bots-field"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="bots-label"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="bots-input"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="bots-input"][data-multiline="true"] {
+  resize: vertical;
+  line-height: var(--ade-leading);
+}
+
+[data-slot="bots-input"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+  border-color: var(--ade-border-strong);
+}
+
+[data-slot="bots-problem"] {
+  margin: 0;
+  color: var(--ade-error);
+  font-size: var(--ade-font-sm);
+  /* nikcli's own output lands here when `agent create` stops: it is a
+     program's message, often several lines, and reflowing it loses the shape
+     that makes it readable. */
+  white-space: pre-wrap;
+}
+
+/*
+ * The line under a field that says what the field will actually do.
+ *
+ * Two of them carry a real decision rather than a nicety — that an empty
+ * persona means nikcli writes it, and that the name is then only a reminder —
+ * so they are sized to be read, not to be skipped.
+ */
+[data-slot="bots-hint"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+}
+
+/*
+ * The system prompt, as written.
+ *
+ * Monospace and preserved: it is the file's own text, whitespace and line
+ * breaks included, and a bot's behaviour can turn on a list that is a list
+ * only because of how it is laid out. Scrolls on its own rather than
+ * stretching the panel, and wraps rather than scrolling sideways — prose in a
+ * horizontal scroller is prose nobody reads.
+ */
+[data-slot="bots-prompt"] {
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[data-slot="bots-btn"]:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/*
+ * Two settings that are read together.
+ *
+ * The model and the effort are one decision in two parts — the effort means
+ * nothing without the model, and nikcli ignores it without one — so they sit
+ * on a line rather than stacked between other fields. Collapses to one column
+ * when the panel is narrow, which is most of the time in a side view.
+ */
+[data-slot="bots-row-fields"] {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--ade-space-4);
+}
+
+@media (max-width: 720px) {
+  [data-slot="bots-row-fields"] {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The save line: the state sits between the two buttons and pushes them
+   apart, so "Modifiche non salvate" is read on the way to the button. */
+[data-slot="bots-form-actions"] [data-slot="bots-hint"] {
+  margin-right: auto;
+  align-self: center;
+}
+
+[data-slot="bots-hint"][data-state="saved"] {
+  color: var(--ade-done, var(--ade-text-weak));
+}
+
+[data-slot="bots-form-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="bots-btn"] {
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+[data-slot="bots-btn"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="bots-btn"][data-tone="primary"] {
+  border-color: var(--ade-accent);
+  background: var(--ade-accent);
+  color: var(--ade-on-accent, #fff);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="bots-btn"][data-tone="danger"] {
+  border-color: var(--ade-error);
+  color: var(--ade-error);
+}
+
+[data-slot="bots-btn"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="bots-notice"] {
+  margin: 0;
+  padding: var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="bots-link"] {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ade-accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── narrow windows ───────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  [data-slot="bots-roster"] {
+    width: 160px;
+  }
+  [data-slot="bots-main"] {
+    padding: var(--ade-space-5);
+  }
+}
