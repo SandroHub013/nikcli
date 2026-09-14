@@ -36,7 +36,12 @@ export type Message = { from: string; token?: string; text: string } & (
    * integrated. `name` titles it; `worktree` gives it its own checkout;
    * `model` picks the model where ADE knows the flag.
    */
-  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; model?: string }
+  /** `fork`: starts from the sender's own conversation, so its prompt cache carries over. */
+  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; model?: string; fork: boolean }
+  /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
+  | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
+  /** The project's shared memory file; `type` for `add`, `text` is the entry. */
+  | { kind: "memory"; op: "add" | "show"; type: string }
   | { kind: "reply"; ref: string }
   /**
    * Not an answer: the session is blocked or needs a decision. The waiter
@@ -53,6 +58,9 @@ export type Message = { from: string; token?: string; text: string } & (
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
 )
+
+export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
+export type KvOpName = (typeof KV_OPS)[number]
 
 /** What `ade-msg update` may say about a request that is not finished. */
 export const UPDATE_STATES = ["bloccata", "decisione"] as const
@@ -95,6 +103,20 @@ export function parseMessage(body: string): Message | undefined {
     const ref = str("ref")
     return isRequestId(ref) ? { kind, from, token, ref, text: "" } : undefined
   }
+  if (kind === "kv") {
+    const op = KV_OPS.find((known) => known === str("op"))
+    const key = str("key")
+    if (!op || (op !== "list" && !key)) return undefined
+    const ttl = typeof record.ttl === "number" && Number.isFinite(record.ttl) ? Math.max(0, Math.floor(record.ttl)) : 0
+    if (op === "set" && !text.trim()) return undefined
+    return { kind, from, token, op, key, ttl, force: record.force === true, text }
+  }
+  if (kind === "memory") {
+    const op = str("op")
+    if (op === "show") return { kind, from, token, op, type: "", text: "" }
+    if (op === "add" && text.trim()) return { kind, from, token, op, type: str("type"), text }
+    return undefined
+  }
 
   if (!text.trim()) return undefined
   if (kind === "send" || kind === "ask") {
@@ -113,6 +135,7 @@ export function parseMessage(body: string): Message | undefined {
       agent,
       autoClose: record.close === true,
       worktree: record.worktree === true,
+      fork: record.fork === true,
       ...(name ? { name } : {}),
       ...(model ? { model } : {}),
       text,
@@ -590,12 +613,22 @@ export const USAGE =
   "  ade-msg relaunch <sessione> [--model <id>] [--fresh]\n" +
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh)\n" +
+  "  ade-msg memory add decisione|fatto|trappola|todo \"<testo>\"\n" +
+  "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
+  "  ade-msg memory show                     stampa la memoria condivisa\n" +
+  "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
+  "                                          stato condiviso tra le sessioni del progetto\n" +
+  "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
+  "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
+  "  ade-msg stats                           token per sessione e quota letta dalla cache\n" +
   "  ade-msg agents | whoami\n" +
   "opzioni:\n" +
   "  --no-wait        ask/spawn: stampa subito l'id, poi usa wait (per lanciare in parallelo)\n" +
   "  --name <nome>    spawn: nome della sessione, usabile poi come destinatario\n" +
   "  --worktree       spawn: lavora in una git worktree sul branch ade/<nome>, accanto al progetto\n" +
   "  --model <id>     spawn: modello (claude, codex, agy)\n" +
+  "  --fork           spawn: parte dalla tua conversazione e ne riusa la cache (claude, codex;\n" +
+  "                   stesso agente e modello, non con --worktree)\n" +
   "  --close          spawn: chiude la sessione dopo la risposta, se non ha lavoro da integrare\n" +
   "                   (di norma resta aperta: serve per i seguiti)\n" +
   "  --file <perc>    ask/spawn/send/reply: il testo è il contenuto del file\n" +

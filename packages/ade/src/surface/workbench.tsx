@@ -1,7 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
-import { remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
+import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
@@ -27,7 +27,7 @@ import {
   worktreePlan,
 } from "../session/orchestra"
 import { detectAgents } from "../session-new/availability"
-import { RESUME, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
+import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
@@ -171,6 +171,16 @@ import {
   type MailPane,
   type Message,
 } from "../session/mailbox"
+import {
+  applyKv,
+  emptySpace,
+  memoryAddReply,
+  memoryEntry,
+  parseKvStore,
+  statsTable,
+  withMemoryEntry,
+  type TokenUsage,
+} from "../session/shared"
 import { displayArgs, introArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
@@ -635,6 +645,7 @@ export function Workbench() {
    */
   const REQUESTS_KEY = "ade.mailbox.requests"
   const SPAWNED_KEY = "ade.mailbox.spawned"
+  const KV_KEY = "ade.mailbox.kv"
   const readStored = (key: string): string | null => {
     try {
       return localStorage.getItem(key)
@@ -670,6 +681,32 @@ export function Workbench() {
     })(),
   )
   const saveSpawned = () => writeStored(SPAWNED_KEY, JSON.stringify(Object.fromEntries(spawnedBy)))
+
+  /** The shared key-value store, one space per project name. See `session/shared.ts`. */
+  let kvStore = parseKvStore(readStored(KV_KEY))
+  const saveKv = () => writeStored(KV_KEY, JSON.stringify(kvStore))
+
+  /** Token usage per pane, from each session's transcript, for `ade-msg stats`. */
+  const usageOf = new Map<string, TokenUsage>()
+  let publishedStats = ""
+  const refreshUsage = async () => {
+    const host = await getHost()
+    if (!host?.transcriptUsage || !host.mailboxPublish) return
+    const rows: { title: string; agent: string; project?: string; usage: TokenUsage }[] = []
+    for (const pane of wb().panes) {
+      const agent = pane.agent ?? pane.model
+      if ((agent !== "claude-code" && agent !== "codex") || !pane.resumeId || !pane.cwd || isRemoteRoot(pane.cwd)) continue
+      const usage = await host.transcriptUsage(agent, pane.resumeId, pane.cwd)
+      if (usage) usageOf.set(pane.id, usage)
+      const known = usageOf.get(pane.id)
+      if (known) rows.push({ title: pane.title, agent, project: pane.workspaceId, usage: known })
+    }
+    const table = statsTable(rows)
+    if (table !== publishedStats) {
+      publishedStats = table
+      await host.mailboxPublish(table, "stats").catch(() => {})
+    }
+  }
 
   /** When each pane last printed anything: a session silent for a while has stopped working. */
   const lastOutputAt = new Map<string, number>()
@@ -977,11 +1014,92 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "kv") {
+      const space = sender?.project || project()?.name || "workspace"
+      const result = applyKv(
+        kvStore[space] ?? emptySpace(),
+        { op: message.op, key: message.key, value: message.text, ttl: message.ttl, force: message.force },
+        sender ? { id: sender.id, title: sender.title } : undefined,
+        Date.now(),
+        (paneId) => running.has(paneId),
+      )
+      if (result.space !== kvStore[space]) {
+        kvStore = { ...kvStore, [space]: result.space }
+        saveKv()
+      }
+      await answer(result.reply)
+      return true
+    }
+
+    if (message.kind === "memory") {
+      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      if (!owner || owner.remote) {
+        await answer("errore: la memoria condivisa esiste solo per i progetti locali")
+        return true
+      }
+      const path = `${owner.root}/.ade/memory.md`
+      const current = host.readTextFile ? await host.readTextFile(path).then((read) => read.text).catch(() => "") : ""
+      if (message.op === "show") {
+        await answer(current.trim() ? `ok\n${current}` : `ok\n(memoria vuota: ${path})`)
+        return true
+      }
+      if (!sender) {
+        await answer("errore: scrivere in memoria richiede una sessione avviata da ADE")
+        return true
+      }
+      const entry = memoryEntry(message.type, message.text, sender.title, new Date())
+      if ("error" in entry) {
+        await answer(`errore: ${entry.error}`)
+        return true
+      }
+      const next = withMemoryEntry(current, entry.line)
+      const failure = host.writeTextFile ? await host.writeTextFile(path, next) : "scrittura non disponibile"
+      if (failure) {
+        await answer(`errore: ${failure}`)
+        return true
+      }
+      await excludeAdeResults(host, owner.root)
+      appendLine(sender.id, `Memoria: ${entry.line.trim()}`, "note")
+      await answer(memoryAddReply(path, next.length))
+      return true
+    }
+
     if (message.kind === "spawn") {
       const agent = resolveAgent(SPAWNABLE, message.agent)
       if ("error" in agent) {
         await answer(`errore: ${agent.error}`)
         return true
+      }
+      /*
+       * A fork starts from the sender's own conversation: same CLI, same model,
+       * same directory — the three things the prompt cache and the CLI's own
+       * lookup of the conversation depend on.
+       */
+      let fork: { args: string[]; resumeId?: string } | undefined
+      if (message.fork) {
+        const parent = wb().panes.find((pane) => pane.id === message.from)
+        const parentAgent = parent?.agent ?? parent?.model
+        const refusal = !parent
+          ? "--fork richiede una sessione avviata da ADE"
+          : parentAgent !== agent.id
+            ? `--fork parte dalla tua conversazione, quindi l'agente deve essere il tuo (${parentAgent})`
+            : message.model
+              ? "--fork usa il tuo modello: toglilo --model, un modello diverso non riusa la cache"
+              : message.worktree
+                ? "--fork e --worktree insieme non sono supportati: la conversazione è legata alla cartella"
+                : parent.cwd && isRemoteRoot(parent.cwd)
+                  ? "--fork non è disponibile negli ambienti remoti"
+                  : undefined
+        if (refusal) {
+          await answer(`errore: ${refusal}`)
+          return true
+        }
+        const planned = planFork(agent.id, parent!.resumeId)
+        if ("error" in planned) {
+          await answer(`errore: ${planned.error}`)
+          return true
+        }
+        fork = planned
       }
       const open = [...spawnedBy.keys()].filter((paneId) => wb().panes.some((pane) => pane.id === paneId))
       if (open.length >= maxSpawned()) {
@@ -1011,7 +1129,8 @@ export function Workbench() {
         name = checked.name
       }
 
-      const spawnArgs: string[] = []
+      // A fork keeps the parent's model choice: a different model is a different cache.
+      const spawnArgs: string[] = fork ? [...(wb().panes.find((pane) => pane.id === message.from)?.spawnArgs ?? [])] : []
       if (message.model) {
         const chosen = modelArgs(agent.id, message.model)
         if ("error" in chosen) {
@@ -1051,7 +1170,7 @@ export function Workbench() {
         maxDepth: maxDepth(),
       })
       const created = addAgent(
-        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs },
+        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
         { index, agentId: agent.id, role: "agent" },
       )
       openRequests.set(id, {
@@ -1071,7 +1190,8 @@ export function Workbench() {
       if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
-          (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch}` : ""),
+          (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch}` : "") +
+          (fork ? " come fork della tua conversazione" : ""),
       )
       return true
     }
@@ -1228,6 +1348,8 @@ export function Workbench() {
   onMount(() => {
     const timer = setInterval(() => void deliverMail(), 700)
     onCleanup(() => clearInterval(timer))
+    const usageTimer = setInterval(() => void refreshUsage(), 15_000)
+    onCleanup(() => clearInterval(usageTimer))
     void getHost().then((host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
       void host?.mailboxPublish?.(USAGE, "usage").catch(() => {})
@@ -3051,6 +3173,8 @@ export function Workbench() {
       /** A spawned session's own checkout, with the branch it is on. */
       worktree?: { path: string; branch: string }
       spawnArgs?: string[]
+      /** Start as a fork of another conversation: the arguments, and the child's id when known. */
+      fork?: { args: string[]; resumeId?: string }
     },
     entry: LaunchEntry,
   ) => {
@@ -3081,9 +3205,12 @@ export function Workbench() {
         : currentProj?.branch ? { branch: currentProj.branch, fidelity: "project" } : undefined,
       ...(input.worktree ? { worktree: input.worktree.path } : {}),
       ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
+      ...(input.fork?.resumeId ? { resumeId: input.fork.resumeId } : {}),
     }))
     setStarting(false)
-    void startProcess(id, entry.agentId, task)
+    // A fork opens as a resumed conversation, and the task is typed into it all the same.
+    if (input.fork) void startProcess(id, entry.agentId, task, { kind: "resume", via: "id", args: input.fork.args }, undefined, true)
+    else void startProcess(id, entry.agentId, task)
     // Handed back for the callers that need to keep talking to the pane they
     // just made; `launchSessions` ignores it.
     return { id, title }

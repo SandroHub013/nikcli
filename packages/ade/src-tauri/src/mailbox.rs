@@ -213,6 +213,7 @@ pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: 
         Some("agents") => "agents",
         Some("requests") => "requests",
         Some("usage") => "usage",
+        Some("stats") => "stats",
         Some(_) => return Err("elenco sconosciuto".into()),
     };
     let dir = mailbox_dir(&app).ok_or("casella non disponibile")?;
@@ -246,11 +247,13 @@ $close = $false
 $worktree = $false
 $force = $false
 $fresh = $false
+$fork = $false
+$ttl = 0
 $name = $null
 $model = $null
 $file = $null
-# update takes an id and a state before its text; everything else one word.
-$lead = if ($cmd -eq 'update') { 2 } else { 1 }
+# update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
+$lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
@@ -267,6 +270,8 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--worktree') { $worktree = $true; continue }
     elseif ($a -eq '--force') { $force = $true; continue }
     elseif ($a -eq '--fresh') { $fresh = $true; continue }
+    elseif ($a -eq '--fork') { $fork = $true; continue }
+    elseif ($a -eq '--ttl' -and $hasNext) { try { $ttl = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
   }
   $pos.Add($a)
 }
@@ -318,6 +323,17 @@ function PostAndConfirm($fields) {
   if ($null -eq $r) { Write-Output 'in coda: ADE non ha ancora confermato'; exit 0 }
   Write-Output $r
   if ($r.StartsWith('ok')) { exit 0 } else { exit 1 }
+}
+
+# Posts and prints what ADE answered after its first line: the value, not the receipt.
+function PostAndPrint($fields) {
+  $id = Post $fields
+  $r = Receipt $id
+  if ($null -eq $r) { Fail 'ADE non ha risposto: riprova tra poco' }
+  if (-not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
+  $nl = $r.IndexOf("`n")
+  if ($nl -ge 0) { Write-Output $r.Substring($nl + 1) } else { Write-Output $r }
+  exit 0
 }
 
 # The answer to $id if it is there, claimed so nobody else takes it; $null if not yet.
@@ -399,6 +415,26 @@ switch ($cmd) {
   'agents' { $f = Join-Path $box 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
   'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
+  'stats' { $f = Join-Path $box 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
+  'kv' {
+    $op = $head
+    switch ($op) {
+      'get' { if (-not $second) { Usage }; PostAndPrint ([ordered]@{ kind = 'kv'; op = 'get'; key = $second }) }
+      'del' { if (-not $second) { Usage }; PostAndPrint ([ordered]@{ kind = 'kv'; op = 'del'; key = $second }) }
+      'list' { PostAndPrint ([ordered]@{ kind = 'kv'; op = 'list'; key = $second }) }
+      'set' { if (-not $second -or -not $text) { Usage }; PostAndPrint ([ordered]@{ kind = 'kv'; op = 'set'; key = $second; text = $text }) }
+      'lock' { if (-not $second) { Usage }; PostAndPrint ([ordered]@{ kind = 'kv'; op = 'lock'; key = $second; ttl = $ttl; text = $text }) }
+      'unlock' { if (-not $second) { Usage }; PostAndPrint ([ordered]@{ kind = 'kv'; op = 'unlock'; key = $second; force = $force }) }
+      default { Usage }
+    }
+  }
+  'memory' {
+    switch ($head) {
+      'add' { if (-not $second -or -not $text) { Usage }; PostAndPrint ([ordered]@{ kind = 'memory'; op = 'add'; type = $second; text = $text }) }
+      'show' { PostAndPrint ([ordered]@{ kind = 'memory'; op = 'show' }) }
+      default { Usage }
+    }
+  }
   'send' {
     if (-not $head -or -not $text) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'send'; to = $head; text = $text })
@@ -430,7 +466,7 @@ switch ($cmd) {
     if ($cmd -eq 'ask') {
       $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
     } else {
-      $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree }
+      $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
       if ($model) { $fields['model'] = $model }
       $fields['text'] = $text
@@ -471,8 +507,8 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; name=""; model=""; file=""
-lead=1; [ "$cmd" = update ] && lead=2
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; file=""
+lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
@@ -489,6 +525,8 @@ while [ $# -gt 0 ]; do
       --worktree) worktree=true; shift; continue ;;
       --force) force=true; shift; continue ;;
       --fresh) fresh=true; shift; continue ;;
+      --fork) fork=true; shift; continue ;;
+      --ttl) [ $# -ge 2 ] && { ttl="$2"; shift 2; continue; } ;;
     esac
   fi
   if [ $n -eq 0 ]; then head="$a"; elif [ $n -eq 1 ] && [ $lead -eq 2 ]; then second="$a"; else text="${text:+$text }$a"; fi
@@ -528,6 +566,17 @@ confirm() {
   post "$1"
   if receipt; then echo "$r"; case "$r" in ok*) exit 0 ;; *) exit 1 ;; esac; fi
   echo "in coda: ADE non ha ancora confermato"; exit 0
+}
+# Prints what ADE answered after its first line: the value, not the receipt.
+show() {
+  post "$1"
+  receipt || fail "ADE non ha risposto: riprova tra poco"
+  case "$r" in
+    ok*) case "$r" in *"
+"*) printf '%s\n' "${r#*
+}" ;; *) printf '%s\n' "$r" ;; esac; exit 0 ;;
+    *) echo "$r"; exit 1 ;;
+  esac
 }
 take() {
   got=""
@@ -581,6 +630,23 @@ case "$cmd" in
   agents) if [ -f "$box/agents.txt" ]; then cat "$box/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
+  stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
+  kv)
+    key="\"key\":\"$(esc "$second")\""
+    case "$head" in
+      get|del) [ -n "$second" ] || usage; show "\"kind\":\"kv\",\"op\":\"$head\",$key" ;;
+      list) show "\"kind\":\"kv\",\"op\":\"list\",$key" ;;
+      set) [ -n "$second" ] && [ -n "$text" ] || usage; show "\"kind\":\"kv\",\"op\":\"set\",$key" ;;
+      lock) [ -n "$second" ] || usage; show "\"kind\":\"kv\",\"op\":\"lock\",$key,\"ttl\":$(printf '%d' "$ttl" 2>/dev/null || echo 0)" ;;
+      unlock) [ -n "$second" ] || usage; show "\"kind\":\"kv\",\"op\":\"unlock\",$key,\"force\":$force" ;;
+      *) usage ;;
+    esac ;;
+  memory)
+    case "$head" in
+      add) [ -n "$second" ] && [ -n "$text" ] || usage; show "\"kind\":\"memory\",\"op\":\"add\",\"type\":\"$(esc "$second")\"" ;;
+      show) show "\"kind\":\"memory\",\"op\":\"show\"" ;;
+      *) usage ;;
+    esac ;;
   send) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"" ;;
   reply) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\"" ;;
   cancel) valid_id "$head" || usage; confirm "\"kind\":\"cancel\",\"ref\":\"$head\"" ;;
@@ -602,7 +668,7 @@ case "$cmd" in
       extra=""
       [ -n "$name" ] && extra="$extra,\"name\":\"$(esc "$name")\""
       [ -n "$model" ] && extra="$extra,\"model\":\"$(esc "$model")\""
-      post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree$extra"
+      post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree,\"fork\":$fork$extra"
     fi
     if receipt; then
       case "$r" in ok*) said="$r" ;; *) echo "$r"; exit 1 ;; esac

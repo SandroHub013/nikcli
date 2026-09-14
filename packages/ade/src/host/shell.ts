@@ -107,7 +107,9 @@ export interface Host {
   /** Answers the `ade-msg send` that is waiting on message `id`. */
   mailboxReceipt?: (id: string, text: string) => Promise<void>
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
-  mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage") => Promise<void>
+  mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage" | "stats") => Promise<void>
+  /** Tokens a claude or codex session has spent so far, from its transcript; null when not found. */
+  transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
   mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
@@ -220,6 +222,7 @@ export interface AgentHookFiles {
 export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
+import type { TokenUsage } from "../session/shared"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -484,6 +487,15 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxPublish(text, name) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_publish", { text, name: name ?? null })
+    },
+
+    async transcriptUsage(agent, sessionId, cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<TokenUsage | null>("transcript_usage", { agent, sessionId, cwd })
+      } catch {
+        return null
+      }
     },
 
     async mailboxState(id, text, kind) {

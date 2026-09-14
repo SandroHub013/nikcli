@@ -40,6 +40,16 @@ export interface ResumeRecipe {
   /** Arguments that reopen the most recent conversation in this directory. */
   readonly last?: () => string[]
   /**
+   * Arguments that start a new conversation as a copy of `parent`, under
+   * `child` where the CLI takes an id. The copy's prompt is the parent's, so a
+   * forked subagent reads the parent's context from the cache instead of
+   * paying for it again.
+   *
+   *   claude  --resume <parent> --fork-session --session-id <child>
+   *   codex   fork <parent>
+   */
+  readonly fork?: (parent: string, child: string) => string[]
+  /**
    * Where the CLI keeps the conversation `byId` would reopen.
    *
    * A pinned id is written down before the agent has said a word, and the CLI
@@ -137,6 +147,7 @@ export const RESUME: Record<string, ResumeRecipe> = {
     start: (id) => ["--session-id", id],
     byId: (id) => ["--resume", id],
     last: () => ["--continue"],
+    fork: (parent, child) => ["--resume", parent, "--fork-session", "--session-id", child],
     transcript: claudeTranscript,
   },
   pi: {
@@ -147,6 +158,7 @@ export const RESUME: Record<string, ResumeRecipe> = {
   codex: {
     byId: (id) => ["resume", id],
     last: () => ["resume", "--last"],
+    fork: (parent) => ["fork", parent],
   },
   opencode: {
     byId: (id) => ["--session", id],
@@ -219,6 +231,23 @@ export function planStart(agentId: string, id = newSessionId()): StartPlan {
   const recipe = RESUME[agentId]
   if (!recipe?.start) return { args: [] }
   return { args: recipe.start(id), resumeId: id }
+}
+
+/**
+ * How to start a session as a fork of `parentId`, or why it cannot be one.
+ *
+ * `resumeId` is the child's own id when the CLI takes one (Claude); otherwise
+ * the child's id arrives later from the CLI's hook, like any other session.
+ */
+export function planFork(
+  agentId: string,
+  parentId: string | undefined,
+  childId = newSessionId(),
+): { args: string[]; resumeId?: string } | { error: string } {
+  const recipe = RESUME[agentId]
+  if (!recipe?.fork) return { error: `${agentId} non sa biforcare una conversazione: avvia senza --fork` }
+  if (!parentId) return { error: "questa sessione non ha ancora una conversazione salvata da cui partire" }
+  return { args: recipe.fork(parentId, childId), ...(recipe.start ? { resumeId: childId } : {}) }
 }
 
 export interface ResumeRequest {

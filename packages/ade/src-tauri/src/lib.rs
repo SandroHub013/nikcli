@@ -20,6 +20,7 @@ mod serve;
 mod shots;
 mod mailbox;
 mod stats;
+mod usage;
 
 use serde::Serialize;
 use std::ffi::OsStr;
@@ -964,6 +965,7 @@ pub fn run() {
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
         .manage(stats::Stats::new())
+        .manage(usage::UsageCache::default())
         /*
          * The video panel's files.
          *
@@ -1008,6 +1010,7 @@ pub fn run() {
             home_dir,
             path_exists,
             stats::system_stats,
+            usage::transcript_usage,
             mailbox::mailbox_take,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,

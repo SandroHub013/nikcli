@@ -37,6 +37,9 @@ export const INTRO_TEXT =
   "Le sessioni restano aperte dopo aver risposto: riusale con ade-msg ask NOME per i seguiti, e chiudile con ade-msg close NOME quando il loro lavoro e integrato. " +
   "ade-msg status mostra le richieste in corso, ade-msg cancel ID ne annulla una; --file PERCORSO usa il contenuto di un file come testo. " +
   "Per risparmiare contesto: delega compiti grandi e non piccoli, chiedi sintesi brevi con i dettagli su file, e leggi i file solo se servono. " +
+  "Contesto condiviso: se esiste, leggi .ade/memory.md del progetto prima di esplorare; aggiungi solo fatti stabili utili a tutte le sessioni con ade-msg memory add TIPO TESTO (tipi: decisione, fatto, trappola, todo). " +
+  "Per lo stato condiviso usa ade-msg kv set CHIAVE VALORE, kv get CHIAVE e kv list; prima di modificare un'area che altre sessioni possono toccare prendi ade-msg kv lock CHIAVE e poi rilascialo con kv unlock CHIAVE. " +
+  "Se un subagent ha bisogno del contesto che hai gia accumulato, avvialo con --fork: parte dalla tua conversazione e ne riusa la cache (stesso agente e modello, senza --worktree); per compiti indipendenti non serve. ade-msg stats mostra quanta parte del prompt arriva dalla cache. " +
   "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito da una sintesi, perche chi chiede e bloccato finche non rispondi; se sei bloccata o serve una decisione usa ade-msg update ID bloccata oppure decisione seguito dal motivo. " +
   "I messaggi [Messaggio da ...] sono note e dicono come rispondere. " +
   "Usalo quando l'utente te lo chiede o quando delegare o coordinarti con un'altra sessione serve al compito."
