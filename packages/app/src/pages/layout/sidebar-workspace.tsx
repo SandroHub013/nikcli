@@ -322,7 +322,7 @@ export const SortableWorkspace = (props: {
               <div class="relative w-full py-1">
                 <Button
                   variant="ghost"
-                  class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+                  class="flex w-full text-left justify-start text-14-regular text-text-base pl-9 pr-10"
                   size="large"
                   onClick={(e: MouseEvent) => {
                     loadMore()
@@ -393,7 +393,7 @@ export const LocalWorkspace = (props: {
           <div class="relative w-full py-1">
             <Button
               variant="ghost"
-              class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+              class="flex w-full text-left justify-start text-14-regular text-text-base pl-9 pr-10"
               size="large"
               onClick={(e: MouseEvent) => {
                 loadMore()

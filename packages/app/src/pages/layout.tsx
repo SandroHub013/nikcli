@@ -283,7 +283,18 @@ export default function Layout(props: ParentProps) {
             {
               label: language.t("toast.update.action.installRestart"),
               onClick: async () => {
-                await platform.update!()
+                // Restarting after a failed install relaunches the old build and looks
+                // like the update silently did nothing. Stop, and say what happened.
+                try {
+                  await platform.update!()
+                } catch (error) {
+                  showToast({
+                    variant: "error",
+                    title: language.t("toast.update.failed"),
+                    description: error instanceof Error ? error.message : String(error),
+                  })
+                  return
+                }
                 await platform.restart!()
               },
             },
@@ -1038,7 +1049,9 @@ export default function Layout(props: ParentProps) {
       id: "theme.scheme.cycle",
       title: language.t("command.theme.scheme.cycle"),
       category: language.t("command.category.theme"),
-      keybind: "mod+shift+s",
+      // Not mod+shift+s: session.new claims it too, and the session registration
+      // wins, so this one silently did nothing while the palette advertised it.
+      keybind: "mod+shift+y",
       onSelect: () => cycleColorScheme(1),
     })
 
@@ -1338,7 +1351,7 @@ export default function Layout(props: ParentProps) {
             <span class="text-14-regular text-text-strong">
               {language.t("workspace.delete.confirm", { name: name() })}
             </span>
-            <span class="text-12-regular text-text-weak">{description()}</span>
+            <span class="text-13-regular text-text-weak">{description()}</span>
           </div>
           <div class="flex justify-end gap-2">
             <Button variant="ghost" size="large" onClick={() => dialog.close()}>
@@ -1412,7 +1425,7 @@ export default function Layout(props: ParentProps) {
             <span class="text-14-regular text-text-strong">
               {language.t("workspace.reset.confirm", { name: name() })}
             </span>
-            <span class="text-12-regular text-text-weak">
+            <span class="text-13-regular text-text-weak">
               {description()} {archivedLabel()} {language.t("workspace.reset.note")}
             </span>
           </div>
@@ -1707,7 +1720,7 @@ export default function Layout(props: ParentProps) {
                         transform: "translate3d(52px, 0, 0)",
                       }}
                     >
-                      <span class="text-12-regular text-text-base truncate select-text">
+                      <span class="text-13-regular text-text-base truncate select-text">
                         {p().worktree.replace(homedir(), "~")}
                       </span>
                     </Tooltip>
@@ -1855,12 +1868,12 @@ export default function Layout(props: ParentProps) {
         >
           <div class="rounded-md bg-background-base shadow-xs-border-base">
             <div class="p-3 flex flex-col gap-2">
-              <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+              <div class="text-13-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
               <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
               <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
             </div>
             <Button
-              class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
+              class="flex w-full text-left justify-start text-13-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
               size="large"
               icon="plus"
               onClick={connectProvider}

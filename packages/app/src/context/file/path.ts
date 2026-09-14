@@ -1,5 +1,7 @@
+import { FILE_SCHEME } from "@/pages/session/tab-identity"
+
 export function stripFileProtocol(input: string) {
-  if (!input.startsWith("file://")) return input
+  if (!input.startsWith(FILE_SCHEME)) return input
   return input.slice("file://".length)
 }
 
@@ -124,11 +126,11 @@ export function createPathHelpers(scope: () => string) {
 
   const tab = (input: string) => {
     const path = normalize(input)
-    return `file://${encodeFilePath(path)}`
+    return `${FILE_SCHEME}${encodeFilePath(path)}`
   }
 
   const pathFromTab = (tabValue: string) => {
-    if (!tabValue.startsWith("file://")) return
+    if (!tabValue.startsWith(FILE_SCHEME)) return
     return normalize(tabValue)
   }
 

@@ -41,7 +41,7 @@ export const DialogAdvisorModel: Component = () => {
       when={agentName()}
       fallback={
         <Dialog title={language.t("dialog.advisor.title")}>
-          <span class="block text-12-regular text-text-weak">{language.t("dialog.advisor.noAgent")}</span>
+          <span class="block text-13-regular text-text-weak">{language.t("dialog.advisor.noAgent")}</span>
         </Dialog>
       }
     >
@@ -67,7 +67,7 @@ export const DialogAdvisorModel: Component = () => {
               <div class="w-full flex items-center gap-x-2 text-13-regular">
                 <span class="truncate">{i.name}</span>
                 <Show when={current()}>
-                  <span class="text-11-regular text-text-weaker">{language.t("dialog.advisor.current")}</span>
+                  <span class="text-11-regular text-text-weak">{language.t("dialog.advisor.current")}</span>
                 </Show>
               </div>
             )

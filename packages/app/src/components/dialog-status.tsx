@@ -52,10 +52,10 @@ const StatusDot: Component<{ tone: Tone }> = (props) => (
   <span
     class="size-2 rounded-full shrink-0"
     classList={{
-      "bg-icon-success": props.tone === "success",
-      "bg-icon-warning": props.tone === "warning",
-      "bg-icon-error": props.tone === "danger",
-      "bg-icon-weak": props.tone === "muted",
+      "bg-icon-success-base": props.tone === "success",
+      "bg-icon-warning-base": props.tone === "warning",
+      "bg-icon-critical-base": props.tone === "danger",
+      "bg-icon-weak-base": props.tone === "muted",
     }}
   />
 )
@@ -64,10 +64,10 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
   <span
     class="inline-flex h-6 max-w-[220px] items-center gap-1.5 rounded-md border border-border-base bg-surface-base px-2 text-11-medium"
     classList={{
-      "text-icon-success": props.tone === "success",
-      "text-icon-warning": props.tone === "warning",
-      "text-icon-error": props.tone === "danger",
-      "text-text-weaker": props.tone === "muted",
+      "text-icon-success-base": props.tone === "success",
+      "text-icon-warning-base": props.tone === "warning",
+      "text-icon-critical-base": props.tone === "danger",
+      "text-text-weak": props.tone === "muted",
     }}
   >
     <StatusDot tone={props.tone} />
@@ -77,20 +77,20 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
 
 const Metric: Component<{ label: string; value: string | number; detail?: string; tone?: Tone }> = (props) => (
   <div class="flex min-w-0 flex-col gap-0.5 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
-    <span class="text-11-regular text-text-weaker">{props.label}</span>
+    <span class="text-11-regular text-text-weak">{props.label}</span>
     <span
-      class="truncate text-15-medium tabular-nums"
+      class="truncate text-16-medium tabular-nums"
       classList={{
-        "text-icon-success": props.tone === "success",
-        "text-icon-warning": props.tone === "warning",
-        "text-icon-error": props.tone === "danger",
+        "text-icon-success-base": props.tone === "success",
+        "text-icon-warning-base": props.tone === "warning",
+        "text-icon-critical-base": props.tone === "danger",
         "text-text-base": !props.tone || props.tone === "muted",
       }}
     >
       {props.value}
     </span>
     <Show when={props.detail}>
-      <span class="truncate text-11-regular text-text-weaker">{props.detail}</span>
+      <span class="truncate text-11-regular text-text-weak">{props.detail}</span>
     </Show>
   </div>
 )
@@ -101,7 +101,7 @@ const Section: Component<{ title: string; description?: string; children: JSXEle
       <div class="flex min-w-0 flex-col gap-0.5">
         <span class="truncate text-13-medium text-text-base">{props.title}</span>
         <Show when={props.description}>
-          <span class="truncate text-11-regular text-text-weaker">{props.description}</span>
+          <span class="truncate text-11-regular text-text-weak">{props.description}</span>
         </Show>
       </div>
     </div>
@@ -110,7 +110,7 @@ const Section: Component<{ title: string; description?: string; children: JSXEle
 )
 
 const EmptyState: Component<{ children: JSXElement }> = (props) => (
-  <div class="rounded-md border border-border-base bg-surface-raised-base px-3 py-2 text-12-regular text-text-weak">
+  <div class="rounded-md border border-border-base bg-surface-raised-base px-3 py-2 text-13-regular text-text-weak">
     {props.children}
   </div>
 )
@@ -207,9 +207,9 @@ export const DialogStatus: Component = () => {
               {([name, item]) => (
                 <div class="flex min-w-0 items-start justify-between gap-3 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
                   <div class="flex min-w-0 flex-col gap-0.5">
-                    <span class="truncate text-12-medium text-text-base">{name}</span>
+                    <span class="truncate text-13-medium text-text-base">{name}</span>
                     <Show when={statusError(item)}>
-                      {(error) => <span class="break-words text-11-regular text-icon-error">{error()}</span>}
+                      {(error) => <span class="break-words text-11-regular text-icon-critical-base">{error()}</span>}
                     </Show>
                   </div>
                   <StatusPill tone={mcpTone(item.status)}>{mcpStatusLabel(item.status)}</StatusPill>
@@ -231,8 +231,8 @@ export const DialogStatus: Component = () => {
               {(item) => (
                 <div class="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
                   <div class="flex min-w-0 flex-col gap-0.5">
-                    <span class="truncate text-12-medium text-text-base">{item.id}</span>
-                    <span class="truncate text-11-regular text-text-weaker">{item.root}</span>
+                    <span class="truncate text-13-medium text-text-base">{item.id}</span>
+                    <span class="truncate text-11-regular text-text-weak">{item.root}</span>
                   </div>
                   <StatusPill tone={lspTone(item.status)}>{item.status}</StatusPill>
                 </div>
@@ -252,9 +252,9 @@ export const DialogStatus: Component = () => {
             <For each={plugins()}>
               {(item) => (
                 <div class="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
-                  <span class="truncate text-12-medium text-text-base">{item.name}</span>
+                  <span class="truncate text-13-medium text-text-base">{item.name}</span>
                   <Show when={item.version}>
-                    <span class="shrink-0 text-11-regular text-text-weaker">@{item.version}</span>
+                    <span class="shrink-0 text-11-regular text-text-weak">@{item.version}</span>
                   </Show>
                 </div>
               )}

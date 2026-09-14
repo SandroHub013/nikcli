@@ -5,6 +5,8 @@ import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { Project } from "@nikcli-ai/sdk/httpapi"
+import { isTranscriptVerbosity, type TranscriptVerbosity } from "@nikcli-ai/ui/transcript-verbosity"
+import { reconcileActiveTab } from "@/pages/session/tab-integrity"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
@@ -163,14 +165,30 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           height: 280,
           opened: false,
         },
+        transcript: {
+          verbosity: "normal" as TranscriptVerbosity,
+        },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+          // Closed by default. It used to open on every new session and spend most
+          // of the window saying there was nothing to review. Deliberately a plain
+          // boolean rather than a rule keyed on the change count: a panel that
+          // opens and closes on its own gives the toggle two hidden modes, and the
+          // first press then appears to do nothing.
+          panelOpened: false,
         },
         fileTree: {
           opened: true,
           width: 344,
           tab: "changes" as "changes" | "all",
+        },
+        // Off by default: an editor that moves on its own has to be asked for.
+        follow: {
+          enabled: false,
+        },
+        /** Which editor "open externally" hands a file to. */
+        externalEditor: {
+          current: "vscode" as "vscode" | "cursor" | "zed" | "windsurf",
         },
         session: {
           width: 600,
@@ -539,6 +557,20 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
+      transcript: {
+        // How much of each turn to draw. Persisted so it survives a reload; a
+        // value written by an older build is validated rather than trusted.
+        verbosity: createMemo<TranscriptVerbosity>(() =>
+          isTranscriptVerbosity(store.transcript?.verbosity) ? store.transcript.verbosity : "normal",
+        ),
+        setVerbosity(verbosity: TranscriptVerbosity) {
+          if (!store.transcript) {
+            setStore("transcript", { verbosity })
+            return
+          }
+          setStore("transcript", "verbosity", verbosity)
+        },
+      },
       review: {
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
@@ -547,6 +579,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("review", "diffStyle", diffStyle)
+        },
+      },
+      externalEditor: {
+        current: createMemo(() => store.externalEditor?.current ?? "vscode"),
+        set(next: "vscode" | "cursor" | "zed" | "windsurf") {
+          if (!store.externalEditor) {
+            setStore("externalEditor", { current: next })
+            return
+          }
+          setStore("externalEditor", "current", next)
+        },
+      },
+      follow: {
+        enabled: createMemo(() => store.follow?.enabled ?? false),
+        toggle() {
+          const next = !(store.follow?.enabled ?? false)
+          // The group is absent in state persisted before it existed, and
+          // setting a leaf of a missing group is a no-op.
+          if (!store.follow) {
+            setStore("follow", { enabled: next })
+            return
+          }
+          setStore("follow", "enabled", next)
         },
       },
       fileTree: {
@@ -658,7 +713,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? false)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -754,8 +809,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const next = all.filter((tab) => tab !== "review")
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: next, active: undefined })
-            } else {
-              setStore("sessionTabs", session, "all", next)
+              return
+            }
+            setStore("sessionTabs", session, "all", next)
+            // Rewriting the list can drop the tab that was active; leaving it set
+            // points the strip at a tab that no longer has a trigger.
+            const active = reconcileActiveTab({ active: store.sessionTabs[session]?.active, all: next })
+            if (active !== store.sessionTabs[session]?.active) {
+              setStore("sessionTabs", session, "active", active)
             }
           },
           async open(tab: string) {

@@ -7,7 +7,7 @@ import { base64Encode } from "@nikcli-ai/util/encode"
 import { getDirectory, getFilename } from "@nikcli-ai/util/path"
 import { Icon } from "@nikcli-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
-import { DateTime } from "luxon"
+import { formatRelativeTime } from "@nikcli-ai/ui/intl-time"
 import { useDialog } from "@nikcli-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
@@ -105,9 +105,7 @@ export default function Home() {
                         </small>
                       </span>
                       <span class="home-recent__time">
-                        {DateTime.fromMillis(project.time.updated ?? project.time.created)
-                          .setLocale(language.locale())
-                          .toRelative()}
+                        {formatRelativeTime(project.time.updated ?? project.time.created, language.locale())}
                       </span>
                     </button>
                   </li>
@@ -121,7 +119,7 @@ export default function Home() {
             <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
               <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
-              <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
+              <div class="text-13-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
             <div />
             <Button class="px-3" onClick={chooseProject}>

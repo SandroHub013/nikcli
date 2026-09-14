@@ -212,6 +212,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
+    error: undefined as string | undefined,
   })
 
   async function checkForUpdates() {
@@ -224,7 +225,15 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   async function installUpdate() {
     if (!platform.update || !platform.restart) return
-    await platform.update()
+    setStore("error", undefined)
+    try {
+      await platform.update()
+    } catch (error) {
+      // This page has no toaster, so a rejection here would vanish and the button
+      // would read as dead. Restarting anyway would relaunch the un-updated build.
+      setStore("error", error instanceof Error ? error.message : String(error))
+      return
+    }
     await platform.restart()
   }
 
@@ -266,6 +275,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             </Show>
           </Show>
         </div>
+        <Show when={store.error}>
+          {(message) => (
+            <div class="text-13-regular text-text-critical-base text-center">
+              {language.t("toast.update.failed")}: {message()}
+            </div>
+          )}
+        </Show>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
             {language.t("error.page.report.prefix")}

@@ -290,7 +290,7 @@ export function SessionHeader() {
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
-                <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
+                <span class="flex-1 min-w-0 text-14-regular text-text-base truncate h-4.5 flex items-center">
                   {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
@@ -316,7 +316,7 @@ export function SessionHeader() {
                         aria-label={language.t("session.header.open.copyPath")}
                       >
                         <Icon name="copy" size="small" class="text-icon-base" />
-                        <span class="text-12-regular text-text-strong">
+                        <span class="text-13-regular text-text-strong">
                           {language.t("session.header.open.copyPath")}
                         </span>
                       </Button>
@@ -330,7 +330,7 @@ export function SessionHeader() {
                         aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                       >
                         <AppIcon id={current().icon} class="size-5" />
-                        <span class="text-12-regular text-text-strong">
+                        <span class="text-13-regular text-text-strong">
                           {language.t("session.header.open.action", { app: current().label })}
                         </span>
                       </Button>
@@ -358,7 +358,7 @@ export function SessionHeader() {
                                     <AppIcon id={o.icon} class="size-5" />
                                     <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
                                     <DropdownMenu.ItemIndicator>
-                                      <Icon name="check-small" size="small" class="text-icon-weak" />
+                                      <Icon name="check-small" size="small" class="text-icon-weak-base" />
                                     </DropdownMenu.ItemIndicator>
                                   </DropdownMenu.RadioItem>
                                 ))}
@@ -366,7 +366,7 @@ export function SessionHeader() {
                             </DropdownMenu.Group>
                             <DropdownMenu.Separator />
                             <DropdownMenu.Item onSelect={copyPath}>
-                              <Icon name="copy" size="small" class="text-icon-weak" />
+                              <Icon name="copy" size="small" class="text-icon-weak-base" />
                               <DropdownMenu.ItemLabel>
                                 {language.t("session.header.open.copyPath")}
                               </DropdownMenu.ItemLabel>
@@ -516,7 +516,7 @@ export function SessionHeader() {
                     <Button
                       variant="ghost"
                       class="group/review-toggle size-6 p-0"
-                      onClick={() => view().reviewPanel.toggle()}
+                      onClick={() => command.trigger("review.toggle")}
                       aria-label={language.t("command.review.toggle")}
                       aria-expanded={view().reviewPanel.opened()}
                       aria-controls="review-panel"
@@ -559,8 +559,8 @@ export function SessionHeader() {
                           size="small"
                           name="bullet-list"
                           classList={{
-                            "text-icon-strong": layout.fileTree.opened(),
-                            "text-icon-weak": !layout.fileTree.opened(),
+                            "text-icon-strong-base": layout.fileTree.opened(),
+                            "text-icon-weak-base": !layout.fileTree.opened(),
                           }}
                         />
                       </div>

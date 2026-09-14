@@ -1,4 +1,7 @@
 import { createMemo } from "solid-js"
+import { usePlatform } from "@/context/platform"
+import { externalEditorUri } from "@/pages/session/external-editor"
+import { transcriptToMarkdown, type TranscriptMessage } from "@/pages/session/transcript-markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useCommand } from "@/context/command"
 import { useDialog } from "@nikcli-ai/ui/context/dialog"
@@ -9,6 +12,7 @@ import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { DialogCreatePR } from "@/pages/session/dialog-create-pr"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -18,6 +22,7 @@ import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@nikcli-ai/ui/toast"
 import { findLast } from "@nikcli-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { nextVerbosity } from "@nikcli-ai/ui/transcript-verbosity"
 import { UserMessage } from "@nikcli-ai/sdk/httpapi"
 import { combineCommandSections } from "@/pages/session/helpers"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
@@ -25,6 +30,7 @@ import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 export const useSessionCommands = (input: {
   command: ReturnType<typeof useCommand>
   dialog: ReturnType<typeof useDialog>
+  platform: ReturnType<typeof usePlatform>
   file: ReturnType<typeof useFile>
   language: ReturnType<typeof useLanguage>
   local: ReturnType<typeof useLocal>
@@ -38,18 +44,28 @@ export const useSessionCommands = (input: {
   navigate: ReturnType<typeof useNavigate>
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  info: () => { revert?: { messageID?: string }; share?: { url?: string } } | undefined
+  info: () => { title?: string; revert?: { messageID?: string }; share?: { url?: string } } | undefined
   status: () => { type: string }
   userMessages: () => UserMessage[]
   visibleUserMessages: () => UserMessage[]
+  /** The revert cutoff, so exports do not carry discarded turns. */
+  revertMessageID: () => string | undefined
   activeMessage: () => UserMessage | undefined
   showAllFiles: () => void
+  /** Opens a tab and reveals the panel that hosts the strip. */
+  openTab: (value: string) => void
+  /** Shows review; closes the panel only when review is already active. */
+  toggleReview: () => void
   navigateMessageByOffset: (offset: number) => void
   setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   addSelectionToContext: (path: string, selection: FileSelection) => void
   focusInput: () => void
 }) => {
+  // Remembered across a plan round-trip, so leaving plan mode returns you to the
+  // agent you were using rather than to a hardcoded default.
+  let previousAgent: () => string | undefined = () => undefined
+
   const sessionCommands = createMemo(() => [
     {
       id: "session.new",
@@ -129,13 +145,129 @@ export const useSessionCommands = (input: {
     },
     {
       id: "browser.visualEditor.open",
-      title: "Browser: Open Visual Editor (Point & Prompt)",
-      description: "Inspect elements, visual edit CSS styles, and point & prompt with agent",
+      title: input.language.t("command.browser.visualEditor"),
+      description: input.language.t("command.browser.visualEditor.description"),
       category: input.language.t("command.category.view"),
       keybind: "mod+shift+b",
       slash: "browser",
       onSelect: () => {
-        input.tabs().open("browser")
+        // Through `openTab`, so the panel hosting the strip is opened too.
+        input.openTab("browser")
+      },
+    },
+    {
+      id: "github.pr.create",
+      title: input.language.t("github.pr.title"),
+      description: input.language.t("github.pr.pushHint"),
+      category: input.language.t("command.category.session"),
+      slash: "pr",
+      onSelect: () => input.dialog.show(() => <DialogCreatePR defaultTitle={input.info()?.title} />),
+    },
+    {
+      id: "transcript.verbosity",
+      title: input.language.t("command.transcript.verbosity"),
+      description: input.language.t(`transcript.verbosity.${input.layout.transcript.verbosity()}`),
+      category: input.language.t("command.category.view"),
+      // Not mod+o: that belongs to project.open, and the session registration
+      // wins the keymap, so it would silently take it over.
+      keybind: "mod+shift+o",
+      onSelect: () => {
+        const next = nextVerbosity(input.layout.transcript.verbosity())
+        input.layout.transcript.setVerbosity(next)
+        showToast({
+          variant: "success",
+          title: input.language.t("command.transcript.verbosity"),
+          description: input.language.t(`transcript.verbosity.${next}`),
+        })
+      },
+    },
+    {
+      id: "session.follow",
+      title: input.language.t("command.session.follow"),
+      description: input.language.t(
+        input.layout.follow.enabled() ? "command.session.follow.on" : "command.session.follow.off",
+      ),
+      category: input.language.t("command.category.view"),
+      keybind: "mod+shift+f",
+      onSelect: () => {
+        input.layout.follow.toggle()
+        showToast({
+          variant: "success",
+          title: input.language.t("command.session.follow"),
+          description: input.language.t(
+            input.layout.follow.enabled() ? "command.session.follow.on" : "command.session.follow.off",
+          ),
+        })
+      },
+    },
+    {
+      id: "session.exportMarkdown",
+      title: input.language.t("command.session.exportMarkdown"),
+      description: input.language.t("command.session.exportMarkdown.description"),
+      category: input.language.t("command.category.session"),
+      onSelect: async () => {
+        const sessionID = input.params.id
+        if (!sessionID) return
+        // Reverted turns are hidden from the transcript and must be hidden here
+        // too: exporting them puts work the user explicitly discarded into an
+        // issue, indistinguishable from what was kept.
+        const cutoff = input.visibleUserMessages().at(-1)?.id
+        const all = input.sync.data.message[sessionID] ?? []
+        const kept = cutoff ? all.filter((message) => message.id <= cutoff || message.role === "assistant") : all
+        const reverted = input.revertMessageID()
+        const messages = (reverted ? kept.filter((message) => message.id < reverted) : kept).map((message) => ({
+          role: message.role,
+          parts: (input.sync.data.part[message.id] ?? []) as TranscriptMessage["parts"],
+        }))
+        const markdown = transcriptToMarkdown({ title: input.info()?.title, messages })
+        // Copied rather than downloaded: the reason to want this is to paste it
+        // into an issue or a review, and a file in the downloads folder is one
+        // more step away from that than the clipboard is.
+        // The write can fail — permission denied, or an insecure context where
+        // `navigator.clipboard` is absent. Unhandled that is a rejected promise
+        // from an async `onSelect`, and a command that reports nothing either way.
+        try {
+          await navigator.clipboard.writeText(markdown)
+        } catch (error) {
+          showToast({
+            variant: "error",
+            title: input.language.t("command.session.exportMarkdown.failed"),
+            description: error instanceof Error ? error.message : String(error),
+          })
+          return
+        }
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title:
+            markdown.split("\n").length === 1
+              ? input.language.t("command.session.exportMarkdown.done.one")
+              : input.language.t("command.session.exportMarkdown.done", {
+                  lines: String(markdown.split("\n").length),
+                }),
+        })
+      },
+    },
+    {
+      id: "file.openExternal",
+      title: input.language.t("command.file.openExternal"),
+      description: input.language.t("command.file.openExternal.description"),
+      category: input.language.t("command.category.file"),
+      disabled: !input.file.pathFromTab(input.tabs().active() ?? ""),
+      onSelect: () => {
+        const relative = input.file.pathFromTab(input.tabs().active() ?? "")
+        if (!relative) return
+        // The tab holds a project-relative path; the editor needs an absolute
+        // one, and resolving it against the wrong root opens the wrong file.
+        const root = input.sdk.directory.replace(/[\/]+$/, "")
+        const absolute = `${root}/${relative}`
+        const editor = input.layout.externalEditor.current()
+        const uri = externalEditorUri({ editor, path: absolute })
+        if (!uri) {
+          showToast({ variant: "error", title: input.language.t("command.file.openExternal.failed") })
+          return
+        }
+        input.platform.openLink(uri)
       },
     },
     {
@@ -144,7 +276,7 @@ export const useSessionCommands = (input: {
       description: "",
       category: input.language.t("command.category.view"),
       keybind: "mod+shift+r",
-      onSelect: () => input.view().reviewPanel.toggle(),
+      onSelect: () => input.toggleReview(),
     },
     {
       id: "fileTree.toggle",
@@ -227,6 +359,57 @@ export const useSessionCommands = (input: {
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => input.dialog.show(() => <DialogSelectMcp />),
+    },
+    {
+      id: "agent.plan.toggle",
+      title: input.language.t("command.agent.planToggle"),
+      description: input.language.t(
+        input.local.agent.current()?.name === "plan"
+          ? "command.agent.planToggle.toBuild"
+          : "command.agent.planToggle.toPlan",
+      ),
+      category: input.language.t("command.category.agent"),
+      keybind: "mod+shift+comma",
+      /**
+       * A direct switch, not a step in the cycle.
+       *
+       * `plan` has always been a selectable agent — it denies `edit` everywhere
+       * except its own plan files — but reaching it meant cycling past whatever
+       * else is configured, and nothing named it as a mode. Every other agent
+       * panel puts planning one keystroke away and says which mode you are in.
+       */
+      onSelect: () => {
+        const current = input.local.agent.current()?.name
+        // Returns to where you came from, not to `build`: toggling out of plan
+        // from `general` used to land you somewhere you had not chosen.
+        if (current === "plan") {
+          const back = previousAgent() ?? "build"
+          previousAgent = () => undefined
+          if (!input.local.agent.list().some((agent) => agent.name === back)) {
+            showToast({ variant: "error", title: input.language.t("command.agent.planToggle.missing") })
+            return
+          }
+          input.local.agent.set(back)
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: input.language.t("command.agent.planToggle.off"),
+          })
+          return
+        }
+        previousAgent = () => current
+        const target = "plan"
+        if (!input.local.agent.list().some((agent) => agent.name === target)) {
+          showToast({ variant: "error", title: input.language.t("command.agent.planToggle.missing") })
+          return
+        }
+        input.local.agent.set(target)
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: input.language.t(target === "plan" ? "command.agent.planToggle.on" : "command.agent.planToggle.off"),
+        })
+      },
     },
     {
       id: "agent.cycle",

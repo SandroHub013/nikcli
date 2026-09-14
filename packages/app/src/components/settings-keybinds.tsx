@@ -398,10 +398,10 @@ export const SettingsKeybinds: Component = () => {
                           type="button"
                           data-keybind-id={id}
                           classList={{
-                            "h-8 px-3 rounded-md text-12-regular": true,
-                            "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
+                            "h-8 px-3 rounded-md text-13-regular": true,
+                            "bg-surface-base text-text-weak hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
                               store.active !== id,
-                            "border border-border-weak-base bg-surface-inset-base text-text-weak": store.active === id,
+                            "border border-border-weak-base bg-surface-inset-base text-text-base": store.active === id,
                           }}
                           onClick={() => start(id)}
                         >
@@ -423,7 +423,7 @@ export const SettingsKeybinds: Component = () => {
 
         <Show when={store.filter && !hasResults()}>
           <div class="flex flex-col items-center justify-center py-12 text-center">
-            <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
+            <span class="text-14-regular text-text-base">{language.t("settings.shortcuts.search.empty")}</span>
             <Show when={store.filter}>
               <span class="text-14-regular text-text-strong mt-1">"{store.filter}"</span>
             </Show>

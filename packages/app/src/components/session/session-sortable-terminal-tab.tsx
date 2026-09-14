@@ -151,7 +151,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
           </span>
         </Tabs.Trigger>
         <Show when={store.editing}>
-          <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
+          <div class="absolute inset-0 flex items-center px-3 bg-surface-base z-10 pointer-events-auto">
             <input
               id={`terminal-title-input-${props.terminal.id}`}
               type="text"

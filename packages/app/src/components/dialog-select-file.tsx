@@ -346,7 +346,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.path ?? "", type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                    <span class="text-text-base whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                       {getDirectory(item.path ?? "")}
                     </span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(item.path ?? "")}</span>
@@ -360,18 +360,18 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                 <div class="flex items-center gap-2 min-w-0">
                   <span class="text-14-regular text-text-strong whitespace-nowrap">{item.title}</span>
                   <Show when={item.description}>
-                    <span class="text-14-regular text-text-weak truncate">{item.description}</span>
+                    <span class="text-14-regular text-text-base truncate">{item.description}</span>
                   </Show>
                 </div>
                 <Show when={item.keybind}>
-                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
+                  <Keybind class="rounded-sm">{formatKeybind(item.keybind ?? "")}</Keybind>
                 </Show>
               </div>
             </Match>
             <Match when={item.type === "session"}>
               <div class="w-full flex items-center justify-between rounded-md pl-1">
                 <div class="flex items-center gap-x-3 grow min-w-0">
-                  <Icon name="bubble-5" size="small" class="shrink-0 text-icon-weak" />
+                  <Icon name="bubble-5" size="small" class="shrink-0 text-icon-weak-base" />
                   <div class="flex items-center gap-2 min-w-0">
                     <span
                       class="text-14-regular text-text-strong truncate"
@@ -381,7 +381,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                     </span>
                     <Show when={item.description}>
                       <span
-                        class="text-14-regular text-text-weak truncate"
+                        class="text-14-regular text-text-base truncate"
                         classList={{ "opacity-70": !!item.archived }}
                       >
                         {item.description}
@@ -390,7 +390,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   </div>
                 </div>
                 <Show when={item.updated}>
-                  <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
+                  <span class="text-13-regular text-text-base whitespace-nowrap ml-2">
                     {getRelativeTime(new Date(item.updated!).toISOString())}
                   </span>
                 </Show>

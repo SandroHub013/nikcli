@@ -1,10 +1,10 @@
 import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@nikcli-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { isValidReleaseDate, monthsSinceRelease } from "@/utils/release-date"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -42,7 +42,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     const latest = createMemo(() =>
       pipe(
         available(),
-        filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
+        filter((x) => Math.abs(monthsSinceRelease(x.release_date) ?? Infinity) < 6),
         groupBy((x) => x.provider.id),
         mapValues((models) =>
           pipe(
@@ -95,7 +95,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       if (state === "show") return true
       if (latestSet().has(key)) return true
       const m = find(model)
-      if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
+      if (!m?.release_date || !isValidReleaseDate(m.release_date)) return true
       return false
     }
 

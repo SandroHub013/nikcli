@@ -9,6 +9,8 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
+import { shouldRenderBareReview } from "@/pages/session/side-panel-visibility"
+import { isBrowserTab } from "@/pages/session/tab-identity"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { StickyAddButton } from "@/pages/session/review-tab"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -39,6 +41,8 @@ export function SessionSidePanel(props: {
   contextOpen: () => boolean
   openedTabs: () => string[]
   activeTab: () => string
+  /** What the user selected, before the derivation that gates on the file tree. */
+  selectedTab: () => string | undefined
   activeFileTab: () => string | undefined
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   openTab: (value: string) => void
@@ -76,6 +80,25 @@ export function SessionSidePanel(props: {
     return "files"
   })
 
+  const browserActive = createMemo(() => isBrowserTab(props.activeTab()))
+
+  /**
+   * Skipping the tab strip and rendering the diff on its own is a shortcut for
+   * "the file tree already lists the changes, so the strip would be redundant".
+   *
+   * It is only sound while `review` is the active tab. With any other tab active
+   * the strip is the only way back to it, so dropping it strands the user on a
+   * pane they cannot leave — previously only the browser case was patched, and
+   * the context tab and file tabs could still be opened into nothing.
+   */
+  const bareReview = createMemo(() =>
+    shouldRenderBareReview({
+      fileTreeOpen: props.layout.fileTree.opened(),
+      fileTreeTab: props.fileTreeTab(),
+      selectedTab: props.selectedTab(),
+    }),
+  )
+
   return (
     <Show when={props.open}>
       <aside
@@ -92,7 +115,7 @@ export function SessionSidePanel(props: {
         <Show when={props.reviewOpen}>
           <div class="flex-1 min-w-0 h-full flex flex-col">
             <Show
-              when={props.layout.fileTree.opened() && props.fileTreeTab() === "changes"}
+              when={bareReview()}
               fallback={
                 <DragDropProvider
                   onDragStart={props.onDragStart}
@@ -115,7 +138,7 @@ export function SessionSidePanel(props: {
                             <div class="flex items-center gap-1.5">
                               <div>{props.language.t("session.tab.review")}</div>
                               <Show when={props.hasReview}>
-                                <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                <div class="text-13-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                   {props.reviewCount}
                                 </div>
                               </Show>
@@ -191,7 +214,7 @@ export function SessionSidePanel(props: {
                     </Show>
 
                     <Tabs.Content value="browser" class="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-                      <Show when={props.activeTab() === "browser" || props.activeTab().startsWith("browser://")}>
+                      <Show when={browserActive()}>
                         <BrowserVisualEditor onClose={() => props.tabs().close("browser")} />
                       </Show>
                     </Tabs.Content>
@@ -224,7 +247,10 @@ export function SessionSidePanel(props: {
                       </Tabs.Content>
                     </Show>
 
-                    <Show when={props.activeFileTab()} keyed>
+                    {/* "browser" is an opened tab but not a file tab; rendering FileTabContent for it
+                        would mount a second Tabs.Content with the same value, and the two would split
+                        the panel height between them. */}
+                    <Show when={!browserActive() && props.activeFileTab()} keyed>
                       {(tab) => (
                         <FileTabContent
                           tab={tab}
@@ -256,18 +282,21 @@ export function SessionSidePanel(props: {
                 </DragDropProvider>
               }
             >
-              {props.reviewPanel()}
+              <div class="flex h-full min-h-0 flex-col">
+                {/* The bare review skips the tab strip, which is where the git
+                    controls normally live. Connecting GitHub or switching a branch
+                    must not depend on the strip winning that race, so the controls
+                    get their own row here. */}
+                <Show when={props.reviewActions}>
+                  <div class="flex h-10 shrink-0 items-center">{props.reviewActions}</div>
+                </Show>
+                <div class="min-h-0 flex-1">{props.reviewPanel()}</div>
+              </div>
             </Show>
           </div>
         </Show>
 
-        <Show
-          when={
-            props.layout.fileTree.opened() &&
-            props.activeTab() !== "browser" &&
-            !props.activeTab().startsWith("browser://")
-          }
-        >
+        <Show when={props.layout.fileTree.opened() && !browserActive()}>
           <div
             id="file-tree-panel"
             class="relative shrink-0 h-full"
@@ -301,7 +330,7 @@ export function SessionSidePanel(props: {
                       <Show
                         when={props.diffsReady}
                         fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
+                          <div class="px-2 py-2 text-13-regular text-text-weak">
                             {props.language.t("common.loading")}
                             {props.language.t("common.loading.ellipsis")}
                           </div>
@@ -318,7 +347,7 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Match>
                     <Match when={true}>
-                      <div class="mt-8 text-center text-12-regular text-text-weak">
+                      <div class="mt-8 text-center text-13-regular text-text-base">
                         {props.language.t("session.review.noChanges")}
                       </div>
                     </Match>

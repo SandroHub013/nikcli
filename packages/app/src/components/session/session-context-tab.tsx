@@ -1,7 +1,7 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { DateTime } from "luxon"
+import { formatDateTime } from "@nikcli-ai/ui/intl-time"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@nikcli-ai/util/encode"
@@ -83,7 +83,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
   const time = (value: number | undefined) => {
     if (!value) return "—"
-    return DateTime.fromMillis(value).setLocale(language.locale()).toLocaleString(DateTime.DATETIME_MED)
+    return formatDateTime(value, language.locale())
   }
 
   const providerLabel = createMemo(() => {
@@ -215,8 +215,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
   function Stat(statProps: { label: string; value: JSX.Element }) {
     return (
       <div class="flex flex-col gap-1">
-        <div class="text-12-regular text-text-weak">{statProps.label}</div>
-        <div class="text-12-medium text-text-strong">{statProps.value}</div>
+        <div class="text-13-regular text-text-weak">{statProps.label}</div>
+        <div class="text-13-medium text-text-strong">{statProps.value}</div>
       </div>
     )
   }
@@ -276,7 +276,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
                 {msgProps.message.role} <span class="text-text-base">• {msgProps.message.id}</span>
               </div>
               <div class="flex items-center gap-3">
-                <div class="shrink-0 text-12-regular text-text-weak">{time(msgProps.message.time.created)}</div>
+                <div class="shrink-0 text-13-regular text-text-weak">{time(msgProps.message.time.created)}</div>
                 <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
               </div>
             </div>
@@ -355,7 +355,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
         <Show when={breakdown().length > 0}>
           <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">{language.t("context.breakdown.title")}</div>
+            <div class="text-13-regular text-text-weak">{language.t("context.breakdown.title")}</div>
             <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
               <For each={breakdown()}>
                 {(segment) => (
@@ -375,7 +375,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
                   <div class="flex items-center gap-1 text-11-regular text-text-weak">
                     <div class="size-2 rounded-sm" style={{ "background-color": segment.color }} />
                     <div>{segment.label}</div>
-                    <div class="text-text-weaker">{segment.percent}</div>
+                    <div class="text-text-weak">{segment.percent}</div>
                   </div>
                 )}
               </For>
@@ -386,8 +386,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
         <Show when={instructionNotices().length > 0}>
           <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">{language.t("session.instructions.history")}</div>
-            <div class="flex flex-col gap-1 text-12-regular text-text-strong">
+            <div class="text-13-regular text-text-weak">{language.t("session.instructions.history")}</div>
+            <div class="flex flex-col gap-1 text-13-regular text-text-strong">
               <For each={instructionNotices()}>{(notice) => <div>{formatInstructionDelta(notice.delta)}</div>}</For>
             </div>
           </div>
@@ -396,16 +396,16 @@ export function SessionContextTab(props: SessionContextTabProps) {
         <Show when={systemPrompt()}>
           {(prompt) => (
             <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
+              <div class="text-13-regular text-text-weak">{language.t("context.systemPrompt.title")}</div>
               <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
-                <Markdown text={prompt()} class="text-12-regular" />
+                <Markdown text={prompt()} class="text-13-regular" />
               </div>
             </div>
           )}
         </Show>
 
         <div class="flex flex-col gap-2">
-          <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
+          <div class="text-13-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
           <Accordion multiple>
             <For each={props.messages()}>{(message) => <RawMessage message={message} />}</For>
           </Accordion>

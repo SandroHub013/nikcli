@@ -55,11 +55,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setStore("current", undefined)
             return
           }
-          if (name && available.some((x) => x.name === name)) {
-            setStore("current", name)
-            return
-          }
-          setStore("current", available[0].name)
+          const target = (name && available.find((x) => x.name === name)) || available[0]
+          setStore("current", target.name)
+          // Deliberately does NOT write the model.
+          //
+          // `model.current()` already resolves `ephemeral → agent.model →
+          // fallback`, so an agent's pinned model applies on its own. Calling
+          // `model.set` here would freeze that live config value into a user
+          // override, after which editing the agent's configured model would stop
+          // taking effect for that agent — and it would also flip the model's
+          // visibility as a side effect. `move()` has that bug; spreading it to
+          // every selection would have made it the norm.
         },
         move(direction: 1 | -1) {
           const available = list()

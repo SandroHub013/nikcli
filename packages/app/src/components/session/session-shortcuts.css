@@ -1,0 +1,65 @@
+/*
+ * Shortcut cheat sheet on the empty session.
+ *
+ * Deliberately quiet: it fills space that was otherwise blank, and must not
+ * compete with the composer for attention. Each row is clickable as well as
+ * documented, so the keybind teaches and the row still works for anyone who
+ * would rather point at it.
+ *
+ * Quiet is done with size and with the hover step, not by dimming the text past
+ * legibility. `--text-weak` measures 3.2:1 on the base surface and `--text-weaker`
+ * 1.9:1; WCAG AA asks 4.5:1 at these sizes, and these rows are buttons whose
+ * labels are the only thing that says what they do.
+ */
+
+[data-component="session-shortcuts"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 20px;
+  width: 100%;
+  max-width: 340px;
+}
+
+[data-slot="session-shortcut"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  color: var(--text-base);
+  /* text-13-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+  text-align: left;
+}
+
+[data-slot="session-shortcut"]:hover,
+[data-slot="session-shortcut"]:focus-visible {
+  background: var(--surface-base-hover);
+  color: var(--text-strong);
+}
+
+[data-slot="session-shortcut-title"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="session-shortcut-hint"] {
+  padding: 6px 8px 0;
+  color: var(--text-base);
+  /* text-11-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+}

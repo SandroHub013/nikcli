@@ -1,4 +1,8 @@
 import { useFilteredList } from "@nikcli-ai/ui/hooks"
+import { formatCost, formatTokens, sessionUsage } from "@/pages/session/session-usage"
+import { type LocalPTY, useTerminal } from "@/context/terminal"
+import { formatTerminalExcerpt, terminalExcerpt } from "@/pages/session/terminal-context"
+import { appendTextToPrompt, removeMentionTrigger } from "@/context/prompt-append"
 import { createEffect, on, Component, Show, For, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
@@ -51,6 +55,7 @@ import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge 
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import { navigatePromptHistory, prependHistoryEntry, promptLength } from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
+import { isPillType } from "./prompt-input/pill"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -58,7 +63,6 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@nikcli-ai/ui/image-preview"
 import { VISUAL_EDITOR_PROMPT_EVENT } from "@/components/browser/visual-editor"
-import { appendTextToPrompt } from "@/context/prompt-append"
 
 interface PromptInputProps {
   class?: string
@@ -66,6 +70,8 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+  /** Fired once the prompt has actually reached the server. */
+  onSent?: () => void
 }
 
 const EXAMPLES = [
@@ -102,10 +108,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
+  const terminal = useTerminal()
+
+
   const commentCount = createMemo(() => prompt.context.items().filter((item) => !!item.comment?.trim()).length)
   const layout = useLayout()
   const comments = useComments()
   const params = useParams()
+
+  /**
+   * What this session has spent. Read from the messages already in the store, so
+   * it costs nothing beyond the sum and follows the transcript as it grows.
+   */
+  const usage = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return sessionUsage([])
+    const messages = sync.data.message[sessionID] ?? []
+    return sessionUsage(messages as Parameters<typeof sessionUsage>[0])
+  })
+
+  const usageBreakdown = () => {
+    const current = usage()
+    return [
+      `${language.t("session.usage.input")}: ${formatTokens(current.input)}`,
+      `${language.t("session.usage.output")}: ${formatTokens(current.output)}`,
+      current.reasoning > 0 ? `${language.t("session.usage.reasoning")}: ${formatTokens(current.reasoning)}` : "",
+      current.cacheRead > 0 ? `${language.t("session.usage.cache")}: ${formatTokens(current.cacheRead)}` : "",
+      `${language.t("session.usage.turns")}: ${current.turns}`,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
@@ -249,7 +282,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     promptPlaceholder({
       mode: store.mode,
       commentCount: commentCount(),
-      example: language.t(EXAMPLES[store.placeholder]),
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
@@ -335,14 +367,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
-    } else {
-      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+      return
     }
+    if (option.type === "terminal") {
+      // Inserted as text, not as a pill: the value is the output itself, read
+      // once at insertion. A pill would imply it keeps tracking the terminal.
+      const reader = terminal.readers.get(option.id)
+      const excerpt = reader
+        ? terminalExcerpt({ selection: reader.selection(), scrollback: reader.text() })
+        : undefined
+      if (!excerpt) {
+        showToast({ variant: "error", title: language.t("terminal.sendToChat.empty") })
+        return
+      }
+      const name = terminal.all().find((item: LocalPTY) => item.id === option.id)?.title
+      prompt.set(
+        appendTextToPrompt(
+          // The trigger has no pill to be swapped for here, so it is removed
+          // explicitly — otherwise a stray `@` is sent to the agent.
+          removeMentionTrigger(prompt.current()),
+          formatTerminalExcerpt({ excerpt, title: name || language.t("terminal.title") }),
+        ),
+      )
+      return
+    }
+    addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
   }
 
   const atKey = (x: AtOption | undefined) => {
     if (!x) return ""
-    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
+    if (x.type === "agent") return `agent:${x.name}`
+    if (x.type === "terminal") return `terminal:${x.id}`
+    return `file:${x.path}`
   }
 
   const {
@@ -354,6 +410,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
+      const terminals: AtOption[] = terminal
+        .all()
+        .map((item: LocalPTY): AtOption => ({ type: "terminal", id: item.id, display: item.title }))
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
@@ -361,20 +420,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions]
+      return [...terminals, ...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
     groupBy: (item) => {
+      if (item.type === "terminal") return "terminal"
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"
       return "file"
     },
     sortGroupsBy: (a, b) => {
       const rank = (category: string) => {
-        if (category === "agent") return 0
-        if (category === "recent") return 1
-        return 2
+        // Above the agents: the menu draws ten rows, and with ten agents
+        // configured anything below them is produced and never seen.
+        if (category === "terminal") return 0
+        if (category === "agent") return 1
+        if (category === "recent") return 2
+        return 3
       }
       return rank(a.category) - rank(b.category)
     },
@@ -474,8 +537,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return false
       const el = node as HTMLElement
-      if (el.dataset.type === "file") return true
-      if (el.dataset.type === "agent") return true
+      if (isPillType(el.dataset.type)) return true
       return el.tagName === "BR"
     })
 
@@ -815,6 +877,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     newSessionWorktree: props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
+    onSent: props.onSent,
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1030,7 +1093,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         classList={{
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
-          "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
+          "rounded-xl overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1088,7 +1151,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-base pointer-events-none whitespace-nowrap truncate">
               {placeholder()}
             </div>
           </Show>
@@ -1098,9 +1161,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
-                  <Icon name="console" size="small" class="text-icon-primary" />
-                  <span class="text-12-regular text-text-primary">{language.t("prompt.mode.shell")}</span>
-                  <span class="text-12-regular text-text-weak">{language.t("prompt.mode.shell.exit")}</span>
+                  <Icon name="console" size="small" class="text-icon-base" />
+                  <span class="text-13-regular text-text-strong">{language.t("prompt.mode.shell")}</span>
+                  <span class="text-13-regular text-text-weak">{language.t("prompt.mode.shell.exit")}</span>
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
@@ -1124,7 +1187,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     as={Button}
                     type="button"
                     variant="ghost"
-                    class="px-2 min-w-0 max-w-[180px] text-12-regular data-[expanded]:bg-surface-raised-base-active"
+                    class="px-2 min-w-0 max-w-[180px] text-13-regular data-[expanded]:bg-surface-raised-base-active"
                     aria-label={language.t("prompt.permissions.title")}
                   >
                     <Icon
@@ -1133,7 +1196,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       classList={{
                         "text-icon-info-active": permissionMode() === "approve_for_me",
                         "text-icon-success-base": permissionMode() === "full_access",
-                        "text-icon-warning": permissionMode() === "require_approval",
+                        "text-icon-warning-base": permissionMode() === "require_approval",
                         "text-icon-base": permissionMode() === "custom",
                       }}
                     />
@@ -1161,7 +1224,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 </DropdownMenu.ItemDescription>
                               </div>
                               <DropdownMenu.ItemIndicator class="ml-auto mt-0.5">
-                                <Icon name="check-small" size="small" class="text-icon-weak" />
+                                <Icon name="check-small" size="small" class="text-icon-weak-base" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
                           </Show>
@@ -1170,7 +1233,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               <Icon
                                 name={permissionModeIcon(preset)}
                                 size="small"
-                                class="text-icon-weak mt-0.5 shrink-0"
+                                class="text-icon-weak-base mt-0.5 shrink-0"
                               />
                               <div class="flex flex-col gap-0.5 min-w-0">
                                 <DropdownMenu.ItemLabel>{permissionModeTitle(preset)}</DropdownMenu.ItemLabel>
@@ -1179,7 +1242,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 </DropdownMenu.ItemDescription>
                               </div>
                               <DropdownMenu.ItemIndicator class="ml-auto mt-0.5">
-                                <Icon name="check-small" size="small" class="text-icon-weak" />
+                                <Icon name="check-small" size="small" class="text-icon-weak-base" />
                               </DropdownMenu.ItemIndicator>
                             </DropdownMenu.RadioItem>
                           ))}
@@ -1189,7 +1252,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <DropdownMenu.Item
                         onSelect={() => dialog.show(() => <DialogSettings defaultValue="permissions" />)}
                       >
-                        <Icon name="settings-gear" size="small" class="text-icon-weak" />
+                        <Icon name="settings-gear" size="small" class="text-icon-weak-base" />
                         <DropdownMenu.ItemLabel>{language.t("prompt.permissions.openSettings")}</DropdownMenu.ItemLabel>
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
@@ -1251,7 +1314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Button
                       data-action="model-variant-cycle"
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-13-regular"
                       onClick={() => local.model.variant.cycle()}
                     >
                       {local.model.variant.current() ?? language.t("common.default")}
@@ -1260,6 +1323,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Show>
               </Match>
             </Switch>
+            {/*
+              Beside the model, where Zed puts it and Copilot's session log
+              echoes it. The running number is the one that matters: a monthly
+              total in a dashboard cannot tell you that *this* session has become
+              expensive while you are still in it.
+            */}
+            <Show when={usage().turns > 0}>
+              <span
+                class="hidden group-hover/prompt-input:inline-block text-13-regular text-text-base tabular-nums shrink-0"
+                title={usageBreakdown()}
+              >
+                {formatTokens(usage().billable)} · {formatCost(usage().cost, language.locale())}
+              </span>
+            </Show>
           </div>
           <div class="flex items-center gap-1 shrink-0">
             <input
@@ -1297,7 +1374,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Match when={working()}>
                     <div class="flex items-center gap-2">
                       <span>{language.t("prompt.action.stop")}</span>
-                      <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+                      <span class="text-icon-base text-13-medium text-[10px]!">{language.t("common.key.esc")}</span>
                     </div>
                   </Match>
                   <Match when={true}>

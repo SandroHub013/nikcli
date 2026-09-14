@@ -210,7 +210,7 @@ export const SortableProject = (props: {
                 />
               </Tooltip>
             </div>
-            <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
+            <div class="px-4 pb-2 text-13-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
             <div class="px-2 pb-2 flex flex-col gap-2">
               <Show
                 when={workspaceEnabled()}

@@ -1,6 +1,7 @@
 export { PlatformProvider, usePlatform, type Platform } from "./context/platform"
 export { AppBaseProviders, AppInterface } from "./app"
 export { useCommand } from "./context/command"
+export { useLanguage } from "./context/language"
 export { useGlobalSync } from "./context/global-sync"
 export { useGlobalSDK } from "./context/global-sdk"
 export { useAccount, type AccountUser, type AccountStatus } from "./context/account"

@@ -10,6 +10,7 @@ import type { QuestionAnswer } from "@nikcli-ai/sdk/httpapi"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@nikcli-ai/ui/toast"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { useDialog } from "@nikcli-ai/ui/context/dialog"
 import { useCommand, type CommandOption } from "@/context/command"
 import { DialogStatus } from "@/components/dialog-status"
@@ -104,6 +105,7 @@ export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
   const language = useLanguage()
+  const layout = useLayout()
   const directory = createMemo(() => {
     return decode64(params.dir) ?? ""
   })
@@ -140,6 +142,16 @@ export default function Layout(props: ParentProps) {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
 
+            const revertPart = (input: { sessionID: string; messageID: string; partID: string }) => {
+              void sdk.client.session.revert(input).catch((error: unknown) => {
+                showToast({
+                  variant: "error",
+                  title: language.t("common.requestFailed"),
+                  description: error instanceof Error ? error.message : String(error),
+                })
+              })
+            }
+
             return (
               <>
                 <DirectoryCommands />
@@ -150,6 +162,8 @@ export default function Layout(props: ParentProps) {
                   onQuestionReply={replyToQuestion}
                   onQuestionReject={rejectQuestion}
                   onNavigateToSession={navigateToSession}
+                  onRevertPart={revertPart}
+                  verbosity={layout.transcript.verbosity}
                 >
                   <LocalProvider>{props.children}</LocalProvider>
                 </DataProvider>

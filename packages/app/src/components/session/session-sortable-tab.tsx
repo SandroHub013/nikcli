@@ -1,4 +1,5 @@
 import { createMemo, Show } from "solid-js"
+import { isBrowserTab } from "@/pages/session/tab-identity"
 import type { JSX } from "solid-js"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { FileIcon } from "@nikcli-ai/ui/file-icon"
@@ -59,7 +60,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
             when={path()}
             fallback={
               <Show
-                when={props.tab === "browser" || props.tab.startsWith("browser://")}
+                when={isBrowserTab(props.tab)}
                 fallback={<span class="text-14-medium truncate">{props.tab}</span>}
               >
                 <div class="flex items-center gap-x-1.5 min-w-0">

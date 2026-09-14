@@ -22,14 +22,14 @@ type BrainResult = {
 }
 
 const Row: Component<{ label: string; value: string; tone?: "ok" | "warn" | "muted" }> = (props) => (
-  <div class="flex items-center justify-between gap-x-3 text-12-regular">
+  <div class="flex items-center justify-between gap-x-3 text-13-regular">
     <span class="text-text-weak">{props.label}</span>
     <span
       class="tabular-nums"
       classList={{
-        "text-icon-success": props.tone === "ok",
-        "text-icon-warning": props.tone === "warn",
-        "text-text-weaker": props.tone === "muted",
+        "text-icon-success-base": props.tone === "ok",
+        "text-icon-warning-base": props.tone === "warn",
+        "text-text-weak": props.tone === "muted",
         "text-text-base": !props.tone,
       }}
     >
@@ -73,7 +73,7 @@ export const DialogBrain: Component = () => {
         <Show
           when={status()}
           fallback={
-            <span class="text-12-regular text-text-weak">
+            <span class="text-13-regular text-text-weak">
               {status.loading ? language.t("common.loading.ellipsis") : language.t("dialog.brain.unavailable")}
             </span>
           }
@@ -107,10 +107,10 @@ export const DialogBrain: Component = () => {
         <Show when={result()}>
           {(r) => (
             <div
-              class="rounded-md border px-3 py-2 text-12-regular"
+              class="rounded-md border px-3 py-2 text-13-regular"
               classList={{
                 "border-border-base text-text-base": r().success,
-                "border-icon-error text-icon-error": !r().success,
+                "border-icon-critical-base text-icon-critical-base": !r().success,
               }}
             >
               <Show when={r().success} fallback={<span>{r().error ?? language.t("dialog.brain.failed")}</span>}>

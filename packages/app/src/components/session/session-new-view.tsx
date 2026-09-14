@@ -1,5 +1,5 @@
 import { For, Show, createMemo } from "solid-js"
-import { DateTime } from "luxon"
+import { formatRelativeTime } from "@nikcli-ai/ui/intl-time"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@nikcli-ai/ui/icon"
@@ -8,6 +8,7 @@ import { getDirectory, getFilename } from "@nikcli-ai/util/path"
 import { usePlatform } from "@/context/platform"
 import { useLocal } from "@/context/local"
 import { WORK_SUGGESTIONS } from "./session-new-view-data"
+import { SessionShortcuts } from "./session-shortcuts"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -82,33 +83,34 @@ export function NewSessionView(props: NewSessionViewProps) {
         when={desktop()}
         fallback={
           <>
-            <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
+            {/* text-weaker is #bcbbbb: 1.87:1 on the base surface, which fails WCAG AA
+                for any text and is indefensible on the heading of the view. */}
+            <div class="text-20-medium text-text-base">{language.t("command.session.new")}</div>
             <div class="flex justify-center items-center gap-3">
               <Icon name="folder" size="small" />
-              <div class="text-12-medium text-text-weak select-text">
+              <div class="text-13-medium text-text-weak select-text">
                 {getDirectory(projectRoot())}
                 <span class="text-text-strong">{getFilename(projectRoot())}</span>
               </div>
             </div>
             <div class="flex justify-center items-center gap-1">
               <Icon name="branch" size="small" />
-              <div class="text-12-medium text-text-weak select-text ml-2">{label(current())}</div>
+              <div class="text-13-medium text-text-base select-text ml-2">{label(current())}</div>
             </div>
             <Show when={sync.project}>
               {(project) => (
                 <div class="flex justify-center items-center gap-3">
                   <Icon name="pencil-line" size="small" />
-                  <div class="text-12-medium text-text-weak">
+                  <div class="text-13-medium text-text-weak">
                     {language.t("session.new.lastModified")}&nbsp;
                     <span class="text-text-strong">
-                      {DateTime.fromMillis(project().time.updated ?? project().time.created)
-                        .setLocale(language.locale())
-                        .toRelative()}
+                      {formatRelativeTime(project().time.updated ?? project().time.created, language.locale())}
                     </span>
                   </div>
                 </div>
               )}
             </Show>
+            <SessionShortcuts />
           </>
         }
       >

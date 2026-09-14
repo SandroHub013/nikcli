@@ -10,12 +10,12 @@ type Tone = "success" | "danger" | "muted"
 
 const SummaryCard: Component<{ label: string; value: string | number; tone?: Tone }> = (props) => (
   <div class="flex min-w-0 flex-col gap-0.5 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
-    <span class="truncate text-11-regular text-text-weaker">{props.label}</span>
+    <span class="truncate text-11-regular text-text-weak">{props.label}</span>
     <span
-      class="truncate text-15-medium tabular-nums"
+      class="truncate text-16-medium tabular-nums"
       classList={{
-        "text-icon-success": props.tone === "success",
-        "text-icon-error": props.tone === "danger",
+        "text-icon-success-base": props.tone === "success",
+        "text-icon-critical-base": props.tone === "danger",
         "text-text-base": !props.tone || props.tone === "muted",
       }}
     >
@@ -28,17 +28,17 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
   <span
     class="inline-flex h-6 max-w-[120px] items-center gap-1.5 rounded-md border border-border-base bg-surface-base px-2 text-11-medium"
     classList={{
-      "text-icon-success": props.tone === "success",
-      "text-icon-error": props.tone === "danger",
+      "text-icon-success-base": props.tone === "success",
+      "text-icon-critical-base": props.tone === "danger",
       "text-text-weaker": props.tone === "muted",
     }}
   >
     <span
       class="size-1.5 rounded-full shrink-0"
       classList={{
-        "bg-icon-success": props.tone === "success",
-        "bg-icon-error": props.tone === "danger",
-        "bg-icon-weak": props.tone === "muted",
+        "bg-icon-success-base": props.tone === "success",
+        "bg-icon-critical-base": props.tone === "danger",
+        "bg-icon-weak-base": props.tone === "muted",
       }}
     />
     <span class="truncate">{props.children}</span>
@@ -69,7 +69,7 @@ export const DialogDoctor: Component = () => {
       <div class="flex w-full min-w-0 flex-col gap-y-4">
         <Show
           when={report()}
-          fallback={<span class="text-12-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>}
+          fallback={<span class="text-13-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>}
         >
           {(current) => (
             <>
@@ -96,15 +96,15 @@ export const DialogDoctor: Component = () => {
                         <Icon
                           name={check.ok ? "check" : "close"}
                           size="small"
-                          class={check.ok ? "text-icon-success shrink-0 mt-0.5" : "text-icon-error shrink-0 mt-0.5"}
+                          class={check.ok ? "text-icon-success-base shrink-0 mt-0.5" : "text-icon-critical-base shrink-0 mt-0.5"}
                         />
                         <div class="flex min-w-0 flex-col gap-0.5">
-                          <span class="text-12-medium text-text-base">{check.label}</span>
+                          <span class="text-13-medium text-text-base">{check.label}</span>
                           <Show when={check.detail}>
                             <span class="text-11-regular text-text-weak break-words">{check.detail}</span>
                           </Show>
                           <Show when={check.fix}>
-                            <span class="text-11-regular text-icon-warning break-words">
+                            <span class="text-11-regular text-icon-warning-base break-words">
                               {language.t("dialog.doctor.fix")}: {check.fix}
                             </span>
                           </Show>

@@ -49,9 +49,9 @@ export const DialogSkills: Component = () => {
           <div class="w-full flex flex-col gap-0.5 min-w-0">
             <div class="flex items-center gap-2 min-w-0">
               <span class="truncate text-13-medium text-text-base">{skill.name}</span>
-              <span class="shrink-0 text-11-regular text-text-weaker">{sourceLabel(skill.location)}</span>
+              <span class="shrink-0 text-11-regular text-text-weak">{sourceLabel(skill.location)}</span>
               <Show when={skill.version}>
-                <span class="shrink-0 text-11-regular text-text-weaker">v{skill.version}</span>
+                <span class="shrink-0 text-11-regular text-text-weak">v{skill.version}</span>
               </Show>
             </div>
             <Show when={skill.description}>
@@ -60,7 +60,7 @@ export const DialogSkills: Component = () => {
             <Show when={skill.tags && skill.tags.length > 0}>
               <div class="flex items-center gap-1 flex-wrap">
                 <For each={skill.tags!.slice(0, 5)}>
-                  {(tag) => <span class="text-10-regular text-text-weaker">#{tag}</span>}
+                  {(tag) => <span class="text-10-regular text-text-weak">#{tag}</span>}
                 </For>
               </div>
             </Show>

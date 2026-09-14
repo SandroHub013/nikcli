@@ -121,7 +121,7 @@ export const SettingsProviders: Component = () => {
             <Show
               when={connected().length > 0}
               fallback={
-                <div class="py-4 text-14-regular text-text-weak">
+                <div class="py-4 text-14-regular text-text-base">
                   {language.t("settings.providers.connected.empty")}
                 </div>
               }
@@ -168,37 +168,37 @@ export const SettingsProviders: Component = () => {
                       </Show>
                     </div>
                     <Show when={item.id === "nikcli"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.nikcli.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "anthropic"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.anthropic.note")}
                       </span>
                     </Show>
                     <Show when={item.id.startsWith("github-copilot")}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.copilot.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "openai"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.openai.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "google"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.google.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "openrouter"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.openrouter.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "vercel"}>
-                      <span class="text-12-regular text-text-weak pl-8">
+                      <span class="text-13-regular text-text-base pl-8">
                         {language.t("dialog.provider.vercel.note")}
                       </span>
                     </Show>
@@ -227,7 +227,7 @@ export const SettingsProviders: Component = () => {
                   <span class="text-14-medium text-text-strong">Custom provider</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
                 </div>
-                <span class="text-12-regular text-text-weak pl-8">Add an OpenAI-compatible provider by base URL.</span>
+                <span class="text-13-regular text-text-base pl-8">Add an OpenAI-compatible provider by base URL.</span>
               </div>
               <Button
                 size="large"

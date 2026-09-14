@@ -69,7 +69,7 @@ export const SettingsModels: Component = () => {
           when={!list.grouped.loading}
           fallback={
             <div class="flex flex-col items-center justify-center py-12 text-center">
-              <span class="text-14-regular text-text-weak">
+              <span class="text-14-regular text-text-base">
                 {language.t("common.loading")}
                 {language.t("common.loading.ellipsis")}
               </span>
@@ -80,7 +80,7 @@ export const SettingsModels: Component = () => {
             when={list.flat().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-12 text-center">
-                <span class="text-14-regular text-text-weak">{language.t("dialog.model.empty")}</span>
+                <span class="text-14-regular text-text-base">{language.t("dialog.model.empty")}</span>
                 <Show when={list.filter()}>
                   <span class="text-14-regular text-text-strong mt-1">&quot;{list.filter()}&quot;</span>
                 </Show>

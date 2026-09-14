@@ -1,0 +1,77 @@
+/*
+ * The waiting-messages strip, directly above the composer.
+ *
+ * Quiet but legible: it is a status, not a call to action, and it appears while
+ * the user is reading the transcript rather than looking here.
+ */
+[data-component="pending-queue"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 8px;
+  background: var(--surface-base);
+}
+
+[data-slot="pending-queue-header"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+[data-slot="pending-queue-clear"] {
+  flex-shrink: 0;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  /* text-11-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+}
+
+[data-slot="pending-queue-clear"]:hover,
+[data-slot="pending-queue-clear"]:focus-visible {
+  color: var(--text-strong);
+}
+
+[data-slot="pending-queue-title"] {
+  padding: 0 2px 2px;
+  color: var(--text-base);
+  /* text-11-medium */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+}
+
+[data-slot="pending-queue-row"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px;
+  color: var(--text-base);
+  /* text-13-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+}
+
+[data-slot="pending-queue-text"] {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

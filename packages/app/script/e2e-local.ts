@@ -99,7 +99,9 @@ Object.assign(process.env, serverEnv)
 process.env.AGENT = "1"
 process.env.NIKCLI = "1"
 
-const log = await import("../../nikcli/src/util/log")
+// `Log` moved out of nikcli into the shared util package; the old path left
+// this script failing to start long before Playwright was ever reached.
+const log = await import("@nikcli-ai/util/log")
 const install = await import("../../nikcli/src/installation")
 await log.Log.init({
   print: true,

@@ -13,12 +13,40 @@ import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
+
+/**
+ * How much scrollback `text()` reads.
+ *
+ * Generous next to the ~60 lines the caller keeps, so wrapped rows and trailing
+ * blanks cannot starve it, and still a two-hundredth of the default buffer.
+ */
+const TERMINAL_READ_ROWS = 400
+
+/** See the comment at the custom key handler below before adding to this. */
+const PASS_THROUGH_COMMANDS: ReadonlyArray<{ id: string; fallback: string }> = [
+  { id: TOGGLE_TERMINAL_ID, fallback: DEFAULT_TOGGLE_TERMINAL_KEYBIND },
+  { id: "terminal.sendToChat", fallback: "mod+shift+u" },
+]
+/** Reading the live terminal, for callers that want to hand its output on. */
+export type TerminalReader = {
+  /** What the user has highlighted, or nothing. */
+  selection: () => string
+  /** The scrollback as text, newest last. */
+  text: () => string
+}
+
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
   onCleanup?: (pty: LocalPTY) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
+  /**
+   * Handed a reader once the terminal is live, and `undefined` when it goes
+   * away. The buffer was only ever read on unmount, so nothing outside could
+   * see what the user was looking at while they were looking at it.
+   */
+  onReader?: (reader: TerminalReader | undefined) => void
 }
 
 let shared: Promise<{ mod: typeof import("ghostty-web"); ghostty: Ghostty }> | undefined
@@ -63,7 +91,14 @@ export const Terminal = (props: TerminalProps) => {
   const theme = useTheme()
   const language = useLanguage()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, [
+    "pty",
+    "class",
+    "classList",
+    "onConnect",
+    "onConnectError",
+    "onReader",
+  ])
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -240,11 +275,17 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for toggle terminal keybinds in parent
-        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
-        const keybinds = parseKeybind(config)
-
-        return matchKeybind(keybinds, event)
+        // Chords the app keeps for itself while the terminal has focus.
+        //
+        // Returning false hands the event to ghostty, which encodes it, sends it
+        // to the PTY and calls `stopPropagation()` — so the command keymap on
+        // `document` never sees it. A shortcut that is not listed here is not
+        // merely inert while the terminal is focused: it is typed into the shell.
+        // Everything else stays with the terminal on purpose, because Ctrl+C,
+        // Ctrl+U and Ctrl+L belong to whatever is running in it.
+        return PASS_THROUGH_COMMANDS.some((entry) =>
+          matchKeybind(parseKeybind(settings.keybinds.get(entry.id) ?? entry.fallback), event),
+        )
       })
 
       const fit = new mod.FitAddon()
@@ -254,6 +295,37 @@ export const Terminal = (props: TerminalProps) => {
       t.loadAddon(fit)
       fitAddon = fit
       serializeAddon = serializer
+
+      local.onReader?.({
+        selection: () => t.getSelection() ?? "",
+        // `serialize` keeps the escape sequences that paint the terminal; they
+        // are noise to a reader, so the buffer is walked line by line instead.
+        text: () => {
+          const buffer = t.buffer.active
+          const lines: string[] = []
+          // `buffer.length` is the whole scrollback — 10 000 rows by default —
+          // and every row costs a wasm crossing plus one allocation per cell,
+          // while the caller keeps the last few dozen. Read the tail, with room
+          // to spare for the caller's own trimming, and hoist the length out of
+          // the loop condition so it is not re-evaluated per row.
+          const total = buffer.length
+          const first = Math.max(0, total - TERMINAL_READ_ROWS)
+          for (let row = first; row < total; row++) {
+            const line = buffer.getLine(row)
+            const text = line?.translateToString(true) ?? ""
+            // A line longer than the terminal is wide occupies several rows, and
+            // each row after the first is marked as a continuation. Joining them
+            // back means one stack trace counts as one line rather than five —
+            // the caller keeps a line budget, and a wrapped row would eat it.
+            if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text
+            else lines.push(text)
+          }
+          // Blank rows below the prompt are padding, not content.
+          while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop()
+          return lines.join("\n")
+        },
+      })
+      cleanups.push(() => local.onReader?.(undefined))
 
       t.open(container)
 

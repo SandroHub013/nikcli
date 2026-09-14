@@ -3,9 +3,19 @@ import { FileIcon } from "@nikcli-ai/ui/file-icon"
 import { Icon } from "@nikcli-ai/ui/icon"
 import { getDirectory, getFilename } from "@nikcli-ai/util/path"
 
+/** How many rows the menu draws. */
+const ROWS = 10
+
 export type AtOption =
   | { type: "agent"; name: string; display: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
+  /**
+   * Whatever is on a terminal right now.
+   *
+   * The one entry the agent cannot fetch for itself: it sees the output of the
+   * commands *it* runs, not of the terminal the user is driving.
+   */
+  | { type: "terminal"; id: string; display: string }
 
 export interface SlashCommand {
   id: string
@@ -51,7 +61,13 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
               when={props.atFlat.length > 0}
               fallback={<div class="text-text-weak px-2 py-1">{props.t("prompt.popover.emptyResults")}</div>}
             >
-              <For each={props.atFlat.slice(0, 10)}>
+              {/*
+                Ten rows. Worth knowing when ordering the groups: with ten agents
+                configured, an eleventh entry of any kind is produced, grouped and
+                sorted correctly and then never drawn. Anything rarer than files
+                belongs above them.
+              */}
+              <For each={props.atFlat.slice(0, ROWS)}>
                 {(item) => (
                   <button
                     classList={{
@@ -61,36 +77,47 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     onClick={() => props.onAtSelect(item)}
                     onMouseEnter={() => props.setAtActive(props.atKey(item))}
                   >
-                    <Show
-                      when={item.type === "agent"}
-                      fallback={
-                        <>
-                          <FileIcon
-                            node={{ path: item.type === "file" ? item.path : "", type: "file" }}
-                            class="shrink-0 size-4"
-                          />
-                          <div class="flex items-center text-14-regular min-w-0">
-                            <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                              {item.type === "file"
-                                ? item.path.endsWith("/")
-                                  ? item.path
-                                  : getDirectory(item.path)
-                                : ""}
+                    {/*
+                      A branch per option type. It used to be a two-way `Show`
+                      where anything that was not an agent rendered as a file —
+                      so a third type drew an icon with no path and no name: a row
+                      that is present, selectable and completely blank.
+                    */}
+                    <Switch>
+                      <Match when={item.type === "agent" && item}>
+                        {(agent) => (
+                          <>
+                            <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
+                            <span class="text-14-regular text-text-strong whitespace-nowrap">@{agent().name}</span>
+                          </>
+                        )}
+                      </Match>
+                      <Match when={item.type === "terminal" && item}>
+                        {(entry) => (
+                          <>
+                            <Icon name="console" size="small" class="text-icon-base shrink-0" />
+                            <span class="text-14-regular text-text-strong whitespace-nowrap truncate min-w-0">
+                              {entry().display}
                             </span>
-                            <Show when={item.type === "file" && !item.path.endsWith("/")}>
-                              <span class="text-text-strong whitespace-nowrap">
-                                {item.type === "file" ? getFilename(item.path) : ""}
+                          </>
+                        )}
+                      </Match>
+                      <Match when={item.type === "file" && item}>
+                        {(file) => (
+                          <>
+                            <FileIcon node={{ path: file().path, type: "file" }} class="shrink-0 size-4" />
+                            <div class="flex items-center text-14-regular min-w-0">
+                              <span class="text-text-base whitespace-nowrap truncate min-w-0">
+                                {file().path.endsWith("/") ? file().path : getDirectory(file().path)}
                               </span>
-                            </Show>
-                          </div>
-                        </>
-                      }
-                    >
-                      <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
-                      <span class="text-14-regular text-text-strong whitespace-nowrap">
-                        @{item.type === "agent" ? item.name : ""}
-                      </span>
-                    </Show>
+                              <Show when={!file().path.endsWith("/")}>
+                                <span class="text-text-strong whitespace-nowrap">{getFilename(file().path)}</span>
+                              </Show>
+                            </div>
+                          </>
+                        )}
+                      </Match>
+                    </Switch>
                   </button>
                 )}
               </For>
@@ -120,7 +147,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
                       <Show when={cmd.type === "custom" && cmd.source !== "command"}>
-                        <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
+                        <span class="text-11-regular text-text-weak px-1.5 py-0.5 bg-surface-base rounded">
                           {cmd.source === "skill"
                             ? props.t("prompt.slash.badge.skill")
                             : cmd.source === "mcp"
@@ -129,7 +156,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         </span>
                       </Show>
                       <Show when={props.commandKeybind(cmd.id)}>
-                        <span class="text-12-regular text-text-subtle">{props.commandKeybind(cmd.id)}</span>
+                        <span class="text-13-regular text-text-weak">{props.commandKeybind(cmd.id)}</span>
                       </Show>
                     </div>
                   </button>

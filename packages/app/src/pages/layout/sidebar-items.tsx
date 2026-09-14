@@ -1,6 +1,7 @@
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { relativeTime, useNow } from "@nikcli-ai/ui/relative-time"
 import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { base64Encode } from "@nikcli-ai/util/encode"
@@ -115,6 +116,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
 
+  const now = useNow()
+  const lastActivity = createMemo(() => relativeTime(props.session.time.updated, now(), language.locale()))
+  const fullTimestamp = createMemo(() => new Date(props.session.time.updated).toLocaleString())
+
   const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
   const cancelHoverPrefetch = () => {
     if (hoverPrefetch.current === undefined) return
@@ -157,7 +162,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           class="shrink-0 size-6 flex items-center justify-center"
           style={{ color: tint() ?? "var(--icon-interactive-base)" }}
         >
-          <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
+          <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak-base" />}>
             <Match when={isWorking()}>
               <Spinner class="size-[15px]" />
             </Match>
@@ -175,13 +180,22 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
           {props.session.title}
         </span>
-        <Show when={props.session.summary}>
-          {(summary) => (
-            <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-              <DiffChanges changes={summary()} />
-            </div>
-          )}
-        </Show>
+        <div class="shrink-0 flex items-center gap-1.5 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+          <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+          {/*
+            Session titles are generated and collide constantly — a project can
+            show half a dozen rows all reading the same thing. The age is often
+            the only thing distinguishing them, so it stays on the row rather
+            than hiding in the hover card.
+          */}
+          <Show when={lastActivity()}>
+            {(label) => (
+              <span class="text-11-regular text-text-base tabular-nums" title={fullTimestamp()}>
+                {label()}
+              </span>
+            )}
+          </Show>
+        </div>
       </div>
     </A>
   )
@@ -213,7 +227,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         >
           <Show
             when={hoverReady()}
-            fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
+            fallback={<div class="text-13-regular text-text-weak">{language.t("session.messages.loading")}</div>}
           >
             <div class="overflow-y-auto max-h-72 h-full">
               <MessageNav
@@ -291,7 +305,7 @@ export const NewSessionItem = (props: {
     >
       <div class="flex items-center gap-1 w-full">
         <div class="shrink-0 size-6 flex items-center justify-center">
-          <Icon name="plus-small" size="small" class="text-icon-weak" />
+          <Icon name="plus-small" size="small" class="text-icon-weak-base" />
         </div>
         <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
           {label}

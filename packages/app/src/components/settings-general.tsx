@@ -63,7 +63,18 @@ export const SettingsGeneral: Component = () => {
                 {
                   label: language.t("toast.update.action.installRestart"),
                   onClick: async () => {
-                    await platform.update!()
+                    // Restarting after a failed install relaunches the old build and looks
+                    // like the update silently did nothing. Stop, and say what happened.
+                    try {
+                      await platform.update!()
+                    } catch (error) {
+                      showToast({
+                        variant: "error",
+                        title: language.t("toast.update.failed"),
+                        description: error instanceof Error ? error.message : String(error),
+                      })
+                      return
+                    }
                     await platform.restart!()
                   },
                 },
@@ -426,7 +437,7 @@ const SettingsRow: Component<SettingsRowProps> = (props) => {
     <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
       <div class="flex flex-col gap-0.5 min-w-0">
         <span class="text-14-medium text-text-strong">{props.title}</span>
-        <span class="text-12-regular text-text-weak">{props.description}</span>
+        <span class="text-13-regular text-text-base">{props.description}</span>
       </div>
       <div class="flex-shrink-0">{props.children}</div>
     </div>

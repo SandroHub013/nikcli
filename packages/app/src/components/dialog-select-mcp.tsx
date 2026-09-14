@@ -65,23 +65,23 @@ export const DialogSelectMcp: Component = () => {
                 <div class="flex items-center gap-2">
                   <span class="truncate">{i.name}</span>
                   <Show when={status() === "connected"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.connected")}</span>
+                    <span class="text-11-regular text-text-weak">{language.t("mcp.status.connected")}</span>
                   </Show>
                   <Show when={status() === "failed"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.failed")}</span>
+                    <span class="text-11-regular text-text-weak">{language.t("mcp.status.failed")}</span>
                   </Show>
                   <Show when={status() === "needs_auth"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.needs_auth")}</span>
+                    <span class="text-11-regular text-text-weak">{language.t("mcp.status.needs_auth")}</span>
                   </Show>
                   <Show when={status() === "disabled"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.disabled")}</span>
+                    <span class="text-11-regular text-text-weak">{language.t("mcp.status.disabled")}</span>
                   </Show>
                   <Show when={loading() === i.name}>
                     <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
                 <Show when={error()}>
-                  <span class="text-11-regular text-text-weaker truncate">{error()}</span>
+                  <span class="text-11-regular text-text-weak truncate">{error()}</span>
                 </Show>
               </div>
               <div onClick={(e) => e.stopPropagation()}>

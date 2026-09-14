@@ -117,7 +117,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
           />
 
           <div class="flex flex-col gap-2">
-            <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
+            <label class="text-13-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
             <div class="flex gap-3 items-start">
               <div
                 class="relative"
@@ -128,7 +128,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
-                    "border-border-base hover:border-border-strong": !store.dragOver,
+                    "border-border-base hover:border-border-strong-base": !store.dragOver,
                     "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
@@ -162,7 +162,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   </Show>
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-md z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !store.iconUrl,
                     "opacity-0": !(store.iconHover && !store.iconUrl),
@@ -171,7 +171,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-md z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !!store.iconUrl,
                     "opacity-0": !(store.iconHover && !!store.iconUrl),
@@ -181,7 +181,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                 </div>
               </div>
               <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
-              <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
+              <div class="flex flex-col gap-1.5 text-13-regular text-text-weak self-center">
                 <span>{language.t("dialog.project.edit.icon.hint")}</span>
                 <span>{language.t("dialog.project.edit.icon.recommended")}</span>
               </div>
@@ -190,7 +190,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
           <Show when={!store.iconUrl}>
             <div class="flex flex-col gap-2">
-              <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
+              <label class="text-13-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
               <div class="flex gap-1.5">
                 <For each={AVATAR_COLOR_KEYS}>
                   {(color) => (

@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
+import { type ComponentProps, ErrorBoundary, Show, Suspense, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@nikcli-ai/ui/font"
@@ -7,8 +7,31 @@ import { MarkedProvider } from "@nikcli-ai/ui/context/marked"
 import { DiffComponentProvider } from "@nikcli-ai/ui/context/diff"
 import { CodeComponentProvider } from "@nikcli-ai/ui/context/code"
 import { I18nProvider } from "@nikcli-ai/ui/context"
-import { Diff } from "@nikcli-ai/ui/diff"
-import { Code } from "@nikcli-ai/ui/code"
+// Both pull in @pierre/diffs and the shiki engine. They are handed to providers
+// at the root but only render once a diff or a code block appears, so they load
+// with the first thing that needs them rather than with the app shell.
+const DiffChunk = lazy(() => import("@nikcli-ai/ui/diff").then((module) => ({ default: module.Diff })))
+const CodeChunk = lazy(() => import("@nikcli-ai/ui/code").then((module) => ({ default: module.Code })))
+
+/**
+ * Each gets its own boundary.
+ *
+ * These render inside the transcript, wherever a code block or a diff appears.
+ * Without a boundary of their own the nearest one is the route's, so the first
+ * code block in a session replaced the entire page with the loading spinner
+ * while a chunk downloaded. The placeholder holds the space instead.
+ */
+const Diff = (props: ComponentProps<typeof DiffChunk>) => (
+  <Suspense fallback={<div data-slot="lazy-chunk-placeholder" />}>
+    <DiffChunk {...props} />
+  </Suspense>
+)
+
+const Code = (props: ComponentProps<typeof CodeChunk>) => (
+  <Suspense fallback={<div data-slot="lazy-chunk-placeholder" />}>
+    <CodeChunk {...props} />
+  </Suspense>
+)
 import { ThemeProvider } from "@nikcli-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
@@ -31,7 +54,7 @@ import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { Suspense, JSX } from "solid-js"
+import { JSX } from "solid-js"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))

@@ -16,19 +16,19 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
   <span
     class="inline-flex h-6 max-w-[190px] items-center gap-1.5 rounded-md border border-border-base bg-surface-base px-2 text-11-medium"
     classList={{
-      "text-icon-success": props.tone === "success",
-      "text-icon-warning": props.tone === "warning",
-      "text-icon-error": props.tone === "danger",
-      "text-text-weaker": props.tone === "muted",
+      "text-icon-success-base": props.tone === "success",
+      "text-icon-warning-base": props.tone === "warning",
+      "text-icon-critical-base": props.tone === "danger",
+      "text-text-weak": props.tone === "muted",
     }}
   >
     <span
       class="size-1.5 rounded-full shrink-0"
       classList={{
-        "bg-icon-success": props.tone === "success",
-        "bg-icon-warning": props.tone === "warning",
-        "bg-icon-error": props.tone === "danger",
-        "bg-icon-weak": props.tone === "muted",
+        "bg-icon-success-base": props.tone === "success",
+        "bg-icon-warning-base": props.tone === "warning",
+        "bg-icon-critical-base": props.tone === "danger",
+        "bg-icon-weak-base": props.tone === "muted",
       }}
     />
     <span class="truncate">{props.children}</span>
@@ -37,13 +37,13 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
 
 const SummaryCard: Component<{ label: string; value: string; tone?: Tone }> = (props) => (
   <div class="flex min-w-0 flex-col gap-0.5 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
-    <span class="truncate text-11-regular text-text-weaker">{props.label}</span>
+    <span class="truncate text-11-regular text-text-weak">{props.label}</span>
     <span
-      class="truncate text-15-medium"
+      class="truncate text-16-medium"
       classList={{
-        "text-icon-success": props.tone === "success",
-        "text-icon-warning": props.tone === "warning",
-        "text-icon-error": props.tone === "danger",
+        "text-icon-success-base": props.tone === "success",
+        "text-icon-warning-base": props.tone === "warning",
+        "text-icon-critical-base": props.tone === "danger",
         "text-text-base": !props.tone || props.tone === "muted",
       }}
     >

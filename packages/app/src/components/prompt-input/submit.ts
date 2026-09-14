@@ -22,6 +22,11 @@ type PendingPrompt = {
   cleanup: VoidFunction
 }
 
+/** Whether the composer holds nothing the user would mind losing. */
+function isPromptEmpty(current: Prompt): boolean {
+  return current.every((part) => (part.type === "text" ? !part.content.trim() : false))
+}
+
 const pending = new Map<string, PendingPrompt>()
 
 type PromptSubmitInput = {
@@ -40,6 +45,8 @@ type PromptSubmitInput = {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+  /** Fired once the prompt has actually reached the server. */
+  onSent?: () => void
 }
 
 type CommentItem = {
@@ -219,7 +226,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       input.setPopover(null)
     }
 
+    /**
+     * Put the failed prompt back — unless the user has moved on.
+     *
+     * This replaces the composer, and a send can fail long after the fact: a
+     * message queued behind a running turn keeps its request open until the turn
+     * ends, and taking that message back out of the queue makes the request fail
+     * minutes later. By then the user is usually typing the thing they took it
+     * back to write, and replacing that is worse than losing the original.
+     */
     const restoreInput = () => {
+      if (!isPromptEmpty(prompt.current())) return
       prompt.set(currentPrompt, input.promptLength(currentPrompt))
       input.setMode(mode)
       input.setPopover(null)
@@ -389,6 +406,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         parts: requestParts,
         variant,
       })
+      // After the POST, not before it. `onSubmit` fires while the composer is
+      // being cleared, which is strictly earlier than the request — anything
+      // reading the server at that moment sees the state before this message.
+      input.onSent?.()
     }
 
     void send().catch((err) => {

@@ -1,4 +1,6 @@
 @import "@nikcli-ai/ui/styles/tailwind";
+@import "./components/session/session-shortcuts.css";
+@import "./pages/session/pending-queue.css";
 
 .home-recent {
   display: flex;
@@ -58,7 +60,7 @@
 .home-recent__copy strong {
   overflow: hidden;
   color: var(--text-strong);
-  font-size: 13px;
+  font-size: var(--font-size-small);
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -67,7 +69,7 @@
 .home-recent__copy small {
   overflow: hidden;
   color: var(--text-weaker);
-  font-size: 11px;
+  font-size: var(--font-size-2x-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -75,5 +77,199 @@
 .home-recent__time {
   flex: 0 0 auto;
   color: var(--text-weaker);
-  font-size: 11px;
+  font-size: var(--font-size-2x-small);
+}
+
+/* ── analytics ──────────────────────────────────────────────────────────── */
+
+[data-component="analytics"] {
+  --chart-1: var(--icon-brand-base);
+  --chart-2: var(--surface-info-strong);
+  --chart-3: var(--icon-success-base);
+  --chart-4: var(--icon-warning-base);
+  --chart-5: var(--icon-critical-base);
+  --chart-6: var(--text-weak);
+
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  /* The dialog is fixed height; the panel is not, so it owns the scroll. */
+  max-height: min(66vh, 620px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+[data-slot="analytics-windows"] {
+  display: flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 8px;
+  background: var(--surface-base-hover);
+}
+
+[data-slot="analytics-window"] {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-weak);
+  font-size: var(--font-size-2x-small);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+[data-slot="analytics-window"][data-active="true"] {
+  background: var(--surface-base);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+[data-slot="analytics-stats"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+[data-slot="analytics-stat"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 10px;
+  background: var(--surface-base);
+}
+
+[data-slot="analytics-stat-label"] {
+  font-size: var(--font-size-2x-small);
+  color: var(--text-weaker);
+}
+
+[data-slot="analytics-stat-value"] {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  /* Deliberately off-ramp: 17px provides prominent visual hierarchy for primary metric values in analytics stats cards between 16px (large) and 20px (x-large). */
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="analytics-delta"] {
+  font-size: var(--font-size-2x-small);
+  font-weight: 500;
+}
+
+[data-slot="analytics-delta"][data-direction="up"] {
+  color: var(--icon-success-base);
+}
+
+[data-slot="analytics-delta"][data-direction="down"] {
+  color: var(--icon-critical-base);
+}
+
+[data-slot="analytics-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+[data-slot="analytics-section-head"] {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  color: var(--text-base);
+}
+
+[data-slot="analytics-section-meta"] {
+  font-size: var(--font-size-2x-small);
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="analytics-columns"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+[data-slot="analytics-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows land one after another, so a refreshed window reads as new data
+   arriving rather than as a silent swap. */
+[data-slot="analytics-row"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 5px 2px;
+  font-size: var(--font-size-x-small);
+  color: var(--text-base);
+  animation: analytics-row-in 320ms cubic-bezier(0.85, 0, 0.15, 1) both;
+}
+
+@keyframes analytics-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-slot="analytics-swatch"] {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+[data-slot="analytics-row-name"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="analytics-row-sub"] {
+  flex: 0 0 auto;
+  color: var(--text-weaker);
+  font-size: var(--font-size-2x-small);
+}
+
+[data-slot="analytics-row-value"],
+[data-slot="analytics-row-share"] {
+  flex: 0 0 auto;
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="analytics-row-share"] {
+  min-width: 34px;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="analytics-row"] {
+    animation: none;
+  }
 }

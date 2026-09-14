@@ -4,43 +4,29 @@ import type {
   MobileGitCommitsResponse,
   MobileGitStatusResponse,
 } from "@nikcli-ai/sdk/httpapi"
+import { useParams } from "@solidjs/router"
+import { useSync } from "@/context/sync"
+import { commitSubject } from "@/pages/session/commit-subject"
 import { Button } from "@nikcli-ai/ui/button"
 import { useDialog } from "@nikcli-ai/ui/context/dialog"
 import { Dialog } from "@nikcli-ai/ui/dialog"
 import { Icon } from "@nikcli-ai/ui/icon"
 import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Mark } from "@nikcli-ai/ui/logo"
 import { TextField } from "@nikcli-ai/ui/text-field"
 import { Tooltip } from "@nikcli-ai/ui/tooltip"
 import { showToast } from "@nikcli-ai/ui/toast"
-import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX, createEffect } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
+import { errorMessage, requestData } from "@/pages/session/git-request"
+import { DialogCreatePR } from "@/pages/session/dialog-create-pr"
+import { DialogGitHubAccount } from "@/pages/session/dialog-github-account"
 
 type GitStatus = MobileGitStatusResponse
 type GitBranch = MobileGitBranchesResponse[number]
 type GitCommit = MobileGitCommitsResponse[number]
 type GitChange = GitStatus["staged"][number] | GitStatus["unstaged"][number]
-
-function errorMessage(value: unknown): string {
-  if (value instanceof Error) return value.message
-  if (typeof value === "string") return value
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>
-    if (typeof record.message === "string") return record.message
-    if (typeof record.error === "string") return record.error
-    if (record.data) return errorMessage(record.data)
-  }
-  return "Unknown request error"
-}
-
-async function requestData<T>(request: Promise<{ data?: T; error?: unknown }>): Promise<T> {
-  const result = await request
-  if (result.error) throw new Error(errorMessage(result.error))
-  if (result.data === undefined) throw new Error("The server returned an empty response")
-  return result.data
-}
 
 function StatusBadge(props: { children: JSX.Element; tone?: "default" | "success" | "warning" }) {
   return (
@@ -48,8 +34,8 @@ function StatusBadge(props: { children: JSX.Element; tone?: "default" | "success
       class="inline-flex min-w-0 items-center gap-1 rounded-md border border-border-weak-base bg-surface-base px-2 py-1 text-11-medium"
       classList={{
         "text-text-weak": !props.tone || props.tone === "default",
-        "text-icon-success": props.tone === "success",
-        "text-icon-warning": props.tone === "warning",
+        "text-icon-success-base": props.tone === "success",
+        "text-icon-warning-base": props.tone === "warning",
       }}
     >
       {props.children}
@@ -64,7 +50,20 @@ function DialogGitChanges(props: { onChanged: () => void }) {
   const [status, setStatus] = createSignal<GitStatus>()
   const [loading, setLoading] = createSignal(true)
   const [busy, setBusy] = createSignal("")
+  // Prefilled from the session title, which is a summary of the very work being
+  // committed. A draft in an editable field, not a decision: see `commitSubject`.
+  const params = useParams()
+  const sync = useSync()
+  const sessionTitle = () => (params.id ? sync.data.session.find((item) => item.id === params.id)?.title : undefined)
   const [message, setMessage] = createSignal("")
+  // The title is model-generated a few seconds after the first message. Reading
+  // it once at construction left the field empty forever for anyone who opened
+  // this dialog before it landed. Filled when it arrives, and never over
+  // something the user has already typed.
+  createEffect(() => {
+    const suggestion = commitSubject(sessionTitle())
+    if (suggestion && !message().trim()) setMessage(suggestion)
+  })
   const [discardTarget, setDiscardTarget] = createSignal("")
 
   const refresh = async () => {
@@ -143,12 +142,12 @@ function DialogGitChanges(props: { onChanged: () => void }) {
           {rowProps.change.status.slice(0, 1)}
         </span>
         <div class="min-w-0 flex-1">
-          <div class="truncate text-12-medium text-text-base">{rowProps.change.path}</div>
+          <div class="truncate text-13-medium text-text-base">{rowProps.change.path}</div>
           <Show when={stats()}>
             {(value) => (
               <div class="mt-0.5 text-11-regular text-text-weaker">
-                <span class="text-icon-success">+{value().additions}</span>
-                <span class="ml-2 text-icon-error">-{value().deletions}</span>
+                <span class="text-icon-success-base">+{value().additions}</span>
+                <span class="ml-2 text-icon-critical-base">-{value().deletions}</span>
               </div>
             )}
           </Show>
@@ -174,7 +173,7 @@ function DialogGitChanges(props: { onChanged: () => void }) {
               <Button
                 size="small"
                 variant="ghost"
-                class="text-icon-error"
+                class="text-icon-critical-base"
                 disabled={!!busy()}
                 onClick={() => void discard([rowProps.change.path]).then(() => setDiscardTarget(""))}
               >
@@ -225,15 +224,15 @@ function DialogGitChanges(props: { onChanged: () => void }) {
         <div class="min-h-0 overflow-y-auto rounded-md border border-border-base">
           <Show
             when={!loading()}
-            fallback={<div class="p-4 text-12-regular text-text-weak">{language.t("common.loading")}</div>}
+            fallback={<div class="p-4 text-13-regular text-text-weak">{language.t("common.loading")}</div>}
           >
             <Show
               when={hasChanges()}
-              fallback={<div class="p-6 text-center text-12-regular text-text-weak">{language.t("git.clean")}</div>}
+              fallback={<div class="p-6 text-center text-13-regular text-text-weak">{language.t("git.clean")}</div>}
             >
               <Show when={stagedPaths().length}>
                 <div class="flex items-center justify-between bg-surface-raised-base px-3 py-2">
-                  <span class="text-11-medium uppercase tracking-wide text-text-weaker">
+                  <span class="text-11-medium uppercase tracking-wide text-text-weak">
                     {language.t("git.section.staged", { count: stagedPaths().length })}
                   </span>
                   <Button
@@ -259,7 +258,7 @@ function DialogGitChanges(props: { onChanged: () => void }) {
 
               <Show when={unstagedPaths().length}>
                 <div class="flex items-center justify-between bg-surface-raised-base px-3 py-2">
-                  <span class="text-11-medium uppercase tracking-wide text-text-weaker">
+                  <span class="text-11-medium uppercase tracking-wide text-text-weak">
                     {language.t("git.section.unstaged", { count: unstagedPaths().length })}
                   </span>
                   <div class="flex items-center gap-1">
@@ -282,7 +281,7 @@ function DialogGitChanges(props: { onChanged: () => void }) {
                       <Button
                         size="small"
                         variant="ghost"
-                        class="text-icon-error"
+                        class="text-icon-critical-base"
                         disabled={!!busy()}
                         onClick={() => void discard(unstagedPaths()).then(() => setDiscardTarget(""))}
                       >
@@ -420,20 +419,20 @@ function DialogGitBranches(props: { onChanged: () => void }) {
         <div class="min-h-0 overflow-y-auto rounded-md border border-border-base">
           <Show
             when={!loading()}
-            fallback={<div class="p-4 text-12-regular text-text-weak">{language.t("common.loading")}</div>}
+            fallback={<div class="p-4 text-13-regular text-text-weak">{language.t("common.loading")}</div>}
           >
             <For
               each={filteredBranches()}
               fallback={
-                <div class="p-6 text-center text-12-regular text-text-weak">{language.t("git.branches.noResults")}</div>
+                <div class="p-6 text-center text-13-regular text-text-weak">{language.t("git.branches.noResults")}</div>
               }
             >
               {(branch) => (
                 <div class="flex min-w-0 items-center gap-3 border-b border-border-weak-base px-3 py-2 last:border-b-0">
-                  <Icon name="branch" size="small" class="text-icon-weak" />
+                  <Icon name="branch" size="small" class="text-icon-weak-base" />
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                      <span class="truncate text-12-medium text-text-base">{branch.name}</span>
+                      <span class="truncate text-13-medium text-text-base">{branch.name}</span>
                       <Show when={branch.isCurrent}>
                         <StatusBadge tone="success">{language.t("git.branches.current")}</StatusBadge>
                       </Show>
@@ -442,7 +441,7 @@ function DialogGitBranches(props: { onChanged: () => void }) {
                       </Show>
                     </div>
                     <Show when={branch.aheadBy || branch.behindBy}>
-                      <div class="mt-0.5 text-11-regular text-text-weaker">
+                      <div class="mt-0.5 text-11-regular text-text-weak">
                         {language.t("git.status.ahead", { count: branch.aheadBy })} ·{" "}
                         {language.t("git.status.behind", { count: branch.behindBy })}
                       </div>
@@ -506,12 +505,12 @@ function DialogGitHistory() {
         <div class="min-h-0 overflow-y-auto rounded-md border border-border-base">
           <Show
             when={!loading()}
-            fallback={<div class="p-4 text-12-regular text-text-weak">{language.t("common.loading")}</div>}
+            fallback={<div class="p-4 text-13-regular text-text-weak">{language.t("common.loading")}</div>}
           >
             <For
               each={commits()}
               fallback={
-                <div class="p-6 text-center text-12-regular text-text-weak">{language.t("git.history.empty")}</div>
+                <div class="p-6 text-center text-13-regular text-text-weak">{language.t("git.history.empty")}</div>
               }
             >
               {(commit) => (
@@ -520,11 +519,11 @@ function DialogGitHistory() {
                     {commit.sha.slice(0, 7)}
                   </span>
                   <div class="min-w-0 flex-1">
-                    <div class="truncate text-12-medium text-text-base">{commit.message}</div>
-                    <div class="mt-1 text-11-regular text-text-weaker">
+                    <div class="truncate text-13-medium text-text-base">{commit.message}</div>
+                    <div class="mt-1 text-11-regular text-text-weak">
                       {commit.author.name} · {new Date(commit.timestamp).toLocaleString()} · {commit.filesCount} files ·{" "}
-                      <span class="text-icon-success">+{commit.additions}</span>{" "}
-                      <span class="text-icon-error">-{commit.deletions}</span>
+                      <span class="text-icon-success-base">+{commit.additions}</span>{" "}
+                      <span class="text-icon-critical-base">-{commit.deletions}</span>
                     </div>
                   </div>
                 </div>
@@ -542,237 +541,12 @@ function DialogGitHistory() {
   )
 }
 
-function DialogGitHubAccount(props: { onChanged: () => void }) {
-  const sdk = useSDK()
-  const dialog = useDialog()
-  const platform = usePlatform()
-  const language = useLanguage()
-  const [bootstrap, setBootstrap] = createSignal<MobileBootstrap>()
-  const [token, setToken] = createSignal("")
-  const [clientID, setClientID] = createSignal("")
-  const [flow, setFlow] = createSignal<{
-    deviceCode: string
-    userCode: string
-    verificationUri: string
-    expiresAt: number
-    interval: number
-  }>()
-  const [busy, setBusy] = createSignal("")
-  let pollTimer: number | undefined
-
-  const refresh = async () => {
-    setBootstrap(await requestData(sdk.client.mobile.bootstrap({ directory: sdk.directory })))
-    props.onChanged()
-  }
-
-  const run = async (key: string, action: () => Promise<void>) => {
-    if (busy()) return
-    setBusy(key)
-    try {
-      await action()
-    } catch (error) {
-      showToast({ variant: "error", title: language.t("common.requestFailed"), description: errorMessage(error) })
-    } finally {
-      setBusy("")
-    }
-  }
-
-  const poll = async () => {
-    const current = flow()
-    if (!current) return false
-    const result = await requestData(
-      sdk.client.mobile.github.oauth.device.poll({
-        directory: sdk.directory,
-        deviceCode: current.deviceCode,
-      }),
-    )
-    if (result.status === "pending") return false
-    if (result.status !== "approved") throw new Error(result.status)
-    if (pollTimer !== undefined) window.clearInterval(pollTimer)
-    pollTimer = undefined
-    setFlow()
-    await refresh()
-    showToast({ variant: "success", icon: "circle-check", title: language.t("github.toast.connected") })
-    return true
-  }
-
-  const startDeviceFlow = () =>
-    run("oauth", async () => {
-      const result = await requestData(sdk.client.mobile.github.oauth.device.start({ directory: sdk.directory }))
-      setFlow({
-        deviceCode: result.deviceCode,
-        userCode: result.userCode,
-        verificationUri: result.verificationUri,
-        expiresAt: result.expiresAt,
-        interval: result.interval,
-      })
-      platform.openLink(result.verificationUri)
-      pollTimer = window.setInterval(() => void poll().catch(() => undefined), Math.max(result.interval, 5) * 1000)
-    })
-
-  const saveClientID = () =>
-    run("client", async () => {
-      await requestData(
-        sdk.client.mobile.github.oauth.clientId.set({ directory: sdk.directory, clientId: clientID().trim() }),
-      )
-      await refresh()
-      showToast({ variant: "success", icon: "circle-check", title: language.t("github.toast.clientSaved") })
-    })
-
-  const saveToken = () =>
-    run("token", async () => {
-      await requestData(sdk.client.mobile.github.auth.set({ directory: sdk.directory, token: token().trim() }))
-      setToken("")
-      await refresh()
-      showToast({ variant: "success", icon: "circle-check", title: language.t("github.toast.connected") })
-    })
-
-  const disconnect = () =>
-    run("disconnect", async () => {
-      await requestData(sdk.client.mobile.github.auth.remove({ directory: sdk.directory }))
-      await refresh()
-      showToast({ variant: "success", title: language.t("github.toast.disconnected") })
-    })
-
-  onMount(() => void refresh().catch((error) => showToast({ variant: "error", description: errorMessage(error) })))
-  onCleanup(() => {
-    if (pollTimer !== undefined) window.clearInterval(pollTimer)
-  })
-
-  return (
-    <Dialog
-      size="large"
-      title={language.t("github.account.title")}
-      description={language.t("github.account.description")}
-    >
-      <div class="flex max-h-[72vh] min-h-0 w-full flex-col gap-5 overflow-y-auto">
-        <div class="flex items-center gap-3 rounded-md border border-border-base bg-surface-raised-base p-3">
-          <div class="flex items-center gap-2">
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-base">
-              <Mark class="size-5" />
-            </div>
-            <div class="text-text-weak">→</div>
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-base">
-              <Icon name="github" size="medium" />
-            </div>
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="text-13-medium text-text-base">
-              {bootstrap()?.github.connected
-                ? `@${bootstrap()?.github.user?.login ?? "github"}`
-                : language.t("github.account.notConnected")}
-            </div>
-            <div class="mt-0.5 text-11-regular text-text-weak">
-              {bootstrap()?.github.connected
-                ? bootstrap()?.github.user?.name || language.t("github.account.connected")
-                : language.t("github.account.connectHint")}
-            </div>
-          </div>
-          <Show when={bootstrap()?.github.connected}>
-            <Button variant="ghost" size="small" disabled={!!busy()} onClick={disconnect}>
-              {language.t("github.account.disconnect")}
-            </Button>
-          </Show>
-        </div>
-
-        <Show when={!bootstrap()?.github.oauthDeviceConfigured}>
-          <div class="flex flex-col gap-3 rounded-md border border-border-base p-3">
-            <div>
-              <div class="text-12-medium text-text-base">{language.t("github.oauth.clientTitle")}</div>
-              <div class="mt-1 text-11-regular text-text-weak">{language.t("github.oauth.clientDescription")}</div>
-            </div>
-            <div class="flex items-end gap-2">
-              <TextField
-                class="flex-1"
-                label={language.t("github.oauth.clientId")}
-                value={clientID()}
-                onChange={setClientID}
-                spellcheck={false}
-              />
-              <Button variant="secondary" size="large" disabled={!clientID().trim() || !!busy()} onClick={saveClientID}>
-                {language.t("common.save")}
-              </Button>
-            </div>
-          </div>
-        </Show>
-
-        <div class="flex flex-col gap-3 rounded-md border border-border-base p-3">
-          <div>
-            <div class="text-12-medium text-text-base">{language.t("github.oauth.title")}</div>
-            <div class="mt-1 text-11-regular text-text-weak">{language.t("github.oauth.description")}</div>
-          </div>
-          <Show
-            when={flow()}
-            fallback={
-              <Button variant="primary" size="large" disabled={!!busy()} onClick={startDeviceFlow}>
-                {language.t("github.oauth.connect")}
-              </Button>
-            }
-          >
-            {(current) => (
-              <div class="flex flex-col gap-3">
-                <div class="rounded-md bg-surface-base px-4 py-3 text-center">
-                  <div class="text-11-regular text-text-weak">{language.t("github.oauth.code")}</div>
-                  <div class="mt-1 font-mono text-20-medium tracking-[0.2em] text-text-strong">
-                    {current().userCode}
-                  </div>
-                </div>
-                <div class="flex gap-2">
-                  <Button
-                    class="flex-1"
-                    variant="secondary"
-                    size="large"
-                    onClick={() => platform.openLink(current().verificationUri)}
-                  >
-                    {language.t("github.oauth.open")}
-                  </Button>
-                  <Button
-                    class="flex-1"
-                    variant="primary"
-                    size="large"
-                    disabled={!!busy()}
-                    onClick={() => run("poll", async () => void (await poll()))}
-                  >
-                    {language.t("github.oauth.check")}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Show>
-        </div>
-
-        <div class="flex flex-col gap-3 rounded-md border border-border-base p-3">
-          <div>
-            <div class="text-12-medium text-text-base">{language.t("github.token.title")}</div>
-            <div class="mt-1 text-11-regular text-text-weak">{language.t("github.token.description")}</div>
-          </div>
-          <TextField
-            type="password"
-            label={language.t("github.token.label")}
-            value={token()}
-            onChange={setToken}
-            spellcheck={false}
-          />
-          <Button variant="secondary" size="large" disabled={!token().trim() || !!busy()} onClick={saveToken}>
-            {language.t("github.token.save")}
-          </Button>
-        </div>
-
-        <div class="flex justify-end">
-          <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-            {language.t("common.close")}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  )
-}
-
 export function ReviewGitControls(props: { onChanged: () => void }) {
   const sdk = useSDK()
   const dialog = useDialog()
   const language = useLanguage()
   const [status, setStatus] = createSignal<GitStatus>()
+  const [bootstrap, setBootstrap] = createSignal<MobileBootstrap>()
   const [busy, setBusy] = createSignal("")
 
   const refresh = async () => {
@@ -781,7 +555,19 @@ export function ReviewGitControls(props: { onChanged: () => void }) {
     } catch {
       setStatus()
     }
+    // The connection chip reads the same bootstrap the account dialog edits, so
+    // a failed read must not take the git status down with it.
+    try {
+      setBootstrap(await requestData(sdk.client.mobile.bootstrap({ directory: sdk.directory })))
+    } catch {
+      setBootstrap()
+    }
   }
+
+  const ahead = () => status()?.commitsAhead ?? 0
+  const behind = () => status()?.commitsBehind ?? 0
+
+  const openPullRequest = () => dialog.show(() => <DialogCreatePR />)
 
   const sync = async (kind: "pull" | "push") => {
     if (busy()) return
@@ -830,7 +616,7 @@ export function ReviewGitControls(props: { onChanged: () => void }) {
         icon={toolProps.icon}
         variant="ghost"
         class="size-8"
-        classList={{ "bg-surface-base text-icon-strong": toolProps.active }}
+        classList={{ "bg-surface-base text-icon-strong-base": toolProps.active }}
         aria-label={toolProps.label}
         disabled={toolProps.disabled}
         onClick={toolProps.onClick}
@@ -846,15 +632,24 @@ export function ReviewGitControls(props: { onChanged: () => void }) {
       <Show when={status()?.branch}>
         <button
           type="button"
-          class="mr-1 flex max-w-36 items-center gap-1.5 rounded-md px-2 py-1 text-11-medium text-text-weak hover:bg-surface-base-hover hover:text-text-base"
+          class="mr-1 flex max-w-56 items-center gap-1.5 rounded-md px-2 py-1 text-11-medium text-text-weak hover:bg-surface-base-hover hover:text-text-base"
           onClick={() => dialog.show(() => <DialogGitBranches onChanged={changed} />)}
           title={status()?.branch}
         >
-          <Icon name="branch" size="small" />
+          <Icon name="branch" size="small" class="shrink-0" />
           <span class="truncate">{status()?.branch}</span>
-          <Show when={(status()?.commitsAhead ?? 0) + (status()?.commitsBehind ?? 0) > 0}>
-            <span class="size-1.5 shrink-0 rounded-full bg-icon-warning" />
-          </Show>
+          {/* Zeros stay on screen: mounting the counts only once they are
+              non-zero resized the chip on every poll and shifted the whole row. */}
+          <span class="flex shrink-0 items-center gap-1 tabular-nums">
+            {/* A zero still says "nothing to push" - that is state, not decoration,
+                so it stays readable. The de-emphasis token measured 1.79:1 here. */}
+            <span classList={{ "text-icon-warning-base": ahead() > 0, "text-text-weak": ahead() === 0 }}>
+              ↑{ahead()}
+            </span>
+            <span classList={{ "text-icon-warning-base": behind() > 0, "text-text-weak": behind() === 0 }}>
+              ↓{behind()}
+            </span>
+          </span>
         </button>
       </Show>
       <Tool
@@ -888,10 +683,50 @@ export function ReviewGitControls(props: { onChanged: () => void }) {
         onClick={() => dialog.show(() => <DialogGitHistory />)}
       />
       <Tool
-        label={language.t("git.toolbar.github")}
-        icon="github"
-        onClick={() => dialog.show(() => <DialogGitHubAccount onChanged={changed} />)}
+        label={language.t("github.pr.title")}
+        icon="git-pull-request"
+        onClick={openPullRequest}
       />
+      {/* Connection decides whether push and pull requests can work at all, so
+          it is a labeled state chip rather than one more icon among icons. Until
+          the first bootstrap read lands, keep the neutral icon to avoid flashing
+          "Connect GitHub" at users who are already connected. */}
+      <Show
+        when={bootstrap()}
+        fallback={
+          <Tool
+            label={language.t("git.toolbar.github")}
+            icon="github"
+            onClick={() => dialog.show(() => <DialogGitHubAccount onChanged={changed} />)}
+          />
+        }
+      >
+        {(value) => (
+          <Show
+            when={value().github.connected}
+            fallback={
+              <button
+                type="button"
+                class="ml-1 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border-weak-base bg-surface-base px-2 text-11-medium text-text-base hover:bg-surface-base-hover"
+                onClick={() => dialog.show(() => <DialogGitHubAccount onChanged={changed} />)}
+              >
+                <Icon name="github" size="small" />
+                {language.t("github.pr.connectAction")}
+              </button>
+            }
+          >
+            <button
+              type="button"
+              class="ml-1 flex h-7 max-w-36 items-center gap-1.5 rounded-md px-2 py-1 text-11-medium text-text-weak hover:bg-surface-base-hover hover:text-text-base"
+              onClick={() => dialog.show(() => <DialogGitHubAccount onChanged={changed} />)}
+              title={language.t("git.toolbar.github")}
+            >
+              <span class="size-1.5 shrink-0 rounded-full bg-icon-success-base" />
+              <span class="truncate">@{value().github.user?.login ?? "github"}</span>
+            </button>
+          </Show>
+        )}
+      </Show>
     </div>
   )
 }

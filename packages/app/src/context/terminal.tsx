@@ -1,9 +1,11 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@nikcli-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup, createSignal } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import { Persist, persisted } from "@/utils/persist"
+
+import type { TerminalReader } from "@/components/terminal"
 
 export type LocalPTY = {
   id: string
@@ -266,7 +268,57 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
 
+    /**
+     * Live readers, one per terminal, registered by the component that mounts it.
+     *
+     * They live here rather than in the panel so that anything can ask what is on
+     * a terminal — the composer's `@` menu needs it, and it is nowhere near the
+     * panel in the tree.
+     */
+    const readers = new Map<string, TerminalReader>()
+    // A plain Map is invisible to the reactive graph, so registration is tracked
+    // through this counter.
+    //
+    // Written while trying to offer the terminals in the composer's `@` menu.
+    // That was not shipped, and this is what was ruled out so the next attempt
+    // need not repeat it:
+    //   - `useFilteredList` does re-resolve when a signal read inside its
+    //     `items` callback changes (pinned by `use-filtered-list.test.ts`);
+    //   - exactly one terminal context is ever created;
+    //   - the reader registers with the right id, and `terminal.all()` reports
+    //     the terminal from inside the composer's scope (probed: length=1);
+    //   - the option was produced and reached the popover, which rendered it
+    //     blank — every non-agent type fell through to the file branch. That
+    //     defect is fixed: `slash-popover.tsx` now switches per type;
+    //   - `useFilteredList` carries three distinct types through grouping, group
+    //     ordering and key-based filtering without dropping any of them
+    //     (`use-filtered-list.test.ts`).
+    // Every layer has now been shown to work in isolation and the entry still
+    // did not appear, which means the fault is in how these are composed in
+    // `prompt-input.tsx` rather than in any one of them. Reproduce by adding the
+    // option back and probing what `flat()` holds, not what the DOM shows — the
+    // DOM misled this investigation twice.
+    // The reactivity here is correct on its own terms and is kept: without it
+    // this Map would silently never notify anyone.
+    const [readerVersion, setReaderVersion] = createSignal(0)
+
     return {
+      readers: {
+        set(id: string, reader: TerminalReader | undefined) {
+          if (reader) readers.set(id, reader)
+          else if (!readers.delete(id)) return
+          setReaderVersion((value: number) => value + 1)
+        },
+        get: (id: string | undefined) => {
+          readerVersion()
+          return id ? readers.get(id) : undefined
+        },
+        /** Whether anything is readable right now, for menus that offer it. */
+        any: () => {
+          readerVersion()
+          return readers.size > 0
+        },
+      },
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),

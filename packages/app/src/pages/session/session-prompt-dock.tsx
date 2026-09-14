@@ -1,8 +1,9 @@
-import { createMemo, For, Show, type ComponentProps } from "solid-js"
+import { createMemo, For, Show, type ComponentProps, type JSX } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { Button } from "@nikcli-ai/ui/button"
 import { BasicTool } from "@nikcli-ai/ui/basic-tool"
 import { PromptInput } from "@/components/prompt-input"
+import { PendingQueue } from "@/pages/session/pending-queue-view"
 import { QuestionDock } from "@/components/question-dock"
 import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
 import { useSync } from "@/context/sync"
@@ -24,7 +25,16 @@ export function SessionPromptDock(props: {
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
+  onSent: () => void
+  /** Increments on every send, so the queue can refresh without waiting for a poll. */
+  submitted: number
+  /** Whether a turn is actually running — not the permission-dialog flag. */
+  queueBusy: boolean
+  /** Puts a message taken back out of the queue into the composer. */
+  onTakeBack: (text: string) => void
   setPromptDockRef: (el: HTMLDivElement) => void
+  /** Live agent activity strip, pinned directly above the input. */
+  activity?: JSX.Element
 }) {
   const params = useParams()
   const sync = useSync()
@@ -47,6 +57,10 @@ export function SessionPromptDock(props: {
           "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
         }}
       >
+        <Show when={props.activity}>
+          <div class="mb-2">{props.activity}</div>
+        </Show>
+
         <Show when={props.questionRequest()} keyed>
           {(req) => {
             const subtitle = questionSubtitle(req.questions.length, (key) => props.t(key))
@@ -85,12 +99,12 @@ export function SessionPromptDock(props: {
                 <Show when={perm.patterns.length > 0}>
                   <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
                     <For each={perm.patterns}>
-                      {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                      {(pattern) => <code class="text-13-regular text-text-base break-all">{pattern}</code>}
                     </For>
                   </div>
                 </Show>
                 <Show when={perm.permission === "doom_loop"}>
-                  <div class="text-12-regular text-text-weak pb-2 px-3">
+                  <div class="text-13-regular text-text-weak pb-2 px-3">
                     {props.t("settings.permissions.tool.doom_loop.description")}
                   </div>
                 </Show>
@@ -130,11 +144,17 @@ export function SessionPromptDock(props: {
         <Show when={!props.blocked}>
           <Show when={instructionLine()}>
             {(line) => (
-              <div class="mb-2 px-1 text-12-regular text-text-weak">
+              <div class="mb-2 px-1 text-13-regular text-text-weak">
                 {props.t("session.instructions.updated")} · {line()}
               </div>
             )}
           </Show>
+          <PendingQueue
+            sessionID={params.id}
+            busy={props.queueBusy}
+            submitted={props.submitted}
+            onTakeBack={props.onTakeBack}
+          />
           <Show
             when={props.promptReady}
             fallback={
@@ -148,6 +168,7 @@ export function SessionPromptDock(props: {
               newSessionWorktree={props.newSessionWorktree}
               onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
               onSubmit={props.onSubmit}
+              onSent={props.onSent}
             />
           </Show>
         </Show>

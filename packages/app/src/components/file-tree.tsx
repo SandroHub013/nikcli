@@ -260,7 +260,7 @@ export default function FileTree(props: {
 
           const dragImage = document.createElement("div")
           dragImage.className =
-            "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
+            "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-13-regular text-text-strong"
           dragImage.style.position = "absolute"
           dragImage.style.top = "-1000px"
 
@@ -294,9 +294,12 @@ export default function FileTree(props: {
           return (
             <span
               classList={{
-                "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-                "text-text-weaker": local.node.ignored,
-                "text-text-weak": !local.node.ignored && !active,
+                "flex-1 min-w-0 text-13-medium whitespace-nowrap truncate": true,
+                // Ignored files stay a tier below normal ones, but both tiers must clear
+                // WCAG AA: the old pairing painted them in the de-emphasis token at 1.79:1,
+                // and the filename is the only thing identifying a file in this tree.
+                "text-text-weak": local.node.ignored,
+                "text-text-base": !local.node.ignored && !active,
               }}
               style={active ? color : undefined}
             >
@@ -319,7 +322,7 @@ export default function FileTree(props: {
                   : "color: var(--icon-warning-active)"
 
             return (
-              <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
+              <span class="shrink-0 w-4 text-center text-13-medium" style={color}>
                 {text}
               </span>
             )
@@ -374,7 +377,7 @@ export default function FileTree(props: {
                 class="w-full"
                 contentStyle={{ "max-width": "480px", width: "fit-content" }}
                 value={
-                  <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
+                  <div class="flex items-center min-w-0 whitespace-nowrap text-13-regular">
                     <span
                       class="min-w-0 truncate text-text-invert-base"
                       style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
@@ -418,7 +421,7 @@ export default function FileTree(props: {
                   <Collapsible.Trigger>
                     <Wrapper>
                       <Node node={node}>
-                        <div class="size-4 flex items-center justify-center text-icon-weak">
+                        <div class="size-4 flex items-center justify-center text-icon-weak-base">
                           <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
                         </div>
                       </Node>
@@ -455,7 +458,7 @@ export default function FileTree(props: {
                 <Wrapper>
                   <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
                     <div class="w-4 shrink-0" />
-                    <FileIcon node={node} class="text-icon-weak size-4" />
+                    <FileIcon node={node} class="text-icon-weak-base size-4" />
                   </Node>
                 </Wrapper>
               </Match>

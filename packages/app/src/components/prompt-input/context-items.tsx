@@ -35,7 +35,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
             >
               <div
                 classList={{
-                  "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                  "group shrink-0 flex flex-col rounded-md pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
                   "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !props.active(item),
                   "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
                     props.active(item),
@@ -70,7 +70,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                   />
                 </div>
                 <Show when={item.comment}>
-                  {(comment) => <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
+                  {(comment) => <div class="text-13-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>}
                 </Show>
               </div>
             </Tooltip>

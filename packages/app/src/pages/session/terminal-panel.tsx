@@ -2,6 +2,8 @@ import { createMemo, For, Show } from "solid-js"
 import { Tabs } from "@nikcli-ai/ui/tabs"
 import { ResizeHandle } from "@nikcli-ai/ui/resize-handle"
 import { IconButton } from "@nikcli-ai/ui/icon-button"
+import { showToast } from "@nikcli-ai/ui/toast"
+import { formatTerminalExcerpt, terminalExcerpt } from "@/pages/session/terminal-context"
 import { TooltipKeybind } from "@nikcli-ai/ui/tooltip"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -27,7 +29,54 @@ export function TerminalPanel(props: {
   handleTerminalDragOver: (event: DragEvent) => void
   handleTerminalDragEnd: () => void
   onCloseTab: () => void
+  /** Hands the terminal's output to the composer. */
+  onSendToPrompt: (text: string) => void
 }) {
+  // Registered into the terminal context, so the composer's `@` menu can read
+  // the same terminals this panel is showing.
+  const readers = props.terminal.readers
+
+  const sendToChat = () => {
+    const active = props.terminal.active()
+    const reader = readers.get(active)
+    // No reader means the terminal has not finished loading. Reachable from the
+    // palette, and returning quietly left the user with no idea why nothing
+    // happened — so it says the same thing an empty terminal says.
+    const excerpt = reader
+      ? terminalExcerpt({ selection: reader.selection(), scrollback: reader.text() })
+      : undefined
+    if (!excerpt) {
+      showToast({ variant: "error", title: props.language.t("terminal.sendToChat.empty") })
+      return
+    }
+    // The tab's own name, not the generic word: with several terminals open it
+    // is the only thing that says which one this came from. It is not a working
+    // directory, and passing it as one read as "Terminal · Terminal 1".
+    const name = props.terminal.all().find((t: LocalPTY) => t.id === active)?.title
+    props.onSendToPrompt(
+      formatTerminalExcerpt({ excerpt, title: name || props.language.t("terminal.title") }),
+    )
+    showToast({
+      variant: "success",
+      icon: "circle-check",
+      title: props.language.t("terminal.sendToChat.done"),
+    })
+  }
+
+  // Registered, not just wired to the button: the tooltip asks the keymap for a
+  // shortcut, and an action that only exists as a button has none to give — nor
+  // a place in the command palette or the shortcut sheet.
+  props.command.register("terminal-send-to-chat", () => [
+    {
+      id: "terminal.sendToChat",
+      title: props.language.t("terminal.sendToChat"),
+      description: props.language.t("terminal.sendToChat.description"),
+      category: props.language.t("command.category.session"),
+      keybind: "mod+shift+u",
+      disabled: !props.open,
+      onSelect: sendToChat,
+    },
+  ])
   return (
     <Show when={props.open}>
       <div
@@ -101,6 +150,19 @@ export function TerminalPanel(props: {
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
+                      title={props.language.t("terminal.sendToChat")}
+                      keybind={props.command.keybind("terminal.sendToChat")}
+                      class="flex items-center"
+                    >
+                      <IconButton
+                        icon="arrow-up"
+                        variant="ghost"
+                        iconSize="large"
+                        onClick={sendToChat}
+                        aria-label={props.language.t("terminal.sendToChat")}
+                      />
+                    </TooltipKeybind>
+                    <TooltipKeybind
                       title={props.language.t("command.terminal.new")}
                       keybind={props.command.keybind("terminal.new")}
                       class="flex items-center"
@@ -126,12 +188,25 @@ export function TerminalPanel(props: {
                         display: props.terminal.active() === pty.id ? "block" : "none",
                       }}
                     >
+                      {/*
+                        The id is taken from the keyed value, not read off `pty`.
+                        A reconnect calls `clone`, which rewrites the row in place,
+                        so `pty.id` has already flipped to the new id by the time
+                        the old branch tears down — it would delete a key that was
+                        never set and leave the disposed terminal's closure, and
+                        its whole scrollback, pinned for the life of the page.
+                      */}
                       <Show when={pty.id} keyed>
+                        {(id) => (
                         <Terminal
                           pty={pty}
+                          onReader={(reader) => {
+                            readers.set(id, reader)
+                          }}
                           onCleanup={props.terminal.update}
-                          onConnectError={() => props.terminal.clone(pty.id)}
+                          onConnectError={() => props.terminal.clone(id)}
                         />
+                        )}
                       </Show>
                     </div>
                   )}

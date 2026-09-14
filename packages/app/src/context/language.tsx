@@ -1,100 +1,53 @@
 import * as i18n from "@solid-primitives/i18n"
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@nikcli-ai/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
-import { dict as zh } from "@/i18n/zh"
-import { dict as zht } from "@/i18n/zht"
-import { dict as ko } from "@/i18n/ko"
-import { dict as de } from "@/i18n/de"
-import { dict as es } from "@/i18n/es"
-import { dict as fr } from "@/i18n/fr"
-import { dict as da } from "@/i18n/da"
-import { dict as ja } from "@/i18n/ja"
-import { dict as pl } from "@/i18n/pl"
-import { dict as ru } from "@/i18n/ru"
-import { dict as ar } from "@/i18n/ar"
-import { dict as no } from "@/i18n/no"
-import { dict as br } from "@/i18n/br"
-import { dict as th } from "@/i18n/th"
-import { dict as bs } from "@/i18n/bs"
+import { LOCALES as TRANSLATED_LOCALES, type Locale as TranslatedLocale } from "@/i18n/locales"
 import { dict as uiEn } from "@nikcli-ai/ui/i18n/en"
-import { dict as uiZh } from "@nikcli-ai/ui/i18n/zh"
-import { dict as uiZht } from "@nikcli-ai/ui/i18n/zht"
-import { dict as uiKo } from "@nikcli-ai/ui/i18n/ko"
-import { dict as uiDe } from "@nikcli-ai/ui/i18n/de"
-import { dict as uiEs } from "@nikcli-ai/ui/i18n/es"
-import { dict as uiFr } from "@nikcli-ai/ui/i18n/fr"
-import { dict as uiDa } from "@nikcli-ai/ui/i18n/da"
-import { dict as uiJa } from "@nikcli-ai/ui/i18n/ja"
-import { dict as uiPl } from "@nikcli-ai/ui/i18n/pl"
-import { dict as uiRu } from "@nikcli-ai/ui/i18n/ru"
-import { dict as uiAr } from "@nikcli-ai/ui/i18n/ar"
-import { dict as uiNo } from "@nikcli-ai/ui/i18n/no"
-import { dict as uiBr } from "@nikcli-ai/ui/i18n/br"
-import { dict as uiTh } from "@nikcli-ai/ui/i18n/th"
-import { dict as uiBs } from "@nikcli-ai/ui/i18n/bs"
 
-export type Locale =
-  | "en"
-  | "zh"
-  | "zht"
-  | "ko"
-  | "de"
-  | "es"
-  | "fr"
-  | "da"
-  | "ja"
-  | "pl"
-  | "ru"
-  | "ar"
-  | "no"
-  | "br"
-  | "th"
-  | "bs"
+/**
+ * Derived from the shipped list rather than repeated.
+ *
+ * There were two of these — this one and `i18n/locales.ts` — with no import
+ * between them. They happened to agree, but a locale added to one was invisible
+ * to the other, so the parity tests would have kept passing over a dictionary
+ * nobody could select.
+ */
+export type Locale = "en" | TranslatedLocale
+
+const LOCALES: readonly Locale[] = ["en", ...TRANSLATED_LOCALES]
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = [
-  "en",
-  "zh",
-  "zht",
-  "ko",
-  "de",
-  "es",
-  "fr",
-  "da",
-  "ja",
-  "pl",
-  "ru",
-  "bs",
-  "ar",
-  "no",
-  "br",
-  "th",
-]
 
-type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
-const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
-  zh,
-  zht,
-  ko,
-  de,
-  es,
-  fr,
-  da,
-  ja,
-  pl,
-  ru,
-  ar,
-  no,
-  br,
-  th,
-  bs,
+/**
+ * The 15 non-English dictionaries are ~470 kB of the entry chunk and a session
+ * uses exactly one, so each is fetched on demand. English stays static: it is
+ * the base every locale is spread over, so it must be there on first paint.
+ *
+ * Each entry pairs the app and UI dictionary for a locale, which lets the
+ * bundler put both in a single per-locale chunk.
+ */
+const LOADERS: Record<Exclude<Locale, "en">, () => Promise<Partial<RawDictionary>>> = {
+  zh: async () => ({ ...(await import("@/i18n/zh")).dict, ...(await import("@nikcli-ai/ui/i18n/zh")).dict }),
+  zht: async () => ({ ...(await import("@/i18n/zht")).dict, ...(await import("@nikcli-ai/ui/i18n/zht")).dict }),
+  ko: async () => ({ ...(await import("@/i18n/ko")).dict, ...(await import("@nikcli-ai/ui/i18n/ko")).dict }),
+  de: async () => ({ ...(await import("@/i18n/de")).dict, ...(await import("@nikcli-ai/ui/i18n/de")).dict }),
+  es: async () => ({ ...(await import("@/i18n/es")).dict, ...(await import("@nikcli-ai/ui/i18n/es")).dict }),
+  fr: async () => ({ ...(await import("@/i18n/fr")).dict, ...(await import("@nikcli-ai/ui/i18n/fr")).dict }),
+  da: async () => ({ ...(await import("@/i18n/da")).dict, ...(await import("@nikcli-ai/ui/i18n/da")).dict }),
+  ja: async () => ({ ...(await import("@/i18n/ja")).dict, ...(await import("@nikcli-ai/ui/i18n/ja")).dict }),
+  pl: async () => ({ ...(await import("@/i18n/pl")).dict, ...(await import("@nikcli-ai/ui/i18n/pl")).dict }),
+  ru: async () => ({ ...(await import("@/i18n/ru")).dict, ...(await import("@nikcli-ai/ui/i18n/ru")).dict }),
+  ar: async () => ({ ...(await import("@/i18n/ar")).dict, ...(await import("@nikcli-ai/ui/i18n/ar")).dict }),
+  no: async () => ({ ...(await import("@/i18n/no")).dict, ...(await import("@nikcli-ai/ui/i18n/no")).dict }),
+  br: async () => ({ ...(await import("@/i18n/br")).dict, ...(await import("@nikcli-ai/ui/i18n/br")).dict }),
+  th: async () => ({ ...(await import("@/i18n/th")).dict, ...(await import("@nikcli-ai/ui/i18n/th")).dict }),
+  bs: async () => ({ ...(await import("@/i18n/bs")).dict, ...(await import("@nikcli-ai/ui/i18n/bs")).dict }),
 }
-void PARITY_CHECK
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -165,23 +118,26 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     })
 
     const base = i18n.flatten({ ...en, ...uiEn })
+    // A plain signal, not a store: these dictionaries are ~900 keys each and
+    // wrapping them in a deep reactive proxy would cost on every lookup for no
+    // benefit — an entry is written once and never mutated in place.
+    const [translations, setTranslations] = createSignal<Record<string, Dictionary>>({})
+
+    createEffect(() => {
+      const current = locale()
+      if (current === "en" || translations()[current]) return
+      LOADERS[current]()
+        .then((loaded) =>
+          setTranslations((previous) => ({ ...previous, [current]: i18n.flatten(loaded) as Dictionary })),
+        )
+        // A locale chunk that fails to load leaves the English base in place,
+        // which is what an untranslated key renders as anyway.
+        .catch(() => {})
+    })
+
     const dict = createMemo<Dictionary>(() => {
-      if (locale() === "en") return base
-      if (locale() === "zh") return { ...base, ...i18n.flatten({ ...zh, ...uiZh }) }
-      if (locale() === "zht") return { ...base, ...i18n.flatten({ ...zht, ...uiZht }) }
-      if (locale() === "de") return { ...base, ...i18n.flatten({ ...de, ...uiDe }) }
-      if (locale() === "es") return { ...base, ...i18n.flatten({ ...es, ...uiEs }) }
-      if (locale() === "fr") return { ...base, ...i18n.flatten({ ...fr, ...uiFr }) }
-      if (locale() === "da") return { ...base, ...i18n.flatten({ ...da, ...uiDa }) }
-      if (locale() === "ja") return { ...base, ...i18n.flatten({ ...ja, ...uiJa }) }
-      if (locale() === "pl") return { ...base, ...i18n.flatten({ ...pl, ...uiPl }) }
-      if (locale() === "ru") return { ...base, ...i18n.flatten({ ...ru, ...uiRu }) }
-      if (locale() === "ar") return { ...base, ...i18n.flatten({ ...ar, ...uiAr }) }
-      if (locale() === "no") return { ...base, ...i18n.flatten({ ...no, ...uiNo }) }
-      if (locale() === "br") return { ...base, ...i18n.flatten({ ...br, ...uiBr }) }
-      if (locale() === "th") return { ...base, ...i18n.flatten({ ...th, ...uiTh }) }
-      if (locale() === "bs") return { ...base, ...i18n.flatten({ ...bs, ...uiBs }) }
-      return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
+      const loaded = locale() === "en" ? undefined : translations()[locale()]
+      return loaded ? { ...base, ...loaded } : base
     })
 
     const t = i18n.translator(dict, i18n.resolveTemplate)

@@ -45,7 +45,7 @@ export const SettingsRow: Component<{
     <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
       <div class="flex flex-col gap-0.5 min-w-0">
         <span class="text-14-medium text-text-strong">{props.title}</span>
-        {props.description && <span class="text-12-regular text-text-weak">{props.description}</span>}
+        {props.description && <span class="text-13-regular text-text-base">{props.description}</span>}
       </div>
       <div class="flex-shrink-0">{props.children}</div>
     </div>

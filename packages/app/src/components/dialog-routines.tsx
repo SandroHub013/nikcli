@@ -1,4 +1,6 @@
 import { Component, createMemo, createResource, createSignal, JSXElement, Show } from "solid-js"
+import { useNow } from "@nikcli-ai/ui/relative-time"
+import { formatRelativeTime } from "@nikcli-ai/ui/intl-time"
 import { Dialog } from "@nikcli-ai/ui/dialog"
 import { List } from "@nikcli-ai/ui/list"
 import { Switch } from "@nikcli-ai/ui/switch"
@@ -32,30 +34,19 @@ function formatInterval(ms: number): string {
   return `every ${Math.round(hours / 24)}d`
 }
 
-function relativeTime(ts: number | undefined): string | undefined {
-  if (!ts) return undefined
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000))
-  if (seconds < 60) return "just now"
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
 const SummaryCard: Component<{ label: string; value: number; tone?: Tone }> = (props) => (
   <div class="flex min-w-0 flex-col gap-0.5 rounded-md border border-border-base bg-surface-raised-base px-3 py-2">
-    <span class="truncate text-11-regular text-text-weaker">{props.label}</span>
+    <span class="truncate text-11-regular text-text-weak">{props.label}</span>
     <span
-      class="text-15-medium tabular-nums"
+      class="text-16-medium tabular-nums"
       classList={{
-        "text-icon-success": props.tone === "success",
-        "text-icon-warning": props.tone === "warning",
-        "text-icon-error": props.tone === "danger",
+        "text-icon-success-base": props.tone === "success",
+        "text-icon-warning-base": props.tone === "warning",
+        "text-icon-critical-base": props.tone === "danger",
         "text-text-base": !props.tone || props.tone === "muted",
       }}
     >
@@ -68,19 +59,19 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
   <span
     class="inline-flex h-6 max-w-[150px] items-center gap-1.5 rounded-md border border-border-base bg-surface-base px-2 text-11-medium"
     classList={{
-      "text-icon-success": props.tone === "success",
-      "text-icon-warning": props.tone === "warning",
-      "text-icon-error": props.tone === "danger",
-      "text-text-weaker": props.tone === "muted",
+      "text-icon-success-base": props.tone === "success",
+      "text-icon-warning-base": props.tone === "warning",
+      "text-icon-critical-base": props.tone === "danger",
+      "text-text-weak": props.tone === "muted",
     }}
   >
     <span
       class="size-1.5 rounded-full shrink-0"
       classList={{
-        "bg-icon-success": props.tone === "success",
-        "bg-icon-warning": props.tone === "warning",
-        "bg-icon-error": props.tone === "danger",
-        "bg-icon-weak": props.tone === "muted",
+        "bg-icon-success-base": props.tone === "success",
+        "bg-icon-warning-base": props.tone === "warning",
+        "bg-icon-critical-base": props.tone === "danger",
+        "bg-icon-weak-base": props.tone === "muted",
       }}
     />
     <span class="truncate">{props.children}</span>
@@ -90,6 +81,8 @@ const StatusPill: Component<{ tone: Tone; children: JSXElement }> = (props) => (
 export const DialogRoutines: Component = () => {
   const sdk = useSDK()
   const language = useLanguage()
+  // Shared clock: a fixed timestamp would freeze the label at first render.
+  const now = useNow()
   const [busy, setBusy] = createSignal<string | null>(null)
 
   const [data, { refetch }] = createResource(async () => {
@@ -210,7 +203,11 @@ export const DialogRoutines: Component = () => {
             const runtime = () => runtimeFor(loop.id)
             const status = () => loopStatus(loop, runtime())
             const schedule = () => (loop.trigger.kind === "interval" ? formatInterval(loop.trigger.everyMs) : "manual")
-            const last = () => relativeTime(runtime()?.lastRunAt)
+            // The full phrase, not the dense form: this row has the width for it.
+            const last = () => {
+              const at = runtime()?.lastRunAt
+              return at ? formatRelativeTime(at, language.locale(), now()) : undefined
+            }
             return (
               <div class="w-full flex items-start justify-between gap-x-3">
                 <div class="flex min-w-0 flex-col gap-1">
@@ -218,14 +215,14 @@ export const DialogRoutines: Component = () => {
                     <span class="truncate text-13-medium text-text-base">{loop.name}</span>
                     <StatusPill tone={statusTone(status())}>{statusLabel(status())}</StatusPill>
                   </div>
-                  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11-regular text-text-weaker">
+                  <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-11-regular text-text-weak">
                     <span class="shrink-0">{schedule()}</span>
                     <span class="shrink-0">{language.t("dialog.routines.runs", { count: runtime()?.runs ?? 0 })}</span>
                     <span class="shrink-0">{language.t("dialog.routines.stages", { count: loop.stages.length })}</span>
                     <Show when={last()}>{(value) => <span class="shrink-0">{value()}</span>}</Show>
                   </div>
                   <Show when={runtime()?.lastError}>
-                    {(message) => <span class="break-words text-11-regular text-icon-error">{message()}</span>}
+                    {(message) => <span class="break-words text-11-regular text-icon-critical-base">{message()}</span>}
                   </Show>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>

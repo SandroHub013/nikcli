@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { Button } from "@nikcli-ai/ui/button"
 import { Icon } from "@nikcli-ai/ui/icon"
 import { IconButton } from "@nikcli-ai/ui/icon-button"
@@ -59,8 +59,16 @@ export function MessageTimeline(props: {
   lastUserMessageID?: string
   expanded: Record<string, boolean>
   onToggleExpanded: (id: string) => void
+  /** Rewind the session to just before this message. */
+  onRewind?: (messageID: string) => void
+  rewindLabel?: string
+  rewindConfirmLabel?: string
+  cancelLabel?: string
 }) {
   let touchGesture: number | undefined
+  // Which message is asking to be confirmed. One at a time: opening a second
+  // closes the first, so there is never more than one armed control on screen.
+  const [confirming, setConfirming] = createSignal("")
 
   return (
     <Show
@@ -275,7 +283,7 @@ export function MessageTimeline(props: {
           <div
             ref={props.setContentRef}
             role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+            class="flex flex-col gap-8 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
             classList={{
               "w-full": true,
               "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
@@ -285,7 +293,7 @@ export function MessageTimeline(props: {
           >
             <Show when={props.turnStart > 0}>
               <div class="w-full flex justify-center">
-                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
+                <Button variant="ghost" size="large" class="text-13-medium opacity-50" onClick={props.onRenderEarlier}>
                   {props.t("session.messages.renderEarlier")}
                 </Button>
               </div>
@@ -295,7 +303,7 @@ export function MessageTimeline(props: {
                 <Button
                   variant="ghost"
                   size="large"
-                  class="text-12-medium opacity-50"
+                  class="text-13-medium opacity-50"
                   disabled={props.historyLoading}
                   onClick={props.onLoadEarlier}
                 >
@@ -320,10 +328,66 @@ export function MessageTimeline(props: {
                       onCleanup(() => props.onUnregisterMessage(message.id))
                     }}
                     classList={{
-                      "min-w-0 w-full max-w-full": true,
+                      "group/turn relative min-w-0 w-full max-w-full": true,
                       "md:max-w-200 3xl:max-w-[1200px]": props.centered,
                     }}
                   >
+                    {/*
+                      The server has always accepted a revert to any message, but
+                      the only way to reach it was `/undo` in the palette, one step
+                      at a time. Anchoring it to the turn makes the transcript the
+                      timeline: go back to the point you want, not N steps back.
+                    */}
+                    <Show when={props.onRewind}>
+                      {(rewind) => (
+                        // Out of flow on purpose: the control only exists on hover, so it
+                        // must not add a row of dead air between turns — it overlays the
+                        // inter-turn gap instead of inflating it.
+                        <div class="absolute -top-7 inset-x-0 px-4 md:px-6 opacity-0 transition-opacity group-hover/turn:opacity-100 group-focus-within/turn:opacity-100">
+                          {/*
+                            Two steps, like discarding a file change. Rewinding is
+                            not undo: it reverts the working tree *and* removes
+                            every turn from here on, and neither comes back. One
+                            click on a control that appears on hover is not the
+                            right price for that.
+                          */}
+                          <Show
+                            when={confirming() === message.id}
+                            fallback={
+                              <Button
+                                variant="ghost"
+                                size="small"
+                                aria-label={props.rewindLabel ?? "Rewind to here"}
+                                onClick={() => setConfirming(message.id)}
+                              >
+                                <Icon name="arrow-left" size="small" />
+                                {props.rewindLabel ?? "Rewind to here"}
+                              </Button>
+                            }
+                          >
+                            <div class="flex items-center gap-1">
+                              <span class="text-13-regular text-text-base">
+                                {props.rewindConfirmLabel ?? "Discards the turns after this and reverts the files."}
+                              </span>
+                              <Button variant="ghost" size="small" onClick={() => setConfirming("")}>
+                                {props.cancelLabel ?? "Cancel"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="small"
+                                class="text-icon-critical-base"
+                                onClick={() => {
+                                  setConfirming("")
+                                  rewind()(message.id)
+                                }}
+                              >
+                                {props.rewindLabel ?? "Rewind to here"}
+                              </Button>
+                            </div>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
                     <SessionTurn
                       sessionID={props.sessionID}
                       messageID={message.id}

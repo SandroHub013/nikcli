@@ -1,4 +1,5 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, untrack } from "solid-js"
+import { appendTextToPrompt } from "@/context/prompt-append"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -8,6 +9,8 @@ import { createStore, produce } from "solid-js/store"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { IconButton } from "@nikcli-ai/ui/icon-button"
 import { Button } from "@nikcli-ai/ui/button"
+import { AgentActivity, type AgentActivityStatus } from "@nikcli-ai/ui/agent-activity"
+import { TaskList } from "@nikcli-ai/ui/task-list"
 import { Tooltip, TooltipKeybind } from "@nikcli-ai/ui/tooltip"
 import { Dialog } from "@nikcli-ai/ui/dialog"
 import { ResizeHandle } from "@nikcli-ai/ui/resize-handle"
@@ -41,6 +44,11 @@ import { showToast } from "@nikcli-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
+import { extractPromptFromParts } from "@/utils/prompt"
+import { canActivateFileTab } from "@/pages/session/tab-integrity"
+import { isBrowserTab, isFileTab } from "@/pages/session/tab-identity"
+import { followTarget, shouldFollow } from "@/pages/session/follow-agent"
+import { reviewToggleAction } from "@/pages/session/review-toggle"
 import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
@@ -122,6 +130,8 @@ export default function Page() {
 
   const [ui, setUi] = createStore({
     responding: false,
+    /** Bumped on every send, so the pending-queue strip can refresh at once. */
+    submitted: 0,
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
     autoCreated: false,
@@ -245,6 +255,24 @@ export default function Page() {
   // widths; the CSS in that mode forces the chat and side panel widths, so an
   // additional in-session handle would be a no-op.
   const supportsInSessionResize = createMemo(() => !isTauri())
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
+  const hasReview = createMemo(() => reviewCount() > 0)
+
+  // The task list has been streaming into the store via `todo.updated` since
+  // before there was anywhere to show it; this only bootstraps the first read.
+  const todos = createMemo(() => (params.id ? (sync.data.todo[params.id] ?? []) : []))
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) return
+        void sync.session.todo(id)
+      },
+    ),
+  )
+
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -256,7 +284,7 @@ export default function Page() {
   const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
 
   function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
+    if (!isFileTab(tab)) return tab
     return file.tab(tab)
   }
 
@@ -276,14 +304,30 @@ export default function Page() {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
+  /**
+   * "Toggle review" means show review. It only closes the panel when review is
+   * already what is on screen — otherwise it would shut the panel on top of the
+   * file, context or browser tab sharing it.
+   */
+  const toggleReview = () => {
+    // `tabs().active()`, not `activeTab()`: the derived tab only says "review"
+    // on desktop with the file tree closed, which would make this one-way.
+    const action = reviewToggleAction({ panelOpen: view().reviewPanel.opened(), selectedTab: tabs().active() })
+    if (action === "close") return view().reviewPanel.close()
+    view().reviewPanel.open()
+    if (action === "activate" || action === "open") tabs().setActive("review")
+  }
+
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
+    // The strip lives inside the review panel, so every tab needs it open —
+    // not just file tabs. Otherwise the tab is active and nothing renders it.
+    openReviewPanel()
 
     const path = file.pathFromTab(next)
     if (!path) return
     file.load(path)
-    openReviewPanel()
   }
 
   createEffect(() => {
@@ -305,19 +349,70 @@ export default function Page() {
 
     const active = tabs().active()
     if (!active) return
-    if (!active.startsWith("file://")) return
+    if (!isFileTab(active)) return
 
     const normalized = normalizeTab(active)
     if (active === normalized) return
     tabs().setActive(normalized)
   })
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
-  const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+
+  // The current turn: everything the agent did since the last thing the user
+  // said. Older turns stay in the transcript; the strip only tracks the live one.
+  const currentTurn = createMemo(() => {
+    const list = messages()
+    let start = list.length - 1
+    while (start >= 0 && list[start].role !== "user") start--
+    return start < 0 ? [] : list.slice(start)
+  })
+
+  const activityStartedAt = createMemo(() => currentTurn()[0]?.time?.created)
+
+  type ActivityStep = { id: string; tool: string; input?: Record<string, unknown>; status: AgentActivityStatus }
+
+  // This memo re-runs on every streamed part, including plain text. `<For>` in
+  // the activity strip keys by object identity, so rebuilding these objects each
+  // time tore down and recreated every row on each token. Reuse the previous
+  // object whenever the step is unchanged, and keep the array itself equal too,
+  // so nothing downstream re-renders unless a step actually moved.
+  const activityStepCache = new Map<string, ActivityStep>()
+  const activitySteps = createMemo(
+    () => {
+      const steps: ActivityStep[] = []
+      const seen = new Set<string>()
+      for (const message of currentTurn()) {
+        if (message.role !== "assistant") continue
+        for (const part of sync.data.part[message.id] ?? []) {
+          if (part.type !== "tool") continue
+          const tool = part as unknown as {
+            callID: string
+            tool: string
+            state: { status: AgentActivityStatus; input?: Record<string, unknown> }
+          }
+          const previous = activityStepCache.get(tool.callID)
+          const step =
+            previous &&
+            previous.tool === tool.tool &&
+            previous.status === tool.state.status &&
+            previous.input === tool.state.input
+              ? previous
+              : { id: tool.callID, tool: tool.tool, input: tool.state.input, status: tool.state.status }
+          activityStepCache.set(tool.callID, step)
+          seen.add(tool.callID)
+          steps.push(step)
+        }
+      }
+      // The turn cursor can move backwards; drop anything no longer in it.
+      for (const callID of activityStepCache.keys()) {
+        if (!seen.has(callID)) activityStepCache.delete(callID)
+      }
+      return steps
+    },
+    [],
+    { equals: same },
+  )
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -585,6 +680,7 @@ export default function Page() {
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
+    tasksCollapsed: false,
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     promptHeight: 0,
@@ -757,6 +853,36 @@ export default function Page() {
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
 
+  /**
+   * Following the agent: the editor opens whatever file it is editing.
+   *
+   * Only the latest message is scanned. The agent's current edit is in the turn
+   * it is writing now, and walking the whole transcript on every streamed part
+   * would cost the length of the session on every token.
+   */
+  const followPath = createMemo(() => {
+    const last = messages().at(-1)
+    if (!last) return undefined
+    return followTarget(sync.data.part[last.id] ?? [])
+  })
+
+  createEffect(() => {
+    const target = followPath()
+    const move = shouldFollow({
+      enabled: layout.follow.enabled(),
+      busy: status().type === "busy",
+      target,
+      // Reading the open tab must not subscribe this effect to it, or closing a
+      // tab by hand would re-open it.
+      current: untrack(() => {
+        const active = tabs().active()
+        return active ? file.pathFromTab(active) : undefined
+      }),
+    })
+    if (!move || !target) return
+    openTab(file.tab(target))
+  })
+
   createEffect(
     on(
       sessionKey,
@@ -797,9 +923,46 @@ export default function Page() {
     return lines.slice(0, 2).join("\n")
   }
 
+  /**
+   * Add a block to the end of what is already typed.
+   *
+   * Flattening the prompt to its text and replacing it — which is what this did —
+   * deleted every file mention, agent mention and pasted image on the way.
+   */
+  const appendToPrompt = (text: string) => prompt.set(appendTextToPrompt(prompt.current(), text))
+
   const addSelectionToContext = (path: string, selection: FileSelection) => {
     const preview = selectionPreview(path, selection)
     prompt.context.add({ type: "file", path, selection, preview })
+  }
+
+  /**
+   * Revert the session to just before `messageID`, restoring that turn's prompt
+   * so it can be edited and re-sent. `session.revert` has always accepted an
+   * arbitrary message; only `/undo`, walking back one turn at a time, ever used it.
+   */
+  const rewindToMessage = async (messageID: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (status()?.type !== "idle") {
+      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    }
+    try {
+      await sdk.client.session.revert({ sessionID, messageID })
+    } catch (error) {
+      // The caller is `void rewindToMessage(id)`, so a rejection here would be an
+      // unhandled one — and the transcript would silently keep showing the turn
+      // the user just asked to take back.
+      showToast({
+        variant: "error",
+        title: language.t("command.session.rewind"),
+        description: error instanceof Error ? error.message : String(error),
+      })
+      return
+    }
+    const parts = sync.data.part[messageID]
+    if (parts) prompt.set(extractPromptFromParts(parts, { directory: sdk.directory }))
+    setActiveMessage(findLast(userMessages(), (x) => x.id < messageID))
   }
 
   const addCommentToContext = (input: {
@@ -949,6 +1112,7 @@ export default function Page() {
     command,
     dialog,
     file,
+    platform,
     language,
     local,
     permission,
@@ -965,8 +1129,11 @@ export default function Page() {
     status,
     userMessages,
     visibleUserMessages,
+    revertMessageID,
     activeMessage,
     showAllFiles,
+    openTab,
+    toggleReview,
     navigateMessageByOffset,
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
@@ -1179,7 +1346,15 @@ export default function Page() {
     const active = tabs().active()
     if (active === "context") return "context"
     if (active === "review" && reviewTab()) return "review"
-    if (active && file.pathFromTab(active)) return normalizeTab(active)
+    // Without this the browser tab falls through to "first open tab", so opening
+    // the visual editor while any file tab exists silently showed the file.
+    if (active && isBrowserTab(active)) return active
+    // A well-formed path is not enough: pointing the strip at a file that is not
+    // in the open list leaves it with no trigger and no content to render.
+    if (active && file.pathFromTab(active)) {
+      const normalized = normalizeTab(active)
+      if (canActivateFileTab({ candidate: normalized, all: openedTabs() })) return normalized
+    }
 
     const first = openedTabs()[0]
     if (first) return first
@@ -1664,6 +1839,10 @@ export default function Page() {
                     lastUserMessageID={lastUserMessage()?.id}
                     expanded={store.expanded}
                     onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
+                    onRewind={(id) => void rewindToMessage(id)}
+                    rewindConfirmLabel={language.t("session.rewind.confirm")}
+                    cancelLabel={language.t("common.cancel")}
+                    rewindLabel={language.t("command.session.rewind")}
                   />
                 </Show>
               </Match>
@@ -1710,6 +1889,21 @@ export default function Page() {
           </div>
 
           <SessionPromptDock
+            activity={
+              <div class="flex flex-col gap-2">
+                <TaskList
+                  items={todos()}
+                  label={language.t("session.tasks.title")}
+                  collapsed={store.tasksCollapsed}
+                  onToggle={() => setStore("tasksCollapsed", !store.tasksCollapsed)}
+                />
+                <AgentActivity
+                  steps={activitySteps()}
+                  active={ui.responding || activitySteps().some((step) => step.status === "running")}
+                  startedAt={activityStartedAt()}
+                />
+              </div>
+            }
             centered={centered()}
             questionRequest={questionRequest}
             permissionRequest={permRequest}
@@ -1724,10 +1918,23 @@ export default function Page() {
             }}
             newSessionWorktree={newSessionWorktree()}
             onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+            // `ui.responding` is the permission-dialog in-flight flag, not "the
+            // agent is working" — it is written only inside `decide()`. Feeding it
+            // here meant the queue strip never armed during an actual turn.
+            queueBusy={status().type === "busy"}
+            submitted={ui.submitted}
+            onTakeBack={(text) => {
+              // Appended, not replacing: the user may already be typing the
+              // replacement for the very message they are taking back.
+              if (text) prompt.set(appendTextToPrompt(prompt.current(), text))
+            }}
             onSubmit={() => {
               comments.clear()
               resumeScroll()
             }}
+            // After the request lands, not when the composer clears: the queue is
+            // read from the server, and at submit time the row does not exist yet.
+            onSent={() => setUi("submitted", (value) => value + 1)}
             setPromptDockRef={(el) => (promptDock = el)}
           />
 
@@ -1758,6 +1965,7 @@ export default function Page() {
           contextOpen={contextOpen}
           openedTabs={openedTabs}
           activeTab={activeTab}
+          selectedTab={() => tabs().active()}
           activeFileTab={activeFileTab}
           tabs={tabs}
           openTab={openTab}
@@ -1806,6 +2014,7 @@ export default function Page() {
         handleTerminalDragOver={handleTerminalDragOver}
         handleTerminalDragEnd={handleTerminalDragEnd}
         onCloseTab={() => setUi("autoCreated", false)}
+        onSendToPrompt={appendToPrompt}
       />
     </div>
   )
