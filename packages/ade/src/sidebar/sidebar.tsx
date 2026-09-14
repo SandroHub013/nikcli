@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
+import { Badge } from "../ui/layout"
 import "./sidebar.css"
 import { getHost } from "../host/shell"
 import { discoverProject, type Project } from "../host/project"
@@ -183,10 +184,10 @@ function WorkspaceHeaderRow(props: {
         {props.row.workspace.name}
       </span>
       <Show when={props.row.workspace.path?.startsWith("ssh://")}>
-        <span data-slot="space-remote-badge" title={props.row.workspace.path}>ssh</span>
+        <Badge tone="accent" data-slot="space-badge" title={props.row.workspace.path}>ssh</Badge>
       </Show>
       <Show when={props.isActive}>
-        <span data-slot="space-active-badge">attivo</span>
+        <Badge tone="waiting" data-slot="space-badge">attivo</Badge>
       </Show>
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>
         {props.row.sessionCount}

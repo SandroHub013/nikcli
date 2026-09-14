@@ -10,6 +10,7 @@ import { createMemo, createResource, createSignal, For, onMount, Show } from "so
 import { getHost } from "../host/shell"
 import { discoverSshHosts, type SshDiscovery } from "./discover"
 import { checkRemoteDir, parseTargetInput, targetOf, type RemoteTarget, type SshHost } from "./ssh"
+import { Badge, Overlay, Row, Scroll, Stack, Surface } from "../ui/layout"
 import "./remote.css"
 
 export function RemoteSpaceDialog(props: { open: boolean; onClose: () => void; onConnect: (target: RemoteTarget) => void }) {
@@ -70,20 +71,15 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
   }
 
   return (
-    <div
-      data-component="remote-space"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) props.onClose()
-      }}
-    >
-      <div data-slot="dialog" role="dialog" aria-modal="true" aria-label="Aggiungi ambiente remoto">
-        <header data-slot="head">
+    <Overlay data-component="remote-space" onClose={props.onClose}>
+      <Surface size="md" role="dialog" aria-modal="true" aria-label="Aggiungi ambiente remoto">
+        <Row as="header" justify="between" gap={4} padX={6} padY={5} border="bottom">
           <strong>Ambiente remoto (ssh)</strong>
           <Show when={found() && !found()!.client}>
-            <span data-slot="warn">ssh non trovato nel PATH</span>
+            <Badge tone="error">ssh non trovato nel PATH</Badge>
           </Show>
-        </header>
-        <div data-slot="fields">
+        </Row>
+        <Stack gap={3} padX={6} padY={5}>
           <input
             ref={input}
             data-slot="input"
@@ -105,11 +101,11 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
             }}
             onKeyDown={onKeyDown}
           />
-        </div>
-        <Show when={problem()}>
-          <p data-slot="problem">{problem()}</p>
-        </Show>
-        <div data-slot="list" role="listbox">
+          <Show when={problem()}>
+            <p data-slot="problem">{problem()}</p>
+          </Show>
+        </Stack>
+        <Scroll max="320px" data-slot="list" role="listbox">
           <Show when={!found.loading} fallback={<p data-slot="empty">Cerco gli host in ~/.ssh…</p>}>
             <Show
               when={hosts().length > 0}
@@ -130,22 +126,22 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
                         .filter(Boolean)
                         .join("")}
                     </span>
-                    <span data-slot="source">{host.source === "config" ? "config" : "known_hosts"}</span>
+                    <Badge tone={host.source === "config" ? "accent" : "neutral"}>{host.source}</Badge>
                   </button>
                 )}
               </For>
             </Show>
           </Show>
-        </div>
-        <footer data-slot="foot">
+        </Scroll>
+        <Row as="footer" justify="end" gap={3} wrap padX={6} padY={4} border="top">
           <button type="button" data-slot="secondary" onClick={() => props.onClose()}>
             Annulla
           </button>
           <button type="button" data-slot="primary" disabled={!query().trim()} onClick={() => connect()}>
             Connetti a «{query().trim() || "…"}»
           </button>
-        </footer>
-      </div>
-    </div>
+        </Row>
+      </Surface>
+    </Overlay>
   )
 }

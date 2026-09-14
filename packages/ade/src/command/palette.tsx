@@ -1,6 +1,7 @@
 import { createSignal, createMemo, createEffect, on, untrack, Show, For } from "solid-js"
 import { type Command, type CommandHit, filterCommands, moveSelection } from "./registry"
 import { groupHits, type GroupedHits } from "./group-hits"
+import { Overlay, Surface } from "../ui/layout"
 import "./palette.css"
 
 export type { GroupedHits }
@@ -127,18 +128,8 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   return (
     <Show when={props.open}>
-      <div 
-        data-component="palette" 
-        onPointerDown={(e) => {
-          if (e.target === e.currentTarget) props.onClose()
-        }}
-      >
-        <div 
-          data-slot="dialog" 
-          role="dialog" 
-          aria-modal="true"
-          aria-label="Command Palette"
-        >
+      <Overlay data-component="palette" onClose={props.onClose}>
+        <Surface size="lg" data-slot="dialog" role="dialog" aria-modal="true" aria-label="Command Palette">
           <div data-slot="input-wrap">
             <input
               ref={inputRef}
@@ -200,8 +191,8 @@ export function CommandPalette(props: CommandPaletteProps) {
               </For>
             </Show>
           </div>
-        </div>
-      </div>
+        </Surface>
+      </Overlay>
     </Show>
   )
 }

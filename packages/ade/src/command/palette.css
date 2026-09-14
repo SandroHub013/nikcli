@@ -1,43 +1,5 @@
-[data-component="palette"] {
-  position: absolute;
-  inset: 0;
-  background: var(--ade-scrim);
-  z-index: 100;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 12vh;
-}
-
-[data-component="palette"] [data-slot="dialog"] {
-  width: 100%;
-  max-width: 640px;
-  background: var(--ade-overlay);
-  border: 1px solid var(--ade-border-strong);
-  border-radius: var(--ade-radius-xl);
-  box-shadow: var(--ade-shadow-lg), inset 0 1px 0 var(--ade-highlight);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: ade-cp-in var(--ade-dur-fast) var(--ade-ease-out);
-}
-
-@keyframes ade-cp-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="palette"] [data-slot="dialog"] {
-    animation: none;
-  }
-}
+/* Scrim, panel, border, shadow and entry animation come from `Overlay` and
+   `Surface` in `ui/layout.css`; only what is the palette's own is here. */
 
 [data-component="palette"] [data-slot="input-wrap"] {
   padding: 0;
