@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { generateQRMatrix } from "@nikcli-ai/remote"
 import { buildMobilePairingDeepLink } from "@/cli/handlers/mobile/shared"
-import { normalizeMobileServerUrl, renderQRRows } from "@tui/component/dialog-mobile-connect"
+import { normalizeMobileServerUrl, shouldShowPairingLink } from "@tui/component/dialog-mobile-connect"
+import { renderQRRows } from "@tui/component/qr"
 
 describe("mobile pairing", () => {
   test("builds the deep link consumed by the mobile app", () => {
@@ -74,5 +75,14 @@ describe("mobile pairing", () => {
     // last module row paired with a blank half-row, so the trailing column
     // is `▀` (top half of the last filled module) — not a space.
     expect(renderQRRows(matrix, 0)).toEqual(["█▄▀", " ▀▀"])
+  })
+
+  test("spells the pairing link out only where the QR cannot be trusted", () => {
+    // Windows terminals all run through ConPTY, where a large frame can lose
+    // cells and leave the QR a blank white square. Everywhere else the link
+    // stays off screen: it carries the pairing token in clear text.
+    expect(shouldShowPairingLink("win32")).toBe(true)
+    expect(shouldShowPairingLink("darwin")).toBe(false)
+    expect(shouldShowPairingLink("linux")).toBe(false)
   })
 })

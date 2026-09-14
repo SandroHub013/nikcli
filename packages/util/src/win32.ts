@@ -20,6 +20,20 @@ export function shouldUseRendererThread(platform: NodeJS.Platform = process.plat
   return platform !== "win32"
 }
 
+/**
+ * Whether an overlay has to ask for a full repaint after it opens.
+ *
+ * Same root cause as `shouldUseRendererThread`: on Windows the console pipe
+ * drops part of a large frame, and OpenTUI only writes the cells that changed
+ * since the previous frame. Cells whose write was lost are never retried, so
+ * the rows the terminal missed keep showing the *previous* screen until
+ * something forces a full repaint. An opening dialog is the worst case — the
+ * frame is nearly full-screen, and what shows through is the view behind it.
+ */
+export function shouldForceOverlayRepaint(platform: NodeJS.Platform = process.platform) {
+  return platform === "win32"
+}
+
 function load() {
   if (process.platform !== "win32") return false
   try {

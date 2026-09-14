@@ -14,6 +14,7 @@ import { useTheme } from "@tui/context/theme"
 import { Renderable, RGBA, TextAttributes } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
+import { scheduleOverlayRepaint } from "@tui/util/repaint"
 import { useToast } from "./toast"
 
 /**
@@ -47,6 +48,12 @@ export function Dialog(
       { opacity: 0 },
       { opacity: 1, duration: 150, ease: "outQuad", onUpdate: (a) => setOpacity(a.targets[0].opacity) },
     )
+    // Opening a dialog is the largest frame the app draws: backdrop, panel and
+    // content all change at once. That is the frame Windows consoles truncate,
+    // and the cells that get lost keep showing the view *behind* the dialog —
+    // permanently, because the renderer only writes what changed. Repaint once
+    // the fade has settled so the panel covers what it is supposed to cover.
+    onCleanup(scheduleOverlayRepaint(renderer, 200))
   })
 
   const width = () => {

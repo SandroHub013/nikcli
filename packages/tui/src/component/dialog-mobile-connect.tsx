@@ -1,7 +1,7 @@
 import { useScrollAcceleration } from "@tui/util/scroll"
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { generateQRMatrix } from "@nikcli-ai/remote"
 import { buildMobilePairingDeepLink, getLocalIPs, isLoopbackHostname } from "@nikcli-ai/util/mobile-pairing"
@@ -12,6 +12,7 @@ import { useToast } from "@tui/ui/toast"
 import { Clipboard } from "@tui/util/clipboard"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { QRCode, qrRenderWidth, renderQRRows, useQRRepaint } from "@tui/component/qr"
 import { createWorkspaceArchive, uploadWorkspaceArchive } from "@nikcli-ai/util/teleport-archive"
 
 function isPlainShortcut(evt: { ctrl?: boolean; meta?: boolean; super?: boolean; name?: string }, ...names: string[]) {
@@ -91,47 +92,35 @@ function isLikelyIPhoneHotspotUrl(value: string): boolean {
   }
 }
 
-export function renderQRRows(matrix: boolean[][], margin = 1): string[] {
-  if (matrix.length === 0) return []
-  const width = matrix[0]?.length ?? 0
-  const blank = Array(width + margin * 2).fill(false) as boolean[]
-  const padded = [
-    ...Array.from({ length: margin }, () => [...blank]),
-    ...matrix.map((row) => [...Array(margin).fill(false), ...row, ...Array(margin).fill(false)] as boolean[]),
-    ...Array.from({ length: margin }, () => [...blank]),
-  ]
-  if (padded.length % 2 !== 0) padded.push([...blank])
-
-  const rows: string[] = []
-  for (let row = 0; row < padded.length; row += 2) {
-    let value = ""
-    for (let column = 0; column < blank.length; column++) {
-      const top = padded[row]?.[column] ?? false
-      const bottom = padded[row + 1]?.[column] ?? false
-      value += top && bottom ? "█" : top ? "▀" : bottom ? "▄" : " "
-    }
-    rows.push(value)
-  }
-  return rows
+/**
+ * Whether to spell the pairing link out next to the QR.
+ *
+ * Every Windows terminal goes through ConPTY, and a frame there can lose
+ * cells (see `shouldForceOverlayRepaint`). The QR is the densest thing the TUI
+ * draws, so it is the first casualty — it comes out as a blank white square,
+ * with no hint that anything is missing. The link carries the same payload the
+ * QR encodes, so printing it keeps pairing possible on a terminal that cannot
+ * draw the symbol. It is not shown elsewhere because it puts the pairing token
+ * on screen in clear text, and `y` already copies it.
+ */
+export function shouldShowPairingLink(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32"
 }
 
-function qrRenderWidth(matrix: boolean[][], margin = 1): number {
-  return (matrix[0]?.length ?? 0) + margin * 2 + 2
-}
-
-function QRCode(props: { matrix: boolean[][] }) {
+function PairingLink(props: { deepLink: string }) {
   const { theme } = useTheme()
-  const rows = createMemo(() => renderQRRows(props.matrix))
   return (
-    <box backgroundColor={theme.foreground.default} paddingLeft={1} paddingRight={1} flexDirection="column">
-      <For each={rows()}>
-        {(row) => (
-          <text fg={theme.surface.base} bg={theme.foreground.default} wrapMode="none">
-            {row}
-          </text>
-        )}
-      </For>
-    </box>
+    <Show when={shouldShowPairingLink()}>
+      <box marginTop={1} flexDirection="column">
+        <text fg={theme.foreground.muted} wrapMode="word">
+          If the QR is blank, this terminal could not draw it. Press y to copy the same pairing link and open it on the
+          phone:
+        </text>
+        <text fg={theme.accent.alt} selectable wrapMode="word">
+          {props.deepLink}
+        </text>
+      </box>
+    </Show>
   )
 }
 
@@ -207,8 +196,10 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
   const qrRows = createMemo(() => (pairing() ? renderQRRows(pairing()!.matrix).length : 0))
   const qrWidth = createMemo(() => (pairing() ? qrRenderWidth(pairing()!.matrix) : 0))
   const stacked = createMemo(() => dimensions().width < qrWidth() + 50)
+  const repaintOnQR = useQRRepaint(() => pairing()?.matrix)
 
   onMount(() => {
+    repaintOnQR()
     dialog.setSize(dimensions().width >= 100 ? "xlarge" : "large")
     const saved = (sync.data.config as RemoteServerConfig | undefined)?.teleport
     if (saved?.url) setForm("url", saved.url)
@@ -511,6 +502,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
                 </text>
                 <text fg={theme.foreground.muted}>Pairing token</text>
                 <text fg={theme.foreground.default}>{value().token.slice(0, 8)}••••••••••••••••</text>
+                <PairingLink deepLink={value().deepLink} />
               </box>
               <scrollbox
                 scrollAcceleration={scrollAcceleration()}
@@ -552,8 +544,10 @@ function LocalMobileConnect(props: { onBack: () => void }) {
   const qrRows = createMemo(() => (pairing() ? renderQRRows(pairing()!.matrix).length : 0))
   const qrWidth = createMemo(() => (pairing() ? qrRenderWidth(pairing()!.matrix) : 0))
   const stacked = createMemo(() => dimensions().width < qrWidth() + 50)
+  const repaintOnQR = useQRRepaint(() => pairing()?.matrix)
 
   onMount(() => {
+    repaintOnQR()
     dialog.setSize(dimensions().width >= 100 ? "xlarge" : "large")
     void createPairing()
   })
@@ -731,6 +725,7 @@ function LocalMobileConnect(props: { onBack: () => void }) {
               <text fg={theme.foreground.muted}>
                 Expires {value().expiresAt ? new Date(value().expiresAt!).toLocaleDateString() : "never"}
               </text>
+              <PairingLink deepLink={value().deepLink} />
               <Show when={connected()}>
                 <text attributes={TextAttributes.BOLD} fg={theme.status.success.fg}>
                   ● Connected
