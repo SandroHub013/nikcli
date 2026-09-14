@@ -557,17 +557,59 @@ export function Workbench() {
    */
   const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
     const line = asOneLine(text)
-    session.write(line)
+    const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
-     * Longer for a longer line. A request with its reply contract runs to a
-     * thousand characters, and Claude Code was still taking them in when a
-     * fixed 400 ms Enter arrived: the request sat in the input box of the
-     * session that was supposed to do it.
+     * A paste, said as one, when the CLI has asked for that. Claude Code and
+     * codex switch bracketed paste on, and then text between the markers is
+     * a paste by declaration rather than by guesswork about timing, and the
+     * Enter after it is a keystroke at once. Otherwise: the text, and Enter
+     * after a wait that grows with the line — a thousand characters with the
+     * reply contract were still being taken in when a fixed 400 ms Enter came.
      */
-    await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)))
+    const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
+    const typedAt = Date.now()
+    session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
+    await new Promise((resolve) => setTimeout(resolve, bracketed ? 120 : Math.min(2500, SUBMIT_DELAY_MS + line.length)))
     if (![...running.values()].includes(session)) return false
     session.write("\r")
+    if (paneId !== undefined) void confirmSubmitted(paneId, session, typedAt)
     return true
+  }
+
+  const ESC = String.fromCharCode(27)
+
+  /** Whether each pane's program has bracketed paste on, from the mode switches in its own output. */
+  const bracketedPaste = new Map<string, boolean>()
+  const noteBracketedPaste = (paneId: string, chunk: string) => {
+    const on = chunk.lastIndexOf(`${ESC}[?2004h`)
+    const off = chunk.lastIndexOf(`${ESC}[?2004l`)
+    if (on >= 0 || off >= 0) bracketedPaste.set(paneId, on > off)
+  }
+
+  /**
+   * Makes sure a typed line became a turn, where the CLI's hooks can say so.
+   *
+   * `UserPromptSubmit` runs the moment a prompt is sent. If it has not run
+   * within a few seconds the line is still in the input box, and Enter goes
+   * again — twice at most, never over a permission prompt, and not at all for
+   * a CLI without the hook, where no answer is not evidence of anything.
+   */
+  const confirmSubmitted = async (paneId: string, session: SpawnedSession, typedAt: number) => {
+    const host = await getHost()
+    const nonce = paneNonces.get(paneId)
+    if (!host?.readAgentActivity || !nonce || !hooked(paneId)) return
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+      if (running.get(paneId) !== session || permissions()[paneId]) return
+      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+      const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+      if (activity && activity.at >= typedAt) {
+        activityOf.set(paneId, activity)
+        return
+      }
+      session.write("\r")
+      appendLine(paneId, "Invio ripetuto: il messaggio non era partito", "note")
+    }
   }
 
   /** Messages taken from the outbox and not delivered yet, oldest first. */
@@ -2544,6 +2586,7 @@ export function Workbench() {
     if (nonce) paneNonces.set(paneId, nonce)
     else paneNonces.delete(paneId)
     activityOf.delete(paneId)
+    bracketedPaste.delete(paneId)
     let spawned: SpawnedSession | undefined
 
     /*
@@ -2601,6 +2644,7 @@ export function Workbench() {
           firstByteAt ??= now
           lastByteAt = now
           lastOutputAt.set(paneId, now)
+          noteBracketedPaste(paneId, chunk)
 
           feedTerminal(paneId, chunk)
         },
