@@ -484,6 +484,13 @@ async fn write_clipboard(app: tauri::AppHandle, text: String) -> Result<(), Stri
     app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
+/// What the frontend is told when a registered voice hotkey changes state.
+#[derive(Clone, serde::Serialize)]
+struct GlobalVoiceEvent {
+    chord: String,
+    state: &'static str,
+}
+
 #[tauri::command]
 async fn register_global_voice_shortcut(app: tauri::AppHandle, chord: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -573,9 +580,22 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     use tauri::Emitter;
-                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = app.emit("nikcli-global-voice", shortcut.to_string());
-                    }
+                    /*
+                     * Both edges, named. A registered hotkey is taken by the
+                     * OS before the webview sees a keydown, so for these
+                     * chords this event is the only keyboard ADE has: the
+                     * release is what lets push-to-talk let go, and the
+                     * chord text is what lets the frontend tell the two
+                     * voice features apart (see voice/global-shortcut.ts).
+                     */
+                    let state = match event.state() {
+                        tauri_plugin_global_shortcut::ShortcutState::Pressed => "pressed",
+                        tauri_plugin_global_shortcut::ShortcutState::Released => "released",
+                    };
+                    let _ = app.emit(
+                        "nikcli-global-voice",
+                        GlobalVoiceEvent { chord: shortcut.to_string(), state },
+                    );
                 })
                 .build(),
         )
@@ -632,6 +652,7 @@ pub fn run() {
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
             mailbox::mailbox_result_reclaim,
+            mailbox::mailbox_state,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,

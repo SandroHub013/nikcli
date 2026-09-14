@@ -120,8 +120,18 @@ import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import {
+  DEFAULT_MAX_SPAWNED,
+  USAGE,
   agentsTable,
+  briefOf,
   byProject,
+  formatCancel,
+  formatNudge,
+  parseOpenRequests,
+  requestState,
+  requestsTable,
+  shouldNudge,
+  type OpenRequest,
   formatDelivery,
   formatLateReply,
   formatRequest,
@@ -538,12 +548,51 @@ export function Workbench() {
   /** Messages taken from the outbox and not delivered yet, oldest first. */
   const mailQueue: { id: string; message: Message; at: number }[] = []
 
-  /**
-   * The `ask` and `spawn` requests still waiting for a reply: who asked, and
-   * who has to answer. Only in memory — after a restart a reply still reaches
-   * a waiting `ade-msg`, just not the typed fallback.
+  /*
+   * What survives a restart, in localStorage: the requests still waiting for
+   * an answer, and which session started which with `spawn`. Pane ids survive
+   * a restore, so both still point at the right panes afterwards.
    */
-  const openRequests = new Map<string, { from: string; to: string; at: number }>()
+  const REQUESTS_KEY = "ade.mailbox.requests"
+  const SPAWNED_KEY = "ade.mailbox.spawned"
+  const readStored = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  }
+  const writeStored = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch {}
+  }
+
+  /** The `ask` and `spawn` requests still waiting for a reply. */
+  const openRequests = new Map<string, OpenRequest>(parseOpenRequests(readStored(REQUESTS_KEY)).map((request) => [request.id, request]))
+  const saveRequests = () => writeStored(REQUESTS_KEY, JSON.stringify([...openRequests.values()]))
+  /*
+   * Restored requests count their grace from now, not from when they were
+   * made: their sessions are being reopened, and "not running" during that is
+   * not "closed".
+   */
+  const loadedAt = Date.now()
+
+  /** Sessions started with `spawn`: pane id → the pane that started it, the only one that may close it. */
+  const spawnedBy = new Map<string, string>(
+    (() => {
+      try {
+        const raw: unknown = JSON.parse(readStored(SPAWNED_KEY) ?? "{}")
+        return raw && typeof raw === "object" ? Object.entries(raw as Record<string, unknown>).filter((entry): entry is [string, string] => typeof entry[1] === "string") : []
+      } catch {
+        return []
+      }
+    })(),
+  )
+  const saveSpawned = () => writeStored(SPAWNED_KEY, JSON.stringify(Object.fromEntries(spawnedBy)))
+
+  /** When each pane last printed anything: a session silent for a while has stopped working. */
+  const lastOutputAt = new Map<string, number>()
 
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
@@ -559,10 +608,43 @@ export function Workbench() {
 
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
   const CLAIM_WINDOW_MS = 3000
-  /** How long a freshly spawned session has to come up before "closed" means closed. */
-  const SPAWN_GRACE_MS = 30_000
+  /** How long a session that replied with `--close` keeps running, so its own `ade-msg reply` can finish. */
+  const AUTO_CLOSE_DELAY_MS = 2500
 
   const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal")
+
+  /** The cap on sessions `spawn` keeps open at once; `ade.mailbox.maxSpawned` in localStorage overrides it. */
+  const maxSpawned = () => {
+    const stored = Number(readStored("ade.mailbox.maxSpawned"))
+    return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_MAX_SPAWNED
+  }
+
+  const targetOf = (request: OpenRequest) => ({
+    running: running.has(request.to),
+    permissionPending: Boolean(permissions()[request.to]),
+    lastOutputAt: lastOutputAt.get(request.to),
+  })
+  const stateOf = (request: OpenRequest, now = Date.now()) =>
+    requestState({ ...request, at: Math.max(request.at, loadedAt) }, targetOf(request), now)
+
+  /** The last state written for each request, so a waiter hears about changes only. */
+  const statesWritten = new Map<string, string>()
+  let publishedRequests = ""
+
+  /** Ends a request: its waiter gets `result`, and nothing about it is kept. */
+  const settle = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, result?: string) => {
+    openRequests.delete(id)
+    saveRequests()
+    statesWritten.delete(id)
+    await host.mailboxState?.(id, "").catch(() => {})
+    if (result !== undefined) await host.mailboxResult?.(id, result).catch(() => {})
+  }
+
+  const closeSpawned = (paneId: string) => {
+    spawnedBy.delete(paneId)
+    saveSpawned()
+    if (wb().panes.some((pane) => pane.id === paneId)) close(paneId)
+  }
 
   const deliverPending = async () => {
     const host = await getHost()
@@ -579,12 +661,35 @@ export function Workbench() {
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
 
-    // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
-    for (const [id, request] of openRequests) {
-      if (running.has(request.to) || Date.now() - request.at < SPAWN_GRACE_MS) continue
-      openRequests.delete(id)
-      const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
-      await host.mailboxResult?.(id, `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${id}`).catch(() => {})
+    const now = Date.now()
+    const panes = mailPanes()
+    for (const request of [...openRequests.values()]) {
+      const state = stateOf(request, now)
+      // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
+      if (state === "sessione chiusa") {
+        const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
+        await settle(host, request.id, `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`)
+        continue
+      }
+      if (statesWritten.get(request.id) !== state) {
+        statesWritten.set(request.id, state)
+        await host.mailboxState?.(request.id, state).catch(() => {})
+      }
+      // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
+      const session = running.get(request.to)
+      if (session && shouldNudge(request, targetOf(request), now)) {
+        request.nudges = (request.nudges ?? 0) + 1
+        request.nudgedAt = now
+        saveRequests()
+        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)))
+        appendLine(request.to, `Promemoria inviato: la richiesta ${request.id} aspetta una risposta`, "note")
+      }
+    }
+
+    const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now)
+    if (table !== publishedRequests) {
+      publishedRequests = table
+      await host.mailboxPublish?.(table, "requests").catch(() => {})
     }
   }
 
@@ -604,12 +709,11 @@ export function Workbench() {
         await answer("errore: questa versione di ADE non accetta risposte")
         return true
       }
-      await host.mailboxResult(message.ref, message.text)
-      openRequests.delete(message.ref)
+      await settle(host, message.ref, message.text)
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
       if (sender) appendLine(sender.id, `Risposta inviata${caller ? ` a ${caller.title}` : ""} (richiesta ${message.ref})`, "note")
       if (caller) appendLine(caller.id, `Risposta ricevuta da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
-      await answer(`ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}`)
+      await answer(`ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}${request?.autoClose ? " — questa sessione ora si chiude" : ""}`)
       // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
@@ -618,6 +722,25 @@ export function Workbench() {
           void typeLine(session, formatLateReply(message.ref, text, sender))
         })
       }, CLAIM_WINDOW_MS)
+      if (request?.autoClose) setTimeout(() => closeSpawned(request.to), AUTO_CLOSE_DELAY_MS)
+      return true
+    }
+
+    if (message.kind === "cancel") {
+      const request = openRequests.get(message.ref)
+      if (!request) {
+        await answer(`errore: nessuna richiesta aperta con id ${message.ref}`)
+        return true
+      }
+      if (!message.from || request.from !== message.from) {
+        await answer("errore: puoi annullare solo le richieste fatte da questa sessione")
+        return true
+      }
+      await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)
+      const session = running.get(request.to)
+      if (request.autoClose) closeSpawned(request.to)
+      else if (session && !permissions()[request.to]) void typeLine(session, formatCancel(request.id, sender))
+      await answer(`ok: richiesta ${request.id} annullata${request.autoClose ? " e sessione chiusa" : ""}`)
       return true
     }
 
@@ -627,8 +750,14 @@ export function Workbench() {
         await answer(`errore: ${agent.error}`)
         return true
       }
-      const brief = message.text.replace(/\s+/g, " ").trim()
-      const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${brief.length > 48 ? `${brief.slice(0, 48)}…` : brief}`
+      const open = [...spawnedBy.keys()].filter((paneId) => wb().panes.some((pane) => pane.id === paneId))
+      if (open.length >= maxSpawned()) {
+        await answer(
+          `errore: ci sono già ${open.length} sessioni avviate con spawn (limite ${maxSpawned()}); chiudine una con ade-msg close <sessione> o aspetta che finiscano`,
+        )
+        return true
+      }
+      const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
       // A subagent works in its caller's project, whichever one is open in ADE.
       const owner = sender?.project || project()?.name
       const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
@@ -636,9 +765,22 @@ export function Workbench() {
         { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title, workspaceId: owner },
         { index, agentId: agent.id, role: "agent" },
       )
-      openRequests.set(id, { from: message.from, to: created.id, at: Date.now() })
+      openRequests.set(id, {
+        id,
+        kind: "spawn",
+        from: message.from,
+        to: created.id,
+        at: Date.now(),
+        brief: briefOf(message.text),
+        ...(message.autoClose ? { autoClose: true } : {}),
+      })
+      saveRequests()
+      if (message.from) {
+        spawnedBy.set(created.id, message.from)
+        saveSpawned()
+      }
       if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
-      await answer(`ok: avviata la sessione "${created.title}" (${agent.id})`)
+      await answer(`ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id})`)
       return true
     }
 
@@ -647,6 +789,22 @@ export function Workbench() {
       await answer(`errore: ${target.error}`)
       return true
     }
+
+    if (message.kind === "close") {
+      if (!message.from || spawnedBy.get(target.pane.id) !== message.from) {
+        await answer(`errore: puoi chiudere solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
+        return true
+      }
+      for (const request of [...openRequests.values()]) {
+        if (request.to === target.pane.id) {
+          await settle(host, request.id, `[ade-msg] richiesta ${request.id} interrotta: la sessione "${target.pane.title}" è stata chiusa`)
+        }
+      }
+      closeSpawned(target.pane.id)
+      await answer(`ok: chiusa la sessione "${target.pane.title}"`)
+      return true
+    }
+
     if (message.kind === "ask" && target.pane.id === message.from) {
       await answer("errore: una sessione non può fare una richiesta a se stessa")
       return true
@@ -664,7 +822,10 @@ export function Workbench() {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
-    if (message.kind === "ask") openRequests.set(id, { from: message.from, to: target.pane.id, at: Date.now() })
+    if (message.kind === "ask") {
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at: Date.now(), brief: briefOf(message.text) })
+      saveRequests()
+    }
     const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
     appendLine(target.pane.id, `${what} ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
     if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
@@ -675,7 +836,10 @@ export function Workbench() {
   onMount(() => {
     const timer = setInterval(() => void deliverMail(), 700)
     onCleanup(() => clearInterval(timer))
-    void getHost().then((host) => host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {}))
+    void getHost().then((host) => {
+      void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
+      void host?.mailboxPublish?.(USAGE, "usage").catch(() => {})
+    })
   })
 
   // The list `ade-msg list` prints, rewritten when a session opens, closes or changes state.
@@ -2115,6 +2279,8 @@ export function Workbench() {
           const now = Date.now()
           firstByteAt ??= now
           lastByteAt = now
+          lastOutputAt.set(paneId, now)
+
           feedTerminal(paneId, chunk)
         },
         onLine: (line, stream) => {

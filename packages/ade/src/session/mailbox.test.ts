@@ -9,6 +9,12 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  formatNudge,
+  parseOpenRequests,
+  requestState,
+  requestsTable,
+  shouldNudge,
+  type OpenRequest,
 } from "./mailbox"
 
 const panes = [
@@ -110,7 +116,8 @@ describe("what lands in the terminal", () => {
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
     expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
-    expect(line.endsWith('ade-msg reply 171-ab "<risultato completo>"')).toBe(true)
+    expect(line).toContain('ade-msg reply 171-ab "<risultato completo>"')
+    expect(line.endsWith("ade-msg reply 171-ab --file <percorso>)")).toBe(true)
   })
 
   test("a late reply names the request it answers", () => {
@@ -170,5 +177,48 @@ describe("by project", () => {
   test("without a sender to go by, the same name in two projects is still an error", () => {
     const result = resolveTarget(mixed, "claude")
     expect("error" in result && result.error).toContain("[web]")
+  })
+})
+
+describe("orchestration", () => {
+  test("close and cancel carry no text; spawn reads --close", () => {
+    expect(parseMessage('{"kind":"close","from":"a","to":"3"}')).toMatchObject({ kind: "close", to: "3", text: "" })
+    expect(parseMessage('{"kind":"cancel","from":"a","ref":"171-ab"}')).toMatchObject({ kind: "cancel", ref: "171-ab" })
+    expect(parseMessage('{"kind":"cancel","from":"a","ref":"../x"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x","close":true}')).toMatchObject({ autoClose: true })
+    expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x"}')).toMatchObject({ autoClose: false })
+  })
+
+  const request: OpenRequest = { id: "171-ab", kind: "spawn", from: "n1-0", to: "n2-1", at: 0, brief: "trova i test lenti" }
+
+  test("a request's state says what the caller is actually waiting on", () => {
+    expect(requestState(request, { running: false, permissionPending: false }, 5_000)).toBe("in avvio")
+    expect(requestState(request, { running: false, permissionPending: false }, 60_000)).toBe("sessione chiusa")
+    expect(requestState(request, { running: true, permissionPending: true }, 60_000)).toBe("attende un permesso")
+    expect(requestState(request, { running: true, permissionPending: false }, 60_000)).toBe("in corso")
+  })
+
+  test("a quiet session with an old request is reminded, at most twice and never over a prompt", () => {
+    const quiet = { running: true, permissionPending: false, lastOutputAt: 10_000 }
+    expect(shouldNudge(request, quiet, 30_000)).toBe(false) // too recent
+    expect(shouldNudge(request, quiet, 70_000)).toBe(true)
+    expect(shouldNudge(request, { ...quiet, lastOutputAt: 60_000 }, 70_000)).toBe(false) // still talking
+    expect(shouldNudge(request, { ...quiet, permissionPending: true }, 70_000)).toBe(false)
+    expect(shouldNudge({ ...request, nudges: 1, nudgedAt: 70_000 }, quiet, 100_000)).toBe(false) // gap
+    expect(shouldNudge({ ...request, nudges: 1, nudgedAt: 70_000 }, quiet, 200_000)).toBe(true)
+    expect(shouldNudge({ ...request, nudges: 2, nudgedAt: 0 }, quiet, 900_000)).toBe(false)
+    expect(formatNudge("171-ab", panes[0])).toContain("ade-msg reply 171-ab")
+  })
+
+  test("status lists who waits on whom, and how long", () => {
+    const table = requestsTable([request], panes, () => "in corso", 125_000)
+    expect(table).toContain("171-ab  spawn  2m05s  in corso  Sessione 1 — claude-code → Sessione 2 — codex  trova i test lenti")
+    expect(requestsTable([], panes, () => "in corso", 0)).toBe("nessuna richiesta in corso\n")
+  })
+
+  test("saved requests survive a restart, and junk does not", () => {
+    const saved = JSON.stringify([request, { id: "../x", kind: "ask", from: "", to: "a", at: 1 }, 7])
+    expect(parseOpenRequests(saved)).toEqual([request])
+    expect(parseOpenRequests("not json")).toEqual([])
   })
 })

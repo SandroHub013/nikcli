@@ -15,7 +15,11 @@
 //!   `results/<id>.txt`, which ADE writes when the other session runs
 //!   `ade-msg reply <id>`. The waiter claims it by renaming it; one that is
 //!   still there a moment later had nobody waiting, and ADE takes it back
-//!   (`<id>.typed`) and types it into the caller instead.
+//!   (`<id>.typed`) and types it into the caller instead;
+//! - for orchestration, `--no-wait` returns the id at once and `wait` takes
+//!   several; ADE writes `results/<id>.state` when what a request waits on
+//!   changes (a permission prompt, say) and publishes `requests.txt` for
+//!   `status`. `cancel`, `close` and `spawn --close` are messages like the rest.
 //!
 //! This side only moves files. Deciding who a message is for, and what it
 //! looks like when it lands, is `src/session/mailbox.ts`, where it is tested.
@@ -165,12 +169,30 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String) -> Result
     Ok(fs::read_to_string(&typed).ok())
 }
 
-/// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for `agents`.
+/// What request `id` is waiting on, for the `ade-msg wait` blocked on it to
+/// print when it changes ("attende un permesso"). Empty text removes it.
+#[tauri::command]
+pub async fn mailbox_state(app: tauri::AppHandle, id: String, text: String) -> Result<(), String> {
+    if !valid_id(&id) {
+        return Err("id richiesta non valido".into());
+    }
+    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
+    if text.is_empty() {
+        let _ = fs::remove_file(dir.join(format!("{id}.state")));
+        return Ok(());
+    }
+    write_whole(dir, &format!("{id}.state"), &text)
+}
+
+/// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
+/// `agents`, `requests` for `status`, `usage` for the help text.
 #[tauri::command]
 pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: String) -> Result<(), String> {
     let name = match name.as_deref() {
         None | Some("sessions") => "sessions",
         Some("agents") => "agents",
+        Some("requests") => "requests",
+        Some("usage") => "usage",
         Some(_) => return Err("elenco sconosciuto".into()),
     };
     let dir = mailbox_dir(&app).ok_or("casella non disponibile")?;
@@ -189,24 +211,46 @@ $box = $env:ADE_MAILBOX
 if (-not $box -or -not (Test-Path $box)) { [Console]::Error.WriteLine('ade-msg: questa shell non e'' una sessione avviata da ADE (ADE_MAILBOX mancante).'); exit 2 }
 
 function Usage {
-  Write-Output "uso:`n  ade-msg list                            sessioni aperte`n  ade-msg send  <sessione> <testo>        nota, non aspetta risposta`n  ade-msg ask   <sessione> <richiesta>    aspetta la risposta e la stampa`n  ade-msg spawn <agente> <compito>        nuova sessione (subagent), aspetta il risultato`n  ade-msg reply <id> <risultato>          risponde a una richiesta ricevuta`n  ade-msg wait  <id>                      riprende l'attesa di una richiesta`n  ade-msg agents | whoami`nask/spawn/wait accettano --timeout <secondi> (predefinito 110)"
+  $f = Join-Path $box 'usage.txt'
+  if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }
   exit 1
 }
+function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 1 }
 
 $all = @($args | ForEach-Object { [string]$_ })
 $cmd = if ($all.Count -gt 0) { $all[0] } else { '' }
 $timeout = 110
+$noWait = $false
+$any = $false
+$close = $false
+$file = $null
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
-  if ($pos.Count -le 1 -and $all[$i] -eq '--timeout' -and ($i + 1) -lt $all.Count) {
-    try { $timeout = [int]$all[$i + 1] } catch { Usage }
-    $i++
-    continue
+  $a = $all[$i]
+  # Options go before the text; wait takes only ids, so anywhere.
+  if ($cmd -eq 'wait' -or $pos.Count -le 1) {
+    $hasNext = ($i + 1) -lt $all.Count
+    if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
+    elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--no-wait') { $noWait = $true; continue }
+    elseif ($a -eq '--any') { $any = $true; continue }
+    elseif ($a -eq '--close') { $close = $true; continue }
   }
-  $pos.Add($all[$i])
+  $pos.Add($a)
 }
 $head = if ($pos.Count -gt 0) { $pos[0] } else { '' }
 $text = if ($pos.Count -gt 1) { ($pos.GetRange(1, $pos.Count - 1)) -join ' ' } else { '' }
+
+# --file: the text is the file. One too big for a message is sent as its path and its beginning.
+if ($file) {
+  if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Fail "file non trovato: $file" }
+  $item = Get-Item -LiteralPath $file
+  $content = [IO.File]::ReadAllText($item.FullName, $utf8)
+  if ($item.Length -gt 60000) {
+    $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, [Math]::Min(3000, $content.Length))
+  }
+  $text = if ($text) { "$text`n`n$content" } else { $content }
+}
 
 function Post($fields) {
   $id = ('{0}-{1}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), ([guid]::NewGuid().ToString('N').Substring(0, 8)))
@@ -234,69 +278,110 @@ function Receipt($id) {
   return $null
 }
 
-# Blocks until the answer to $id arrives, and prints it as this command's output.
-function Await($id) {
+# Posts and prints the receipt; exits 1 when ADE refused.
+function PostAndConfirm($fields) {
+  $id = Post $fields
+  $r = Receipt $id
+  if ($null -eq $r) { Write-Output 'in coda: ADE non ha ancora confermato'; exit 0 }
+  Write-Output $r
+  if ($r.StartsWith('ok')) { exit 0 } else { exit 1 }
+}
+
+# The answer to $id if it is there, claimed so nobody else takes it; $null if not yet.
+function TakeResult($id) {
   $dir = Join-Path $box 'results'
   $ready = Join-Path $dir "$id.txt"
   $taken = Join-Path $dir "$id.taken"
   $typed = Join-Path $dir "$id.typed"
+  if (Test-Path $ready) {
+    $claimed = $true
+    try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
+    if ($claimed) {
+      $r = [IO.File]::ReadAllText($taken, $utf8)
+      Remove-Item -LiteralPath $taken -ErrorAction SilentlyContinue
+      return $r
+    }
+  }
+  if (Test-Path $typed) {
+    $r = [IO.File]::ReadAllText($typed, $utf8)
+    Remove-Item -LiteralPath $typed -ErrorAction SilentlyContinue
+    return $r
+  }
+  return $null
+}
+
+# Blocks until the answers arrive (all of them, or the first with --any) and prints them.
+function AwaitIds([string[]]$ids) {
+  $dir = Join-Path $box 'results'
+  $pending = New-Object System.Collections.Generic.List[string]
+  foreach ($id in $ids) { $pending.Add($id) }
+  $multi = $ids.Count -gt 1
+  $seen = @{}
   $deadline = [DateTime]::UtcNow.AddSeconds($timeout)
-  while ([DateTime]::UtcNow -lt $deadline) {
-    if (Test-Path $ready) {
-      $claimed = $true
-      try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
-      if ($claimed) {
-        $r = [IO.File]::ReadAllText($taken, $utf8)
-        Remove-Item -LiteralPath $taken -ErrorAction SilentlyContinue
+  while ($pending.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline) {
+    foreach ($id in @($pending)) {
+      $r = TakeResult $id
+      $stateFile = Join-Path $dir "$id.state"
+      if ($null -ne $r) {
+        [void]$pending.Remove($id)
+        Remove-Item -LiteralPath $stateFile -ErrorAction SilentlyContinue
+        if ($multi) { Write-Output "=== risposta $id ===" }
         Write-Output $r
-        exit 0
+        if ($any) {
+          if ($pending.Count -gt 0) { Write-Output "`n(ancora in attesa: $($pending -join ' ') - riprendi con: ade-msg wait $($pending -join ' '))" }
+          exit 0
+        }
+        continue
+      }
+      if (Test-Path $stateFile) {
+        $s = $null
+        try { $s = [IO.File]::ReadAllText($stateFile, $utf8).Trim() } catch {}
+        if ($s -and $seen[$id] -ne $s) { $seen[$id] = $s; [Console]::Error.WriteLine("ade-msg: richiesta $id - $s") }
       }
     }
-    if (Test-Path $typed) {
-      $r = [IO.File]::ReadAllText($typed, $utf8)
-      Remove-Item -LiteralPath $typed -ErrorAction SilentlyContinue
-      Write-Output $r
-      exit 0
-    }
-    Start-Sleep -Milliseconds 250
+    if ($pending.Count -gt 0) { Start-Sleep -Milliseconds 250 }
   }
-  Write-Output "ancora in corso: la richiesta $id non ha ancora una risposta. Riprendi l'attesa con: ade-msg wait $id (se la risposta arriva mentre non stai aspettando, ADE la scrive nel tuo terminale)"
+  if ($pending.Count -eq 0) { exit 0 }
+  Write-Output "ancora in corso: $($pending -join ' ') senza risposta. Riprendi l'attesa con: ade-msg wait $($pending -join ' ') (stato: ade-msg status; se una risposta arriva mentre non aspetti, ADE la scrive nel tuo terminale)"
   exit 0
 }
 
 switch ($cmd) {
   'list' { $f = Join-Path $box 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
   'agents' { $f = Join-Path $box 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
+  'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'send' {
     if (-not $head -or -not $text) { Usage }
-    $id = Post ([ordered]@{ kind = 'send'; to = $head; text = $text })
-    $r = Receipt $id
-    if ($null -eq $r) { Write-Output 'in coda: ADE non ha ancora confermato la consegna'; exit 0 }
-    Write-Output $r
-    if ($r.StartsWith('ok')) { exit 0 } else { exit 1 }
-  }
-  { $_ -eq 'ask' -or $_ -eq 'spawn' } {
-    if (-not $head -or -not $text) { Usage }
-    $fields = if ($cmd -eq 'ask') { [ordered]@{ kind = 'ask'; to = $head; text = $text } } else { [ordered]@{ kind = 'spawn'; agent = $head; text = $text } }
-    $id = Post $fields
-    $r = Receipt $id
-    if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
-    if ($null -eq $r) { [Console]::Error.WriteLine("ade-msg: richiesta $id in coda, ADE non l'ha ancora consegnata") }
-    else { [Console]::Error.WriteLine("ade-msg: $r (richiesta $id), in attesa della risposta...") }
-    Await $id
+    PostAndConfirm ([ordered]@{ kind = 'send'; to = $head; text = $text })
   }
   'reply' {
     if (-not $head -or -not $text) { Usage }
-    $id = Post ([ordered]@{ kind = 'reply'; ref = $head; text = $text })
+    PostAndConfirm ([ordered]@{ kind = 'reply'; ref = $head; text = $text })
+  }
+  'cancel' {
+    if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
+    PostAndConfirm ([ordered]@{ kind = 'cancel'; ref = $head })
+  }
+  'close' {
+    if (-not $head) { Usage }
+    PostAndConfirm ([ordered]@{ kind = 'close'; to = $head })
+  }
+  { $_ -eq 'ask' -or $_ -eq 'spawn' } {
+    if (-not $head -or -not $text) { Usage }
+    $fields = if ($cmd -eq 'ask') { [ordered]@{ kind = 'ask'; to = $head; text = $text } } else { [ordered]@{ kind = 'spawn'; agent = $head; close = $close; text = $text } }
+    $id = Post $fields
     $r = Receipt $id
-    if ($null -eq $r) { Write-Output 'in coda: ADE non ha ancora confermato la risposta'; exit 0 }
-    Write-Output $r
-    if ($r.StartsWith('ok')) { exit 0 } else { exit 1 }
+    if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
+    $said = if ($null -eq $r) { 'in coda, ADE non l''ha ancora consegnata' } else { $r }
+    if ($noWait) { Write-Output "id: $id - $said - attendi con: ade-msg wait $id"; exit 0 }
+    [Console]::Error.WriteLine("ade-msg: $said (richiesta $id), in attesa della risposta...")
+    AwaitIds @($id)
   }
   'wait' {
-    if (-not $head -or $head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
-    Await $head
+    if ($pos.Count -eq 0) { Usage }
+    foreach ($id in $pos) { if ($id -notmatch '^[A-Za-z0-9_-]{1,80}$') { Fail "id non valido: $id" } }
+    AwaitIds $pos.ToArray()
   }
   default { Usage }
 }
@@ -315,17 +400,44 @@ case "$(uname -s 2>/dev/null)" in
 esac
 box="$ADE_MAILBOX"
 if [ -z "$box" ] || [ ! -d "$box" ]; then echo "ade-msg: questa shell non e' una sessione avviata da ADE (ADE_MAILBOX mancante)." >&2; exit 2; fi
-usage() {
-  printf 'uso:\n  ade-msg list\n  ade-msg send  <sessione> <testo>\n  ade-msg ask   <sessione> <richiesta>\n  ade-msg spawn <agente> <compito>\n  ade-msg reply <id> <risultato>\n  ade-msg wait  <id>\n  ade-msg agents | whoami\nask/spawn/wait accettano --timeout <secondi> (predefinito 110)\n'
-  exit 1
-}
-esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
+usage() { if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi; exit 1; }
+fail() { echo "ade-msg: $1" >&2; exit 1; }
+esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
+valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
+
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110
-[ "$1" = "--timeout" ] && [ -n "$2" ] && { timeout="$2"; shift 2; }
-head="$1"; [ $# -gt 0 ] && shift
-[ "$1" = "--timeout" ] && [ -n "$2" ] && { timeout="$2"; shift 2; }
-text="$*"
+timeout=110; nowait=0; any=0; close=false; file=""
+n=0; head=""; text=""; ids=""
+while [ $# -gt 0 ]; do
+  a="$1"
+  if [ "$cmd" = wait ] || [ $n -le 1 ]; then
+    case "$a" in
+      --timeout) [ $# -ge 2 ] && { timeout="$2"; shift 2; continue; } ;;
+      --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
+      --no-wait) nowait=1; shift; continue ;;
+      --any) any=1; shift; continue ;;
+      --close) close=true; shift; continue ;;
+    esac
+  fi
+  if [ $n -eq 0 ]; then head="$a"; else text="${text:+$text }$a"; fi
+  ids="${ids:+$ids }$a"
+  n=$((n+1)); shift
+done
+
+if [ -n "$file" ]; then
+  [ -f "$file" ] || fail "file non trovato: $file"
+  size=$(wc -c < "$file" | tr -d ' ')
+  full="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+  if [ "$size" -gt 60000 ]; then
+    content="Il contenuto completo e' nel file $full ($size byte); leggilo da li'. Inizio:
+$(head -c 3000 "$file")"
+  else
+    content="$(cat "$file")"
+  fi
+  if [ -n "$text" ]; then text="$text
+
+$content"; else text="$content"; fi
+fi
 
 post() {
   id="$(date +%s)000-$$"
@@ -340,40 +452,76 @@ receipt() {
   done
   return 1
 }
+confirm() {
+  post "$1"
+  if receipt; then echo "$r"; case "$r" in ok*) exit 0 ;; *) exit 1 ;; esac; fi
+  echo "in coda: ADE non ha ancora confermato"; exit 0
+}
+take() {
+  got=""
+  if [ -f "$box/results/$1.txt" ] && mv "$box/results/$1.txt" "$box/results/$1.taken" 2>/dev/null; then
+    got="$(cat "$box/results/$1.taken")"; rm -f "$box/results/$1.taken"; return 0
+  fi
+  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; rm -f "$box/results/$1.typed"; return 0; fi
+  return 1
+}
 await() {
   end=$(( $(date +%s) + timeout ))
-  while [ "$(date +%s)" -lt "$end" ]; do
-    if [ -f "$box/results/$1.txt" ] && mv "$box/results/$1.txt" "$box/results/$1.taken" 2>/dev/null; then
-      cat "$box/results/$1.taken"; echo; rm -f "$box/results/$1.taken"; exit 0
-    fi
-    if [ -f "$box/results/$1.typed" ]; then cat "$box/results/$1.typed"; echo; rm -f "$box/results/$1.typed"; exit 0; fi
-    sleep 0.25
+  multi=0; [ $# -gt 1 ] && multi=1
+  pending="$*"
+  while [ -n "$pending" ] && [ "$(date +%s)" -lt "$end" ]; do
+    still=""
+    for rid in $pending; do
+      if take "$rid"; then
+        rm -f "$box/results/$rid.state"
+        [ $multi = 1 ] && echo "=== risposta $rid ==="
+        printf '%s\n' "$got"
+        if [ $any = 1 ]; then
+          rest=""; for o in $pending; do [ "$o" != "$rid" ] && rest="${rest:+$rest }$o"; done
+          [ -n "$rest" ] && printf '\n(ancora in attesa: %s - riprendi con: ade-msg wait %s)\n' "$rest" "$rest"
+          exit 0
+        fi
+      else
+        still="${still:+$still }$rid"
+        if [ -f "$box/results/$rid.state" ]; then
+          s="$(cat "$box/results/$rid.state")"; key="seen_$(printf '%s' "$rid" | tr -c 'A-Za-z0-9_' '_')"
+          eval "old=\"\${$key}\""
+          if [ "$s" != "$old" ]; then eval "$key=\"\$s\""; echo "ade-msg: richiesta $rid - $s" >&2; fi
+        fi
+      fi
+    done
+    pending="$still"
+    [ -n "$pending" ] && sleep 0.25
   done
-  echo "ancora in corso: la richiesta $1 non ha ancora una risposta. Riprendi l'attesa con: ade-msg wait $1"
+  [ -z "$pending" ] && exit 0
+  echo "ancora in corso: $pending senza risposta. Riprendi l'attesa con: ade-msg wait $pending (stato: ade-msg status)"
   exit 0
 }
 
 case "$cmd" in
   list) if [ -f "$box/sessions.txt" ]; then cat "$box/sessions.txt"; else echo "nessuna sessione pubblicata"; fi ;;
   agents) if [ -f "$box/agents.txt" ]; then cat "$box/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
+  status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
-  send|reply)
-    [ -n "$head" ] && [ -n "$text" ] || usage
-    if [ "$cmd" = send ]; then post "\"kind\":\"send\",\"to\":\"$(esc "$head")\""; else post "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\""; fi
-    if receipt; then echo "$r"; case "$r" in ok*) exit 0 ;; *) exit 1 ;; esac; fi
-    echo "in coda: ADE non ha ancora confermato la consegna" ;;
+  send) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"" ;;
+  reply) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\"" ;;
+  cancel) valid_id "$head" || usage; confirm "\"kind\":\"cancel\",\"ref\":\"$head\"" ;;
+  close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\"" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
-    if [ "$cmd" = ask ]; then post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\""; else post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\""; fi
+    if [ "$cmd" = ask ]; then post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\""; else post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close"; fi
     if receipt; then
-      case "$r" in ok*) echo "ade-msg: $r (richiesta $id), in attesa della risposta..." >&2 ;; *) echo "$r"; exit 1 ;; esac
+      case "$r" in ok*) said="$r" ;; *) echo "$r"; exit 1 ;; esac
     else
-      echo "ade-msg: richiesta $id in coda" >&2
+      said="in coda, ADE non l'ha ancora consegnata"
     fi
+    if [ $nowait = 1 ]; then echo "id: $id - $said - attendi con: ade-msg wait $id"; exit 0; fi
+    echo "ade-msg: $said (richiesta $id), in attesa della risposta..." >&2
     await "$id" ;;
   wait)
-    case "$head" in ''|*[!A-Za-z0-9_-]*) usage ;; esac
-    await "$head" ;;
+    [ -n "$ids" ] || usage
+    for rid in $ids; do valid_id "$rid" || fail "id non valido: $rid"; done
+    await $ids ;;
   *) usage ;;
 esac
 "#;

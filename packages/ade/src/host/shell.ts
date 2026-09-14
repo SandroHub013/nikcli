@@ -107,7 +107,9 @@ export interface Host {
   /** Answers the `ade-msg send` that is waiting on message `id`. */
   mailboxReceipt?: (id: string, text: string) => Promise<void>
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
-  mailboxPublish?: (text: string, name?: "sessions" | "agents") => Promise<void>
+  mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage") => Promise<void>
+  /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
+  mailboxState?: (id: string, text: string) => Promise<void>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -457,6 +459,11 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxPublish(text, name) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_publish", { text, name: name ?? null })
+    },
+
+    async mailboxState(id, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("mailbox_state", { id, text })
     },
 
     async mailboxResult(id, text) {
