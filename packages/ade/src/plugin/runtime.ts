@@ -18,7 +18,7 @@ import { createSignal } from "solid-js"
 import type { Definition } from "@nikcli-ai/plugin/v2/ade/plugin"
 import { createPluginRegistry, type PluginRegistry } from "./registry"
 import { adaptV2AdePlugin, readV2AdePlugin, type AdePluginHost, type LoadedV2Plugin } from "./v2"
-import { discoverPlugins, type DiscoveryIO } from "./discovery"
+import { discoverPlugins, type DiscoveryIO, type ResolvedPlugin } from "./discovery"
 import { clearPluginStorage } from "./storage"
 
 export interface PluginStatus {
@@ -66,6 +66,15 @@ export interface RuntimeOptions {
    * list, which is also where every other component-shaped decision is made.
    */
   readonly internal?: (runtime: { status: () => PluginStatus[]; registry: PluginRegistry }) => InternalAdePlugin[]
+  /**
+   * Whether the user lets this project run these plugins.
+   *
+   * A plugin is code, and `.nikcli/tui.json` arrives with whatever repository
+   * was just cloned: opening a folder must not be enough to run what it
+   * declares. Asked before anything is imported; absent means the host has
+   * already decided (the tests, which load nothing real).
+   */
+  readonly trust?: (projectRoot: string, plugins: readonly ResolvedPlugin[]) => Promise<boolean>
 }
 
 function message(error: unknown): string {
@@ -145,7 +154,15 @@ export function createAdePluginRuntime(options: RuntimeOptions): AdePluginRuntim
     }
 
     const load = options.load
-    if (!load) return
+    if (!load || found.resolved.length === 0) return
+
+    const trusted = options.trust ? await options.trust(projectRoot, found.resolved).catch(() => false) : true
+    if (!trusted) {
+      for (const plugin of found.resolved) {
+        note({ id: plugin.spec, spec: plugin.spec, source: "file", active: false, error: "non autorizzato per questo progetto" })
+      }
+      return
+    }
 
     for (const plugin of found.resolved) {
       let definition: Definition | undefined

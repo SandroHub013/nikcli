@@ -235,6 +235,7 @@ pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
 /// and a half-written `settings.json` is a CLI that will not start.
 #[tauri::command]
 pub async fn agent_hook_write(
+    app: tauri::AppHandle,
     agent: String,
     config_text: String,
     script: Option<String>,
@@ -242,6 +243,42 @@ pub async fn agent_hook_write(
     let target = target(&agent)?;
     let config = under_home(target.config)?;
     let script_path = under_home(target.script)?;
+
+    /*
+     * This command writes a program another CLI runs and the configuration
+     * that makes it run, so it must not be a way to install any program.
+     *
+     * The configuration may differ from what is on disk only in ADE's own
+     * entries, and those must invoke ADE's script exactly as `hookCommand`
+     * spells it. The script's text is the part no rule can check, so a script
+     * that is not already the one on disk is shown to the user first, in a
+     * native dialog nothing in the webview can click.
+     */
+    let current = fs::read_to_string(&config).ok();
+    check_hook_config(current.as_deref(), &config_text, &hook_command(&script_path))?;
+    if let Some(text) = script.as_ref() {
+        let on_disk = fs::read_to_string(&script_path).ok();
+        if on_disk.as_deref() != Some(text.as_str()) {
+            let question = format!(
+                "ADE vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire ad ADE quale conversazione ha aperto. Consentire?",
+                script_path.display()
+            );
+            let allowed = tauri::async_runtime::spawn_blocking(move || {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                app.dialog()
+                    .message(question)
+                    .title("Hook di ADE")
+                    .kind(MessageDialogKind::Warning)
+                    .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                    .blocking_show()
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            if !allowed {
+                return Err("installazione dell'hook annullata".to_string());
+            }
+        }
+    }
 
     match script {
         Some(text) => {
@@ -263,6 +300,72 @@ pub async fn agent_hook_write(
     write_atomic(&config, config_text.as_bytes())
 }
 
+/// How a CLI's configuration invokes ADE's script. Mirrors `hookCommand` in `agent-hooks.ts`.
+fn hook_command(script_path: &Path) -> String {
+    format!("powershell -NoProfile -ExecutionPolicy Bypass -File \"{}\"", script_path.display())
+}
+
+/// The configuration with every ADE entry taken out, and whatever that emptied.
+fn without_ade(value: &serde_json::Value) -> Option<serde_json::Value> {
+    use serde_json::Value;
+    match value {
+        Value::Object(map) => {
+            if map.get("command").and_then(Value::as_str).is_some_and(|c| c.contains(SCRIPT_NAME)) {
+                return None;
+            }
+            let kept: serde_json::Map<String, Value> = map
+                .iter()
+                .filter_map(|(k, v)| without_ade(v).map(|v| (k.clone(), v)))
+                .collect();
+            // Empty containers compare as absent: removing ADE's entry may
+            // leave `"hooks": {}` where there was no `hooks` key before.
+            (!kept.is_empty()).then_some(Value::Object(kept))
+        }
+        Value::Array(items) => {
+            let kept: Vec<Value> = items.iter().filter_map(without_ade).collect();
+            (!kept.is_empty()).then_some(Value::Array(kept))
+        }
+        other => Some(other.clone()),
+    }
+}
+
+fn ade_commands(value: &serde_json::Value, out: &mut Vec<String>) {
+    use serde_json::Value;
+    match value {
+        Value::Object(map) => {
+            for (key, v) in map {
+                match v {
+                    Value::String(s) if key == "command" && s.contains(SCRIPT_NAME) => out.push(s.clone()),
+                    other => ade_commands(other, out),
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|v| ade_commands(v, out)),
+        _ => {}
+    }
+}
+
+/// Refuses a configuration that changes anything but ADE's own hook entries.
+fn check_hook_config(current: Option<&str>, next: &str, command: &str) -> Result<(), String> {
+    let parse = |text: &str| -> Result<serde_json::Value, String> {
+        if text.trim().is_empty() {
+            return Ok(serde_json::Value::Object(Default::default()));
+        }
+        serde_json::from_str(text).map_err(|e| format!("configurazione non valida: {e}"))
+    };
+    let before = parse(current.unwrap_or(""))?;
+    let after = parse(next)?;
+    if without_ade(&before) != without_ade(&after) {
+        return Err("la configurazione cambia più degli hook di ADE: scrittura rifiutata".to_string());
+    }
+    let mut commands = Vec::new();
+    ade_commands(&after, &mut commands);
+    if let Some(bad) = commands.iter().find(|c| c.as_str() != command) {
+        return Err(format!("comando hook non riconosciuto: {bad}"));
+    }
+    Ok(())
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let staging = path.with_extension("ade-part");
     {
@@ -282,6 +385,29 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_hook_write_may_only_touch_ade_entries() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let entry = |cmd: &str| format!(r#"{{"type":"command","command":{}}}"#, serde_json::to_string(cmd).unwrap());
+        let current = r#"{"model":"opus","hooks":{"Stop":[{"hooks":[{"type":"command","command":"notify"}]}]}}"#;
+        let installed = format!(
+            r#"{{"model":"opus","hooks":{{"Stop":[{{"hooks":[{{"type":"command","command":"notify"}}]}},{{"hooks":[{}]}}],"SessionStart":[{{"hooks":[{}]}}]}}}}"#,
+            entry(&command),
+            entry(&command)
+        );
+        assert!(check_hook_config(Some(current), &installed, &command).is_ok());
+        assert!(check_hook_config(Some(&installed), current, &command).is_ok());
+        assert!(check_hook_config(None, &format!(r#"{{"hooks":{{"SessionStart":[{{"hooks":[{}]}}]}}}}"#, entry(&command)), &command).is_ok());
+
+        let widened = installed.replace(r#""model":"opus""#, r#""model":"opus","permissions":{"allow":["Bash"]}"#);
+        assert!(check_hook_config(Some(current), &widened, &command).is_err());
+        let foreign = installed.replace("notify", "calc");
+        assert!(check_hook_config(Some(current), &foreign, &command).is_err());
+        let hijacked = installed.replace("powershell -NoProfile", "calc & powershell -NoProfile");
+        assert!(check_hook_config(Some(current), &hijacked, &command).is_err());
+    }
 
     #[test]
     fn every_target_has_a_script_this_module_recognises() {

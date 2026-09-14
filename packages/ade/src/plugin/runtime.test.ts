@@ -95,6 +95,32 @@ describe("the runtime", () => {
     expect(runtime.status()).toEqual([{ id: "from.disk", spec: "./p.js", source: "file", active: true }])
   })
 
+  test("a project plugin the user has not trusted is never imported", async () => {
+    clearPluginStorage()
+    const { host } = recordingHost()
+    let imported = false
+    let asked: string[] = []
+    const runtime = createAdePluginRuntime({
+      host,
+      io: io({ "C:/repo/.nikcli/tui.json": configWith("./p.js"), "C:/repo/p.js": "" }),
+      load: async () => {
+        imported = true
+        return {}
+      },
+      trust: async (_root, plugins) => {
+        asked = plugins.map((plugin) => plugin.spec)
+        return false
+      },
+    })
+
+    await runtime.start("C:/repo")
+    expect(asked).toEqual(["./p.js"])
+    expect(imported).toBe(false)
+    expect(runtime.status()).toEqual([
+      { id: "./p.js", spec: "./p.js", source: "file", active: false, error: "non autorizzato per questo progetto" },
+    ])
+  })
+
   test("the declared options reach the plugin", async () => {
     clearPluginStorage()
     const { host } = recordingHost()

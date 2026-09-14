@@ -81,12 +81,40 @@ export async function awaitPaneReply(
   const initial = deps.linesOf(paneId)
   if (!initial) return { lines: [], reason: "gone" }
 
-  const mark = initial.length
+  /*
+   * The mark is the last line on screen, not a count.
+   *
+   * The workbench keeps a pane's last 200 lines and drops the oldest, so once
+   * a transcript is full its length never changes again: counting made every
+   * answer to a busy pane look like no answer at all ("silent" after twenty
+   * seconds), and `slice(count)` returned nothing even when it had grown.
+   * What follows that line is what is new — and when it has scrolled out,
+   * everything is. Found by identity, and by text when a store has swapped
+   * the objects: the workbench never pushes the same text twice in a row, so
+   * the tail's text changes with every line that arrives.
+   */
+  const anchor = initial.at(-1)
+  const anchorText = anchor?.text
   const startedAt = deps.now()
-  let lastCount = mark
+  let lastLength = initial.length
+  let lastTailText = anchorText
   let lastChangeAt = startedAt
+  let grew = false
 
-  const since = (): WatchedLine[] => (deps.linesOf(paneId) ?? []).slice(mark)
+  const newSince = (lines: readonly WatchedLine[]): WatchedLine[] => {
+    if (!anchor) return [...lines]
+    let at = lines.lastIndexOf(anchor)
+    if (at < 0) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i]!.text === anchorText) {
+          at = i
+          break
+        }
+      }
+    }
+    return at >= 0 ? lines.slice(at + 1) : [...lines]
+  }
+  const since = (): WatchedLine[] => newSince(deps.linesOf(paneId) ?? [])
 
   for (;;) {
     if (options.signal?.aborted) return { lines: since(), reason: "aborted" }
@@ -95,12 +123,12 @@ export async function awaitPaneReply(
     if (!lines) return { lines: [], reason: "gone" }
 
     const at = deps.now()
-    if (lines.length !== lastCount) {
-      lastCount = lines.length
+    if (lines.length !== lastLength || lines.at(-1)?.text !== lastTailText) {
+      lastLength = lines.length
+      lastTailText = lines.at(-1)?.text
       lastChangeAt = at
+      grew = true
     }
-
-    const grew = lastCount > mark
 
     /*
      * An errored pane is finished, whatever the transcript is doing. Sitting

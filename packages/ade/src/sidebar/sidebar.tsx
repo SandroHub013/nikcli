@@ -1038,15 +1038,24 @@ export function Sidebar(props: SidebarProps) {
               >
                 <For each={keyedWorkspaces()}>
                   {(entry) => {
-                    const row = entry.data()
-                    const isActive = row.type === "workspace"
-                      ? isWorkspaceActive(row.id, row.workspace.path, row.workspace.name)
-                      : undefined
+                    /*
+                     * Read inside the props, not once above them. The keyed
+                     * list keeps a row's component and swaps its data, and a
+                     * `const row = entry.data()` here ran once, untracked: a
+                     * session's status, a count or the active space never
+                     * reached a row that already existed.
+                     */
+                    const isActive = () => {
+                      const row = entry.data()
+                      return row.type === "workspace"
+                        ? isWorkspaceActive(row.id, row.workspace.path, row.workspace.name)
+                        : undefined
+                    }
                     return (
                       <WorkspaceTreeRow
-                        row={row}
+                        row={entry.data()}
                         now={now()}
-                        isActiveSpace={isActive}
+                        isActiveSpace={isActive()}
                         /* Pressing a project both opens its row and makes it the
                            one being worked in: the two are the same intent, and
                            asking for a separate click to switch would be asking

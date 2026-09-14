@@ -70,11 +70,80 @@ async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> 
     if !resolved.is_dir() {
         return Err(format!("non è una cartella: {path}"));
     }
+    if let Some(reason) = too_broad_root(&resolved, dirs::home_dir().as_deref()) {
+        return Err(format!("{path}: {reason}"));
+    }
     let mut allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
     if !allowed.contains(&resolved) {
         allowed.push(resolved);
     }
     Ok(())
+}
+
+/// Why `dir` cannot be a write root, when it cannot.
+///
+/// Any folder used to be accepted, so a caller could register the drive root or
+/// the home directory and the confinement below confined nothing. A project is
+/// a folder the user works in; a directory holding the user's whole profile, a
+/// system directory or ADE's own configuration is not one, whoever asks.
+fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
+    if dir.parent().is_none() {
+        return Some("la radice del disco non è un progetto");
+    }
+    // `\\?\C:\` is a prefix plus a root: two components, and no real parent.
+    #[cfg(windows)]
+    if dir.components().count() <= 2 {
+        return Some("la radice del disco non è un progetto");
+    }
+    if let Some(home) = home.and_then(|h| h.canonicalize().ok()) {
+        if home.starts_with(dir) {
+            return Some("la cartella utente (o una sua antenata) non è un progetto");
+        }
+        for private in [".ssh", ".gnupg", ".aws", ".config", ".claude", ".codex", "AppData"] {
+            if dir.starts_with(home.join(private)) {
+                return Some("cartella di configurazione dell'utente");
+            }
+        }
+    }
+    let lowered = dir.to_string_lossy().to_lowercase().replace('\\', "/");
+    for system in ["/windows", "/program files", "/program files (x86)", "/programdata"] {
+        if lowered.contains(&format!(":{system}")) {
+            return Some("cartella di sistema");
+        }
+    }
+    #[cfg(not(windows))]
+    for system in ["/etc", "/usr", "/bin", "/sbin", "/var", "/System", "/Library"] {
+        if dir.starts_with(system) {
+            return Some("cartella di sistema");
+        }
+    }
+    None
+}
+
+/// True when a write would land where git reads commands from.
+///
+/// A project root contains its `.git`, and `.git/config` (`core.pager`,
+/// `core.fsmonitor`, aliases) or anything under `.git/hooks` runs the next time
+/// git does — which ADE itself does every few seconds. The editor never needs
+/// either; `.git/info/exclude`, which ADE does write, stays allowed.
+fn is_git_executable_path(path: &Path) -> bool {
+    let names: Vec<String> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+        .collect();
+    names.iter().enumerate().any(|(i, name)| {
+        if name != ".git" {
+            return false;
+        }
+        let rest = &names[i + 1..];
+        // `.git/worktrees/<name>/config.worktree` is the same file for a worktree.
+        let rest = match rest {
+            [w, _, tail @ ..] if w == "worktrees" => tail,
+            other => other,
+        };
+        matches!(rest.first().map(String::as_str), Some("hooks"))
+            || matches!(rest, [f] if f == "config" || f == "config.worktree")
+    })
 }
 
 /// Resolves `path` to a form that can be compared against a root, without
@@ -132,6 +201,9 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
     // `starts_with` on a Path compares whole components, so a root of
     // `/work/app` does not also cover `/work/app-backup`.
     if allowed.iter().any(|root| resolved.starts_with(root)) {
+        if is_git_executable_path(&resolved) {
+            return Err(format!("configurazione o hook di git: {path}"));
+        }
         return Ok(resolved);
     }
     Err(format!("fuori dal progetto: {path}"))
@@ -280,7 +352,10 @@ async fn write_bytes(
 }
 
 fn write_atomic(roots: &WriteRoots, path: &str, bytes: &[u8]) -> Result<(), String> {
-    let target = within_roots(roots, path)?;
+    let target = match within_roots(roots, path) {
+        Ok(target) => target,
+        Err(refusal) => global_bot_file(path).ok_or(refusal)?,
+    };
     let target = target.as_path();
     if target.is_dir() {
         return Err(format!("il percorso è una directory: {path}"));
@@ -314,6 +389,126 @@ fn write_atomic(roots: &WriteRoots, path: &str, bytes: &[u8]) -> Result<(), Stri
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Bots: nikcli agent files, and the two nikcli commands the panel needs
+// ---------------------------------------------------------------------------
+
+/// nikcli's global configuration directory. Mirrors `globalConfigDir` in `bots/nikcli.ts`.
+fn nikcli_global_dir() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    #[cfg(windows)]
+    let dir = home.join("AppData").join("Roaming").join("nikcli");
+    #[cfg(not(windows))]
+    let dir = home.join(".config").join("nikcli");
+    Some(dir)
+}
+
+/// True for `<config>/agent(s)/**/<name>.md`: the shape of a bot's file.
+fn is_bot_path(path: &Path, config: &Path) -> bool {
+    let Ok(rest) = path.strip_prefix(config) else {
+        return false;
+    };
+    let mut parts = rest.components().map(|c| c.as_os_str().to_string_lossy().to_lowercase());
+    let first = parts.next();
+    let names: Vec<String> = parts.collect();
+    matches!(first.as_deref(), Some("agent") | Some("agents"))
+        && names.len() >= 1
+        && names.len() <= 4
+        && names.last().is_some_and(|n| n.ends_with(".md"))
+        && names.iter().all(|n| n != ".." && n != ".")
+}
+
+/// A global bot's file, resolved, when `path` is one.
+///
+/// The global directory is not a write root — it also holds nikcli's providers
+/// and plugins, which are code — so only agent files inside it are writable.
+fn global_bot_file(path: &str) -> Option<PathBuf> {
+    let config = nikcli_global_dir()?;
+    let config = config.canonicalize().unwrap_or(config);
+    let resolved = resolve_for_check(Path::new(path)).ok()?;
+    is_bot_path(&resolved, &config).then_some(resolved)
+}
+
+/// Deletes a bot's file: a project one inside an open project's `.nikcli`, or a global one.
+#[tauri::command]
+async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
+    let project = within_roots(&roots, &path).ok().filter(|target| {
+        target
+            .ancestors()
+            .any(|dir| dir.file_name().is_some_and(|n| n == ".nikcli") && is_bot_path(target, dir))
+    });
+    let target = project
+        .or_else(|| global_bot_file(&path))
+        .ok_or_else(|| format!("non è il file di un bot: {path}"))?;
+    std::fs::remove_file(&target).map_err(|e| format!("{path}: {e}"))
+}
+
+/// The arguments `nikcli` may be run with from the bots panel.
+///
+///   nikcli models
+///   nikcli agent create --path <dir> --description <t> --mode <m> --tools <list> [--model <id>]
+///
+/// Each option once, each with a value, and `--path` a configuration root the
+/// agent file is then written under.
+fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
+    match args {
+        [only] if only == "models" => Ok(()),
+        [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
+            if rest.len() % 2 != 0 {
+                return Err("argomenti di nikcli agent create incompleti".to_string());
+            }
+            let mut seen = Vec::new();
+            for pair in rest.chunks(2) {
+                let (flag, value) = (pair[0].as_str(), pair[1].as_str());
+                if !["--path", "--description", "--mode", "--tools", "--model"].contains(&flag) || seen.contains(&flag) {
+                    return Err(format!("opzione di nikcli non consentita: {flag}"));
+                }
+                seen.push(flag);
+                if flag == "--path" {
+                    let resolved = resolve_for_check(Path::new(value))?;
+                    let global = nikcli_global_dir().map(|d| d.canonicalize().unwrap_or(d));
+                    let in_project = within_roots(roots, value).is_ok();
+                    if !in_project && global.as_deref() != Some(resolved.as_path()) {
+                        return Err(format!("cartella dei bot non consentita: {value}"));
+                    }
+                }
+            }
+            if !seen.contains(&"--path") {
+                return Err("nikcli agent create senza --path".to_string());
+            }
+            Ok(())
+        }
+        _ => Err("comando nikcli non consentito".to_string()),
+    }
+}
+
+/// Runs `nikcli models` or `nikcli agent create`, and hands back what it printed.
+#[tauri::command]
+async fn nikcli_bot(
+    roots: tauri::State<'_, WriteRoots>,
+    args: Vec<String>,
+    cwd: Option<String>,
+) -> Result<ShellOutput, String> {
+    check_nikcli_args(&roots, &args)?;
+    let program = pty::which_on_path("nikcli").ok_or("nikcli non trovato nel PATH")?;
+    let mut command = std::process::Command::new(program);
+    command.args(&args).stdin(std::process::Stdio::null());
+    if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
+        command.current_dir(dir);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let output = command.output().map_err(|e| format!("nikcli non eseguibile: {e}"))?;
+    Ok(ShellOutput {
+        code: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +561,13 @@ const GIT_EXECUTING_FLAGS: &[&str] = &[
     "--upload-pack",
     "--receive-pack",
     "--exec",
+    "--ext-diff",
+    "--textconv",
 ];
+
+/// Options that make git write a file of the caller's choosing, outside the
+/// confinement every other write in this file goes through.
+const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 
 /// The only variable ADE sets for git: the throwaway index a snapshot stages
 /// into, so the user's real index is never touched.
@@ -386,10 +587,22 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     if !GIT_SUBCOMMANDS.contains(&subcommand.as_str()) {
         return Err(format!("sottocomando git non consentito: {subcommand}"));
     }
-    for arg in args {
+    for arg in &args[1..] {
+        if arg == "--" {
+            break;
+        }
         // `--exec-path=/tmp/x` and `--exec-path /tmp/x` are the same option.
         let head = arg.split('=').next().unwrap_or(arg);
-        if GIT_EXECUTING_FLAGS.contains(&head) {
+        if GIT_EXECUTING_FLAGS.contains(&head) || GIT_WRITING_FLAGS.contains(&head) {
+            return Err(format!("opzione git non consentita: {arg}"));
+        }
+        /*
+         * `rebase -x <cmd>` is `--exec`, and git's option parser also takes it
+         * glued (`-xcmd`) or clustered (`-ix cmd`). Any short-option cluster
+         * holding an x is refused for rebase; `cherry-pick -x` only annotates
+         * the message and stays allowed.
+         */
+        if subcommand == "rebase" && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('x') {
             return Err(format!("opzione git non consentita: {arg}"));
         }
     }
@@ -698,6 +911,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             allow_write_root,
             git_run,
+            bot_delete,
+            nikcli_bot,
             read_dir,
             read_text_file,
             write_text_file,
@@ -865,6 +1080,106 @@ mod tests {
         let error = within_roots(&roots, &dir.join("f.txt").to_string_lossy())
             .expect_err("an empty root set grants nothing");
         assert!(error.contains("nessun progetto aperto"), "{error}");
+    }
+
+    #[test]
+    fn git_config_and_hooks_are_not_writable_inside_a_project() {
+        let dir = TempDir::new("githooks");
+        let roots = dir.roots();
+        for bad in [
+            dir.join(".git").join("hooks").join("pre-commit"),
+            dir.join(".git").join("config"),
+            dir.join(".git").join("worktrees").join("w").join("config.worktree"),
+        ] {
+            let error = within_roots(&roots, &bad.to_string_lossy()).expect_err("refused");
+            assert!(error.contains("git"), "{error}");
+        }
+        assert!(within_roots(&roots, &dir.join(".git").join("info").join("exclude").to_string_lossy()).is_ok());
+        assert!(within_roots(&roots, &dir.join("src").join("config").to_string_lossy()).is_ok());
+    }
+
+    #[test]
+    fn a_root_that_is_the_whole_disk_or_home_is_refused() {
+        let home = dirs::home_dir().expect("home");
+        let home = home.canonicalize().expect("canonical home");
+        assert!(too_broad_root(&home, Some(&home)).is_some());
+        if let Some(parent) = home.parent() {
+            assert!(too_broad_root(parent, Some(&home)).is_some());
+        }
+        let mut root = home.clone();
+        while let Some(parent) = root.parent() {
+            root = parent.to_path_buf();
+        }
+        assert!(too_broad_root(&root, Some(&home)).is_some());
+        assert!(too_broad_root(&home.join(".ssh"), Some(&home)).is_some());
+
+        let project = TempDir::new("project");
+        let project_path = project.0.canonicalize().expect("canonical");
+        assert!(too_broad_root(&project_path, Some(&home)).is_none());
+    }
+
+    #[test]
+    fn only_an_agent_file_counts_as_a_bot() {
+        let config = Path::new("C:\\cfg\\nikcli");
+        assert!(is_bot_path(&config.join("agent").join("reviewer.md"), config));
+        assert!(is_bot_path(&config.join("agents").join("team").join("senior.md"), config));
+        assert!(!is_bot_path(&config.join("nikcli.json"), config));
+        assert!(!is_bot_path(&config.join("plugin").join("x.md"), config));
+        assert!(!is_bot_path(&config.join("agent").join("run.js"), config));
+        assert!(!is_bot_path(&config.join("agent"), config));
+        assert!(!is_bot_path(Path::new("C:\\elsewhere\\agent\\x.md"), config));
+    }
+
+    #[test]
+    fn nikcli_runs_only_the_two_bot_commands() {
+        let dir = TempDir::new("bots");
+        let roots = dir.roots();
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        let home = dir.join(".nikcli").to_string_lossy().into_owned();
+
+        assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
+        assert!(check_nikcli_args(
+            &roots,
+            &args(&["agent", "create", "--path", &home, "--description", "a", "--mode", "primary", "--tools", ""])
+        )
+        .is_ok());
+        for bad in [
+            &["run", "rm -rf"][..],
+            &["models", "--x"],
+            &["agent", "create", "--description", "a"],
+            &["agent", "create", "--path", &home, "--path", &home],
+            &["agent", "create", "--path", &home, "--exec", "calc"],
+            &["agent", "create", "--path", "C:\\Windows\\Temp"],
+            &["agent", "create", "--path"],
+        ] {
+            assert!(check_nikcli_args(&roots, &args(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn git_options_that_run_or_write_are_refused() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for bad in [
+            &["rebase", "-x", "calc", "main"][..],
+            &["rebase", "-ix", "calc"],
+            &["rebase", "-xcalc"],
+            &["rebase", "--exec=calc"],
+            &["diff", "--output=C:/evil.txt"],
+            &["log", "--output", "x"],
+            &["diff", "--ext-diff"],
+            &["status", "-c", "core.fsmonitor=calc"],
+            &["config", "core.pager", "calc"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
+        }
+        for good in [
+            &["cherry-pick", "-x", "abc"][..],
+            &["rebase", "main"],
+            &["diff", "--cached", "HEAD"],
+            &["log", "--", "--output=x"],
+        ] {
+            assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
     }
 
     #[test]

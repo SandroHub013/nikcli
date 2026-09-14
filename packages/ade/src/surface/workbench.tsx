@@ -125,6 +125,7 @@ import { createManagerPlugin } from "../plugin/built-in/manager"
 import { importPluginModule } from "../plugin/loader"
 import { PluginSection } from "../plugin/pane"
 import { parseCommandId } from "../plugin/trust"
+import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
 import {
@@ -1412,6 +1413,30 @@ export function Workbench() {
     io: pluginIO,
     load: importPluginModule,
     internal: ({ status, registry }) => [createManagerPlugin(status, registry)],
+    async trust(root, plugins) {
+      let stored: string | null = null
+      try {
+        stored = localStorage.getItem(CONSENT_KEY)
+      } catch {
+        // No storage: ask every time.
+      }
+      if (hasConsent(stored, root, plugins)) return true
+      const { ask } = await import("@tauri-apps/plugin-dialog")
+      const allowed = await ask(consentQuestion(root, plugins), {
+        title: "Plugin del progetto",
+        kind: "warning",
+        okLabel: "Esegui",
+        cancelLabel: "Non ora",
+      })
+      if (allowed) {
+        try {
+          localStorage.setItem(CONSENT_KEY, withConsent(stored, root, plugins))
+        } catch {
+          // Approved for this start only.
+        }
+      }
+      return allowed
+    },
     host: {
       data: {
         project: () => {
@@ -1745,6 +1770,18 @@ export function Workbench() {
     }
 
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)) {
+      /*
+       * The cleanup is registered here, before the first await. It used to be
+       * an `onCleanup` at the end of the async block below, where Solid has no
+       * owner and the call does nothing: closing the workbench left the global
+       * hotkeys registered and the listener alive.
+       */
+      let disposed = false
+      let releaseGlobal: (() => void) | undefined
+      onCleanup(() => {
+        disposed = true
+        releaseGlobal?.()
+      })
       void (async () => {
         try {
           const { listen } = await import("@tauri-apps/api/event")
@@ -1796,11 +1833,14 @@ export function Workbench() {
             if (payload.state === "pressed") void voiceEngine.toggle(mode)
           })
 
-          onCleanup(() => {
+          releaseGlobal = () => {
+            releaseGlobal = undefined
             unlisten()
             registerGlobalShortcuts = undefined
             void invoke("unregister_global_voice_shortcuts").catch(() => {})
-          })
+          }
+          // Closed while the awaits above were still running.
+          if (disposed) releaseGlobal()
         } catch (e) {
           console.warn("Inizializzazione scorciatoia globale saltata:", e)
         }

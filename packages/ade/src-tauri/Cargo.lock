@@ -10,6 +10,7 @@ dependencies = [
  "junction",
  "portable-pty",
  "serde",
+ "serde_json",
  "sysinfo",
  "tauri",
  "tauri-build",

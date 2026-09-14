@@ -116,27 +116,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   let loadGeneration = 0
 
   /**
-   * Where a message to the frame is allowed to be delivered.
+   * Messages to the frame go to `"*"`, for a page loaded by URL too.
    *
-   * For a page loaded by URL that is the page's own origin, so a redirect
-   * somewhere else stops receiving what the user selected. A mirror has no
-   * origin to name — it is sandboxed without `allow-same-origin`, so its
-   * document is opaque and matches nothing but `"*"` — and there `"*"` is safe
-   * for the same reason it is necessary: that document is a sealed copy with
-   * nobody else inside it.
+   * The frame is sandboxed without `allow-same-origin`, so every document in
+   * it — mirror or live page — has an opaque origin, and a target origin of
+   * `http://localhost:3000` matches nothing: the message is dropped without an
+   * error. That is why Design Mode never switched on for a page carrying the
+   * bridge itself. `"*"` gives nothing away: what goes out is the mode and
+   * selectors the page itself sent, and what comes back is accepted only from
+   * this frame's own window (`handleMessage`).
    */
-  const frameOrigin = (): string => {
-    if (srcdoc() !== null) return "*"
-    try {
-      return new URL(url()).origin
-    } catch {
-      return "*"
-    }
-  }
-
   const post = (message: unknown) => {
     try {
-      iframeRef?.contentWindow?.postMessage(message, frameOrigin())
+      iframeRef?.contentWindow?.postMessage(message, "*")
     } catch {
       // Frame might be detached or cross-origin restricted
     }

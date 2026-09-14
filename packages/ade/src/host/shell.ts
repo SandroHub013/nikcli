@@ -188,6 +188,10 @@ export interface Host {
    * configuration pointing at a script that is not there.
    */
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
+  /** `nikcli models` or `nikcli agent create …`: the only nikcli commands the bots panel runs. */
+  nikcliBot?: (args: string[], cwd?: string) => Promise<RunResult>
+  /** Deletes a bot's `.md` file; resolves to the failure, or null. */
+  deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
@@ -272,6 +276,25 @@ export async function getHost(): Promise<Host | undefined> {
         // A command that cannot start at all is reported like one that ran and
         // failed, so callers have a single shape to handle.
         return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
+      }
+    },
+
+    async nikcliBot(args, cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<RunResult>("nikcli_bot", { args, cwd })
+      } catch (error) {
+        return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
+      }
+    },
+
+    async deleteBotFile(path) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        await invoke("bot_delete", { path })
+        return null
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
       }
     },
 

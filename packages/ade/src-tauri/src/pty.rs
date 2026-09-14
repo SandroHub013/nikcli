@@ -125,6 +125,135 @@ const ALLOWED_SHELLS: &[&str] = &["cmd", "powershell", "pwsh"];
 #[cfg(not(windows))]
 const ALLOWED_SHELLS: &[&str] = &["sh", "bash", "zsh", "fish"];
 
+/// The OpenSSH client, for remote Spaces. Its arguments go through `check_args`.
+const ALLOWED_REMOTE: &[&str] = &["ssh"];
+
+/// The switches a shell may be started with. Anything else is refused.
+///
+/// A shell name on the list is not enough: `cmd /c <anything>`,
+/// `powershell -EncodedCommand <anything>` and `sh -c <anything>` run a command
+/// without ever showing a prompt, and PowerShell also accepts any unambiguous
+/// prefix of a parameter (`-enc`, `-comm`) and a bare positional as a command.
+/// So shells get a short list of switches that only change how the prompt
+/// behaves, compared whole and case-insensitively.
+#[cfg(windows)]
+const SHELL_SWITCHES: &[(&str, &[&str])] = &[
+    ("cmd", &["/q", "/d", "/a", "/u"]),
+    ("powershell", &["-nologo", "-noprofile", "-noexit", "-interactive"]),
+    ("pwsh", &["-nologo", "-noprofile", "-noexit", "-interactive", "-login", "-l"]),
+];
+#[cfg(not(windows))]
+const SHELL_SWITCHES: &[(&str, &[&str])] = &[
+    ("sh", &["-l", "-i", "--login"]),
+    ("bash", &["-l", "-i", "--login"]),
+    ("zsh", &["-l", "-i", "--login"]),
+    ("fish", &["-l", "-i", "--login"]),
+];
+
+/// The name `command` is known by: no directory, one executable extension off.
+fn command_stem(command: &str) -> &str {
+    let name = command.trim();
+    match name.rsplit_once('.') {
+        Some((head, ext)) if is_executable_extension(ext) => head,
+        _ => name,
+    }
+}
+
+/// A `[user@]host` an ssh session may be opened to, as `~/.ssh/config` and
+/// `known_hosts` spell them. Nothing that starts with a dash, so it can never be
+/// read as an option.
+fn is_ssh_destination(value: &str) -> bool {
+    let (user, host) = match value.split_once('@') {
+        Some((user, host)) => (Some(user), host),
+        None => (None, value),
+    };
+    let user_ok = user.map_or(true, |u| {
+        !u.is_empty() && u.len() <= 64 && u.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    });
+    let host_ok = !host.is_empty()
+        && host.len() <= 253
+        && !host.starts_with('-')
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || "._-:[]%".contains(c));
+    user_ok && host_ok && !value.starts_with('-')
+}
+
+/// The remote command ADE sends to open a shell in a folder, and nothing else.
+///
+/// `cd -- '<dir>' && exec "$SHELL" -l`, with the folder free of quotes, so the
+/// only thing a caller chooses is a path.
+fn is_ssh_remote_cd(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("cd -- '") else {
+        return false;
+    };
+    let Some(dir) = rest.strip_suffix("' && exec \"$SHELL\" -l") else {
+        return false;
+    };
+    !dir.is_empty() && dir.len() <= 1024 && !dir.contains('\'') && !dir.chars().any(|c| c.is_control())
+}
+
+/// Whether `args` are ones `command` may be started with.
+///
+/// Agents keep their arguments: they are the programs the user asked for, and
+/// what they do next is already theirs to decide. Shells and ssh do not, because
+/// for them an argument is a command to run.
+///
+/// ssh takes `-p <port>`, `-l <user>`, `-t`/`-T`, `-J <destination>`, then one
+/// destination and optionally the folder-changing command above. No `-o`, `-F`
+/// or `-L`/`-R`/`-D`: `-o ProxyCommand=` and `-F <file>` run a local command,
+/// and forwards open ports nobody asked for.
+fn check_args(command: &str, args: &[String]) -> Result<(), String> {
+    let stem = command_stem(command).to_ascii_lowercase();
+    if stem == "ssh" {
+        let mut destination = false;
+        let mut i = 0;
+        while i < args.len() {
+            let arg = args[i].as_str();
+            if destination {
+                if i + 1 == args.len() && is_ssh_remote_cd(arg) {
+                    return Ok(());
+                }
+                return Err(format!("argomento ssh non consentito: {arg}"));
+            }
+            match arg {
+                "-t" | "-T" | "-tt" => {}
+                "-p" => {
+                    let port = args.get(i + 1).ok_or("porta ssh mancante")?;
+                    if port.parse::<u16>().map_or(true, |p| p == 0) {
+                        return Err(format!("porta ssh non valida: {port}"));
+                    }
+                    i += 1;
+                }
+                "-l" | "-J" => {
+                    let value = args.get(i + 1).ok_or("valore ssh mancante")?;
+                    let ok = if arg == "-l" {
+                        is_ssh_destination(value) && !value.contains('@')
+                    } else {
+                        value.split(',').all(is_ssh_destination)
+                    };
+                    if !ok {
+                        return Err(format!("valore ssh non valido: {value}"));
+                    }
+                    i += 1;
+                }
+                "--" => {}
+                _ if is_ssh_destination(arg) => destination = true,
+                _ => return Err(format!("argomento ssh non consentito: {arg}")),
+            }
+            i += 1;
+        }
+        return if destination { Ok(()) } else { Err("ssh senza destinazione".to_string()) };
+    }
+    if let Some((_, switches)) = SHELL_SWITCHES.iter().find(|(shell, _)| *shell == stem) {
+        for arg in args {
+            let lowered = arg.to_ascii_lowercase();
+            if !switches.contains(&lowered.as_str()) {
+                return Err(format!("argomento della shell non consentito: {arg}"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// What the CLI's reporting hook needs to know about this spawn.
 ///
 /// Only the two identifiers: the directory it writes into is ADE's to choose,
@@ -149,13 +278,11 @@ fn is_allowed_command(command: &str) -> bool {
     }
     // Strip one trailing executable extension so `cmd.exe` and `cmd` both pass,
     // while `evil.exe.cmd` — two extensions, not a name we know — does not.
-    let stem = match name.rsplit_once('.') {
-        Some((head, ext)) if is_executable_extension(ext) => head,
-        _ => name,
-    };
+    let stem = command_stem(name);
     ALLOWED_AGENTS
         .iter()
         .chain(ALLOWED_SHELLS.iter())
+        .chain(ALLOWED_REMOTE.iter())
         .any(|allowed| allowed.eq_ignore_ascii_case(stem))
 }
 
@@ -269,6 +396,7 @@ pub async fn pty_spawn(
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
+    check_args(&command, &args)?;
 
     let pty = native_pty_system();
     let pair = pty
@@ -849,6 +977,64 @@ mod tests {
                     .any(|marker| kept == *marker || kept.starts_with(marker)),
                 "{kept} must still be inherited"
             );
+        }
+    }
+
+    fn strings(args: &[&str]) -> Vec<String> {
+        args.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn a_shell_cannot_be_handed_a_command() {
+        #[cfg(windows)]
+        {
+            assert!(check_args("cmd", &strings(&[])).is_ok());
+            assert!(check_args("cmd.exe", &strings(&["/Q"])).is_ok());
+            assert!(check_args("powershell", &strings(&["-NoLogo"])).is_ok());
+            for bad in [&["/c", "calc"][..], &["/K", "calc"], &["/ccalc"]] {
+                assert!(check_args("cmd", &strings(bad)).is_err(), "{bad:?}");
+            }
+            for bad in [&["-enc", "AAAA"][..], &["-Comm", "calc"], &["calc"], &["-File", "x.ps1"]] {
+                assert!(check_args("powershell", &strings(bad)).is_err(), "{bad:?}");
+                assert!(check_args("pwsh", &strings(bad)).is_err(), "{bad:?}");
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(check_args("zsh", &strings(&["-l"])).is_ok());
+            assert!(check_args("sh", &strings(&["-c", "id"])).is_err());
+            assert!(check_args("bash", &strings(&["script.sh"])).is_err());
+        }
+    }
+
+    #[test]
+    fn agents_keep_their_arguments() {
+        assert!(check_args("claude", &strings(&["--model", "opus", "--resume", "x"])).is_ok());
+    }
+
+    #[test]
+    fn ssh_opens_a_session_to_a_host_and_nothing_else() {
+        assert!(check_args("ssh", &strings(&["devbox"])).is_ok());
+        assert!(check_args("ssh", &strings(&["-p", "2222", "-l", "niko", "10.0.0.5"])).is_ok());
+        assert!(check_args("ssh", &strings(&["-J", "bastion", "niko@host.example.com"])).is_ok());
+        assert!(check_args(
+            "ssh.exe",
+            &strings(&["-t", "devbox", "cd -- '/srv/app' && exec \"$SHELL\" -l"])
+        )
+        .is_ok());
+
+        for bad in [
+            &[][..],
+            &["-o", "ProxyCommand=calc", "devbox"],
+            &["-oProxyCommand=calc", "devbox"],
+            &["-F", "evil.conf", "devbox"],
+            &["-L", "8080:localhost:80", "devbox"],
+            &["devbox", "rm -rf ~"],
+            &["devbox", "cd -- '/x'; rm -rf ~; ' && exec \"$SHELL\" -l"],
+            &["-p", "nope", "devbox"],
+            &["-J", "-oProxyCommand=calc", "devbox"],
+        ] {
+            assert!(check_args("ssh", &strings(bad)).is_err(), "{bad:?}");
         }
     }
 

@@ -209,7 +209,8 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     return writeBot({ ...input, mode, home, base }, host)
   }
 
-  const result = await host.run(NIKCLI_COMMAND, createArgs({
+  if (!host.nikcliBot) return { ok: false, problem: "Questo host non può eseguire nikcli." }
+  const result = await host.nikcliBot(createArgs({
     home,
     description: input.description,
     mode,
@@ -338,21 +339,13 @@ export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<st
 /** Removes a bot's file. The roster is the directory, so this is the deletion. */
 export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
   const host = await getHost()
-  if (!host?.run) return "Nessun host."
+  if (!host?.deleteBotFile) return "Nessun host."
   /*
-   * Through the shell rather than a dedicated command because the host facade
-   * has no delete: writing is guarded by the declared write roots, and adding
-   * a delete to that surface for one panel is a larger decision than this
-   * change. `del`/`rm` on a path ADE just listed is the same authority the
-   * user already has in the terminal pane beside it.
+   * A command of its own, which deletes only a bot's file. This used to go
+   * through `host.run("cmd", ["/c", "del", …])`, which `run` refuses — it runs
+   * git and nothing else — so deleting a bot always failed.
    */
-  const isWindows = typeof navigator !== "undefined" && /win/i.test(navigator.userAgent ?? "")
-  const result = isWindows
-    ? await host.run("cmd", ["/c", "del", "/q", bot.path])
-    : await host.run("rm", ["-f", bot.path])
-
-  if (result.code === 0) return undefined
-  return result.stderr.trim() || `Eliminazione non riuscita (codice ${result.code ?? "?"}).`
+  return (await host.deleteBotFile(bot.path)) ?? undefined
 }
 
 /**
@@ -367,7 +360,8 @@ export async function listModels(cwd?: string): Promise<string[]> {
   const host = await getHost()
   if (!host) return []
   try {
-    const result = await host.run(NIKCLI_COMMAND, ["models"], cwd)
+    if (!host.nikcliBot) return []
+    const result = await host.nikcliBot(["models"], cwd)
     return parseModelList(result.stdout)
   } catch {
     return []

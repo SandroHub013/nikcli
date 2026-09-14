@@ -12,6 +12,8 @@ function scriptedPane(input: {
   status?: WatchedStatus | ((tick: number) => WatchedStatus)
   backlog?: readonly string[]
   pollMs?: number
+  /** Keeps only the last `cap` lines, as the workbench does with its 200. */
+  cap?: number
 }) {
   const pollMs = input.pollMs ?? 250
   const lines: WatchedLine[] = (input.backlog ?? []).map((text) => ({ kind: "step", text }))
@@ -23,6 +25,7 @@ function scriptedPane(input: {
     tick += 1
     const next = input.script[tick]
     if (next !== undefined) lines.push({ kind: "step", text: next })
+    if (input.cap !== undefined && lines.length > input.cap) lines.splice(0, lines.length - input.cap)
   }
 
   return {
@@ -51,6 +54,36 @@ describe("awaitPaneReply", () => {
 
     expect(result.reason).toBe("settled")
     expect(result.lines.map((l) => l.text)).toEqual(["Sto guardando.", "Ho finito."])
+  })
+
+  /*
+   * Un transcript pieno non cresce più di lunghezza: le righe nuove spingono
+   * fuori le vecchie. Contare le righe dava «silent» a ogni risposta.
+   */
+  test("un transcript già al limite restituisce comunque la risposta", async () => {
+    const pane = scriptedPane({
+      cap: 3,
+      backlog: ["a", "b", "c"],
+      script: ["Uno.", "Due.", undefined, undefined, undefined, undefined, undefined, undefined],
+    })
+
+    const result = await awaitPaneReply(pane.deps, "p1", { pollMs: pane.pollMs })
+
+    expect(result.reason).toBe("settled")
+    expect(result.lines.map((l) => l.text)).toEqual(["Uno.", "Due."])
+  })
+
+  test("una risposta più lunga del limite restituisce tutto ciò che resta", async () => {
+    const pane = scriptedPane({
+      cap: 2,
+      backlog: ["a", "b"],
+      script: ["1", "2", "3", undefined, undefined, undefined, undefined, undefined, undefined],
+    })
+
+    const result = await awaitPaneReply(pane.deps, "p1", { pollMs: pane.pollMs })
+
+    expect(result.reason).toBe("settled")
+    expect(result.lines.map((l) => l.text)).toEqual(["2", "3"])
   })
 
   /*
