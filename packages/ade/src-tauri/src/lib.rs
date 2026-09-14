@@ -670,50 +670,118 @@ async fn current_dir() -> Result<String, String> {
 ///
 /// macOS starts apps from Finder or the Dock with launchd's PATH
 /// (`/usr/bin:/bin:/usr/sbin:/sbin`), so `nikcli`, `bun`, Homebrew and every
-/// agent CLI are missing from the terminal panes and from `nikcli serve`
-/// alike. Asking the login shell once, before anything is spawned, fixes all
-/// of them. A launch from a terminal already has the PATH and is left alone.
-#[cfg(target_os = "macos")]
+/// agent CLI are missing from the terminal panes, from the new-session form
+/// (which then disables every agent as "not installed") and from `nikcli serve`.
+///
+/// The PATH becomes, in order: what the login shell reports, what the process
+/// already had, and the directories the usual installers write to. The shell's
+/// answer is the one that knows about nvm, asdf and custom profiles, but it can
+/// fail — a slow `.zshrc`, a prompt waiting on input — so the known directories
+/// are added whether it answered or not. Only directories that exist are kept.
+#[cfg(unix)]
 fn import_login_path() {
+    let current = std::env::var("PATH").unwrap_or_default();
+    let home = dirs::home_dir();
+    let merged = merge_path(login_shell_path().as_deref(), &current, &known_bin_dirs(home.as_deref()));
+    std::env::set_var("PATH", merged);
+}
+
+#[cfg(unix)]
+fn login_shell_path() -> Option<String> {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
-    let current = std::env::var("PATH").unwrap_or_default();
-    if current.split(':').any(|p| p.starts_with("/opt/homebrew") || p.contains("/.bun/") || p.starts_with("/usr/local/bin")) {
-        return;
-    }
-    let shell = std::env::var("SHELL").ok().filter(|s| s.starts_with('/')).unwrap_or_else(|| "/bin/zsh".into());
-    let Ok(mut child) = Command::new(&shell)
-        .args(["-ilc", "printf '__ADE_PATH__%s' \"$PATH\""])
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|s| s.starts_with('/'))
+        .unwrap_or_else(|| "/bin/zsh".into());
+    let mut child = Command::new(&shell)
+        .args(["-ilc", "printf '__ADE_PATH__%s__ADE_END__' \"$PATH\""])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-    else {
-        return;
-    };
-    // A profile that waits on input or the network must not hold the window.
-    let deadline = Instant::now() + Duration::from_secs(3);
+        .ok()?;
+    let mut stdout = child.stdout.take()?;
+    // Read on a thread so a chatty profile cannot fill the pipe and stall the
+    // shell, and so the wait below can give up on one that never exits.
+    let reader = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = stdout.read_to_string(&mut out);
+        out
+    });
+    let deadline = Instant::now() + Duration::from_secs(8);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
             _ => {
                 let _ = child.kill();
-                return;
+                let _ = child.wait();
+                return None;
             }
         }
     }
-    let mut out = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_string(&mut out);
-    }
-    if let Some((_, path)) = out.rsplit_once("__ADE_PATH__") {
-        let path = path.trim();
-        if !path.is_empty() {
-            std::env::set_var("PATH", path);
+    let out = reader.join().ok()?;
+    let start = out.rfind("__ADE_PATH__")? + "__ADE_PATH__".len();
+    let end = out[start..].find("__ADE_END__")? + start;
+    let path = out[start..end].trim();
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+/// Where Homebrew, bun, npm, pnpm, cargo, volta, pipx and nvm put binaries.
+#[cfg(unix)]
+fn known_bin_dirs(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+    if let Some(home) = home {
+        for relative in [
+            ".bun/bin",
+            ".local/bin",
+            ".npm-global/bin",
+            ".cargo/bin",
+            ".volta/bin",
+            ".deno/bin",
+            ".opencode/bin",
+            "Library/pnpm",
+            ".local/share/pnpm",
+            "bin",
+        ] {
+            dirs.push(home.join(relative));
+        }
+        // nvm has no stable "current" link; the newest installed Node is the
+        // best guess at the one the user's shell selects.
+        if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
+            let mut versions: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+            versions.sort();
+            if let Some(newest) = versions.last() {
+                dirs.push(newest.join("bin"));
+            }
         }
     }
+    dirs.into_iter().filter(|d| d.is_dir()).collect()
+}
+
+/// Joins PATH sources in priority order, dropping empty and repeated entries.
+#[cfg(unix)]
+fn merge_path(login: Option<&str>, current: &str, known: &[PathBuf]) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    let known = known.iter().map(|d| d.to_string_lossy().into_owned());
+    for entry in login
+        .unwrap_or("")
+        .split(':')
+        .map(str::to_string)
+        .chain(current.split(':').map(str::to_string))
+        .chain(known)
+    {
+        if !entry.is_empty() && seen.insert(entry.clone()) {
+            out.push(entry);
+        }
+    }
+    out.join(":")
 }
 
 #[tauri::command]
@@ -860,7 +928,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 pub fn run() {
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     import_login_path();
 
     tauri::Builder::default()
@@ -994,6 +1062,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_login_path_comes_first_and_nothing_repeats() {
+        let known = vec![PathBuf::from("/opt/homebrew/bin"), PathBuf::from("/usr/bin")];
+        let merged = merge_path(Some("/Users/a/.bun/bin:/usr/bin"), "/usr/bin:/bin", &known);
+        assert_eq!(merged, "/Users/a/.bun/bin:/usr/bin:/bin:/opt/homebrew/bin");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_that_did_not_answer_still_gets_the_known_dirs() {
+        let known = vec![PathBuf::from("/opt/homebrew/bin")];
+        assert_eq!(merge_path(None, "/usr/bin:/bin", &known), "/usr/bin:/bin:/opt/homebrew/bin");
+    }
 
     /// A throwaway directory that cleans itself up, so these tests need no
     /// fixture crate and leave nothing behind when one of them fails.
