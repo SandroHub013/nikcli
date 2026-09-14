@@ -119,6 +119,7 @@ import { readReportLine } from "../session/report"
 import { asSubmittedLine } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import { formatDelivery, parseMessage, resolveTarget, sessionsTable, type MailPane } from "../session/mailbox"
+import { displayArgs, introArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -1821,7 +1822,12 @@ export function Workbench() {
      */
     const resumed = resume?.kind === "resume"
     const opening = resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
-    const extraArgs = [...opening.args, ...(extra ?? [])]
+    /*
+     * The `ade-msg` notice first: `codex -c …` has to precede a `resume`
+     * subcommand, and for the rest the order does not matter. The shell has
+     * no instructions to extend and gets nothing. See `session-new/intro.ts`.
+     */
+    const extraArgs = [...introArgs(agentId), ...opening.args, ...(extra ?? [])]
     const mintedId = "resumeId" in opening ? opening.resumeId : undefined
 
     /*
@@ -1862,7 +1868,7 @@ export function Workbench() {
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
       }))
 
-      appendLine(paneId, `${p.root}> ${[agent.command, ...extraArgs].join(" ")}`, "shell")
+      appendLine(paneId, `${p.root}> ${[agent.command, ...displayArgs(extraArgs)].join(" ")}`, "shell")
 
       /*
        * Started bare, the way the user would start it in their own terminal.
@@ -2017,7 +2023,8 @@ export function Workbench() {
               status: "working",
               activity: "In esecuzione",
             }))
-            running.get(paneId)?.write(asSubmittedLine(task))
+            // Opening tasks only — a line the user typed later is theirs alone.
+            running.get(paneId)?.write(asSubmittedLine(typeIntoResumed ? task : withIntro(agentId, task)))
             return
           }
           /*
