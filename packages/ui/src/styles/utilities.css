@@ -37,31 +37,92 @@
   text-align: left;
 }
 
-.text-12-regular {
+/* The dense scale. Used by the browser console rows, the chart axis labels and
+   the agent task list, which were all written against these names before the
+   names existed and were therefore rendering at the inherited size. */
+.text-10-regular {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-3x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-10-medium {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-3x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-10-bold {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-3x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-11-regular {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-11-medium {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-11-semibold {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-style: normal;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* Utilities are numbered by the pixels they render, so the name can never
+   drift from the size again: text-12 is 12px (--font-size-x-small), text-13 is 13px (--font-size-small). */
+
+
+.text-13-regular {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large); /* 150% */
   letter-spacing: var(--letter-spacing-normal);
 }
 
-.text-12-medium {
+.text-13-medium {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large); /* 150% */
   letter-spacing: var(--letter-spacing-normal);
 }
 
-.text-12-mono {
+.text-13-mono {
   font-family: var(--font-family-mono);
   font-feature-settings: var(--font-family-mono--font-feature-settings);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 166.667% */
+  line-height: var(--line-height-large); /* 150% */
   letter-spacing: var(--letter-spacing-normal);
 }
 
@@ -80,6 +141,15 @@
   font-style: normal;
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-large); /* 171.429% */
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text-14-semibold {
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-style: normal;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
 }
 

@@ -11,8 +11,11 @@
 
   /* text-12-medium */
   font-family: var(--font-family-sans);
-  font-size: 12px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 1;
-  color: var(--text-weak);
+  /* The chip exists to be read — it names the keys to press — so it is held to
+     the contrast a label needs. `--text-weak` measures 3.1:1 here, under the
+     4.5:1 WCAG AA asks at 12px. */
+  color: var(--text-base);
 }

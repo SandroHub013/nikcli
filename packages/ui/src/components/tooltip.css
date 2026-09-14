@@ -28,7 +28,7 @@
   pointer-events: none !important;
   transform-origin: var(--kb-tooltip-content-transform-origin);
 
-  /* text-12-medium */
+  /* text-13-medium */
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
   font-style: normal;

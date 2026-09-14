@@ -22,13 +22,14 @@
 [data-component="avatar"][data-size="small"] {
   width: 1.25rem;
   height: 1.25rem;
-  font-size: 0.75rem;
+  font-size: var(--font-size-x-small);
   line-height: 1;
 }
 
 [data-component="avatar"][data-size="normal"] {
   width: 1.5rem;
   height: 1.5rem;
+  /* Deliberately off-ramp: 1.125rem (18px) scales single-letter avatar fallback initials to 75% of the 1.5rem (24px) container. */
   font-size: 1.125rem;
   line-height: 1.5rem;
 }
@@ -36,7 +37,7 @@
 [data-component="avatar"][data-size="large"] {
   width: 2rem;
   height: 2rem;
-  font-size: 1.25rem;
+  font-size: var(--font-size-x-large);
   line-height: 2rem;
 }
 

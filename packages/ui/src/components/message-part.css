@@ -575,7 +575,7 @@
 
     [data-slot="question-tab"] {
       padding: 4px 12px;
-      font-size: 13px;
+      font-size: var(--font-size-small);
       border-radius: 4px;
       background-color: var(--surface-base);
       color: var(--text-base);
@@ -605,7 +605,7 @@
     gap: 8px;
 
     [data-slot="question-text"] {
-      font-size: 14px;
+      font-size: var(--font-size-base);
       color: var(--text-base);
       line-height: 1.5;
     }
@@ -649,13 +649,13 @@
       }
 
       [data-slot="option-label"] {
-        font-size: 14px;
+        font-size: var(--font-size-base);
         color: var(--text-base);
         font-weight: 500;
       }
 
       [data-slot="option-description"] {
-        font-size: 12px;
+        font-size: var(--font-size-x-small);
         color: var(--text-weak);
       }
     }
@@ -669,7 +669,7 @@
       [data-slot="custom-input"] {
         flex: 1;
         padding: 8px 12px;
-        font-size: 14px;
+        font-size: var(--font-size-base);
         border: 1px solid var(--border-base);
         border-radius: 6px;
         background-color: var(--surface-base);
@@ -704,7 +704,7 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      font-size: 13px;
+      font-size: var(--font-size-small);
 
       [data-slot="review-label"] {
         color: var(--text-weak);
@@ -738,7 +738,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    font-size: 13px;
+    font-size: var(--font-size-small);
 
     [data-slot="question-text"] {
       color: var(--text-weak);
@@ -925,5 +925,32 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+/*
+ * Undo for a single agent edit.
+ *
+ * Kept quiet and revealed on hover: it sits under every file-writing tool call
+ * in a transcript, so at full strength it would compete with the content it is
+ * attached to.
+ */
+[data-slot="message-part-tool-revert"] {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+[data-component="tool-part-wrapper"]:hover [data-slot="message-part-tool-revert"],
+[data-slot="message-part-tool-revert"]:focus-within {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* No hover to reveal it on touch, so it stays visible. */
+  [data-slot="message-part-tool-revert"] {
+    opacity: 1;
   }
 }

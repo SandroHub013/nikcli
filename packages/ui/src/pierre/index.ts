@@ -1,4 +1,5 @@
 import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
+import { registerNikcliTheme } from "./theme"
 import { ComponentProps } from "solid-js"
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
@@ -144,6 +145,8 @@ const unsafeCSS = `
 }`
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
+  // Whoever asks for these options is about to render with the theme.
+  registerNikcliTheme()
   return {
     theme: "Nikcli",
     themeType: "system",

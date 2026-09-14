@@ -1,6 +1,7 @@
 import { useMarked } from "../context/marked"
+import { sanitize } from "../context/markdown-sanitize"
+import { renderIncremental, type StablePrefix } from "../context/markdown-split"
 import { useI18n } from "../context/i18n"
-import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@nikcli-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
@@ -9,39 +10,19 @@ import { isServer } from "solid-js/web"
 type Entry = {
   hash: string
   html: string
+  /**
+   * What of this message has already settled. Carried across ticks so a growing
+   * answer costs the length of its unfinished block, not its whole length.
+   */
+  prefix?: StablePrefix
 }
 
 const max = 200
 const cache = new Map<string, Entry>()
 
-if (typeof window !== "undefined" && DOMPurify.isSupported) {
-  DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
-    if (!(node instanceof HTMLAnchorElement)) return
-    if (node.target !== "_blank") return
-
-    const rel = node.getAttribute("rel") ?? ""
-    const set = new Set(rel.split(/\s+/).filter(Boolean))
-    set.add("noopener")
-    set.add("noreferrer")
-    node.setAttribute("rel", Array.from(set).join(" "))
-  })
-}
-
-const config = {
-  USE_PROFILES: { html: true, mathMl: true },
-  SANITIZE_NAMED_PROPS: true,
-  FORBID_TAGS: ["style"],
-  FORBID_CONTENTS: ["style", "script"],
-}
-
 const iconPaths = {
   copy: '<path d="M6.2513 6.24935V2.91602H17.0846V13.7493H13.7513M13.7513 6.24935V17.0827H2.91797V6.24935H13.7513Z" stroke="currentColor" stroke-linecap="round"/>',
   check: '<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>',
-}
-
-function sanitize(html: string) {
-  if (!DOMPurify.isSupported) return ""
-  return DOMPurify.sanitize(html, config)
 }
 
 type CopyLabels = {
@@ -187,10 +168,18 @@ export function Markdown(
         }
       }
 
-      const next = await marked.parse(markdown)
-      const safe = sanitize(next)
-      if (key && hash) touch(key, { hash, html: safe })
-      return safe
+      // Render segment by segment rather than re-rendering the whole message on
+      // every streamed tick. Both halves compose: each segment is a whole number
+      // of markdown blocks, so parsing them apart and joining the HTML gives the
+      // same bytes as parsing the join, and sanitising complete blocks likewise.
+      const previous = key ? cache.get(key)?.prefix : undefined
+      const rendered = await renderIncremental({
+        text: markdown,
+        cached: previous,
+        render: async (segment) => sanitize(await marked.parse(segment)),
+      })
+      if (key && hash) touch(key, { hash, html: rendered.html, prefix: rendered.prefix })
+      return rendered.html
     },
     { initialValue: "" },
   )

@@ -1,5 +1,5 @@
 import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange } from "@pierre/diffs"
-import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"

@@ -1,4 +1,5 @@
 import { WorkerPoolManager } from "@pierre/diffs/worker"
+import { registerNikcliTheme } from "./theme"
 import ShikiWorkerUrl from "@pierre/diffs/worker/worker.js?worker&url"
 
 export type WorkerPoolStyle = "unified" | "split"
@@ -8,6 +9,7 @@ export function workerFactory(): Worker {
 }
 
 function createPool(lineDiffType: "none" | "word-alt") {
+  registerNikcliTheme()
   const pool = new WorkerPoolManager(
     {
       workerFactory,

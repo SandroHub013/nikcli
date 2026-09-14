@@ -963,7 +963,7 @@ export function Code<T>(props: CodeProps<T>) {
               stepFind(e.shiftKey ? -1 : 1)
             }}
           />
-          <div class="shrink-0 text-12-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
+          <div class="shrink-0 text-13-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
             {findCount() ? `${findIndex() + 1}/${findCount()}` : "0/0"}
           </div>
           <div class="flex items-center">

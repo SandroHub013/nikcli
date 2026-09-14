@@ -1,0 +1,187 @@
+/*
+ * Charts — SVG drawn at a fixed logical width and scaled to the container.
+ * Strokes carry `vector-effect: non-scaling-stroke`, so the non-uniform scale
+ * never thickens a line; hover is resolved from the pointer ratio rather than
+ * from pixel geometry.
+ */
+
+[data-component="chart"] {
+  /* Categorical palette built from theme tokens, so it follows light/dark. */
+  --chart-1: var(--icon-brand-base);
+  --chart-2: var(--surface-info-strong);
+  --chart-3: var(--icon-success-base);
+  --chart-4: var(--icon-warning-base);
+  --chart-5: var(--icon-critical-base);
+  --chart-6: var(--text-weak);
+
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+[data-slot="chart-svg"] {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+[data-slot="chart-grid"] line {
+  stroke: var(--border-weak-base);
+  stroke-dasharray: 2 4;
+}
+
+[data-slot="chart-line"] {
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+[data-slot="chart-crosshair"] {
+  stroke: var(--border-base);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* Clip-reveal: the series wipe in from the left on first paint. */
+[data-slot="chart-reveal"] {
+  transform-origin: left center;
+  animation: chart-reveal 900ms cubic-bezier(0.85, 0, 0.15, 1) both;
+}
+
+@keyframes chart-reveal {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+[data-component="chart"][data-status="loading"] [data-slot="chart-svg"] {
+  opacity: 0.35;
+  animation: chart-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes chart-breathe {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+[data-slot="chart-axis"] {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 4px;
+  font-size: var(--font-size-3x-small);
+  color: var(--text-weaker);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+[data-slot="chart-empty"] {
+  display: grid;
+  place-items: center;
+  min-height: 90px;
+  font-size: var(--font-size-x-small);
+  color: var(--text-weak);
+}
+
+/* ── tooltip ────────────────────────────────────────────────────────────── */
+
+[data-slot="chart-tooltip"] {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 120px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 8px;
+  background: var(--background-base);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+  font-size: var(--font-size-2x-small);
+  white-space: nowrap;
+}
+
+[data-slot="chart-tooltip-title"] {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+[data-slot="chart-tooltip-row"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-slot="chart-swatch"] {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+[data-slot="chart-tooltip-label"] {
+  flex: 1;
+  color: var(--text-weak);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="chart-tooltip-value"] {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── share bar ──────────────────────────────────────────────────────────── */
+
+[data-component="chart-share"] {
+  --chart-1: var(--icon-brand-base);
+  --chart-2: var(--surface-info-strong);
+  --chart-3: var(--icon-success-base);
+  --chart-4: var(--icon-warning-base);
+  --chart-5: var(--icon-critical-base);
+  --chart-6: var(--text-weak);
+
+  width: 100%;
+}
+
+[data-slot="chart-share-track"] {
+  display: flex;
+  width: 100%;
+  height: 8px;
+  gap: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-base-hover);
+}
+
+[data-slot="chart-share-segment"] {
+  height: 100%;
+  transform-origin: left center;
+  animation: chart-share-grow 620ms cubic-bezier(0.85, 0, 0.15, 1) both;
+}
+
+@keyframes chart-share-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="chart-reveal"],
+  [data-slot="chart-share-segment"],
+  [data-component="chart"][data-status="loading"] [data-slot="chart-svg"] {
+    animation: none;
+  }
+}

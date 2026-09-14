@@ -1,382 +1,119 @@
 import { marked } from "marked"
-import markedKatex from "marked-katex-extension"
 import markedShiki from "marked-shiki"
-import katex from "katex"
-import { bundledLanguages, type BundledLanguage } from "shiki"
+import type { BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
-import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
-registerCustomTheme("Nikcli", () => {
-  return Promise.resolve({
-    name: "Nikcli",
-    colors: {
-      "editor.background": "transparent",
-      "editor.foreground": "var(--text-base)",
-      "gitDecoration.addedResourceForeground": "var(--syntax-diff-add)",
-      "gitDecoration.deletedResourceForeground": "var(--syntax-diff-delete)",
-      // "gitDecoration.conflictingResourceForeground": "#ffca00",
-      // "gitDecoration.modifiedResourceForeground": "#1a76d4",
-      // "gitDecoration.untrackedResourceForeground": "#00cab1",
-      // "gitDecoration.ignoredResourceForeground": "#84848A",
-      // "terminal.titleForeground": "#adadb1",
-      // "terminal.titleInactiveForeground": "#84848A",
-      // "terminal.background": "#141415",
-      // "terminal.foreground": "#adadb1",
-      // "terminal.ansiBlack": "#141415",
-      // "terminal.ansiRed": "#ff2e3f",
-      // "terminal.ansiGreen": "#0dbe4e",
-      // "terminal.ansiYellow": "#ffca00",
-      // "terminal.ansiBlue": "#008cff",
-      // "terminal.ansiMagenta": "#c635e4",
-      // "terminal.ansiCyan": "#08c0ef",
-      // "terminal.ansiWhite": "#c6c6c8",
-      // "terminal.ansiBrightBlack": "#141415",
-      // "terminal.ansiBrightRed": "#ff2e3f",
-      // "terminal.ansiBrightGreen": "#0dbe4e",
-      // "terminal.ansiBrightYellow": "#ffca00",
-      // "terminal.ansiBrightBlue": "#008cff",
-      // "terminal.ansiBrightMagenta": "#c635e4",
-      // "terminal.ansiBrightCyan": "#08c0ef",
-      // "terminal.ansiBrightWhite": "#c6c6c8",
-    },
-    tokenColors: [
-      {
-        scope: ["comment", "punctuation.definition.comment", "string.comment"],
-        settings: {
-          foreground: "var(--syntax-comment)",
-        },
-      },
-      {
-        scope: ["entity.other.attribute-name"],
-        settings: {
-          foreground: "var(--syntax-property)", // maybe attribute
-        },
-      },
-      {
-        scope: ["constant", "entity.name.constant", "variable.other.constant", "variable.language", "entity"],
-        settings: {
-          foreground: "var(--syntax-constant)",
-        },
-      },
-      {
-        scope: ["entity.name", "meta.export.default", "meta.definition.variable"],
-        settings: {
-          foreground: "var(--syntax-type)",
-        },
-      },
-      {
-        scope: ["meta.object.member"],
-        settings: {
-          foreground: "var(--syntax-primitive)",
-        },
-      },
-      {
-        scope: [
-          "variable.parameter.function",
-          "meta.jsx.children",
-          "meta.block",
-          "meta.tag.attributes",
-          "entity.name.constant",
-          "meta.embedded.expression",
-          "meta.template.expression",
-          "string.other.begin.yaml",
-          "string.other.end.yaml",
-        ],
-        settings: {
-          foreground: "var(--syntax-punctuation)",
-        },
-      },
-      {
-        scope: ["entity.name.function", "support.type.primitive"],
-        settings: {
-          foreground: "var(--syntax-primitive)",
-        },
-      },
-      {
-        scope: ["support.class.component"],
-        settings: {
-          foreground: "var(--syntax-type)",
-        },
-      },
-      {
-        scope: "keyword",
-        settings: {
-          foreground: "var(--syntax-keyword)",
-        },
-      },
-      {
-        scope: [
-          "keyword.operator",
-          "storage.type.function.arrow",
-          "punctuation.separator.key-value.css",
-          "entity.name.tag.yaml",
-          "punctuation.separator.key-value.mapping.yaml",
-        ],
-        settings: {
-          foreground: "var(--syntax-operator)",
-        },
-      },
-      {
-        scope: ["storage", "storage.type"],
-        settings: {
-          foreground: "var(--syntax-keyword)",
-        },
-      },
-      {
-        scope: ["storage.modifier.package", "storage.modifier.import", "storage.type.java"],
-        settings: {
-          foreground: "var(--syntax-primitive)",
-        },
-      },
-      {
-        scope: [
-          "string",
-          "punctuation.definition.string",
-          "string punctuation.section.embedded source",
-          "entity.name.tag",
-        ],
-        settings: {
-          foreground: "var(--syntax-string)",
-        },
-      },
-      {
-        scope: "support",
-        settings: {
-          foreground: "var(--syntax-primitive)",
-        },
-      },
-      {
-        scope: ["support.type.object.module", "variable.other.object", "support.type.property-name.css"],
-        settings: {
-          foreground: "var(--syntax-object)",
-        },
-      },
-      {
-        scope: "meta.property-name",
-        settings: {
-          foreground: "var(--syntax-property)",
-        },
-      },
-      {
-        scope: "variable",
-        settings: {
-          foreground: "var(--syntax-variable)",
-        },
-      },
-      {
-        scope: "variable.other",
-        settings: {
-          foreground: "var(--syntax-variable)",
-        },
-      },
-      {
-        scope: [
-          "invalid.broken",
-          "invalid.illegal",
-          "invalid.unimplemented",
-          "invalid.deprecated",
-          "message.error",
-          "markup.deleted",
-          "meta.diff.header.from-file",
-          "punctuation.definition.deleted",
-          "brackethighlighter.unmatched",
-          "token.error-token",
-        ],
-        settings: {
-          foreground: "var(--syntax-critical)",
-        },
-      },
-      {
-        scope: "carriage-return",
-        settings: {
-          foreground: "var(--syntax-keyword)",
-        },
-      },
-      {
-        scope: "string source",
-        settings: {
-          foreground: "var(--syntax-variable)",
-        },
-      },
-      {
-        scope: "string variable",
-        settings: {
-          foreground: "var(--syntax-constant)",
-        },
-      },
-      {
-        scope: [
-          "source.regexp",
-          "string.regexp",
-          "string.regexp.character-class",
-          "string.regexp constant.character.escape",
-          "string.regexp source.ruby.embedded",
-          "string.regexp string.regexp.arbitrary-repitition",
-          "string.regexp constant.character.escape",
-        ],
-        settings: {
-          foreground: "var(--syntax-regexp)",
-        },
-      },
-      {
-        scope: "support.constant",
-        settings: {
-          foreground: "var(--syntax-primitive)",
-        },
-      },
-      {
-        scope: "support.variable",
-        settings: {
-          foreground: "var(--syntax-variable)",
-        },
-      },
-      {
-        scope: "meta.module-reference",
-        settings: {
-          foreground: "var(--syntax-info)",
-        },
-      },
-      {
-        scope: "punctuation.definition.list.begin.markdown",
-        settings: {
-          foreground: "var(--syntax-punctuation)",
-        },
-      },
-      {
-        scope: ["markup.heading", "markup.heading entity.name"],
-        settings: {
-          fontStyle: "bold",
-          foreground: "var(--syntax-info)",
-        },
-      },
-      {
-        scope: "markup.quote",
-        settings: {
-          foreground: "var(--syntax-info)",
-        },
-      },
-      {
-        scope: "markup.italic",
-        settings: {
-          fontStyle: "italic",
-          // foreground: "",
-        },
-      },
-      {
-        scope: "markup.bold",
-        settings: {
-          fontStyle: "bold",
-          foreground: "var(--text-strong)",
-        },
-      },
-      {
-        scope: [
-          "markup.raw",
-          "markup.inserted",
-          "meta.diff.header.to-file",
-          "punctuation.definition.inserted",
-          "markup.changed",
-          "punctuation.definition.changed",
-          "markup.ignored",
-          "markup.untracked",
-        ],
-        settings: {
-          foreground: "var(--text-base)",
-        },
-      },
-      {
-        scope: "meta.diff.range",
-        settings: {
-          fontStyle: "bold",
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: "meta.diff.header",
-        settings: {
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: "meta.separator",
-        settings: {
-          fontStyle: "bold",
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: "meta.output",
-        settings: {
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: "meta.export.default",
-        settings: {
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: [
-          "brackethighlighter.tag",
-          "brackethighlighter.curly",
-          "brackethighlighter.round",
-          "brackethighlighter.square",
-          "brackethighlighter.angle",
-          "brackethighlighter.quote",
-        ],
-        settings: {
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: ["constant.other.reference.link", "string.other.link"],
-        settings: {
-          fontStyle: "underline",
-          foreground: "var(--syntax-unknown)",
-        },
-      },
-      {
-        scope: "token.info-token",
-        settings: {
-          foreground: "var(--syntax-info)",
-        },
-      },
-      {
-        scope: "token.warn-token",
-        settings: {
-          foreground: "var(--syntax-warning)",
-        },
-      },
-      {
-        scope: "token.debug-token",
-        settings: {
-          foreground: "var(--syntax-info)",
-        },
-      },
-    ],
-    semanticTokenColors: {
-      comment: "var(--syntax-comment)",
-      string: "var(--syntax-string)",
-      number: "var(--syntax-constant)",
-      regexp: "var(--syntax-regexp)",
-      keyword: "var(--syntax-keyword)",
-      variable: "var(--syntax-variable)",
-      parameter: "var(--syntax-variable)",
-      property: "var(--syntax-property)",
-      function: "var(--syntax-primitive)",
-      method: "var(--syntax-primitive)",
-      type: "var(--syntax-type)",
-      class: "var(--syntax-type)",
-      namespace: "var(--syntax-type)",
-      enumMember: "var(--syntax-primitive)",
-      "variable.constant": "var(--syntax-constant)",
-      "variable.defaultLibrary": "var(--syntax-unknown)",
-    },
-  } as unknown as ThemeRegistrationResolved)
-})
 
-function renderMathInText(text: string): string {
+
+/**
+ * The highlighter drags in @pierre/diffs, the shiki core and its TextMate engine
+ * — ~450 kB that only matters once a code block is actually rendered. Everything
+ * below the first `await` is fetched on demand and shared across callers.
+ */
+type Highlighter = Awaited<ReturnType<(typeof import("@pierre/diffs"))["getSharedHighlighter"]>>
+
+let highlighterPromise: Promise<{ highlighter: Highlighter; isBundled: (lang: string) => boolean }> | undefined
+
+function loadHighlighter() {
+  // A rejected promise must not be cached: a chunk that fails to load once —
+  // stale build after a deploy, a dropped connection — would otherwise make every
+  // later parse rethrow the same failure. `Markdown` renders through a resource,
+  // so that turns one bad fetch into every message with a code fence throwing for
+  // the rest of the session. Clearing the slot lets the next attempt retry.
+  highlighterPromise ??= (async () => {
+    const [diffs, shiki, theme] = await Promise.all([
+      import("@pierre/diffs"),
+      import("shiki"),
+      import("../pierre/theme"),
+    ])
+    theme.registerNikcliTheme()
+    const highlighter = await diffs.getSharedHighlighter({ themes: ["Nikcli"], langs: [] })
+    return { highlighter, isBundled: (lang: string) => lang in shiki.bundledLanguages }
+  })().catch((error) => {
+    highlighterPromise = undefined
+    throw error
+  })
+  return highlighterPromise
+}
+
+/**
+ * Highlighted code blocks, keyed by language and source.
+ *
+ * A streaming message is re-parsed on every throttled tick, and each parse used
+ * to re-highlight every block in it from scratch — including blocks that
+ * finished long ago and cannot change. Measured over a 40-tick message that was
+ * 2.0s of main-thread work, growing with message length, when only the block
+ * still being written actually differs between ticks.
+ */
+const HIGHLIGHT_CACHE = new Map<string, string>()
+const HIGHLIGHT_CACHE_MAX = 400
+
+const highlightKey = (code: string, lang: string | undefined) => `${lang ?? ""}\u0000${code}`
+
+function rememberHighlight(key: string, html: string): string {
+  HIGHLIGHT_CACHE.set(key, html)
+  if (HIGHLIGHT_CACHE.size > HIGHLIGHT_CACHE_MAX) {
+    const oldest = HIGHLIGHT_CACHE.keys().next().value
+    if (oldest !== undefined) HIGHLIGHT_CACHE.delete(oldest)
+  }
+  return html
+}
+
+function recallHighlight(key: string): string | undefined {
+  const hit = HIGHLIGHT_CACHE.get(key)
+  if (hit === undefined) return undefined
+  // Refresh recency so the blocks on screen survive eviction.
+  HIGHLIGHT_CACHE.delete(key)
+  HIGHLIGHT_CACHE.set(key, hit)
+  return hit
+}
+
+/** Resolve a language name to one shiki can load, then make sure it is loaded. */
+async function prepareLanguage(lang: string | undefined) {
+  const { highlighter, isBundled } = await loadHighlighter()
+  const language = lang && isBundled(lang) ? lang : "text"
+  if (!highlighter.getLoadedLanguages().includes(language)) {
+    await highlighter.loadLanguage(language as BundledLanguage)
+  }
+  return { highlighter, language }
+}
+
+/**
+ * KaTeX is ~600 kB — a sixth of the app's entry chunk — and most sessions never
+ * render a formula, so both math paths pull it in on first use instead.
+ */
+type Katex = (typeof import("katex"))["default"]
+
+let katexModule: Promise<Katex> | undefined
+function loadKatex(): Promise<Katex> {
+  katexModule ??= import("katex")
+    .then((module) => module.default)
+    .catch((error) => {
+      katexModule = undefined
+      throw error
+    })
+  return katexModule
+}
+
+let katexExtension: Promise<void> | undefined
+function registerKatexExtension(): Promise<void> {
+  katexExtension ??= import("marked-katex-extension")
+    .then(({ default: markedKatex }) => {
+      marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
+    })
+    .catch((error) => {
+      katexExtension = undefined
+      throw error
+    })
+  return katexExtension
+}
+
+/** Cheap pre-check: no `$` in the source means no math for either renderer. */
+function mayContainMath(text: string): boolean {
+  return text.includes("$")
+}
+
+function renderMathInText(text: string, katex: Katex): string {
   let result = text
 
   // Display math: $$...$$
@@ -408,17 +145,20 @@ function renderMathInText(text: string): string {
   return result
 }
 
-function renderMathExpressions(html: string): string {
+async function renderMathExpressions(html: string): Promise<string> {
+  if (!mayContainMath(html)) return html
+
   // Split on code/pre/kbd tags to avoid processing their contents
   const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
   const parts = html.split(codeBlockPattern)
+  const katex = await loadKatex()
 
   return parts
     .map((part, i) => {
       // Odd indices are the captured code blocks - leave them alone
       if (i % 2 === 1) return part
       // Process math only in non-code parts
-      return renderMathInText(part)
+      return renderMathInText(part, katex)
     })
     .join("")
 }
@@ -427,8 +167,6 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   const codeBlockRegex = /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g
   const matches = [...html.matchAll(codeBlockRegex)]
   if (matches.length === 0) return html
-
-  const highlighter = await getSharedHighlighter({ themes: ["Nikcli"], langs: [] })
 
   let result = html
   for (const match of matches) {
@@ -440,72 +178,130 @@ async function highlightCodeBlocks(html: string): Promise<string> {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
 
-    let language = lang || "text"
-    if (!(language in bundledLanguages)) {
-      language = "text"
+    const key = highlightKey(code, lang)
+    let highlighted = recallHighlight(key)
+    if (highlighted === undefined) {
+      const { highlighter, language } = await prepareLanguage(lang)
+      highlighted = rememberHighlight(
+        key,
+        highlighter.codeToHtml(code, { lang: language, theme: "Nikcli", tabindex: false }),
+      )
     }
-    if (!highlighter.getLoadedLanguages().includes(language)) {
-      await highlighter.loadLanguage(language as BundledLanguage)
-    }
-
-    const highlighted = highlighter.codeToHtml(code, {
-      lang: language,
-      theme: "Nikcli",
-      tabindex: false,
-    })
     result = result.replace(fullMatch, () => highlighted)
   }
 
   return result
 }
 
+/**
+ * Escape a value being interpolated into a double-quoted HTML attribute.
+ *
+ * Overriding marked's `link` renderer replaces its escaping along with its
+ * markup, so this has to do it again: one quote in an href or a title closes the
+ * attribute and everything after it is parsed as markup. Model output reaches
+ * here from pages the agent fetched and files it read, so it is attacker text.
+ *
+ * The `&` case carries the most weight, and not for the obvious reason.
+ * `[x](&#x6a;avascript:alert(1))` reaches `safeHref` looking harmless because the
+ * scheme is entity-encoded. Writing it out unescaped would let the HTML parser
+ * decode it back into `javascript:` inside the attribute; escaping `&` makes the
+ * parser hand back the literal text `&#x6a;avascript:`, which is a relative path
+ * and inert. Dropping that one line turns three cases in
+ * `markdown-link-injection.test.ts` into live handlers.
+ */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/** Schemes that execute rather than navigate. */
+const UNSAFE_SCHEME = /^[\s\u0000-\u001f]*(?:javascript|vbscript|data|file)\s*:/i
+
+/**
+ * The href to render, or undefined when it should not be linked at all.
+ *
+ * This is the second line of defence, not the first — `escapeAttribute` already
+ * makes an entity-encoded scheme inert. What this adds is refusing to render a
+ * link at all when the target is plainly executable, so the user is not offered
+ * something to click that would never have worked.
+ *
+ * Decoding happens before the check because a scheme can be spelled with
+ * entities or spaced out by control characters. Both decimal and hex forms are
+ * handled; leaving one out would not open a hole, but it reads like an oversight.
+ */
+function safeHref(href: string): string | undefined {
+  const decoded = href
+    .replace(/&#x([0-9a-f]+);?/gi, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);?/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/[\u0000-\u001f]/g, "")
+  if (UNSAFE_SCHEME.test(decoded)) return undefined
+  return href
+}
+
 export type NativeMarkdownParser = (markdown: string) => Promise<string>
+
+export interface MarkedParser {
+  parse(markdown: string): Promise<string>
+}
+
+/**
+ * Builds the parser the context hands out. Exported so the parsing pipeline —
+ * including the deferred KaTeX and shiki paths — can be tested without standing
+ * up a component tree.
+ */
+export function createMarkedParser(options: { nativeParser?: NativeMarkdownParser } = {}): MarkedParser {
+  const jsParser = marked.use(
+    {
+      renderer: {
+        link({ href, title, text }) {
+          const safe = safeHref(href)
+          // Not a link, but the text still belongs on the page.
+          if (!safe) return text
+          const titleAttr = title ? ` title="${escapeAttribute(title)}"` : ""
+          return `<a href="${escapeAttribute(safe)}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+        },
+      },
+    },
+    markedShiki({
+      async highlight(code, lang) {
+        const key = highlightKey(code, lang)
+        const cached = recallHighlight(key)
+        if (cached !== undefined) return cached
+        const { highlighter, language } = await prepareLanguage(lang)
+        return rememberHighlight(
+          key,
+          highlighter.codeToHtml(code, { lang: language, theme: "Nikcli", tabindex: false }),
+        )
+      },
+    }),
+  )
+
+  const nativeParser = options.nativeParser
+  if (nativeParser) {
+    return {
+      async parse(markdown: string): Promise<string> {
+        const html = await nativeParser(markdown)
+        const withMath = await renderMathExpressions(html)
+        return highlightCodeBlocks(withMath)
+      },
+    }
+  }
+
+  return {
+    async parse(markdown: string): Promise<string> {
+      // `marked.use` mutates the singleton `jsParser` builds on, so registering
+      // the extension here still applies to this very call.
+      if (mayContainMath(markdown)) await registerKatexExtension()
+      return jsParser.parse(markdown, { async: true })
+    },
+  }
+}
 
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
-  init: (props: { nativeParser?: NativeMarkdownParser }) => {
-    const jsParser = marked.use(
-      {
-        renderer: {
-          link({ href, title, text }) {
-            const titleAttr = title ? ` title="${title}"` : ""
-            return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
-          },
-        },
-      },
-      markedKatex({
-        throwOnError: false,
-        nonStandard: true,
-      }),
-      markedShiki({
-        async highlight(code, lang) {
-          const highlighter = await getSharedHighlighter({ themes: ["Nikcli"], langs: [] })
-          if (!(lang in bundledLanguages)) {
-            lang = "text"
-          }
-          if (!highlighter.getLoadedLanguages().includes(lang)) {
-            await highlighter.loadLanguage(lang as BundledLanguage)
-          }
-          return highlighter.codeToHtml(code, {
-            lang: lang || "text",
-            theme: "Nikcli",
-            tabindex: false,
-          })
-        },
-      }),
-    )
-
-    if (props.nativeParser) {
-      const nativeParser = props.nativeParser
-      return {
-        async parse(markdown: string): Promise<string> {
-          const html = await nativeParser(markdown)
-          const withMath = renderMathExpressions(html)
-          return highlightCodeBlocks(withMath)
-        },
-      }
-    }
-
-    return jsParser
-  },
+  init: (props: { nativeParser?: NativeMarkdownParser }) => createMarkedParser(props),
 })

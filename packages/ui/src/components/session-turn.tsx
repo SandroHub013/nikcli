@@ -9,6 +9,7 @@ import {
   ToolPart,
 } from "@nikcli-ai/sdk/httpapi"
 import { useData } from "../context"
+import { shouldHideReasoning, shouldHideToolCalls } from "./transcript-verbosity"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
 
 import { Binary } from "@nikcli-ai/util/binary"
@@ -21,7 +22,7 @@ import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { Tooltip } from "./tooltip"
 import { createStore } from "solid-js/store"
-import { DateTime, DurationUnit, Interval } from "luxon"
+import { formatDuration } from "../intl-time"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -136,6 +137,7 @@ function AssistantMessageItem(props: {
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
+  hideToolCalls: boolean
   hidden?: () => readonly { messageID: string; callID: string }[]
 }) {
   const data = useData()
@@ -155,6 +157,11 @@ function AssistantMessageItem(props: {
 
     if (props.hideReasoning) {
       parts = parts.filter((part) => part?.type !== "reasoning")
+    }
+
+    // Compact keeps only what the agent said, not the work behind it.
+    if (props.hideToolCalls) {
+      parts = parts.filter((part) => part?.type !== "tool")
     }
 
     if (props.hideResponsePart) {
@@ -467,19 +474,7 @@ export function SessionTurn(
     const msg = message()
     if (!msg) return ""
     const completed = lastAssistantMessage()?.time.completed
-    const from = DateTime.fromMillis(msg.time.created)
-    const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
-    const interval = Interval.fromDateTimes(from, to)
-    const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
-
-    const locale = i18n.locale()
-    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
-      notation: "compact",
-      unitDisplay: "narrow",
-      compactDisplay: "short",
-      showZeros: false,
-    })
-    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
+    return formatDuration((completed ?? Date.now()) - msg.time.created, i18n.locale())
   }
 
   const autoScroll = createAutoScroll({
@@ -731,7 +726,8 @@ export function SessionTurn(
                               message={assistantMessage}
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
-                              hideReasoning={!working()}
+                              hideReasoning={shouldHideReasoning({ verbosity: data.verbosity(), working: working() })}
+                              hideToolCalls={shouldHideToolCalls(data.verbosity())}
                               hidden={hidden}
                             />
                           )}

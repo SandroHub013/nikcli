@@ -9,7 +9,8 @@ import type {
   QuestionAnswer,
 } from "@nikcli-ai/sdk/httpapi"
 import { createSimpleContext } from "./helper"
-import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+import type { TranscriptVerbosity } from "../components/transcript-verbosity"
 
 type Data = {
   session: Session[]
@@ -48,6 +49,14 @@ export type QuestionRejectFn = (input: { requestID: string }) => void
 
 export type NavigateToSessionFn = (sessionID: string) => void
 
+/**
+ * Undo a single edit the agent made.
+ *
+ * `session.revert` has always taken an optional `partID`, but nothing ever
+ * passed one — the only granularity the UI offered was a whole turn.
+ */
+export type RevertPartFn = (input: { sessionID: string; messageID: string; partID: string }) => void
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -57,6 +66,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onQuestionReply?: QuestionReplyFn
     onQuestionReject?: QuestionRejectFn
     onNavigateToSession?: NavigateToSessionFn
+    onRevertPart?: RevertPartFn
+    verbosity?: () => TranscriptVerbosity
   }) => {
     return {
       get store() {
@@ -69,6 +80,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       replyToQuestion: props.onQuestionReply,
       rejectQuestion: props.onQuestionReject,
       navigateToSession: props.onNavigateToSession,
+      revertPart: props.onRevertPart,
+      verbosity: () => props.verbosity?.() ?? "normal",
     }
   },
 })

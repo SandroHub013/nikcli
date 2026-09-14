@@ -14,7 +14,7 @@ export default function () {
       </p>
       <a
         href="https://nikcli.store"
-        class="px-4 py-2 rounded-md bg-surface-strong border border-border-weak-base text-14-medium text-text-strong hover:bg-surface-stronger"
+        class="px-4 py-2 rounded-md bg-surface-strong border border-border-weak-base text-14-medium text-text-strong hover:bg-surface-raised-stronger"
       >
         Go to nikcli.store
       </a>

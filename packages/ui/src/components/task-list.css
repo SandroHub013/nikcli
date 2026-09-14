@@ -1,0 +1,149 @@
+/*
+ * Task list — the plan the agent is working to.
+ *
+ * Sits above the prompt dock next to the activity rail, so it has to stay
+ * quiet: collapsed it is a single line carrying the count and the task in
+ * flight, expanded it grows only as far as the list needs and scrolls after
+ * that rather than pushing the composer off screen.
+ */
+
+[data-component="task-list"] {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 10px;
+  background: var(--surface-base);
+  overflow: hidden;
+}
+
+[data-slot="task-list-head"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--text-weak);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+[data-slot="task-list-head"]:hover {
+  color: var(--text-base);
+  background: var(--surface-base-hover);
+}
+
+[data-slot="task-list-label"] {
+  /* text-13-medium */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+  color: var(--text-base);
+}
+
+[data-slot="task-list-count"] {
+  /* text-11-medium */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-normal);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--background-weak);
+  color: var(--text-weak);
+}
+
+/* Only shown while collapsed, so the head still says what is happening. */
+[data-slot="task-list-current"] {
+  /* text-11-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-2x-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+  color: var(--text-weak);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="task-list-items"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 2px 10px 10px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+[data-slot="task-list-item"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+  /* text-13-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+  color: var(--text-base);
+}
+
+[data-slot="task-list-item"] svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--icon-weak-base);
+}
+
+[data-slot="task-list-item"][data-state="active"] {
+  color: var(--text-strong);
+}
+
+[data-slot="task-list-item"][data-state="active"] svg {
+  color: var(--icon-brand-base, var(--icon-strong-base));
+}
+
+[data-slot="task-list-item"][data-state="done"] svg {
+  color: var(--icon-success-base);
+}
+
+[data-slot="task-list-item"][data-state="done"] span {
+  color: var(--text-weak);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-base);
+}
+
+/*
+ * Cancelled has to read differently from done at a glance: when you are checking
+ * what an agent did, "finished" and "abandoned" are the distinction that matters,
+ * and both struck through made them the same shape. Done keeps the strikethrough
+ * and the success tick; cancelled loses the strikethrough and fades instead.
+ */
+[data-slot="task-list-item"][data-state="cancelled"] {
+  opacity: 0.55;
+}
+
+[data-slot="task-list-item"][data-state="cancelled"] span {
+  color: var(--text-weak);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="task-list"] {
+    animation: task-list-enter 200ms cubic-bezier(0.85, 0, 0.15, 1) both;
+  }
+}
+
+@keyframes task-list-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

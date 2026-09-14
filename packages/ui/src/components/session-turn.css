@@ -28,7 +28,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 18px;
+    gap: 16px;
     overflow-anchor: none;
 
     [data-slot="session-turn-badge"] {
@@ -250,8 +250,8 @@
   }
 
   [data-slot="session-turn-summary-title"] {
-    font-size: 13px;
-    /* text-12-medium */
+    font-size: var(--font-size-small);
+    /* text-13-medium */
     font-weight: 500;
     color: var(--text-weak);
   }
@@ -264,6 +264,7 @@
 
   [data-slot="session-turn-markdown"] {
     &[data-diffs="true"] {
+      /* Deliberately off-ramp: 15px provides slightly enlarged markdown body sizing when rendered alongside code diffs. */
       font-size: 15px;
     }
 
@@ -546,8 +547,8 @@
   }
 
   [data-slot="session-turn-details-text"] {
-    font-size: 13px;
-    /* text-12-medium */
+    font-size: var(--font-size-small);
+    /* text-13-medium */
     font-weight: 500;
   }
 
