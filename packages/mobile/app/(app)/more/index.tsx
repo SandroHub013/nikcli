@@ -75,10 +75,7 @@ export default function MoreScreen() {
         </Link>
         <Divider inset={20} />
         <Link href={"/more/observability" as Href} asChild>
-          <SettingsNavCard
-            title="Observability"
-            description="Toggle OpenTelemetry and inspect OTLP export status."
-          />
+          <SettingsNavCard title="Observability" description="Toggle OpenTelemetry and inspect OTLP export status." />
         </Link>
         <Divider inset={20} />
         <Link href={"/more/host" as Href} asChild>
@@ -92,17 +89,11 @@ export default function MoreScreen() {
 
       <Section label="Appearance">
         <Link href={"/more/settings/appearance" as Href} asChild>
-          <SettingsNavCard
-            title="Appearance"
-            description="Wallpaper, math rendering, and rotating tips."
-          />
+          <SettingsNavCard title="Appearance" description="Wallpaper, math rendering, and rotating tips." />
         </Link>
         <Divider inset={20} />
         <Link href="/more/settings/providers" asChild>
-          <SettingsNavCard
-            title="Fusion"
-            description="OpenRouter Fusion presets live with models in Settings."
-          />
+          <SettingsNavCard title="Fusion" description="OpenRouter Fusion presets live with models in Settings." />
         </Link>
         <Divider inset={20} />
         <Link href="/more/settings" asChild>

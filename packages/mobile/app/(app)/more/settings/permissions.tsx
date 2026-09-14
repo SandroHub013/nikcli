@@ -105,12 +105,7 @@ export default function PermissionsSettingsScreen() {
       >
         {message ? <ErrorBanner message={message} /> : null}
 
-        <SurfaceCard
-          eyebrow="Presets"
-          title={permissionModeTitle(mode)}
-          description={permissionModeDescription(mode)}
-        >
-
+        <SurfaceCard eyebrow="Presets" title={permissionModeTitle(mode)} description={permissionModeDescription(mode)}>
           <View className="mt-4 gap-2">
             {PERMISSION_PRESETS.map((preset) => {
               const active = mode === preset
@@ -156,7 +151,6 @@ export default function PermissionsSettingsScreen() {
           title="Per-tool rules"
           description="Override individual tools. Choosing Ask, Allow, or Deny here switches the host into Custom mode when it no longer matches a preset."
         >
-
           <View className="mt-4">
             {PERMISSION_ITEMS.map((item, index) => {
               const current = getPermissionActionFor(permission, item.id)

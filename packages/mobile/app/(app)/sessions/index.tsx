@@ -184,7 +184,13 @@ export default function SessionsScreen() {
   }, [seen, seenReady, sessions])
 
   const refreshControlElement = useMemo(
-    () => <RefreshControl refreshing={refreshing} onRefresh={() => void load(searchRef.current, true)} tintColor={palette.muted} />,
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={() => void load(searchRef.current, true)}
+        tintColor={palette.muted}
+      />
+    ),
     [refreshing, load, palette.muted],
   )
 
@@ -232,9 +238,7 @@ export default function SessionsScreen() {
   const projects = bootstrap?.projects ?? []
   const visibleSessions = useMemo(
     () =>
-      sessions
-        .filter((item) => matchesFilter(item, filter))
-        .sort((a, b) => b.info.time.updated - a.info.time.updated),
+      sessions.filter((item) => matchesFilter(item, filter)).sort((a, b) => b.info.time.updated - a.info.time.updated),
     [filter, sessions],
   )
   const sections: SessionSection[] = useMemo(

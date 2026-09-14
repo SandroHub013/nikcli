@@ -6,9 +6,7 @@ import { parsePairingPayload } from "./pairing"
 describe("parsePairingPayload", () => {
   test("reads the CLI / TUI nikcli://connect deep link", () => {
     expect(
-      parsePairingPayload(
-        "nikcli://connect?server=http://192.168.1.10:4096&token=nkm_abc&directory=/Users/me/proj",
-      ),
+      parsePairingPayload("nikcli://connect?server=http://192.168.1.10:4096&token=nkm_abc&directory=/Users/me/proj"),
     ).toEqual({
       url: "http://192.168.1.10:4096",
       token: "nkm_abc",
@@ -18,9 +16,7 @@ describe("parsePairingPayload", () => {
 
   test("accepts the root nikcli:// form and encoded query values", () => {
     expect(
-      parsePairingPayload(
-        "nikcli://?server=http%3A%2F%2F10.0.0.4%3A4096&token=nkm_xyz&directory=%2Ftmp%2Fapp",
-      ),
+      parsePairingPayload("nikcli://?server=http%3A%2F%2F10.0.0.4%3A4096&token=nkm_xyz&directory=%2Ftmp%2Fapp"),
     ).toEqual({
       url: "http://10.0.0.4:4096",
       token: "nkm_xyz",

@@ -430,324 +430,321 @@ export default function EditorScreen() {
       {/* ── Header with glass treatment ── */}
       <View
         style={{
-            paddingTop: top + 8,
-            paddingBottom: 10,
-            paddingHorizontal: 16,
+          paddingTop: top + 8,
+          paddingBottom: 10,
+          paddingHorizontal: 16,
+          overflow: "hidden",
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: isDark ? hexToRgba(palette.ink, 0.07) : hexToRgba(palette.border, 0.8),
+        }}
+      >
+        {/* Layer 1: Full-width glass background */}
+        <AdaptiveBlur
+          tint={isDark ? "dark" : "light"}
+          intensity={isDark ? 90 : 80}
+          style={StyleSheet.absoluteFill}
+          fallbackColor={isDark ? "rgba(17,17,17,0.85)" : "rgba(247,246,242,0.80)"}
+          pointerEvents="none"
+        />
+        {/* Layer 2: Semi-transparent overlay */}
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: isDark ? "rgba(0,0,0,0.32)" : "rgba(247,246,242,0.22)",
+            },
+          ]}
+          pointerEvents="none"
+        />
+
+        {/* Inner glass card */}
+        <View
+          style={{
             overflow: "hidden",
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: isDark ? hexToRgba(palette.ink, 0.07) : hexToRgba(palette.border, 0.8),
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.80)",
+            padding: 12,
           }}
         >
-          {/* Layer 1: Full-width glass background */}
-          <AdaptiveBlur
-            tint={isDark ? "dark" : "light"}
-            intensity={isDark ? 90 : 80}
-            style={StyleSheet.absoluteFill}
-            fallbackColor={isDark ? "rgba(17,17,17,0.85)" : "rgba(247,246,242,0.80)"}
-            pointerEvents="none"
-          />
-          {/* Layer 2: Semi-transparent overlay */}
           <View
             style={[
               StyleSheet.absoluteFill,
               {
-                backgroundColor: isDark ? "rgba(0,0,0,0.32)" : "rgba(247,246,242,0.22)",
+                backgroundColor: isDark ? "rgba(24,24,24,0.72)" : "rgba(255,255,255,0.68)",
               },
             ]}
             pointerEvents="none"
           />
 
-          {/* Inner glass card */}
+          {/* Bottom gradient */}
           <View
             style={{
-              overflow: "hidden",
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.80)",
-              padding: 12,
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 24,
+              backgroundColor: isDark ? "rgba(255,255,255,0.015)" : "rgba(239,237,232,0.14)",
             }}
-          >
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  backgroundColor: isDark ? "rgba(24,24,24,0.72)" : "rgba(255,255,255,0.68)",
-                },
-              ]}
-              pointerEvents="none"
-            />
+            pointerEvents="none"
+          />
 
-            {/* Bottom gradient */}
-            <View
-              style={{
-                position: "absolute",
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 24,
-                backgroundColor: isDark ? "rgba(255,255,255,0.015)" : "rgba(239,237,232,0.14)",
-              }}
-              pointerEvents="none"
-            />
+          {/* ── Top row: back, breadcrumb, actions ── */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {renderChromeButton(backScale, <ArrowLeft size={16} color={palette.ink} strokeWidth={2.2} />, handleBack, {
+              label: "Go back",
+            })}
 
-            {/* ── Top row: back, breadcrumb, actions ── */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              {renderChromeButton(
-                backScale,
-                <ArrowLeft size={16} color={palette.ink} strokeWidth={2.2} />,
-                handleBack,
-                { label: "Go back" },
-              )}
-
-              {/* Breadcrumb with git status */}
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <EditorBreadcrumb
-                    rootLabel={(directory ?? "").split("/").pop() ?? "root"}
-                    segments={breadcrumbSegments}
-                    onSegmentPress={(index) => {
-                      if (index < breadcrumbSegments.length - 1) router.back()
-                    }}
-                  />
-                  {gitStatus && <GitFileStatusBadge status={gitStatus} compact />}
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 3,
+            {/* Breadcrumb with git status */}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <EditorBreadcrumb
+                  rootLabel={(directory ?? "").split("/").pop() ?? "root"}
+                  segments={breadcrumbSegments}
+                  onSegmentPress={(index) => {
+                    if (index < breadcrumbSegments.length - 1) router.back()
                   }}
-                >
-                  <View
-                    style={{
-                      borderRadius: 5,
-                      backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 9,
-                        fontWeight: "700",
-                        letterSpacing: 0.6,
-                        color: palette.muted,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {language}
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: palette.muted,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {lineCount}L · {charCount}C
-                  </Text>
-                </View>
+                />
+                {gitStatus && <GitFileStatusBadge status={gitStatus} compact />}
               </View>
-
-              {/* Action buttons */}
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {renderChromeButton(
-                  findScale,
-                  <Search size={16} color={findOpen ? palette.accentLight : palette.ink} strokeWidth={2} />,
-                  openFind,
-                  { active: findOpen, label: "Find in file" },
-                )}
-                {renderChromeButton(
-                  moreScale,
-                  <Ellipsis size={18} color={palette.ink} strokeWidth={2.2} />,
-                  () => toolsSheetRef.current?.present(),
-                  { active: wordWrap || copied, label: "More editor actions" },
-                )}
-
-                {/* View / Edit toggle with animated colors */}
-                <Animated.View style={{ transform: [{ scale: modeScale }] }}>
-                  <Pressable
-                    onPress={() => {
-                      void triggerHaptic("selection")
-                      if (isLargeFile && mode === "view") return
-                      const nextMode = mode === "view" ? "edit" : "view"
-                      setMode(nextMode)
-                      if (nextMode === "edit") requestAnimationFrame(() => editInputRef.current?.focus())
-                    }}
-                    onPressIn={() =>
-                      Animated.spring(modeScale, {
-                        toValue: 0.93,
-                        ...PRESS_SPRING,
-                      }).start()
-                    }
-                    onPressOut={() =>
-                      Animated.spring(modeScale, {
-                        toValue: 1,
-                        ...PRESS_SPRING,
-                      }).start()
-                    }
-                    accessibilityRole="button"
-                    accessibilityLabel={mode === "view" ? "Switch to edit mode" : "Switch to view mode"}
-                  >
-                    <Animated.View
-                      style={{
-                        width: 44,
-                        height: 44,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 12,
-                        borderCurve: "continuous",
-                        borderWidth: 1,
-                        overflow: "hidden",
-                        borderColor: modeProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [
-                            isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.82)",
-                            hexToRgba(palette.ink, isDark ? 0.45 : 0.35),
-                          ],
-                        }),
-                        backgroundColor: modeProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [
-                            isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.58)",
-                            hexToRgba(palette.ink, isDark ? 0.12 : 0.1),
-                          ],
-                        }),
-                      }}
-                    >
-                      {mode === "view" ? (
-                        <Pencil size={16} color={isLargeFile ? palette.muted : palette.ink} strokeWidth={2} />
-                      ) : (
-                        <Eye size={16} color={palette.accentLight} strokeWidth={2} />
-                      )}
-                    </Animated.View>
-                  </Pressable>
-                </Animated.View>
-              </View>
-            </View>
-
-            {/* ── Find bar (animated) ── */}
-            {findOpen ? (
-              <Animated.View
+              <View
                 style={{
-                  opacity: findBarAnim,
-                  transform: [
-                    {
-                      translateY: findBarAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-12, 0],
-                      }),
-                    },
-                  ],
-                  marginTop: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 3,
                 }}
-                pointerEvents="auto"
               >
                 <View
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: isDark ? hexToRgba(palette.ink, 0.1) : hexToRgba(palette.border, 0.65),
-                    overflow: "hidden",
-                    paddingHorizontal: 12,
-                    paddingVertical: 9,
+                    borderRadius: 5,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
                   }}
                 >
-                  <AdaptiveBlur
-                    tint={isDark ? "dark" : "light"}
-                    intensity={40}
-                    style={StyleSheet.absoluteFill}
-                    fallbackColor={isDark ? "rgba(20,20,20,0.92)" : "rgba(255,255,255,0.92)"}
-                    pointerEvents="none"
-                  />
-                  <View
-                    style={[
-                      StyleSheet.absoluteFill,
-                      {
-                        backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.15)",
-                      },
-                    ]}
-                    pointerEvents="none"
-                  />
-                  <Pressable
-                    onPress={() => setCaseSensitive((v) => !v)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Case-sensitive search"
-                    accessibilityState={{ selected: caseSensitive }}
-                    hitSlop={8}
-                    style={{ padding: 4 }}
-                  >
-                    <CaseSensitive size={14} color={caseSensitive ? palette.accent : palette.muted} strokeWidth={2.1} />
-                  </Pressable>
-                  <Search size={14} color={palette.muted} strokeWidth={2.1} />
-                  <TextInput
-                    value={findQuery}
-                    onChangeText={handleFindQueryChange}
-                    placeholder="Find in current file"
-                    placeholderTextColor={palette.muted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardAppearance={isDark ? "dark" : "light"}
-                    onSubmitEditing={() => saveRecentSearch(findQuery)}
-                    style={{
-                      flex: 1,
-                      color: palette.ink,
-                      fontSize: 13,
-                      fontFamily: MONO,
-                      paddingVertical: 0,
-                    }}
-                  />
                   <Text
                     style={{
-                      color: palette.muted,
-                      fontSize: 11,
+                      fontSize: 9,
                       fontWeight: "700",
-                      fontVariant: ["tabular-nums"],
+                      letterSpacing: 0.6,
+                      color: palette.muted,
+                      textTransform: "uppercase",
                     }}
                   >
-                    {findMatches.length ? `${activeFindIndex + 1}/${findMatches.length}` : "0/0"}
+                    {language}
                   </Text>
-                  <Pressable
-                    onPress={() => moveFind(-1)}
-                    disabled={!findMatches.length}
-                    accessibilityRole="button"
-                    accessibilityLabel="Previous match"
-                    accessibilityState={{ disabled: !findMatches.length }}
-                    hitSlop={8}
-                  >
-                    <ChevronUp size={15} color={findMatches.length ? palette.ink : palette.muted} strokeWidth={2.3} />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => moveFind(1)}
-                    disabled={!findMatches.length}
-                    accessibilityRole="button"
-                    accessibilityLabel="Next match"
-                    accessibilityState={{ disabled: !findMatches.length }}
-                    hitSlop={8}
-                  >
-                    <ChevronDown size={15} color={findMatches.length ? palette.ink : palette.muted} strokeWidth={2.3} />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      handleFindQueryChange("")
-                      setFindOpen(false)
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close find"
-                    hitSlop={8}
-                  >
-                    <X size={15} color={palette.muted} strokeWidth={2.3} />
-                  </Pressable>
                 </View>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: palette.muted,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {lineCount}L · {charCount}C
+                </Text>
+              </View>
+            </View>
+
+            {/* Action buttons */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {renderChromeButton(
+                findScale,
+                <Search size={16} color={findOpen ? palette.accentLight : palette.ink} strokeWidth={2} />,
+                openFind,
+                { active: findOpen, label: "Find in file" },
+              )}
+              {renderChromeButton(
+                moreScale,
+                <Ellipsis size={18} color={palette.ink} strokeWidth={2.2} />,
+                () => toolsSheetRef.current?.present(),
+                { active: wordWrap || copied, label: "More editor actions" },
+              )}
+
+              {/* View / Edit toggle with animated colors */}
+              <Animated.View style={{ transform: [{ scale: modeScale }] }}>
+                <Pressable
+                  onPress={() => {
+                    void triggerHaptic("selection")
+                    if (isLargeFile && mode === "view") return
+                    const nextMode = mode === "view" ? "edit" : "view"
+                    setMode(nextMode)
+                    if (nextMode === "edit") requestAnimationFrame(() => editInputRef.current?.focus())
+                  }}
+                  onPressIn={() =>
+                    Animated.spring(modeScale, {
+                      toValue: 0.93,
+                      ...PRESS_SPRING,
+                    }).start()
+                  }
+                  onPressOut={() =>
+                    Animated.spring(modeScale, {
+                      toValue: 1,
+                      ...PRESS_SPRING,
+                    }).start()
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={mode === "view" ? "Switch to edit mode" : "Switch to view mode"}
+                >
+                  <Animated.View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 12,
+                      borderCurve: "continuous",
+                      borderWidth: 1,
+                      overflow: "hidden",
+                      borderColor: modeProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [
+                          isDark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.82)",
+                          hexToRgba(palette.ink, isDark ? 0.45 : 0.35),
+                        ],
+                      }),
+                      backgroundColor: modeProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [
+                          isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.58)",
+                          hexToRgba(palette.ink, isDark ? 0.12 : 0.1),
+                        ],
+                      }),
+                    }}
+                  >
+                    {mode === "view" ? (
+                      <Pencil size={16} color={isLargeFile ? palette.muted : palette.ink} strokeWidth={2} />
+                    ) : (
+                      <Eye size={16} color={palette.accentLight} strokeWidth={2} />
+                    )}
+                  </Animated.View>
+                </Pressable>
               </Animated.View>
-            ) : null}
+            </View>
           </View>
+
+          {/* ── Find bar (animated) ── */}
+          {findOpen ? (
+            <Animated.View
+              style={{
+                opacity: findBarAnim,
+                transform: [
+                  {
+                    translateY: findBarAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-12, 0],
+                    }),
+                  },
+                ],
+                marginTop: 10,
+              }}
+              pointerEvents="auto"
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: isDark ? hexToRgba(palette.ink, 0.1) : hexToRgba(palette.border, 0.65),
+                  overflow: "hidden",
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                }}
+              >
+                <AdaptiveBlur
+                  tint={isDark ? "dark" : "light"}
+                  intensity={40}
+                  style={StyleSheet.absoluteFill}
+                  fallbackColor={isDark ? "rgba(20,20,20,0.92)" : "rgba(255,255,255,0.92)"}
+                  pointerEvents="none"
+                />
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.15)",
+                    },
+                  ]}
+                  pointerEvents="none"
+                />
+                <Pressable
+                  onPress={() => setCaseSensitive((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Case-sensitive search"
+                  accessibilityState={{ selected: caseSensitive }}
+                  hitSlop={8}
+                  style={{ padding: 4 }}
+                >
+                  <CaseSensitive size={14} color={caseSensitive ? palette.accent : palette.muted} strokeWidth={2.1} />
+                </Pressable>
+                <Search size={14} color={palette.muted} strokeWidth={2.1} />
+                <TextInput
+                  value={findQuery}
+                  onChangeText={handleFindQueryChange}
+                  placeholder="Find in current file"
+                  placeholderTextColor={palette.muted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardAppearance={isDark ? "dark" : "light"}
+                  onSubmitEditing={() => saveRecentSearch(findQuery)}
+                  style={{
+                    flex: 1,
+                    color: palette.ink,
+                    fontSize: 13,
+                    fontFamily: MONO,
+                    paddingVertical: 0,
+                  }}
+                />
+                <Text
+                  style={{
+                    color: palette.muted,
+                    fontSize: 11,
+                    fontWeight: "700",
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {findMatches.length ? `${activeFindIndex + 1}/${findMatches.length}` : "0/0"}
+                </Text>
+                <Pressable
+                  onPress={() => moveFind(-1)}
+                  disabled={!findMatches.length}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous match"
+                  accessibilityState={{ disabled: !findMatches.length }}
+                  hitSlop={8}
+                >
+                  <ChevronUp size={15} color={findMatches.length ? palette.ink : palette.muted} strokeWidth={2.3} />
+                </Pressable>
+                <Pressable
+                  onPress={() => moveFind(1)}
+                  disabled={!findMatches.length}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next match"
+                  accessibilityState={{ disabled: !findMatches.length }}
+                  hitSlop={8}
+                >
+                  <ChevronDown size={15} color={findMatches.length ? palette.ink : palette.muted} strokeWidth={2.3} />
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    handleFindQueryChange("")
+                    setFindOpen(false)
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close find"
+                  hitSlop={8}
+                >
+                  <X size={15} color={palette.muted} strokeWidth={2.3} />
+                </Pressable>
+              </View>
+            </Animated.View>
+          ) : null}
         </View>
+      </View>
 
       {/* ── Body ── */}
       <View style={{ flex: 1 }}>

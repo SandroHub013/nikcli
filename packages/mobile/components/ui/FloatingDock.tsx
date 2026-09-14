@@ -132,7 +132,9 @@ export function FloatingDock({
               ) : (
                 <Plus size={18} color={contrastOn(palette.accent)} strokeWidth={2.4} />
               )}
-              <Text style={{ color: contrastOn(palette.accent), ...typeStyle(16, { weight: "600" }) }}>{actionLabel}</Text>
+              <Text style={{ color: contrastOn(palette.accent), ...typeStyle(16, { weight: "600" }) }}>
+                {actionLabel}
+              </Text>
             </View>
           </Pressable>
         </Animated.View>

@@ -927,11 +927,7 @@ export default function UserScreen() {
             <View style={{ padding: 20, flexDirection: "row", alignItems: "center", gap: 18 }}>
               <AnimatedAvatar user={currentUser} size={80} />
               <View style={{ flex: 1, gap: 6 }}>
-                <Text
-                  selectable
-                  style={{ color: palette.ink, ...typeStyle(22, { weight: "800" }) }}
-                  numberOfLines={1}
-                >
+                <Text selectable style={{ color: palette.ink, ...typeStyle(22, { weight: "800" }) }} numberOfLines={1}>
                   {currentUser.display_name || currentUser.username}
                 </Text>
                 <Text selectable style={{ color: palette.soft, ...typeStyle(13) }}>

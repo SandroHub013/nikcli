@@ -147,7 +147,8 @@ function filePresentation(node: FileNode, palette: ReturnType<typeof useAppTheme
   const textExts = new Set(["md", "mdx", "txt", "log", "yml", "yaml", "toml", "ini", "env"])
   const imageExts = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"])
   if (["json", "jsonc"].includes(ext)) return { Icon: FileJson, color: palette.success, label: "JSON" }
-  if (["css", "scss", "sass", "less"].includes(ext)) return { Icon: Braces, color: palette.ink, label: ext.toUpperCase() }
+  if (["css", "scss", "sass", "less"].includes(ext))
+    return { Icon: Braces, color: palette.ink, label: ext.toUpperCase() }
   if (["sql", "db", "sqlite"].includes(ext)) return { Icon: Database, color: palette.accent, label: ext.toUpperCase() }
   if (["lock", "plist"].includes(ext) || node.name === "package.json")
     return { Icon: Package, color: palette.warn, label: "Package" }
@@ -206,8 +207,7 @@ function ChromeIconButton({
 
 function GitTreeMarker({ status, dot }: { status?: "added" | "modified" | "deleted"; dot?: boolean }) {
   const { palette } = useAppTheme()
-  const color =
-    status === "added" ? palette.success : status === "deleted" ? palette.danger : palette.warn
+  const color = status === "added" ? palette.success : status === "deleted" ? palette.danger : palette.warn
 
   if (dot) {
     return <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: color, opacity: 0.78 }} />
@@ -644,11 +644,7 @@ export default function ExplorerScreen() {
               )}
             </View>
 
-            <Icon
-              size={16}
-              color={isDir && isExpanded ? palette.warn : presentation.color}
-              strokeWidth={2}
-            />
+            <Icon size={16} color={isDir && isExpanded ? palette.warn : presentation.color} strokeWidth={2} />
 
             <Text
               numberOfLines={1}

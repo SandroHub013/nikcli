@@ -26,7 +26,11 @@ export function SurfaceCard({
   const { palette } = useAppTheme()
   const compact = width < 390
   const backgroundColor =
-    tone === "panel" ? palette.panel : tone === "background" ? hexToRgba(palette.background, 0.72) : palette.surfaceRaised
+    tone === "panel"
+      ? palette.panel
+      : tone === "background"
+        ? hexToRgba(palette.background, 0.72)
+        : palette.surfaceRaised
   const borderColor = hexToRgba(palette.ink, 0.08)
 
   return (

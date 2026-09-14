@@ -282,8 +282,7 @@ export function SessionListItem(props: {
                 {hasChanges ? (
                   <Text style={{ color: palette.muted, ...typeStyle(13) }}>
                     {"· "}
-                    <Text style={{ color: palette.success, fontVariant: ["tabular-nums"] }}>+{additions}</Text>
-                    {" "}
+                    <Text style={{ color: palette.success, fontVariant: ["tabular-nums"] }}>+{additions}</Text>{" "}
                     <Text style={{ color: palette.danger, fontVariant: ["tabular-nums"] }}>-{deletions}</Text>
                   </Text>
                 ) : null}

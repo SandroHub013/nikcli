@@ -3,6 +3,30 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.351.0 (September 2026)
+
+## Core
+
+- Improve hostLanGet listener handling (@nikomatt69)
+- Implement LAN pairing functionality for mobile devices (@nikomatt69)
+
+## Mobile
+
+- Update layout and styling across multiple screens (@nikomatt69)
+- Enhance bottom sheet and session components (@nikomatt69)
+- Enhance session screen and composer UI (@nikomatt69)
+- Integrate expo-camera and update app permissions (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mobile): integrate expo-camera and update app permissions
+  - feat(mobile): enhance session screen and composer UI
+  - feat(mobile): enhance bottom sheet and session components
+  - feat(mobile): update layout and styling across multiple screens
+  - feat(mobile): implement LAN pairing functionality for mobile devices
+  - fix(mobile): improve hostLanGet listener handling
+
 ## v1.350.0 (September 2026)
 
 ## Core

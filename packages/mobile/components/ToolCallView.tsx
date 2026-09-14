@@ -121,7 +121,13 @@ export function ToolCallView(props: { part: ToolPart }) {
   const statusLabel =
     status === "running" ? "Running" : status === "completed" ? "Completed" : status === "error" ? "Failed" : "Idle"
   const statusTone =
-    status === "running" ? palette.warn : status === "completed" ? palette.success : status === "error" ? palette.danger : palette.muted
+    status === "running"
+      ? palette.warn
+      : status === "completed"
+        ? palette.success
+        : status === "error"
+          ? palette.danger
+          : palette.muted
   const statusBackground = hexToRgba(statusTone, isDark ? 0.12 : 0.1)
   const statusBorder = hexToRgba(statusTone, isDark ? 0.22 : 0.2)
 
@@ -163,73 +169,73 @@ export function ToolCallView(props: { part: ToolPart }) {
             paddingVertical: 10,
           }}
         >
-        <View className="flex-1 flex-row items-center gap-2">
-          <Animated.View
-            style={{
-              width: 8,
-              height: 8,
-
-              borderRadius: 4,
-              opacity: status === "running" ? pulseAnim : 1,
-              backgroundColor: statusDotColor(status, {
-                warn: palette.warn,
-                success: palette.success,
-                danger: palette.danger,
-                muted: palette.muted,
-              }),
-            }}
-          />
-          <Icon size={15} color={palette.accentLight} strokeWidth={2.1} />
-          <View className="min-w-0 flex-1">
-            <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
-              {props.part.tool || "Unknown tool"}
-            </Text>
-            {title ? (
-              <Text className="mt-0.5 text-[11px] leading-4 text-soft" numberOfLines={2}>
-                {title}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-        <View className="flex-row items-center gap-2">
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: statusBorder,
-              backgroundColor: statusBackground,
-              paddingHorizontal: 9,
-              paddingVertical: 6,
-            }}
-          >
-            <Text
+          <View className="flex-1 flex-row items-center gap-2">
+            <Animated.View
               style={{
-                color: statusTone,
-                fontSize: 10,
-                fontWeight: "700",
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
+                width: 8,
+                height: 8,
+
+                borderRadius: 4,
+                opacity: status === "running" ? pulseAnim : 1,
+                backgroundColor: statusDotColor(status, {
+                  warn: palette.warn,
+                  success: palette.success,
+                  danger: palette.danger,
+                  muted: palette.muted,
+                }),
+              }}
+            />
+            <Icon size={15} color={palette.accentLight} strokeWidth={2.1} />
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
+                {props.part.tool || "Unknown tool"}
+              </Text>
+              {title ? (
+                <Text className="mt-0.5 text-[11px] leading-4 text-soft" numberOfLines={2}>
+                  {title}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <View className="flex-row items-center gap-2">
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: statusBorder,
+                backgroundColor: statusBackground,
+                paddingHorizontal: 9,
+                paddingVertical: 6,
               }}
             >
-              {statusLabel}
-            </Text>
-          </View>
-          {timing ? (
-            <View className="rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
-              <Text className="text-[10px] text-soft" style={{ fontVariant: ["tabular-nums"] }}>
-                {timing}
+              <Text
+                style={{
+                  color: statusTone,
+                  fontSize: 10,
+                  fontWeight: "700",
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                }}
+              >
+                {statusLabel}
               </Text>
             </View>
-          ) : null}
-          {open ? (
-            <ChevronDown size={14} color={palette.muted} strokeWidth={2.1} />
-          ) : (
-            <ChevronRight size={14} color={palette.muted} strokeWidth={2.1} />
-          )}
-        </View>
+            {timing ? (
+              <View className="rounded-full border border-border/60 bg-background/80 px-2.5 py-1">
+                <Text className="text-[10px] text-soft" style={{ fontVariant: ["tabular-nums"] }}>
+                  {timing}
+                </Text>
+              </View>
+            ) : null}
+            {open ? (
+              <ChevronDown size={14} color={palette.muted} strokeWidth={2.1} />
+            ) : (
+              <ChevronRight size={14} color={palette.muted} strokeWidth={2.1} />
+            )}
+          </View>
         </View>
       </Pressable>
       {open ? (

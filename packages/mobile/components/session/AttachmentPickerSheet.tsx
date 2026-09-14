@@ -164,15 +164,7 @@ export function AttachmentPickerSheet({ visible, onClose, onFile }: AttachmentPi
   )
 }
 
-function SourceRow({
-  item,
-  bordered,
-  onPress,
-}: {
-  item: AttachmentItemDef
-  bordered: boolean
-  onPress(): void
-}) {
+function SourceRow({ item, bordered, onPress }: { item: AttachmentItemDef; bordered: boolean; onPress(): void }) {
   const { palette, isDark } = useAppTheme()
   const Icon = item.icon
 

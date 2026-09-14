@@ -41,7 +41,9 @@ export function ListRow({
       <Pressable
         {...props}
         accessibilityRole={props.onPress ? "button" : undefined}
-        accessibilityLabel={props.accessibilityLabel ?? (typeof subtitle === "string" ? `${title}, ${subtitle}` : title)}
+        accessibilityLabel={
+          props.accessibilityLabel ?? (typeof subtitle === "string" ? `${title}, ${subtitle}` : title)
+        }
         accessibilityState={{ ...props.accessibilityState, disabled: Boolean(props.disabled) }}
         onPressIn={(event) => {
           setPressed(true)
@@ -71,7 +73,10 @@ export function ListRow({
         >
           {leading ? <View style={{ alignSelf: "flex-start", marginTop: 5 }}>{leading}</View> : null}
           <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-            <Text style={{ color: palette.ink, ...typeStyle(15, { weight: "600" }) }} numberOfLines={fontScale > 1 ? undefined : 1}>
+            <Text
+              style={{ color: palette.ink, ...typeStyle(15, { weight: "600" }) }}
+              numberOfLines={fontScale > 1 ? undefined : 1}
+            >
               {title}
             </Text>
             {subtitle ? (
@@ -84,7 +89,10 @@ export function ListRow({
               )
             ) : null}
           </View>
-          {trailing ?? ((showChevron ?? Boolean(props.onPress)) ? <ChevronRight size={16} color={palette.muted} strokeWidth={2} /> : null)}
+          {trailing ??
+            ((showChevron ?? Boolean(props.onPress)) ? (
+              <ChevronRight size={16} color={palette.muted} strokeWidth={2} />
+            ) : null)}
         </View>
       </Pressable>
     </Animated.View>

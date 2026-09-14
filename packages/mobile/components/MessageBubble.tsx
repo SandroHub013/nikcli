@@ -490,7 +490,9 @@ function ScrollableCodeBlock(props: { node: ASTNode; textStyle: any; backgroundC
               transform: [{ scale: pressed ? 0.97 : 1 }],
             })}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6 }}
+            >
               <Copy size={10} color={copied ? palette.success : palette.muted} strokeWidth={2} />
               <Text className="text-[10px] font-semibold" style={{ color: copied ? palette.success : palette.muted }}>
                 {copied ? "Copied" : "Copy"}
@@ -778,299 +780,299 @@ function MessageBubbleImpl(props: MessageBubbleProps) {
             ) : null}
           </>
         ) : (
-        <View style={{ width: "100%" }}>
-          {text || assistantError ? (
-            <View className="min-w-0 pb-2">
-              {text ? (
-                <MessageBodyMarkdown
-                  text={text}
-                  rules={markdownRules}
-                  ink={palette.ink}
-                  codeBackground={palette.codeBackground}
-                  style={{
-                    body: {
-                      color: palette.ink,
-                      fontSize: 17,
-                      lineHeight: 24,
-                      marginBottom: 0,
-                    },
-                    paragraph: { marginTop: 0, marginBottom: 8 },
-                    heading1: {
-                      color: palette.ink,
-                      fontSize: 18,
-                      fontWeight: "700",
-                      marginTop: 12,
-                      marginBottom: 8,
-                    },
-                    heading2: {
-                      color: palette.ink,
-                      fontSize: 16,
-                      fontWeight: "700",
-                      marginTop: 10,
-                      marginBottom: 6,
-                    },
-                    heading3: {
-                      color: palette.ink,
-                      fontSize: 14,
-                      fontWeight: "700",
-                      marginTop: 8,
-                      marginBottom: 4,
-                    },
-                    heading4: {
-                      color: palette.ink,
-                      fontSize: 12,
-                      fontWeight: "600",
-                      marginTop: 4,
-                      marginBottom: 3,
-                    },
-                    heading5: {
-                      color: palette.ink,
-                      fontSize: 11,
-                      fontWeight: "600",
-                      marginTop: 4,
-                      marginBottom: 2,
-                    },
-                    heading6: {
-                      color: palette.muted,
-                      fontSize: 10,
-                      fontWeight: "600",
-                      marginTop: 4,
-                      marginBottom: 2,
-                    },
-                    strong: { fontWeight: "700" },
-                    em: { fontStyle: "italic" },
-                    s: {
-                      textDecorationLine: "line-through",
-                      color: palette.muted,
-                    },
-                    hr: {
-                      backgroundColor: palette.border,
-                      height: StyleSheet.hairlineWidth,
-                      marginVertical: 12,
-                    },
-                    table: {
+          <View style={{ width: "100%" }}>
+            {text || assistantError ? (
+              <View className="min-w-0 pb-2">
+                {text ? (
+                  <MessageBodyMarkdown
+                    text={text}
+                    rules={markdownRules}
+                    ink={palette.ink}
+                    codeBackground={palette.codeBackground}
+                    style={{
+                      body: {
+                        color: palette.ink,
+                        fontSize: 17,
+                        lineHeight: 24,
+                        marginBottom: 0,
+                      },
+                      paragraph: { marginTop: 0, marginBottom: 8 },
+                      heading1: {
+                        color: palette.ink,
+                        fontSize: 18,
+                        fontWeight: "700",
+                        marginTop: 12,
+                        marginBottom: 8,
+                      },
+                      heading2: {
+                        color: palette.ink,
+                        fontSize: 16,
+                        fontWeight: "700",
+                        marginTop: 10,
+                        marginBottom: 6,
+                      },
+                      heading3: {
+                        color: palette.ink,
+                        fontSize: 14,
+                        fontWeight: "700",
+                        marginTop: 8,
+                        marginBottom: 4,
+                      },
+                      heading4: {
+                        color: palette.ink,
+                        fontSize: 12,
+                        fontWeight: "600",
+                        marginTop: 4,
+                        marginBottom: 3,
+                      },
+                      heading5: {
+                        color: palette.ink,
+                        fontSize: 11,
+                        fontWeight: "600",
+                        marginTop: 4,
+                        marginBottom: 2,
+                      },
+                      heading6: {
+                        color: palette.muted,
+                        fontSize: 10,
+                        fontWeight: "600",
+                        marginTop: 4,
+                        marginBottom: 2,
+                      },
+                      strong: { fontWeight: "700" },
+                      em: { fontStyle: "italic" },
+                      s: {
+                        textDecorationLine: "line-through",
+                        color: palette.muted,
+                      },
+                      hr: {
+                        backgroundColor: palette.border,
+                        height: StyleSheet.hairlineWidth,
+                        marginVertical: 12,
+                      },
+                      table: {
+                        borderWidth: 1,
+                        borderColor: palette.border,
+                        borderRadius: 10,
+                        marginVertical: 10,
+                        overflow: "hidden",
+                      },
+                      thead: { backgroundColor: palette.surface },
+                      th: {
+                        color: palette.ink,
+                        fontWeight: "600",
+                        fontSize: 11,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        borderRightWidth: 1,
+                        borderRightColor: palette.border,
+                        borderBottomWidth: 2,
+                        borderBottomColor: palette.border,
+                      },
+                      tr: {
+                        borderBottomWidth: 1,
+                        borderBottomColor: palette.border,
+                      },
+                      td: {
+                        color: palette.soft,
+                        fontSize: 11,
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRightWidth: 1,
+                        borderRightColor: palette.border,
+                      },
+                      bullet_list: { marginVertical: 4 },
+                      ordered_list: { marginVertical: 4 },
+                      list_item: { marginBottom: 5 },
+                      bullet_list_icon: {
+                        color: palette.accentLight,
+                        marginRight: 6,
+                      },
+                      bullet_list_content: {
+                        flex: undefined,
+                        flexGrow: 1,
+                        flexShrink: 1,
+                      },
+                      ordered_list_icon: {
+                        color: palette.accentLight,
+                        marginRight: 6,
+                      },
+                      ordered_list_content: {
+                        flex: undefined,
+                        flexGrow: 1,
+                        flexShrink: 1,
+                      },
+                      code_inline: {
+                        color: palette.accentLight,
+                        backgroundColor: palette.codeBackground,
+                        borderRadius: 4,
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        fontFamily: "Menlo",
+                        fontSize: 11,
+                      },
+                      code_block: {
+                        color: palette.codeText,
+                        fontSize: 11,
+                        lineHeight: 16,
+                        fontFamily: "Menlo",
+                        includeFontPadding: false,
+                      },
+                      fence: {
+                        color: palette.codeText,
+                        fontSize: 11,
+                        lineHeight: 16,
+                        fontFamily: "Menlo",
+                        includeFontPadding: false,
+                      },
+                      blockquote: {
+                        borderLeftWidth: 3,
+                        borderLeftColor: palette.accent,
+                        paddingLeft: 12,
+                        paddingVertical: 4,
+                        marginVertical: 8,
+                        backgroundColor: `${palette.accent}10`,
+                        borderRadius: 4,
+                      },
+                      link: {
+                        color: palette.accentLight,
+                        textDecorationLine: "underline",
+                      },
+                    }}
+                  />
+                ) : null}
+
+                {assistantError ? (
+                  <View
+                    style={{
+                      alignSelf: "stretch",
+                      borderRadius: 14,
+                      borderCurve: "continuous",
                       borderWidth: 1,
-                      borderColor: palette.border,
-                      borderRadius: 10,
-                      marginVertical: 10,
-                      overflow: "hidden",
-                    },
-                    thead: { backgroundColor: palette.surface },
-                    th: {
-                      color: palette.ink,
-                      fontWeight: "600",
-                      fontSize: 11,
-                      paddingHorizontal: 10,
-                      paddingVertical: 8,
-                      borderRightWidth: 1,
-                      borderRightColor: palette.border,
-                      borderBottomWidth: 2,
-                      borderBottomColor: palette.border,
-                    },
-                    tr: {
-                      borderBottomWidth: 1,
-                      borderBottomColor: palette.border,
-                    },
-                    td: {
-                      color: palette.soft,
-                      fontSize: 11,
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      borderRightWidth: 1,
-                      borderRightColor: palette.border,
-                    },
-                    bullet_list: { marginVertical: 4 },
-                    ordered_list: { marginVertical: 4 },
-                    list_item: { marginBottom: 5 },
-                    bullet_list_icon: {
-                      color: palette.accentLight,
-                      marginRight: 6,
-                    },
-                    bullet_list_content: {
-                      flex: undefined,
-                      flexGrow: 1,
-                      flexShrink: 1,
-                    },
-                    ordered_list_icon: {
-                      color: palette.accentLight,
-                      marginRight: 6,
-                    },
-                    ordered_list_content: {
-                      flex: undefined,
-                      flexGrow: 1,
-                      flexShrink: 1,
-                    },
-                    code_inline: {
-                      color: palette.accentLight,
-                      backgroundColor: palette.codeBackground,
-                      borderRadius: 4,
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                      fontFamily: "Menlo",
-                      fontSize: 11,
-                    },
-                    code_block: {
-                      color: palette.codeText,
-                      fontSize: 11,
-                      lineHeight: 16,
-                      fontFamily: "Menlo",
-                      includeFontPadding: false,
-                    },
-                    fence: {
-                      color: palette.codeText,
-                      fontSize: 11,
-                      lineHeight: 16,
-                      fontFamily: "Menlo",
-                      includeFontPadding: false,
-                    },
-                    blockquote: {
-                      borderLeftWidth: 3,
-                      borderLeftColor: palette.accent,
-                      paddingLeft: 12,
-                      paddingVertical: 4,
-                      marginVertical: 8,
-                      backgroundColor: `${palette.accent}10`,
-                      borderRadius: 4,
-                    },
-                    link: {
-                      color: palette.accentLight,
-                      textDecorationLine: "underline",
-                    },
-                  }}
-                />
-              ) : null}
-
-              {assistantError ? (
-                <View
-                  style={{
-                    alignSelf: "stretch",
-                    borderRadius: 14,
-                    borderCurve: "continuous",
-                    borderWidth: 1,
-                    borderColor: hexToRgba(palette.danger, 0.2),
-                    backgroundColor: hexToRgba(palette.danger, 0.08),
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                  }}
-                >
-                  <Text selectable style={{ color: palette.danger, ...typeStyle(14) }}>
-                    {assistantError}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
-          {files.length ? (
-            <View className="gap-2 py-3">
-              {files.map((part) => (
-                <MessageFileView key={part.id} part={part} />
-              ))}
-            </View>
-          ) : null}
-
-          {messageArtifacts.length > 0 ? (
-            <MessageArtifactSection
-              artifacts={messageArtifacts}
-              onOpen={(preview) => {
-                if (props.onOpenArtifact) props.onOpenArtifact(preview)
-                else if (preview.url) void Linking.openURL(preview.url).catch(() => undefined)
-              }}
-            />
-          ) : null}
-
-          {reasoningVisible ? (
-            <View className="py-3">
-              <View className="rounded-[8px] border border-border bg-background/55 p-3">
-                <Pressable
-                  onPress={toggleReasoning}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: reasoningExpanded }}
-                  accessibilityLabel={reasoningExpanded ? "Collapse reasoning" : "Expand reasoning"}
-                  style={({ pressed }) => ({
-                    opacity: pressed ? 0.82 : 1,
-                    transform: [{ scale: pressed ? 0.97 : 1 }],
-                  })}
-                >
-                  <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Animated.View
-                      style={{
-                        transform: [
-                          {
-                            rotate: reasoningRotation.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ["0deg", "90deg"],
-                            }),
-                          },
-                        ],
-                      }}
-                    >
-                      <ChevronRight size={13} color={palette.accentLight} strokeWidth={2.1} />
-                    </Animated.View>
-                    <Text className="flex-1 text-[12px] font-medium text-muted">
-                      {wordCount > 0 ? `Reasoning · ${wordCount.toLocaleString()} words` : "Reasoning"}
+                      borderColor: hexToRgba(palette.danger, 0.2),
+                      backgroundColor: hexToRgba(palette.danger, 0.08),
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <Text selectable style={{ color: palette.danger, ...typeStyle(14) }}>
+                      {assistantError}
                     </Text>
                   </View>
-                </Pressable>
-                {reasoningExpanded ? (
-                  <Text selectable className="mt-2 text-sm leading-5 text-soft">
-                    {reasoningText ||
-                      "Reasoning metadata was returned, but no visible reasoning text was captured for this step."}
-                  </Text>
-                ) : (
-                  <Text className="mt-2 text-sm leading-5 text-soft" numberOfLines={2}>
-                    {reasoningText}
-                  </Text>
-                )}
-              </View>
-            </View>
-          ) : null}
-
-          {tools.length ? (
-            <View className="py-1">
-              <ToolRunGroup tools={tools} />
-            </View>
-          ) : null}
-
-          {patch ? (
-            <View className="py-3">
-              <View className="rounded-[8px] border border-border bg-background/55 p-3">
-                <View className="flex-row items-center justify-between gap-3">
-                  <Text className="flex-1 text-sm font-semibold text-ink">Patch preview</Text>
-                  {!props.diffLoaded ? (
-                    <Pressable
-                      onPress={() => props.onLoadDiff?.(props.message.info.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Load patch diff"
-                    >
-                      <Text className="text-[12px] font-medium text-muted">
-                        {props.diffLoading ? "Loading..." : "Load diff"}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-                <ScrollView className="mt-2 max-h-28" nestedScrollEnabled style={{ flexGrow: 0 }}>
-                  <PathPreview files={patch.files} />
-                </ScrollView>
-                {props.diffLoaded ? (
-                  props.diffs?.length ? (
-                    <DiffViewer diffs={props.diffs} />
-                  ) : (
-                    <View className="mt-3 rounded-[8px] border border-border/70 bg-surface px-3 py-2.5">
-                      <Text className="text-sm leading-5 text-soft">
-                        No structured diff is available for this patch step.
-                      </Text>
-                    </View>
-                  )
                 ) : null}
               </View>
-            </View>
-          ) : null}
+            ) : null}
 
-          {props.isActive && userActions ? (
-            <View className="flex-row flex-wrap gap-2 py-3">{userActions}</View>
-          ) : null}
-        </View>
+            {files.length ? (
+              <View className="gap-2 py-3">
+                {files.map((part) => (
+                  <MessageFileView key={part.id} part={part} />
+                ))}
+              </View>
+            ) : null}
+
+            {messageArtifacts.length > 0 ? (
+              <MessageArtifactSection
+                artifacts={messageArtifacts}
+                onOpen={(preview) => {
+                  if (props.onOpenArtifact) props.onOpenArtifact(preview)
+                  else if (preview.url) void Linking.openURL(preview.url).catch(() => undefined)
+                }}
+              />
+            ) : null}
+
+            {reasoningVisible ? (
+              <View className="py-3">
+                <View className="rounded-[8px] border border-border bg-background/55 p-3">
+                  <Pressable
+                    onPress={toggleReasoning}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: reasoningExpanded }}
+                    accessibilityLabel={reasoningExpanded ? "Collapse reasoning" : "Expand reasoning"}
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.82 : 1,
+                      transform: [{ scale: pressed ? 0.97 : 1 }],
+                    })}
+                  >
+                    <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Animated.View
+                        style={{
+                          transform: [
+                            {
+                              rotate: reasoningRotation.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ["0deg", "90deg"],
+                              }),
+                            },
+                          ],
+                        }}
+                      >
+                        <ChevronRight size={13} color={palette.accentLight} strokeWidth={2.1} />
+                      </Animated.View>
+                      <Text className="flex-1 text-[12px] font-medium text-muted">
+                        {wordCount > 0 ? `Reasoning · ${wordCount.toLocaleString()} words` : "Reasoning"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {reasoningExpanded ? (
+                    <Text selectable className="mt-2 text-sm leading-5 text-soft">
+                      {reasoningText ||
+                        "Reasoning metadata was returned, but no visible reasoning text was captured for this step."}
+                    </Text>
+                  ) : (
+                    <Text className="mt-2 text-sm leading-5 text-soft" numberOfLines={2}>
+                      {reasoningText}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
+
+            {tools.length ? (
+              <View className="py-1">
+                <ToolRunGroup tools={tools} />
+              </View>
+            ) : null}
+
+            {patch ? (
+              <View className="py-3">
+                <View className="rounded-[8px] border border-border bg-background/55 p-3">
+                  <View className="flex-row items-center justify-between gap-3">
+                    <Text className="flex-1 text-sm font-semibold text-ink">Patch preview</Text>
+                    {!props.diffLoaded ? (
+                      <Pressable
+                        onPress={() => props.onLoadDiff?.(props.message.info.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Load patch diff"
+                      >
+                        <Text className="text-[12px] font-medium text-muted">
+                          {props.diffLoading ? "Loading..." : "Load diff"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <ScrollView className="mt-2 max-h-28" nestedScrollEnabled style={{ flexGrow: 0 }}>
+                    <PathPreview files={patch.files} />
+                  </ScrollView>
+                  {props.diffLoaded ? (
+                    props.diffs?.length ? (
+                      <DiffViewer diffs={props.diffs} />
+                    ) : (
+                      <View className="mt-3 rounded-[8px] border border-border/70 bg-surface px-3 py-2.5">
+                        <Text className="text-sm leading-5 text-soft">
+                          No structured diff is available for this patch step.
+                        </Text>
+                      </View>
+                    )
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            {props.isActive && userActions ? (
+              <View className="flex-row flex-wrap gap-2 py-3">{userActions}</View>
+            ) : null}
+          </View>
         )}
       </View>
     </Pressable>

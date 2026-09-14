@@ -61,92 +61,84 @@ function CommandPaletteBody(props: CommandPaletteSheetProps) {
 
   return (
     <View style={{ flex: 1 }}>
-        <View className="border-b border-border px-5 pb-4">
-          <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Commands</Text>
-          <Text className="mt-1.5" style={{ color: palette.ink, ...typeStyle(18, { weight: "700" }) }}>
-            Session command palette
-          </Text>
-          <Text className="mt-1" style={{ color: palette.muted, ...typeStyle(13) }}>
-            Search host commands and mobile quick actions, then prefill or trigger them from one place.
-          </Text>
-        </View>
-
-        <View className="px-5 pt-3 pb-2">
-          <TextField
-            value={props.query}
-            onChangeText={props.onQueryChange}
-            placeholder="Search commands, actions, slash names"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            returnKeyType="search"
-          />
-        </View>
-
-        <ScrollView
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
-          {...sheetScroll}
-        >
-          {props.loading ? (
-            <Text style={{ paddingHorizontal: 20, paddingTop: 20, color: palette.muted, ...typeStyle(14) }}>
-              Loading host commands…
-            </Text>
-          ) : sections.length ? (
-            sections.map(([section, items]) => (
-              <View key={section} style={{ paddingTop: 10 }}>
-                <Text
-                  style={{
-                    paddingHorizontal: 20,
-                    paddingBottom: 4,
-                    color: palette.accentLight,
-                    ...caps(11, { weight: "700" }),
-                  }}
-                >
-                  {section}
-                </Text>
-                {items.map((item, index) => (
-                  <CommandRow
-                    key={item.id}
-                    item={item}
-                    bordered={index < items.length - 1}
-                    onPress={() => {
-                      if (item.disabled) return
-                      void triggerHaptic("selection")
-                      item.onPress()
-                    }}
-                  />
-                ))}
-              </View>
-            ))
-          ) : (
-            <View style={{ alignItems: "center", paddingHorizontal: 32, paddingTop: 36 }}>
-              <Slash size={18} color={palette.muted} strokeWidth={2.1} />
-              <Text style={{ marginTop: 10, color: palette.ink, ...typeStyle(15, { weight: "600" }) }}>
-                No commands found
-              </Text>
-              <Text style={{ marginTop: 4, textAlign: "center", color: palette.muted, ...typeStyle(13) }}>
-                Try another keyword or start a slash command in the composer.
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+      <View className="border-b border-border px-5 pb-4">
+        <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Commands</Text>
+        <Text className="mt-1.5" style={{ color: palette.ink, ...typeStyle(18, { weight: "700" }) }}>
+          Session command palette
+        </Text>
+        <Text className="mt-1" style={{ color: palette.muted, ...typeStyle(13) }}>
+          Search host commands and mobile quick actions, then prefill or trigger them from one place.
+        </Text>
       </View>
-    )
+
+      <View className="px-5 pt-3 pb-2">
+        <TextField
+          value={props.query}
+          onChangeText={props.onQueryChange}
+          placeholder="Search commands, actions, slash names"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          returnKeyType="search"
+        />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) }}
+        {...sheetScroll}
+      >
+        {props.loading ? (
+          <Text style={{ paddingHorizontal: 20, paddingTop: 20, color: palette.muted, ...typeStyle(14) }}>
+            Loading host commands…
+          </Text>
+        ) : sections.length ? (
+          sections.map(([section, items]) => (
+            <View key={section} style={{ paddingTop: 10 }}>
+              <Text
+                style={{
+                  paddingHorizontal: 20,
+                  paddingBottom: 4,
+                  color: palette.accentLight,
+                  ...caps(11, { weight: "700" }),
+                }}
+              >
+                {section}
+              </Text>
+              {items.map((item, index) => (
+                <CommandRow
+                  key={item.id}
+                  item={item}
+                  bordered={index < items.length - 1}
+                  onPress={() => {
+                    if (item.disabled) return
+                    void triggerHaptic("selection")
+                    item.onPress()
+                  }}
+                />
+              ))}
+            </View>
+          ))
+        ) : (
+          <View style={{ alignItems: "center", paddingHorizontal: 32, paddingTop: 36 }}>
+            <Slash size={18} color={palette.muted} strokeWidth={2.1} />
+            <Text style={{ marginTop: 10, color: palette.ink, ...typeStyle(15, { weight: "600" }) }}>
+              No commands found
+            </Text>
+            <Text style={{ marginTop: 4, textAlign: "center", color: palette.muted, ...typeStyle(13) }}>
+              Try another keyword or start a slash command in the composer.
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  )
 }
 
-function CommandRow({
-  item,
-  bordered,
-  onPress,
-}: {
-  item: CommandPaletteItem
-  bordered: boolean
-  onPress(): void
-}) {
+function CommandRow({ item, bordered, onPress }: { item: CommandPaletteItem; bordered: boolean; onPress(): void }) {
   const { palette, isDark } = useAppTheme()
 
   return (

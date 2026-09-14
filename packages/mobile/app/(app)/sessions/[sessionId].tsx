@@ -649,9 +649,7 @@ export default function SessionScreen() {
   const cleaned = Boolean(detail?.info.github?.worktree.cleanedAt ?? detail?.info.worktree?.cleanedAt)
   const hasCleanableWorktree = Boolean(detail?.info.github?.worktree ?? detail?.info.worktree)
   const sessionProject =
-    detail?.info.github?.repo ||
-    detail?.info.directory?.split("/").filter(Boolean).pop() ||
-    "Workspace"
+    detail?.info.github?.repo || detail?.info.directory?.split("/").filter(Boolean).pop() || "Workspace"
   const sessionOwner = currentUser?.display_name || currentUser?.username
   const sessionLocation = [sessionProject, sessionOwner].filter(Boolean).join(" · ")
 
@@ -1738,12 +1736,9 @@ export default function SessionScreen() {
                           justifyContent: "center",
                         }}
                       >
-                      <Text
-                        numberOfLines={1}
-                        style={{ color: palette.ink, ...typeStyle(14, { weight: "500" }) }}
-                      >
-                        {prompt}
-                      </Text>
+                        <Text numberOfLines={1} style={{ color: palette.ink, ...typeStyle(14, { weight: "500" }) }}>
+                          {prompt}
+                        </Text>
                       </View>
                     </Pressable>
                   ))}

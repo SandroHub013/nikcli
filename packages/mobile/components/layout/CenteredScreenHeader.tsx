@@ -45,7 +45,13 @@ export function CenteredScreenHeader({
         <Text
           accessibilityRole="header"
           numberOfLines={1}
-          style={{ flex: 1, marginHorizontal: 8, textAlign: "center", color: palette.ink, ...typeStyle(20, { weight: "700" }) }}
+          style={{
+            flex: 1,
+            marginHorizontal: 8,
+            textAlign: "center",
+            color: palette.ink,
+            ...typeStyle(20, { weight: "700" }),
+          }}
         >
           {title}
         </Text>

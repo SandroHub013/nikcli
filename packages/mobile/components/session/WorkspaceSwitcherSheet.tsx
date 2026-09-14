@@ -38,7 +38,15 @@ function projectLabel(project: ProjectInfo): string {
 function SectionLabel({ label }: { label: string }) {
   const { palette } = useAppTheme()
   return (
-    <Text style={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4, color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>
+    <Text
+      style={{
+        paddingHorizontal: 20,
+        paddingTop: 14,
+        paddingBottom: 4,
+        color: palette.muted,
+        ...typeStyle(12, { weight: "500" }),
+      }}
+    >
       {label}
     </Text>
   )

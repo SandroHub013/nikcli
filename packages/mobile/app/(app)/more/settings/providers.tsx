@@ -214,7 +214,7 @@ export default function ProvidersSettingsScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
     >
       <Stack.Screen options={{ title: "Models" }} />
 
@@ -278,7 +278,9 @@ export default function ProvidersSettingsScreen() {
                       onPress={() => chooseProvider(provider.id)}
                       style={optionChipStyle(palette, active)}
                     >
-                      <Text style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}>
+                      <Text
+                        style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                      >
                         {provider.name}
                       </Text>
                       <Text
@@ -319,7 +321,9 @@ export default function ProvidersSettingsScreen() {
                         onPress={() => chooseModel(model.id)}
                         style={optionChipStyle(palette, active)}
                       >
-                        <Text style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}>
+                        <Text
+                          style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                        >
                           {model.name}
                         </Text>
                         <Text
@@ -362,7 +366,10 @@ export default function ProvidersSettingsScreen() {
                             style={optionChipStyle(palette, active)}
                           >
                             <Text
-                              style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                              style={{
+                                color: optionChipTextColor(palette, active),
+                                ...typeStyle(12, { weight: "600" }),
+                              }}
                             >
                               {formatVariantLabel(variant)}
                             </Text>

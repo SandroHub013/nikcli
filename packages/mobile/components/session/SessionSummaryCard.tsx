@@ -170,9 +170,7 @@ export function SessionSummaryCard({
         {branch || hasDiff || totalCost > 0 ? (
           <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {branch ? <InfoChip label={branch} /> : null}
-            {hasDiff ? (
-              <InfoChip label={`+${additions} / −${deletions}`} tone="accent" />
-            ) : null}
+            {hasDiff ? <InfoChip label={`+${additions} / −${deletions}`} tone="accent" /> : null}
             {totalCost > 0 && totalTokens > 0 ? <InfoChip label={`${formatCompactCount(totalTokens)} ctx`} /> : null}
           </View>
         ) : null}

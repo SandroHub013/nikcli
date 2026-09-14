@@ -42,7 +42,13 @@ export function InfoChip({ label, tone = "neutral" }: InfoChipProps) {
           : hexToRgba(palette.ink, 0.06)
 
   const textColor =
-    tone === "good" ? palette.success : tone === "warn" ? palette.warn : tone === "accent" ? palette.accent : palette.soft
+    tone === "good"
+      ? palette.success
+      : tone === "warn"
+        ? palette.warn
+        : tone === "accent"
+          ? palette.accent
+          : palette.soft
 
   return (
     <View

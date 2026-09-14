@@ -65,13 +65,7 @@ function HowToStep({ index, title, detail }: { index: number; title: string; det
   )
 }
 
-function PairingScanner({
-  onClose,
-  onScanned,
-}: {
-  onClose(): void
-  onScanned(payload: ServerConfig): void
-}) {
+function PairingScanner({ onClose, onScanned }: { onClose(): void; onScanned(payload: ServerConfig): void }) {
   const { top, bottom } = useSafeAreaInsets()
   const [permission, requestPermission] = useCameraPermissions()
   const [hint, setHint] = useState("Point the camera at the QR on your computer")
@@ -446,7 +440,11 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
             description="The code is a pairing link. It carries the server address and a mobile token so you do not have to type them."
           >
             <View style={{ gap: 14 }}>
-              <HowToStep index={1} title="Start nikcli on your computer" detail="Keep the terminal open while you pair." />
+              <HowToStep
+                index={1}
+                title="Start nikcli on your computer"
+                detail="Keep the terminal open while you pair."
+              />
               <HowToStep
                 index={2}
                 title="Show the pairing QR"

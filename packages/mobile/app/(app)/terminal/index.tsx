@@ -324,7 +324,10 @@ function TabBarItem({
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel={`Close terminal tab ${title}`}
-        style={[TAB_BAR_CLOSE_BUTTON_STYLE, { minWidth: 28, minHeight: 44, alignItems: "center", justifyContent: "center" }]}
+        style={[
+          TAB_BAR_CLOSE_BUTTON_STYLE,
+          { minWidth: 28, minHeight: 44, alignItems: "center", justifyContent: "center" },
+        ]}
       >
         <Text style={closeLabelStyle}>✕</Text>
       </Pressable>
@@ -676,13 +679,7 @@ export default function TerminalScreen() {
       {/* Top chrome — fixed height, never scrolls or shifts */}
       <View style={[styles.chrome, { backgroundColor: palette.background }]}>
         <TerminalScreenHeader />
-        <TabBar
-          tabs={tabs}
-          activeIndex={activeIndex}
-          onSelect={setActiveIndex}
-          onClose={closeTab}
-          palette={palette}
-        />
+        <TabBar tabs={tabs} activeIndex={activeIndex} onSelect={setActiveIndex} onClose={closeTab} palette={palette} />
         <View
           style={[
             styles.toolbar,
@@ -811,7 +808,13 @@ export default function TerminalScreen() {
       </View>
 
       {/* Terminal dock — fills remaining space, anchored to bottom; shrinks upward when keyboard opens */}
-      <View style={[styles.terminalDock, { backgroundColor: palette.codeBlockBackground }, keyboardInset > 0 ? { paddingBottom: keyboardInset } : null]}>
+      <View
+        style={[
+          styles.terminalDock,
+          { backgroundColor: palette.codeBlockBackground },
+          keyboardInset > 0 ? { paddingBottom: keyboardInset } : null,
+        ]}
+      >
         <View style={[styles.terminalViewport, { backgroundColor: palette.codeBlockBackground }]} collapsable={false}>
           {client
             ? tabs.map((tab, index) => (

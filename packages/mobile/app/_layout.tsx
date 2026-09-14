@@ -51,8 +51,7 @@ function AppLockCoordinator() {
   const didBackground = useRef(false)
   const hasBeenActive = useRef(AppState.currentState === "active")
 
-  const skipLock =
-    pathname === "/" || pathname === "/login" || pathname === "/connect" || pathname === "" || !pathname
+  const skipLock = pathname === "/" || pathname === "/login" || pathname === "/connect" || pathname === "" || !pathname
 
   useEffect(() => {
     if (!security.biometricsEnabled) setLocked(false)

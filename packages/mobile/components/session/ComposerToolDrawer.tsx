@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import {
-  Animated,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native"
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import {
   Brain,
   ChevronRight,
@@ -218,7 +210,9 @@ export function ComposerToolDrawer({
           })}
         </ScrollView>
 
-        <View style={{ flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hexToRgba(palette.ink, 0.08) }}>
+        <View
+          style={{ flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: hexToRgba(palette.ink, 0.08) }}
+        >
           {activeTab === "model" ? (
             <ModelContent
               modelLabel={modelLabel}
@@ -663,18 +657,18 @@ function ModelContent({
               justifyContent: "center",
             }}
           >
-          <Text
-            style={{
-              fontSize: 12,
-              fontWeight: "700",
-              color: palette.accentLight,
-            }}
-          >
-            Open full model picker
-          </Text>
-          <Text style={{ fontSize: 11, color: palette.muted, marginTop: 4 }}>
-            Search models and choose thinking effort like the CLI.
-          </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: "700",
+                color: palette.accentLight,
+              }}
+            >
+              Open full model picker
+            </Text>
+            <Text style={{ fontSize: 11, color: palette.muted, marginTop: 4 }}>
+              Search models and choose thinking effort like the CLI.
+            </Text>
           </View>
         </Pressable>
       ) : null}
@@ -884,9 +878,7 @@ function McpContent({
             )
             const statusText = server.connected ? "Connected" : !server.enabled ? "Disabled" : "Disconnected"
             const statusColor = server.connected ? palette.success : palette.muted
-            const iconBg = server.connected
-              ? hexToRgba(palette.success, 0.12)
-              : hexToRgba(palette.ink, 0.06)
+            const iconBg = server.connected ? hexToRgba(palette.success, 0.12) : hexToRgba(palette.ink, 0.06)
 
             return (
               <AnimatedItemCard

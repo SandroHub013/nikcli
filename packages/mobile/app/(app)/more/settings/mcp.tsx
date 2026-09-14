@@ -183,7 +183,7 @@ export default function McpSettingsScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
     >
       <Stack.Screen options={{ title: "MCP" }} />
 
@@ -216,21 +216,39 @@ export default function McpSettingsScreen() {
           <View className="flex-row gap-2">
             <Pressable
               onPress={() => setMcpType("remote")}
-              style={[optionChipStyle(palette, mcpType === "remote"), { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 }]}
+              style={[
+                optionChipStyle(palette, mcpType === "remote"),
+                { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 },
+              ]}
             >
-              <Text style={{ color: optionChipTextColor(palette, mcpType === "remote"), ...typeStyle(14, { weight: "600" }) }}>
+              <Text
+                style={{
+                  color: optionChipTextColor(palette, mcpType === "remote"),
+                  ...typeStyle(14, { weight: "600" }),
+                }}
+              >
                 Remote
               </Text>
               <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>URL-based MCP endpoint</Text>
             </Pressable>
             <Pressable
               onPress={() => setMcpType("local")}
-              style={[optionChipStyle(palette, mcpType === "local"), { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 }]}
+              style={[
+                optionChipStyle(palette, mcpType === "local"),
+                { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 },
+              ]}
             >
-              <Text style={{ color: optionChipTextColor(palette, mcpType === "local"), ...typeStyle(14, { weight: "600" }) }}>
+              <Text
+                style={{
+                  color: optionChipTextColor(palette, mcpType === "local"),
+                  ...typeStyle(14, { weight: "600" }),
+                }}
+              >
                 Local
               </Text>
-              <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>Host command launched by Nikcli</Text>
+              <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
+                Host command launched by Nikcli
+              </Text>
             </Pressable>
           </View>
           {mcpType === "remote" ? (

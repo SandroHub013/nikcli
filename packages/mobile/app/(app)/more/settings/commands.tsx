@@ -229,7 +229,7 @@ export default function CommandsSettingsScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
     >
       <Stack.Screen options={{ title: "Commands" }} />
 
@@ -413,7 +413,9 @@ export default function CommandsSettingsScreen() {
               onPress={() => setCommandSubtask((value) => !value)}
               style={optionChipStyle(palette, commandSubtask)}
             >
-              <Text style={{ color: optionChipTextColor(palette, commandSubtask), ...typeStyle(12, { weight: "600" }) }}>
+              <Text
+                style={{ color: optionChipTextColor(palette, commandSubtask), ...typeStyle(12, { weight: "600" }) }}
+              >
                 Run as subtask
               </Text>
               <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>

@@ -1109,7 +1109,10 @@ export default function SettingsScreen() {
                     <Pressable
                       key={mode}
                       onPress={() => void applyThemeMode(mode)}
-                      style={[optionChipStyle(palette, active), { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 }]}
+                      style={[
+                        optionChipStyle(palette, active),
+                        { flex: 1, minWidth: 0, borderRadius: 18, padding: 12 },
+                      ]}
                     >
                       <Text
                         style={{
@@ -1152,7 +1155,9 @@ export default function SettingsScreen() {
                   padding: 16,
                 }}
               >
-                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Visible settings sections</Text>
+                <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>
+                  Visible settings sections
+                </Text>
                 <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                   {SETTINGS_SECTIONS.map((section) => {
                     const active = visibleSettingsSections[section.id]
@@ -1162,7 +1167,9 @@ export default function SettingsScreen() {
                         onPress={() => void toggleSettingsSection(section.id)}
                         style={optionChipStyle(palette, active)}
                       >
-                        <Text style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}>
+                        <Text
+                          style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}
+                        >
                           {section.label}
                         </Text>
                         <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
@@ -1199,23 +1206,38 @@ export default function SettingsScreen() {
                 <View style={{ marginTop: 16, gap: 12 }}>
                   {(
                     [
-                      ["Notifications", notifications, updateNotificationPreference, [
-                        ["enabled", "Master switch"],
-                        ["sessionReady", "Session ready"],
-                        ["permissions", "Permission requests"],
-                        ["failures", "Failures"],
-                      ]],
-                      ["Haptics", haptics, updateHapticPreference, [
-                        ["enabled", "Master switch"],
-                        ["send", "Send"],
-                        ["commands", "Commands"],
-                        ["permissions", "Permissions"],
-                        ["errors", "Errors"],
-                      ]],
-                      ["Message gestures", gestures, updateGesturePreference, [
-                        ["bubbleSwipeActions", "Swipe actions"],
-                        ["bubbleLongPressActions", "Long press actions"],
-                      ]],
+                      [
+                        "Notifications",
+                        notifications,
+                        updateNotificationPreference,
+                        [
+                          ["enabled", "Master switch"],
+                          ["sessionReady", "Session ready"],
+                          ["permissions", "Permission requests"],
+                          ["failures", "Failures"],
+                        ],
+                      ],
+                      [
+                        "Haptics",
+                        haptics,
+                        updateHapticPreference,
+                        [
+                          ["enabled", "Master switch"],
+                          ["send", "Send"],
+                          ["commands", "Commands"],
+                          ["permissions", "Permissions"],
+                          ["errors", "Errors"],
+                        ],
+                      ],
+                      [
+                        "Message gestures",
+                        gestures,
+                        updateGesturePreference,
+                        [
+                          ["bubbleSwipeActions", "Swipe actions"],
+                          ["bubbleLongPressActions", "Long press actions"],
+                        ],
+                      ],
                     ] as const
                   ).map(([title, values, update, rows]) => (
                     <View
@@ -1238,7 +1260,12 @@ export default function SettingsScreen() {
                               onPress={() => void (update as (nextKey: string, next: boolean) => unknown)(key, !active)}
                               style={optionChipStyle(palette, active)}
                             >
-                              <Text style={{ color: optionChipTextColor(palette, active), ...typeStyle(12, { weight: "600" }) }}>
+                              <Text
+                                style={{
+                                  color: optionChipTextColor(palette, active),
+                                  ...typeStyle(12, { weight: "600" }),
+                                }}
+                              >
                                 {label}
                               </Text>
                               <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(11) }}>
@@ -1455,7 +1482,11 @@ export default function SettingsScreen() {
               onRequestClose={() => setThemePickerOpen(false)}
             >
               <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: hexToRgba(palette.ink, 0.46) }}>
-                <Pressable style={{ flex: 1 }} onPress={() => setThemePickerOpen(false)} accessibilityLabel="Dismiss theme picker" />
+                <Pressable
+                  style={{ flex: 1 }}
+                  onPress={() => setThemePickerOpen(false)}
+                  accessibilityLabel="Dismiss theme picker"
+                />
                 <View
                   style={{
                     borderTopLeftRadius: 24,
@@ -1479,7 +1510,14 @@ export default function SettingsScreen() {
                       backgroundColor: hexToRgba(palette.ink, 0.16),
                     }}
                   />
-                  <Text style={{ marginBottom: 16, textAlign: "center", color: palette.ink, ...typeStyle(18, { weight: "600" }) }}>
+                  <Text
+                    style={{
+                      marginBottom: 16,
+                      textAlign: "center",
+                      color: palette.ink,
+                      ...typeStyle(18, { weight: "600" }),
+                    }}
+                  >
                     Choose theme
                   </Text>
                   <ScrollView

@@ -255,7 +255,7 @@ export default function GithubSettingsScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 36, gap: 16 }}
     >
       <Stack.Screen options={{ title: "GitHub" }} />
 
@@ -338,7 +338,9 @@ export default function GithubSettingsScreen() {
                 padding: 16,
               }}
             >
-              <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>Authorization in progress</Text>
+              <Text style={{ color: palette.muted, ...typeStyle(12, { weight: "500" }) }}>
+                Authorization in progress
+              </Text>
               <Text style={{ marginTop: 8, color: palette.soft, ...typeStyle(14) }}>
                 Enter this code in GitHub if the browser page asks for it.
               </Text>
@@ -354,7 +356,12 @@ export default function GithubSettingsScreen() {
               >
                 <Text
                   selectable
-                  style={{ textAlign: "center", color: palette.ink, letterSpacing: 6, ...typeStyle(28, { weight: "600" }) }}
+                  style={{
+                    textAlign: "center",
+                    color: palette.ink,
+                    letterSpacing: 6,
+                    ...typeStyle(28, { weight: "600" }),
+                  }}
                 >
                   {oauthFlow.userCode}
                 </Text>
