@@ -3,6 +3,17 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.354.0 (September 2026)
+
+## Mobile
+
+- Streamline loading functions and update router types (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(mobile): streamline loading functions and update router types
+
 ## v1.353.0 (September 2026)
 
 ## Core

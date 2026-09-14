@@ -65,21 +65,24 @@ export default function RoutinesScreen() {
   const [error, setError] = useState<string | null>(null)
   const [runningID, setRunningID] = useState<string | null>(null)
 
-  const load = useCallback(async (silent = false) => {
-    if (!client) {
-      setRoutines([])
-      return
-    }
-    try {
-      if (!silent) setRefreshing(true)
-      setError(null)
-      setRoutines(await client.listRoutines())
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      if (!silent) setRefreshing(false)
-    }
-  }, [client])
+  const load = useCallback(
+    async (silent = false) => {
+      if (!client) {
+        setRoutines([])
+        return
+      }
+      try {
+        if (!silent) setRefreshing(true)
+        setError(null)
+        setRoutines(await client.listRoutines())
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!silent) setRefreshing(false)
+      }
+    },
+    [client],
+  )
 
   useEffect(() => {
     void load(true)
