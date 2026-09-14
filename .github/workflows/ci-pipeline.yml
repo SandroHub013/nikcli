@@ -114,6 +114,26 @@ jobs:
       cli_run_id: ${{ needs.publish.outputs.run_id }}
     secrets: inherit
 
+  # Android is built after the desktop apps, from the same tag, and its artifacts
+  # are attached to the same release. `mobile-android.yml` refuses to ship an
+  # artifact signed with the debug keystore, so a run that reaches the release
+  # is signed with the upload key or it is red.
+  mobile:
+    needs: [publish, desktop]
+    if: >-
+      needs.desktop.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/live-main' &&
+      github.repository == 'nikomatt69/nikcli' &&
+      needs.publish.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/mobile-android.yml
+    with:
+      artifact: both
+      tag: ${{ needs.publish.outputs.tag }}
+    secrets: inherit
+
   railway-deploy:
     needs: publish
     if: >-
