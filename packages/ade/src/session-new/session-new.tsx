@@ -7,7 +7,7 @@
  * "four sessions" and "three agents and a shell", which the count alone hides.
  */
 import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
-import { agentBrand, agentLabel } from "./agents"
+import { agentLabel } from "./agents"
 import { AgentMark } from "./agent-mark"
 import { defaultAgentId, detectAgents, type AgentStatus } from "./availability"
 import { getHost } from "../host/shell"
@@ -98,7 +98,6 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           <div data-slot="new-agents">
             <For each={agents() ?? []}>
               {(status: AgentStatus) => {
-                const brand = agentBrand(status.agent.id)
                 const isSelected = () => agentId() === status.agent.id
                 const isAbsent = () => status.availability === "assente"
 
@@ -112,12 +111,6 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                     disabled={isAbsent()}
                     title={status.path ?? (isAbsent() ? "non installato" : undefined)}
                     onClick={() => setAgentId(status.agent.id)}
-                    style={{
-                      "--cli-color": brand.color,
-                      "--cli-tint": brand.tint,
-                      "--cli-border": brand.border,
-                      ...(brand.contrast ? { "--cli-contrast": brand.contrast } : {}),
-                    }}
                   >
                     <span data-slot="new-agent-glyph" aria-hidden="true">
                       <AgentMark id={status.agent.id} size={22} colored />

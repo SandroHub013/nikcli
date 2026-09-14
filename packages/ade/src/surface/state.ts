@@ -430,8 +430,8 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
              * and a line that said "riprendo il compito" for both left the
              * user unable to tell which one they got.
              */
-            text: !p.wasRunning
-              ? "Sessione ripristinata. Il processo non è più attivo: scrivi o premi Riprendi per riaprirla."
+            text: !p.agent
+              ? "Sessione ripristinata. Il processo non è più attivo."
               : p.resumeId
                 ? "Sessione ripristinata. Riapro la conversazione dell'agente dov'era rimasta."
                 : "Sessione ripristinata. Il processo non è sopravvissuto alla chiusura: riprendo il compito.",

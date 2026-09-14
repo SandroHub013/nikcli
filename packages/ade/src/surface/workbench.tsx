@@ -801,6 +801,22 @@ export function Workbench() {
         for (const { session, plan } of planRestore(sessions)) {
           void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
         }
+
+        /*
+         * And the sessions whose agent had already exited, too.
+         *
+         * They used to wait for a click on "Riprendi", and nobody opens ADE to
+         * look at a dead transcript: the pane is there to be used. `reopen`
+         * asks for the conversation by id when there is one, and starts the
+         * agent fresh when there is not.
+         */
+        const planned = new Set(sessions.map((session) => session.pane.id))
+        for (const pane of wb().panes) {
+          if (planned.has(pane.id)) continue
+          if (pane.browserUrl || pane.filePath || pane.videoPath || pane.plugin) continue
+          if (!(pane.agent ?? pane.model)) continue
+          void reopen(pane)
+        }
       }
     }
 
@@ -1692,9 +1708,9 @@ export function Workbench() {
     const plan = planResume({
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
-      // Never "the most recent one here": from a single pane that is some
-      // other session's thread as often as it is this one's.
-      lastTaken: true,
+      // "The most recent one here" only when this is the one pane of that
+      // agent: with two, the latest thread is as likely the other's.
+      lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
       missing,
     })
     const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
@@ -1770,7 +1786,9 @@ export function Workbench() {
         tree: p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
         status: hasTask ? "working" : "idle",
         activity: resumed ? "Sessione ripresa" : (hasTask ? "In esecuzione" : "Disponibile"),
-        ...(mintedId ? { resumeId: mintedId } : {}),
+        // A fresh start drops an id whose conversation is gone, so the pane
+        // stops promising to reopen it.
+        ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
       }))
 
       appendLine(paneId, `${p.root}> ${[agent.command, ...extraArgs].join(" ")}`, "shell")
@@ -1825,6 +1843,39 @@ export function Workbench() {
 
       running.set(paneId, session)
       touchRunning()
+
+      /*
+       * Learning the id from the CLI's own record, for the ones that keep one.
+       *
+       * agy takes no id up front and has no hook ADE installs, but it writes
+       * the latest conversation per directory to a file. What it said before
+       * this session started is not ours; an id that shows up afterwards is,
+       * unless another pane already holds it. Without this a restored agy
+       * pane had nothing to ask for and came back as a new conversation.
+       */
+      const latest = RESUME[agentId]?.latest
+      if (latest && !mintedId && host.homeDir && host.readTextFile) {
+        const readText = host.readTextFile
+        const home = await host.homeDir().catch(() => "")
+        const readLatest = async () =>
+          home
+            ? latest.read((await readText(latest.path(home), 1_000_000).catch(() => undefined))?.text ?? "", p.root)
+            : undefined
+        const before = await readLatest()
+        const poll = setInterval(async () => {
+          if (running.get(paneId) !== session) {
+            stopOpeningPoll(poll)
+            return
+          }
+          const id = await readLatest()
+          if (!id || id === before) return
+          const panes = wb().panes
+          if (panes.some((pane) => pane.id !== paneId && pane.resumeId === id)) return
+          if (panes.find((pane) => pane.id === paneId)?.resumeId === id) return
+          setWb((w) => updatePane(w, paneId, { resumeId: id }))
+        }, 3000)
+        openingPolls.add(poll)
+      }
 
       /*
        * Wait for the hook to say who the agent turned out to be.

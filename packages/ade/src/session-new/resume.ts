@@ -50,6 +50,46 @@ export interface ResumeRecipe {
    * Undefined when the location is not known: the id is then trusted.
    */
   readonly transcript?: (home: string, cwd: string, id: string) => string | undefined
+  /**
+   * A file where the CLI itself records the latest conversation per directory.
+   *
+   * The way to learn an id for a CLI that will not take one up front: read it
+   * when the session starts, read it again while it runs, and an id that
+   * appears in between is the one this session opened.
+   */
+  readonly latest?: {
+    readonly path: (home: string) => string
+    readonly read: (text: string, cwd: string) => string | undefined
+  }
+}
+
+function joinHome(home: string, ...segments: string[]): string {
+  const sep = home.includes("\\") ? "\\" : "/"
+  return [home.replace(/[\\/]+$/, ""), ...segments].join(sep)
+}
+
+/** Windows hands the same directory back with either slash and any case. */
+function sameDir(a: string, b: string): boolean {
+  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(a) === norm(b)
+}
+
+/**
+ * agy's `cache/last_conversations.json`: `{ "<directory>": "<conversation id>" }`,
+ * read off this machine. Conversations live in `conversations/<id>.db`.
+ */
+function agyLatest(text: string, cwd: string): string | undefined {
+  let map: unknown
+  try {
+    map = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (!map || typeof map !== "object" || Array.isArray(map)) return undefined
+  for (const [dir, id] of Object.entries(map)) {
+    if (typeof id === "string" && id && sameDir(dir, cwd)) return id
+  }
+  return undefined
 }
 
 /**
@@ -60,8 +100,7 @@ export interface ResumeRecipe {
 function claudeTranscript(home: string, cwd: string, id: string): string | undefined {
   const folder = cwd.replace(/[^a-zA-Z0-9]/g, "-")
   if (folder.length > 200) return undefined
-  const sep = home.includes("\\") ? "\\" : "/"
-  return [home.replace(/[\\/]+$/, ""), ".claude", "projects", folder, `${id}.jsonl`].join(sep)
+  return joinHome(home, ".claude", "projects", folder, `${id}.jsonl`)
 }
 
 /*
@@ -128,6 +167,11 @@ export const RESUME: Record<string, ResumeRecipe> = {
   agy: {
     byId: (id) => ["--conversation", id],
     last: () => ["--continue"],
+    transcript: (home, _cwd, id) => joinHome(home, ".gemini", "antigravity-cli", "conversations", `${id}.db`),
+    latest: {
+      path: (home) => joinHome(home, ".gemini", "antigravity-cli", "cache", "last_conversations.json"),
+      read: agyLatest,
+    },
   },
   prime: {
     byId: (id) => ["--resume", id],

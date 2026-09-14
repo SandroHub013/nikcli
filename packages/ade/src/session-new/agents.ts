@@ -76,91 +76,16 @@ export function agentLabel(id: string): string {
   return agentById(id)?.label ?? id
 }
 
-export interface AgentBrand {
-  color: string
-  tint: string
-  border: string
-  contrast?: string
-  vendor: string
-}
-
-export const AGENT_BRANDS: Record<string, AgentBrand> = {
-  "claude-code": {
-    color: "#d97757",
-    tint: "rgba(217, 119, 87, 0.14)",
-    border: "rgba(217, 119, 87, 0.35)",
-    vendor: "Anthropic",
-  },
-  codex: {
-    color: "#10a37f",
-    tint: "rgba(16, 163, 127, 0.14)",
-    border: "rgba(16, 163, 127, 0.35)",
-    vendor: "OpenAI",
-  },
-  opencode: {
-    color: "#f1ecec",
-    tint: "rgba(241, 236, 236, 0.12)",
-    border: "rgba(241, 236, 236, 0.30)",
-    contrast: "#121212",
-    vendor: "Anomaly",
-  },
-  nikcli: {
-    color: "#3b82f6",
-    tint: "rgba(59, 130, 246, 0.15)",
-    border: "rgba(59, 130, 246, 0.40)",
-    vendor: "nikcli",
-  },
-  agy: {
-    color: "#a855f7",
-    tint: "rgba(168, 85, 247, 0.14)",
-    border: "rgba(168, 85, 247, 0.35)",
-    vendor: "Google",
-  },
-  kimi: {
-    color: "#1783ff",
-    tint: "rgba(23, 131, 255, 0.14)",
-    border: "rgba(23, 131, 255, 0.35)",
-    vendor: "Moonshot",
-  },
-  prime: {
-    color: "#6366f1",
-    tint: "rgba(99, 102, 241, 0.14)",
-    border: "rgba(99, 102, 241, 0.35)",
-    vendor: "Prime Intellect",
-  },
-  pi: {
-    color: "#f59e0b",
-    tint: "rgba(245, 158, 11, 0.14)",
-    border: "rgba(245, 158, 11, 0.35)",
-    vendor: "pi.dev",
-  },
-  ohmypi: {
-    color: "#f97316",
-    tint: "rgba(249, 115, 22, 0.14)",
-    border: "rgba(249, 115, 22, 0.35)",
-    vendor: "OhMyPi",
-  },
-  hermes: {
-    color: "#ef4444",
-    tint: "rgba(239, 68, 68, 0.14)",
-    border: "rgba(239, 68, 68, 0.35)",
-    vendor: "Nous Research",
-  },
-  terminal: {
-    color: "#22c55e",
-    tint: "rgba(34, 197, 94, 0.14)",
-    border: "rgba(34, 197, 94, 0.35)",
-    vendor: "System",
-  },
-}
-
-export function agentBrand(id: string): AgentBrand {
-  return (
-    AGENT_BRANDS[id] ?? {
-      color: "var(--ade-accent)",
-      tint: "var(--ade-accent-soft)",
-      border: "var(--ade-border)",
-      vendor: "Agent",
-    }
-  )
-}
+/*
+ * No brand colours here either.
+ *
+ * There was an `AGENT_BRANDS` table — colour, tint, border per agent — that
+ * the launcher wrote into each tile as inline `--cli-*` variables. The same
+ * variables are declared per `[data-agent-id]` in `session-new.css`, with
+ * light and dark values and a glow the table never had; the inline copy won
+ * on specificity and quietly overrode the file that looked authoritative.
+ * Two tables of the same colours drift, and these had: the CSS said one teal
+ * for Codex and the table another. The stylesheet is now the one place, next
+ * to the rules that use the values, and `agent-mark.tsx` says which colours
+ * are actually the vendors'.
+ */

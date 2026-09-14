@@ -214,7 +214,17 @@
 
 /* ── agents ────────────────────────────────────────────────────────────────── */
 
-/* Per-agent CLI brand palettes */
+/*
+ * Per-agent tile palettes — the one place these live.
+ *
+ * Each agent's tile is tinted with its brand colour, and the brand colour is
+ * the one its mark is drawn in (`agent-mark.tsx` names the source of every
+ * one). Five of them have no colour: Codex, Antigravity, Prime, pi and Nous
+ * all ship black-on-white, so their tiles take the same ink as OpenCode's
+ * and nothing else. They used to have a hue each — teal, violet, indigo,
+ * amber, red — chosen here rather than by the vendor, and a black mark on a
+ * violet tile still reads as violet.
+ */
 [data-agent-id="claude-code"] {
   --cli-color: light-dark(#c25a39, #d97757);
   --cli-tint: light-dark(rgba(194, 90, 57, 0.10), rgba(217, 119, 87, 0.14));
@@ -223,12 +233,17 @@
   --cli-contrast: #ffffff;
 }
 
-[data-agent-id="codex"] {
-  --cli-color: light-dark(#0a8565, #10a37f);
-  --cli-tint: light-dark(rgba(10, 133, 101, 0.10), rgba(16, 163, 127, 0.14));
-  --cli-border: light-dark(rgba(10, 133, 101, 0.28), rgba(16, 163, 127, 0.35));
-  --cli-glow: light-dark(rgba(10, 133, 101, 0.18), rgba(16, 163, 127, 0.25));
-  --cli-contrast: #ffffff;
+/* Black-and-white brands: ink, at the same strengths OpenCode's off-white gets. */
+[data-agent-id="codex"],
+[data-agent-id="agy"],
+[data-agent-id="prime"],
+[data-agent-id="pi"],
+[data-agent-id="hermes"] {
+  --cli-color: light-dark(#000000, #ffffff);
+  --cli-tint: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
+  --cli-border: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.30));
+  --cli-glow: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.22));
+  --cli-contrast: light-dark(#ffffff, #000000);
 }
 
 [data-agent-id="opencode"] {
@@ -247,14 +262,6 @@
   --cli-contrast: #ffffff;
 }
 
-[data-agent-id="agy"] {
-  --cli-color: light-dark(#7c3aed, #a855f7);
-  --cli-tint: light-dark(rgba(124, 58, 237, 0.10), rgba(168, 85, 247, 0.14));
-  --cli-border: light-dark(rgba(124, 58, 237, 0.28), rgba(168, 85, 247, 0.35));
-  --cli-glow: light-dark(rgba(124, 58, 237, 0.18), rgba(168, 85, 247, 0.25));
-  --cli-contrast: #ffffff;
-}
-
 [data-agent-id="kimi"] {
   --cli-color: light-dark(#0266d6, #1783ff);
   --cli-tint: light-dark(rgba(2, 102, 214, 0.10), rgba(23, 131, 255, 0.14));
@@ -263,35 +270,11 @@
   --cli-contrast: #ffffff;
 }
 
-[data-agent-id="prime"] {
-  --cli-color: light-dark(#4f46e5, #6366f1);
-  --cli-tint: light-dark(rgba(79, 70, 229, 0.10), rgba(99, 102, 241, 0.14));
-  --cli-border: light-dark(rgba(79, 70, 229, 0.28), rgba(99, 102, 241, 0.35));
-  --cli-glow: light-dark(rgba(79, 70, 229, 0.18), rgba(99, 102, 241, 0.25));
-  --cli-contrast: #ffffff;
-}
-
-[data-agent-id="pi"] {
-  --cli-color: light-dark(#b45309, #f59e0b);
-  --cli-tint: light-dark(rgba(180, 83, 9, 0.10), rgba(245, 158, 11, 0.14));
-  --cli-border: light-dark(rgba(180, 83, 9, 0.28), rgba(245, 158, 11, 0.35));
-  --cli-glow: light-dark(rgba(180, 83, 9, 0.18), rgba(245, 158, 11, 0.25));
-  --cli-contrast: #ffffff;
-}
-
 [data-agent-id="ohmypi"] {
   --cli-color: light-dark(#ea580c, #f97316);
   --cli-tint: light-dark(rgba(234, 88, 12, 0.10), rgba(249, 115, 22, 0.14));
   --cli-border: light-dark(rgba(234, 88, 12, 0.28), rgba(249, 115, 22, 0.35));
   --cli-glow: light-dark(rgba(234, 88, 12, 0.18), rgba(249, 115, 22, 0.25));
-  --cli-contrast: #ffffff;
-}
-
-[data-agent-id="hermes"] {
-  --cli-color: light-dark(#dc2626, #ef4444);
-  --cli-tint: light-dark(rgba(220, 38, 38, 0.10), rgba(239, 68, 68, 0.14));
-  --cli-border: light-dark(rgba(220, 38, 38, 0.28), rgba(239, 68, 68, 0.35));
-  --cli-glow: light-dark(rgba(220, 38, 38, 0.18), rgba(239, 68, 68, 0.25));
   --cli-contrast: #ffffff;
 }
 

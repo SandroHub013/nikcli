@@ -75,6 +75,22 @@ describe("planResume", () => {
     expect(RESUME["claude-code"]!.transcript!("/h", `/${"a".repeat(220)}`, "x")).toBeUndefined()
   })
 
+  test("agy's own record of the latest conversation is read per directory", () => {
+    const latest = RESUME.agy!.latest!
+    const text = JSON.stringify({
+      "C:\\Users\\me": "home-id",
+      "C:\\Users\\me\\Favorites\\nikcli": "nikcli-id",
+    })
+    expect(latest.read(text, "C:/Users/me/Favorites/nikcli")).toBe("nikcli-id")
+    expect(latest.read(text, "c:\\users\\me\\favorites\\nikcli\\")).toBe("nikcli-id")
+    expect(latest.read(text, "C:\\Users\\me\\elsewhere")).toBeUndefined()
+    expect(latest.read("not json", "C:\\Users\\me")).toBeUndefined()
+    expect(latest.path("C:\\Users\\me")).toBe("C:\\Users\\me\\.gemini\\antigravity-cli\\cache\\last_conversations.json")
+    expect(planResume({ agentId: "agy", resumeId: "x" })).toEqual({ kind: "resume", via: "id", args: ["--conversation", "x"] })
+    // No `--session-id` for agy: a vanished conversation cannot be re-pinned.
+    expect(planResume({ agentId: "agy", resumeId: "x", missing: true })).toEqual({ kind: "fresh" })
+  })
+
   test("an agent that takes an id but was never given one asks for the last", () => {
     // nikcli, opencode, kimi, agy and the rest: the flag exists, but nothing
     // tells ADE which conversation the CLI opened.
