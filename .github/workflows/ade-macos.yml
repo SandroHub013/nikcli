@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   build:
-    if: github.repository == 'nikomatt69/nikcli'
+    if: github.repository == 'SandroHub013/nikcli'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
