@@ -58,7 +58,10 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG_JSON='{"build":{"beforeBuildCommand":""},"bundle":{"macOS":{"signingIdentity":"-"}}}'
-          bun x tauri build --target aarch64-apple-darwin --bundles app,dmg --config "$CONFIG_JSON"
+          # `app` only: Tauri's dmg step (bundle_dmg.sh) dresses the window through
+          # Finder AppleScript and fails silently on the headless runner. The dmg
+          # is made from the finished bundle with hdiutil below.
+          bun x tauri build --target aarch64-apple-darwin --bundles app --config "$CONFIG_JSON"
 
       - name: Collect bundle
         shell: bash
@@ -67,7 +70,11 @@ jobs:
           BUNDLE="packages/ade/src-tauri/target/aarch64-apple-darwin/release/bundle"
           STAGE="ade-macos"
           mkdir -p "$STAGE"
-          find "$BUNDLE" -type f -name "*.dmg" -exec cp {} "$STAGE/" \;
+          # A plain dmg: the app plus an Applications link to drag it onto.
+          DMGROOT="$(mktemp -d)"
+          cp -R "$BUNDLE/macos/ADE.app" "$DMGROOT/"
+          ln -s /Applications "$DMGROOT/Applications"
+          hdiutil create -volname ADE -srcfolder "$DMGROOT" -ov -format UDZO "$STAGE/ADE-aarch64-apple-darwin.dmg"
           # ditto keeps the bundle's symlinks and extended attributes, which the
           # ad-hoc seal depends on; a plain zip can break it.
           ditto -c -k --keepParent "$BUNDLE/macos/ADE.app" "$STAGE/ADE-aarch64-apple-darwin.app.zip"
