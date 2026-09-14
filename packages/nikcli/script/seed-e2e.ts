@@ -72,3 +72,11 @@ const seed = async () => {
 }
 
 await seed()
+
+// The instance leaves a file watcher, database handles and bus subscriptions
+// open, so the process would never exit on its own — and `app/script/e2e-local.ts`
+// blocks on `await seed.exited`, so the whole e2e run hangs before Playwright is
+// ever spawned.
+const { Instance } = await import("../src/project/instance")
+await Instance.disposeAll()
+process.exit(0)

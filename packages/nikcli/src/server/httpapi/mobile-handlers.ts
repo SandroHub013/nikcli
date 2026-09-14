@@ -163,6 +163,9 @@ const MobileHandlers = HttpApiBuilder.group(MobileHttpApi.Api, "mobile", (handle
     .handle("githubSessionCreate", ({ payload }) =>
       route(() => github.githubSessionCreate(mutable(payload)), catchUnauthorized),
     )
+    .handle("githubPrCreate", ({ payload }) =>
+      route(() => github.githubPrCreate(mutable(payload)), catchUnauthorized).pipe(Effect.map(passthrough)),
+    )
     // --- sessions ---
     .handle("sessionList", ({ query }) => fromPromise(() => session.sessionList(query)))
     .handle("sessionCreate", ({ payload }) =>

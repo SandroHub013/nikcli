@@ -546,6 +546,15 @@ export namespace SessionHttpApi {
       }),
     )
     .add(
+      // Takes a queued input back out. Returns the row so the caller can put its
+      // text back in the composer, which is the only reason to drop it.
+      HttpApiEndpoint.post("pendingDrop", "/:sessionID/pending/:pendingID/drop", {
+        params: PendingPath,
+        success: SessionPending.InfoSchema,
+        error: [NotFound, Busy],
+      }),
+    )
+    .add(
       HttpApiEndpoint.get("message", "/:sessionID/message/:messageID", {
         params: MessagePath,
         success: MessageWithParts,
@@ -912,6 +921,11 @@ export namespace SessionHttpApi {
         const prompt = yield* SessionPrompt.Service
         return yield* prompt.steerPending(params)
       }).pipe(declaredErrors),
+    pendingDrop: ({ params }: { params: typeof PendingPath.Type }) =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        return jsonSafe(yield* prompt.dropPending(params))
+      }).pipe(declaredErrors),
     message: ({ params }: { params: typeof MessagePath.Type }) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -1178,6 +1192,7 @@ export namespace SessionHttpApi {
       .handle("messages", (request) => handlers.messages(request))
       .handle("pending", (request) => handlers.pending(request))
       .handle("pendingSteer", (request) => handlers.pendingSteer(request))
+      .handle("pendingDrop", (request) => handlers.pendingDrop(request))
       .handle("message", (request) => handlers.message(request))
       .handle("messageRemove", (request) => handlers.messageRemove(request))
       .handle("partRemove", (request) => handlers.partRemove(request))

@@ -16,6 +16,8 @@ import {
   MobileGithubImportRequest,
   MobileGithubPublishInput,
   MobileGithubPublishResult,
+  MobileGithubPullRequest,
+  MobileGithubPullRequestCreateInput,
   MobileGithubSessionCreateInput,
   MobileGithubSessionCreateResult,
   MobileGithubBranch,
@@ -173,6 +175,12 @@ export namespace MobileHttpApi {
   })
   const MobileGithubSessionCreateResultEffect = fromZod(MobileGithubSessionCreateResult).annotate({
     identifier: "MobileGithubSessionCreateResult",
+  })
+  const MobileGithubPullRequestCreateInputEffect = fromZod(MobileGithubPullRequestCreateInput).annotate({
+    identifier: "MobileGithubPullRequestCreateInput",
+  })
+  const MobileGithubPullRequestEffect = fromZod(MobileGithubPullRequest).annotate({
+    identifier: "MobileGithubPullRequest",
   })
   const MobileSessionCreateInputEffect = fromZod(MobileSessionCreateInput).annotate({
     identifier: "MobileSessionCreateInput",
@@ -551,6 +559,17 @@ export namespace MobileHttpApi {
         success: MobileGithubSessionCreateResultEffect,
         error: Unauthorized,
       }).annotate(OpenApi.Identifier, "mobile.github.session.create"),
+    )
+    .add(
+      HttpApiEndpoint.post("githubPrCreate", "/github/pr", {
+        payload: MobileGithubPullRequestCreateInputEffect,
+        success: MobileGithubPullRequestEffect,
+        // Only the missing-token case is declared. A GitHub refusal answers with
+        // GitHub's own 4xx (422: the repository rejects this pull request) or 502,
+        // passed through as a raw response — see `githubPrCreate` in
+        // `server/mobile/github.ts`.
+        error: Unauthorized,
+      }).annotate(OpenApi.Identifier, "mobile.github.pr.create"),
     )
     // --- sessions ---
     .add(

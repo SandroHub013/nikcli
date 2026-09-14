@@ -360,6 +360,11 @@ export namespace SessionPrompt {
     pendingID: Identifier.schema("pending"),
   })
 
+  export const DropPendingInput = z.object({
+    sessionID: Identifier.schema("session"),
+    pendingID: Identifier.schema("pending"),
+  })
+
   export type Admission = {
     messageID: string
     message?: MessageV2.WithParts
@@ -383,6 +388,7 @@ export namespace SessionPrompt {
      */
     admit(input: PromptInput): Effect.Effect<Awaited<ReturnType<typeof admit>>, unknown>
     steerPending(input: z.infer<typeof SteerPendingInput>): Effect.Effect<SessionPending.Info, unknown>
+    dropPending(input: z.infer<typeof DropPendingInput>): Effect.Effect<SessionPending.Info, unknown>
     prompt(input: PromptInput): Effect.Effect<Awaited<ReturnType<typeof prompt>>, unknown>
     resolvePromptParts(template: string): Effect.Effect<PromptInput["parts"], unknown>
     cancel(sessionID: string): Effect.Effect<void>
@@ -576,6 +582,38 @@ export namespace SessionPrompt {
     }
 
     return loop(input.sessionID, admission.controller, admission.messageID)
+  })
+
+  /**
+   * Take a queued input back out of the queue.
+   *
+   * The counterpart to `steerPending`: one sends it sooner, this drops it. Both
+   * are the same decision — the queued message is wrong — reached from opposite
+   * directions, and only one of them was reachable.
+   *
+   * The row is returned so the caller can put its text back in the composer,
+   * which is the only reason to drop it rather than let it run.
+   */
+  const dropPending = fn(DropPendingInput, async (input) => {
+    await sessionGet(input.sessionID)
+    const pending = Database.transaction((tx) => {
+      const row = SessionPending.get(input.pendingID, tx)
+      // Scoped to the session in the path: a pending id alone must not let one
+      // session reach into another's queue.
+      if (!row || row.sessionID !== input.sessionID) return undefined
+      SessionPending.remove([input.pendingID], tx)
+      return row
+    })
+    if (!pending) {
+      throw new Session.NotFoundError({
+        message: `Pending input not found: ${input.pendingID}`,
+      })
+    }
+    // The prompt request for this message is still open, waiting for a reply it
+    // will now never get. Released here so the client hears about it at once
+    // rather than as an "interrupted" error when the running turn ends.
+    PromptState.dropped(input.sessionID, pending.messageID)
+    return pending
   })
 
   const steerPending = fn(SteerPendingInput, async (input) => {
@@ -2050,6 +2088,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }),
       admit: (input) => withInstanceContext(() => admit(input)),
       steerPending: (input) => withInstanceContext(() => steerPending(input)),
+      dropPending: (input) => withInstanceContext(() => dropPending(input)),
       prompt: (input) => withInstanceContext(() => prompt(input)),
       resolvePromptParts: (template) =>
         InstanceState.context.pipe(

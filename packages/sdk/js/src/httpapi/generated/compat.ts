@@ -183,6 +183,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
             start: result0(raw["mobile"]["githubOauthDeviceStart"]),
           },
         },
+        pr: { create: result(raw["mobile"]["githubPrCreate"]) },
         repos: result0(raw["mobile"]["githubRepos"]),
         session: {
           cleanup: result(raw["mobile"]["sessionCleanup"]),
@@ -375,6 +376,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
       monitorLog: result(raw["session"]["monitorLog"]),
       pending: result(raw["session"]["pending"]),
       pendingSteer: result(raw["session"]["pendingSteer"]),
+      pendingDrop: result(raw["session"]["pendingDrop"]),
       prompt: result(raw["session-prompt"]["prompt"]),
       promptAsync: result(raw["session-prompt"]["promptAsync"]),
       revert: result(raw["session"]["revert"]),

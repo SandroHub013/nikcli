@@ -263,6 +263,7 @@ export namespace GithubApi {
     head: string,
     base: string,
     body?: string,
+    draft?: boolean,
   ): Promise<any> {
     const response = await fetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls`, {
       method: "POST",
@@ -271,7 +272,13 @@ export namespace GithubApi {
         Accept: "application/vnd.github.v3+json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ title, head, base, body }),
+      body: JSON.stringify({
+        title,
+        head,
+        base,
+        ...(body !== undefined ? { body } : {}),
+        ...(draft !== undefined ? { draft } : {}),
+      }),
     })
     if (!response.ok) {
       const error = await response.text()

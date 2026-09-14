@@ -350,6 +350,7 @@ export namespace PublicHttpApi {
       .handle("messages", (request) => SessionHttpApi.handlers.messages(request))
       .handle("pending", (request) => SessionHttpApi.handlers.pending(request))
       .handle("pendingSteer", (request) => SessionHttpApi.handlers.pendingSteer(request))
+      .handle("pendingDrop", (request) => SessionHttpApi.handlers.pendingDrop(request))
       .handle("message", (request) => SessionHttpApi.handlers.message(request))
       .handle("messageRemove", (request) => SessionHttpApi.handlers.messageRemove(request))
       .handle("partRemove", (request) => SessionHttpApi.handlers.partRemove(request))

@@ -1011,9 +1011,10 @@ export type MobileGithubDeviceAuthStart = {
 }
 
 export type MobileGithubDeviceAuthPollResult = {
-  status: "pending" | "approved" | "denied" | "expired"
+  status: "pending" | "approved" | "denied" | "expired" | "misconfigured"
   interval?: number | undefined
   user?: { login: string; name?: string | null | undefined; avatar_url?: string | undefined } | undefined
+  error?: string | undefined
 }
 
 export type Project = {
@@ -1107,6 +1108,13 @@ export type Workspace = {
         eventLimit?: number | undefined
       }
     | { directory: string; type: "branch"; branch?: string | undefined; eventLimit?: number | undefined }
+}
+
+export type MobileGithubPullRequest = {
+  number: number
+  html_url: string
+  title?: string | undefined
+  url?: string | undefined
 }
 
 export type FileDiff1 = {
@@ -4747,6 +4755,16 @@ export type MobileGithubSessionCreatePayload = {
   readonly executionTarget?: ("local" | "container") | undefined
 }
 
+export type MobileGithubPrCreatePayload = {
+  readonly owner: string
+  readonly repo: string
+  readonly title: string
+  readonly head: string
+  readonly base: string
+  readonly body?: string | undefined
+  readonly draft?: boolean | undefined
+}
+
 export type MobileSessionCreatePayload = {
   readonly parentID?: string | undefined
   readonly title?: string | undefined
@@ -7280,6 +7298,18 @@ export type MobileGithubSessionCreateInput = {
 
 export type MobileGithubSessionCreateOutput = MobileGithubSessionCreateResult
 
+export type MobileGithubPrCreateInput = {
+  readonly owner: MobileGithubPrCreatePayload["owner"]
+  readonly repo: MobileGithubPrCreatePayload["repo"]
+  readonly title: MobileGithubPrCreatePayload["title"]
+  readonly head: MobileGithubPrCreatePayload["head"]
+  readonly base: MobileGithubPrCreatePayload["base"]
+  readonly body?: MobileGithubPrCreatePayload["body"]
+  readonly draft?: MobileGithubPrCreatePayload["draft"]
+}
+
+export type MobileGithubPrCreateOutput = MobileGithubPullRequest
+
 export type MobileSessionListInput = {
   readonly limit?: { readonly limit?: number | undefined; readonly search?: string | undefined }["limit"]
   readonly search?: { readonly limit?: number | undefined; readonly search?: string | undefined }["search"]
@@ -8244,6 +8274,13 @@ export type SessionPendingSteerInput = {
 }
 
 export type SessionPendingSteerOutput = SessionPendingInput2
+
+export type SessionPendingDropInput = {
+  readonly sessionID: { readonly sessionID: string; readonly pendingID: string }["sessionID"]
+  readonly pendingID: { readonly sessionID: string; readonly pendingID: string }["pendingID"]
+}
+
+export type SessionPendingDropOutput = SessionPendingInput2
 
 export type SessionMessageInput = {
   readonly sessionID: { readonly sessionID: string; readonly messageID: string }["sessionID"]

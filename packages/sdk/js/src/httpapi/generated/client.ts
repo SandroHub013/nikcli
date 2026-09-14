@@ -173,6 +173,8 @@ import type {
   MobileGithubImportOutput,
   MobileGithubSessionCreateInput,
   MobileGithubSessionCreateOutput,
+  MobileGithubPrCreateInput,
+  MobileGithubPrCreateOutput,
   MobileSessionListInput,
   MobileSessionListOutput,
   MobileSessionCreateInput,
@@ -449,6 +451,8 @@ import type {
   SessionPendingOutput,
   SessionPendingSteerInput,
   SessionPendingSteerOutput,
+  SessionPendingDropInput,
+  SessionPendingDropOutput,
   SessionMessageInput,
   SessionMessageOutput,
   SessionMessageRemoveInput,
@@ -655,7 +659,9 @@ export function make(options: ClientOptions) {
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
+    throw new ClientError("UnexpectedStatus", {
+      cause: { status: response.status, method: descriptor.method, path: descriptor.path },
+    })
   }
 
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
@@ -1835,6 +1841,26 @@ export function make(options: ClientOptions) {
               private: input["private"],
               title: input["title"],
               executionTarget: input["executionTarget"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubPrCreate: (input: MobileGithubPrCreateInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubPrCreateOutput>(
+          {
+            method: "POST",
+            path: `/mobile/github/pr`,
+            body: {
+              owner: input["owner"],
+              repo: input["repo"],
+              title: input["title"],
+              head: input["head"],
+              base: input["base"],
+              body: input["body"],
+              draft: input["draft"],
             },
             successStatus: 200,
             declaredStatuses: [401],
@@ -3596,6 +3622,17 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.pendingID)}/steer`,
+            successStatus: 200,
+            declaredStatuses: [404, 409],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      pendingDrop: (input: SessionPendingDropInput, requestOptions?: RequestOptions) =>
+        request<SessionPendingDropOutput>(
+          {
+            method: "POST",
+            path: `/session/${encodeURIComponent(input.sessionID)}/pending/${encodeURIComponent(input.pendingID)}/drop`,
             successStatus: 200,
             declaredStatuses: [404, 409],
             empty: false,

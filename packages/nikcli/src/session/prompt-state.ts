@@ -178,6 +178,43 @@ export namespace PromptState {
     })
   }
 
+  /**
+   * Release the waiter for a message that will never be delivered.
+   *
+   * `prompt` keeps its HTTP request open until its message produces a reply. A
+   * message taken back out of the queue produces none, so without this the
+   * request hangs until the running turn ends and is then rejected as
+   * "Session interrupted" — an error the client reports minutes later, about
+   * something the user deliberately cancelled.
+   */
+  export function dropped(sessionID: string, messageID: string): void {
+    const entry = state()[sessionID]
+    if (!entry) return
+    const remaining: Entry["callbacks"] = []
+    for (const callback of entry.callbacks) {
+      if (callback.messageID === messageID) {
+        callback.reject(new DroppedError({ sessionID, messageID }))
+        continue
+      }
+      remaining.push(callback)
+    }
+    entry.callbacks = remaining
+  }
+
+  /** A prompt the user took back, as distinct from one that failed. */
+  export class DroppedError extends Error {
+    override readonly name = "SessionPromptDroppedError"
+    readonly _tag = "SessionPromptDroppedError"
+
+    constructor(readonly input: { sessionID: string; messageID: string }) {
+      super(`Pending prompt dropped: ${input.messageID}`)
+    }
+
+    static isInstance(value: unknown): value is DroppedError {
+      return value instanceof Error && (value as DroppedError)._tag === "SessionPromptDroppedError"
+    }
+  }
+
   export function promoted(sessionID: string, messages: MessageV2.WithParts[]): void {
     if (messages.length === 0) return
     const entry = state()[sessionID]

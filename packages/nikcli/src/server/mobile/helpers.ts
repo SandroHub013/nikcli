@@ -382,6 +382,27 @@ export const MobileGithubPublishResult = z
   })
   .meta({ ref: "MobileGithubPublishResult" })
 
+export const MobileGithubPullRequestCreateInput = z
+  .object({
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    title: z.string().min(1),
+    head: z.string().min(1),
+    base: z.string().min(1),
+    body: z.string().optional(),
+    draft: z.boolean().optional(),
+  })
+  .meta({ ref: "MobileGithubPullRequestCreateInput" })
+
+export const MobileGithubPullRequest = z
+  .object({
+    number: z.number(),
+    html_url: z.string(),
+    title: z.string().optional(),
+    url: z.string().optional(),
+  })
+  .meta({ ref: "MobileGithubPullRequest" })
+
 export const MobileGithubDeviceAuthStart = z
   .object({
     deviceCode: z.string(),
@@ -401,7 +422,7 @@ export const MobileGithubDeviceAuthPollInput = z
 
 export const MobileGithubDeviceAuthPollResult = z
   .object({
-    status: z.enum(["pending", "approved", "denied", "expired"]),
+    status: z.enum(["pending", "approved", "denied", "expired", "misconfigured"]),
     interval: z.number().optional(),
     user: z
       .object({
@@ -410,6 +431,7 @@ export const MobileGithubDeviceAuthPollResult = z
         avatar_url: z.string().optional(),
       })
       .optional(),
+    error: z.string().optional(),
   })
   .meta({ ref: "MobileGithubDeviceAuthPollResult" })
 
@@ -1045,6 +1067,18 @@ export async function pollGithubDeviceAuth(deviceCode: string) {
   }
   if (payload.error === "expired_token") {
     return { status: "expired" as const }
+  }
+  if (
+    payload.error === "device_flow_disabled" ||
+    payload.error === "incorrect_device_code" ||
+    payload.error === "unsupported_grant_type"
+  ) {
+    // Permanent OAuth app or client configuration failure cannot succeed by retrying;
+    // return terminal status to stop client polling.
+    return {
+      status: "misconfigured" as const,
+      error: payload.error,
+    }
   }
   throw new Error(payload.error || "GitHub auth polling failed")
 }

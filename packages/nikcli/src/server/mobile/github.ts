@@ -13,6 +13,7 @@ import {
   GithubAuthInput,
   GithubOAuthClientInput,
   MobileGithubDeviceAuthPollInput,
+  MobileGithubPullRequestCreateInput,
   MobileGithubSessionCreateInput,
   configGet,
   createExecutionWorkspace,
@@ -75,6 +76,43 @@ export async function githubBranches(owner: string, repo: string) {
   } catch (error) {
     if (error instanceof GithubApiError) throw githubHttpError(error)
     throw error
+  }
+}
+
+/**
+ * Resolves to the pull request, or to a raw `Response` carrying GitHub's refusal.
+ * The declared error schemas pin one status each, so they cannot express "whatever
+ * 4xx GitHub answered" — the handler passes the `Response` through unchanged.
+ */
+export async function githubPrCreate(
+  input: typeof MobileGithubPullRequestCreateInput._output,
+): Promise<{ number: number; html_url: string; title?: string; url?: string } | Response> {
+  const token = await githubToken()
+  if (!token) throw noToken()
+  try {
+    const pr = await GithubApi.createPullRequest(
+      token,
+      input.owner,
+      input.repo,
+      input.title,
+      input.head,
+      input.base,
+      input.body,
+      input.draft,
+    )
+    return {
+      number: pr.number,
+      html_url: pr.html_url,
+      title: pr.title,
+      url: pr.url,
+    }
+  } catch (error) {
+    // GithubApi carries GitHub's own status. Flattening it to 400 hides the one
+    // case the caller can act on: 422 means the repository refuses this pull
+    // request (draft not allowed, head already open), not a malformed request.
+    const status = (error as { status?: unknown }).status
+    const upstream = typeof status === "number" && status >= 400 && status < 500 ? status : 502
+    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: upstream })
   }
 }
 
