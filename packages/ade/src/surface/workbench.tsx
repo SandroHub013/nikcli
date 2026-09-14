@@ -477,7 +477,23 @@ export function Workbench() {
         status: running.has(pane.id) ? pane.status : "chiusa",
       }))
 
+  /** Long enough for a TUI's paste detection to close before Enter arrives. */
+  const SUBMIT_DELAY_MS = 400
+  let delivering = false
+
   const deliverMail = async () => {
+    // One pass at a time: a pass now waits between text and Enter, and two
+    // overlapping passes would interleave two messages in one input box.
+    if (delivering) return
+    delivering = true
+    try {
+      await deliverPending()
+    } finally {
+      delivering = false
+    }
+  }
+
+  const deliverPending = async () => {
     const host = await getHost()
     if (!host?.mailboxTake || !host.mailboxReceipt) return
     const incoming = await host.mailboxTake().catch(() => [])
@@ -500,7 +516,22 @@ export function Workbench() {
         await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
         continue
       }
-      session.write(`${formatDelivery(message, sender)}\r`)
+      /*
+       * The text, and the Enter on its own a moment later.
+       *
+       * Written together, the whole line and its carriage return reach the
+       * CLI in one burst, and Claude Code and codex take a burst for a
+       * paste: the return becomes part of the pasted text and the message
+       * sits in the input box waiting for someone to press Enter. A
+       * keystroke that arrives after the paste has settled is a keystroke.
+       */
+      session.write(formatDelivery(message, sender))
+      await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
+      if (running.get(target.pane.id) !== session) {
+        await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
+        continue
+      }
+      session.write("\r")
       appendLine(target.pane.id, `Messaggio ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
       if (sender) appendLine(sender.id, `Messaggio inviato a ${target.pane.title}: ${message.text}`, "note")
       await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
