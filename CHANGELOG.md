@@ -3,6 +3,19 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.355.0 (September 2026)
+
+## Core
+
+- Format mobile pairing files with prettier (@nikomatt69)
+- Update server context and router types for consistency (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(mobile): update server context and router types for consistency
+  - fix(ci): format mobile pairing files with prettier
+
 ## v1.354.0 (September 2026)
 
 ## Mobile

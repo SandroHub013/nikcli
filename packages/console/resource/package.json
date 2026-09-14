@@ -19,5 +19,5 @@
     "@types/node": "catalog:",
     "cloudflare": "5.2.0"
   },
-  "version": "1.354.0"
+  "version": "1.355.0"
 }
