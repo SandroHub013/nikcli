@@ -18,6 +18,7 @@ mod media;
 mod pty;
 mod serve;
 mod shots;
+mod stats;
 
 use serde::Serialize;
 use std::ffi::OsStr;
@@ -583,6 +584,7 @@ pub fn run() {
         .manage(serve::Server::default())
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
+        .manage(stats::Stats::new())
         /*
          * The video panel's files.
          *
@@ -621,6 +623,7 @@ pub fn run() {
             current_dir,
             home_dir,
             path_exists,
+            stats::system_stats,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,

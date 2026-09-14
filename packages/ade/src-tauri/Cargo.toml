@@ -30,6 +30,8 @@ serde = { version = "1", features = ["derive"] }
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
 portable-pty = "0.9.0"
+# CPU, RAM and ADE's own memory for the sidebar footer, on every platform.
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
 # Directory junctions need no elevation, unlike symlinks. One small crate is a
