@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   WATCH_MAX_GAP_MS,
   acceptsReport,
+  followReports,
   newNonce,
   parseReport,
   reportFile,
@@ -63,9 +64,8 @@ describe("acceptsReport", () => {
     expect(acceptsReport(report!, { pane: "pane-7", nonce: "a1b2c3" })).toBe(true)
   })
 
-  test("refuses a nested agent reporting under its parent's pane", () => {
-    // The child inherits ADE_PANE_ID through the environment; it cannot
-    // inherit a nonce ADE only minted for the parent's spawn.
+  test("refuses a report from an earlier spawn of the same pane", () => {
+    // A nested agent inherits the nonce too; followReports is what keeps it out.
     expect(acceptsReport(report!, { pane: "pane-7", nonce: "d4e5f6" })).toBe(false)
   })
 
@@ -176,8 +176,8 @@ describe("watchForReport", () => {
     const cleared: string[] = []
     const report = await watchForReport({
       ...expected,
-      // Same pane, a nonce from a spawn that is not this one: a nested agent
-      // that inherited the environment, or a file left by a previous run.
+      // Same pane, a nonce from a spawn that is not this one: a file left by
+      // a previous run. (A nested agent carries this spawn's nonce; see followReports.)
       read: async () => JSON.stringify({ ...JSON.parse(good), nonce: "deadbeef" }),
       clear: async (nonce) => void cleared.push(nonce),
       ...time,
@@ -199,5 +199,43 @@ describe("watchForReport", () => {
 
     expect(report?.pane).toBe("pane-7")
     expect(polls).toBe(3)
+  })
+})
+
+describe("followReports", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const report = (sessionId: string, source?: string) =>
+    JSON.stringify({ ...JSON.parse(good), sessionId, ...(source ? { source } : {}) })
+
+  /** Hands out the given drop-file contents one poll at a time, then nothing. */
+  function run(files: (string | null)[], extraPolls = 3) {
+    let at = 0
+    let polls = 0
+    const seen: string[] = []
+    return followReports({
+      ...expected,
+      read: async () => files[polls++] ?? null,
+      clear: async () => {},
+      cancelled: () => polls >= files.length + extraPolls,
+      onReport: (r) => void seen.push(r.sessionId),
+      now: () => at,
+      sleep: async (ms) => void (at += ms),
+    }).then(() => seen)
+  }
+
+  test("a /clear or /resume inside the CLI moves the pane after the first report", async () => {
+    expect(await run([report("first", "startup"), null, report("cleared", "clear"), report("other", "resume")])).toEqual([
+      "first",
+      "cleared",
+      "other",
+    ])
+  })
+
+  test("a nested agent's startup, with the inherited nonce, does not", async () => {
+    expect(await run([report("first", "startup"), report("child", "startup"), report("old-script")])).toEqual(["first"])
+  })
+
+  test("the same id reported again is not a move", async () => {
+    expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
   })
 })

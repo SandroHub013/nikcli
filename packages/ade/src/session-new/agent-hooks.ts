@@ -342,6 +342,31 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
 }
 
 /**
+ * Rewrites an installed hook's script with this version's, config untouched.
+ *
+ * The script is ADE's own file and changes when ADE does (it began sending
+ * `source`); an install from an older version would otherwise keep the old
+ * one until the user thought to reinstall. The config is written back as the
+ * exact text just read, because `writeAgentHook` writes both halves and the
+ * config is not ADE's to reformat. Done only when `lastWritten` differs, so a
+ * launch with nothing new does not touch another program's settings file.
+ * Answers the script now on disk, for the caller to remember.
+ */
+export async function refreshHookScript(
+  host: HookHost,
+  target: HookTarget,
+  lastWritten: string | undefined,
+): Promise<string | undefined> {
+  const script = hookScript(target.agent)
+  if (lastWritten === script || !host.readAgentHook || !host.writeAgentHook) return undefined
+  const files = await host.readAgentHook(target.id)
+  const command = installedCommand(files.configText ?? undefined)
+  if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
+  await host.writeAgentHook(target.id, files.configText, script)
+  return script
+}
+
+/**
  * The script the config points at.
  *
  * Windows PowerShell, and only that. A hook that is subtly wrong does not
@@ -388,6 +413,7 @@ $report = [ordered]@{
   nonce     = "$env:ADE_SPAWN_NONCE"
   agent     = "${agent}"
   sessionId = "$sessionId"
+  source    = "$($payload.source)"
   at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 }
 

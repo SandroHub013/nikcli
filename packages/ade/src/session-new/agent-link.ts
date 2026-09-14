@@ -23,8 +23,13 @@
  * child's `SessionStart` would overwrite the parent's id under the parent's
  * pane, and the pane would then be resumed into a conversation it never had.
  * ADE mints a nonce per spawn and refuses a report that does not carry it —
- * which also throws away a file left behind by a previous run of the same
- * pane id.
+ * which throws away a file left behind by a previous run of the same pane id.
+ *
+ * The nonce alone does not stop a nested agent: the child inherits it along
+ * with the pane id. What stops the child is order and reason — the first
+ * report is the CLI ADE started, which reaches `SessionStart` before it can
+ * start anything, and after that only a `resume` or `clear` moves the pane
+ * ({@link acceptsLaterReport}).
  *
  * In a `.ts` and free of any host, because this is the part that decides
  * whether a report is believed — and the part that decides how long to wait
@@ -65,6 +70,12 @@ export interface LinkReport {
   readonly sessionId: string
   /** When the hook ran, epoch milliseconds. Advisory. */
   readonly at?: number
+  /**
+   * Why the session started, as the CLI says it: Claude Code sends
+   * `startup`, `resume`, `clear` or `compact`. Absent from older scripts and
+   * from CLIs that do not say.
+   */
+  readonly source?: string
 }
 
 /** Ids longer than this are not ids. Matches herdr's own ceiling. */
@@ -94,7 +105,8 @@ export function parseReport(text: string): LinkReport | undefined {
   if (!pane || !nonce || !agent || !sessionId) return undefined
 
   const at = typeof raw.at === "number" && Number.isFinite(raw.at) ? raw.at : undefined
-  return { pane, nonce, agent, sessionId, ...(at !== undefined ? { at } : {}) }
+  const source = asId(raw.source)
+  return { pane, nonce, agent, sessionId, ...(at !== undefined ? { at } : {}), ...(source ? { source } : {}) }
 }
 
 function isTable(value: unknown): value is Record<string, unknown> {
@@ -200,6 +212,65 @@ export async function watchForReport(watch: LinkWatch): Promise<LinkReport | und
     gap = Math.min(WATCH_MAX_GAP_MS, Math.round(gap * 1.4))
   }
   return undefined
+}
+
+/**
+ * The reasons a session may change conversation after its first report.
+ *
+ * Both are the user acting inside the CLI — `/resume` another conversation,
+ * `/clear` into a new one — and the pane has to follow, or a restore brings
+ * back the conversation they left. `startup` is deliberately not here: after
+ * the first report, a `startup` with this spawn's nonce is an agent the
+ * session started itself (`claude -p` from its own shell inherits the
+ * environment, nonce included), and taking its id would resume the pane into
+ * a conversation it never had. `compact` keeps the id, so it has nothing to
+ * say.
+ */
+const LATER_SOURCES: ReadonlySet<string> = new Set(["resume", "clear"])
+
+/** Whether a report after the first one moves the pane to a new conversation. */
+export function acceptsLaterReport(report: LinkReport, current: string): boolean {
+  return report.source !== undefined && LATER_SOURCES.has(report.source) && report.sessionId !== current
+}
+
+export interface LinkFollow extends LinkWatch {
+  /** Every conversation the pane moves to, the first one included. */
+  readonly onReport: (report: LinkReport) => void
+}
+
+/**
+ * {@link watchForReport}, and then the rest of the session's life.
+ *
+ * The first report is taken whatever its source, within the usual window. After
+ * it the drop file is checked every {@link WATCH_MAX_GAP_MS} — a `stat` per pane
+ * every two seconds — for as long as the pane runs, and only a report that
+ * {@link acceptsLaterReport} moves the pane. Stopping after the first report,
+ * as this used to, is why the hook's `resume|clear` matcher never did anything:
+ * the hook wrote the new id, and nobody was reading any more.
+ *
+ * Without `cancelled` there is no end to wait for, so it stops after the first
+ * window.
+ */
+export async function followReports(follow: LinkFollow): Promise<void> {
+  const sleep = follow.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const first = await watchForReport(follow)
+  let current = first?.sessionId
+  if (first) follow.onReport(first)
+  if (!follow.cancelled) return
+
+  while (!follow.cancelled()) {
+    await sleep(WATCH_MAX_GAP_MS)
+    if (follow.cancelled()) return
+    const text = await follow.read(follow.nonce)
+    if (text === null) continue
+    const report = parseReport(text)
+    if (report === undefined) continue
+    await follow.clear(follow.nonce)
+    if (!acceptsReport(report, follow)) continue
+    if (current !== undefined && !acceptsLaterReport(report, current)) continue
+    current = report.sessionId
+    follow.onReport(report)
+  }
 }
 
 export function newNonce(): string {

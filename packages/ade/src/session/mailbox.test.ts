@@ -8,6 +8,7 @@ import {
   resolveAgent,
   resolveTarget,
   sessionsTable,
+  verifySender,
 } from "./mailbox"
 
 const panes = [
@@ -73,6 +74,19 @@ describe("resolveTarget", () => {
     expect("error" in result && result.error).toContain("1 Sessione 1")
     expect("error" in resolveTarget(panes, "9")).toBe(true)
   })
+})
+
+test("verifySender keeps a sender only with that pane's token", () => {
+  const tokens: Record<string, string> = { "n1-0": "secret" }
+  const tokenOf = (id: string) => tokens[id]
+  const note = parseMessage('{"from":"n1-0","token":"secret","to":"2","text":"x"}')!
+  expect(verifySender(note, tokenOf).from).toBe("n1-0")
+  const forged = parseMessage('{"from":"n1-0","token":"guess","to":"2","text":"x"}')!
+  expect(verifySender(forged, tokenOf).from).toBe("")
+  const bare = parseMessage('{"from":"n1-0","to":"2","text":"x"}')!
+  expect(verifySender(bare, tokenOf).from).toBe("")
+  const unknown = parseMessage('{"from":"n9-9","to":"2","text":"x"}')!
+  expect(verifySender(unknown, tokenOf).from).toBe("")
 })
 
 test("resolveAgent accepts the id, the id without -code, and the label", () => {

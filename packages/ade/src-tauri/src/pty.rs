@@ -258,6 +258,13 @@ pub async fn pty_spawn(
      * `ade-msg list` shows and what a reply is addressed to.
      */
     pane: Option<String>,
+    /*
+     * A secret for this spawn, which `ade-msg` sends with every message. The
+     * pane id is printed by `ade-msg list` for anyone to copy; the token is
+     * only in this process tree's environment, so a message that carries it
+     * really comes from this pane.
+     */
+    pane_token: Option<String>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
@@ -365,6 +372,9 @@ pub async fn pty_spawn(
         }
         builder.env("ADE_PANE_ID", pane);
         builder.env("ADE_MAILBOX", box_dir.as_os_str());
+        if let Some(token) = pane_token.as_ref().filter(|t| !t.is_empty()) {
+            builder.env("ADE_PANE_TOKEN", token);
+        }
     }
 
     if let Some(link) = link.as_ref() {

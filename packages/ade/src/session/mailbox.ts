@@ -26,10 +26,12 @@ export interface MailPane {
   status?: string
 }
 
-export type Message =
-  | { kind: "send" | "ask"; from: string; to: string; text: string }
-  | { kind: "spawn"; from: string; agent: string; text: string }
-  | { kind: "reply"; from: string; ref: string; text: string }
+/** `token` is what proves `from`; see {@link verifySender}. */
+export type Message = { from: string; token?: string; text: string } & (
+  | { kind: "send" | "ask"; to: string }
+  | { kind: "spawn"; agent: string }
+  | { kind: "reply"; ref: string }
+)
 
 /** Longest text delivered. Past this it is a file, and should be sent as a path. */
 export const MAX_TEXT = 4000
@@ -50,23 +52,38 @@ export function parseMessage(body: string): Message | undefined {
   const record = raw as Record<string, unknown>
   const str = (key: string) => (typeof record[key] === "string" ? (record[key] as string).trim() : "")
   const from = str("from")
+  const token = str("token") || undefined
   const text = typeof record.text === "string" ? record.text : ""
   if (!text.trim()) return undefined
   const kind = str("kind") || "send"
 
   if (kind === "send" || kind === "ask") {
     const to = str("to")
-    return to ? { kind, from, to, text } : undefined
+    return to ? { kind, from, token, to, text } : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
-    return agent ? { kind, from, agent, text } : undefined
+    return agent ? { kind, from, token, agent, text } : undefined
   }
   if (kind === "reply") {
     const ref = str("ref")
-    return isRequestId(ref) ? { kind, from, ref, text } : undefined
+    return isRequestId(ref) ? { kind, from, token, ref, text } : undefined
   }
   return undefined
+}
+
+/**
+ * The message with `from` kept only if its token is that pane's.
+ *
+ * A pane id is public — `ade-msg list` prints every one — so without this
+ * any session could sign as another, and answer a request made to it. An
+ * unproven sender is not refused, only anonymous: a note still arrives, it
+ * just cannot be answered, and a reply to a known request is refused.
+ */
+export function verifySender<M extends Message>(message: M, tokenOf: (paneId: string) => string | undefined): M {
+  const expected = message.from ? tokenOf(message.from) : undefined
+  const proven = expected !== undefined && message.token === expected
+  return proven ? message : { ...message, from: "" }
 }
 
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */

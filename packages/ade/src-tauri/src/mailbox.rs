@@ -5,7 +5,8 @@
 //! built from exactly those two things:
 //!
 //! - every session ADE starts finds `ade-msg` on its PATH, with its own pane id
-//!   in `ADE_PANE_ID` and the mailbox in `ADE_MAILBOX`;
+//!   in `ADE_PANE_ID`, the secret that proves it in `ADE_PANE_TOKEN`, and the
+//!   mailbox in `ADE_MAILBOX`;
 //! - `ade-msg send|ask|spawn|reply` drops a JSON file in `outbox/` and waits
 //!   for a receipt; `ade-msg list` and `agents` print what ADE last published;
 //! - the frontend takes the outbox, types each message into the target pane's
@@ -210,6 +211,7 @@ $text = if ($pos.Count -gt 1) { ($pos.GetRange(1, $pos.Count - 1)) -join ' ' } e
 function Post($fields) {
   $id = ('{0}-{1}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), ([guid]::NewGuid().ToString('N').Substring(0, 8)))
   $fields['from'] = $env:ADE_PANE_ID
+  $fields['token'] = $env:ADE_PANE_TOKEN
   $json = $fields | ConvertTo-Json -Compress
   $out = Join-Path $box 'outbox'
   $part = Join-Path $out "$id.part"
@@ -327,7 +329,7 @@ text="$*"
 
 post() {
   id="$(date +%s)000-$$"
-  printf '{"from":"%s",%s,"text":"%s"}' "$(esc "$ADE_PANE_ID")" "$1" "$(esc "$text")" > "$box/outbox/$id.part"
+  printf '{"from":"%s","token":"%s",%s,"text":"%s"}' "$(esc "$ADE_PANE_ID")" "$(esc "$ADE_PANE_TOKEN")" "$1" "$(esc "$text")" > "$box/outbox/$id.part"
   mv "$box/outbox/$id.part" "$box/outbox/$id.json"
 }
 receipt() {

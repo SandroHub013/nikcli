@@ -97,6 +97,8 @@ export interface Host {
     link?: { pane: string; nonce: string }
     /** The pane this process belongs to: what `ade-msg` calls the session. */
     pane?: string
+    /** Proves a message comes from `pane`: set as `ADE_PANE_TOKEN`, sent back by `ade-msg`. */
+    paneToken?: string
   }) => Promise<SpawnedSession>
 
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
@@ -280,7 +282,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -342,6 +344,7 @@ export async function getHost(): Promise<Host | undefined> {
           rows: rows ?? 30,
           link: link ?? null,
           pane: pane ?? null,
+          paneToken: paneToken ?? null,
         })
       } catch (error) {
         dead = true

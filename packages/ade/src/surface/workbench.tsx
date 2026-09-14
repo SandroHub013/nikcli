@@ -12,8 +12,8 @@ import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
-import { newNonce, watchForReport } from "../session-new/agent-link"
-import { HOOK_TARGETS, readHookStatus, type HookHost, type HookStatus } from "../session-new/agent-hooks"
+import { followReports, newNonce } from "../session-new/agent-link"
+import { HOOK_TARGETS, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, McpSection, RoutineSection, SkillsSection } from "../settings/sections"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
@@ -128,6 +128,7 @@ import {
   resolveAgent,
   resolveTarget,
   sessionsTable,
+  verifySender,
   type MailPane,
   type Message,
 } from "../session/mailbox"
@@ -533,6 +534,18 @@ export function Workbench() {
    */
   const openRequests = new Map<string, { from: string; to: string; at: number }>()
 
+  /*
+   * One secret per spawn, in that process tree's environment only. A pane id
+   * is public — `ade-msg list` prints them — so a `from` counts as the sender
+   * only when the token that came with it is this pane's.
+   */
+  const paneTokens = new Map<string, string>()
+  const mintPaneToken = (paneId: string) => {
+    const token = newNonce()
+    paneTokens.set(paneId, token)
+    return token
+  }
+
   /** How long a reply may sit unclaimed before it is typed into the caller instead. */
   const CLAIM_WINDOW_MS = 3000
   /** How long a freshly spawned session has to come up before "closed" means closed. */
@@ -544,7 +557,8 @@ export function Workbench() {
     const host = await getHost()
     if (!host?.mailboxTake || !host.mailboxReceipt) return
     for (const { id, body } of await host.mailboxTake().catch(() => [])) {
-      const message = parseMessage(body)
+      const parsed = parseMessage(body)
+      const message = parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : undefined))
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }
@@ -571,7 +585,7 @@ export function Workbench() {
 
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
-      if (request && message.from && request.to !== message.from) {
+      if (request && request.to !== message.from) {
         await answer(`errore: la richiesta ${message.ref} non è stata fatta a questa sessione`)
         return true
       }
@@ -691,6 +705,21 @@ export function Workbench() {
     setHookHost(() => host)
     const states = await Promise.all(HOOK_TARGETS.map((target) => readHookStatus(host, target)))
     setHookStates(Object.fromEntries(states.map((state) => [state.target.id, state])))
+    // An install from an older ADE gets this version's script.
+    for (const state of states) {
+      if (!state.installed) continue
+      const key = `ade.hookScript.${state.target.id}`
+      let last: string | undefined
+      try {
+        last = localStorage.getItem(key) ?? undefined
+      } catch {}
+      const written = await refreshHookScript(host, state.target, last).catch(() => undefined)
+      if (written) {
+        try {
+          localStorage.setItem(key, written)
+        } catch {}
+      }
+    }
   }
 
   /*
@@ -2060,6 +2089,7 @@ export function Workbench() {
         onExit: (code) => finish(paneId, code),
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
+        paneToken: mintPaneToken(paneId),
       })
 
       running.set(paneId, session)
@@ -2112,7 +2142,8 @@ export function Workbench() {
        * is worse than not writing one.
        */
       if (nonce) {
-        void watchForReport({
+        // And after it: a `/resume` or `/clear` inside the CLI moves the pane too.
+        void followReports({
           pane: paneId,
           nonce,
           read: (n) => host.readAgentLink?.(n) ?? Promise.resolve(null),
@@ -2120,9 +2151,10 @@ export function Workbench() {
             await host.clearAgentLink?.(n)
           },
           cancelled: () => running.get(paneId) !== session,
-        }).then((report) => {
-          if (!report || running.get(paneId) !== session) return
-          setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+          onReport: (report) => {
+            if (running.get(paneId) !== session) return
+            setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
+          },
         })
       }
 
