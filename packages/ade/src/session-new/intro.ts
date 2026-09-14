@@ -27,10 +27,14 @@ export const INTRO_TEXT =
   "Sei una sessione dentro ADE, accanto ad altre sessioni di agenti che possono usare CLI diverse (Claude Code, Codex e altre). " +
   "Puoi comunicare con loro dalla shell con il comando ade-msg: " +
   "ade-msg list mostra le sessioni aperte con numero, id, agente e titolo; " +
-  "ade-msg send NUMERO-ID-TITOLO-O-AGENTE TESTO manda un messaggio, che arriva nel terminale di quella sessione come input; " +
-  "ade-msg whoami stampa il tuo id. " +
-  "I messaggi che ricevi iniziano con [Messaggio da ...] e dicono come rispondere. " +
-  "Usalo quando l'utente te lo chiede o quando coordinarti con un'altra sessione serve al compito."
+  "ade-msg ask SESSIONE RICHIESTA manda una richiesta e resta in attesa finche quella sessione risponde, poi stampa la risposta (come un subagent); " +
+  "ade-msg spawn AGENTE COMPITO apre una nuova sessione con quell'agente (claude, codex, agy...), le affida il compito e stampa il risultato quando ha finito; " +
+  "ade-msg send SESSIONE TESTO manda solo una nota, senza attendere; " +
+  "SESSIONE e il numero, l'id, il titolo o il nome dell'agente. " +
+  "Se ask o spawn stampano ancora in corso, riprendi l'attesa con ade-msg wait ID. " +
+  "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito dal risultato completo, perche chi chiede e bloccato finche non rispondi. " +
+  "I messaggi [Messaggio da ...] sono note e dicono come rispondere. " +
+  "Usalo quando l'utente te lo chiede o quando delegare o coordinarti con un'altra sessione serve al compito."
 
 /** Arguments that put the notice in the CLI's instructions, or none. */
 export function introArgs(agentId: string, text = INTRO_TEXT): string[] {

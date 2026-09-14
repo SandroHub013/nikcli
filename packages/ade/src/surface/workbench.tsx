@@ -9,7 +9,7 @@ import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
-import { agentById, agentLabel } from "../session-new/agents"
+import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
 import { newNonce, watchForReport } from "../session-new/agent-link"
@@ -27,6 +27,7 @@ const ROLE_LABEL: Record<LaunchEntry["role"], string> = {
 }
 import { Sidebar } from "../sidebar"
 import { SessionGrid } from "../grid/session-grid"
+import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { NikChromeLogo } from "./nik-chrome-logo"
@@ -116,9 +117,20 @@ import {
   type PermissionAnswer,
 } from "../session/permission"
 import { readReportLine } from "../session/report"
-import { asSubmittedLine } from "../session/typing"
+import { asOneLine, asSubmittedLine } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
-import { formatDelivery, parseMessage, resolveTarget, sessionsTable, type MailPane } from "../session/mailbox"
+import {
+  agentsTable,
+  formatDelivery,
+  formatLateReply,
+  formatRequest,
+  parseMessage,
+  resolveAgent,
+  resolveTarget,
+  sessionsTable,
+  type MailPane,
+  type Message,
+} from "../session/mailbox"
 import { displayArgs, introArgs, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
@@ -169,6 +181,7 @@ const HANDLED_COMMANDS = new Set([
   "project.open",
   "pane.close",
   "pane.expand",
+  "pane.rename",
   "view.toggle",
   "theme.toggle",
   "browser.new",
@@ -493,61 +506,157 @@ export function Workbench() {
     }
   }
 
+  /*
+   * The text, and the Enter on its own a moment later.
+   *
+   * Written together, the whole line and its carriage return reach the CLI in
+   * one burst, and Claude Code and codex take a burst for a paste: the return
+   * becomes part of the pasted text and the line sits in the input box waiting
+   * for someone to press Enter. A keystroke that arrives after the paste has
+   * settled is a keystroke. False when the session went away in between.
+   */
+  const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
+    session.write(asOneLine(text))
+    await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
+    if (![...running.values()].includes(session)) return false
+    session.write("\r")
+    return true
+  }
+
+  /** Messages taken from the outbox and not delivered yet, oldest first. */
+  const mailQueue: { id: string; message: Message; at: number }[] = []
+
+  /**
+   * The `ask` and `spawn` requests still waiting for a reply: who asked, and
+   * who has to answer. Only in memory — after a restart a reply still reaches
+   * a waiting `ade-msg`, just not the typed fallback.
+   */
+  const openRequests = new Map<string, { from: string; to: string; at: number }>()
+
+  /** How long a reply may sit unclaimed before it is typed into the caller instead. */
+  const CLAIM_WINDOW_MS = 3000
+  /** How long a freshly spawned session has to come up before "closed" means closed. */
+  const SPAWN_GRACE_MS = 30_000
+
+  const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal")
+
   const deliverPending = async () => {
     const host = await getHost()
     if (!host?.mailboxTake || !host.mailboxReceipt) return
-    const incoming = await host.mailboxTake().catch(() => [])
-    for (const { id, body } of incoming) {
+    for (const { id, body } of await host.mailboxTake().catch(() => [])) {
       const message = parseMessage(body)
-      const panes = mailPanes()
-      const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
-      if (!message) {
-        await answer("errore: messaggio non valido")
-        continue
-      }
-      const sender = panes.find((pane) => pane.id === message.from)
-      const target = resolveTarget(panes, message.to, message.from)
-      if ("error" in target) {
-        await answer(`errore: ${target.error}`)
-        continue
-      }
-      const session = running.get(target.pane.id)
-      if (!session) {
-        await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
-        continue
-      }
-      /*
-       * The text, and the Enter on its own a moment later.
-       *
-       * Written together, the whole line and its carriage return reach the
-       * CLI in one burst, and Claude Code and codex take a burst for a
-       * paste: the return becomes part of the pasted text and the message
-       * sits in the input box waiting for someone to press Enter. A
-       * keystroke that arrives after the paste has settled is a keystroke.
-       */
-      session.write(formatDelivery(message, sender))
-      await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
-      if (running.get(target.pane.id) !== session) {
-        await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
-        continue
-      }
-      session.write("\r")
-      appendLine(target.pane.id, `Messaggio ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
-      if (sender) appendLine(sender.id, `Messaggio inviato a ${target.pane.title}: ${message.text}`, "note")
-      await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
+      if (message) mailQueue.push({ id, message, at: Date.now() })
+      else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }
+
+    for (const item of [...mailQueue]) {
+      const done = await deliverOne(host, item.id, item.message)
+      if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
+    }
+
+    // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
+    for (const [id, request] of openRequests) {
+      if (running.has(request.to) || Date.now() - request.at < SPAWN_GRACE_MS) continue
+      openRequests.delete(id)
+      const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
+      await host.mailboxResult?.(id, `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${id}`).catch(() => {})
+    }
+  }
+
+  /** Delivers one message; false leaves it queued for the next pass. */
+  const deliverOne = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, message: Message): Promise<boolean> => {
+    const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
+    const panes = mailPanes()
+    const sender = panes.find((pane) => pane.id === message.from)
+
+    if (message.kind === "reply") {
+      const request = openRequests.get(message.ref)
+      if (request && message.from && request.to !== message.from) {
+        await answer(`errore: la richiesta ${message.ref} non è stata fatta a questa sessione`)
+        return true
+      }
+      if (!host.mailboxResult) {
+        await answer("errore: questa versione di ADE non accetta risposte")
+        return true
+      }
+      await host.mailboxResult(message.ref, message.text)
+      openRequests.delete(message.ref)
+      const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
+      if (sender) appendLine(sender.id, `Risposta inviata${caller ? ` a ${caller.title}` : ""} (richiesta ${message.ref})`, "note")
+      if (caller) appendLine(caller.id, `Risposta ricevuta da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
+      await answer(`ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}`)
+      // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
+      setTimeout(() => {
+        void host.mailboxResultReclaim?.(message.ref).then((text) => {
+          const session = caller && running.get(caller.id)
+          if (text == null || !session || permissions()[caller.id]) return
+          void typeLine(session, formatLateReply(message.ref, text, sender))
+        })
+      }, CLAIM_WINDOW_MS)
+      return true
+    }
+
+    if (message.kind === "spawn") {
+      const agent = resolveAgent(SPAWNABLE, message.agent)
+      if ("error" in agent) {
+        await answer(`errore: ${agent.error}`)
+        return true
+      }
+      const brief = message.text.replace(/\s+/g, " ").trim()
+      const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${brief.length > 48 ? `${brief.slice(0, 48)}…` : brief}`
+      const owner = project()?.name
+      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      const created = addAgent(
+        { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title },
+        { index, agentId: agent.id, role: "agent" },
+      )
+      openRequests.set(id, { from: message.from, to: created.id, at: Date.now() })
+      if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
+      await answer(`ok: avviata la sessione "${created.title}" (${agent.id})`)
+      return true
+    }
+
+    const target = resolveTarget(panes, message.to, message.from)
+    if ("error" in target) {
+      await answer(`errore: ${target.error}`)
+      return true
+    }
+    if (message.kind === "ask" && target.pane.id === message.from) {
+      await answer("errore: una sessione non può fare una richiesta a se stessa")
+      return true
+    }
+    const session = running.get(target.pane.id)
+    if (!session) {
+      await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
+      return true
+    }
+    // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
+    if (permissions()[target.pane.id]) return false
+
+    const line = message.kind === "ask" ? formatRequest(id, message.text, sender) : formatDelivery(message, sender)
+    if (!(await typeLine(session, line))) {
+      await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
+      return true
+    }
+    if (message.kind === "ask") openRequests.set(id, { from: message.from, to: target.pane.id, at: Date.now() })
+    const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
+    appendLine(target.pane.id, `${what} ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
+    if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
+    await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
+    return true
   }
 
   onMount(() => {
     const timer = setInterval(() => void deliverMail(), 700)
     onCleanup(() => clearInterval(timer))
+    void getHost().then((host) => host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {}))
   })
 
   // The list `ade-msg list` prints, rewritten when a session opens, closes or changes state.
   createEffect(() => {
     runningTick()
     const table = sessionsTable(mailPanes())
-    void getHost().then((host) => host?.mailboxPublish?.(table).catch(() => {}))
+    void getHost().then((host) => host?.mailboxPublish?.(table, "sessions").catch(() => {}))
   })
 
   /*
@@ -1188,6 +1297,9 @@ export function Workbench() {
       if (wb().focusedId) close(wb().focusedId!)
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb(w => expandPane(w, w.focusedId!))
+    } else if (id === "pane.rename") {
+      // Handled by the pane itself: the title is edited where it is shown.
+      requestRename(wb().focusedId)
     } else if (id === "view.toggle") {
       setWb(w => ({ ...w, view: nextView(w.view) }))
     } else if (id.startsWith("view.")) {
@@ -2055,7 +2167,9 @@ export function Workbench() {
               activity: "In esecuzione",
             }))
             // Opening tasks only — a line the user typed later is theirs alone.
-            running.get(paneId)?.write(asSubmittedLine(typeIntoResumed ? task : withIntro(agentId, task)))
+            // Text and Enter apart, for the reason `typeLine` gives.
+            const session = running.get(paneId)
+            if (session) void typeLine(session, typeIntoResumed ? task : withIntro(agentId, task))
             return
           }
           /*
@@ -2102,7 +2216,7 @@ export function Workbench() {
   }
 
   const addAgent = (
-    input: { agentId: string; count: number; task: string; preset?: string },
+    input: { agentId: string; count: number; task: string; preset?: string; title?: string },
     entry: LaunchEntry,
   ) => {
     const id = `n${Date.now()}-${entry.index}-${++paneSequence}`
@@ -2110,7 +2224,7 @@ export function Workbench() {
     // for the agent beside it, not for a prompt nothing will read.
     const task = entry.role === "shell" ? "" : input.task
     const hasInitialTask = Boolean(task.trim())
-    const title = task || `${ROLE_LABEL[entry.role]} ${entry.index} — ${agentLabel(entry.agentId)}`
+    const title = input.title || task || `${ROLE_LABEL[entry.role]} ${entry.index} — ${agentLabel(entry.agentId)}`
     const currentProj = project()
     setWb(w => addPane(w, {
       id,

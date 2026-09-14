@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { MAX_TEXT, formatDelivery, parseMessage, resolveTarget, sessionsTable } from "./mailbox"
+import {
+  MAX_TEXT,
+  formatDelivery,
+  formatLateReply,
+  formatRequest,
+  parseMessage,
+  resolveAgent,
+  resolveTarget,
+  sessionsTable,
+} from "./mailbox"
 
 const panes = [
   { id: "n1-0", title: "Sessione 1 — claude-code", agent: "claude-code", status: "idle" },
@@ -8,17 +17,33 @@ const panes = [
 ]
 
 describe("parseMessage", () => {
-  test("what the scripts write, BOM included", () => {
-    expect(parseMessage('﻿{"from":"n2-1","to":"claude","text":"ciao"}')).toEqual({
+  test("a note without a kind is a send, BOM included", () => {
+    expect(parseMessage('\ufeff{"from":"n2-1","to":"claude","text":"ciao"}')).toEqual({
+      kind: "send",
       from: "n2-1",
       to: "claude",
       text: "ciao",
     })
   })
 
-  test("no target or no text is not a message", () => {
+  test("ask, spawn and reply carry what each needs", () => {
+    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x"}')).toMatchObject({ kind: "ask", to: "2" })
+    expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"fai x"}')).toMatchObject({
+      kind: "spawn",
+      agent: "codex",
+    })
+    expect(parseMessage('{"kind":"reply","from":"b","ref":"171-ab","text":"fatto"}')).toMatchObject({
+      kind: "reply",
+      ref: "171-ab",
+    })
+  })
+
+  test("anything missing its target, its text, or with a ref that is a path, is refused", () => {
     expect(parseMessage('{"from":"a","to":"","text":"x"}')).toBeUndefined()
     expect(parseMessage('{"from":"a","to":"b","text":"  "}')).toBeUndefined()
+    expect(parseMessage('{"kind":"spawn","from":"a","text":"x"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"reply","from":"a","ref":"../x","text":"x"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"boh","from":"a","to":"b","text":"x"}')).toBeUndefined()
     expect(parseMessage("not json")).toBeUndefined()
   })
 })
@@ -31,8 +56,7 @@ describe("resolveTarget", () => {
   })
 
   test("codex can reach claude by the agent's name when there is one", () => {
-    const single = [panes[0]!, panes[1]!]
-    expect(resolveTarget(single, "claude", "n2-1")).toEqual({ pane: panes[0] })
+    expect(resolveTarget([panes[0]!, panes[1]!], "claude", "n2-1")).toEqual({ pane: panes[0] })
   })
 
   test("two claude sessions are an error that lists them, never a guess", () => {
@@ -41,7 +65,6 @@ describe("resolveTarget", () => {
   })
 
   test("a loose match never picks the sender itself", () => {
-    // Session 1 asks for "claude": the only other claude is session 3.
     expect(resolveTarget(panes, "claude", "n1-0")).toEqual({ pane: panes[2] })
   })
 
@@ -52,27 +75,47 @@ describe("resolveTarget", () => {
   })
 })
 
-describe("formatDelivery", () => {
-  test("arrives on one line, with the way to answer", () => {
-    const line = formatDelivery({ from: "n2-1", to: "claude", text: "riga uno\nriga due" }, panes[1])
-    expect(line).toBe(
+test("resolveAgent accepts the id, the id without -code, and the label", () => {
+  const agents = [
+    { id: "claude-code", label: "Claude Code" },
+    { id: "codex", label: "Codex" },
+  ]
+  expect(resolveAgent(agents, "claude")).toEqual({ id: "claude-code" })
+  expect(resolveAgent(agents, "Claude Code")).toEqual({ id: "claude-code" })
+  expect(resolveAgent(agents, "CODEX")).toEqual({ id: "codex" })
+  expect("error" in resolveAgent(agents, "gemini")).toBe(true)
+})
+
+describe("what lands in the terminal", () => {
+  test("a note arrives on one line, with the way to answer", () => {
+    expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(
       '[Messaggio da "Sessione 2 — codex" (codex)]: riga uno riga due — per rispondere: ade-msg send n2-1 "<testo>"',
     )
   })
 
+  test("a request ends with the reply command the caller is blocked on", () => {
+    const line = formatRequest("171-ab", "trova i test lenti", panes[0])
+    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
+    expect(line.endsWith('ade-msg reply 171-ab "<risultato completo>"')).toBe(true)
+  })
+
+  test("a late reply names the request it answers", () => {
+    expect(formatLateReply("171-ab", "fatto", panes[1])).toBe(
+      '[Risposta alla richiesta 171-ab da "Sessione 2 — codex" (codex)]: fatto',
+    )
+  })
+
   test("escape sequences cannot become keystrokes in the other terminal", () => {
-    const line = formatDelivery({ from: "", to: "x", text: "ok[2J" }, undefined)
-    expect(line).toBe("[Messaggio da una sessione ADE]: ok[2J")
+    expect(formatDelivery({ text: "ok\u001b[2J\u0003" }, undefined)).toBe("[Messaggio da una sessione ADE]: ok[2J")
   })
 
   test("a very long text is cut", () => {
-    const line = formatDelivery({ from: "", to: "x", text: "a".repeat(MAX_TEXT + 50) }, undefined)
-    expect(line.endsWith("… [troncato]")).toBe(true)
+    expect(formatDelivery({ text: "a".repeat(MAX_TEXT + 50) }, undefined).endsWith("… [troncato]")).toBe(true)
   })
 })
 
-test("sessionsTable lists numbers, ids and titles, and how to send", () => {
+test("sessionsTable lists numbers, ids and titles, and the commands", () => {
   const table = sessionsTable(panes)
   expect(table).toContain("1  n1-0  claude-code  idle     Sessione 1 — claude-code")
-  expect(table).toContain("ade-msg send")
+  expect(table).toContain("ade-msg spawn")
 })

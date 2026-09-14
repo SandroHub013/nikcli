@@ -630,6 +630,8 @@ pub fn run() {
             mailbox::mailbox_take,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
+            mailbox::mailbox_result,
+            mailbox::mailbox_result_reclaim,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,
