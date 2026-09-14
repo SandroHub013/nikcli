@@ -108,4 +108,5 @@ export const dict: Record<Keys, string> = {
   "ui.question.review.notAnswered": "(ikke besvart)",
   "ui.question.multiHint": "(velg alle som gjelder)",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
+  "ui.messagePart.revertEdit": "Angre herfra",
 }

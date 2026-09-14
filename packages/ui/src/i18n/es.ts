@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(no respondida)",
   "ui.question.multiHint": "(selecciona todas las que correspondan)",
   "ui.question.custom.placeholder": "Escribe tu respuesta...",
+  "ui.messagePart.revertEdit": "Deshacer desde aquí",
 }

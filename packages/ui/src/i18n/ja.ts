@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(未回答)",
   "ui.question.multiHint": "(該当するものをすべて選択)",
   "ui.question.custom.placeholder": "回答を入力...",
+  "ui.messagePart.revertEdit": "ここから元に戻す",
 }

@@ -109,4 +109,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(未回答)",
   "ui.question.multiHint": "(可多選)",
   "ui.question.custom.placeholder": "輸入你的答案...",
+  "ui.messagePart.revertEdit": "從這裡復原",
 } satisfies Partial<Record<Keys, string>>

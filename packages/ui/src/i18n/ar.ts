@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(لم يتم الرد)",
   "ui.question.multiHint": "(حدد كل ما ينطبق)",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
+  "ui.messagePart.revertEdit": "تراجع من هنا",
 }

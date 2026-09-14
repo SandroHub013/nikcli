@@ -110,4 +110,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(nije odgovoreno)",
   "ui.question.multiHint": "(odaberi sve što važi)",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
+  "ui.messagePart.revertEdit": "Poništi od ovdje",
 } satisfies Partial<Record<Keys, string>>

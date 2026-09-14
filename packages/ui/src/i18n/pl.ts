@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(bez odpowiedzi)",
   "ui.question.multiHint": "(zaznacz wszystkie pasujące)",
   "ui.question.custom.placeholder": "Wpisz swoją odpowiedź...",
+  "ui.messagePart.revertEdit": "Cofnij od tego miejsca",
 }

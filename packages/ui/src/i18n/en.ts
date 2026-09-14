@@ -106,4 +106,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(not answered)",
   "ui.question.multiHint": "(select all that apply)",
   "ui.question.custom.placeholder": "Type your answer...",
+  "ui.messagePart.revertEdit": "Undo from here",
 }

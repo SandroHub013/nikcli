@@ -109,4 +109,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(nicht beantwortet)",
   "ui.question.multiHint": "(alle zutreffenden auswählen)",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
+  "ui.messagePart.revertEdit": "Ab hier rückgängig",
 } satisfies Partial<Record<Keys, string>>

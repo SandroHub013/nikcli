@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(ikke besvaret)",
   "ui.question.multiHint": "(vælg alle der gælder)",
   "ui.question.custom.placeholder": "Skriv dit svar...",
+  "ui.messagePart.revertEdit": "Fortryd herfra",
 }

@@ -105,4 +105,5 @@ export const dict = {
   "ui.question.review.notAnswered": "(답변되지 않음)",
   "ui.question.multiHint": "(해당하는 항목 모두 선택)",
   "ui.question.custom.placeholder": "답변 입력...",
+  "ui.messagePart.revertEdit": "여기서부터 되돌리기",
 }
