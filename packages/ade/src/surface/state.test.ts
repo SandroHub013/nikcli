@@ -91,3 +91,30 @@ describe("surface state", () => {
     expect(restored.panes[0].status).toBe("done")
   })
 })
+
+describe("panes of several projects, and spawned worktrees, survive a restart", () => {
+  test("each pane keeps its project, worktree and spawn arguments", () => {
+    let wb = createWorkbench()
+    wb = { ...wb, projectPath: "C:/p/web" }
+    wb = addPane(wb, { id: "a", title: "A", status: "idle", mode: "auto", lines: [], model: "codex", agent: "codex", workspaceId: "web", cwd: "C:/p/web" })
+    wb = addPane(wb, {
+      id: "b",
+      title: "revisore",
+      status: "idle",
+      mode: "auto",
+      lines: [],
+      model: "agy",
+      agent: "agy",
+      workspaceId: "api",
+      cwd: "C:/p/api-ade/revisore",
+      worktree: "C:/p/api-ade/revisore",
+      spawnArgs: ["--model", "gemini-3.1-pro-high"],
+      tree: { branch: "ade/revisore", fidelity: "full" },
+    })
+    const back = fromWorkspaceState(JSON.parse(JSON.stringify(toWorkspaceState(wb))))
+    expect(back.panes.map((pane) => pane.workspaceId)).toEqual(["web", "api"])
+    expect(back.panes[1]?.worktree).toBe("C:/p/api-ade/revisore")
+    expect(back.panes[1]?.spawnArgs).toEqual(["--model", "gemini-3.1-pro-high"])
+    expect(back.panes[1]?.tree?.fidelity).toBe("full")
+  })
+})

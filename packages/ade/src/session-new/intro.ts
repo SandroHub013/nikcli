@@ -32,9 +32,12 @@ export const INTRO_TEXT =
   "ade-msg send SESSIONE TESTO manda solo una nota, senza attendere; " +
   "SESSIONE e il numero, l'id, il titolo o il nome dell'agente; un nome da solo cerca prima nel tuo progetto, PROGETTO/NOME cerca in un altro. " +
   "Se ask o spawn stampano ancora in corso, riprendi l'attesa con ade-msg wait ID. " +
-  "Per orchestrare lavori in parallelo: lancia piu ade-msg spawn AGENTE COMPITO --no-wait --close (ognuno stampa un id), poi ade-msg wait ID1 ID2 ... per raccogliere tutti i risultati (o --any per il primo); " +
-  "ade-msg status mostra le richieste in corso, ade-msg cancel ID ne annulla una, ade-msg close SESSIONE chiude una sessione avviata da te; --file PERCORSO usa il contenuto di un file come testo, utile per compiti o risultati lunghi. " +
-  "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito dal risultato completo, perche chi chiede e bloccato finche non rispondi. " +
+  "Per orchestrare: lancia piu ade-msg spawn AGENTE COMPITO --no-wait --name NOME (ognuno stampa un id), poi ade-msg wait ID1 ID2 ... per raccogliere i risultati (o --any per il primo). " +
+  "Aggiungi --worktree quando il subagent deve modificare file (lavora su un branch ade/NOME in una cartella separata, e poi integri tu), --model ID per un modello piu economico sui compiti semplici. " +
+  "Le sessioni restano aperte dopo aver risposto: riusale con ade-msg ask NOME per i seguiti, e chiudile con ade-msg close NOME quando il loro lavoro e integrato. " +
+  "ade-msg status mostra le richieste in corso, ade-msg cancel ID ne annulla una; --file PERCORSO usa il contenuto di un file come testo. " +
+  "Per risparmiare contesto: delega compiti grandi e non piccoli, chiedi sintesi brevi con i dettagli su file, e leggi i file solo se servono. " +
+  "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito da una sintesi, perche chi chiede e bloccato finche non rispondi; se sei bloccata o serve una decisione usa ade-msg update ID bloccata oppure decisione seguito dal motivo. " +
   "I messaggi [Messaggio da ...] sono note e dicono come rispondere. " +
   "Usalo quando l'utente te lo chiede o quando delegare o coordinarti con un'altra sessione serve al compito."
 

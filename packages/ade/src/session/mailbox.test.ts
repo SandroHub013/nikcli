@@ -10,6 +10,7 @@ import {
   sessionsTable,
   verifySender,
   formatNudge,
+  formatUpdate,
   parseOpenRequests,
   requestState,
   requestsTable,
@@ -116,8 +117,8 @@ describe("what lands in the terminal", () => {
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
     expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
-    expect(line).toContain('ade-msg reply 171-ab "<risultato completo>"')
-    expect(line.endsWith("ade-msg reply 171-ab --file <percorso>)")).toBe(true)
+    expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
+    expect(line).toContain("ade-msg update 171-ab")
   })
 
   test("a late reply names the request it answers", () => {
@@ -220,5 +221,59 @@ describe("orchestration", () => {
     const saved = JSON.stringify([request, { id: "../x", kind: "ask", from: "", to: "a", at: 1 }, 7])
     expect(parseOpenRequests(saved)).toEqual([request])
     expect(parseOpenRequests("not json")).toEqual([])
+  })
+})
+describe("spawn options, updates and the request contract", () => {
+  test("spawn carries name, worktree and model; close carries force", () => {
+    expect(
+      parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"x","name":"revisore","worktree":true,"model":"gpt-5"}'),
+    ).toMatchObject({ name: "revisore", worktree: true, model: "gpt-5", autoClose: false })
+    expect(parseMessage('{"kind":"close","from":"a","to":"3","force":true}')).toMatchObject({ force: true })
+    expect(parseMessage('{"kind":"close","from":"a","to":"3"}')).toMatchObject({ force: false })
+  })
+
+  test("an update names a known state and has a reason", () => {
+    expect(parseMessage('{"kind":"update","from":"b","ref":"171-ab","state":"bloccata","text":"manca la chiave"}')).toMatchObject({
+      kind: "update",
+      state: "bloccata",
+    })
+    expect(parseMessage('{"kind":"update","from":"b","ref":"171-ab","state":"finito","text":"x"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"update","from":"b","ref":"171-ab","state":"bloccata","text":" "}')).toBeUndefined()
+  })
+
+  test("the request says where to work, how to answer briefly, and whether to delegate", () => {
+    const line = formatRequest("171-ab", "sistema i test", panes[0], {
+      worktree: { path: "C:\\p\\app-ade\\revisore", branch: "ade/revisore" },
+      resultsDir: "C:\\p\\app-ade\\revisore\\.ade\\results",
+      depth: 1,
+      maxDepth: 2,
+    })
+    expect(line).toContain("worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
+    expect(line).toContain("ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO")
+    expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
+    expect(line).toContain("livello 1 di 2")
+    expect(line).toContain("resta aperta")
+    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare altre sessioni")
+  })
+
+  test("an update tells the caller how to unblock and resume waiting", () => {
+    const text = formatUpdate("171-ab", "decisione", "uso A o B?", panes[1])
+    expect(text).toContain("chiede una decisione: uso A o B?")
+    expect(text).toContain("ade-msg send n2-1")
+    expect(text).toContain("ade-msg wait 171-ab")
+  })
+
+  test("a blocked request is not nudged, and status shows why it waits", () => {
+    const blocked: OpenRequest = {
+      id: "171-ab",
+      kind: "ask",
+      from: "n1-0",
+      to: "n2-1",
+      at: 0,
+      brief: "x",
+      update: { state: "bloccata", text: "manca la chiave API", at: 1 },
+    }
+    expect(shouldNudge(blocked, { running: true, permissionPending: false, lastOutputAt: 0 }, 900_000)).toBe(false)
+    expect(requestsTable([blocked], panes, () => "in corso", 1_000)).toContain("bloccata: manca la chiave API")
   })
 })

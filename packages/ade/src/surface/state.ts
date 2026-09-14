@@ -117,6 +117,10 @@ export interface Pane {
    * starts again wearing the old name. See `session-new/resume.ts`.
    */
   resumeId?: string
+  /** The git worktree this session works in, when `spawn --worktree` gave it one; its cwd on every start. */
+  worktree?: string
+  /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
+  spawnArgs?: string[]
 }
 
 export interface Workbench {
@@ -307,6 +311,10 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.task ? { task: p.task } : {}),
       ...(p.model ? { model: p.model } : {}),
       ...(p.resumeId ? { resumeId: p.resumeId } : {}),
+      // The project each pane belongs to: the workbench holds every project's sessions, not only the open one's.
+      ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.worktree ? { worktree: p.worktree } : {}),
+      ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
       /*
        * Recorded at save time, not derived at restore time.
        *
@@ -437,15 +445,22 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
                 : "Sessione ripristinata. Il processo non è sopravvissuto alla chiusura: riprendo il compito.",
           },
         ],
-        workspaceId: owner,
+        workspaceId: p.project || owner,
+        ...(p.worktree ? { worktree: p.worktree } : {}),
+        ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
         /*
-         * Sessions run in the project itself now; only a pane saved from one of
-         * the old per-session worktrees is a tree that may be behind.
+         * Sessions run in the project itself, or in the worktree `spawn
+         * --worktree` made for them; only a pane saved from one of the old
+         * per-session worktrees is a tree that may be behind.
          */
         tree: p.branch
           ? {
               branch: p.branch,
-              fidelity: p.cwd && state.projectPath && samePath(p.cwd, state.projectPath) === false ? "stale" : "project",
+              fidelity: p.worktree
+                ? "full"
+                : p.cwd && state.projectPath && !p.project && samePath(p.cwd, state.projectPath) === false
+                  ? "stale"
+                  : "project",
               note: "Ripristinato",
             }
           : undefined

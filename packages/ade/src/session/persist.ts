@@ -62,6 +62,12 @@ export interface PaneState {
    * id — see `session-new/resume.ts`, which is where the difference lives.
    */
   resumeId?: string
+  /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */
+  project?: string
+  /** The worktree a spawned session works in. */
+  worktree?: string
+  /** Arguments chosen at spawn, replayed on every start. */
+  spawnArgs?: string[]
 }
 
 export interface WorkspaceState {
@@ -175,6 +181,11 @@ function sanitisePane(raw: unknown): PaneState {
     ...(resumeId !== undefined ? { resumeId } : {}),
     ...(lines !== undefined ? { lines } : {}),
     ...(typeof raw.wasRunning === "boolean" ? { wasRunning: raw.wasRunning } : {}),
+    ...(asOptionalString(raw.project) ? { project: raw.project as string } : {}),
+    ...(asOptionalString(raw.worktree) ? { worktree: raw.worktree as string } : {}),
+    ...(Array.isArray(raw.spawnArgs) && raw.spawnArgs.every((arg) => typeof arg === "string")
+      ? { spawnArgs: raw.spawnArgs as string[] }
+      : {}),
   }
 }
 

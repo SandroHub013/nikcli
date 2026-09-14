@@ -10,6 +10,19 @@ import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
+import {
+  DEFAULT_MAX_DEPTH,
+  checkName,
+  depthOf,
+  descendants,
+  excludeWithAde,
+  modelArgs,
+  nameTaken,
+  resultsDir,
+  slugify,
+  worktreeArgs,
+  worktreePlan,
+} from "../session/orchestra"
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
 import { followReports, newNonce } from "../session-new/agent-link"
@@ -127,6 +140,7 @@ import {
   byProject,
   formatCancel,
   formatNudge,
+  formatUpdate,
   parseOpenRequests,
   requestState,
   requestsTable,
@@ -640,10 +654,92 @@ export function Workbench() {
     if (result !== undefined) await host.mailboxResult?.(id, result).catch(() => {})
   }
 
-  const closeSpawned = (paneId: string) => {
-    spawnedBy.delete(paneId)
+  /** How deep sessions may start sessions; `ade.mailbox.maxDepth` in localStorage overrides it. */
+  const maxDepth = () => {
+    const stored = Number(readStored("ade.mailbox.maxDepth"))
+    return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_MAX_DEPTH
+  }
+  const parentOf = (paneId: string) => spawnedBy.get(paneId)
+
+  /**
+   * Why a session's worktree cannot be thrown away yet, or nothing.
+   *
+   * What firstmate learned the hard way: a worker is torn down when its work
+   * has landed, not when it says it is done. Uncommitted changes, or commits
+   * on its branch the project's branch does not have, are work that closing
+   * would strand.
+   */
+  const unintegrated = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<string | undefined> => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane?.worktree || !host.run) return undefined
+    const status = await host.run("git", ["status", "--porcelain"], pane.worktree)
+    if (status.code === 0 && status.stdout.trim()) return `"${pane.title}" ha modifiche non committate in ${pane.worktree}`
+    const branch = pane.tree?.branch
+    const root = (await projectOfPane(host, paneId))?.root
+    if (branch && root) {
+      const merged = await host.run("git", ["branch", "--list", branch, "--merged"], root)
+      if (merged.code === 0 && !merged.stdout.trim()) return `"${pane.title}" ha commit sul branch ${branch} non ancora integrati`
+    }
+    return undefined
+  }
+
+  /**
+   * Closes a spawned session and every session below it, or says why not.
+   *
+   * Refused when any of them has work not yet integrated, unless forced. A
+   * worktree whose work is integrated is removed; one closed by force stays on
+   * disk with its branch, because closing a session must never delete work.
+   */
+  const closeTree = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    paneId: string,
+    force: boolean,
+  ): Promise<{ closed: string[]; kept: string[] } | { error: string }> => {
+    const ids = [...descendants(paneId, spawnedBy), paneId].filter((id) => wb().panes.some((pane) => pane.id === id))
+    const blocked = new Map<string, string>()
+    for (const id of ids) {
+      const reason = await unintegrated(host, id)
+      if (reason) blocked.set(id, reason)
+    }
+    if (blocked.size > 0 && !force) {
+      return { error: `non chiudo: ${[...blocked.values()].join("; ")}. Integra o committa prima, oppure usa --force (la worktree resta su disco)` }
+    }
+    const closed: string[] = []
+    const kept: string[] = []
+    for (const id of ids) {
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      if (!pane) continue
+      for (const request of [...openRequests.values()]) {
+        if (request.to === id) await settle(host, request.id, `[ade-msg] richiesta ${request.id} interrotta: la sessione "${pane.title}" è stata chiusa`)
+      }
+      spawnedBy.delete(id)
+      close(id)
+      closed.push(pane.title)
+      if (pane.worktree) {
+        const root = (await projectOfPane(host, id))?.root
+        if (!blocked.has(id) && root && host.run) {
+          const removed = await host.run("git", ["worktree", "remove", pane.worktree], root)
+          if (removed.code !== 0) kept.push(pane.worktree)
+        } else {
+          kept.push(pane.worktree)
+        }
+      }
+    }
     saveSpawned()
-    if (wb().panes.some((pane) => pane.id === paneId)) close(paneId)
+    return { closed, kept }
+  }
+
+  /** Makes sure `.ade/` (where subagents put long results) is ignored by git in this project. */
+  const excludeAdeResults = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, root: string) => {
+    if (!host.run || !host.readTextFile || !host.writeTextFile) return
+    const common = await host.run("git", ["rev-parse", "--git-common-dir"], root)
+    if (common.code !== 0) return
+    const dir = common.stdout.trim()
+    const absolute = /^([A-Za-z]:[\\/]|[\\/])/.test(dir) ? dir : `${root}/${dir}`
+    const file = `${absolute}/info/exclude`
+    const current = await host.readTextFile(file).then((read) => read.text).catch(() => "")
+    const next = excludeWithAde(current)
+    if (next !== undefined) await host.writeTextFile(file, next).catch(() => null)
   }
 
   const deliverPending = async () => {
@@ -713,7 +809,10 @@ export function Workbench() {
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
       if (sender) appendLine(sender.id, `Risposta inviata${caller ? ` a ${caller.title}` : ""} (richiesta ${message.ref})`, "note")
       if (caller) appendLine(caller.id, `Risposta ricevuta da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
-      await answer(`ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}${request?.autoClose ? " — questa sessione ora si chiude" : ""}`)
+      await answer(
+        `ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}` +
+          (request?.autoClose ? " — se non ha lavoro da integrare questa sessione ora si chiude" : " — la sessione resta aperta per i seguiti"),
+      )
       // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
@@ -722,7 +821,43 @@ export function Workbench() {
           void typeLine(session, formatLateReply(message.ref, text, sender))
         })
       }, CLAIM_WINDOW_MS)
-      if (request?.autoClose) setTimeout(() => closeSpawned(request.to), AUTO_CLOSE_DELAY_MS)
+      if (request?.autoClose) {
+        setTimeout(() => {
+          void closeTree(host, request.to, false).then((outcome) => {
+            const note = "error" in outcome ? `Resta aperta: ${outcome.error}` : `Chiusa dopo la risposta: ${outcome.closed.join(", ")}`
+            appendLine(request.to, note, "note")
+            if (caller) appendLine(caller.id, note, "note")
+          })
+        }, AUTO_CLOSE_DELAY_MS)
+      }
+      return true
+    }
+
+    if (message.kind === "update") {
+      const request = openRequests.get(message.ref)
+      if (!request) {
+        await answer(`errore: nessuna richiesta aperta con id ${message.ref}`)
+        return true
+      }
+      if (request.to !== message.from) {
+        await answer(`errore: la richiesta ${message.ref} non è stata fatta a questa sessione`)
+        return true
+      }
+      request.update = { state: message.state, text: message.text, at: Date.now() }
+      saveRequests()
+      const caller = panes.find((pane) => pane.id === request.from)
+      const line = formatUpdate(request.id, message.state, message.text, sender)
+      await host.mailboxState?.(request.id, line, "update").catch(() => {})
+      if (caller) appendLine(caller.id, `Aggiornamento da ${sender?.title ?? "una sessione"}: ${message.state} — ${message.text}`, "note")
+      await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta`)
+      // Nobody woke on it: typed into the caller, which is not waiting any more.
+      setTimeout(() => {
+        void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
+          const session = caller && running.get(caller.id)
+          if (text == null || !session || permissions()[caller.id]) return
+          void typeLine(session, text)
+        })
+      }, CLAIM_WINDOW_MS)
       return true
     }
 
@@ -737,10 +872,10 @@ export function Workbench() {
         return true
       }
       await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)
+      // The session stays: it may have other work, and closing is `ade-msg close`'s decision.
       const session = running.get(request.to)
-      if (request.autoClose) closeSpawned(request.to)
-      else if (session && !permissions()[request.to]) void typeLine(session, formatCancel(request.id, sender))
-      await answer(`ok: richiesta ${request.id} annullata${request.autoClose ? " e sessione chiusa" : ""}`)
+      if (session && !permissions()[request.to]) void typeLine(session, formatCancel(request.id, sender))
+      await answer(`ok: richiesta ${request.id} annullata; la sessione resta aperta (chiudila con ade-msg close se non serve più)`)
       return true
     }
 
@@ -757,12 +892,68 @@ export function Workbench() {
         )
         return true
       }
-      const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
+      // Depth: the user's own sessions are level 0, and each spawn goes one down.
+      const depth = message.from ? depthOf(message.from, parentOf) + 1 : 1
+      if (depth > maxDepth()) {
+        await answer(`errore: questa sessione è già al livello ${depth - 1} e il massimo è ${maxDepth()}: fai il lavoro qui o chiedi a chi ti ha avviato`)
+        return true
+      }
+
+      let name: string | undefined
+      if (message.name !== undefined) {
+        const checked = checkName(message.name)
+        if ("error" in checked) {
+          await answer(`errore: ${checked.error}`)
+          return true
+        }
+        if (nameTaken(panes.map((pane) => pane.title), checked.name)) {
+          await answer(`errore: esiste già una sessione "${checked.name}": scegli un altro nome, o mandale una richiesta con ade-msg ask`)
+          return true
+        }
+        name = checked.name
+      }
+
+      const spawnArgs: string[] = []
+      if (message.model) {
+        const chosen = modelArgs(agent.id, message.model)
+        if ("error" in chosen) {
+          await answer(`errore: ${chosen.error}`)
+          return true
+        }
+        spawnArgs.push(...chosen)
+      }
+
       // A subagent works in its caller's project, whichever one is open in ADE.
       const owner = sender?.project || project()?.name
+      const ownerProject = message.from ? await projectOfPane(host, message.from) : project()
+      const root = ownerProject?.root
+      let worktree: { path: string; branch: string } | undefined
+      if (message.worktree) {
+        if (!root || !host.run) {
+          await answer("errore: nessun progetto in cui creare la worktree")
+          return true
+        }
+        const plan = worktreePlan(root, slugify(name ?? `${agent.id}-${id.slice(-8)}`))
+        const added = await host.run("git", ["worktree", "add", "-b", plan.branch, plan.path], root)
+        if (added.code !== 0) {
+          await answer(`errore: worktree non creata (${(added.stderr || added.stdout).trim().split(/\r?\n/)[0] || "git ha rifiutato"})`)
+          return true
+        }
+        worktree = plan
+        spawnArgs.push(...worktreeArgs(agent.id, plan.path))
+      }
+      if (root) await excludeAdeResults(host, root)
+
+      const title = name ?? `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
       const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      const task = formatRequest(id, message.text, sender, {
+        ...(worktree ? { worktree } : {}),
+        ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
+        depth,
+        maxDepth: maxDepth(),
+      })
       const created = addAgent(
-        { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title, workspaceId: owner },
+        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs },
         { index, agentId: agent.id, role: "agent" },
       )
       openRequests.set(id, {
@@ -780,7 +971,10 @@ export function Workbench() {
         saveSpawned()
       }
       if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
-      await answer(`ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id})`)
+      await answer(
+        `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
+          (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch}` : ""),
+      )
       return true
     }
 
@@ -795,13 +989,15 @@ export function Workbench() {
         await answer(`errore: puoi chiudere solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
         return true
       }
-      for (const request of [...openRequests.values()]) {
-        if (request.to === target.pane.id) {
-          await settle(host, request.id, `[ade-msg] richiesta ${request.id} interrotta: la sessione "${target.pane.title}" è stata chiusa`)
-        }
+      const outcome = await closeTree(host, target.pane.id, message.force)
+      if ("error" in outcome) {
+        await answer(`errore: ${outcome.error}`)
+        return true
       }
-      closeSpawned(target.pane.id)
-      await answer(`ok: chiusa la sessione "${target.pane.title}"`)
+      await answer(
+        `ok: chiuse ${outcome.closed.map((title) => `"${title}"`).join(", ")}` +
+          (outcome.kept.length ? `; worktree lasciate su disco: ${outcome.kept.join(", ")}` : ""),
+      )
       return true
     }
 
@@ -817,10 +1013,26 @@ export function Workbench() {
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
     if (permissions()[target.pane.id]) return false
 
-    const line = message.kind === "ask" ? formatRequest(id, message.text, sender) : formatDelivery(message, sender)
+    const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
+    const targetDepth = depthOf(target.pane.id, parentOf)
+    const line =
+      message.kind === "ask"
+        ? formatRequest(id, message.text, sender, {
+            ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+            depth: targetDepth,
+            maxDepth: maxDepth(),
+          })
+        : formatDelivery(message, sender)
     if (!(await typeLine(session, line))) {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
+    }
+    // The caller has spoken to a session that said it was blocked on it: that is the answer it was waiting for.
+    for (const request of openRequests.values()) {
+      if (request.update && request.from === message.from && request.to === target.pane.id) {
+        delete request.update
+        saveRequests()
+      }
     }
     if (message.kind === "ask") {
       openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at: Date.now(), brief: briefOf(message.text) })
@@ -2208,7 +2420,15 @@ export function Workbench() {
      * subcommand, and for the rest the order does not matter. The shell has
      * no instructions to extend and gets nothing. See `session-new/intro.ts`.
      */
-    const extraArgs = [...introArgs(agentId), ...opening.args, ...(extra ?? [])]
+    /*
+     * A spawned session keeps what it was spawned with: its worktree is its
+     * directory, and its `--model` (or agy's `--add-dir`) comes back on every
+     * restart. Before the opening, like the notice, so a `resume` subcommand
+     * still comes after the flags.
+     */
+    const launched = wb().panes.find((pane) => pane.id === paneId)
+    const workDir = launched?.worktree || p.root
+    const extraArgs = [...introArgs(agentId), ...(launched?.spawnArgs ?? []), ...opening.args, ...(extra ?? [])]
     const mintedId = "resumeId" in opening ? opening.resumeId : undefined
 
     /*
@@ -2240,8 +2460,10 @@ export function Workbench() {
     try {
       const hasTask = Boolean(task.trim())
       setWb(w => updatePane(w, paneId, {
-        cwd: p.root,
-        tree: p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
+        cwd: workDir,
+        tree: launched?.worktree && launched.tree
+          ? launched.tree
+          : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
         status: hasTask ? "working" : "idle",
         activity: resumed ? "Sessione ripresa" : (hasTask ? "In esecuzione" : "Disponibile"),
         // A fresh start drops an id whose conversation is gone, so the pane
@@ -2249,7 +2471,7 @@ export function Workbench() {
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
       }))
 
-      appendLine(paneId, `${p.root}> ${[agent.command, ...displayArgs(extraArgs)].join(" ")}`, "shell")
+      appendLine(paneId, `${workDir}> ${[agent.command, ...displayArgs(extraArgs)].join(" ")}`, "shell")
 
       /*
        * Started bare, the way the user would start it in their own terminal.
@@ -2274,7 +2496,7 @@ export function Workbench() {
       const session = await host.spawn({
         command: agent.command,
         args: extraArgs,
-        cwd: p.root,
+        cwd: workDir,
         onData: (chunk) => {
           const now = Date.now()
           firstByteAt ??= now
@@ -2459,7 +2681,17 @@ export function Workbench() {
   }
 
   const addAgent = (
-    input: { agentId: string; count: number; task: string; preset?: string; title?: string; workspaceId?: string },
+    input: {
+      agentId: string
+      count: number
+      task: string
+      preset?: string
+      title?: string
+      workspaceId?: string
+      /** A spawned session's own checkout, with the branch it is on. */
+      worktree?: { path: string; branch: string }
+      spawnArgs?: string[]
+    },
     entry: LaunchEntry,
   ) => {
     const id = `n${Date.now()}-${entry.index}-${++paneSequence}`
@@ -2483,8 +2715,12 @@ export function Workbench() {
       task,
       lines: [{ kind: "note", text: task || "Nessun task iniziale" }],
       workspaceId: input.workspaceId || currentProj?.name || "workspace",
-      cwd: currentProj?.root,
-      tree: currentProj?.branch ? { branch: currentProj.branch, fidelity: "project" } : undefined,
+      cwd: input.worktree?.path ?? currentProj?.root,
+      tree: input.worktree
+        ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
+        : currentProj?.branch ? { branch: currentProj.branch, fidelity: "project" } : undefined,
+      ...(input.worktree ? { worktree: input.worktree.path } : {}),
+      ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
     }))
     setStarting(false)
     void startProcess(id, entry.agentId, task)

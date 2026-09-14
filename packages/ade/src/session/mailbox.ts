@@ -31,14 +31,27 @@ export interface MailPane {
 /** `token` is what proves `from`; see {@link verifySender}. */
 export type Message = { from: string; token?: string; text: string } & (
   | { kind: "send" | "ask"; to: string }
-  /** `autoClose`: the session is closed as soon as it has replied. */
-  | { kind: "spawn"; agent: string; autoClose: boolean }
+  /**
+   * `autoClose`: closed once it has replied, unless it has work not yet
+   * integrated. `name` titles it; `worktree` gives it its own checkout;
+   * `model` picks the model where ADE knows the flag.
+   */
+  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; model?: string }
   | { kind: "reply"; ref: string }
-  /** Closes a session the sender started with `spawn`. `text` is empty. */
-  | { kind: "close"; to: string }
+  /**
+   * Not an answer: the session is blocked or needs a decision. The waiter
+   * wakes with it and the request stays open.
+   */
+  | { kind: "update"; ref: string; state: UpdateState }
+  /** Closes a session the sender started with `spawn`, and the ones it started. `text` is empty. */
+  | { kind: "close"; to: string; force: boolean }
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
 )
+
+/** What `ade-msg update` may say about a request that is not finished. */
+export const UPDATE_STATES = ["bloccata", "decisione"] as const
+export type UpdateState = (typeof UPDATE_STATES)[number]
 
 /** Longest text delivered. Past this it is a file, and should be sent as a path. */
 export const MAX_TEXT = 4000
@@ -66,7 +79,7 @@ export function parseMessage(body: string): Message | undefined {
   // The two that carry no text.
   if (kind === "close") {
     const to = str("to")
-    return to ? { kind, from, token, to, text: "" } : undefined
+    return to ? { kind, from, token, to, force: record.force === true, text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
@@ -80,11 +93,29 @@ export function parseMessage(body: string): Message | undefined {
   }
   if (kind === "spawn") {
     const agent = str("agent")
-    return agent ? { kind, from, token, agent, autoClose: record.close === true, text } : undefined
+    if (!agent) return undefined
+    const name = str("name")
+    const model = str("model")
+    return {
+      kind,
+      from,
+      token,
+      agent,
+      autoClose: record.close === true,
+      worktree: record.worktree === true,
+      ...(name ? { name } : {}),
+      ...(model ? { model } : {}),
+      text,
+    }
   }
   if (kind === "reply") {
     const ref = str("ref")
     return isRequestId(ref) ? { kind, from, token, ref, text } : undefined
+  }
+  if (kind === "update") {
+    const ref = str("ref")
+    const state = UPDATE_STATES.find((known) => known === str("state"))
+    return isRequestId(ref) && state ? { kind, from, token, ref, state, text } : undefined
   }
   return undefined
 }
@@ -249,11 +280,47 @@ export function formatDelivery(message: { text: string }, sender: MailPane | und
  * caller is blocked on, and an answer given in the conversation instead of
  * through `ade-msg reply` never reaches it.
  */
-export function formatRequest(id: string, text: string, sender: MailPane | undefined): string {
+export function formatRequest(
+  id: string,
+  text: string,
+  sender: MailPane | undefined,
+  context: RequestContext = {},
+): string {
+  const where = context.worktree
+    ? ` Lavori nella worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica solo lì, fai commit sul branch, non toccare il progetto principale.`
+    : ""
+  const results = context.resultsDir ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md` : undefined
+  const delegate =
+    context.depth === undefined || context.maxDepth === undefined
+      ? ""
+      : context.depth < context.maxDepth
+        ? ` Puoi delegare sottocompiti grandi con ade-msg spawn (sei al livello ${context.depth} di ${context.maxDepth}); quelli piccoli falli tu.`
+        : " Non avviare altre sessioni: sei all'ultimo livello consentito."
   return (
-    `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} — ` +
-    `${who(sender)} è in attesa: quando hai finito rispondi con ade-msg reply ${id} "<risultato completo>" ` +
-    `(se è lungo scrivilo in un file e usa ade-msg reply ${id} --file <percorso>)`
+    `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} —${where}${delegate} ` +
+    `${who(sender)} è in attesa. Quando hai finito rispondi con ade-msg reply ${id} "<sintesi>": ` +
+    `al massimo 15 righe con ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO` +
+    (results ? `; i dettagli lunghi scrivili in ${results} e metti il percorso nella risposta` : "") +
+    `. Se sei bloccata o serve una decisione usa ade-msg update ${id} bloccata|decisione "<motivo>" e aspetta. ` +
+    `Dopo la risposta la sessione resta aperta per eventuali seguiti.`
+  )
+}
+
+export interface RequestContext {
+  worktree?: { path: string; branch: string }
+  /** Where detail that does not belong in the reply goes. */
+  resultsDir?: string
+  /** The answering session's level in the spawn tree, and the most allowed. */
+  depth?: number
+  maxDepth?: number
+}
+
+/** What a waiter prints when a request it waits on is not done but needs its caller. */
+export function formatUpdate(id: string, state: UpdateState, text: string, replier: MailPane | undefined): string {
+  const what = state === "bloccata" ? "è bloccata" : "chiede una decisione"
+  return (
+    `[Aggiornamento richiesta ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
+    `La richiesta resta aperta. Rispondi alla sessione con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi riprendi con ade-msg wait ${id}.`
   )
 }
 
@@ -291,6 +358,8 @@ export interface OpenRequest {
   /** Reminders already typed, and when the last one was. */
   nudges?: number
   nudgedAt?: number
+  /** The last `ade-msg update` about it, until the session replies or works again. */
+  update?: { state: UpdateState; text: string; at: number }
 }
 
 export type RequestState = "in corso" | "attende un permesso" | "sessione chiusa" | "in avvio"
@@ -329,6 +398,8 @@ export function shouldNudge(
   now: number,
 ): boolean {
   if (!target.running || target.permissionPending) return false
+  // A session that said it is blocked is waiting on its caller, not forgetting to answer.
+  if (request.update) return false
   if ((request.nudges ?? 0) >= MAX_NUDGES) return false
   if (now - request.at < NUDGE_AFTER_MS) return false
   if (request.nudgedAt !== undefined && now - request.nudgedAt < NUDGE_GAP_MS) return false
@@ -353,7 +424,7 @@ export function requestsTable(
     request.id,
     request.kind + (request.autoClose ? "+close" : ""),
     age(now - request.at),
-    stateOf(request),
+    request.update && stateOf(request) === "in corso" ? `${request.update.state}: ${briefOf(request.update.text, 40)}` : stateOf(request),
     `${title(request.from)} → ${title(request.to)}`,
     request.brief,
   ])
@@ -433,14 +504,20 @@ export const USAGE =
   "  ade-msg ask    <sessione> \"<richiesta>\"   aspetta la risposta e la stampa\n" +
   "  ade-msg spawn  <agente> \"<compito>\"       nuova sessione (subagent), aspetta il risultato\n" +
   "  ade-msg reply  <id> \"<risultato>\"         risponde a una richiesta ricevuta\n" +
+  "  ade-msg update <id> bloccata|decisione \"<motivo>\"  non è una risposta: sveglia chi aspetta, la richiesta resta aperta\n" +
   "  ade-msg wait   <id> [<id>...] [--any]     aspetta le risposte (tutte, o la prima con --any)\n" +
   "  ade-msg status                          richieste in corso\n" +
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
-  "  ade-msg close  <sessione>               chiude una sessione avviata da te con spawn\n" +
+  "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
+  "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
   "  ade-msg agents | whoami\n" +
   "opzioni:\n" +
   "  --no-wait        ask/spawn: stampa subito l'id, poi usa wait (per lanciare in parallelo)\n" +
-  "  --close          spawn: chiude la sessione appena ha risposto\n" +
+  "  --name <nome>    spawn: nome della sessione, usabile poi come destinatario\n" +
+  "  --worktree       spawn: lavora in una git worktree sul branch ade/<nome>, accanto al progetto\n" +
+  "  --model <id>     spawn: modello (claude, codex, agy)\n" +
+  "  --close          spawn: chiude la sessione dopo la risposta, se non ha lavoro da integrare\n" +
+  "                   (di norma resta aperta: serve per i seguiti)\n" +
   "  --file <perc>    ask/spawn/send/reply: il testo è il contenuto del file\n" +
   "  --timeout <sec>  ask/spawn/wait: quanto aspettare (predefinito 110)\n" +
   "<sessione> = numero, id, titolo o nome dell'agente; progetto/nome cerca solo in quel progetto,\n" +

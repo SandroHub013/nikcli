@@ -109,11 +109,11 @@ export interface Host {
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
   mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage") => Promise<void>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
-  mailboxState?: (id: string, text: string) => Promise<void>
+  mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
-  mailboxResultReclaim?: (id: string) => Promise<string | null>
+  mailboxResultReclaim?: (id: string, kind?: "result" | "update") => Promise<string | null>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -461,9 +461,9 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_publish", { text, name: name ?? null })
     },
 
-    async mailboxState(id, text) {
+    async mailboxState(id, text, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("mailbox_state", { id, text })
+      await invoke("mailbox_state", { id, text, kind: kind ?? null })
     },
 
     async mailboxResult(id, text) {
@@ -471,9 +471,9 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_result", { id, text })
     },
 
-    async mailboxResultReclaim(id) {
+    async mailboxResultReclaim(id, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string | null>("mailbox_result_reclaim", { id })
+      return invoke<string | null>("mailbox_result_reclaim", { id, kind: kind === "update" ? "update" : null })
     },
 
     async pickDirectory(title) {

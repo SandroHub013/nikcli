@@ -157,11 +157,23 @@ pub async fn mailbox_result(app: tauri::AppHandle, id: String, text: String) -> 
 /// A rename, like the waiter's claim, so exactly one of the two wins. The
 /// answer stays as `<id>.typed`, where a later `ade-msg wait` still finds it.
 #[tauri::command]
-pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+///
+/// `kind: "update"` does the same for an `ade-msg update` no waiter woke on;
+/// that one is not kept, since a later `wait` should wait for the answer.
+pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String, kind: Option<String>) -> Result<Option<String>, String> {
     if !valid_id(&id) {
         return Err("id richiesta non valido".into());
     }
     let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
+    if kind.as_deref() == Some("update") {
+        let taken = dir.join(format!("{id}.update-typed"));
+        if fs::rename(dir.join(format!("{id}.update")), &taken).is_err() {
+            return Ok(None);
+        }
+        let text = fs::read_to_string(&taken).ok();
+        let _ = fs::remove_file(&taken);
+        return Ok(text);
+    }
     let typed = dir.join(format!("{id}.typed"));
     if fs::rename(dir.join(format!("{id}.txt")), &typed).is_err() {
         return Ok(None);
@@ -172,16 +184,24 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String) -> Result
 /// What request `id` is waiting on, for the `ade-msg wait` blocked on it to
 /// print when it changes ("attende un permesso"). Empty text removes it.
 #[tauri::command]
-pub async fn mailbox_state(app: tauri::AppHandle, id: String, text: String) -> Result<(), String> {
+///
+/// `kind: "update"` writes `<id>.update` instead: an `ade-msg update` from the
+/// answering session, which wakes the waiter rather than being printed beside it.
+pub async fn mailbox_state(app: tauri::AppHandle, id: String, text: String, kind: Option<String>) -> Result<(), String> {
     if !valid_id(&id) {
         return Err("id richiesta non valido".into());
     }
+    let ext = match kind.as_deref() {
+        None | Some("state") => "state",
+        Some("update") => "update",
+        Some(_) => return Err("tipo di stato sconosciuto".into()),
+    };
     let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
     if text.is_empty() {
-        let _ = fs::remove_file(dir.join(format!("{id}.state")));
+        let _ = fs::remove_file(dir.join(format!("{id}.{ext}")));
         return Ok(());
     }
-    write_whole(dir, &format!("{id}.state"), &text)
+    write_whole(dir, &format!("{id}.{ext}"), &text)
 }
 
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
@@ -223,23 +243,34 @@ $timeout = 110
 $noWait = $false
 $any = $false
 $close = $false
+$worktree = $false
+$force = $false
+$name = $null
+$model = $null
 $file = $null
+# update takes an id and a state before its text; everything else one word.
+$lead = if ($cmd -eq 'update') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
   # Options go before the text; wait takes only ids, so anywhere.
-  if ($cmd -eq 'wait' -or $pos.Count -le 1) {
+  if ($cmd -eq 'wait' -or $pos.Count -le $lead) {
     $hasNext = ($i + 1) -lt $all.Count
     if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
     elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--name' -and $hasNext) { $name = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
+    elseif ($a -eq '--worktree') { $worktree = $true; continue }
+    elseif ($a -eq '--force') { $force = $true; continue }
   }
   $pos.Add($a)
 }
 $head = if ($pos.Count -gt 0) { $pos[0] } else { '' }
-$text = if ($pos.Count -gt 1) { ($pos.GetRange(1, $pos.Count - 1)) -join ' ' } else { '' }
+$second = if ($pos.Count -gt 1) { $pos[1] } else { '' }
+$text = if ($pos.Count -gt $lead) { ($pos.GetRange($lead, $pos.Count - $lead)) -join ' ' } else { '' }
 
 # --file: the text is the file. One too big for a message is sent as its path and its beginning.
 if ($file) {
@@ -320,6 +351,21 @@ function AwaitIds([string[]]$ids) {
   $deadline = [DateTime]::UtcNow.AddSeconds($timeout)
   while ($pending.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline) {
     foreach ($id in @($pending)) {
+      # An update is not an answer, but it is the caller's turn: wake with it.
+      $updateFile = Join-Path $dir "$id.update"
+      if (Test-Path $updateFile) {
+        $claimed = Join-Path $dir "$id.update-taken"
+        $ok = $true
+        try { Move-Item -LiteralPath $updateFile -Destination $claimed -Force } catch { $ok = $false }
+        if ($ok) {
+          $u = [IO.File]::ReadAllText($claimed, $utf8)
+          Remove-Item -LiteralPath $claimed -ErrorAction SilentlyContinue
+          Write-Output $u
+          $others = @($pending | Where-Object { $_ -ne $id })
+          if ($others.Count -gt 0) { Write-Output "(ancora in attesa anche di: $($others -join ' '))" }
+          exit 0
+        }
+      }
       $r = TakeResult $id
       $stateFile = Join-Path $dir "$id.state"
       if ($null -ne $r) {
@@ -363,13 +409,24 @@ switch ($cmd) {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
     PostAndConfirm ([ordered]@{ kind = 'cancel'; ref = $head })
   }
+  'update' {
+    if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$' -or ($second -ne 'bloccata' -and $second -ne 'decisione') -or -not $text) { Usage }
+    PostAndConfirm ([ordered]@{ kind = 'update'; ref = $head; state = $second; text = $text })
+  }
   'close' {
     if (-not $head) { Usage }
-    PostAndConfirm ([ordered]@{ kind = 'close'; to = $head })
+    PostAndConfirm ([ordered]@{ kind = 'close'; to = $head; force = $force })
   }
   { $_ -eq 'ask' -or $_ -eq 'spawn' } {
     if (-not $head -or -not $text) { Usage }
-    $fields = if ($cmd -eq 'ask') { [ordered]@{ kind = 'ask'; to = $head; text = $text } } else { [ordered]@{ kind = 'spawn'; agent = $head; close = $close; text = $text } }
+    if ($cmd -eq 'ask') {
+      $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
+    } else {
+      $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree }
+      if ($name) { $fields['name'] = $name }
+      if ($model) { $fields['model'] = $model }
+      $fields['text'] = $text
+    }
     $id = Post $fields
     $r = Receipt $id
     if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
@@ -406,20 +463,25 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; file=""
-n=0; head=""; text=""; ids=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; name=""; model=""; file=""
+lead=1; [ "$cmd" = update ] && lead=2
+n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
-  if [ "$cmd" = wait ] || [ $n -le 1 ]; then
+  if [ "$cmd" = wait ] || [ $n -le $lead ]; then
     case "$a" in
       --timeout) [ $# -ge 2 ] && { timeout="$2"; shift 2; continue; } ;;
       --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
+      --name) [ $# -ge 2 ] && { name="$2"; shift 2; continue; } ;;
+      --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
+      --worktree) worktree=true; shift; continue ;;
+      --force) force=true; shift; continue ;;
     esac
   fi
-  if [ $n -eq 0 ]; then head="$a"; else text="${text:+$text }$a"; fi
+  if [ $n -eq 0 ]; then head="$a"; elif [ $n -eq 1 ] && [ $lead -eq 2 ]; then second="$a"; else text="${text:+$text }$a"; fi
   ids="${ids:+$ids }$a"
   n=$((n+1)); shift
 done
@@ -472,6 +534,12 @@ await() {
   while [ -n "$pending" ] && [ "$(date +%s)" -lt "$end" ]; do
     still=""
     for rid in $pending; do
+      if [ -f "$box/results/$rid.update" ] && mv "$box/results/$rid.update" "$box/results/$rid.update-taken" 2>/dev/null; then
+        cat "$box/results/$rid.update-taken"; echo; rm -f "$box/results/$rid.update-taken"
+        rest=""; for o in $pending; do [ "$o" != "$rid" ] && rest="${rest:+$rest }$o"; done
+        [ -n "$rest" ] && echo "(ancora in attesa anche di: $rest)"
+        exit 0
+      fi
       if take "$rid"; then
         rm -f "$box/results/$rid.state"
         [ $multi = 1 ] && echo "=== risposta $rid ==="
@@ -506,10 +574,22 @@ case "$cmd" in
   send) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"" ;;
   reply) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\"" ;;
   cancel) valid_id "$head" || usage; confirm "\"kind\":\"cancel\",\"ref\":\"$head\"" ;;
-  close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\"" ;;
+  update)
+    valid_id "$head" || usage
+    case "$second" in bloccata|decisione) ;; *) usage ;; esac
+    [ -n "$text" ] || usage
+    confirm "\"kind\":\"update\",\"ref\":\"$head\",\"state\":\"$second\"" ;;
+  close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\",\"force\":$force" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
-    if [ "$cmd" = ask ]; then post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\""; else post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close"; fi
+    if [ "$cmd" = ask ]; then
+      post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\""
+    else
+      extra=""
+      [ -n "$name" ] && extra="$extra,\"name\":\"$(esc "$name")\""
+      [ -n "$model" ] && extra="$extra,\"model\":\"$(esc "$model")\""
+      post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree$extra"
+    fi
     if receipt; then
       case "$r" in ok*) said="$r" ;; *) echo "$r"; exit 1 ;; esac
     else
