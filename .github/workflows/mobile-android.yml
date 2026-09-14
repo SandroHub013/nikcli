@@ -1,0 +1,271 @@
+name: mobile-android
+
+# Builds the signed Android app for `packages/mobile`.
+#
+# The Expo project is bare — `packages/mobile/android` is committed — so this
+# builds with Gradle on the runner instead of going through EAS. The upload
+# keystore comes from repository secrets, is decoded into the runner's temp
+# directory and is passed to Gradle through the environment (never on the
+# command line). Every produced artifact is verified to carry that certificate
+# before it is uploaded, so a build that silently fell back to the debug
+# keystore fails instead of shipping.
+#
+# Required secrets (see GITHUB_SECRETS.txt):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#
+# Deliberately not triggered by push/pull_request: releasing a signed build is
+# an explicit act, and a repository without the keystore secrets would otherwise
+# leave the pipeline red. Callers using `workflow_call` must pass
+# `secrets: inherit`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact:
+        description: "Artifacts to build"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - apk
+          - aab
+      version_name:
+        description: "versionName (default: expo.version from app.json)"
+        required: false
+        type: string
+        default: ""
+      version_code:
+        description: "versionCode (default: this run's number)"
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Release tag to build from and attach the artifacts to (optional)"
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      artifact:
+        description: "Artifacts to build: both, apk or aab"
+        required: false
+        type: string
+        default: "both"
+      version_name:
+        required: false
+        type: string
+        default: ""
+      version_code:
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Release tag to build from and attach the artifacts to"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: mobile-android-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.repository == 'nikomatt69/nikcli'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || '' }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The Gradle scripts shell out to `node --print require.resolve(...)` to
+      # locate react-native, the RN gradle plugin and expo-modules-autolinking.
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Decode upload keystore
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set — cannot produce a signed build."
+            echo "Generate one with:"
+            echo "  keytool -genkeypair -v -storetype PKCS12 -keystore nikcli-upload.jks \\"
+            echo "    -alias nikcli-upload -keyalg RSA -keysize 2048 -validity 10000"
+            echo "  base64 -i nikcli-upload.jks | pbcopy"
+            exit 1
+          fi
+          KEYSTORE_PATH="$RUNNER_TEMP/nikcli-upload.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::Decoded keystore is empty — ANDROID_KEYSTORE_BASE64 is not valid base64."
+            exit 1
+          fi
+          chmod 600 "$KEYSTORE_PATH"
+          echo "path=$KEYSTORE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION_NAME="${INPUT_VERSION_NAME:-}"
+          if [ -z "$VERSION_NAME" ] && [ -n "${INPUT_TAG:-}" ]; then
+            VERSION_NAME="${INPUT_TAG#refs/tags/}"
+            VERSION_NAME="${VERSION_NAME#v}"
+          fi
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="$(node -p "require('./packages/mobile/app.json').expo.version")"
+          fi
+          VERSION_CODE="${INPUT_VERSION_CODE:-}"
+          if [ -z "$VERSION_CODE" ]; then
+            VERSION_CODE="$GITHUB_RUN_NUMBER"
+          fi
+          case "$VERSION_CODE" in
+            ''|*[!0-9]*)
+              echo "::error::versionCode must be a positive integer, got '$VERSION_CODE'."
+              exit 1
+              ;;
+          esac
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Building nikcli mobile $VERSION_NAME ($VERSION_CODE)"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: packages/mobile/android
+
+      - name: Build signed app
+        working-directory: packages/mobile/android
+        env:
+          NIKCLI_ANDROID_STORE_FILE: ${{ steps.keystore.outputs.path }}
+          NIKCLI_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NIKCLI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          NIKCLI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          NIKCLI_ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
+          NIKCLI_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          EXPO_NO_TELEMETRY: "1"
+        run: |
+          set -euo pipefail
+          if [ -z "${NIKCLI_ANDROID_STORE_PASSWORD:-}" ] || [ -z "${NIKCLI_ANDROID_KEY_ALIAS:-}" ] || [ -z "${NIKCLI_ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD must all be set."
+            exit 1
+          fi
+          TASKS=()
+          case "${{ inputs.artifact || 'both' }}" in
+            apk) TASKS=(:app:assembleRelease) ;;
+            aab) TASKS=(:app:bundleRelease) ;;
+            both) TASKS=(:app:assembleRelease :app:bundleRelease) ;;
+            *)
+              echo "::error::Unknown artifact '${{ inputs.artifact }}' — expected apk, aab or both."
+              exit 1
+              ;;
+          esac
+          ./gradlew --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g" \
+            "${TASKS[@]}"
+
+      # A release build falls back to the debug keystore when signing is not
+      # configured, which would ship an unusable artifact under a green check.
+      # Verify the real certificate is in place before anything leaves the job.
+      - name: Verify signatures
+        id: verify
+        working-directory: packages/mobile/android
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          APKSIGNER="$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found in $ANDROID_SDK_ROOT/build-tools."
+            exit 1
+          fi
+          STAGE="$GITHUB_WORKSPACE/dist-android"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          assert_not_debug() {
+            if printf '%s' "$1" | grep -q "CN=Android Debug"; then
+              echo "::error::$2 is signed with the debug keystore — the upload keystore was not applied."
+              exit 1
+            fi
+          }
+
+          APK="app/build/outputs/apk/release/app-release.apk"
+          if [ -f "$APK" ]; then
+            CERTS="$("$APKSIGNER" verify --print-certs --verbose "$APK")"
+            echo "$CERTS"
+            assert_not_debug "$CERTS" "$APK"
+            cp "$APK" "$STAGE/nikcli-${VERSION_NAME}-${VERSION_CODE}.apk"
+          fi
+
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          if [ -f "$AAB" ]; then
+            CERTS="$(keytool -printcert -jarfile "$AAB")"
+            echo "$CERTS"
+            assert_not_debug "$CERTS" "$AAB"
+            cp "$AAB" "$STAGE/nikcli-${VERSION_NAME}-${VERSION_CODE}.aab"
+          fi
+
+          if [ -z "$(ls -A "$STAGE")" ]; then
+            echo "::error::Gradle produced no release artifacts."
+            exit 1
+          fi
+          (cd "$STAGE" && sha256sum nikcli-* > checksums.txt)
+          {
+            echo "### nikcli mobile ${VERSION_NAME} (${VERSION_CODE})"
+            echo
+            echo '```'
+            cat "$STAGE/checksums.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: nikcli-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          path: ${{ steps.verify.outputs.stage }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to release
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN || github.token }}
+          STAGE: ${{ steps.verify.outputs.stage }}
+        run: |
+          set -euo pipefail
+          find "$STAGE" -maxdepth 1 -type f \
+            -exec gh release upload "${{ inputs.tag }}" --clobber --repo nikomatt69/nikcli {} +

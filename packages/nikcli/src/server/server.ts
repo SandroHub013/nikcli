@@ -171,6 +171,79 @@ export namespace Server {
     return server
   }
 
+  /**
+   * The extra, token-gated listener a phone pairs against.
+   *
+   * A separate socket *and* a separate router, on purpose. `mobileAuthRequired`
+   * used to be flipped on the process-wide pipeline, which reaches every local
+   * client too: the TUI talks to this same engine without a mobile token, so
+   * turning the flag on globally answered 401 to the editor that had just asked
+   * for a pairing link. Here only requests arriving on the LAN socket are held
+   * to a mobile token; the loopback listener keeps its own rules.
+   *
+   * Idempotent: pairing again (or from a second client) reuses the listener
+   * that is already bound, so the QR code a phone already scanned keeps working.
+   */
+  export interface MobileListener {
+    readonly url: string
+    readonly hostname: string
+    readonly port: number
+  }
+
+  let mobileServer: Bun.Server<WebSocketData> | undefined
+  let mobileListener: MobileListener | undefined
+  let mobileMDNS = false
+
+  export function mobile(): MobileListener | undefined {
+    return mobileListener
+  }
+
+  /** Closes the pairing listener, if one is bound. `false` when there was none. */
+  export async function stopMobile(): Promise<boolean> {
+    const server = mobileServer
+    if (!server) return false
+    mobileServer = undefined
+    mobileListener = undefined
+    // Only our own record: the main listener publishes and retracts its own.
+    if (mobileMDNS) MDNS.unpublish()
+    mobileMDNS = false
+    await server.stop(true).catch(() => undefined)
+    return true
+  }
+
+  export function listenMobile(opts: { hostname?: string; port?: number; mdns?: boolean } = {}): MobileListener {
+    if (mobileListener) return mobileListener
+
+    const hostname = opts.hostname ?? "0.0.0.0"
+    const handler = ServerRouter.make({
+      fallback,
+      corsWhitelist: _corsWhitelist,
+      listenHostname: hostname,
+      mobileAuthRequired: true,
+    })
+    const server = Bun.serve<WebSocketData>({
+      hostname,
+      port: opts.port ?? 0,
+      idleTimeout: 0,
+      maxRequestBodySize: Flag.NIKCLI_SERVER_MAX_BODY ?? 2 * 1024 * 1024 * 1024,
+      fetch: (request: Request, bound: Bun.Server<WebSocketData>) => handler(request, bound),
+      websocket: ServerWebSocket.handlers,
+    })
+    const port = server.port
+    if (!port) {
+      void server.stop(true)
+      throw new Error("the mobile listener did not bind a TCP port")
+    }
+
+    mobileMDNS = Boolean(opts.mdns) && !isLoopbackHostname(hostname)
+    if (mobileMDNS) MDNS.publish(port)
+    const listener: MobileListener = { url: `http://${hostname}:${port}`, hostname, port }
+    mobileServer = server
+    mobileListener = listener
+    log.info("mobile listener started", listener)
+    return listener
+  }
+
   export async function listenEffect(opts: {
     port: number
     hostname: string

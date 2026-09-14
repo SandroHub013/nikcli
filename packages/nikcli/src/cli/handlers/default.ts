@@ -486,17 +486,9 @@ export default Runtime.handler(Commands, async (input) => {
               port: options.port ?? 0,
               hostname: options.hostname ?? "127.0.0.1",
               mdns: options.mdns,
-              mobileAuthRequired: options.mobileAuthRequired,
             })
             return result.url
           }
-        : undefined,
-      createMobileToken: !shouldStartServer
-        ? async (options = {}) =>
-            client.call("mobileToken", {
-              name: options.name,
-              expiresInDays: options.expiresInDays,
-            })
         : undefined,
     })
 

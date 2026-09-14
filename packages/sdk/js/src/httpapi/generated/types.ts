@@ -1760,6 +1760,13 @@ export type MobileMissionExec = {
   ok: boolean
 }
 
+export type MobileHostLan = {
+  listening: boolean
+  url?: string | undefined
+  hostname?: string | undefined
+  port?: number | undefined
+}
+
 export type Project2 = {
   id: string
   worktree: string
@@ -5432,6 +5439,8 @@ export type MobileFusionSetPayload = { readonly name: string; readonly enabled: 
 
 export type MobileHostHerdrSetPayload = { readonly enabled: boolean }
 
+export type MobileHostLanStartPayload = { readonly mdns?: boolean }
+
 export type ProjectUpdatePayload = {
   readonly name?: string | undefined
   readonly icon?:
@@ -7848,6 +7857,12 @@ export type MobileHostDevtoolsOutput = {
   uptimeSec?: number | undefined
   platform?: string | undefined
 }
+
+export type MobileHostLanGetOutput = MobileHostLan
+
+export type MobileHostLanStartInput = { readonly mdns?: MobileHostLanStartPayload["mdns"] }
+
+export type MobileHostLanStartOutput = MobileHostLan
 
 export type ProjectListOutput = Array<Project2>
 

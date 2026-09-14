@@ -408,6 +408,13 @@ export namespace MobileHttpApi {
     reason: Schema.optional(Schema.String),
   }
 
+  const MobileHostLan = Schema.Struct({
+    listening: Schema.Boolean,
+    url: Schema.optional(Schema.String),
+    hostname: Schema.optional(Schema.String),
+    port: Schema.optional(Schema.Number),
+  }).annotate({ identifier: "MobileHostLan" })
+
   export const Group = HttpApiGroup.make("mobile")
     // --- auth tokens ---
     .add(
@@ -1304,6 +1311,24 @@ export namespace MobileHttpApi {
           platform: Schema.optional(Schema.String),
         }),
       }).annotate(OpenApi.Identifier, "mobile.host.devtools"),
+    )
+    // The pairing listener: the LAN socket a phone connects to, which the host
+    // opens on demand because the engine itself usually binds loopback only.
+    .add(
+      HttpApiEndpoint.get("hostLanGet", "/host/lan", {
+        success: MobileHostLan,
+      }).annotate(OpenApi.Identifier, "mobile.host.lan.get"),
+    )
+    .add(
+      HttpApiEndpoint.post("hostLanStart", "/host/lan", {
+        payload: [
+          HttpApiSchema.NoContent,
+          Schema.Struct({ mdns: Schema.optionalKey(Schema.Boolean) }).annotate({
+            identifier: "MobileHostLanStartInput",
+          }),
+        ],
+        success: MobileHostLan,
+      }).annotate(OpenApi.Identifier, "mobile.host.lan.start"),
     )
     .prefix("/mobile")
 

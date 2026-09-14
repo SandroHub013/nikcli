@@ -346,7 +346,9 @@ const MobileHandlers = HttpApiBuilder.group(MobileHttpApi.Api, "mobile", (handle
     .handle("hostHerdrGet", () => fromPromise(() => hostStatus.hostHerdrGet()))
     .handle("hostHerdrSet", ({ payload }) => fromPromise(() => hostStatus.hostHerdrSet(payload)))
     .handle("hostIsland", () => fromPromise(() => hostStatus.hostIsland()))
-    .handle("hostDevtools", () => fromPromise(() => hostStatus.hostDevtools())),
+    .handle("hostDevtools", () => fromPromise(() => hostStatus.hostDevtools()))
+    .handle("hostLanGet", () => fromPromise(() => hostStatus.hostLanGet()))
+    .handle("hostLanStart", ({ payload }) => fromPromise(() => hostStatus.hostLanStart(mutable(payload)))),
 )
 
 /** The middleware implementation must be in scope while the group layer is

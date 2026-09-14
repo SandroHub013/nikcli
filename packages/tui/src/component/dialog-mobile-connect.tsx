@@ -8,7 +8,6 @@ import { buildMobilePairingDeepLink, getLocalIPs, isLoopbackHostname } from "@ni
 import { DialogHeader, useDialog } from "@tui/ui/dialog"
 import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
-import { useServer } from "@tui/context/server"
 import { useToast } from "@tui/ui/toast"
 import { Clipboard } from "@tui/util/clipboard"
 import { useSync } from "@tui/context/sync"
@@ -541,7 +540,6 @@ function LocalMobileConnect(props: { onBack: () => void }) {
   const scrollAcceleration = useScrollAcceleration()
   const dialog = useDialog()
   const sdk = useSDK()
-  const server = useServer()
   const toast = useToast()
   const dimensions = useTerminalDimensions()
   const [pairing, setPairing] = createSignal<Pairing>()
@@ -586,15 +584,14 @@ function LocalMobileConnect(props: { onBack: () => void }) {
   })
 
   async function resolveBaseUrl() {
-    if (!server.startServer || !server.createMobileToken)
-      throw new Error("Start nikcli with --hostname 0.0.0.0 to connect from your phone")
     setStatus("Starting a token-protected LAN server…")
-    return server.startServer({
-      hostname: "0.0.0.0",
-      port: 0,
-      mdns: true,
-      mobileAuthRequired: true,
-    })
+    // The host opens the LAN socket, not this process: with a background
+    // service the engine runs elsewhere, and a listener bound here would serve
+    // the phone from a second engine.
+    const started = await sdk.client.mobile.host.lan.start({ mdns: true }, { throwOnError: true })
+    const url = started.data?.url
+    if (!url) throw new Error("The host did not open a LAN listener for mobile pairing")
+    return url
   }
 
   async function createPairing() {
@@ -602,19 +599,17 @@ function LocalMobileConnect(props: { onBack: () => void }) {
     setConnected(false)
     setStatus("Preparing a secure mobile link…")
     try {
-      const createMobileToken = server.createMobileToken
-      if (!createMobileToken) {
-        throw new Error("This TUI cannot create a token for the local server")
-      }
       const baseUrl = await resolveBaseUrl()
       const urls = pairingUrls(baseUrl)
       if (urls.length === 0) {
         throw new Error("No LAN address found. Connect both devices to the same network or use a public server URL.")
       }
-      const created = await createMobileToken({
-        name: "mobile-app",
-        expiresInDays: 90,
-      })
+      const response = await sdk.client.mobile.auth.token.create(
+        { name: "mobile-app", expiresInDays: 90 },
+        { throwOnError: true },
+      )
+      const created = response.data
+      if (!created) throw new Error("The host did not return a pairing token")
       const serverUrl = urls[0]!
       const deepLink = buildMobilePairingDeepLink({
         serverUrl,

@@ -244,6 +244,9 @@ export default Runtime.handler(Commands.commands["serve"], async (input) => {
     process.exit(1)
   }, 5_000)
   try {
+    // The pairing listener is a second socket on this process; the main
+    // server's stop does not know about it.
+    await Server.stopMobile()
     await server.stop(true)
     if (remoteSync) await remoteSync.stop()
     await Promise.all(workspaceSync.map((item) => item.stop()))

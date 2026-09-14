@@ -12,7 +12,6 @@ import { createNikcliClient, type Event } from "@nikcli-ai/sdk/httpapi"
 import { Flag } from "@nikcli-ai/util/flag"
 import { Process } from "@nikcli-ai/util/process"
 import { IslandBridge } from "@nikcli-ai/util/island-bridge"
-import { MobileAuth } from "@/mobile/auth"
 import { BrowserControl } from "@/browser-control/browser-control"
 import { errorMessage } from "@nikcli-ai/util/error-format"
 import { Diagnostics } from "@/cli/diagnostics"
@@ -147,13 +146,7 @@ export const rpc = {
       body,
     }
   },
-  async server(input: {
-    port: number
-    hostname: string
-    mdns?: boolean
-    cors?: string[]
-    mobileAuthRequired?: boolean
-  }) {
+  async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (shuttingDown) {
       await shuttingDown
       shuttingDown = undefined
@@ -161,9 +154,6 @@ export const rpc = {
     if (server) await server.stop(true)
     server = Server.listen(input)
     return { url: server.url.toString() }
-  },
-  async mobileToken(input: { name?: string; expiresInDays?: number }) {
-    return MobileAuth.create(input)
   },
   async checkUpgrade(input: { directory: string }) {
     await withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
@@ -205,6 +195,9 @@ export const rpc = {
         })
       })
       await Instance.disposeAll()
+      // The pairing listener is a second socket this process may have opened;
+      // the main server's stop does not know about it.
+      await Server.stopMobile()
       if (server) {
         const current = server
         server = undefined

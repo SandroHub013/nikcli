@@ -86,7 +86,7 @@ import { SessionTabs } from "./component/session-tabs"
 import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants"
 import { DialogWebPreview } from "@tui/component/dialog-web-preview"
 import { SupportSessionProvider } from "@tui/context/support-session"
-import type { CreateMobileTokenOptions, CreatedMobileToken, StartServerOptions } from "@tui/context/server"
+import type { StartServerOptions } from "@tui/context/server"
 import {
   shouldUseRendererThread,
   win32DisableProcessedInput,
@@ -134,7 +134,6 @@ export function tui(input: {
   checkUpgrade?: () => Promise<void>
   upgradeNow?: (method: string, version: string) => Promise<void>
   startServer?: (options?: StartServerOptions) => Promise<string>
-  createMobileToken?: (options?: CreateMobileTokenOptions) => Promise<CreatedMobileToken>
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
    *
@@ -213,7 +212,7 @@ export function tui(input: {
                   onBeforeExit={() => TuiPluginRuntime.dispose()}
                   onRestart={input.onRestart}
                 >
-                  <ServerProvider startServer={input.startServer} createMobileToken={input.createMobileToken}>
+                  <ServerProvider startServer={input.startServer}>
                     <KVProvider>
                       <ToastProvider>
                         <LanguageProvider>

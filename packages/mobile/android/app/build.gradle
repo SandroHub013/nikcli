@@ -81,6 +81,20 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+/**
+ * Release signing and version overrides come from the environment (CI) or from
+ * `-P` gradle properties. Passwords are read from the environment first so they
+ * never appear in the gradle command line.
+ */
+def resolveBuildSetting(String envName, String propertyName) {
+    def value = System.getenv(envName) ?: findProperty(propertyName)
+    return value?.toString()?.trim() ?: null
+}
+
+def releaseStoreFile = resolveBuildSetting('NIKCLI_ANDROID_STORE_FILE', 'nikcliAndroidStoreFile')
+def releaseVersionCode = (resolveBuildSetting('NIKCLI_ANDROID_VERSION_CODE', 'nikcliAndroidVersionCode') ?: '1').toInteger()
+def releaseVersionName = resolveBuildSetting('NIKCLI_ANDROID_VERSION_NAME', 'nikcliAndroidVersionName') ?: '1.0.0'
+
 android {
     ndkVersion rootProject.ext.ndkVersion
 
@@ -92,8 +106,8 @@ android {
         applicationId 'ai.nikcli.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -104,15 +118,27 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseStoreFile != null) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword resolveBuildSetting('NIKCLI_ANDROID_STORE_PASSWORD', 'nikcliAndroidStorePassword')
+                keyAlias resolveBuildSetting('NIKCLI_ANDROID_KEY_ALIAS', 'nikcliAndroidKeyAlias')
+                keyPassword resolveBuildSetting('NIKCLI_ANDROID_KEY_PASSWORD', 'nikcliAndroidKeyPassword')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Signed with the upload keystore when one is provided; local builds
+            // without it fall back to the debug keystore.
+            if (releaseStoreFile != null) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

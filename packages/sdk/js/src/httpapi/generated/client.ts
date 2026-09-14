@@ -338,6 +338,9 @@ import type {
   MobileHostHerdrSetOutput,
   MobileHostIslandOutput,
   MobileHostDevtoolsOutput,
+  MobileHostLanGetOutput,
+  MobileHostLanStartInput,
+  MobileHostLanStartOutput,
   ProjectListOutput,
   ProjectCurrentOutput,
   ProjectUpdateInput,
@@ -2893,6 +2896,23 @@ export function make(options: ClientOptions) {
       hostDevtools: (requestOptions?: RequestOptions) =>
         request<MobileHostDevtoolsOutput>(
           { method: "GET", path: `/mobile/host/devtools`, successStatus: 200, declaredStatuses: [], empty: false },
+          requestOptions,
+        ),
+      hostLanGet: (requestOptions?: RequestOptions) =>
+        request<MobileHostLanGetOutput>(
+          { method: "GET", path: `/mobile/host/lan`, successStatus: 200, declaredStatuses: [], empty: false },
+          requestOptions,
+        ),
+      hostLanStart: (input?: MobileHostLanStartInput, requestOptions?: RequestOptions) =>
+        request<MobileHostLanStartOutput>(
+          {
+            method: "POST",
+            path: `/mobile/host/lan`,
+            body: { mdns: input?.["mdns"] },
+            successStatus: 200,
+            declaredStatuses: [],
+            empty: false,
+          },
           requestOptions,
         ),
     },

@@ -115,6 +115,26 @@ that looks broken.
 the next start resumes them. Wait for the process to disappear, then remove the
 registration; `SIGKILL` only if it outlasts the stop timeout.
 
+### Mobile pairing
+
+The service binds loopback, so a phone has nowhere to point. `POST
+/mobile/host/lan` opens a **second** listener on `0.0.0.0`, in the engine
+process, and answers with its URL; `GET` reports whether one is bound. The TUI's
+pairing dialog calls it over the ordinary SDK client, so the same code serves
+both the service path and the private in-process one.
+
+Two properties are load-bearing:
+
+- **The LAN socket gets its own router**, with `mobileAuthRequired` on. That flag
+  used to be set on the process-wide pipeline, which every local client shares:
+  turning it on answered 401 to the very TUI that had just asked for a pairing
+  link. Only requests arriving on the LAN socket are held to a mobile token now.
+- **Starting is idempotent.** Pairing again — or from a second client — reuses
+  the bound listener, so a QR code a phone already scanned keeps working.
+
+The listener outlives the client, like the sessions do. `Server.stopMobile()`
+closes it on server shutdown; a pairing is revoked by revoking its token.
+
 ### Deliberate differences from opencode
 
 - **No per-service password.** opencode stamps one into the registration and

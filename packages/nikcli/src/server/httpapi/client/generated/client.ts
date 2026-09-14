@@ -1595,6 +1595,13 @@ const Endpoint16_112 = (raw: RawClient["mobile"]) => () => raw["hostIsland"]({})
 
 const Endpoint16_113 = (raw: RawClient["mobile"]) => () => raw["hostDevtools"]({}).pipe(Effect.mapError(mapClientError))
 
+const Endpoint16_114 = (raw: RawClient["mobile"]) => () => raw["hostLanGet"]({}).pipe(Effect.mapError(mapClientError))
+
+type Endpoint16_115Request = Parameters<RawClient["mobile"]["hostLanStart"]>[0]
+type Endpoint16_115Input = { readonly mdns?: Extract<Endpoint16_115Request["payload"], object>["mdns"] }
+const Endpoint16_115 = (raw: RawClient["mobile"]) => (input?: Endpoint16_115Input) =>
+  raw["hostLanStart"]({ payload: { mdns: input?.["mdns"] } }).pipe(Effect.mapError(mapClientError))
+
 const adaptGroup16 = (raw: RawClient["mobile"]) => ({
   authTokenList: Endpoint16_0(raw),
   authTokenCreate: Endpoint16_1(raw),
@@ -1710,6 +1717,8 @@ const adaptGroup16 = (raw: RawClient["mobile"]) => ({
   hostHerdrSet: Endpoint16_111(raw),
   hostIsland: Endpoint16_112(raw),
   hostDevtools: Endpoint16_113(raw),
+  hostLanGet: Endpoint16_114(raw),
+  hostLanStart: Endpoint16_115(raw),
 })
 
 const Endpoint17_0 = (raw: RawClient["project"]) => () => raw["list"]({}).pipe(Effect.mapError(mapClientError))

@@ -196,6 +196,7 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
         devtools: result0(raw["mobile"]["hostDevtools"]),
         herdr: { get: result0(raw["mobile"]["hostHerdrGet"]), set: result(raw["mobile"]["hostHerdrSet"]) },
         island: result0(raw["mobile"]["hostIsland"]),
+        lan: { get: result0(raw["mobile"]["hostLanGet"]), start: result(raw["mobile"]["hostLanStart"]) },
       },
       lsp: { status: result0(raw["mobile"]["lspStatus"]) },
       loop: {

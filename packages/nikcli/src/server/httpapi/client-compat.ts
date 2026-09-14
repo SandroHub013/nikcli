@@ -151,6 +151,8 @@ export const PublicClientCompat = {
   "mobile.host.herdr.get": ["result0", "mobile.hostHerdrGet"],
   "mobile.host.herdr.set": ["result", "mobile.hostHerdrSet"],
   "mobile.host.island": ["result0", "mobile.hostIsland"],
+  "mobile.host.lan.get": ["result0", "mobile.hostLanGet"],
+  "mobile.host.lan.start": ["result", "mobile.hostLanStart"],
   "mobile.lsp.status": ["result0", "mobile.lspStatus"],
   "mobile.loop.abort": ["result", "mobile.loopAbort"],
   "mobile.loop.create": ["result", "mobile.loopCreate"],

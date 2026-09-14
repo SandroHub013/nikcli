@@ -75,3 +75,23 @@ export async function hostDevtools() {
     platform: process.platform,
   }
 }
+
+/**
+ * The LAN listener a phone pairs against, started on demand.
+ *
+ * The engine usually listens on loopback only — a background service shared by
+ * every local client — so a pairing link has nowhere to point until this opens
+ * a second, token-gated socket on `0.0.0.0`. Imported lazily: `server.ts` reaches
+ * these handlers through its own router.
+ */
+export async function hostLanGet() {
+  const { Server } = await import("@/server/server")
+  const listener = Server.mobile()
+  return { listening: Boolean(listener), ...(listener ?? {}) }
+}
+
+export async function hostLanStart(input: { mdns?: boolean } | void) {
+  const { Server } = await import("@/server/server")
+  const listener = Server.listenMobile({ mdns: input?.mdns ?? true })
+  return { listening: true, ...listener }
+}

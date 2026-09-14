@@ -14477,6 +14477,120 @@
         ]
       }
     },
+    "/mobile/host/lan": {
+      "get": {
+        "tags": ["mobile"],
+        "operationId": "mobile.host.lan.get",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MobileHostLan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileHostLan"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.lan.get({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["mobile"],
+        "operationId": "mobile.host.lan.start",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "auth_token": []
+          },
+          {
+            "basicAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MobileHostLan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileHostLan"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileHostLanStartInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.lan.start({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "tags": ["project"],
@@ -56374,6 +56488,63 @@
                 "type": "null"
               }
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "MobileHostLan": {
+        "type": "object",
+        "properties": {
+          "listening": {
+            "type": "boolean"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hostname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "port": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["listening"],
+        "additionalProperties": false
+      },
+      "MobileHostLanStartInput": {
+        "type": "object",
+        "properties": {
+          "mdns": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

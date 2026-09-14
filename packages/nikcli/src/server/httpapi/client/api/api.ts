@@ -1470,6 +1470,16 @@ export type MobileHostIslandOperation<E = never> = () => Effect.Effect<Endpoint1
 export type Endpoint16_113Output = EffectValue<ReturnType<RawClient["mobile"]["hostDevtools"]>>
 export type MobileHostDevtoolsOperation<E = never> = () => Effect.Effect<Endpoint16_113Output, E>
 
+export type Endpoint16_114Output = EffectValue<ReturnType<RawClient["mobile"]["hostLanGet"]>>
+export type MobileHostLanGetOperation<E = never> = () => Effect.Effect<Endpoint16_114Output, E>
+
+type Endpoint16_115Request = Parameters<RawClient["mobile"]["hostLanStart"]>[0]
+export type Endpoint16_115Input = { readonly mdns?: Extract<Endpoint16_115Request["payload"], object>["mdns"] }
+export type Endpoint16_115Output = EffectValue<ReturnType<RawClient["mobile"]["hostLanStart"]>>
+export type MobileHostLanStartOperation<E = never> = (
+  input?: Endpoint16_115Input,
+) => Effect.Effect<Endpoint16_115Output, E>
+
 export interface MobileApi<E = never> {
   readonly authTokenList: MobileAuthTokenListOperation<E>
   readonly authTokenCreate: MobileAuthTokenCreateOperation<E>
@@ -1585,6 +1595,8 @@ export interface MobileApi<E = never> {
   readonly hostHerdrSet: MobileHostHerdrSetOperation<E>
   readonly hostIsland: MobileHostIslandOperation<E>
   readonly hostDevtools: MobileHostDevtoolsOperation<E>
+  readonly hostLanGet: MobileHostLanGetOperation<E>
+  readonly hostLanStart: MobileHostLanStartOperation<E>
 }
 
 export type Endpoint17_0Output = EffectValue<ReturnType<RawClient["project"]["list"]>>
