@@ -22,6 +22,8 @@ export interface Notice {
   readonly text: string
   /** Which session it came from, when it came from one. */
   readonly paneId?: string
+  /** A page the notice can open, such as a new release. */
+  readonly href?: string
   readonly at: number
   readonly read: boolean
 }
@@ -48,6 +50,7 @@ export interface NoticeInput {
   readonly kind: NoticeKind
   readonly text: string
   readonly paneId?: string
+  readonly href?: string
   readonly at: number
 }
 
@@ -78,6 +81,7 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     kind: input.kind,
     text: input.text,
     ...(input.paneId !== undefined ? { paneId: input.paneId } : {}),
+    ...(input.href !== undefined ? { href: input.href } : {}),
     at: input.at,
     read: false,
   }

@@ -335,6 +335,21 @@
   color: var(--ade-text);
 }
 
+[data-slot="ade-notice-link"] {
+  flex: 0 0 auto;
+  padding: 2px var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="ade-notice-link"]:hover {
+  background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
 /* ── command field ────────────────────────────────────────────────────────── */
 
 [data-slot="ade-search"] {

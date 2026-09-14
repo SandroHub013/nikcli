@@ -209,6 +209,8 @@ import {
   type Notice,
   type NoticeKind,
 } from "./notifications"
+import { startUpdateWatch } from "../update/watch"
+import { isReleasePage } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import {
@@ -1189,6 +1191,38 @@ export function Workbench() {
     if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
     return true
+  }
+
+  /*
+   * New releases reach the bell by themselves: a published `ade-v*` release
+   * on the fork is announced once, with a link to its downloads. Desktop only,
+   * since a browser tab of the dev server has no installed version to be behind.
+   */
+  onMount(() => {
+    if (!isTauriDesktop()) return
+    const stop = startUpdateWatch({
+      currentVersion: async () => (await import("@tauri-apps/api/app")).getVersion(),
+      onUpdate: (update) =>
+        setNotices((list) =>
+          addNotice(list, {
+            kind: "info",
+            text: `ADE ${update.version} è disponibile`,
+            href: update.url,
+            at: Date.now(),
+          }),
+        ),
+    })
+    onCleanup(stop)
+  })
+
+  const openNoticeLink = async (href: string) => {
+    if (!isReleasePage(href)) return
+    try {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("ade_open_release", { url: href })
+    } catch (error) {
+      report(`Impossibile aprire la pagina: ${String(error)}`)
+    }
   }
 
   onMount(() => {
@@ -3501,6 +3535,17 @@ export function Workbench() {
                         {(notice) => (
                           <div data-slot="ade-notice-row" data-kind={notice.kind}>
                             <span data-slot="ade-notice-text">{notice.text}</span>
+                            <Show when={notice.href}>
+                              {(href) => (
+                                <button
+                                  type="button"
+                                  data-slot="ade-notice-link"
+                                  onClick={() => void openNoticeLink(href())}
+                                >
+                                  Scarica
+                                </button>
+                              )}
+                            </Show>
                             <button
                               type="button"
                               data-slot="ade-notice-dismiss"

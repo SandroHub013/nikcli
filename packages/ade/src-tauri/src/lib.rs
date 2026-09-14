@@ -728,6 +728,24 @@ async fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+/// Opens an ADE release page in the default browser.
+///
+/// Only the fork's release pages: the URL comes from GitHub's API, and a
+/// command that opens any URL is one every page in the browser pane could call.
+/// The shell plugin's own `open` permission stays out of the capabilities for
+/// the same reason.
+#[tauri::command]
+async fn ade_open_release(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    const PREFIX: &str = "https://github.com/SandroHub013/nikcli/releases/";
+    if !url.starts_with(PREFIX) || url.contains(char::is_whitespace) {
+        return Err("non è una pagina di rilascio di ADE".into());
+    }
+    #[allow(deprecated)]
+    tauri_plugin_shell::ShellExt::shell(&app)
+        .open(url, None)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn ade_window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
@@ -909,6 +927,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ade_open_release,
             allow_write_root,
             git_run,
             bot_delete,
