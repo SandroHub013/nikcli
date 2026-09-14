@@ -71,9 +71,6 @@ describe("createPaneRecords", () => {
       })
       records.bufferLoading.set("p1", true)
       records.permissions.set("p1", { what: "scrivere", kind: "write", answers: [] })
-      records.paneView.set("p1", "diff")
-      records.paneDiff.set("p1", { files: [], added: 0, removed: 0, truncated: false })
-      records.diffLoading.set("p1", true)
 
       // A second pane, to prove the forgetting is targeted.
       records.bufferLoading.set("p2", true)
@@ -83,9 +80,6 @@ describe("createPaneRecords", () => {
       expect(records.reports()).toEqual({})
       expect(records.buffers()).toEqual({})
       expect(records.permissions()).toEqual({})
-      expect(records.paneView()).toEqual({})
-      expect(records.paneDiff()).toEqual({})
-      expect(records.diffLoading()).toEqual({})
       expect(records.bufferLoading()).toEqual({ p2: true })
 
       dispose()

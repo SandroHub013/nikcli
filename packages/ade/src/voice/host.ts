@@ -29,7 +29,6 @@ export interface AdeVoiceHostDeps {
   getRunningSession: (paneId: string) => SpawnedSession | { write: (text: string) => void; kill?: () => void } | undefined
   openFile: (path: string) => Promise<void>
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
-  setPaneView: (paneId: string, view: "transcript" | "diff") => void
   permissions: () => Record<string, PermissionRequest>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
   getHost?: () => Promise<Host | undefined>
@@ -254,9 +253,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       }
     },
 
-    setPaneView(paneId: string, view: "transcript" | "diff"): void {
-      deps.setPaneView(paneId, view)
-    },
+    /*
+     * The pane no longer has a diff face: the "modifiche" tab was removed from
+     * the session pane, so there is nothing to switch to. The method stays
+     * because `VoiceHost` (packages/voice) still declares it.
+     */
+    setPaneView(): void {},
 
     browserNavigate(paneId: string, url: string): void {
       deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))

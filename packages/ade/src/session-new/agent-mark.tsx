@@ -27,8 +27,9 @@
  *                The bare rosette that stood here named the company, not the
  *                product, in a colour OpenAI retired
  *   opencode     anomalyco/opencode, `packages/identity/mark.svg`
- *   agy          Google Antigravity's mark, vectorised on Wikimedia Commons
- *                from antigravity.google — their press page ships PNG only
+ *   agy          Google Antigravity's arch and its blurred colour field, from
+ *                `@lobehub/icons-static-svg` (`antigravity.svg`,
+ *                `antigravity-color.svg`), kept in `vendor-paths.ts`
  *   kimi         simple-icons `kimi.svg`, from Moonshot's own Branding-Guide
  *   prime        PrimeIntellect-ai/prime-agent, `assets/brand/prime-butterfly.svg`
  *   pi           `pi.dev/logo-auto.svg`
@@ -50,20 +51,27 @@
  *
  * The vendor's, from the same files, and only where the vendor has one.
  * Claude is `#D97757`, Kimi's dot is `#1783FF`, OhMyPi's plug is `#F97316`,
- * OpenCode's ring is its off-white; everything else — Codex, Antigravity,
- * Prime, pi, Nous — ships black-on-white and white-on-black and nothing
- * more, and here takes the theme's ink for it. Those five used to wear a
- * colour each (a teal, a Google gradient, an indigo, an amber, a red) that
- * nobody had chosen but us, which made the row legible and every mark on it
- * a little wrong. `session-new.css` tints the launcher tiles to match, and
- * the two must agree: a black mark on a purple tile still says purple.
+ * OpenCode's ring is its off-white, Codex is a lilac-to-blue gradient and
+ * Antigravity is a field of blurred Google colours cut to the arch. Prime,
+ * pi and Nous ship black-on-white and white-on-black and nothing more, and
+ * take the theme's ink for it. Several used to wear a colour each (a teal,
+ * a flat four-stop gradient, an indigo, an amber, a red) that nobody had
+ * chosen but us, which made the row legible and every mark on it a little
+ * wrong. `session-new.css` tints the launcher tiles to match, and the two
+ * must agree: a black mark on a purple tile still says purple.
  *
  * Monochrome mode swaps every fill for `currentColor`.
  */
 
-import { type JSX } from "solid-js"
+import { For, type JSX } from "solid-js"
 import { initialOf } from "./marks"
-import { CODEX_PATH, NOUS_PATHS } from "./vendor-paths"
+import {
+  ANTIGRAVITY_ARCH,
+  ANTIGRAVITY_BLOBS,
+  CODEX_GRADIENT,
+  CODEX_PATH,
+  NOUS_PATHS,
+} from "./vendor-paths"
 
 /**
  * What a black-and-white mark is painted with.
@@ -120,24 +128,32 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
   ),
 
   /*
-   * OpenAI Codex: the rosette's silhouette with a `>_` prompt cut out.
+   * OpenAI Codex: the rosette's silhouette with a `>_` prompt cut out, in
+   * the lilac-to-blue gradient of the app icon.
    *
-   * Monochrome on purpose. OpenAI's mark has been black-on-white since the
-   * rebrand; the teal `#10A37F` it wore here was the API-era colour, retired
-   * with it, and on a dark tile it read as somebody else's product. Ink of the
-   * theme in colored mode, `currentColor` otherwise — for this brand the two
-   * are nearly the same thing.
+   * Not OpenAI's teal: `#10A37F` was the API-era colour, retired with the
+   * rebrand, and it named the company rather than the product. The gradient
+   * runs top to bottom in user space so it lands the same at any size.
    */
   codex: (size, colored) => (
     <svg
       width={size()}
       height={size()}
       viewBox="0 0 24 24"
-      fill={colored() ? INK : "currentColor"}
+      fill={colored() ? "url(#ade-codex-grad)" : "currentColor"}
       fill-rule="evenodd"
       aria-hidden="true"
       data-mark="codex"
     >
+      {colored() && (
+        <defs>
+          <linearGradient id="ade-codex-grad" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24">
+            <For each={CODEX_GRADIENT}>
+              {(stop) => <stop offset={stop.offset} stop-color={stop.color} />}
+            </For>
+          </linearGradient>
+        </defs>
+      )}
       <path clip-rule="evenodd" d={CODEX_PATH} />
     </svg>
   ),
@@ -175,25 +191,60 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
   },
 
   /*
-   * Google Antigravity's arch.
+   * Google Antigravity's arch, cut from a field of blurred colour.
    *
-   * In ink, not in Google's four colours: the arch is black on
-   * antigravity.google and white in the app, and the gradient it wore here
-   * was borrowed from the parent company's wordmark, which is a different
-   * logo.
+   * That is the app icon: not a flat arch and not a linear gradient, but
+   * eleven soft blobs of Google's yellow, red, green and blue behind a mask
+   * shaped like the arch. The four-stop gradient it wore before was a guess
+   * at this from memory; the blobs, their blur radii and the mask are the
+   * vendor's. Monochrome mode draws the arch alone in `currentColor`.
+   *
+   * The ids repeat wherever the mark is drawn twice on one page; every copy
+   * defines them identically, so whichever wins is the right one.
    */
   agy: (size, colored) => (
     <svg
       width={size()}
       height={size()}
-      viewBox="8 9 96 96"
+      viewBox="0 0 24 24"
       aria-hidden="true"
       data-mark="agy"
     >
-      <path
-        fill={colored() ? INK : "currentColor"}
-        d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z"
-      />
+      {colored() ? (
+        <>
+          <defs>
+            <mask id="ade-agy-mask" maskUnits="userSpaceOnUse" x="0" y="1" width="24" height="23">
+              <path d={ANTIGRAVITY_ARCH} fill="#fff" />
+            </mask>
+            <For each={ANTIGRAVITY_BLOBS}>
+              {(blob, i) => (
+                <filter
+                  id={`ade-agy-blur-${i()}`}
+                  filterUnits="userSpaceOnUse"
+                  color-interpolation-filters="sRGB"
+                  x={blob.region.x}
+                  y={blob.region.y}
+                  width={blob.region.w}
+                  height={blob.region.h}
+                >
+                  <feGaussianBlur stdDeviation={blob.blur} />
+                </filter>
+              )}
+            </For>
+          </defs>
+          <g mask="url(#ade-agy-mask)">
+            <For each={ANTIGRAVITY_BLOBS}>
+              {(blob, i) => (
+                <g filter={`url(#ade-agy-blur-${i()})`}>
+                  <path d={blob.d} fill={blob.fill} />
+                </g>
+              )}
+            </For>
+          </g>
+        </>
+      ) : (
+        <path d={ANTIGRAVITY_ARCH} fill="currentColor" />
+      )}
     </svg>
   ),
 

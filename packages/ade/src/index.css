@@ -289,21 +289,39 @@ body,
 /* ── grid ──────────────────────────────────────────────────────────────────── */
 
 /*
- * The grid has no padding and no gutter: it is a wall of terminals.
+ * The grid is a tray of shells, not a wall of terminals.
  *
- * Its ground is the border colour, and the one-pixel gap is what shows through
- * — so the lines between panes are the gap itself rather than borders drawn on
- * each card, which would double up wherever two panes meet and leave the outer
- * edge bordered against the window frame.
+ * It was: no padding, a one-pixel gap of border colour, every pane flush
+ * against the next and against the window. That matched a sidebar that was a
+ * flat column; the sidebar is now a rounded panel floating on the ground
+ * (`sidebar.css`, "Conchiglia · Perla"), and beside it a wall of square tiles
+ * read as a different application. So the grid takes the same ground and the
+ * same breathing room, and each cell's pane is a shell of its own — see the
+ * rule after this one. Ten pixels a side is what the sidebar's own margin
+ * is, so the gutters line up across the window.
  */
 [data-component="session-grid"] {
   display: grid;
-  gap: var(--ade-grid-gap);
+  gap: 10px;
+  padding: 10px;
   width: 100%;
   height: 100%;
   overflow-y: auto;
   align-content: start;
-  background: var(--ade-border);
+  background: var(--ade-bg);
+}
+
+/*
+ * Whatever sits in a cell — a session, a file, a browser, a video, a plugin —
+ * gets the shell: corners, and a shadow instead of a border. On the cell's
+ * child rather than on each component, so a pane kind added tomorrow is
+ * rounded before anybody remembers to round it. What the shell contains is
+ * still each component's own business.
+ */
+[data-slot="grid-cell"] > [data-component] {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45));
 }
 
 /* With no panes there is nothing for the gaps to separate, so the ground goes

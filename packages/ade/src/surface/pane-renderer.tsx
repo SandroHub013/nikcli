@@ -49,7 +49,6 @@ export interface PaneRendererDeps {
   appendLine: (id: string, text: string, kind?: "step" | "shell" | "note") => void
   close: (id: string) => void
   saveFile: (id: string) => void
-  showPaneView: (id: string, view: "transcript" | "diff") => void
   answerPermission: (id: string, answer: PermissionAnswer) => void
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
@@ -67,7 +66,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, reports, permissions, paneView, paneDiff, diffLoading } = records
+  const { buffers, bufferLoading, reports, permissions } = records
 
   /*
    * The rendered tile is built once per pane and kept.
@@ -239,7 +238,16 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
-        onInput={(data) => deps.sessionFor(current().id)?.write(data)}
+        onInput={(data) => {
+          const session = deps.sessionFor(current().id)
+          if (!session) return
+          // Enter typed straight into the terminal submits a turn, exactly as
+          // the composer does; the quiet timer brings the pane back to idle.
+          if (data.includes("\r") && current().status === "idle") {
+            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+          }
+          session.write(data)
+        }}
         /*
          * The paths, and not a keystroke more.
          *
@@ -310,11 +318,6 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
               : undefined
         }
         lines={current().lines}
-        view={paneView()[current().id] ?? "transcript"}
-        onViewChange={current().cwd ? (view) => deps.showPaneView(current().id, view) : undefined}
-        diff={paneDiff()[current().id]}
-        diffLoading={diffLoading()[current().id]}
-        changedFiles={paneDiff()[current().id]?.files.length}
         focused={isFocused()}
         onFocus={focus}
         onClose={() => deps.close(current().id)}

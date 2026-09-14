@@ -37,7 +37,6 @@ function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
     appendLine: (paneId, text, kind) => {
       appendedLines.push({ paneId, text, kind })
     },
-    setPaneView: () => {},
     permissions: () => permissionsState,
     answerPermission: (paneId, answer) => {
       permissionsAnswered.push({ paneId, answer })

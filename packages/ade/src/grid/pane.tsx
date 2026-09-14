@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
-import { DiffView, type SessionDiff } from "../review"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { attachTerminal } from "../terminal/registry"
@@ -202,17 +201,6 @@ export interface SessionPaneProps {
   onDropPath?: (paths: string[]) => void
   /** The terminal's size in cells, whenever the pane changes shape. */
   onResize?: (cols: number, rows: number) => void
-  /**
-   * Which face of the session is showing. The transcript is what the agent
-   * says; the diff is what it did, and the two disagree often enough that the
-   * pane has to be able to show either without losing its place.
-   */
-  view?: "transcript" | "diff"
-  onViewChange?: (view: "transcript" | "diff") => void
-  diff?: SessionDiff
-  diffLoading?: boolean
-  /** Number of changed files, shown on the tab so it is worth pressing. */
-  changedFiles?: number
 }
 
 /*
@@ -470,35 +458,6 @@ export function SessionPane(props: SessionPaneProps) {
             <span data-slot="pane-meta">{props.elapsed}</span>
           </Show>
         </span>
-        {/* Offered whenever the session has a checkout to diff. The count
-            appears once it is known; the view itself says when nothing changed. */}
-        <Show when={props.onViewChange}>
-          <div data-slot="pane-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              data-slot="pane-tab"
-              data-active={(props.view ?? "transcript") === "transcript" ? "true" : undefined}
-              aria-selected={(props.view ?? "transcript") === "transcript"}
-              onClick={() => props.onViewChange?.("transcript")}
-            >
-              sessione
-            </button>
-            <button
-              type="button"
-              role="tab"
-              data-slot="pane-tab"
-              data-active={props.view === "diff" ? "true" : undefined}
-              aria-selected={props.view === "diff"}
-              onClick={() => props.onViewChange?.("diff")}
-            >
-              modifiche
-              <Show when={(props.changedFiles ?? 0) > 0}>
-                <span data-slot="pane-tab-count">{props.changedFiles}</span>
-              </Show>
-            </button>
-          </div>
-        </Show>
         <Show when={props.tokens}>
           <span data-slot="pane-tokens">{props.tokens}</span>
         </Show>
@@ -529,12 +488,6 @@ export function SessionPane(props: SessionPaneProps) {
           the pane's own top edge, keyed off `data-status`, which says the same
           thing without taking a row — see `pane.css`. */}
 
-      <Show when={props.view === "diff"}>
-        <div data-slot="pane-diff">
-          <DiffView diff={props.diff} loading={props.diffLoading} />
-        </div>
-      </Show>
-
       {/*
         The live session, drawn by a real terminal emulator.
 
@@ -547,7 +500,6 @@ export function SessionPane(props: SessionPaneProps) {
       <Show when={props.terminalId}>
         <div
           data-slot="pane-terminal"
-          data-hidden={props.view === "diff" ? "true" : undefined}
           ref={(element) => {
             const id = props.terminalId
             if (!id) return
@@ -562,7 +514,7 @@ export function SessionPane(props: SessionPaneProps) {
 
       <div
         data-slot="pane-transcript"
-        data-hidden={props.view === "diff" || props.terminalId ? "true" : undefined}
+        data-hidden={props.terminalId ? "true" : undefined}
         ref={(element) => (scroller = element)}
         onScroll={(event) => setFollowing(atBottom(event.currentTarget))}
       >

@@ -178,69 +178,13 @@
   letter-spacing: -0.012em;
 }
 
-/* ── transcript / diff tabs ───────────────────────────────────────────────── */
-
-[data-slot="pane-tabs"] {
-  display: flex;
-  gap: 1px;
-  flex: 0 0 auto;
-  padding: 1px;
-  border-radius: var(--ade-radius-sm);
-  background: var(--ade-active);
-}
-
-[data-slot="pane-tab"] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ade-space-2);
-  padding: 1px var(--ade-space-4);
-  border: 0;
-  border-radius: calc(var(--ade-radius-sm) - 1px);
-  background: transparent;
-  color: var(--ade-text-weak);
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-sm);
-  cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="pane-tab"]:hover {
-  color: var(--ade-text-soft);
-}
-
-[data-slot="pane-tab"][data-active] {
-  background: var(--ade-surface);
-  color: var(--ade-text);
-}
-
-[data-slot="pane-tab"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
-[data-slot="pane-tab-count"] {
-  color: var(--ade-accent);
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
-  font-variant-numeric: tabular-nums;
-}
-
 /*
- * The transcript keeps its scroll position while the diff is showing, which is
- * why it is hidden rather than unmounted: coming back to a session that jumped
- * to the bottom loses the line you were reading.
+ * Hidden rather than unmounted while a live terminal is attached: the saved
+ * transcript is what a pane shows when its process is gone, and it has to keep
+ * its scroll position for that moment instead of jumping to the bottom.
  */
 [data-slot="pane-transcript"][data-hidden] {
   display: none;
-}
-
-[data-slot="pane-diff"] {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  background: var(--ade-sunken);
 }
 
 /*
@@ -821,5 +765,159 @@
     background-image: none;
     background-color: var(--pane-status);
     animation: none;
+  }
+}
+
+/* ══ Conchiglia · C2 "Vetro" ══════════════════════════════════════════════════
+ *
+ * The evolution chosen from `sessioni-conchiglia-varianti.html`, after the
+ * sidebar took "Perla". The three rules at the top of this file still hold;
+ * what changes is the shape they are drawn in.
+ *
+ * The terminal takes the whole shell, out to the rounded corners. The header
+ * no longer owns a row above it: it is a pill of frosted glass floating over
+ * the first lines, and what scrolls past underneath shows through. That costs
+ * about two rows of terminal at the top — the one price of this direction —
+ * and buys a pane that reads as one object rather than as a bar with a
+ * terminal hung under it.
+ *
+ * Status moves off the top edge and onto the agent's mark: a halo in the
+ * status colour, which pulses while the session works. The sweep along the
+ * edge is gone with the edge.
+ *
+ * At the end of the file and scoped to the session pane throughout: the base
+ * rules above are shared with the file, browser and video panes, which keep
+ * their bar. Scoping is also what wins the cascade here — `index.css` loads
+ * after this sheet and ties go to it.
+ */
+
+/* ── the shell: the terminal's ground, corner to corner ── */
+[data-component="session-pane"] {
+  background: var(--ade-terminal-bg, var(--ade-sunken));
+  transition: box-shadow var(--ade-dur-fast) var(--ade-ease);
+}
+
+/* No edge: the status lives on the mark now. */
+[data-component="session-pane"]::before {
+  content: none;
+}
+
+/*
+ * Focus is a ring on the shell and a longer shadow, not a line drawn inside.
+ * There is an outside again — the gutter — so the ring can sit on it.
+ */
+[data-component="session-pane"][data-focused] {
+  outline: none;
+  box-shadow:
+    0 0 0 1.5px var(--ade-accent),
+    0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
+}
+
+/* ── the header: a pill of glass over the first lines ── */
+[data-component="session-pane"] > [data-slot="pane-header"] {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  z-index: 3;
+  min-height: 30px;
+  padding: 0 var(--ade-space-3);
+  gap: var(--ade-space-4);
+  border: 0;
+  border-radius: var(--ade-radius-full);
+  background: color-mix(in srgb, var(--ade-raised) 78%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow:
+    var(--ade-shadow-sm),
+    inset 0 0 0 1px light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.06));
+  font-family: var(--ade-sans);
+}
+
+[data-component="session-pane"][data-focused] > [data-slot="pane-header"] {
+  box-shadow:
+    var(--ade-shadow-sm),
+    inset 0 0 0 1px var(--ade-accent-soft);
+}
+
+/* The mark in a round chip, with the status as a halo around it. */
+[data-component="session-pane"] [data-slot="pane-identity"] {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ade-radius-full);
+  background: color-mix(in srgb, var(--pane-status) 18%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
+}
+
+/* Work in progress still needs a sign that is not a word: the halo breathes. */
+[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"],
+[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"] {
+  animation: ade-pane-halo 1.6s ease-in-out infinite;
+}
+
+@keyframes ade-pane-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
+  }
+}
+
+[data-component="session-pane"] [data-slot="pane-title"] {
+  font-weight: var(--ade-weight-semibold);
+}
+
+/* Meta in the same face as the title: a pill of glass is one object, and a
+   change of typeface halfway along splits it in two. */
+[data-component="session-pane"] [data-slot="pane-who"],
+[data-component="session-pane"] [data-slot="pane-state"],
+[data-component="session-pane"] [data-slot="pane-tokens"],
+[data-component="session-pane"] [data-slot="pane-cost"] {
+  font-family: var(--ade-sans);
+}
+
+/* The status word wears its colour as a tint, not only as ink. */
+[data-component="session-pane"] [data-slot="pane-activity-word"] {
+  padding: 1px var(--ade-space-4);
+  border-radius: var(--ade-radius-full);
+  background: color-mix(in srgb, var(--pane-status) 14%, transparent);
+  font-weight: var(--ade-weight-medium);
+}
+
+/* The dot that split "Ragionando 41s" is drawn on the word itself, and a
+   word with a ground of its own would carry the dot inside the pill. The
+   pill is the separation now. */
+[data-component="session-pane"] [data-slot="pane-state"] > span:first-child:not(:only-child)::after {
+  content: none;
+}
+
+[data-component="session-pane"] [data-slot="pane-action"] {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ade-radius-full);
+}
+
+/*
+ * Room for the pill.
+ *
+ * The header is out of flow, so the body would start under it. Forty-two
+ * pixels — six of margin, thirty of pill, six of air — is the top padding that
+ * keeps the first prompt readable, and it is the two rows this direction
+ * costs. Bottom and sides stay at zero: those are terminal columns.
+ */
+[data-component="session-pane"] [data-slot="pane-terminal"],
+[data-component="session-pane"] [data-slot="pane-transcript"],
+[data-component="session-pane"] [data-slot="pane-plugin"] {
+  padding-top: 42px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The halo holds at its wider size instead of breathing. */
+  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"],
+  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"] {
+    animation: none;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
   }
 }
