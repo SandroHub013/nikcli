@@ -104,7 +104,7 @@ export default function MissionsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      void load(true)
     }, [load]),
   )
 

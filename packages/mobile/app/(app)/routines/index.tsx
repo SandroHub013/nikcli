@@ -65,24 +65,24 @@ export default function RoutinesScreen() {
   const [error, setError] = useState<string | null>(null)
   const [runningID, setRunningID] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!client) {
       setRoutines([])
       return
     }
     try {
-      setRefreshing(true)
+      if (!silent) setRefreshing(true)
       setError(null)
       setRoutines(await client.listRoutines())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setRefreshing(false)
+      if (!silent) setRefreshing(false)
     }
   }, [client])
 
   useEffect(() => {
-    void load()
+    void load(true)
   }, [load])
 
   const refreshControlElement = useMemo(

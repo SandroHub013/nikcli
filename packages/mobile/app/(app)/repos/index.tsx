@@ -72,7 +72,7 @@ export default function ReposScreen() {
   const executionTarget = config?.executionTarget ?? "local"
   const containerReady = Boolean(bootstrap?.execution?.container?.available)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!client) {
       setProjects([])
       setRepos([])
@@ -81,7 +81,7 @@ export default function ReposScreen() {
     }
 
     try {
-      setRefreshing(true)
+      if (!silent) setRefreshing(true)
       setError(null)
       setGithubError(null)
       const projectList = await client.listProjects()
@@ -112,7 +112,7 @@ export default function ReposScreen() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
-      setRefreshing(false)
+      if (!silent) setRefreshing(false)
     }
   }, [client])
 
@@ -126,7 +126,7 @@ export default function ReposScreen() {
         router.replace("/")
         return
       }
-      void load()
+      void load(true)
     }, [config, load, loading, rootNavigationState?.key]),
   )
 
@@ -178,7 +178,7 @@ export default function ReposScreen() {
       })
       if (config) await save({ ...config, directory: worktree.directory })
       setSandboxName("")
-      await load()
+      await load(true)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
@@ -192,7 +192,7 @@ export default function ReposScreen() {
       setSandboxAction(directory)
       setError(null)
       await client.resetWorktree(directory, selectedProject.worktree)
-      await load()
+      await load(true)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
@@ -209,7 +209,7 @@ export default function ReposScreen() {
       if (config?.directory === directory) {
         await save({ ...config, directory: selectedProject.worktree })
       }
-      await load()
+      await load(true)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
@@ -245,7 +245,7 @@ export default function ReposScreen() {
         private: repo.private,
       })
       await save({ ...config, directory: result.import.directory })
-      await load()
+      await load(true)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError))
     } finally {
