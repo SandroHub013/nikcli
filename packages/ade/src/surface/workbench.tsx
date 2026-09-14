@@ -2993,14 +2993,16 @@ export function Workbench() {
             The name stays in the accessibility tree: the mark is decorative
             and the label is on the box around it.
           */}
-          <span data-slot="ade-brand" role="img" aria-label="ADE">
-            {/*
-              Concept 03: Molten Chrome Mercury (N).
-              Continuous liquid metal ribbon with animated caustic sheen
-              and floating mercury micro-droplets.
-            */}
-            <NikChromeLogo size={30} />
-          </span>
+          <Show when={!(isTauriDesktop() && isMacOS())}>
+            <span data-slot="ade-brand" role="img" aria-label="ADE">
+              {/*
+                Concept 03: Molten Chrome Mercury (N).
+                Continuous liquid metal ribbon with animated caustic sheen
+                and floating mercury micro-droplets.
+              */}
+              <NikChromeLogo size={30} />
+            </span>
+          </Show>
           <ProjectBar project={project()} />
           <span data-slot="ade-count">{wb().panes.filter(p => !p.browserUrl && !p.plugin).length} sessioni</span>
         </div>
@@ -3131,6 +3133,14 @@ export function Workbench() {
               </div>
             </Show>
           </div>
+        </Show>
+
+        {/* On macOS the traffic lights hold the left edge, so the mark takes
+            the place the window controls have elsewhere. */}
+        <Show when={isTauriDesktop() && isMacOS()}>
+          <span data-slot="ade-brand" data-place="end" role="img" aria-label="ADE">
+            <NikChromeLogo size={30} />
+          </span>
         </Show>
 
         <Show when={isTauriDesktop() && !isMacOS()}>

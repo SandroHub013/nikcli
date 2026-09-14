@@ -48,6 +48,10 @@
   padding-left: 80px;
 }
 
+[data-slot="ade-brand"][data-place="end"] {
+  margin-left: var(--ade-space-2);
+}
+
 [data-slot="ade-bar-side"] {
   display: flex;
   align-items: center;
