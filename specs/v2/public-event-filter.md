@@ -14,14 +14,14 @@
 
 The cost is not hypothetical. Measured 2026-08-16 against `packages/nikcli/src`, of the 64 declared `BusEvent.schema` types, **six reach every SSE client and no client anywhere reads them**:
 
-| Type                      | Published by                           | Who reads it                                |
-| ------------------------- | -------------------------------------- | ------------------------------------------- |
-| `lsp.client.diagnostics`  | `lsp/client.ts:63`                     | `lsp/client.ts:215` — **the same module**   |
-| `mcp.browser.open.failed` | `mcp/index.ts:849`                     | `cli/cmd/mcp.ts:293` — **the same process** |
-| `command.executed`        | `session/prompt-commands.ts:505,579`   | nobody                                      |
-| `instance.reload.started` | `project/reload.ts` (`InstanceReload`) | nobody                                      |
-| `instance.reloaded`       | `project/reload.ts` (`InstanceReload`) | nobody                                      |
-| `loop.aborted`            | `loop/engine.ts:543` and siblings      | nobody                                      |
+| Type                      | Published by                           | Who reads it                               |
+| ------------------------- | -------------------------------------- | ------------------------------------------ |
+| `lsp.client.diagnostics`  | `lsp/client.ts:63`                     | `lsp/client.ts:215` — **the same module**  |
+| `mcp.browser.open.failed` | `mcp/index.ts:849`                     | `cli/handlers/mcp/` — **the same process** |
+| `command.executed`        | `session/prompt-commands.ts:505,579`   | nobody                                     |
+| `instance.reload.started` | `project/reload.ts` (`InstanceReload`) | nobody                                     |
+| `instance.reloaded`       | `project/reload.ts` (`InstanceReload`) | nobody                                     |
+| `loop.aborted`            | `loop/engine.ts:543` and siblings      | nobody                                     |
 
 "Nobody" is repo-wide: zero references in `packages/tui`, `packages/app`, `packages/mobile`, `packages/desktop`, outside the generated `Event` union itself. Reproduce with:
 
@@ -52,7 +52,7 @@ BusEvent.schema(type, properties, { visibility: "internal" }) // never leaves th
 
 The alternative — a list of internal type strings inside `event-feed.ts` — was rejected. That is the same shape as the four hand-copied instance-less prefixes that H2 just deleted: the list lives away from the thing it describes, nothing forces them to agree, and the failure (an internal event silently going public) reports itself nowhere. A field on the declaration cannot drift from the declaration.
 
-`Bus.publish` is unchanged. Internal events still reach in-process subscribers exactly as they do today; `lsp/client.ts` and `cli/cmd/mcp.ts` keep working with no edit.
+`Bus.publish` is unchanged. Internal events still reach in-process subscribers exactly as they do today; `lsp/client.ts` and `cli/handlers/mcp/` keep working with no edit.
 
 ### 2. Filter once, before encoding
 

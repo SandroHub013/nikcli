@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { namedFailures } from "@tui/util/settled"
+import { ClientError } from "@nikcli-ai/sdk/httpapi"
+import { clientErrorStatus, isTransientHttpInterrupt, namedFailures, retryTransient } from "@tui/util/settled"
 
 const ok = (value: unknown): PromiseSettledResult<unknown> => ({ status: "fulfilled", value })
 const bad = (reason: unknown): PromiseSettledResult<unknown> => ({ status: "rejected", reason })
@@ -41,5 +42,59 @@ describe("namedFailures", () => {
 
   it("handles an empty batch", () => {
     expect(namedFailures([], [])).toEqual({ failed: [], errors: [] })
+  })
+})
+
+function statusError(status: number) {
+  return new ClientError("UnexpectedStatus", { cause: { status } })
+}
+
+describe("clientErrorStatus", () => {
+  it("reads the generated-client status cause", () => {
+    expect(clientErrorStatus(statusError(499))).toBe(499)
+    expect(clientErrorStatus(new Error("plain"))).toBeUndefined()
+  })
+})
+
+describe("isTransientHttpInterrupt", () => {
+  it("treats Effect abort statuses as retryable", () => {
+    expect(isTransientHttpInterrupt(statusError(499))).toBe(true)
+    expect(isTransientHttpInterrupt(statusError(503))).toBe(true)
+    expect(isTransientHttpInterrupt(statusError(500))).toBe(false)
+    expect(isTransientHttpInterrupt(new Error("boom"))).toBe(false)
+  })
+})
+
+describe("retryTransient", () => {
+  it("returns the first success", async () => {
+    expect(await retryTransient(async () => 7, { retries: 2, delayMs: 1 })).toBe(7)
+  })
+
+  it("retries a 499 and then succeeds", async () => {
+    let attempts = 0
+    const value = await retryTransient(
+      async () => {
+        attempts++
+        if (attempts < 3) throw statusError(499)
+        return "ok"
+      },
+      { retries: 2, delayMs: 1 },
+    )
+    expect(value).toBe("ok")
+    expect(attempts).toBe(3)
+  })
+
+  it("does not retry a non-transient failure", async () => {
+    let attempts = 0
+    await expect(
+      retryTransient(
+        async () => {
+          attempts++
+          throw statusError(400)
+        },
+        { retries: 2, delayMs: 1 },
+      ),
+    ).rejects.toMatchObject({ reason: "UnexpectedStatus" })
+    expect(attempts).toBe(1)
   })
 })

@@ -72,6 +72,40 @@ describe("InstanceState hot reload", () => {
       await fs.rm(directory, { recursive: true, force: true })
     }
   })
+
+  it("rebuilds after an interrupted lookup instead of caching the abort", async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-reload-interrupt-"))
+
+    try {
+      const result = await Effect.runPromise(
+        locallyInstance(
+          { directory, worktree: directory, project: { id: "test" } as any },
+          Effect.scoped(
+            Effect.gen(function* () {
+              let builds = 0
+              const cache = yield* InstanceState.make(() =>
+                Effect.gen(function* () {
+                  builds++
+                  if (builds === 1) return yield* Effect.interrupt
+                  return { build: builds }
+                }),
+              )
+
+              const first = yield* Effect.exit(InstanceState.get(cache))
+              const second = yield* InstanceState.get(cache)
+              return { firstInterrupted: first._tag === "Failure", second: second.build, builds }
+            }),
+          ),
+        ),
+      )
+
+      expect(result.firstInterrupted).toBe(true)
+      expect(result.second).toBe(2)
+      expect(result.builds).toBe(2)
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  })
 })
 
 // The mechanism test above proves `invalidateReloadable` rebuilds an opted-in

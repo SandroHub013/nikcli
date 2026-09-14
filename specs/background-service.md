@@ -178,6 +178,15 @@ What the table says, which is not what you would guess:
 
 ## Command registration
 
+> **Superseded.** This section proposes a `lazy()` wrapper for the yargs
+> registration tree. That tree is gone: [`specs/cli-framework.md`](cli-framework.md)
+> replaced it with `effect/unstable/cli`, where the command table is data and
+> _every_ handler — the default `$0` included — is already a `() => import()`.
+> That went further than the numbers below (`154K` → `33K` `Function` objects),
+> so there is nothing here left to implement. Kept for the measurements and for
+> the reasoning in points 1–3, which is what the effect tree ended up doing.
+> Do not reintroduce `src/cli/cmd/lazy.ts`.
+
 `cli-main` imported all ~44 command modules eagerly. Because `run [message..]`
 pulls the whole engine, the main thread loaded a complete engine graph _and_ the
 TUI worker loaded another in its own isolate — two engines per session, to run a
