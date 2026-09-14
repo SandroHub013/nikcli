@@ -49,10 +49,10 @@ describe("section commands", () => {
     const at = (view: Workbench["view"]) =>
       buildCommands(context({ workbench: { ...createWorkbench(), view } })).find((c) => c.id === "view.toggle")?.title
 
-    expect(at("agent")).toBe("Sezione successiva (code)")
-    expect(at("chat")).toBe("Sezione successiva (bot)")
+    expect(at("agent")).toBe("Sezione successiva (Code)")
+    expect(at("chat")).toBe("Sezione successiva (Bot)")
     // The wrap is the point of the test, and `bot` is now the last section.
-    expect(at("bot")).toBe("Sezione successiva (agent)")
+    expect(at("bot")).toBe("Sezione successiva (Agent)")
   })
 })
 

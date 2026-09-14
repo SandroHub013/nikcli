@@ -33,7 +33,7 @@
 }
 
 /*
- * Three groups, and the middle one centred on the window.
+ * Three groups, and the middle one centred on the sessions area.
  *
  * Absolute rather than a flex third, because the section you are in must not
  * move when a project name gets longer or a session count goes from 9 to 10.
@@ -117,9 +117,11 @@
   opacity: 0.8;
 }
 
+/* Centred on the sessions area: `--ade-bar-offset` is the sidebar's width,
+   set by the workbench, and the bar spans the whole window above both. */
 [data-slot="ade-bar-center"] {
   position: absolute;
-  left: 50%;
+  left: calc(var(--ade-bar-offset, 0px) + (100% - var(--ade-bar-offset, 0px)) / 2);
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;

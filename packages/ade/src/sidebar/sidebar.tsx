@@ -1020,6 +1020,7 @@ export function Sidebar(props: SidebarProps) {
               <span data-slot="section-label">Spaces</span>
               <span data-slot="section-count">{props.workspaces.length}</span>
             </button>
+            <div data-slot="section-actions">
             <Show when={props.onAddProject}>
               <button
                 type="button"
@@ -1047,6 +1048,7 @@ export function Sidebar(props: SidebarProps) {
                 </svg>
               </button>
             </Show>
+            </div>
           </div>
 
           <Show when={isOpen("progetti")}>
@@ -1113,6 +1115,7 @@ export function Sidebar(props: SidebarProps) {
               <span data-slot="section-label">Agenti attivi</span>
               <span data-slot="section-count">{allSessions().length}</span>
             </button>
+            <div data-slot="section-actions">
             <Show when={props.onNewSession}>
               <button
                 type="button"
@@ -1126,6 +1129,7 @@ export function Sidebar(props: SidebarProps) {
                 </svg>
               </button>
             </Show>
+            </div>
           </div>
 
           <Show when={isOpen("agenti")}>
@@ -1183,6 +1187,7 @@ export function Sidebar(props: SidebarProps) {
               </svg>
               <span data-slot="section-label">File</span>
             </button>
+            <div data-slot="section-actions" />
           </div>
 
           <Show when={isOpen("file")}>

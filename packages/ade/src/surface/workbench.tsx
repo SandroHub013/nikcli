@@ -3296,6 +3296,20 @@ export function Workbench() {
     return entry ? formatChord(parseChord(entry.chord, platform), platform) : ""
   })
 
+  /*
+   * How much of the window the sidebar takes, so the bar's middle group can
+   * centre on the sessions rather than on the whole window. Measured, not read
+   * from state: the sidebar owns its width while it is being dragged.
+   */
+  const [sidebarPx, setSidebarPx] = createSignal(0)
+  onMount(() => {
+    const sidebar = document.querySelector<HTMLElement>('[data-component="ade-sidebar"]')
+    if (!sidebar || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => setSidebarPx(sidebar.getBoundingClientRect().width))
+    observer.observe(sidebar)
+    onCleanup(() => observer.disconnect())
+  })
+
   return (
     <div data-component="ade-shell" data-theme={theme()}>
       {/* First, so it is over the workbench while the workbench is still
@@ -3306,14 +3320,16 @@ export function Workbench() {
         data-slot="ade-bar"
         data-platform={isTauriDesktop() && isMacOS() ? "macos" : undefined}
         data-tauri-drag-region
+        style={{ "--ade-bar-offset": `${sidebarPx()}px` }}
         onDblClick={(e) => {
           if (e.target === e.currentTarget) void adeWindowToggleMaximize()
         }}
       >
         {/* Three groups: who and where on the left, the navigation in the
             middle, the controls on the right. The middle one is centred on
-            the window rather than on what is left over, so the section you
-            are in does not move when a project name gets longer. */}
+            the sessions area — the window minus the sidebar — rather than on
+            what is left over, so the section you are in does not move when a
+            project name gets longer. */}
         <div data-slot="ade-bar-side" data-side="start">
           {/*
             The mark, not the word.

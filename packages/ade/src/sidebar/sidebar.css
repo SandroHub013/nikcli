@@ -386,12 +386,26 @@
 }
 
 /* Held in the layout but quiet until wanted, like the pane's own actions. */
+/*
+ * The same width in every header, however many buttons it holds — two for
+ * Spaces, one for the agents, none for the files — so the counts before it
+ * end on one vertical line instead of stepping in by a button's width.
+ */
+[data-slot="section-actions"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  width: calc(2 * 22px + var(--ade-space-2));
+  gap: var(--ade-space-2);
+  margin-right: var(--ade-space-4);
+}
+
 [data-slot="section-add"] {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  margin-right: var(--ade-space-4);
   flex: 0 0 auto;
   padding: 0;
   border: 0;
@@ -724,6 +738,14 @@
 }
 [data-slot="workspace-count"] {
   background: transparent;
+}
+/* In colonna con i conteggi delle intestazioni: stessa larghezza minima e lo
+   stesso rientro da destra, che è lo spazio dei pulsanti "aggiungi" (56px):
+   riga e intestazione hanno già lo stesso padding orizzontale di 10px. */
+[data-component="ade-sidebar"] [data-slot="workspace-count"] {
+  min-width: 24px;
+  box-sizing: border-box;
+  margin-right: calc(2 * 22px + var(--ade-space-2) + var(--ade-space-4));
 }
 
 /* ── la ricerca, senza cornice ── */
@@ -1298,6 +1320,9 @@ aside[data-component="ade-sidebar"] {
    un fondo che lo stacca dall'etichetta senza aggiungere una linea. */
 [data-slot="section-count"] {
   margin-left: auto;
+  min-width: 24px;
+  box-sizing: border-box;
+  text-align: center;
   padding: 0 7px;
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);

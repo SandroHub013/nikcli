@@ -40,10 +40,10 @@ export const ADE_VIEWS: readonly AdeView[] = ["agent", "code", "chat", "bot"]
  * design had stopped using the word.
  */
 export const ADE_VIEW_LABELS: Record<AdeView, string> = {
-  agent: "agent",
-  code: "code",
-  chat: "chat",
-  bot: "bot",
+  agent: "Agent",
+  code: "Code",
+  chat: "Chat",
+  bot: "Bot",
 }
 
 /** Cycles forward through the sections, wrapping at the end. */
