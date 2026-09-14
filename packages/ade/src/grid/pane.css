@@ -869,6 +869,38 @@
   font-weight: var(--ade-weight-semibold);
 }
 
+[data-component="session-pane"] [data-slot="pane-title"][data-renamable] {
+  cursor: text;
+}
+
+/*
+ * The title while it is being edited: the same slot, the same face, the same
+ * width, so the swap from text to field moves nothing on the row. Only the
+ * accent underline and a whisper of ground say that typing now does something.
+ */
+[data-component="session-pane"] [data-slot="pane-title-input"] {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  outline: none;
+  background: color-mix(in srgb, var(--ade-accent) 10%, transparent);
+  box-shadow: inset 0 -1.5px 0 var(--ade-accent);
+  font: inherit;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-semibold);
+  letter-spacing: -0.012em;
+  line-height: inherit;
+  color: var(--ade-text);
+}
+
+[data-component="session-pane"] [data-slot="pane-title-input"]::selection {
+  background: color-mix(in srgb, var(--ade-accent) 30%, transparent);
+}
+
 /* Meta in the same face as the title: a pill of glass is one object, and a
    change of typeface halfway along splits it in two. */
 [data-component="session-pane"] [data-slot="pane-who"],

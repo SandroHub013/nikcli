@@ -96,6 +96,8 @@ describe("surface commands", () => {
 
     expect(cmds.find((c) => c.id === "pane.close")?.enabled).toBe(true)
     expect(cmds.find((c) => c.id === "pane.expand")?.enabled).toBe(true)
+    expect(cmds.find((c) => c.id === "pane.rename")?.enabled).toBe(true)
+    expect(cmds.find((c) => c.id === "pane.rename")?.shortcut).toBe("F2")
   })
 
   /*

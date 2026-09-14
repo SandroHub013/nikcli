@@ -322,6 +322,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}
+        /* Into the workspace, so the name survives a restart like the pane does. */
+        onRename={(title) => deps.setWb((w) => updatePane(w, current().id, { title }))}
       />
     )
 

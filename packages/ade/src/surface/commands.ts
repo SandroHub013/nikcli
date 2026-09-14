@@ -125,6 +125,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       shortcut: shortcutFor("pane.expand", platform),
     },
     {
+      id: "pane.rename",
+      title: "Rinomina sessione",
+      group: "Pannello",
+      enabled: !!focusedPane,
+      disabledReason: focusedPane ? undefined : "Nessun pannello a fuoco",
+      shortcut: shortcutFor("pane.rename", platform),
+    },
+    {
       id: "view.toggle",
       title: `Sezione successiva (${ADE_VIEW_LABELS[nextView(workbench.view)]})`,
       group: "Vista",

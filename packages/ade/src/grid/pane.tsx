@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX 
 import { parseAnsi, type Span } from "../session/stream"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
+import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
 
 /** The screenshot tray's own drag type. See the drop handler for why. */
@@ -177,6 +178,11 @@ export interface SessionPaneProps {
   onExpand?: () => void
   onFocus?: () => void
   /**
+   * Stores a new title. Absent when the name is not the user's to change,
+   * in which case the header offers no way to edit it.
+   */
+  onRename?: (title: string) => void
+  /**
    * The terminal to draw in this pane, when it has one.
    *
    * Absent for a pane whose process never started, or one restored from a
@@ -324,9 +330,55 @@ export function SessionPane(props: SessionPaneProps) {
     focusPane(root)
   })
 
+  /*
+   * The title, edited where it is read.
+   *
+   * A double click on the name swaps it for a field with the same text; Enter
+   * or leaving the field keeps what was typed, Escape drops it. The
+   * `pane.rename` command arrives as an event on the root, so the palette and
+   * its key reach the same field without the workbench holding editing state
+   * for every pane.
+   *
+   * Focus is moved by hand rather than with `autofocus`: the field is born
+   * after the page loaded, and the caret must land at the end with the whole
+   * name selected, since replacing it is the common edit.
+   */
+  const [editing, setEditing] = createSignal(false)
+  let titleField: HTMLInputElement | undefined
+
+  const beginRename = () => {
+    if (!props.onRename || editing()) return
+    setEditing(true)
+    queueMicrotask(() => {
+      titleField?.focus({ preventScroll: true })
+      titleField?.select()
+    })
+  }
+
+  /*
+   * `refocus` only from the keyboard. Enter and Escape leave the caret on a
+   * field that is about to vanish, so it goes back to the terminal; a blur
+   * means the user clicked somewhere else, and taking the caret back from
+   * there would undo the click.
+   */
+  const endRename = (keep: boolean, refocus = false) => {
+    if (!editing()) return
+    const raw = titleField?.value ?? ""
+    setEditing(false)
+    if (keep) {
+      const next = commitRename(raw, props.title)
+      if (next !== undefined) props.onRename?.(next)
+    }
+    if (refocus) focusPane(root)
+  }
+
   return (
     <article
-      ref={root}
+      ref={(element) => {
+        root = element
+        // The listener lives and dies with the element, so nothing to clean up.
+        element.addEventListener(RENAME_EVENT, beginRename)
+      }}
       data-component="session-pane"
       data-pane-id={props.id}
       data-status={props.status}
@@ -407,9 +459,41 @@ export function SessionPane(props: SessionPaneProps) {
             {props.glyph ?? "•"}
           </span>
         </span>
-        <h2 data-slot="pane-title" title={props.title}>
-          {props.title}
-        </h2>
+        <Show
+          when={editing()}
+          fallback={
+            <h2
+              data-slot="pane-title"
+              data-renamable={props.onRename ? "true" : undefined}
+              title={props.onRename ? `${props.title}\nDoppio clic per rinominare` : props.title}
+              onDblClick={beginRename}
+            >
+              {props.title}
+            </h2>
+          }
+        >
+          <input
+            ref={titleField}
+            type="text"
+            data-slot="pane-title-input"
+            aria-label="Nome della sessione"
+            value={props.title}
+            spellcheck={false}
+            onKeyDown={(event) => {
+              // Not the pane's key, and not the workbench's: Enter here is a
+              // commit, not a turn, and Escape is a cancel, not a palette key.
+              event.stopPropagation()
+              if (event.key === "Enter") {
+                event.preventDefault()
+                endRename(true, true)
+              } else if (event.key === "Escape") {
+                event.preventDefault()
+                endRename(false, true)
+              }
+            }}
+            onBlur={() => endRename(true)}
+          />
+        </Show>
         {/*
           Agent, mode, tree and state used to be a footer of their own, under
           the composer. Both rows are gone: everything below the terminal is a

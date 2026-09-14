@@ -35,6 +35,7 @@ export const DEFAULT_BINDINGS: BindingEntry[] = [
   // Pane management
   { chord: "mod+w", commandId: "pane.close" },
   { chord: "mod+shift+m", commandId: "pane.expand" },
+  { chord: "f2", commandId: "pane.rename" },
 
   // Views and theme
   { chord: "mod+shift+v", commandId: "view.toggle" },
