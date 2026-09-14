@@ -1531,11 +1531,18 @@ aside[data-component="ade-sidebar"] {
   background: var(--ade-hover);
 }
 
-/* ── il fondo: impostazioni, tema e notifiche vicini; a destra le risorse ── */
+/* ── il fondo: impostazioni, tema e notifiche vicini; a destra le risorse ──
+ *
+ * The three numbers never shrink and are never clipped. They used to share
+ * the row by shrinking with `overflow: hidden`, and on a narrow column that
+ * cut the CPU label off and hid the memory. Now the row wraps: when they do
+ * not fit beside the buttons they drop to a line of their own.
+ */
 [data-slot="sidebar-settings-strip"] {
-  container-type: inline-size;
+  flex-wrap: wrap;
   justify-content: flex-start;
-  gap: var(--ade-space-3);
+  column-gap: var(--ade-space-3);
+  row-gap: 4px;
 }
 
 [data-slot="sidebar-footer-group"] {
@@ -1553,10 +1560,9 @@ aside[data-component="ade-sidebar"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--ade-space-3);
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  gap: 8px;
+  flex: 1 0 auto;
+  margin-left: auto;
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
   font-variant-numeric: tabular-nums;
@@ -1583,11 +1589,4 @@ aside[data-component="ade-sidebar"] {
 
 [data-slot="sidebar-stat"][data-load="high"] {
   color: var(--ade-error);
-}
-
-/* Narrow column: the memory goes first, then the labels. */
-@container (max-width: 230px) {
-  [data-slot="sidebar-stat"]:last-child {
-    display: none;
-  }
 }
