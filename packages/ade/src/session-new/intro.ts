@@ -26,11 +26,11 @@
 export const INTRO_TEXT =
   "Sei una sessione dentro ADE, accanto ad altre sessioni di agenti che possono usare CLI diverse (Claude Code, Codex e altre). " +
   "Puoi comunicare con loro dalla shell con il comando ade-msg: " +
-  "ade-msg list mostra le sessioni aperte con numero, id, agente e titolo; " +
+  "ade-msg list mostra le sessioni aperte divise per progetto, con numero, id, agente e titolo; " +
   "ade-msg ask SESSIONE RICHIESTA manda una richiesta e resta in attesa finche quella sessione risponde, poi stampa la risposta (come un subagent); " +
   "ade-msg spawn AGENTE COMPITO apre una nuova sessione con quell'agente (claude, codex, agy...), le affida il compito e stampa il risultato quando ha finito; " +
   "ade-msg send SESSIONE TESTO manda solo una nota, senza attendere; " +
-  "SESSIONE e il numero, l'id, il titolo o il nome dell'agente. " +
+  "SESSIONE e il numero, l'id, il titolo o il nome dell'agente; un nome da solo cerca prima nel tuo progetto, PROGETTO/NOME cerca in un altro. " +
   "Se ask o spawn stampano ancora in corso, riprendi l'attesa con ade-msg wait ID. " +
   "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito dal risultato completo, perche chi chiede e bloccato finche non rispondi. " +
   "I messaggi [Messaggio da ...] sono note e dicono come rispondere. " +

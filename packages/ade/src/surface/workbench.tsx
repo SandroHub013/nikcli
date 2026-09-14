@@ -121,6 +121,7 @@ import { asOneLine, asSubmittedLine } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import {
   agentsTable,
+  byProject,
   formatDelivery,
   formatLateReply,
   formatRequest,
@@ -172,6 +173,12 @@ import {
 } from "./notifications"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
+import {
+  GLOBAL_VOICE_EVENT,
+  modeForGlobalChord,
+  readGlobalVoicePayload,
+  toTauriChord,
+} from "../voice/global-shortcut"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -482,14 +489,18 @@ export function Workbench() {
    * can receive: typing into a pane with no process reaches nobody.
    */
   const mailPanes = (): MailPane[] =>
-    wb()
-      .panes.filter((pane) => !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model))
-      .map((pane) => ({
-        id: pane.id,
-        title: pane.title,
-        agent: pane.agent ?? pane.model,
-        status: running.has(pane.id) ? pane.status : "chiusa",
-      }))
+    // Grouped by project, which is also the order `ade-msg list` numbers them in.
+    byProject(
+      wb()
+        .panes.filter((pane) => !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model))
+        .map((pane) => ({
+          id: pane.id,
+          title: pane.title,
+          agent: pane.agent ?? pane.model,
+          status: running.has(pane.id) ? pane.status : "chiusa",
+          project: pane.workspaceId,
+        })),
+    )
 
   /** Long enough for a TUI's paste detection to close before Enter arrives. */
   const SUBMIT_DELAY_MS = 400
@@ -619,7 +630,16 @@ export function Workbench() {
       const brief = message.text.replace(/\s+/g, " ").trim()
       const title = `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${brief.length > 48 ? `${brief.slice(0, 48)}…` : brief}`
       const owner = project()?.name
-      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      /*
+       * A subagent works in its caller's project. Sessions start in the project
+       * open in ADE, so a caller from another one is told, rather than getting
+       * a helper in a directory it knows nothing about.
+       */
+      if (sender?.project && owner && sender.project !== owner) {
+        await answer(`errore: la tua sessione è nel progetto "${sender.project}", ma in ADE è aperto "${owner}": spawn avvia sessioni solo nel progetto aperto`)
+        return true
+      }
+      const index =(owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
       const created = addAgent(
         { agentId: agent.id, count: 1, task: formatRequest(id, message.text, sender), title },
         { index, agentId: agent.id, role: "agent" },
@@ -841,10 +861,14 @@ export function Workbench() {
     }),
   })
 
+  /* Set once the native shell has registered the voice hotkeys; see onMount. */
+  let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
+
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
     await voiceEngine.updateSettings(saved.settings)
+    await registerGlobalShortcuts?.(saved.settings)
   }
 
   const pttHandler = createPushToTalkHandler(voiceEngine)
@@ -1216,44 +1240,55 @@ export function Workbench() {
           const { listen } = await import("@tauri-apps/api/event")
           const { invoke } = await import("@tauri-apps/api/core")
 
-          const toTauriChord = (chord: string) => {
-            return chord
-              .split("+")
-              .map((part) => {
-                const p = part.trim().toLowerCase()
-                if (p === "mod" || p === "ctrl" || p === "cmd") return "CommandOrControl"
-                if (p === "alt") return "Alt"
-                if (p === "shift") return "Shift"
-                return p.toUpperCase()
-              })
-              .join("+")
-          }
-
-          const syncGlobalShortcuts = async () => {
+          /*
+           * Registered from the settings as they are now, and again whenever
+           * they change: the panel used to save a new chord that the OS kept
+           * ignoring until the next launch, while the old one still opened
+           * the microphone from anywhere.
+           */
+          const syncGlobalShortcuts = async (settings: VoiceSettings) => {
             try {
               await invoke("unregister_global_voice_shortcuts")
-              const transcribeChord = toTauriChord(voiceSettings().transcriptionChord)
-              const agentChord = toTauriChord(voiceSettings().agentChord)
-              await invoke("register_global_voice_shortcut", { chord: transcribeChord })
-              await invoke("register_global_voice_shortcut", { chord: agentChord })
+              for (const chord of [settings.transcriptionChord, settings.agentChord]) {
+                await invoke("register_global_voice_shortcut", { chord: toTauriChord(chord) })
+              }
             } catch (err) {
               console.warn("Registrazione scorciatoia globale non riuscita:", err)
             }
           }
 
-          await syncGlobalShortcuts()
+          await syncGlobalShortcuts(voiceSettings())
+          registerGlobalShortcuts = syncGlobalShortcuts
 
-          const unlisten = await listen<string>("nikcli-global-voice", (event) => {
-            const pressed = event.payload.toLowerCase()
-            if (pressed.includes("j")) {
-              void voiceEngine.toggle("transcription")
-            } else if (pressed.includes("k")) {
-              void voiceEngine.toggle("agent")
+          /*
+           * The OS takes a registered hotkey before the webview sees the key,
+           * so inside ADE's own window this event is the only keydown these
+           * chords ever produce. It has to do everything the window listener
+           * does for them: tell the two features apart by chord, and honour
+           * push-to-talk on the release.
+           */
+          const unlisten = await listen<unknown>(GLOBAL_VOICE_EVENT, (event) => {
+            const payload = readGlobalVoicePayload(event.payload)
+            if (!payload) return
+            const mode = modeForGlobalChord(payload.chord, voiceSettings(), platform)
+            if (!mode) return
+
+            if (voiceSettings().activation === "push-to-talk") {
+              if (payload.state === "pressed") {
+                const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
+                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, mode)
+              } else {
+                // No key to compare: the native side already said the chord let go.
+                void pttHandler.onKeyUp()
+              }
+              return
             }
+            if (payload.state === "pressed") void voiceEngine.toggle(mode)
           })
 
           onCleanup(() => {
             unlisten()
+            registerGlobalShortcuts = undefined
             void invoke("unregister_global_voice_shortcuts").catch(() => {})
           })
         } catch (e) {

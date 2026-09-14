@@ -130,6 +130,45 @@ describe("what lands in the terminal", () => {
 
 test("sessionsTable lists numbers, ids and titles, and the commands", () => {
   const table = sessionsTable(panes)
-  expect(table).toContain("1  n1-0  claude-code  idle     Sessione 1 — claude-code")
+  expect(table).toContain("progetto senza progetto (3 sessioni)")
+  expect(table).toContain("  1  n1-0  claude-code  idle     Sessione 1 — claude-code")
   expect(table).toContain("ade-msg spawn")
+})
+
+describe("by project", () => {
+  const mixed = [
+    { id: "a1", title: "Claude web", agent: "claude-code", project: "web" },
+    { id: "b1", title: "Claude api", agent: "claude-code", project: "api" },
+    { id: "a2", title: "Codex web", agent: "codex", project: "web" },
+    { id: "b2", title: "Codex api", agent: "codex", project: "api" },
+  ]
+
+  test("the list groups each project's sessions under a heading, numbered in that order", () => {
+    const table = sessionsTable(mixed)
+    expect(table.indexOf("progetto web (2 sessioni)")).toBeLessThan(table.indexOf("progetto api (2 sessioni)"))
+    expect(table).toMatch(/1 {2}a1 .*Claude web/)
+    expect(table).toMatch(/2 {2}a2 .*Codex web/)
+    expect(table).toMatch(/3 {2}b1 .*Claude api/)
+  })
+
+  test("numbers follow the grouped order", () => {
+    expect(resolveTarget(mixed, "2")).toEqual({ pane: mixed[2] })
+  })
+
+  test("a bare agent name goes to the one in the sender's project", () => {
+    expect(resolveTarget(mixed, "claude", "b2")).toEqual({ pane: mixed[1] })
+    expect(resolveTarget(mixed, "claude", "a2")).toEqual({ pane: mixed[0] })
+  })
+
+  test("progetto/nome reaches another project, and progetto/N counts inside it", () => {
+    expect(resolveTarget(mixed, "api/claude", "a2")).toEqual({ pane: mixed[1] })
+    expect(resolveTarget(mixed, "api/2", "a2")).toEqual({ pane: mixed[3] })
+    const missing = resolveTarget(mixed, "mobile/claude")
+    expect("error" in missing && missing.error).toContain("Progetti: web, api")
+  })
+
+  test("without a sender to go by, the same name in two projects is still an error", () => {
+    const result = resolveTarget(mixed, "claude")
+    expect("error" in result && result.error).toContain("[web]")
+  })
 })

@@ -24,6 +24,8 @@ export interface MailPane {
   title: string
   agent?: string
   status?: string
+  /** The project the session works in; sessions are listed and found by it. */
+  project?: string
 }
 
 /** `token` is what proves `from`; see {@link verifySender}. */
@@ -93,43 +95,90 @@ function agentName(agent: string | undefined): string {
 
 export type Resolution = { pane: MailPane } | { error: string }
 
+const NO_PROJECT = "senza progetto"
+
+function projectOf(pane: MailPane): string {
+  return pane.project?.trim() || NO_PROJECT
+}
+
+/**
+ * The panes with each project's sessions together, projects in the order they
+ * first appear. The numbers `ade-msg list` prints are positions in this order,
+ * so everything that numbers panes goes through it.
+ */
+export function byProject(panes: readonly MailPane[]): MailPane[] {
+  const groups = new Map<string, MailPane[]>()
+  for (const pane of panes) {
+    const key = projectOf(pane)
+    groups.set(key, [...(groups.get(key) ?? []), pane])
+  }
+  return [...groups.values()].flat()
+}
+
 /**
  * One pane for what the sender wrote, tried from most to least precise:
  * the pane id, its number in `ade-msg list`, its exact title, the agent's
- * name, a piece of the title. Ambiguity is an error, never a guess — a
- * message delivered to the wrong session is worse than one refused.
+ * name, a piece of the title.
+ *
+ * Sessions are found by project. `progetto/nome` looks only inside that
+ * project (`progetto/2` is the second session there); a plain name matching
+ * in several projects goes to the one in the sender's own project, which is
+ * almost always the one meant — "claude" from a codex working on nikcli is
+ * the claude working on nikcli. Ambiguity left after that is an error, never
+ * a guess: a message delivered to the wrong session is worse than one refused.
  */
 export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: string): Resolution {
-  const wanted = to.trim().replace(/^#/, "")
-  const lower = wanted.toLowerCase()
+  const ordered = byProject(panes)
+  const trimmed = to.trim().replace(/^#/, "")
 
-  const byId = panes.find((pane) => pane.id === wanted)
+  const byId = ordered.find((pane) => pane.id === trimmed)
   if (byId) return { pane: byId }
 
+  const label = (pane: MailPane) => `${ordered.indexOf(pane) + 1} ${pane.title} [${projectOf(pane)}]`
+
+  // `progetto/nome`: what comes before the last slash names a project.
+  let scope = ordered
+  let wanted = trimmed
+  const slash = trimmed.lastIndexOf("/")
+  if (slash > 0) {
+    const name = trimmed.slice(0, slash).trim().toLowerCase()
+    const inProject = ordered.filter((pane) => projectOf(pane).toLowerCase() === name)
+    if (inProject.length === 0) {
+      const projects = [...new Set(ordered.map(projectOf))].join(", ") || "nessuno"
+      return { error: `nessun progetto "${trimmed.slice(0, slash)}". Progetti: ${projects}` }
+    }
+    scope = inProject
+    wanted = trimmed.slice(slash + 1).trim().replace(/^#/, "")
+  }
+  const lower = wanted.toLowerCase()
+
   if (/^\d+$/.test(wanted)) {
-    const pane = panes[Number(wanted) - 1]
-    return pane ? { pane } : { error: `nessuna sessione numero ${wanted} (ce ne sono ${panes.length})` }
+    const pane = scope[Number(wanted) - 1]
+    return pane ? { pane } : { error: `nessuna sessione numero ${wanted} (ce ne sono ${scope.length})` }
   }
 
+  const home = ordered.find((pane) => pane.id === fromId)
   const pick = (matches: MailPane[], what: string): Resolution | undefined => {
     // The sender is never its own recipient by a loose match.
-    const others = matches.filter((pane) => pane.id !== fromId)
+    let others = matches.filter((pane) => pane.id !== fromId)
+    if (others.length > 1 && home) {
+      const near = others.filter((pane) => projectOf(pane) === projectOf(home))
+      if (near.length > 0) others = near
+    }
     if (others.length === 1) return { pane: others[0]! }
     if (others.length > 1) {
       return {
-        error: `"${wanted}" corrisponde a ${others.length} sessioni (${what}): ${others
-          .map((pane) => `${panes.indexOf(pane) + 1} ${pane.title}`)
-          .join(", ")} — usa il numero`,
+        error: `"${wanted}" corrisponde a ${others.length} sessioni (${what}): ${others.map(label).join(", ")} — usa il numero o progetto/nome`,
       }
     }
     return undefined
   }
 
   return (
-    pick(panes.filter((pane) => pane.title.toLowerCase() === lower), "titolo") ??
-    pick(panes.filter((pane) => agentName(pane.agent) === agentName(wanted)), "agente") ??
-    pick(panes.filter((pane) => pane.title.toLowerCase().includes(lower)), "titolo") ?? {
-      error: `nessuna sessione "${wanted}". Sessioni: ${panes.map((pane, i) => `${i + 1} ${pane.title}`).join(", ") || "nessuna"}`,
+    pick(scope.filter((pane) => pane.title.toLowerCase() === lower), "titolo") ??
+    pick(scope.filter((pane) => agentName(pane.agent) === agentName(wanted)), "agente") ??
+    pick(scope.filter((pane) => pane.title.toLowerCase().includes(lower)), "titolo") ?? {
+      error: `nessuna sessione "${trimmed}". Sessioni: ${ordered.map(label).join(", ") || "nessuna"}`,
     }
   )
 }
@@ -197,21 +246,29 @@ export function formatLateReply(ref: string, text: string, replier: MailPane | u
   return `[Risposta alla richiesta ${ref} da ${who(replier)}]: ${oneLine(text)}`
 }
 
-/** What `ade-msg list` prints: number, id, agent, state, title. */
+/**
+ * What `ade-msg list` prints: a heading per project, and under it each
+ * session's number, id, agent, state and title. The number is global, so it
+ * means the same session whichever project the caller is in.
+ */
 export function sessionsTable(panes: readonly MailPane[]): string {
   if (panes.length === 0) return "nessuna sessione aperta\n"
-  const rows = panes.map((pane, i) => [
-    String(i + 1),
-    pane.id,
-    pane.agent ?? "-",
-    pane.status ?? "-",
-    pane.title,
-  ])
+  const ordered = byProject(panes)
+  const rows = ordered.map((pane, i) => [String(i + 1), pane.id, pane.agent ?? "-", pane.status ?? "-", pane.title])
   const widths = [0, 1, 2, 3].map((col) => Math.max(...rows.map((row) => row[col]!.length)))
-  const lines = rows.map((row) =>
-    row.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  "),
-  )
-  return `${lines.join("\n")}\n\n${USAGE}`
+  const out: string[] = []
+  let current: string | undefined
+  ordered.forEach((pane, i) => {
+    const project = projectOf(pane)
+    if (project !== current) {
+      const count = ordered.filter((other) => projectOf(other) === project).length
+      if (current !== undefined) out.push("")
+      out.push(`progetto ${project} (${count} ${count === 1 ? "sessione" : "sessioni"})`)
+      current = project
+    }
+    out.push(`  ${rows[i]!.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  ")}`)
+  })
+  return `${out.join("\n")}\n\n${USAGE}`
 }
 
 /** What `ade-msg agents` prints: the CLIs a `spawn` can start. */
@@ -227,4 +284,5 @@ export const USAGE =
   "  ade-msg reply <id> \"<risultato>\"        risponde a una richiesta ricevuta\n" +
   "  ade-msg wait  <id>                      riprende l'attesa di una richiesta ancora in corso\n" +
   "  ade-msg agents | whoami\n" +
-  "<sessione> = numero, id, titolo o nome dell'agente; ask/spawn/wait accettano --timeout <secondi>\n"
+  "<sessione> = numero, id, titolo o nome dell'agente; progetto/nome cerca solo in quel progetto,\n" +
+  "  un nome da solo preferisce le sessioni del tuo progetto. ask/spawn/wait accettano --timeout <secondi>\n"
