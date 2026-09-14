@@ -83,6 +83,8 @@ export interface SidebarProps {
    * then the button is not drawn at all, rather than drawn and refusing.
    */
   onAddProject?: () => void
+  /** Opens the dialog that adds a Space on a host reached over ssh. */
+  onAddRemote?: () => void
   /** Switches to a project already in the list. */
   onSelectProject?: (id: string) => void
   /** Launches a new agent session screen. */
@@ -180,6 +182,9 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-name" title={props.row.workspace.name}>
         {props.row.workspace.name}
       </span>
+      <Show when={props.row.workspace.path?.startsWith("ssh://")}>
+        <span data-slot="space-remote-badge" title={props.row.workspace.path}>ssh</span>
+      </Show>
       <Show when={props.isActive}>
         <span data-slot="space-active-badge">attivo</span>
       </Show>
@@ -1024,6 +1029,20 @@ export function Sidebar(props: SidebarProps) {
               >
                 <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                   <path d="M6 2v8M2 6h8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+              </button>
+            </Show>
+            <Show when={props.onAddRemote}>
+              <button
+                type="button"
+                data-slot="section-add"
+                aria-label="Aggiungi ambiente remoto (ssh)"
+                title="Aggiungi ambiente remoto (ssh)"
+                onClick={() => props.onAddRemote?.()}
+              >
+                <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                  <rect x="1.5" y="2" width="9" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" />
+                  <path d="M3.5 4l1.3 1-1.3 1M6 6h2M4 10h4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
             </Show>

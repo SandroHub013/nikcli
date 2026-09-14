@@ -180,12 +180,19 @@ fn is_ssh_destination(value: &str) -> bool {
 /// The remote command ADE sends to open a shell in a folder, and nothing else.
 ///
 /// `cd -- '<dir>' && exec "$SHELL" -l`, with the folder free of quotes, so the
-/// only thing a caller chooses is a path.
+/// only thing a caller chooses is a path. Home-relative folders are spelled
+/// `cd -- "$HOME"/'<dir>'`, and the home itself `cd -- "$HOME"`, because a
+/// quoted `~` does not expand. Mirrors `remoteCd` in `src/remote/ssh.ts`.
 fn is_ssh_remote_cd(value: &str) -> bool {
-    let Some(rest) = value.strip_prefix("cd -- '") else {
+    const SHELL: &str = " && exec \"$SHELL\" -l";
+    let Some(cd) = value.strip_prefix("cd -- ").and_then(|rest| rest.strip_suffix(SHELL)) else {
         return false;
     };
-    let Some(dir) = rest.strip_suffix("' && exec \"$SHELL\" -l") else {
+    if cd == "\"$HOME\"" {
+        return true;
+    }
+    let quoted = cd.strip_prefix("\"$HOME\"/").unwrap_or(cd);
+    let Some(dir) = quoted.strip_prefix('\'').and_then(|d| d.strip_suffix('\'')) else {
         return false;
     };
     !dir.is_empty() && dir.len() <= 1024 && !dir.contains('\'') && !dir.chars().any(|c| c.is_control())
@@ -1022,8 +1029,12 @@ mod tests {
             &strings(&["-t", "devbox", "cd -- '/srv/app' && exec \"$SHELL\" -l"])
         )
         .is_ok());
+        assert!(check_args("ssh", &strings(&["-t", "devbox", "cd -- \"$HOME\"/'app' && exec \"$SHELL\" -l"])).is_ok());
+        assert!(check_args("ssh", &strings(&["-t", "devbox", "cd -- \"$HOME\" && exec \"$SHELL\" -l"])).is_ok());
 
         for bad in [
+            &["devbox", "cd -- \"$HOME\"/$(calc) && exec \"$SHELL\" -l"][..],
+            &["devbox", "cd -- \"$(calc)\" && exec \"$SHELL\" -l"],
             &[][..],
             &["-o", "ProxyCommand=calc", "devbox"],
             &["-oProxyCommand=calc", "devbox"],

@@ -19,6 +19,27 @@ function fakeHost(overrides: Partial<Host> = {}): Host {
 }
 
 describe("discoverProject", () => {
+  it("a remote Space is known by its root, without running git or granting writes", async () => {
+    const calls: string[] = []
+    const host = fakeHost({
+      run: async (cmd) => {
+        calls.push(cmd)
+        return { code: 0, stdout: "", stderr: "" }
+      },
+      allowWriteRoot: async (path) => {
+        calls.push(`allow ${path}`)
+      },
+    })
+    const p = await discoverProject(host, "ssh://niko@devbox:2222/srv/app")
+    expect(p).toEqual({
+      root: "ssh://niko@devbox:2222/srv/app",
+      name: "app @ devbox",
+      git: false,
+      remote: { destination: "niko@devbox", port: 2222, dir: "/srv/app" },
+    })
+    expect(calls).toEqual([])
+  })
+
   it("returns a git project when rev-parse succeeds", async () => {
     const host = fakeHost({
       run: async (_cmd, args) => {

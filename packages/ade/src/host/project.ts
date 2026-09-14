@@ -9,8 +9,11 @@
 
 import type { Host } from "./shell"
 import { normalizePath, basename } from "./path"
+import { isRemoteRoot, parseRemoteRoot, remoteName, remoteRoot, type RemoteTarget } from "../remote/ssh"
 
 export interface Project {
+  /** Set for a remote Space: sessions open over ssh, and nothing on the local disk belongs to it. */
+  remote?: RemoteTarget
   /** Absolute, normalised root of the repository (or of the chosen directory). */
   root: string
   /** Display name: basename of the root. */
@@ -33,6 +36,16 @@ export async function discoverProject(
   host: Host,
   startDir: string,
 ): Promise<Project> {
+  /*
+   * A remote Space is known by its root alone. Nothing local is asked about
+   * it — no git, no write root — and every place a project is opened from
+   * (restore, recents, the palette) comes through here, so none of them runs
+   * `git` in a directory called `ssh://…`.
+   */
+  if (isRemoteRoot(startDir)) {
+    const remote = parseRemoteRoot(startDir)
+    if (remote) return { root: remoteRoot(remote), name: remoteName(remote), git: false, remote }
+  }
   const toplevel = await host.run("git", ["rev-parse", "--show-toplevel"], startDir)
 
   if (toplevel.code !== 0 || !toplevel.stdout.trim()) {

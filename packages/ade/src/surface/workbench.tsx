@@ -1,6 +1,8 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
-import { getHost, type SpawnedSession } from "../host/shell"
+import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
+import { remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
+import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
@@ -379,6 +381,7 @@ export function Workbench() {
   // The launch screen is a state, not an empty grid: it has to be reachable with
   // six sessions already running, which is exactly when a seventh is wanted.
   const [starting, setStarting] = createSignal(false)
+  const [remoteOpen, setRemoteOpen] = createSignal(false)
   const themeState = createThemeState()
   const theme = themeState.theme
 
@@ -2586,6 +2589,7 @@ export function Workbench() {
     const host = await getHost()
     const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
+    if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host)
 
     /*
      * The conversation id is chosen here, before the agent exists.
@@ -2856,6 +2860,130 @@ export function Workbench() {
     } catch (e) {
       appendLine(paneId, String(e))
       setWb(w => updatePane(w, paneId, { status: "error", activity: "Avvio fallito" }))
+    }
+  }
+
+  /**
+   * A session in a remote Space: ssh to the host, into its folder, then the
+   * agent typed at the remote prompt the way the user would type it.
+   *
+   * Nothing local comes along — no resume id, no hook, no `ade-msg` notice:
+   * those live on this machine, and the agent is on another one. What is typed
+   * waits for the connection to settle and never goes into a password,
+   * passphrase or fingerprint question; the user answers those in the pane.
+   */
+  const startRemoteProcess = async (
+    paneId: string,
+    agentId: string,
+    command: string,
+    task: string,
+    target: RemoteTarget,
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+  ) => {
+    const args = sshArgs(target)
+    const home = host.homeDir ? await host.homeDir().catch(() => undefined) : undefined
+    const shellOnly = agentId === "terminal"
+    paneNonces.delete(paneId)
+    activityOf.delete(paneId)
+    bracketedPaste.delete(paneId)
+    setWb((w) =>
+      updatePane(w, paneId, {
+        cwd: remoteRoot(target),
+        tree: undefined,
+        resumeId: undefined,
+        status: task.trim() ? "working" : "idle",
+        activity: "Connessione ssh",
+      }),
+    )
+    appendLine(paneId, `ssh ${args.join(" ")}`, "shell")
+
+    let tail = ""
+    let spawned: SpawnedSession | undefined
+    try {
+      const session = await host.spawn({
+        command: "ssh",
+        args,
+        ...(home ? { cwd: home } : {}),
+        onData: (chunk) => {
+          lastOutputAt.set(paneId, Date.now())
+          noteBracketedPaste(paneId, chunk)
+          tail = (tail + stripAnsi(chunk)).slice(-400)
+          feedTerminal(paneId, chunk)
+        },
+        onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
+        onExit: (code) => {
+          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+        },
+        pane: paneId,
+        paneToken: mintPaneToken(paneId),
+      })
+      spawned = session
+      running.set(paneId, session)
+      touchRunning()
+
+      const steps = [...(shellOnly ? [] : [command]), ...(task.trim() ? [task] : [])]
+      if (steps.length === 0) return
+      let index = 0
+      let stepStart = Date.now()
+      let stepFirst: number | undefined
+      const poll = setInterval(() => {
+        if (running.get(paneId) !== session) {
+          stopOpeningPoll(poll)
+          return
+        }
+        const last = lastOutputAt.get(paneId)
+        if (last !== undefined && last > stepStart) stepFirst ??= last
+        const lastLine = tail.split(/\r?\n|\r/).filter((line) => line.trim()).pop() ?? ""
+        const decision = decideOpening({
+          startedAt: stepStart,
+          firstByteAt: stepFirst,
+          lastByteAt: stepFirst === undefined ? undefined : last,
+          now: Date.now(),
+          permissionPending: sshAsking(lastLine) || Boolean(permissions()[paneId]),
+          // The first step waits out a password typed by hand.
+          ...(index === 0 ? { timeoutMs: 180_000 } : {}),
+        })
+        if (decision === "wait") return
+        if (decision === "abandon") {
+          stopOpeningPoll(poll)
+          noteInTerminal(paneId, `ADE non ha scritto «${steps[index]}»: la connessione non si è stabilizzata. Scrivilo tu.`)
+          setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+          return
+        }
+        const text = steps[index]!
+        index += 1
+        void typeLine(session, text)
+        setWb((w) => updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "Connesso" : "In esecuzione" }))
+        if (index >= steps.length) {
+          stopOpeningPoll(poll)
+          return
+        }
+        stepStart = Date.now()
+        stepFirst = undefined
+      }, 150)
+      openingPolls.add(poll)
+    } catch (e) {
+      appendLine(paneId, String(e))
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "Connessione fallita" }))
+    }
+  }
+
+  /** Adds a remote Space, makes it the one in use, and opens a terminal on it. */
+  const addRemoteSpace = async (target: RemoteTarget) => {
+    const host = await getHost()
+    if (!host) return
+    const opened = await discoverProject(host, remoteRoot(target))
+    const newRecents = addRecent(recents(), { root: opened.root, name: opened.name })
+    setRecents(newRecents)
+    localStorage.setItem("ade.recents", serializeRecents(newRecents))
+    setProject(opened)
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setRemoteOpen(false)
+    if (!wb().panes.some((pane) => pane.workspaceId === opened.name)) {
+      addAgent(
+        { agentId: "terminal", count: 1, task: "", title: `ssh ${target.destination}` },
+        { index: 1, agentId: "terminal", role: "shell" },
+      )
     }
   }
 
@@ -3281,6 +3409,7 @@ export function Workbench() {
           onSelectSession={(id) => setWb(w => ({ ...w, focusedId: id }))}
           /* No picker in the browser harness, so no button that could not work. */
           onAddProject={hasHost() ? () => void addProject() : undefined}
+          onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
           onSelectProject={(id) => void switchProject(id)}
           onNewSession={() => setStarting(true)}
           project={project()}
@@ -3482,6 +3611,12 @@ export function Workbench() {
           </Show>
         </main>
       </div>
+
+      <RemoteSpaceDialog
+        open={remoteOpen()}
+        onClose={() => setRemoteOpen(false)}
+        onConnect={(target) => void addRemoteSpace(target)}
+      />
 
       <CommandPalette
         open={paletteOpen()}

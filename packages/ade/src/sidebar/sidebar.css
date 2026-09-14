@@ -900,6 +900,21 @@
   color: var(--ade-text);
 }
 
+[data-slot="space-remote-badge"] {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(167, 139, 250, 0.14);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  margin-left: var(--ade-space-2);
+}
+
 [data-slot="space-active-badge"] {
   display: inline-flex;
   align-items: center;

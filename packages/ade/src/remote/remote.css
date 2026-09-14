@@ -1,0 +1,152 @@
+[data-component="remote-space"] {
+  position: absolute;
+  inset: 0;
+  background: var(--ade-scrim);
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--ade-space-6) 0;
+}
+
+[data-component="remote-space"] [data-slot="dialog"] {
+  width: 100%;
+  max-width: 560px;
+  background: var(--ade-overlay);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-xl);
+  box-shadow: var(--ade-shadow-lg), inset 0 1px 0 var(--ade-highlight);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-component="remote-space"] [data-slot="head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ade-space-4);
+  padding: var(--ade-space-5) var(--ade-space-6);
+  border-bottom: 1px solid var(--ade-border);
+  color: var(--ade-text);
+  font-size: var(--ade-font-md);
+}
+
+[data-component="remote-space"] [data-slot="warn"],
+[data-component="remote-space"] [data-slot="problem"] {
+  color: var(--ade-danger, #e5484d);
+  font-size: var(--ade-font-sm);
+}
+
+[data-component="remote-space"] [data-slot="problem"] {
+  margin: 0;
+  padding: var(--ade-space-2) var(--ade-space-6) 0;
+}
+
+[data-component="remote-space"] [data-slot="fields"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-5) var(--ade-space-6) 0;
+}
+
+[data-component="remote-space"] [data-slot="input"] {
+  width: 100%;
+  background: var(--ade-surface, transparent);
+  color: var(--ade-text);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  padding: var(--ade-space-3) var(--ade-space-4);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-component="remote-space"] [data-slot="input"]::placeholder {
+  color: var(--ade-text-weak);
+}
+
+[data-component="remote-space"] [data-slot="list"] {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--ade-space-4) var(--ade-space-3);
+}
+
+[data-component="remote-space"] [data-slot="empty"] {
+  margin: 0;
+  padding: var(--ade-space-5);
+  text-align: center;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-component="remote-space"] [data-slot="host"] {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--ade-space-4);
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  background: transparent;
+  border: 0;
+  border-radius: var(--ade-radius-md);
+  color: var(--ade-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-component="remote-space"] [data-slot="host"]:hover,
+[data-component="remote-space"] [data-slot="host"]:focus-visible {
+  background: var(--ade-hover, rgba(127, 127, 127, 0.12));
+}
+
+[data-component="remote-space"] [data-slot="alias"] {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="remote-space"] [data-slot="detail"] {
+  color: var(--ade-text-soft);
+  font-family: var(--ade-mono, monospace);
+  font-size: var(--ade-font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="remote-space"] [data-slot="source"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs, 11px);
+}
+
+[data-component="remote-space"] [data-slot="foot"] {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4) var(--ade-space-6);
+  border-top: 1px solid var(--ade-border);
+}
+
+[data-component="remote-space"] [data-slot="primary"],
+[data-component="remote-space"] [data-slot="secondary"] {
+  border-radius: var(--ade-radius-md);
+  padding: var(--ade-space-2) var(--ade-space-5);
+  font-size: var(--ade-font-sm);
+  cursor: pointer;
+  border: 1px solid var(--ade-border);
+  background: transparent;
+  color: var(--ade-text);
+}
+
+[data-component="remote-space"] [data-slot="primary"] {
+  background: var(--ade-accent, #3b82f6);
+  border-color: transparent;
+  color: var(--ade-accent-text, #fff);
+}
+
+[data-component="remote-space"] [data-slot="primary"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
