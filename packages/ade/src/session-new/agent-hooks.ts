@@ -54,6 +54,16 @@ export interface HookTarget {
    * works, so ADE's omits it as well.
    */
   readonly matcher?: string
+  /**
+   * Events that say whether the agent is working: the first starts a turn,
+   * every other one ends it. Claude Code only — its `UserPromptSubmit` and
+   * `Stop` are documented and take no matcher. codex's other events have not
+   * been read off an installed config, so it gets none.
+   *
+   * What firstmate learned: busy or idle comes from the harness, not from how
+   * the screen looks — a long turn with nothing new drawn is not an idle agent.
+   */
+  readonly activityEvents?: readonly string[]
 }
 
 /**
@@ -76,6 +86,7 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     config: [".claude", "settings.json"],
     script: [".claude", "hooks", `${HOOK_MARKER}.ps1`],
     matcher: "startup|resume|clear",
+    activityEvents: ["UserPromptSubmit", "Stop"],
   },
   {
     id: "codex",
@@ -163,15 +174,34 @@ export function installedCommand(configText: string | undefined): string | undef
  * of `SessionStart` groups is the order they run in, and ADE's is the one that
  * matters least.
  */
-export function installHook(configText: string | undefined, command: string, matcher?: string): string {
+export function installHook(
+  configText: string | undefined,
+  command: string,
+  matcher?: string,
+  activityEvents: readonly string[] = [],
+): string {
   const config = withoutAde(parse(configText))
   const hooks: Table = isTable(config.hooks) ? config.hooks : {}
   config.hooks = hooks
-  const groups: unknown[] = Array.isArray(hooks.SessionStart) ? hooks.SessionStart : []
   const leaf = { type: "command", command, timeout: HOOK_TIMEOUT }
-  groups.push(matcher === undefined ? { hooks: [leaf] } : { matcher, hooks: [leaf] })
-  hooks.SessionStart = groups
+  const append = (event: string, group: Table) => {
+    const groups: unknown[] = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : []
+    groups.push(group)
+    hooks[event] = groups
+  }
+  append("SessionStart", matcher === undefined ? { hooks: [leaf] } : { matcher, hooks: [leaf] })
+  for (const event of activityEvents) append(event, { hooks: [{ ...leaf }] })
   return render(config)
+}
+
+/** The activity events this config does not send to ADE yet. */
+export function missingActivityEvents(configText: string | undefined, events: readonly string[] = []): string[] {
+  const config = parse(configText)
+  const hooks = isTable(config.hooks) ? config.hooks : {}
+  return events.filter((event) => {
+    const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter(isTable) : []
+    return !groups.some((group) => leaves(group).some((leaf) => isAdeCommand(commandOf(leaf))))
+  })
 }
 
 /**
@@ -189,8 +219,18 @@ export function removeHook(configText: string | undefined): string {
 function withoutAde(config: Table): Table {
   const hooks = config.hooks
   if (!isTable(hooks)) return config
-  const groups = hooks.SessionStart
-  if (!Array.isArray(groups)) return config
+  // Every event: ADE's entries are under SessionStart and, for Claude Code, the activity events too.
+  for (const event of Object.keys(hooks)) {
+    if (Array.isArray(hooks[event])) withoutAdeIn(hooks, event)
+  }
+  return config
+}
+
+function withoutAdeIn(hooks: Table, event: string): void {
+  const groups = hooks[event] as unknown[]
+  // An event that never held an ADE entry is left exactly as it was, down to its object identity.
+  const touched = groups.some((group) => isTable(group) && leaves(group).some((leaf) => isAdeCommand(commandOf(leaf))))
+  if (!touched) return
 
   const kept: unknown[] = []
   for (const group of groups) {
@@ -212,8 +252,9 @@ function withoutAde(config: Table): Table {
     if (others.length === 0) continue
     kept.push({ ...group, hooks: others })
   }
-  hooks.SessionStart = kept
-  return config
+  // SessionStart stays even empty (see removeHook); an activity event emptied of ADE's entry was ADE's to begin with.
+  if (kept.length === 0 && event !== "SessionStart") delete hooks[event]
+  else hooks[event] = kept
 }
 
 /**
@@ -334,7 +375,7 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
   const current = files.configText ?? undefined
   if (install) {
     const command = hookCommand(files.scriptPath)
-    await write(target.id, installHook(current, command, target.matcher), hookScript(target.agent))
+    await write(target.id, installHook(current, command, target.matcher, target.activityEvents), hookScript(target.agent))
   } else {
     await write(target.id, removeHook(current), null)
   }
@@ -362,7 +403,11 @@ export async function refreshHookScript(
   const files = await host.readAgentHook(target.id)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
-  await host.writeAgentHook(target.id, files.configText, script)
+  // An install from before the activity events gets them too; otherwise the config goes back as it was read.
+  const missing = missingActivityEvents(files.configText, target.activityEvents)
+  const config =
+    missing.length > 0 ? installHook(files.configText, command, target.matcher, target.activityEvents) : files.configText
+  await host.writeAgentHook(target.id, config, script)
   return script
 }
 
@@ -402,10 +447,27 @@ $raw = [Console]::In.ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
 try { $payload = $raw | ConvertFrom-Json } catch { exit 0 }
 
-if ($payload.hook_event_name -and $payload.hook_event_name -ne "SessionStart") { exit 0 }
-
 $sessionId = $payload.session_id
 if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
+
+# A turn starting or ending: whether the agent is working, for ADE to wait on or remind.
+$event = "$($payload.hook_event_name)"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop") {
+  $activity = [ordered]@{
+    state     = $(if ($event -eq "Stop") { "idle" } else { "busy" })
+    sessionId = "$sessionId"
+    at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  }
+  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
+  $staging = $target + ".part"
+  try {
+    [IO.File]::WriteAllText($staging, ($activity | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $staging -Destination $target -Force
+  } catch {}
+  exit 0
+}
+
+if ($event -and $event -ne "SessionStart") { exit 0 }
 if (-not [string]::IsNullOrWhiteSpace($env:CODEX_THREAD_ID) -and $env:CODEX_THREAD_ID -ne $sessionId) { exit 0 }
 
 $report = [ordered]@{

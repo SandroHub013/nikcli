@@ -45,6 +45,11 @@ export type Message = { from: string; token?: string; text: string } & (
   | { kind: "update"; ref: string; state: UpdateState }
   /** Closes a session the sender started with `spawn`, and the ones it started. `text` is empty. */
   | { kind: "close"; to: string; force: boolean }
+  /**
+   * Restarts a session the sender spawned, in the same pane and worktree:
+   * its own conversation back unless `fresh`, on another model if `model`.
+   */
+  | { kind: "relaunch"; to: string; model?: string; fresh: boolean }
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
 )
@@ -80,6 +85,11 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "close") {
     const to = str("to")
     return to ? { kind, from, token, to, force: record.force === true, text: "" } : undefined
+  }
+  if (kind === "relaunch") {
+    const to = str("to")
+    const model = str("model")
+    return to ? { kind, from, token, to, fresh: record.fresh === true, ...(model ? { model } : {}), text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
@@ -360,20 +370,83 @@ export interface OpenRequest {
   nudgedAt?: number
   /** The last `ade-msg update` about it, until the session replies or works again. */
   update?: { state: UpdateState; text: string; at: number }
+  /** When the request line was typed (`ask`); a spawn's is typed by the opening, later. */
+  deliveredAt?: number
+  /** Extra Enters sent because the line never started a turn. */
+  rings?: number
 }
 
-export type RequestState = "in corso" | "attende un permesso" | "sessione chiusa" | "in avvio"
+export type RequestState = "in corso" | "attende un permesso" | "sessione chiusa" | "in avvio" | "inattiva senza risposta"
+
+/** Whether an agent is in a turn, from its CLI's own hooks. Absent means unknown, never idle. */
+export interface Activity {
+  state: "busy" | "idle"
+  at: number
+}
+
+/**
+ * The activity a hook wrote, if it is about this pane's conversation.
+ *
+ * A nested agent inherits the spawn's environment and its hook writes to the
+ * same file; its turns are not the pane's. When the pane's conversation id is
+ * known, only that conversation's turns count.
+ */
+export function parseActivity(text: string | null | undefined, sessionId?: string): Activity | undefined {
+  if (!text) return undefined
+  try {
+    const raw = JSON.parse(text.replace(/^\ufeff/, "")) as Record<string, unknown>
+    if ((raw.state !== "busy" && raw.state !== "idle") || typeof raw.at !== "number") return undefined
+    if (sessionId && typeof raw.sessionId === "string" && raw.sessionId !== sessionId) return undefined
+    return { state: raw.state, at: raw.at }
+  } catch {
+    return undefined
+  }
+}
 
 /** How long a freshly spawned session has to come up before "not running" means closed. */
 export const SPAWN_GRACE_MS = 30_000
 
 export function requestState(
   request: OpenRequest,
-  target: { running: boolean; permissionPending: boolean },
+  target: { running: boolean; permissionPending: boolean; activity?: Activity },
   now: number,
 ): RequestState {
   if (!target.running) return now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
-  return target.permissionPending ? "attende un permesso" : "in corso"
+  if (target.permissionPending) return "attende un permesso"
+  // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
+  const reached = request.deliveredAt ?? request.at
+  if (target.activity?.state === "idle" && target.activity.at > reached && !request.update) return "inattiva senza risposta"
+  return "in corso"
+}
+
+/** After an agent's turn ends without a reply, how long before it is reminded. */
+export const IDLE_NUDGE_MS = 20_000
+/** How long a typed request may go without starting a turn before Enter is sent again. */
+export const RERING_AFTER_MS = 20_000
+/** The same for a spawn, whose request is typed only once the new session has settled. */
+export const RERING_SPAWN_AFTER_MS = 60_000
+
+/**
+ * Whether to press Enter again for a request that never started a turn.
+ *
+ * The one way a typed line is lost is to stay in the input box: a TUI took the
+ * text and its Enter for a paste. With turn hooks that is visible — the line
+ * went in and no turn began — and a second Enter is the fix. Only with hooks:
+ * without them nothing distinguishes a stuck line from a slow start, and an
+ * Enter at the wrong moment answers whatever the agent asks next. Once.
+ */
+export function shouldRering(
+  request: OpenRequest,
+  target: { running: boolean; permissionPending: boolean; activity?: Activity; hooked: boolean },
+  now: number,
+): boolean {
+  if (!target.hooked || !target.running || target.permissionPending || (request.rings ?? 0) >= 1) return false
+  const since = request.deliveredAt ?? request.at
+  const wait = request.deliveredAt !== undefined ? RERING_AFTER_MS : RERING_SPAWN_AFTER_MS
+  if (now - since < wait) return false
+  // Still in a turn that began before: the line is queued behind it, not stuck.
+  if (target.activity?.state === "busy") return false
+  return !target.activity || target.activity.at < since
 }
 
 /** A request older than this, in a session silent for {@link NUDGE_QUIET_MS}, gets a reminder. */
@@ -394,15 +467,19 @@ export const MAX_NUDGES = 2
  */
 export function shouldNudge(
   request: OpenRequest,
-  target: { running: boolean; permissionPending: boolean; lastOutputAt?: number },
+  target: { running: boolean; permissionPending: boolean; lastOutputAt?: number; activity?: Activity },
   now: number,
 ): boolean {
   if (!target.running || target.permissionPending) return false
   // A session that said it is blocked is waiting on its caller, not forgetting to answer.
   if (request.update) return false
   if ((request.nudges ?? 0) >= MAX_NUDGES) return false
-  if (now - request.at < NUDGE_AFTER_MS) return false
   if (request.nudgedAt !== undefined && now - request.nudgedAt < NUDGE_GAP_MS) return false
+  // With turn hooks the agent's own word decides: working is never nudged, and a turn that ended is.
+  if (target.activity?.state === "busy") return false
+  const reached = request.deliveredAt ?? request.at
+  if (target.activity?.state === "idle" && target.activity.at > reached) return now - target.activity.at >= IDLE_NUDGE_MS
+  if (now - request.at < NUDGE_AFTER_MS) return false
   return target.lastOutputAt === undefined || now - target.lastOutputAt >= NUDGE_QUIET_MS
 }
 
@@ -510,6 +587,9 @@ export const USAGE =
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
+  "  ade-msg relaunch <sessione> [--model <id>] [--fresh]\n" +
+  "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
+  "                                          riprende la sua conversazione (o da zero con --fresh)\n" +
   "  ade-msg agents | whoami\n" +
   "opzioni:\n" +
   "  --no-wait        ask/spawn: stampa subito l'id, poi usa wait (per lanciare in parallelo)\n" +

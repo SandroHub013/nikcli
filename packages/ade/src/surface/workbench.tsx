@@ -18,6 +18,7 @@ import {
   excludeWithAde,
   modelArgs,
   nameTaken,
+  withoutModel,
   resultsDir,
   slugify,
   worktreeArgs,
@@ -26,7 +27,7 @@ import {
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
 import { followReports, newNonce } from "../session-new/agent-link"
-import { HOOK_TARGETS, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
+import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, McpSection, RoutineSection, SkillsSection } from "../settings/sections"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
@@ -141,7 +142,10 @@ import {
   formatCancel,
   formatNudge,
   formatUpdate,
+  parseActivity,
   parseOpenRequests,
+  shouldRering,
+  type Activity,
   requestState,
   requestsTable,
   shouldNudge,
@@ -608,6 +612,14 @@ export function Workbench() {
   /** When each pane last printed anything: a session silent for a while has stopped working. */
   const lastOutputAt = new Map<string, number>()
 
+  /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
+  const paneNonces = new Map<string, string>()
+  const activityOf = new Map<string, Activity>()
+  const hooked = (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return paneNonces.has(paneId) && Boolean(hookTarget(pane?.agent ?? pane?.model ?? "")?.activityEvents?.length)
+  }
+
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
    * is public — `ade-msg list` prints them — so a `from` counts as the sender
@@ -637,7 +649,22 @@ export function Workbench() {
     running: running.has(request.to),
     permissionPending: Boolean(permissions()[request.to]),
     lastOutputAt: lastOutputAt.get(request.to),
+    activity: activityOf.get(request.to),
+    hooked: hooked(request.to),
   })
+
+  /** Refreshes the turn activity of the sessions that owe an answer; the others are not asked. */
+  const readActivities = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    if (!host.readAgentActivity) return
+    const targets = new Set([...openRequests.values()].map((request) => request.to))
+    for (const paneId of targets) {
+      const nonce = paneNonces.get(paneId)
+      if (!nonce || !hooked(paneId)) continue
+      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+      const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+      if (activity) activityOf.set(paneId, activity)
+    }
+  }
   const stateOf = (request: OpenRequest, now = Date.now()) =>
     requestState({ ...request, at: Math.max(request.at, loadedAt) }, targetOf(request), now)
 
@@ -757,6 +784,7 @@ export function Workbench() {
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
 
+    await readActivities(host)
     const now = Date.now()
     const panes = mailPanes()
     for (const request of [...openRequests.values()]) {
@@ -771,8 +799,16 @@ export function Workbench() {
         statesWritten.set(request.id, state)
         await host.mailboxState?.(request.id, state).catch(() => {})
       }
-      // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
       const session = running.get(request.to)
+      // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
+      if (session && shouldRering(request, targetOf(request), now)) {
+        request.rings = (request.rings ?? 0) + 1
+        saveRequests()
+        session.write("\r")
+        appendLine(request.to, `Invio ripetuto: la richiesta ${request.id} non era partita`, "note")
+        continue
+      }
+      // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
       if (session && shouldNudge(request, targetOf(request), now)) {
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
@@ -984,6 +1020,55 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "relaunch") {
+      if (!message.from || spawnedBy.get(target.pane.id) !== message.from) {
+        await answer(`errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
+        return true
+      }
+      const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
+      if (!pane) {
+        await answer(`errore: la sessione "${target.pane.title}" non esiste più`)
+        return true
+      }
+      const agentId = pane.agent ?? pane.model
+      let spawnArgs = pane.spawnArgs ?? []
+      if (message.model) {
+        const chosen = modelArgs(agentId, message.model)
+        if ("error" in chosen) {
+          await answer(`errore: ${chosen.error}`)
+          return true
+        }
+        spawnArgs = [...withoutModel(spawnArgs), ...chosen]
+      }
+      /*
+       * Same pane, same worktree, same place in the tree. The old process goes
+       * first; its exit is ignored because `running` already holds nothing for
+       * the pane, and then the new spawn's.
+       */
+      const old = running.get(pane.id)
+      running.delete(pane.id)
+      touchRunning()
+      old?.kill()
+      setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
+      if (message.fresh) {
+        for (const request of [...openRequests.values()]) {
+          if (request.to === pane.id) {
+            await settle(host, request.id, `[ade-msg] richiesta ${request.id} interrotta: la sessione "${pane.title}" è stata riavviata da zero`)
+          }
+        }
+        void startProcess(pane.id, agentId, "")
+      } else {
+        const updated = wb().panes.find((candidate) => candidate.id === pane.id)
+        if (updated) void reopen(updated)
+      }
+      appendLine(pane.id, `Riavviata da ${sender?.title ?? "una sessione"}${message.model ? ` con il modello ${message.model}` : ""}${message.fresh ? ", da zero" : ""}`, "note")
+      await answer(
+        `ok: riavviata "${pane.title}"${message.model ? ` con ${message.model}` : ""}` +
+          (message.fresh ? " da zero: mandale il compito con ade-msg ask" : "; riprende la sua conversazione e le richieste aperte restano valide"),
+      )
+      return true
+    }
+
     if (message.kind === "close") {
       if (!message.from || spawnedBy.get(target.pane.id) !== message.from) {
         await answer(`errore: puoi chiudere solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
@@ -1035,7 +1120,8 @@ export function Workbench() {
       }
     }
     if (message.kind === "ask") {
-      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at: Date.now(), brief: briefOf(message.text) })
+      const at = Date.now()
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text) })
       saveRequests()
     }
     const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
@@ -1414,7 +1500,7 @@ export function Workbench() {
             agentId: pane.agent,
             cwd: pane.cwd || p.root,
             ...(pane.resumeId !== undefined ? { resumeId: pane.resumeId } : {}),
-            missing: await conversationMissing(pane.agent, pane.resumeId),
+            missing: await conversationMissing(pane.agent, pane.resumeId, pane.cwd || p.root),
             pane,
           })),
         )
@@ -2331,9 +2417,10 @@ export function Workbench() {
    * names — see `ResumeRecipe.transcript`. False whenever it cannot be told:
    * an id that cannot be checked is trusted, as it was before.
    */
-  const conversationMissing = async (agentId: string, resumeId: string | undefined) => {
+  // `cwd` is where the agent ran: a worktree session's transcripts are filed under the worktree, not the project.
+  const conversationMissing = async (agentId: string, resumeId: string | undefined, cwd?: string) => {
     const host = await getHost()
-    const root = project()?.root
+    const root = cwd || project()?.root
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
@@ -2352,7 +2439,7 @@ export function Workbench() {
   const reopen = async (pane: Pane, line?: string) => {
     const agentId = pane.agent ?? pane.model
     if (running.has(pane.id)) return
-    const missing = await conversationMissing(agentId, pane.resumeId)
+    const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
@@ -2446,6 +2533,11 @@ export function Workbench() {
      */
     const linked = hookStates()[agentId]?.installed ?? false
     const nonce = linked ? newNonce() : undefined
+    // Kept per pane so turn activity can be read for as long as this spawn lives.
+    if (nonce) paneNonces.set(paneId, nonce)
+    else paneNonces.delete(paneId)
+    activityOf.delete(paneId)
+    let spawned: SpawnedSession | undefined
 
     /*
      * The project itself, not a worktree cut for the session.
@@ -2519,12 +2611,20 @@ export function Workbench() {
            */
           void handlePanelRequest(paneId, line)
         },
-        onExit: (code) => finish(paneId, code),
+        /*
+         * Only this spawn's exit ends the pane. A relaunch kills the old process
+         * and starts the new one at once, and the old one's exit arriving later
+         * must not mark the new session finished.
+         */
+        onExit: (code) => {
+          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+        },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
 
+      spawned = session
       running.set(paneId, session)
       touchRunning()
 

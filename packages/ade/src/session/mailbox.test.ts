@@ -11,7 +11,9 @@ import {
   verifySender,
   formatNudge,
   formatUpdate,
+  parseActivity,
   parseOpenRequests,
+  shouldRering,
   requestState,
   requestsTable,
   shouldNudge,
@@ -275,5 +277,45 @@ describe("spawn options, updates and the request contract", () => {
     }
     expect(shouldNudge(blocked, { running: true, permissionPending: false, lastOutputAt: 0 }, 900_000)).toBe(false)
     expect(requestsTable([blocked], panes, () => "in corso", 1_000)).toContain("bloccata: manca la chiave API")
+  })
+})
+describe("turn activity from the CLI's hooks", () => {
+  const request: OpenRequest = { id: "171-ab", kind: "ask", from: "n1-0", to: "n2-1", at: 1_000, deliveredAt: 1_000, brief: "x" }
+  const live = { running: true, permissionPending: false, hooked: true }
+
+  test("an activity file is believed only about the pane's own conversation", () => {
+    const text = '{"state":"idle","sessionId":"abc","at":5}'
+    expect(parseActivity(text, "abc")).toEqual({ state: "idle", at: 5 })
+    expect(parseActivity(text)).toEqual({ state: "idle", at: 5 })
+    expect(parseActivity(text, "child")).toBeUndefined()
+    expect(parseActivity('{"state":"asleep","at":5}')).toBeUndefined()
+    expect(parseActivity(null)).toBeUndefined()
+  })
+
+  test("working is never nudged; a turn that ended without a reply is, soon", () => {
+    expect(shouldNudge(request, { ...live, activity: { state: "busy", at: 2_000 } }, 900_000)).toBe(false)
+    expect(shouldNudge(request, { ...live, activity: { state: "idle", at: 2_000 } }, 10_000)).toBe(false)
+    expect(shouldNudge(request, { ...live, activity: { state: "idle", at: 2_000 } }, 30_000)).toBe(true)
+    expect(requestState(request, { ...live, activity: { state: "idle", at: 2_000 } }, 30_000)).toBe("inattiva senza risposta")
+  })
+
+  test("a line that started no turn gets one more Enter, once, and only with hooks", () => {
+    expect(shouldRering(request, live, 10_000)).toBe(false) // too soon
+    expect(shouldRering(request, live, 30_000)).toBe(true) // no activity since
+    expect(shouldRering(request, { ...live, activity: { state: "busy", at: 1_500 } }, 30_000)).toBe(false) // it started
+    expect(shouldRering(request, { ...live, activity: { state: "idle", at: 500 } }, 30_000)).toBe(true) // idle from before
+    expect(shouldRering(request, { ...live, activity: { state: "busy", at: 500 } }, 30_000)).toBe(false) // queued behind a turn
+    expect(shouldRering({ ...request, rings: 1 }, live, 30_000)).toBe(false)
+    expect(shouldRering(request, { ...live, hooked: false }, 30_000)).toBe(false)
+    expect(shouldRering(request, { ...live, permissionPending: true }, 30_000)).toBe(false)
+  })
+
+  test("relaunch is a message with a target, a model and a fresh flag", () => {
+    expect(parseMessage('{"kind":"relaunch","from":"a","to":"revisore","model":"sonnet","fresh":true}')).toMatchObject({
+      kind: "relaunch",
+      to: "revisore",
+      model: "sonnet",
+      fresh: true,
+    })
   })
 })

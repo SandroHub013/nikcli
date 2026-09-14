@@ -125,6 +125,19 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
   }
 }
 
+/** Spawn arguments with any model choice taken out, so another can be put in. */
+export function withoutModel(args: readonly string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "--model" || args[i] === "-m") && i + 1 < args.length) {
+      i++
+      continue
+    }
+    out.push(args[i]!)
+  }
+  return out
+}
+
 /**
  * Arguments a session in a worktree needs to stay in it.
  *

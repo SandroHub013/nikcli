@@ -245,6 +245,7 @@ $any = $false
 $close = $false
 $worktree = $false
 $force = $false
+$fresh = $false
 $name = $null
 $model = $null
 $file = $null
@@ -265,6 +266,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--close') { $close = $true; continue }
     elseif ($a -eq '--worktree') { $worktree = $true; continue }
     elseif ($a -eq '--force') { $force = $true; continue }
+    elseif ($a -eq '--fresh') { $fresh = $true; continue }
   }
   $pos.Add($a)
 }
@@ -417,6 +419,12 @@ switch ($cmd) {
     if (-not $head) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'close'; to = $head; force = $force })
   }
+  'relaunch' {
+    if (-not $head) { Usage }
+    $fields = [ordered]@{ kind = 'relaunch'; to = $head; fresh = $fresh }
+    if ($model) { $fields['model'] = $model }
+    PostAndConfirm $fields
+  }
   { $_ -eq 'ask' -or $_ -eq 'spawn' } {
     if (-not $head -or -not $text) { Usage }
     if ($cmd -eq 'ask') {
@@ -463,7 +471,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; name=""; model=""; file=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; name=""; model=""; file=""
 lead=1; [ "$cmd" = update ] && lead=2
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -479,6 +487,7 @@ while [ $# -gt 0 ]; do
       --close) close=true; shift; continue ;;
       --worktree) worktree=true; shift; continue ;;
       --force) force=true; shift; continue ;;
+      --fresh) fresh=true; shift; continue ;;
     esac
   fi
   if [ $n -eq 0 ]; then head="$a"; elif [ $n -eq 1 ] && [ $lead -eq 2 ]; then second="$a"; else text="${text:+$text }$a"; fi
@@ -580,6 +589,10 @@ case "$cmd" in
     [ -n "$text" ] || usage
     confirm "\"kind\":\"update\",\"ref\":\"$head\",\"state\":\"$second\"" ;;
   close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\",\"force\":$force" ;;
+  relaunch)
+    [ -n "$head" ] || usage
+    extra=""; [ -n "$model" ] && extra=",\"model\":\"$(esc "$model")\""
+    confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh$extra" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
     if [ "$cmd" = ask ]; then

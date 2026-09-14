@@ -137,6 +137,20 @@ pub async fn agent_link_read(app: tauri::AppHandle, nonce: String) -> Result<Opt
     }
 }
 
+/// Whether the agent of this spawn is in a turn, as its last `UserPromptSubmit`
+/// or `Stop` hook wrote it; `None` until either has run. Not consumed: it is a
+/// state, overwritten by the next turn, and read as often as it is needed.
+#[tauri::command]
+pub async fn agent_activity_read(app: tauri::AppHandle, nonce: String) -> Result<Option<String>, String> {
+    let json = nonce_path(&app, &nonce)?;
+    let path = json.with_extension("activity");
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("attività non leggibile: {error}")),
+    }
+}
+
 /// Forgets a report the frontend has taken.
 #[tauri::command]
 pub async fn agent_link_clear(app: tauri::AppHandle, nonce: String) -> Result<(), String> {

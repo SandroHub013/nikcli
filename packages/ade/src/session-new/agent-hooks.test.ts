@@ -9,6 +9,7 @@ import {
   installHook,
   installedCommand,
   isAdeCommand,
+  missingActivityEvents,
   readHookStatus,
   removeHook,
   setHook,
@@ -313,8 +314,13 @@ describe("hookScript", () => {
     expect(script).toContain("ADE_SESSION_DIR")
   })
 
-  test("refuses an event that is not a session start", () => {
-    expect(script).toContain('$payload.hook_event_name -ne "SessionStart"')
+  test("refuses an event that is not a session start or a turn", () => {
+    expect(script).toContain('$event -ne "SessionStart"')
+  })
+
+  test("a turn starting or ending is written beside the report, not over it", () => {
+    expect(script).toContain('$event -eq "UserPromptSubmit" -or $event -eq "Stop"')
+    expect(script).toContain('("$env:ADE_SPAWN_NONCE" + ".activity")')
   })
 
   test("refuses a nested codex thread reporting its parent's id", () => {
@@ -337,5 +343,32 @@ describe("hookScript", () => {
 
   test("says who owns the file, since it sits in the user's config", () => {
     expect(script.startsWith(`# installed by ADE — ${HOOK_MARKER}`)).toBe(true)
+  })
+})
+
+describe("activity events", () => {
+  const events = ["UserPromptSubmit", "Stop"]
+  const command = hookCommand(CLAUDE_SCRIPT)
+
+  test("claude-code asks for them, codex does not", () => {
+    expect(hookTarget("claude-code")?.activityEvents).toEqual(events)
+    expect(hookTarget("codex")?.activityEvents).toBeUndefined()
+  })
+
+  test("installed beside everyone else's, once each, and removed with the rest", () => {
+    const installed = installHook(CLAUDE, command, "startup|resume|clear", events)
+    const hooks = JSON.parse(installed).hooks
+    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command, timeout: 5 }] }])
+    expect(hooks.UserPromptSubmit).toHaveLength(1)
+    expect(hooks.PostToolUse).toEqual(JSON.parse(CLAUDE).hooks.PostToolUse)
+    expect(missingActivityEvents(installed, events)).toEqual([])
+    const twice = installHook(installed, command, "startup|resume|clear", events)
+    expect(JSON.parse(twice).hooks.Stop).toHaveLength(1)
+    expect(JSON.parse(removeHook(twice)).hooks.Stop).toBeUndefined()
+  })
+
+  test("an install from before them is found missing", () => {
+    const old = installHook(CLAUDE, command, "startup|resume|clear")
+    expect(missingActivityEvents(old, events)).toEqual(events)
   })
 })

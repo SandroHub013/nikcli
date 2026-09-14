@@ -8,6 +8,7 @@ import {
   nameTaken,
   resultsDir,
   slugify,
+  withoutModel,
   worktreeArgs,
   worktreePlan,
 } from "./orchestra"
@@ -94,4 +95,9 @@ test("results live in .ade/results, kept out of git once", () => {
   expect(resultsDir("C:\\p\\app")).toBe("C:\\p\\app\\.ade\\results")
   expect(excludeWithAde("*.log")).toBe("*.log\n# ADE: risultati dei subagent\n.ade/\n")
   expect(excludeWithAde("# x\n.ade/\n")).toBeUndefined()
+})
+
+test("withoutModel takes the model choice out and leaves the rest", () => {
+  expect(withoutModel(["--model", "a", "--add-dir", "C:\\w"])).toEqual(["--add-dir", "C:\\w"])
+  expect(withoutModel(["-m", "gpt-5"])).toEqual([])
 })

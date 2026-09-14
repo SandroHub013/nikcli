@@ -172,6 +172,8 @@ export interface Host {
   readAgentLink?: (nonce: string) => Promise<string | null>
   /** Forgets a report that has been taken. */
   clearAgentLink?: (nonce: string) => Promise<void>
+  /** The last turn start or end the CLI's hook wrote for this spawn, as text, or null. */
+  readAgentActivity?: (nonce: string) => Promise<string | null>
   /**
    * One CLI's hook configuration, so ADE can show its state and merge into it.
    *
@@ -527,6 +529,16 @@ export async function getHost(): Promise<Host | undefined> {
         await invoke("agent_link_clear", { nonce })
       } catch {
         // A report left behind is swept at the next start.
+      }
+    },
+
+    async readAgentActivity(nonce) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return (await invoke<string | null>("agent_activity_read", { nonce })) ?? null
+      } catch {
+        // Unknown, which is what it is: never read as idle.
+        return null
       }
     },
 
