@@ -1,0 +1,574 @@
+/**
+ * Cloud speech-to-text transcriber powered by OpenRouter (microsoft/mai-transcribe-2).
+ *
+ * Implements the Transcriber contract by collecting silence-delimited audio Blobs
+ * from createMicCapture, encoding them to pure base64, and dispatching HTTP POST requests
+ * to OpenRouter's transcriptions API.
+ *
+ * Security & Reliability guarantees:
+ * - Zero hardcoded or default API keys; key is strictly injected via caller options.
+ * - API key is never logged, never printed, never spoken, and stripped from error messages.
+ * - Distinct localized Italian errors for 401 (invalid key) and 402 (exhausted credit).
+ * - Enforces 25 MB payload limit and AbortController timeout (30s) below upstream 60s cap.
+ * - Tracks and exposes usage (cost and seconds) per transcription request.
+ */
+
+import type {
+  FinalTranscriptCallback,
+  PartialTranscriptCallback,
+  Transcriber,
+  TranscriberErrorCallback,
+  TranscriberOptions,
+  TranscriptEvent,
+} from "./transcriber"
+import {
+  createMicCapture,
+  encodeWav,
+  type CapturedSegment,
+  type MicCapture,
+  type MicCaptureOptions,
+} from "../audio/capture"
+import {
+  ApiKeyInvalid,
+  ApiKeyMissing,
+  MicPermissionDenied,
+  MicUnavailable,
+  QuotaExhausted,
+  RequestTimeout,
+  TranscriptionFailed,
+} from "../effect/errors"
+
+// ---------------------------------------------------------------------------
+// Constants & Specifications
+// ---------------------------------------------------------------------------
+
+export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/audio/transcriptions"
+export const OPENROUTER_MODEL = "microsoft/mai-transcribe-2"
+export const OPENROUTER_FALLBACK_MODEL = "openai/whisper-large-v3"
+export const OPENROUTER_TIMEOUT_MS = 30_000
+export const MAX_AUDIO_BYTES = 25 * 1024 * 1024 // 25 MB limit
+
+export type OpenRouterAudioFormat =
+  | "webm"
+  | "wav"
+  | "mp3"
+  | "flac"
+  | "m4a"
+  | "ogg"
+  | "aac"
+
+// ---------------------------------------------------------------------------
+// Helpers: MIME to Format & Base64 Converter
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a MIME type string to the short format tag required by OpenRouter.
+ */
+export function mimeToAudioFormat(mimeType: string): OpenRouterAudioFormat {
+  const lower = mimeType.toLowerCase()
+  if (lower.includes("webm")) return "webm"
+  if (lower.includes("mp4") || lower.includes("m4a")) return "m4a"
+  if (lower.includes("wav")) return "wav"
+  if (lower.includes("mp3") || lower.includes("mpeg")) return "mp3"
+  if (lower.includes("ogg")) return "ogg"
+  if (lower.includes("flac")) return "flac"
+  if (lower.includes("aac")) return "aac"
+  return "webm"
+}
+
+/**
+ * Converts an audio Blob to pure base64 without data URI scheme or prefix comma.
+ */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const g = typeof window !== "undefined" ? window : (globalThis as any)
+
+  if (typeof g?.FileReader !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const reader = new g.FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        if (typeof result === "string") {
+          const commaIdx = result.indexOf(",")
+          resolve(commaIdx !== -1 ? result.slice(commaIdx + 1) : result)
+        } else {
+          reject(new Error("Errore durante la codifica base64 del file audio: risultato nullo."))
+        }
+      }
+      reader.onerror = () => reject(reader.error ?? new Error("Errore durante la codifica base64 del file audio."))
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  // Node.js / Bun runtime fallback
+  const buffer = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(bytes).toString("base64")
+  }
+
+  let binary = ""
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+/**
+ * Strictly scrubs the API key from any output string, preventing accidental leakage
+ * into logs, exceptions, or UI surfaces.
+ */
+/**
+ * Turns a settings language code into what the request body should carry.
+ *
+ * Returns undefined for "auto" and for anything empty, which the caller sends
+ * as an absent field. Defaults to Italian only when nothing was asked for at
+ * all, so an older caller that never passed a language keeps the behaviour it
+ * had rather than silently switching to detection.
+ */
+export function normalizeRequestLanguage(code: string | undefined): string | undefined {
+  if (code === undefined) return "it"
+  const clean = code.trim().toLowerCase()
+  if (clean.length === 0 || clean === "auto") return undefined
+  return clean
+}
+
+export function sanitizeApiKey(text: string, apiKey?: string): string {
+  if (!text) return ""
+  if (!apiKey || apiKey.trim().length === 0) return text
+  return text.replaceAll(apiKey, "[REDACTED]")
+}
+
+// ---------------------------------------------------------------------------
+// Usage & Options Interfaces
+// ---------------------------------------------------------------------------
+
+export interface OpenRouterUsage {
+  seconds?: number
+  total_tokens?: number
+  input_tokens?: number
+  output_tokens?: number
+  cost?: number
+}
+
+export type OpenRouterUsageCallback = (usage: OpenRouterUsage) => void
+
+export interface OpenRouterTranscriberOptions extends TranscriberOptions {
+  /** OpenRouter Bearer API key. Required; caller must provide it. */
+  apiKey: string
+  /** Speech-to-text model to query (default: 'microsoft/mai-transcribe-2'). */
+  model?: string
+  /** Callback fired with usage statistics (cost, tokens, seconds) upon successful transcription. */
+  onUsage?: OpenRouterUsageCallback
+  /**
+   * ISO-639-1 code the audio is expected to be in, from `VoiceSettings.language`.
+   *
+   * This used to be the literal `"it"` in the request body, which made the
+   * language picker decorative: it validated the code, stored it, redrew the
+   * list from the model's own inventory, and then every request asked for
+   * Italian anyway. Speaking English into it produced Italian-shaped nonsense
+   * and nothing in the interface said why.
+   *
+   * `"auto"` is passed through as *no* language field: that is how the model
+   * is asked to detect, and sending the string "auto" as a language code is
+   * not the same request.
+   */
+  language?: string
+  /** Request timeout in milliseconds (default: 30_000 ms). */
+  timeoutMs?: number
+  /** Optional pre-existing MicCapture instance. If omitted, createMicCapture() is used. */
+  capture?: MicCapture
+  /** Options passed to createMicCapture when capture is not pre-supplied. */
+  captureOptions?: MicCaptureOptions
+  /** Dependency injection hook for fetch. */
+  fetch?: typeof globalThis.fetch
+  /** Dependency injection hook for time provider. */
+  now?: () => number
+}
+
+export interface OpenRouterTranscriber extends Transcriber {
+  /** Access usage statistics for the most recent successful transcription. */
+  getLastUsage(): OpenRouterUsage | null
+  /** Property accessor for usage metrics. */
+  readonly lastUsage: OpenRouterUsage | null
+  /** Underlying microphone capture adapter. */
+  readonly capture: MicCapture
+  /** Whether a transcription request is currently in flight. */
+  readonly hasInFlight: boolean
+}
+
+// ---------------------------------------------------------------------------
+// OpenRouter Transcriber Factory
+// ---------------------------------------------------------------------------
+
+export function createOpenRouterTranscriber(
+  options: OpenRouterTranscriberOptions
+): OpenRouterTranscriber {
+  const apiKey = options.apiKey
+  const timeoutMs = options.timeoutMs ?? OPENROUTER_TIMEOUT_MS
+  const fetchFn = options.fetch ?? globalThis.fetch.bind(globalThis)
+  const language = normalizeRequestLanguage(options.language)
+
+  let partialCb: PartialTranscriptCallback = options.onPartial ?? (() => {})
+  let finalCb: FinalTranscriptCallback = options.onFinal ?? (() => {})
+  let errorCb: TranscriberErrorCallback = options.onError ?? (() => {})
+  let usageCb: OpenRouterUsageCallback = options.onUsage ?? (() => {})
+
+  let lastUsage: OpenRouterUsage | null = null
+  let userStopped = true
+  let inFlightRequests = 0
+
+  const micCapture: MicCapture =
+    options.capture ?? createMicCapture({ preferredFormat: "wav", ...options.captureOptions })
+
+  async function transcribeSegment(segment: CapturedSegment): Promise<void> {
+    if (!segment.blob || segment.blob.size === 0) return
+
+    inFlightRequests++
+    try {
+      if (!apiKey || apiKey.trim().length === 0) {
+        errorCb(
+          new ApiKeyMissing({
+            message:
+              "Chiave API OpenRouter mancante. Specificare una chiave API valida nelle opzioni.",
+          }) as unknown as Error
+        )
+        return
+      }
+
+      if (segment.blob.size > MAX_AUDIO_BYTES) {
+        const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
+        errorCb(
+          new Error(
+            `File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`
+          )
+        )
+        return
+      }
+
+      let base64Audio: string = ""
+      let shortFormat = segment.format || mimeToAudioFormat(segment.mimeType || segment.blob.type)
+
+      // In a browser environment, if the audio segment is in webm/m4a format,
+      // transcode it to 16 kHz WAV via AudioContext.decodeAudioData.
+      // Azure MAI-Transcribe 2 strictly requires WAV/PCM.
+      if (shortFormat !== "wav" && typeof window !== "undefined") {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+        if (AudioCtx) {
+          try {
+            const ctx = new AudioCtx({ sampleRate: 16000 })
+            const arrayBuf = await segment.blob.arrayBuffer()
+            const decoded = await ctx.decodeAudioData(arrayBuf)
+            const pcm = decoded.getChannelData(0)
+            const wavBlob = encodeWav(pcm, decoded.sampleRate)
+            base64Audio = await blobToBase64(wavBlob)
+            shortFormat = "wav"
+            await ctx.close().catch(() => {})
+          } catch {
+            // Decode failed (e.g. mock test blob), fall back to original blob
+          }
+        }
+      }
+
+      if (!base64Audio) {
+        try {
+          base64Audio = await blobToBase64(segment.blob)
+        } catch (err: any) {
+          errorCb(
+            new Error(
+              `Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`
+            )
+          )
+          return
+        }
+      }
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+      const primaryModel = options.model ?? OPENROUTER_MODEL
+      const requestPayload: Record<string, any> = {
+        model: primaryModel,
+        input_audio: {
+          data: base64Audio,
+          format: shortFormat,
+        },
+        ...(language ? { language } : {}),
+        temperature: 0,
+      }
+
+      let response: Response
+      try {
+        response = await fetchFn(OPENROUTER_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestPayload),
+          signal: controller.signal,
+        })
+
+        // If OpenRouter returns 400 (e.g. "Provider returned 400" because Azure MAI-Transcribe 2
+        // has an upstream provider failure or rejects language/temperature parameters):
+        if (!response.ok && (response.status === 400 || response.status >= 500)) {
+          // Attempt 1: Retry without language and temperature
+          try {
+            const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: primaryModel,
+                input_audio: {
+                  data: base64Audio,
+                  format: shortFormat,
+                },
+              }),
+              signal: controller.signal,
+            })
+            if (retryResponse.ok) {
+              response = retryResponse
+            }
+          } catch {
+            // continue to fallback below
+          }
+
+          // Attempt 2: If still failing and primary was not already the fallback model, retry with whisper-large-v3
+          if (!response.ok && primaryModel !== OPENROUTER_FALLBACK_MODEL) {
+            try {
+              const fallbackResponse = await fetchFn(OPENROUTER_ENDPOINT, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${apiKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: OPENROUTER_FALLBACK_MODEL,
+                  input_audio: {
+                    data: base64Audio,
+                    format: shortFormat,
+                  },
+                  ...(language ? { language } : {}),
+                }),
+                signal: controller.signal,
+              })
+              if (fallbackResponse.ok) {
+                response = fallbackResponse
+              }
+            } catch {
+              // keep original response for standard error handling below
+            }
+          }
+        }
+      } catch (netErr: any) {
+      if (controller.signal.aborted || netErr?.name === "AbortError") {
+        errorCb(
+          new RequestTimeout({
+            timeoutMs,
+            message: `Richiesta di trascrizione OpenRouter scaduta per timeout (dopo ${Math.round(timeoutMs / 1000)} secondi).`,
+          }) as unknown as Error
+        )
+        return
+      }
+
+      const safeNetMessage = sanitizeApiKey(
+        netErr?.message ?? "connessione fallita",
+        apiKey
+      )
+      errorCb(
+        new Error(
+          `Errore di rete durante la connessione a OpenRouter: ${safeNetMessage}.`
+        )
+      )
+      return
+    } finally {
+      clearTimeout(timer)
+    }
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        errorCb(
+          new ApiKeyInvalid({
+            message:
+              "Autenticazione OpenRouter fallita: chiave API non valida o revocata.",
+          }) as unknown as Error
+        )
+        return
+      }
+
+      if (response.status === 402) {
+        errorCb(
+          new QuotaExhausted({
+            message:
+              "Credito OpenRouter esaurito: ricarica il conto sul tuo account OpenRouter.",
+          }) as unknown as Error
+        )
+        return
+      }
+
+      if (response.status === 429) {
+        errorCb(
+          new Error(
+            "Limite di frequenza OpenRouter superato: troppe richieste simultanee."
+          )
+        )
+        return
+      }
+
+      let detail = ""
+      try {
+        const errorJson = await response.json()
+        if (errorJson?.error?.message) {
+          detail = String(errorJson.error.message)
+        } else if (typeof errorJson?.error === "string") {
+          detail = errorJson.error
+        }
+      } catch {
+        // Response was not JSON
+      }
+
+      const safeDetail = sanitizeApiKey(detail, apiKey)
+      const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
+      errorCb(
+        new Error(
+          `Errore servizio OpenRouter (${response.status})${detailSuffix}.`
+        )
+      )
+      return
+    }
+
+    try {
+      const data = await response.json()
+
+      if (data?.usage) {
+        lastUsage = data.usage
+        usageCb(data.usage)
+      }
+
+      const text = (
+        data?.text ??
+        data?.transcription ??
+        (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
+        ""
+      ).trim()
+      if (text) {
+        finalCb({
+          text,
+          isFinal: true,
+          confidence: 1.0,
+        })
+      }
+    } catch (parseErr: any) {
+      errorCb(
+        new Error(
+          `Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`
+        )
+      )
+    }
+  } finally {
+    inFlightRequests--
+  }
+}
+
+  micCapture.onSegment(async (segment: CapturedSegment) => {
+    try {
+      await transcribeSegment(segment)
+    } catch (err: any) {
+      const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
+      errorCb(new Error(`Errore imprevisto trascrizione OpenRouter: ${safeMsg}`))
+    }
+  })
+
+  micCapture.onError((err: Error) => {
+    errorCb(err)
+  })
+
+  return {
+    getLastUsage(): OpenRouterUsage | null {
+      return lastUsage
+    },
+
+    get lastUsage(): OpenRouterUsage | null {
+      return lastUsage
+    },
+
+    get capture(): MicCapture {
+      return micCapture
+    },
+
+    get hasInFlight(): boolean {
+      return inFlightRequests > 0
+    },
+
+    startSegment(): void {
+      micCapture.startSegment?.()
+    },
+
+    commit(): boolean {
+      return Boolean(micCapture.commitSegment?.())
+    },
+
+    async start(): Promise<void> {
+      userStopped = false
+      // Reported and rethrown: a start() that resolves is a promise to the
+      // caller that audio is now flowing, and without a key or a microphone
+      // none is.
+      if (!apiKey || apiKey.trim().length === 0) {
+        const missing = new ApiKeyMissing({
+          message:
+            "Chiave API OpenRouter mancante. Specificare una chiave API valida nelle opzioni.",
+        })
+        errorCb(missing as unknown as Error)
+        throw missing
+      }
+
+      try {
+        await micCapture.start()
+      } catch (err: any) {
+        userStopped = true
+        const lower = String(err?.message ?? "").toLowerCase()
+        if (lower.includes("negato") || lower.includes("notallowed") || lower.includes("permission")) {
+          const permErr = new MicPermissionDenied({
+            message: "Accesso al microfono negato. Concedi il permesso audio nelle impostazioni del browser.",
+            cause: err,
+          })
+          errorCb(permErr as unknown as Error)
+          throw permErr
+        }
+        if (lower.includes("nessun microfono") || lower.includes("notfound")) {
+          const unavailErr = new MicUnavailable({
+            message: "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova.",
+            cause: err,
+          })
+          errorCb(unavailErr as unknown as Error)
+          throw unavailErr
+        }
+        const failure = new TranscriptionFailed({
+          cause: err,
+          message: `Errore avvio microfono per OpenRouter: ${err?.message ?? "sconosciuto"}`,
+        })
+        errorCb(failure as unknown as Error)
+        throw failure
+      }
+    },
+
+    stop(): void {
+      userStopped = true
+      micCapture.stop()
+    },
+
+    onPartial(callback: PartialTranscriptCallback): void {
+      partialCb = callback
+    },
+
+    onFinal(callback: FinalTranscriptCallback): void {
+      finalCb = callback
+    },
+
+    onError(callback: TranscriberErrorCallback): void {
+      errorCb = callback
+    },
+  }
+}

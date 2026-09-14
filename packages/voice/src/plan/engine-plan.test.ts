@@ -1,0 +1,257 @@
+import { describe, expect, test } from "bun:test"
+import { createVoiceEngine } from "../engine"
+import { createFakeTranscriber } from "../asr/fake"
+import { createFakeSpeaker } from "../tts/speaker"
+import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "../bridge/host"
+
+/*
+ * Il percorso completo, senza rete: frase detta → grammatica che non la
+ * riconosce → pianificatore → sessioni avviate → annuncio a voce.
+ *
+ * Nasce da una frase precisa dell'utente, «avvia 4 sessioni claude in tale
+ * progetto, 1 riguardante questo ecc...», che era esattamente ciò che il
+ * vocabolario a frasi fisse non poteva rappresentare: conteggio, agente,
+ * progetto e un compito libero per sessione sono quattro dimensioni aperte
+ * nella stessa frase.
+ */
+
+class PlanningHost implements VoiceHost {
+  started: { agent: string; task?: string; project?: string }[] = []
+  panes: PaneSummary[] = []
+
+  async runCommand(): Promise<void> {}
+  listPanes(): PaneSummary[] {
+    return this.panes
+  }
+  listAgents() {
+    return [
+      { id: "claude-code", label: "Claude Code", available: true },
+      { id: "codex", label: "Codex", available: true },
+    ]
+  }
+  listProjects() {
+    return [{ name: "nikcli", root: "C:/Users/x/nikcli", isOpen: true }]
+  }
+  async startSession(input: { agent: string; task?: string; project?: string }) {
+    this.started.push(input)
+    const id = `pane-${this.started.length}`
+    this.panes.push({
+      id,
+      title: input.task ?? input.agent,
+      status: "working",
+      index: this.panes.length + 1,
+      hasLiveProcess: true,
+      isBrowser: false,
+      isFile: false,
+    })
+    return { paneId: id, title: id }
+  }
+  focusPane(): void {}
+  async sendPrompt(): Promise<void> {}
+  async insertText(): Promise<void> {}
+  async openFile(): Promise<void> {}
+  async searchProject() {
+    return []
+  }
+  setPaneView(): void {}
+  browserNavigate(): void {}
+  answerPermission(): void {}
+  setColumns(): void {}
+  setView(): void {}
+  scrollTranscript(): void {}
+  describeState(): VoiceStateSnapshot {
+    return {
+      totalSessions: this.panes.length,
+      workingSessions: this.panes.length,
+      waitingSessions: 0,
+      doneSessions: 0,
+      errorSessions: 0,
+      currentView: "code",
+      spokenSummary: "",
+    }
+  }
+}
+
+function setup(answer: string | (() => Promise<string>)) {
+  const host = new PlanningHost()
+  const transcriber = createFakeTranscriber()
+  const speaker = createFakeSpeaker()
+  const prompts: { system: string; user: string }[] = []
+
+  const engine = createVoiceEngine({
+    host,
+    transcriber,
+    speaker,
+    now: () => 10_000,
+    plan: async (prompt) => {
+      prompts.push({ system: prompt.system, user: prompt.user })
+      return typeof answer === "string" ? answer : answer()
+    },
+  })
+
+  return { engine, host, transcriber, speaker, prompts }
+}
+
+/** Lets the forked planning fiber finish before the assertions run. */
+async function settle() {
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+  await new Promise((resolve) => setTimeout(resolve, 5))
+}
+
+describe("il pianificatore dentro il motore", () => {
+  test("«avvia 4 sessioni claude, una per argomento» avvia quattro sessioni", async () => {
+    const { engine, host, transcriber, speaker } = setup(
+      JSON.stringify([
+        { action: "start_session", agent: "claude", task: "il parser", project: "nikcli" },
+        { action: "start_session", agent: "claude", task: "i test", project: "nikcli" },
+        { action: "start_session", agent: "claude", task: "la documentazione", project: "nikcli" },
+        { action: "start_session", agent: "claude", task: "la build", project: "nikcli" },
+      ]),
+    )
+
+    await engine.start()
+    transcriber.emit(
+      "avvia quattro sessioni claude nel progetto nikcli, una sul parser, una sui test, una sulla documentazione e una sulla build",
+      true,
+    )
+    await settle()
+
+    expect(host.started).toHaveLength(4)
+    expect(host.started.map((s) => s.task)).toEqual(["il parser", "i test", "la documentazione", "la build"])
+    // Il progetto arriva come radice, non come la parola detta.
+    expect(host.started.every((s) => s.project === "C:/Users/x/nikcli")).toBe(true)
+    expect(speaker.lastSpoken).toBe("Ho avviato 4 sessioni Claude Code.")
+
+    await engine.stop()
+  })
+
+  /*
+   * La ragione dell'ibrido: le frasi note non devono pagare un giro di rete.
+   */
+  test("una frase che la grammatica riconosce non arriva mai al pianificatore", async () => {
+    const { engine, transcriber, prompts } = setup("[]")
+
+    await engine.start()
+    transcriber.emit("nuova sessione", true)
+    await settle()
+
+    expect(prompts).toHaveLength(0)
+
+    await engine.stop()
+  })
+
+  test("il modello riceve gli agenti e i progetti veri di questa macchina", async () => {
+    const { engine, transcriber, prompts } = setup("[]")
+
+    await engine.start()
+    transcriber.emit("fai una cosa complicatissima con i pannelli", true)
+    await settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0].system).toContain("claude-code")
+    expect(prompts[0].system).toContain("nikcli")
+    expect(prompts[0].user).toBe("fai una cosa complicatissima con i pannelli")
+
+    await engine.stop()
+  })
+
+  /*
+   * Un agente che il modello si è inventato non deve diventare una sessione
+   * silenziosamente mancante: viene rifiutato dicendolo.
+   */
+  test("un agente inventato viene rifiutato a voce", async () => {
+    const { engine, host, transcriber, speaker } = setup(
+      JSON.stringify([{ action: "start_session", agent: "copilot" }]),
+    )
+
+    await engine.start()
+    transcriber.emit("avvia due sessioni di copilot", true)
+    await settle()
+
+    expect(host.started).toEqual([])
+    expect(speaker.lastSpoken).toContain("copilot")
+
+    await engine.stop()
+  })
+
+  /*
+   * La garanzia strutturale: non esiste un passo distruttivo, e nemmeno un
+   * comando distruttivo pianificabile. Il modello può chiederlo quanto vuole.
+   */
+  test("un piano che tenta di chiudere o terminare non esegue niente", async () => {
+    const { engine, host, transcriber } = setup(
+      JSON.stringify([
+        { action: "close_pane", paneIndex: 1 },
+        { action: "run_command", command: "process.kill" },
+      ]),
+    )
+
+    await engine.start()
+    transcriber.emit("chiudi tutto e ammazza i processi adesso", true)
+    await settle()
+
+    expect(host.started).toEqual([])
+    expect(host.panes).toEqual([])
+
+    await engine.stop()
+  })
+
+  test("un pianificatore irraggiungibile lo dice, invece di tacere", async () => {
+    const { engine, transcriber, speaker } = setup(async () => {
+      throw new Error("Il servizio ha risposto 429.")
+    })
+
+    await engine.start()
+    transcriber.emit("orchestrami qualcosa di elaborato", true)
+    await settle()
+
+    expect(speaker.lastSpoken).toContain("429")
+
+    await engine.stop()
+  })
+
+  test("Jarvis risponde a voce a domande discorsive senza tentare azioni UI", async () => {
+    const { engine, host, transcriber, speaker } = setup(
+      JSON.stringify({
+        speech: "Al momento ci sono zero sessioni aperte. Vuoi che ne avvii una con Claude?",
+        steps: [],
+      }),
+    )
+
+    await engine.start()
+    transcriber.emit("Jarvis, qual è la situazione dei pannelli in questo momento?", true)
+    await settle()
+
+    expect(host.started).toEqual([])
+    expect(speaker.lastSpoken).toBe("Al momento ci sono zero sessioni aperte. Vuoi che ne avvii una con Claude?")
+    expect(engine.history().some((entry) => entry.kind === "assistant" && entry.text.includes("zero sessioni"))).toBe(
+      true,
+    )
+
+    await engine.stop()
+  })
+
+  test("Barge-in: un parlato parziale dell'utente tronca la sintesi vocale attiva", async () => {
+    const { engine, transcriber, speaker } = setup("[]")
+    await engine.start()
+
+    // Sintesi attiva
+    await speaker.speak("Sto pronunciando una frase lunghissima che l'utente vuole interrompere...")
+    expect(speaker.lastSpoken).toContain("lunghissima")
+
+    let cancelled = false
+    const origCancel = speaker.cancel
+    speaker.cancel = () => {
+      cancelled = true
+      origCancel.call(speaker)
+    }
+
+    // L'utente inizia a parlare (evento partial da ASR)
+    transcriber.emit("fermati", false)
+    await settle()
+
+    expect(cancelled).toBe(true)
+
+    await engine.stop()
+  })
+})

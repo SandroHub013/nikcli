@@ -1,0 +1,54 @@
+/**
+ * Transcriber contract for speech-to-text recognition.
+ *
+ * Why this interface exists:
+ * The browser's Web Speech API is today's implementation, but not the only one
+ * possible. Future backends (such as local Whisper models, WebSocket-based streaming
+ * servers, or specialized audio pipelines) can satisfy this contract without touching
+ * the dialogue state machine or ADE host bridge.
+ */
+
+export interface TranscriptEvent {
+  /** The recognized spoken transcript text. */
+  text: string
+  /** Whether the transcript chunk is finalized. */
+  isFinal: boolean
+  /** Confidence score [0.0 - 1.0] when provided by the recognition engine. */
+  confidence?: number
+}
+
+export type PartialTranscriptCallback = (text: string) => void
+export type FinalTranscriptCallback = (event: TranscriptEvent) => void
+export type TranscriberErrorCallback = (error: Error) => void
+
+export interface TranscriberOptions {
+  onPartial?: PartialTranscriptCallback
+  onFinal?: FinalTranscriptCallback
+  onError?: TranscriberErrorCallback
+}
+
+export interface Transcriber {
+  /** Start listening for spoken audio input. */
+  start(): void | Promise<void>
+
+  /** Stop listening and release active recognition resources. */
+  stop(): void | Promise<void>
+
+  /** Register callback invoked when an interim/partial recognition is received. */
+  onPartial(callback: PartialTranscriptCallback): void
+
+  /** Register callback invoked when a definitive/final recognition is received. */
+  onFinal(callback: FinalTranscriptCallback): void
+
+  /** Register callback invoked when a recognition or device error occurs. */
+  onError(callback: TranscriberErrorCallback): void
+
+  /** Explicitly start recording an utterance segment (e.g. on push-to-talk press). */
+  startSegment?(): void
+
+  /** Explicitly commit and flush the current utterance segment (e.g. on push-to-talk release). */
+  commit?(): boolean
+
+  /** Whether audio processing or transcription is currently in flight. */
+  readonly hasInFlight?: boolean
+}

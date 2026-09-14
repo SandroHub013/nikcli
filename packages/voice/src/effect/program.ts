@@ -1,0 +1,874 @@
+/**
+ * Effect-TS dialogue orchestration program.
+ *
+ * Implements the main voice cycle:
+ * final transcription event -> parseUtterance (pure) -> transition (pure) ->
+ * dispatch onto VoiceHost (Effect, can fail with HostActionFailed) -> Speaker.speak (Effect)
+ *
+ * Core guarantees:
+ * - Pure functions (normalize, parse, session/transition) remain 100% pure and called directly.
+ * - Dialogue timeouts use the Effect Clock / TestClock for deterministic, instant time travel in tests.
+ * - Hardware, network, and host errors NEVER break the listening loop: every failure is caught,
+ *   translated via `spokenMessage`, spoken to the user, and listening continues.
+ */
+
+import { Clock, Duration, Effect, Fiber, Scope, Stream } from "effect"
+
+import type { VoiceHost } from "../bridge/host"
+import { dispatch, type DispatchOutcome } from "../bridge/dispatch"
+import {
+  createInitialDialogState,
+  transition,
+  type DialogEffect,
+  type DialogEvent,
+  type DialogState,
+  type DialogStatus,
+} from "../dialog/session"
+import { parseUtterance, type CandidateMatch, type ParseContext, type ParseResult } from "../intent/parse"
+import { correctCustomWords } from "../asr/custom-words"
+import { VOCABULARY } from "../intent/vocabulary"
+import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "../settings/model"
+import { matchesWakeWord } from "../settings/wake-word"
+import { replySpeech } from "../tts/reply"
+import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
+import { planUtterance, type Completion } from "../plan/planner"
+import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
+
+import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
+import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type TranscriberService } from "./services"
+
+/**
+ * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
+ * completely bypassing intent parsing and command execution.
+ */
+export function dispatchTranscription(
+  text: string,
+  host: VoiceHost,
+  sendMode: "manual" | "auto",
+  focusedPaneId?: string,
+): Effect.Effect<void, HostActionFailed> {
+  return Effect.tryPromise({
+    try: async () => {
+      const panes = host.listPanes()
+      const targetPane = focusedPaneId ? (panes.find((p) => p.id === focusedPaneId)?.id ?? panes[0]?.id) : panes[0]?.id
+
+      if (!targetPane) return
+
+      if (sendMode === "auto") {
+        await host.sendPrompt(targetPane, text)
+      } else {
+        await host.insertText(targetPane, text)
+      }
+    },
+    catch: (err) =>
+      new HostActionFailed({
+        action: sendMode === "auto" ? "sendPrompt" : "insertText",
+        cause: err,
+        message: "Errore durante l'inserimento del testo trascritto nel pannello.",
+      }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function checkDisambiguationChoice(text: string): number | null {
+  const t = text.trim().toLowerCase()
+  if (
+    t === "la prima" ||
+    t === "il primo" ||
+    t === "prima" ||
+    t === "primo" ||
+    t === "1" ||
+    t === "uno" ||
+    t === "opzione 1" ||
+    t === "opzione uno"
+  ) {
+    return 0
+  }
+  if (
+    t === "la seconda" ||
+    t === "il secondo" ||
+    t === "seconda" ||
+    t === "secondo" ||
+    t === "2" ||
+    t === "due" ||
+    t === "opzione 2" ||
+    t === "opzione due"
+  ) {
+    return 1
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Program Options & Handle
+// ---------------------------------------------------------------------------
+
+export interface VoiceProgramOptions {
+  /** Initial dialog status (default: 'idle'). */
+  initialStatus?: DialogStatus
+  /** Optional custom time provider. If omitted, uses Effect Clock.currentTimeMillis. */
+  now?: () => number
+  /** Dynamic context provider supplying focused pane or custom context. */
+  getContext?: () => Partial<ParseContext>
+  /** Dynamic settings provider returning active VoiceSettings. */
+  getSettings?: () => VoiceSettings
+  /** External push-to-talk query provider. */
+  isPushToTalkActive?: () => boolean
+  /** Notification hook fired when dialogue state changes. */
+  onStateChange?: (state: DialogState) => void
+  /** Notification hook fired on partial transcript stream update. */
+  onPartialTranscript?: (text: string) => void
+  /** Notification hook fired when speech is synthesized. */
+  onSpoken?: (text: string) => void
+  /** Notification hook fired when an ADE action finishes dispatching. */
+  onOutcome?: (outcome: DispatchOutcome) => void
+  /** Notification hook fired when an error occurs. */
+  onError?: (error: string) => void
+  /** Notification hook fired with each parsed utterance result. */
+  onParseResult?: (result: ParseResult) => void
+  /**
+   * Fired with the command the user actually gave, wake word already removed.
+   *
+   * Distinct from `onPartialTranscript`, which streams and then clears: this
+   * fires once, with the final text, and is what the agent console records as
+   * the user's half of the conversation.
+   */
+  onUtterance?: (text: string) => void
+  /**
+   * Fired with each finished sentence in transcription mode.
+   *
+   * Dictation used to leave no trace anywhere the interface could see. It does
+   * not go through the dialogue machine — text on its way into a pane is not a
+   * turn of conversation — so the widget's "what I have heard so far" line,
+   * which reads the machine's dictation buffer, stayed empty for the whole
+   * session; and the cloud backend emits no partials at all, so the other
+   * source was empty too. The result was a pill that said "sto ascoltando…"
+   * forever while the words were already landing in the pane. This is the
+   * missing channel: one call per sentence, with the text as sent.
+   */
+  onTranscribed?: (text: string) => void
+  /**
+   * The language model that plans what the grammar could not match.
+   *
+   * Optional, and its absence is a working configuration: without it an
+   * unmatched sentence gets the same "non ho capito" it always did. With it,
+   * "avvia quattro sessioni claude, una sul parser e una sui test" becomes a
+   * plan — which no list of phrases can do, because the count, the agent, the
+   * project and a free-text task per session are four open dimensions at once.
+   *
+   * Injected rather than built here so the whole path is testable without a
+   * network, and so the key stays in the layer that owns it.
+   */
+  plan?: Completion
+  /** Fired with the plan that ran, for the transcript and for tests. */
+  onPlan?: (result: { steps: PlanStep[]; execution: PlanExecution }) => void
+  /** Provider returning recent conversation history entries for multi-turn reasoning. */
+  getHistory?: () => readonly { kind: string; text?: string; label?: string }[]
+}
+
+export interface VoiceProgramHandle {
+  readonly submitText: (text: string) => Effect.Effect<void>
+  readonly handlePermissionRequest: (paneId: string, what: string) => Effect.Effect<void>
+  readonly cancel: Effect.Effect<void>
+  readonly wake: Effect.Effect<void>
+  readonly sleep: Effect.Effect<void>
+  readonly getDialogState: Effect.Effect<DialogState>
+  readonly pressToTalk: Effect.Effect<void>
+  readonly releaseToTalk: Effect.Effect<void>
+}
+
+export type ExternalCommand =
+  | { readonly _tag: "submitText"; readonly text: string }
+  | { readonly _tag: "permission"; readonly paneId: string; readonly what: string }
+  | { readonly _tag: "cancel" }
+  | { readonly _tag: "wake" }
+  | { readonly _tag: "sleep" }
+  | { readonly _tag: "pressToTalk" }
+  | { readonly _tag: "releaseToTalk" }
+
+// ---------------------------------------------------------------------------
+// Program Constructor
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates and forks the resilient voice interaction loop inside the environment's Scope.
+ * Returns a handle allowing external events (text submission, permissions, cancellations).
+ */
+export function makeVoiceProgram(
+  options: VoiceProgramOptions = {},
+): Effect.Effect<VoiceProgramHandle, VoiceError, TranscriberService | SpeakerService | VoiceHost | Scope.Scope> {
+  return Effect.gen(function* () {
+    const transcriber = yield* Transcriber
+    const speaker = yield* Speaker
+    const host = yield* VoiceHostService
+    const programScope = yield* Effect.scope
+
+    let currentState: DialogState = createInitialDialogState(options.initialStatus ?? "idle")
+    /*
+     * Cosa si stava chiedendo quando la domanda è rimasta in sospeso.
+     *
+     * Prima erano solo i candidati. Gli slot estratti dalla frase originale
+     * — «chiudi il pannello due» → `{paneIndex: 2}` — venivano buttati, e la
+     * risposta «la prima» eseguiva l'intento con `slots: {}`. Il numero che
+     * l'utente aveva appena detto spariva, e il bersaglio tornava a essere
+     * indovinato dal ripiego.
+     */
+    let pendingDisambiguation: { candidates: CandidateMatch[]; slots: Record<string, any> } | null = null
+    let activeTimerFiber: Fiber.RuntimeFiber<void, unknown> | null = null
+
+    const getNowMs: Effect.Effect<number> = options.now ? Effect.sync(options.now) : Clock.currentTimeMillis
+
+    function getCombinedContext(): ParseContext {
+      const extra = options.getContext ? options.getContext() : {}
+      const panes = host.listPanes()
+      const isPendingPerm = currentState.status === "confirming" && Boolean(currentState.pendingAction?.isPermission)
+      const pendingPermPaneId = currentState.pendingAction?.paneId
+
+      return {
+        panes,
+        pendingPermission: isPendingPerm,
+        pendingPermissionPaneId: pendingPermPaneId,
+        ...extra,
+      }
+    }
+
+    const cancelActiveTimer: Effect.Effect<void> = Effect.gen(function* () {
+      if (activeTimerFiber !== null) {
+        yield* Fiber.interrupt(activeTimerFiber)
+        activeTimerFiber = null
+      }
+    })
+
+    yield* Scope.addFinalizer(programScope, cancelActiveTimer)
+
+    function startTimer(durationMs: number): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        yield* cancelActiveTimer
+        const timerEffect = Effect.gen(function* () {
+          yield* Effect.sleep(Duration.millis(durationMs))
+          activeTimerFiber = null
+          yield* applyDialogEvent({ type: "timeout" })
+        })
+        activeTimerFiber = yield* Effect.fork(timerEffect)
+      })
+    }
+
+    function applyDialogEvent(event: DialogEvent): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const now = yield* getNowMs
+        const ctx = getCombinedContext()
+        const result = transition(currentState, event, now, ctx)
+        currentState = result.state
+        options.onStateChange?.(currentState)
+        yield* executeEffects(result.effects)
+      })
+    }
+
+    /*
+     * The half of a conversation that was missing.
+     *
+     * `sendPrompt` submits and returns, so until now the assistant said "l'ho
+     * inviato" and then went quiet for good: the answer — the thing the user
+     * asked for — appeared on a screen they may not be looking at. There is no
+     * event to hang this on, which is why the host watches the pane and this
+     * only decides what to say about the result.
+     *
+     * Forked, because a coding agent takes minutes and the dialogue loop has
+     * to keep hearing the user in the meantime. One watch at a time: asking a
+     * second question means the first answer is no longer the one wanted, and
+     * two voices over each other are worse than either.
+     */
+    let replyWatchFiber: Fiber.RuntimeFiber<void, never> | null = null
+    let replyWatchAbort: AbortController | null = null
+
+    function watchForReply(paneId: string): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const awaitReply = host.awaitReply
+        if (!awaitReply) return
+
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        if (settings.speakReplies === false) return
+
+        if (replyWatchFiber !== null) {
+          replyWatchAbort?.abort()
+          yield* Fiber.interrupt(replyWatchFiber)
+          replyWatchFiber = null
+        }
+
+        const abort = new AbortController()
+        replyWatchAbort = abort
+
+        const watch = Effect.gen(function* () {
+          const result = yield* Effect.tryPromise({
+            try: () => awaitReply.call(host, paneId, { signal: abort.signal }),
+            catch: (err) => new HostActionFailed({ action: "awaitReply", cause: err }),
+          })
+          if (abort.signal.aborted) return
+          const text = replySpeech(result)
+          if (!text) return
+          options.onSpoken?.(text)
+          yield* speaker.speak(text)
+        }).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+
+        replyWatchFiber = yield* Effect.fork(watch)
+      })
+    }
+
+    yield* Scope.addFinalizer(
+      programScope,
+      Effect.sync(() => replyWatchAbort?.abort()),
+    )
+
+    function executeEffects(effects: DialogEffect[]): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        for (const effect of effects) {
+          switch (effect.type) {
+            case "speak": {
+              // Preset readback removal: do NOT speak canned static readbacks with the offline voice.
+              // We only want the agent's real voice (Jarvis planner speech, replies, or explicit safety confirm prompts).
+              const isPresetReadback = VOCABULARY.some((v) => v.readback === effect.text)
+              if (isPresetReadback) {
+                break
+              }
+              options.onSpoken?.(effect.text)
+              yield* speaker.speak(effect.text).pipe(
+                Effect.catchAll((err) =>
+                  Effect.sync(() => {
+                    options.onError?.(spokenMessage(err))
+                  }),
+                ),
+              )
+              break
+            }
+
+            case "start_timer": {
+              yield* startTimer(effect.durationMs)
+              break
+            }
+
+            case "cancel_timer": {
+              yield* cancelActiveTimer
+              break
+            }
+
+            case "execute_intent": {
+              const focusedPaneId = options.getContext?.().focusedPaneId
+              const dispatchOp = Effect.tryPromise({
+                try: () =>
+                  dispatch(
+                    {
+                      outcome: "matched",
+                      intent: effect.intent,
+                      slots: effect.slots,
+                      confidence: 1.0,
+                      candidates: [],
+                      rawUtterance: "",
+                      normalizedUtterance: "",
+                    },
+                    host,
+                    { focusedPaneId },
+                  ),
+                catch: (err) =>
+                  new HostActionFailed({
+                    action: effect.intent.intent,
+                    cause: err,
+                    message: "Errore durante l'esecuzione del comando sul VoiceHost.",
+                  }),
+              })
+
+              const outcomeResult = yield* dispatchOp.pipe(Effect.either)
+
+              if (outcomeResult._tag === "Right") {
+                const outcome = outcomeResult.right
+                options.onOutcome?.(outcome)
+                if (outcome.success) {
+                  yield* applyDialogEvent({
+                    type: "command_success",
+                    readback: outcome.spoken,
+                  })
+                } else {
+                  yield* applyDialogEvent({
+                    type: "command_failed",
+                    error: outcome.spoken,
+                  })
+                }
+              } else {
+                const vError = outcomeResult.left
+                const msg = spokenMessage(vError)
+                options.onError?.(msg)
+                options.onOutcome?.({ success: false, spoken: msg, error: msg })
+                yield* applyDialogEvent({
+                  type: "command_failed",
+                  error: msg,
+                })
+              }
+              break
+            }
+
+            case "answer_permission": {
+              yield* Effect.try({
+                try: () => host.answerPermission(effect.paneId, effect.answer),
+                catch: (err) =>
+                  new HostActionFailed({
+                    action: "answerPermission",
+                    cause: err,
+                  }),
+              }).pipe(
+                Effect.catchAll((err) =>
+                  Effect.sync(() => {
+                    options.onError?.(spokenMessage(err))
+                  }),
+                ),
+              )
+              break
+            }
+
+            case "send_prompt": {
+              const sent = yield* Effect.tryPromise({
+                try: async () => {
+                  let targetPaneId = effect.paneId
+                  if (!targetPaneId) {
+                    const panes = host.listPanes()
+                    targetPaneId = panes[0]?.id
+                  }
+                  if (targetPaneId) {
+                    await host.sendPrompt(targetPaneId, effect.text)
+                  }
+                  return targetPaneId
+                },
+                catch: (err) =>
+                  new HostActionFailed({
+                    action: "sendPrompt",
+                    cause: err,
+                  }),
+              }).pipe(
+                Effect.catchAll((err) =>
+                  Effect.sync(() => {
+                    options.onError?.(spokenMessage(err))
+                    return undefined
+                  }),
+                ),
+              )
+
+              if (sent) yield* watchForReply(sent)
+              break
+            }
+          }
+        }
+      })
+    }
+
+    /**
+     * Plans an unmatched sentence, carries it out, and says what happened.
+     *
+     * Returns whether it handled the utterance. `false` means the planner had
+     * nothing — the sentence described no operation, or the model could not be
+     * reached — and the caller falls through to the suggestions it always gave.
+     *
+     * Executed immediately, announced afterwards: that is the shape the user
+     * asked for. The safety that replaces a confirmation is structural rather
+     * than conversational — `PLANNABLE_COMMANDS` and the step union in
+     * `plan/schema.ts` contain nothing that can close, kill, or delete, so the
+     * worst a misheard sentence can do is open sessions and cost tokens.
+     * Closing and killing stay in the grammar, which still asks.
+     */
+    function runPlan(utterance: string): Effect.Effect<boolean> {
+      return Effect.gen(function* () {
+        const complete = options.plan
+        if (!complete) return false
+
+        currentState = { ...currentState, status: "executing" }
+        options.onStateChange?.(currentState)
+
+        const historyEntries = options.getHistory?.() ?? []
+        const recentHistory = historyEntries
+          .slice(-6)
+          .map((e) => {
+            if (e.kind === "user" && e.text) return { role: "user" as const, text: e.text }
+            if (e.kind === "assistant" && e.text) return { role: "assistant" as const, text: e.text }
+            if (e.kind === "action" && e.label) return { role: "action" as const, text: e.label }
+            return undefined
+          })
+          .filter((e): e is { role: "user" | "assistant" | "action"; text: string } => e !== undefined)
+
+        const panes = host.listPanes()
+        const focusedId = options.getContext?.().focusedPaneId
+        const focusedPane = panes.find((p) => p.id === focusedId)
+
+        const context = {
+          agents: host.listAgents?.() ?? [],
+          projects: host.listProjects?.() ?? [],
+          paneCount: panes.length,
+          commands: PLANNABLE_COMMANDS,
+          recentHistory,
+          focusedPaneTitle: focusedPane?.title,
+          activeProjectName: host.describeState?.().activeProject,
+        }
+
+        const planned = yield* Effect.promise(() => planUtterance(utterance, context, complete))
+
+        /*
+         * A failure to reach the model is not "non ho capito": one is the
+         * sentence's fault and the other is the network's, and telling the
+         * user which is the difference between rephrasing and checking the
+         * key. Handing it back as unhandled would print the wrong one.
+         */
+        if (planned.failure) {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+          yield* say(planned.failure)
+          return true
+        }
+
+        if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+          return false
+        }
+
+        const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
+        options.onPlan?.({ steps: planned.steps, execution })
+
+        currentState = { ...currentState, status: "idle" }
+        options.onStateChange?.(currentState)
+
+        if (planned.speech) {
+          const failures =
+            execution.failures.length > 0 ? ` Nota: ${execution.failures.join(" ")}` : ""
+          yield* say(`${planned.speech}${failures}`)
+        } else {
+          const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
+          yield* say(
+            announceExecution({
+              execution,
+              refusals: planned.refusals,
+              agentLabel: (id) => labels.get(id) ?? id,
+            }),
+          )
+        }
+        return true
+      })
+    }
+
+    /** Speak, and never let the synthesiser's failure become the program's. */
+    function say(text: string): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        if (!text) return
+        options.onSpoken?.(text)
+        yield* speaker
+          .speak(text)
+          .pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+      })
+    }
+
+    let isWakeWordAwake = false
+    let isPushToTalkPressed = false
+
+    function executeAgentUtterance(trimmed: string): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        /*
+         * Announced here, and only here, so the console sees what the agent
+         * saw. Every agent-mode path converges on this function *after* the
+         * wake word has been stripped, so what is reported is the command
+         * itself rather than "ehi nik apri il pannello". Dictation never
+         * reaches this point, which is correct: text on its way into a pane
+         * is not a turn of conversation with the assistant.
+         */
+        options.onUtterance?.(trimmed)
+
+        // 1. Check if user is resolving a pending disambiguation question ("la prima" / "la seconda")
+        if (pendingDisambiguation && pendingDisambiguation.candidates.length >= 2) {
+          const choice = checkDisambiguationChoice(trimmed)
+          if (choice !== null && pendingDisambiguation.candidates[choice]) {
+            const chosen = pendingDisambiguation.candidates[choice]
+            const carriedSlots = pendingDisambiguation.slots
+            pendingDisambiguation = null
+
+            if (chosen.intent.destructive) {
+              /*
+               * Qui gli slot si perdono comunque, e non è un difetto nascosto.
+               *
+               * Il ramo distruttivo rientra nella macchina a stati del dialogo
+               * passando la frase dell'intento, che viene ri-analizzata: il
+               * «due» dell'utente non sopravvive. Portarlo fin dentro la
+               * conferma vorrebbe dire far accettare slot a `DialogEvent`,
+               * un cambio molto più largo di questo.
+               *
+               * Non viene chiuso il pannello sbagliato, però: da quando
+               * `resolveTargetPane` rifiuta di indovinare per le azioni
+               * distruttive, l'esito è che l'assistente richiede su quale
+               * pannello. Un giro in più, non un danno.
+               */
+              yield* applyDialogEvent({
+                type: "utterance",
+                text: chosen.matchedPhrase,
+              })
+              return
+            }
+
+            // Execute non-destructive candidate directly - silently without canned offline readbacks
+            currentState = { ...currentState, status: "executing" }
+            options.onStateChange?.(currentState)
+            yield* executeEffects([
+              {
+                type: "execute_intent",
+                intent: chosen.intent,
+                // Gli slot della frase originale, non un oggetto vuoto: «la
+                // prima» sceglie fra due intenti, non ritratta il «due» che
+                // l'utente aveva già detto.
+                slots: carriedSlots,
+              },
+            ])
+            return
+          }
+          pendingDisambiguation = null
+        }
+
+        // 2. Parse utterance using pure parseUtterance
+        const ctx = getCombinedContext()
+        const parsed = parseUtterance(trimmed, ctx)
+        options.onParseResult?.(parsed)
+
+        // 3. Ambiguous outcome: query user for clarification, never execute
+        if (parsed.outcome === "ambiguous") {
+          pendingDisambiguation = { candidates: parsed.candidates, slots: parsed.slots }
+          yield* applyDialogEvent({ type: "utterance", text: trimmed })
+          return
+        }
+
+        /*
+         * 3b. The grammar did not recognise it — so try to plan it.
+         *
+         * This is the seam of the hybrid, and the order is the point: the
+         * hand-written vocabulary answers what people say often, instantly and
+         * offline, and only what it rejects costs a network round trip. Put
+         * the planner first and "chiudi il pannello due" would take two
+         * seconds and stop working on a train.
+         */
+        if (parsed.outcome === "unknown" && currentState.status !== "dictating" && options.plan) {
+          const handled = yield* runPlan(trimmed)
+          if (handled) return
+        }
+
+        // 4. Unknown outcome: do NOT speak offline fallback suggestions.
+        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+          options.onError?.("Comando non riconosciuto.")
+          return
+        }
+
+        // 5. Normal utterance flow through dialogue state machine
+        yield* applyDialogEvent({ type: "utterance", text: trimmed })
+      })
+    }
+
+    function handleTranscriptionUtterance(text: string): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        const focusedPaneId = options.getContext?.().focusedPaneId
+        // In transcription mode, speech is strictly silenced: cancel any active TTS immediately
+        yield* speaker.cancel
+        // Announced before the dispatch, not after: the point of the line is to
+        // show the user that they were heard, and that is worth saying even if
+        // the delivery into the pane then fails and says so itself.
+        options.onTranscribed?.(text)
+        yield* dispatchTranscription(text, host, settings.transcriptionSend, focusedPaneId).pipe(
+          Effect.catchAll((err) =>
+            Effect.sync(() => {
+              options.onError?.(spokenMessage(err))
+            }),
+          ),
+        )
+      })
+    }
+
+    function processUtterance(rawText: string, fromAsr = false): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+
+        /*
+         * The user's own vocabulary, repaired before anything else reads it.
+         *
+         * Here rather than in either branch because both need it: dictation
+         * puts the text straight into an agent's prompt, where "open code" is
+         * the wrong program, and a command like "apri open code" has to match
+         * the same way whichever mode heard it.
+         *
+         * The list is empty unless the user filled it, so by default this
+         * returns the text unchanged.
+         */
+        const trimmed = correctCustomWords(rawText, currentSettings.customWords).text.trim()
+        const isPtt = options.isPushToTalkActive !== undefined ? options.isPushToTalkActive() : isPushToTalkPressed
+
+        if (!trimmed) {
+          if (currentSettings.activation === "push-to-talk" && !isPtt) {
+            options.onOutcome?.({ success: true, spoken: "" })
+          }
+          return
+        }
+
+        if (currentSettings.activation === "push-to-talk" && !isPtt && !fromAsr) {
+          return
+        }
+
+        // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
+        if (currentSettings.mode === "transcription") {
+          yield* handleTranscriptionUtterance(trimmed)
+          return
+        }
+
+        // Agent mode: wake-word activation
+        if (currentSettings.activation === "wake-word") {
+          /*
+           * Una domanda in sospeso tiene sveglio l'assistente.
+           *
+           * Ogni intento distruttivo chiede conferma — «Vuoi davvero chiudere
+           * il pannello?» — ma `executeAgentUtterance` rimetteva subito
+           * `isWakeWordAwake` a falso. Il «sì» dell'utente arrivava quindi a
+           * un assistente di nuovo sordo e veniva scartato: in modalità
+           * wake-word *nessuna* azione distruttiva poteva essere confermata a
+           * voce, e la domanda restava lì senza che niente spiegasse perché.
+           *
+           * Lo stesso vale per la disambiguazione: se il dialogo sta
+           * aspettando quale dei due pannelli si intendeva, la risposta è
+           * parte di quello scambio, non un comando nuovo.
+           */
+          const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+
+          if (!isWakeWordAwake && !awaitingAnswer) {
+            const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
+            if (!match.matched) {
+              // Deaf until wake-word is detected
+              return
+            }
+            if (match.remainder.length > 0) {
+              // Spoke wake-word and command together in one breath
+              yield* executeAgentUtterance(match.remainder)
+              return
+            } else {
+              // Spoke only the wake-phrase
+              isWakeWordAwake = true
+              yield* applyDialogEvent({ type: "wake" })
+              return
+            }
+          } else {
+            // Already awake: check if user repeated the wake-word
+            const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
+            const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
+            yield* executeAgentUtterance(commandText)
+            /*
+             * Si torna a dormire solo se non è rimasta una domanda aperta.
+             * Altrimenti la risposta dell'utente — che arriva un secondo
+             * dopo — cadrebbe nel vuoto.
+             */
+            isWakeWordAwake = currentState.status === "confirming" || pendingDisambiguation !== null
+            return
+          }
+        }
+
+        // Standard agent mode (toggle)
+        yield* executeAgentUtterance(trimmed)
+      })
+    }
+
+    // Stream consumption loop for continuous speech recognition events
+    const recognitionLoop = Stream.runForEach(transcriber.events, (ev) =>
+      Effect.gen(function* () {
+        const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        const isPtt = options.isPushToTalkActive !== undefined ? options.isPushToTalkActive() : isPushToTalkPressed
+
+        switch (ev._tag) {
+          case "partial": {
+            if (currentSettings.activation === "push-to-talk" && !isPtt) {
+              break
+            }
+            // Barge-in: user started speaking, cancel any active or queued speech synthesis immediately
+            if (ev.text.trim().length > 0) {
+              yield* speaker.cancel
+            }
+            options.onPartialTranscript?.(ev.text)
+            break
+          }
+          case "final": {
+            options.onPartialTranscript?.("")
+            const text = (ev.event?.text || "").trim()
+            if (!text) {
+              if (currentSettings.activation === "push-to-talk" && !isPtt) {
+                options.onOutcome?.({
+                  success: true,
+                  spoken: "",
+                })
+              }
+              break
+            }
+            yield* processUtterance(ev.event.text, true)
+            break
+          }
+          case "error": {
+            // Critical requirement: recognition error must NOT terminate listening loop.
+            options.onPartialTranscript?.("")
+            const rawMsg = ev.error.message ?? spokenMessage(ev.error)
+            options.onError?.(rawMsg)
+            if (currentState.status === "executing") {
+              currentState = { ...currentState, status: "idle" }
+              options.onStateChange?.(currentState)
+            }
+            // In transcription mode, speech is strictly forbidden: errors are visual only.
+            if (currentSettings.mode !== "transcription") {
+              yield* speaker.speak(spokenMessage(ev.error)).pipe(Effect.catchAll(() => Effect.void))
+            }
+            break
+          }
+        }
+      }).pipe(
+        Effect.catchAll((err) =>
+          Effect.sync(() => {
+            options.onError?.(spokenMessage(err))
+          }),
+        ),
+      ),
+    )
+
+    // Fork recognition loop bound to the active Scope
+    yield* Effect.forkScoped(recognitionLoop)
+
+    return {
+      submitText: (text: string) => processUtterance(text),
+
+      handlePermissionRequest: (paneId: string, what: string) =>
+        applyDialogEvent({ type: "permission_requested", paneId, what }),
+
+      cancel: Effect.gen(function* () {
+        yield* cancelActiveTimer
+        pendingDisambiguation = null
+        isWakeWordAwake = false
+        options.onPartialTranscript?.("")
+        yield* speaker.cancel
+        yield* applyDialogEvent({ type: "cancel" })
+      }),
+
+      wake: Effect.gen(function* () {
+        isWakeWordAwake = true
+        yield* applyDialogEvent({ type: "wake" })
+      }),
+
+      sleep: Effect.gen(function* () {
+        isWakeWordAwake = false
+        yield* applyDialogEvent({ type: "sleep" })
+      }),
+
+      getDialogState: Effect.sync(() => currentState),
+
+      pressToTalk: Effect.gen(function* () {
+        isPushToTalkPressed = true
+        yield* speaker.cancel
+      }),
+
+      releaseToTalk: Effect.sync(() => {
+        isPushToTalkPressed = false
+      }),
+    }
+  })
+}
