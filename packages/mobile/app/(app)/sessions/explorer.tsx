@@ -32,6 +32,7 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { triggerHaptic } from "@/lib/haptics"
 import { useServer } from "@/lib/server-context"
 import { hexToRgba, useAppTheme } from "@/lib/theme"
+import { type as typeStyle } from "@/lib/typography"
 import type { FileNode, GitState } from "@/lib/types"
 
 type TreeNode = FileNode & {

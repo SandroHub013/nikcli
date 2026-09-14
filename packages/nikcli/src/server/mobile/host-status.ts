@@ -87,7 +87,8 @@ export async function hostDevtools() {
 export async function hostLanGet() {
   const { Server } = await import("@/server/server")
   const listener = Server.mobile()
-  return { listening: Boolean(listener), ...(listener ?? {}) }
+  if (!listener) return { listening: false }
+  return { listening: true, ...listener }
 }
 
 export async function hostLanStart(input: { mdns?: boolean } | void) {
