@@ -556,8 +556,15 @@ export function Workbench() {
    * settled is a keystroke. False when the session went away in between.
    */
   const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
-    session.write(asOneLine(text))
-    await new Promise((resolve) => setTimeout(resolve, SUBMIT_DELAY_MS))
+    const line = asOneLine(text)
+    session.write(line)
+    /*
+     * Longer for a longer line. A request with its reply contract runs to a
+     * thousand characters, and Claude Code was still taking them in when a
+     * fixed 400 ms Enter arrived: the request sat in the input box of the
+     * session that was supposed to do it.
+     */
+    await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)))
     if (![...running.values()].includes(session)) return false
     session.write("\r")
     return true

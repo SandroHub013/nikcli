@@ -254,8 +254,8 @@ $lead = if ($cmd -eq 'update') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
-  # Options go before the text; wait takes only ids, so anywhere.
-  if ($cmd -eq 'wait' -or $pos.Count -le $lead) {
+  # Options anywhere: agents write them after the text as often as before it.
+  if ($true) {
     $hasNext = ($i + 1) -lt $all.Count
     if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
     elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
@@ -476,7 +476,8 @@ lead=1; [ "$cmd" = update ] && lead=2
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
-  if [ "$cmd" = wait ] || [ $n -le $lead ]; then
+  # Options anywhere: agents write them after the text as often as before it.
+  if true; then
     case "$a" in
       --timeout) [ $# -ge 2 ] && { timeout="$2"; shift 2; continue; } ;;
       --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
