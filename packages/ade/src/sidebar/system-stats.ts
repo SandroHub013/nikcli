@@ -30,6 +30,19 @@ export function loadOf(percent: number): Load {
   return "ok"
 }
 
+/** `1.6G`, `812M`: the footer's width is the constraint, the tooltip has the words. */
+export function formatBytesShort(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0M"
+  if (bytes < GB) return `${Math.round(bytes / MB)}M`
+  return `${(bytes / GB).toFixed(bytes < 10 * GB ? 1 : 0)}G`
+}
+
+/** A whole percent, with `<1%` for the small non-zero readings that would round to a lie. */
+function percentShort(value: number): string {
+  if (value > 0 && value < 1) return "<1%"
+  return `${Math.round(value)}%`
+}
+
 export interface StatView {
   cpu: { text: string; load: Load; title: string }
   ram: { text: string; load: Load; title: string }
@@ -42,17 +55,17 @@ export function describeStats(stats: SystemStats): StatView {
   const who = `ADE e i suoi ${stats.processes} processi (webview e agenti)`
   return {
     cpu: {
-      text: `${cpu < 10 ? cpu.toFixed(1) : Math.round(cpu)}%`,
+      text: percentShort(cpu),
       load: loadOf(cpu),
       title: `CPU usata da ${who}: ${cpu.toFixed(1)}%`,
     },
     ram: {
-      text: formatBytes(stats.appMem),
+      text: formatBytesShort(stats.appMem),
       load: loadOf(share),
       title: `RAM occupata da ${who}: ${formatBytes(stats.appMem)}`,
     },
     mem: {
-      text: `${share < 10 ? share.toFixed(1) : Math.round(share)}%`,
+      text: percentShort(share),
       load: loadOf(share),
       title: `Quota della memoria del computer (${formatBytes(stats.ramTotal)}) usata da ADE`,
     },

@@ -18,7 +18,9 @@ describe("system stats", () => {
 
   test("the three numbers describe ADE, not the machine", () => {
     const view = describeStats({ cpu: 3.24, appMem: 1.2 * GB, ramTotal: 32 * GB, processes: 14 })
-    expect([view.cpu.text, view.ram.text, view.mem.text]).toEqual(["3.2%", "1.2 GB", "3.8%"])
+    expect([view.cpu.text, view.ram.text, view.mem.text]).toEqual(["3%", "1.2G", "4%"])
+    expect(view.ram.title).toContain("1.2 GB")
+    expect(describeStats({ cpu: 0.4, appMem: 300 * 1024 ** 2, ramTotal: 32 * GB, processes: 2 }).cpu.text).toBe("<1%")
     expect(view.ram.title).toContain("14 processi")
     expect(describeStats({ cpu: 140, appMem: 0, ramTotal: 0, processes: 1 }).cpu.text).toBe("100%")
   })

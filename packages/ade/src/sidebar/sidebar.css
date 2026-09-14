@@ -1533,38 +1533,37 @@ aside[data-component="ade-sidebar"] {
 
 /* ── il fondo: impostazioni, tema e notifiche vicini; a destra le risorse ──
  *
- * The three numbers never shrink and are never clipped. They used to share
- * the row by shrinking with `overflow: hidden`, and on a narrow column that
- * cut the CPU label off and hid the memory. Now the row wraps: when they do
- * not fit beside the buttons they drop to a line of their own.
+ * One row, buttons and numbers on the same line. The numbers carry marks
+ * instead of CPU/RAM/MEM, which is what makes them fit beside the buttons
+ * on a narrow column; they never shrink, so nothing is clipped — the gaps
+ * tighten first.
  */
 [data-slot="sidebar-settings-strip"] {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-start;
-  column-gap: var(--ade-space-3);
-  row-gap: 4px;
+  gap: 6px;
 }
 
 [data-slot="sidebar-footer-group"] {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   flex: 0 0 auto;
 }
 
 [data-slot="sidebar-footer-group"] [data-slot="sidebar-footer-actions"] {
-  gap: 2px;
+  gap: 1px;
 }
 
 [data-slot="sidebar-stats"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  flex: 1 0 auto;
+  gap: 7px;
+  flex: 0 0 auto;
   margin-left: auto;
   font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--ade-text-soft);
   white-space: nowrap;
@@ -1572,21 +1571,38 @@ aside[data-component="ade-sidebar"] {
 
 [data-slot="sidebar-stat"] {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 3px;
   cursor: default;
 }
 
-[data-slot="sidebar-stat-label"] {
+[data-slot="sidebar-stat-icon"] {
+  flex: 0 0 auto;
   color: var(--ade-text-weak);
-  font-size: 9px;
-  letter-spacing: 0.04em;
 }
 
-[data-slot="sidebar-stat"][data-load="busy"] {
+[data-slot="sidebar-stat"][data-load="busy"],
+[data-slot="sidebar-stat"][data-load="busy"] [data-slot="sidebar-stat-icon"] {
   color: var(--ade-working);
 }
 
-[data-slot="sidebar-stat"][data-load="high"] {
+[data-slot="sidebar-stat"][data-load="high"],
+[data-slot="sidebar-stat"][data-load="high"] [data-slot="sidebar-stat-icon"] {
   color: var(--ade-error);
+}
+/* A narrow column tightens the buttons before anything would overflow. */
+[data-slot="sidebar-footer"] {
+  container-type: inline-size;
+}
+
+@container (max-width: 230px) {
+  [data-slot="sidebar-settings"],
+  [data-slot="sidebar-footer-actions"] [data-slot="ade-icon"] {
+    width: 22px;
+    height: 22px;
+  }
+
+  [data-slot="sidebar-stats"] {
+    gap: 5px;
+  }
 }
