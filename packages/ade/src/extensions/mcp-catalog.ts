@@ -23,6 +23,12 @@ export type McpAuthKind =
 
 /** The subset of an MCP server definition that ADE writes to `.mcp.json`. */
 export interface McpServerConfig {
+  /**
+   * The transport. Claude Code reads a server with a `url` only when it says
+   * `http` or `sse`; without it the entry is ignored (`claude mcp get` finds
+   * no such server). Optional for `command` servers, where `stdio` is implied.
+   */
+  readonly type?: "http" | "sse" | "stdio"
   readonly url?: string
   readonly command?: string
   readonly args?: readonly string[]
@@ -72,8 +78,14 @@ export interface McpCatalogEntry {
   readonly warning?: string
 }
 
-function remote(name: string, url: string, server: Omit<McpServerConfig, "url"> = {}): McpInstallConfiguration {
-  return { name, server: { url, ...server } }
+/** A remote server: streamable HTTP unless the card says `sse`. */
+function remote(
+  name: string,
+  url: string,
+  server: Omit<McpServerConfig, "url" | "type" | "command" | "args"> = {},
+  type: "http" | "sse" = "http",
+): McpInstallConfiguration {
+  return { name, server: { type, url, ...server } }
 }
 
 function stdio(

@@ -11,7 +11,7 @@ import {
 function installation(name = "github"): McpInstallConfiguration {
   return {
     name,
-    server: { url: "https://example.test/mcp" },
+    server: { type: "http", url: "https://example.test/mcp" },
   }
 }
 
@@ -34,7 +34,7 @@ describe(".mcp.json merge", () => {
     const text = addMcpServer(undefined, installation())
 
     expect(JSON.parse(text)).toEqual({
-      mcpServers: { github: { url: "https://example.test/mcp" } },
+      mcpServers: { github: { type: "http", url: "https://example.test/mcp" } },
     })
   })
 
@@ -46,7 +46,7 @@ describe(".mcp.json merge", () => {
 
     expect(parsed.inputs).toEqual({ theme: "dark" })
     expect(parsed.mcpServers.other).toEqual({ url: "https://other.test/mcp" })
-    expect(parsed.mcpServers.github).toEqual({ url: "https://example.test/mcp" })
+    expect(parsed.mcpServers.github).toEqual({ type: "http", url: "https://example.test/mcp" })
     expect(next).toContain("\r\n")
   })
 
@@ -54,6 +54,19 @@ describe(".mcp.json merge", () => {
     const current = JSON.stringify({ mcpServers: { github: { url: "https://old.test/mcp" } } })
 
     expect(() => addMcpServer(current, installation())).toThrow(/già presente/i)
+  })
+
+  test("a remote server says its transport, or Claude Code ignores it", () => {
+    const bare = { name: "github", server: { url: "https://example.test/mcp" } }
+    expect(() => addMcpServer(undefined, bare)).toThrow(/type "http" o "sse"/)
+    const sse = addMcpServer(undefined, { name: "old", server: { type: "sse", url: "https://example.test/sse" } })
+    expect(JSON.parse(sse).mcpServers.old).toEqual({ type: "sse", url: "https://example.test/sse" })
+    expect(() => addMcpServer(undefined, { name: "x", server: { type: "stdio", url: "https://example.test/mcp" } })).toThrow()
+    expect(() => addMcpServer(undefined, { name: "x", server: { type: "http", command: "npx" } })).toThrow()
+    expect(JSON.parse(addMcpServer(undefined, { name: "x", server: { command: "npx", args: ["-y", "pkg"] } })).mcpServers.x).toEqual({
+      command: "npx",
+      args: ["-y", "pkg"],
+    })
   })
 
   test("reports malformed JSON clearly", () => {
@@ -79,6 +92,7 @@ describe(".mcp.json merge", () => {
       addMcpServer(undefined, {
         name: "stripe",
         server: {
+          type: "http",
           url: "https://example.test/mcp",
           headers: { Authorization: "Bearer sk_live_this_must_not_be_written" },
         },
@@ -94,6 +108,7 @@ describe(".mcp.json merge", () => {
 
     await addMcpServerToProject("C:/repo", installation("github"), io)
     expect(JSON.parse(files["C:/repo/.mcp.json"]!).mcpServers.github).toEqual({
+      type: "http",
       url: "https://example.test/mcp",
     })
 
