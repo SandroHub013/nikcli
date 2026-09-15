@@ -214,6 +214,26 @@ export function devConfig(port: number): string {
   )
 }
 
+/**
+ * `tauri dev`'s arguments for this instance.
+ *
+ * A test build runs as its own executable, `ade-test`, so that nothing
+ * finding the official app by its name (an installer closing `ade-desktop.exe`)
+ * reaches a test window. That binary exists only where `Cargo.toml` declares
+ * the `test-exe` feature, so the flags follow the manifest: on a branch that
+ * predates it the dev build stays `ade-desktop`.
+ */
+export function tauriDevArgs(configPath: string, cargoToml: string): string[] {
+  const args = ["x", "tauri", "dev", "--config", "src-tauri/tauri.test.conf.json", "--config", configPath]
+  if (/^\s*test-exe\s*=/m.test(cargoToml)) args.push("--features", "test-exe", "--", "--bin", "ade-test")
+  return args
+}
+
+/** Whether `tauri dev`'s output says the app binary is running, under either name. */
+export function appStarted(log: string): boolean {
+  return /Running `target[\\/]debug[\\/]ade-(desktop|test)/.test(log)
+}
+
 export function parseRecord(text: string): TestAppRecord | undefined {
   try {
     const value = JSON.parse(text) as Partial<TestAppRecord>

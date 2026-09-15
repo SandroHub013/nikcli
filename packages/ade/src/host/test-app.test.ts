@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   TEST_APP_PORT_BASE,
   TEST_APP_PORT_SPAN,
+  appStarted,
   devConfig,
   hashPath,
   instanceProcesses,
@@ -11,6 +12,7 @@ import {
   parseRecord,
   planTestApp,
   startFailure,
+  tauriDevArgs,
 } from "./test-app"
 
 describe("host/test-app", () => {
@@ -133,6 +135,18 @@ describe("host/test-app", () => {
       "Accesso negato",
     )
     expect(startFailure("     Running `target\\debug\\ade-desktop.exe`")).toBeUndefined()
+  })
+
+  test("a test build runs as ade-test only where Cargo.toml has the feature, and either name counts as started", () => {
+    const before = '[[bin]]\nname = "ade-desktop"\n'
+    const after = before + '[[bin]]\nname = "ade-test"\nrequired-features = ["test-exe"]\n\n[features]\ntest-exe = []\n'
+    expect(tauriDevArgs("C:/w/.ade-test/tauri.dev.json", before)).not.toContain("--features")
+    expect(tauriDevArgs("C:/w/.ade-test/tauri.dev.json", after).slice(-5)).toEqual(["--features", "test-exe", "--", "--bin", "ade-test"])
+    // The bin's own required-features line is not the feature's declaration.
+    expect(tauriDevArgs("x", '[[bin]]\nrequired-features = ["test-exe"]\n')).not.toContain("--features")
+    expect(appStarted("     Running `target\\debug\\ade-desktop.exe`")).toBe(true)
+    expect(appStarted("     Running `target/debug/ade-test`")).toBe(true)
+    expect(appStarted("   Compiling ade-desktop v0.0.0")).toBe(false)
   })
 
   test("hashPath is stable", () => {

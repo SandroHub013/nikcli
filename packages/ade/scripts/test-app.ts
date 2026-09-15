@@ -18,6 +18,7 @@ import { createServer } from "node:net"
 import { join } from "node:path"
 import {
   TEST_APP_CDP_OFFSET,
+  appStarted,
   devConfig,
   instanceProcesses,
   instanceRunning,
@@ -25,6 +26,7 @@ import {
   parseRecord,
   planTestApp,
   startFailure,
+  tauriDevArgs,
   type ProcessRow,
   type TestAppPlan,
   type TestAppRecord,
@@ -184,7 +186,7 @@ async function start(): Promise<void> {
   const startedAt = Date.now()
   const child = spawn(
     process.execPath,
-    ["x", "tauri", "dev", "--config", "src-tauri/tauri.test.conf.json", "--config", plan.configPath],
+    tauriDevArgs(plan.configPath, readFileSync(join(adeDir, "src-tauri", "Cargo.toml"), "utf8")),
     {
       cwd: adeDir,
       detached: true,
@@ -233,7 +235,7 @@ async function start(): Promise<void> {
       stop(true)
       process.exit(1)
     }
-    if (/Running `target[\\/]debug[\\/]ade-desktop/.test(log)) {
+    if (appStarted(log)) {
       console.log("\nFinestra aperta. Per chiuderla: bun run test:app stop")
       return
     }
