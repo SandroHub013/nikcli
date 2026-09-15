@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { describeCapabilities, formatReply, parseRequest, REPLY_PREFIX, REQUEST_PREFIX } from "./protocol"
+import { describeCapabilities, formatReply, panelsHelp, parseRequest, REPLY_PREFIX, REQUEST_PREFIX } from "./protocol"
+import { VIDEO_VERBS } from "../video/video"
+import { MODEL_VERBS } from "../model3d/model"
+import { SIMULATOR_VERBS } from "../simulator/simulator"
 
 describe("parseRequest", () => {
   test("reads a panel, a verb and no arguments", () => {
@@ -133,5 +136,34 @@ describe("describeCapabilities", () => {
 
   test("a panel with nothing to offer says nothing", () => {
     expect(describeCapabilities("video", [])).toEqual([])
+  })
+})
+
+describe("panelsHelp", () => {
+  const help = panelsHelp([
+    { panel: "video", verbs: VIDEO_VERBS },
+    { panel: "model", verbs: MODEL_VERBS },
+    { panel: "app", verbs: SIMULATOR_VERBS },
+  ])
+
+  test("one line per panel, with every command", () => {
+    const lines = help.trimEnd().split("\n")
+    expect(lines.filter((line) => /^ {2}(video|model|app): /.test(line))).toHaveLength(3)
+    for (const verb of MODEL_VERBS) expect(help).toInclude(verb.usage)
+    expect(help).toInclude(`${REQUEST_PREFIX} <pannello> <comando>`)
+  })
+
+  /*
+   * `ade-msg help` prints in the agent's own output, and `onLine` reads it.
+   * A pane that wraps a line where the sentinel starts would hand it over
+   * from there, so no cut at any sentinel may be a request.
+   */
+  test("no line, cut at any sentinel, reads as a request", () => {
+    for (const line of help.split("\n")) {
+      for (let at = line.indexOf(REQUEST_PREFIX); at !== -1; at = line.indexOf(REQUEST_PREFIX, at + 1)) {
+        expect(parseRequest(line.slice(at))).toBeUndefined()
+      }
+      expect(parseRequest(line)).toBeUndefined()
+    }
   })
 })

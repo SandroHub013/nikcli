@@ -218,6 +218,10 @@ import { createAutosave } from "./autosave"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter } from "../panels/router"
+import { panelsHelp } from "../panels/protocol"
+import { VIDEO_VERBS } from "../video/video"
+import { MODEL_VERBS } from "../model3d/model"
+import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { isModel, MODEL_EXTENSIONS } from "../model3d/model"
@@ -2041,7 +2045,12 @@ export function Workbench() {
     onCleanup(every(15_000, () => refreshUsage()))
     void getHost().then((host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
-      void host?.mailboxPublish?.(USAGE, "usage").catch(() => {})
+      const panelVerbs = [
+        { panel: "video", verbs: VIDEO_VERBS },
+        { panel: "model", verbs: MODEL_VERBS },
+        { panel: "app", verbs: SIMULATOR_VERBS },
+      ]
+      void host?.mailboxPublish?.(`${USAGE}${panelsHelp(panelVerbs)}`, "usage").catch(() => {})
     })
   })
 

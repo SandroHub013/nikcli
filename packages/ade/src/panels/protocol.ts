@@ -129,6 +129,25 @@ export interface PanelVerb {
 }
 
 /**
+ * The panels section of `ade-msg help`: one line per panel.
+ *
+ * How an agent learns the channel exists, now that nothing is typed into its
+ * pty. The sentinel is never followed by a real panel and command, not even
+ * mid-line: the help is printed in the agent's own output, and a narrow
+ * pane that wraps it there would hand `onLine` a request.
+ */
+export function panelsHelp(panels: readonly { panel: string; verbs: readonly PanelVerb[] }[]): string {
+  const width = Math.max(0, ...panels.map(({ panel }) => panel.length)) + 1
+  return [
+    `pannelli (se aperti in ADE): scrivi da sola nella tua risposta la riga ${REQUEST_PREFIX} <pannello> <comando>;`,
+    `  ADE risponde con una riga "${REPLY_PREFIX} <pannello> <comando> ok|errore — …"`,
+    ...panels.map(({ panel, verbs }) =>
+      `  ${`${panel}:`.padEnd(width + 1)}${verbs.map((verb) => verb.usage).join(" | ")}`,
+    ),
+  ].join("\n") + "\n"
+}
+
+/**
  * What ADE tells a session so its agent knows any of this exists.
  *
  * Noted in the session's transcript when a panel it can drive is opened,
