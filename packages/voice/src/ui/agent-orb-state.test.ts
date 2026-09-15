@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { MAX_PUSH, orbCentered, orbPhase, projectPoint, spherePoints } from "./agent-orb-state"
+import { escapeStopsOrb, MAX_PUSH, orbCentered, orbPhase, projectPoint, spherePoints } from "./agent-orb-state"
 
 describe("ui/agent-orb-state", () => {
   test("speaking wins, executing thinks, an open microphone listens, the rest is idle", () => {
@@ -40,6 +40,18 @@ describe("ui/agent-orb-state", () => {
     }
     expect(furthest).toBeLessThanOrEqual(1 + MAX_PUSH + 1e-9)
     expect(furthest).toBeGreaterThan(1.05)
+  })
+
+  test("Escape stops the agent only when no field or dialog wants it", () => {
+    const outside = { closest: () => null }
+    const field = { closest: (s: string) => (s.includes("textarea") ? {} : null) }
+    const base = { key: "Escape", defaultPrevented: false, target: outside, modalOpen: false }
+    expect(escapeStopsOrb(base)).toBe(true)
+    expect(escapeStopsOrb({ ...base, target: null })).toBe(true)
+    expect(escapeStopsOrb({ ...base, target: field })).toBe(false)
+    expect(escapeStopsOrb({ ...base, modalOpen: true })).toBe(false)
+    expect(escapeStopsOrb({ ...base, defaultPrevented: true })).toBe(false)
+    expect(escapeStopsOrb({ ...base, key: "Enter" })).toBe(false)
   })
 
   test("silence and idle leave the sphere still; reduced motion never turns it", () => {

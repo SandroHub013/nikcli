@@ -21,6 +21,7 @@ import type { PlaybackMeter } from "../tts/playback-level"
 import {
   ORB_CENTER_SIZE,
   ORB_DOCK_SIZE,
+  escapeStopsOrb,
   orbCentered,
   orbPhase,
   projectPoint,
@@ -138,11 +139,13 @@ export function AgentOrb(props: AgentOrbProps) {
     onCleanup(() => window.removeEventListener("resize", onResize))
   })
 
-  /* Escape stops the reply, as the pill did. */
+  /* Escape stops the reply, as the pill did — unless a field or a dialog has it. */
   createEffect(() => {
     if (!centered()) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
+      const target = event.target instanceof Element ? event.target : document.activeElement
+      const modalOpen = document.querySelector('[aria-modal="true"], dialog[open]') !== null
+      if (!escapeStopsOrb({ key: event.key, defaultPrevented: event.defaultPrevented, target, modalOpen })) return
       event.preventDefault()
       void props.engine.cancel()
     }
@@ -160,6 +163,26 @@ export function AgentOrb(props: AgentOrbProps) {
     return ""
   })
 
+  /*
+   * The element always has the centred size and place; the flight is a
+   * transform onto the dock. Animating left/width instead would lay out the
+   * page and resize the canvas on every frame of it.
+   */
+  const flightStyle = () => {
+    const center = centerBox()
+    const at = box()
+    const dx = at.left + at.size / 2 - (center.left + center.size / 2)
+    const dy = at.top + at.size / 2 - (center.top + center.size / 2)
+    const scale = at.size / center.size
+    return {
+      left: `${center.left}px`,
+      top: `${center.top}px`,
+      width: `${center.size}px`,
+      height: `${center.size}px`,
+      transform: `translate(${dx}px, ${dy}px) scale(${scale})`,
+    }
+  }
+
   const dim = () => {
     const rect = stageRect()
     return { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` }
@@ -173,7 +196,7 @@ export function AgentOrb(props: AgentOrbProps) {
         data-phase={shown()}
         data-centered={centered() ? "true" : undefined}
         data-reduced={reduced ? "true" : undefined}
-        style={{ left: `${box().left}px`, top: `${box().top}px`, width: `${box().size}px`, height: `${box().size}px` }}
+        style={flightStyle()}
       >
         <button
           type="button"

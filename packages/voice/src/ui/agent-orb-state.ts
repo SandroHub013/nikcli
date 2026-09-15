@@ -39,6 +39,30 @@ export function orbCentered(phase: OrbPhase): boolean {
   return phase === "think" || phase === "speak"
 }
 
+/** What `escapeStopsOrb` needs to know about a key press, so it can be tested without a DOM. */
+export interface EscapeInput {
+  readonly key: string
+  readonly defaultPrevented: boolean
+  /** The focused element, or anything with `closest` standing in for it. */
+  readonly target: { closest?(selector: string): unknown } | null
+  /** Whether a modal dialog is open anywhere in the window. */
+  readonly modalOpen: boolean
+}
+
+/** Where Escape belongs to someone else: a field being edited, or a dialog. */
+export const ESCAPE_OWNERS =
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog, [role="dialog"], [role="alertdialog"], [data-layout="overlay"]'
+
+/**
+ * Escape stops the agent only when nobody else wants it. Taking it from a
+ * dialog or a field would close the reply instead of the palette, or eat the
+ * key an editor uses to leave a mode.
+ */
+export function escapeStopsOrb(input: EscapeInput): boolean {
+  if (input.key !== "Escape" || input.defaultPrevented || input.modalOpen) return false
+  return !input.target?.closest?.(ESCAPE_OWNERS)
+}
+
 /** The size of the centred sphere, and of the docked one it flies from. */
 export const ORB_CENTER_SIZE = 280
 export const ORB_DOCK_SIZE = 28
