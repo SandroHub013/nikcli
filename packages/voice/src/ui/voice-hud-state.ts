@@ -8,6 +8,7 @@
  * that can be checked without a DOM should be.
  */
 
+import type { AgentEntry } from "../agent/log"
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceErrorKind } from "../effect/errors"
 import type { OrbRim } from "./orb-mark"
@@ -69,6 +70,29 @@ export interface HudInput {
   readback?: string
   /** The phrase that wakes the agent, quoted back while it sleeps. */
   wakeWord: string
+  /** The user's latest sentence, heard in full (see `latestExchange`). */
+  utterance?: string
+  /** What the assistant said in answer to `utterance`, once it has. */
+  answer?: string
+}
+
+/**
+ * The user's latest sentence and the assistant's answer to it, from the agent log.
+ *
+ * `spoken` alone cannot say which question it answers: during an agent turn it
+ * still holds whatever the assistant said before ("Sono sveglio e in ascolto."),
+ * and the HUD read that out as if it were about the request in progress. The
+ * log has the order, so an answer only counts when it came after the sentence.
+ */
+export function latestExchange(history: readonly AgentEntry[]): { utterance?: string; answer?: string } {
+  let answer: string | undefined
+  for (let i = history.length - 1; i >= 0; i--) {
+    const entry = history[i]!
+    if (entry.kind === "user") return answer === undefined ? { utterance: entry.text } : { utterance: entry.text, answer }
+    // The newest assistant line after the sentence is its answer.
+    if (entry.kind === "assistant" && answer === undefined) answer = entry.text
+  }
+  return {}
 }
 
 /**
@@ -80,7 +104,7 @@ export interface HudInput {
  * total confidence.
  */
 export function agentHudState(input: HudInput): HudState {
-  const { status, partial, spoken, readback, wakeWord } = input
+  const { status, partial, spoken, readback, wakeWord, utterance, answer } = input
 
   switch (status) {
     case "asleep":
@@ -90,7 +114,14 @@ export function agentHudState(input: HudInput): HudState {
       return { tone: "asking", label: "conferma", line: readback ?? spoken, quoted: false }
 
     case "executing":
-      return { tone: "working", label: "eseguo", line: readback ?? spoken, quoted: false }
+      /*
+       * A matched command reads back what it does. A sentence the grammar did
+       * not know goes to the agent and has no readback: then the line is the
+       * sentence itself, quoted — never the previous thing the assistant said.
+       */
+      if (readback) return { tone: "working", label: "eseguo", line: readback, quoted: false }
+      if (utterance) return { tone: "working", label: "eseguo", line: utterance, quoted: true }
+      return { tone: "working", label: "eseguo", line: spoken, quoted: false }
 
     case "dictating":
       return { tone: "listening", label: "detto", line: partial || spoken, quoted: true }
@@ -102,6 +133,10 @@ export function agentHudState(input: HudInput): HudState {
       }
       if (readback) {
         return { tone: "done", label: "capito", line: readback, quoted: false }
+      }
+      // An agent turn has no readback; its answer is what the user waited for.
+      if (answer) {
+        return { tone: "done", label: "risposta", line: answer, quoted: false }
       }
       return { tone: "listening", label: "ascolto", line: "parla pure", quoted: false }
   }
