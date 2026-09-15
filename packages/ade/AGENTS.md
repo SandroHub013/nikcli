@@ -73,7 +73,7 @@ bun run test:app stop     # stop this worktree's instance, and only that
 ## Workflow
 
 1. Change the code on the ADE branch (`feat/ade`).
-2. Try it in ADE Test (`bun run native:dev` from this directory).
+2. Try it in ADE Test (`bun run test:app` from this directory: one instance per worktree, see below).
 3. Before committing, run from this directory: `bun run typecheck` and
    `bun run test`; from `../voice`: `bun run typecheck` and `bun run test`.
    For Rust changes, `cargo check` and `cargo test` in `src-tauri`.

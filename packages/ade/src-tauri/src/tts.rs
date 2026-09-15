@@ -86,6 +86,20 @@ fn exe_path(root: &Path) -> PathBuf {
     root.join("piper").join("piper.exe")
 }
 
+/// Written after the runtime archive is fully extracted, holding its digest.
+///
+/// `piper.exe` alone does not prove an installation: an extraction cut short
+/// can leave the executable without the DLLs and espeak data beside it, and a
+/// check on the exe would then never repair it.
+fn runtime_marker(root: &Path) -> PathBuf {
+    root.join("piper").join(".ade-complete")
+}
+
+fn runtime_ready(root: &Path) -> bool {
+    exe_path(root).is_file()
+        && std::fs::read_to_string(runtime_marker(root)).map(|d| d.trim() == RUNTIME.sha256).unwrap_or(false)
+}
+
 fn model_path(root: &Path, id: &str) -> PathBuf {
     root.join("voices").join(format!("{id}.onnx"))
 }
@@ -128,36 +142,46 @@ pub fn tts_piper_status(app: tauri::AppHandle, voice_id: String) -> Result<Piper
         return Ok(PiperStatus { supported: false, installed: false });
     }
     let root = root(&app)?;
-    let installed = exe_path(&root).is_file()
+    let installed = runtime_ready(&root)
         && model_path(&root, &voice_id).is_file()
         && model_path(&root, &voice_id).with_extension("onnx.json").is_file();
     Ok(PiperStatus { supported: true, installed })
 }
 
 /// Downloads what is missing for `voice_id`: the runtime once, then the voice.
+///
+/// curl, tar and certutil block for seconds, so the work runs on Tauri's
+/// blocking pool rather than on an async worker the other commands need.
 #[tauri::command]
-pub async fn tts_piper_install(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, Piper>,
-    voice_id: String,
-) -> Result<(), String> {
+pub async fn tts_piper_install(app: tauri::AppHandle, voice_id: String) -> Result<(), String> {
     let wanted = voice(&voice_id)?;
     if !cfg!(windows) {
         return Err("La voce Piper è disponibile solo su Windows.".into());
     }
+    tauri::async_runtime::spawn_blocking(move || install_blocking(&app, wanted))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<(), String> {
+    let state = app.state::<Piper>();
     // Two first sentences must not download the same files into each other.
     let _one = state.install.lock().map_err(|_| "installazione bloccata")?;
-    let root = root(&app)?;
+    let root = root(app)?;
     std::fs::create_dir_all(root.join("voices")).map_err(|e| e.to_string())?;
 
-    if !exe_path(&root).is_file() {
+    if !runtime_ready(&root) {
+        // Whatever an interrupted attempt left is discarded, not trusted.
+        let _ = std::fs::remove_dir_all(root.join("piper"));
         let zip = root.join("piper.zip.part");
         fetch(&RUNTIME, &zip)?;
-        run(system_tool("tar.exe"), &["-xf".as_ref(), zip.as_os_str(), "-C".as_ref(), root.as_os_str()])?;
+        let extracted = run(system_tool("tar.exe"), &["-xf".as_ref(), zip.as_os_str(), "-C".as_ref(), root.as_os_str()]);
         let _ = std::fs::remove_file(&zip);
+        extracted?;
         if !exe_path(&root).is_file() {
             return Err("L'archivio di Piper non contiene piper.exe.".into());
         }
+        std::fs::write(runtime_marker(&root), RUNTIME.sha256).map_err(|e| e.to_string())?;
     }
     let model = model_path(&root, wanted.id);
     let config = model.with_extension("onnx.json");
@@ -173,15 +197,22 @@ pub async fn tts_piper_install(
 }
 
 /// One sentence as WAV bytes, from the resident process (started, or restarted for another voice).
+///
+/// On the blocking pool: the sentences of one reply are requested together and
+/// wait for each other on the resident process's lock, and each wait would
+/// otherwise hold an async worker.
 #[tauri::command]
-pub async fn tts_piper_speak(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, Piper>,
-    voice_id: String,
-    text: String,
-) -> Result<tauri::ipc::Response, String> {
+pub async fn tts_piper_speak(app: tauri::AppHandle, voice_id: String, text: String) -> Result<tauri::ipc::Response, String> {
     voice(&voice_id)?;
-    let root = root(&app)?;
+    let bytes = tauri::async_runtime::spawn_blocking(move || speak_blocking(&app, &voice_id, &text))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str) -> Result<Vec<u8>, String> {
+    let state = app.state::<Piper>();
+    let root = root(app)?;
     let scratch = root.join("scratch");
     std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
     // One line per sentence is Piper's input format; a newline inside would split it.
@@ -193,7 +224,10 @@ pub async fn tts_piper_speak(
     let mut guard = state.resident.lock().map_err(|_| "voce bloccata")?;
     if guard.as_ref().map(|r| r.voice != voice_id).unwrap_or(true) {
         *guard = None;
-        *guard = Some(start(&root, &voice_id)?);
+        if !runtime_ready(&root) {
+            return Err("La voce Piper non è ancora installata.".into());
+        }
+        *guard = Some(start(&root, voice_id)?);
     }
     let out = scratch.join(format!("{}.wav", SENTENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let result = synthesize(guard.as_mut().expect("started above"), &text, &out);
@@ -204,7 +238,7 @@ pub async fn tts_piper_speak(
     drop(guard);
     let bytes = result.and_then(|_| std::fs::read(&out).map_err(|e| e.to_string()));
     let _ = std::fs::remove_file(&out);
-    Ok(tauri::ipc::Response::new(bytes?))
+    bytes
 }
 
 /// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
@@ -330,6 +364,21 @@ mod tests {
         assert_eq!(digest_in(modern), expected);
         assert_eq!(digest_in(spaced), expected);
         assert_eq!(digest_in("CertUtil: error"), None);
+    }
+
+    #[test]
+    fn a_runtime_without_its_completion_marker_is_not_installed() {
+        let root = std::env::temp_dir().join(format!("ade-tts-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("piper")).unwrap();
+        std::fs::write(exe_path(&root), b"exe").unwrap();
+        // An extraction cut short: the exe is there, the marker is not.
+        assert!(!runtime_ready(&root));
+        std::fs::write(runtime_marker(&root), "not the digest").unwrap();
+        assert!(!runtime_ready(&root));
+        std::fs::write(runtime_marker(&root), RUNTIME.sha256).unwrap();
+        assert!(runtime_ready(&root));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
