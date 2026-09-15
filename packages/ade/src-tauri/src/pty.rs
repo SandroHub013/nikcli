@@ -403,7 +403,8 @@ pub async fn pty_spawn(
      * API keys for this session, by name. Only names cross the IPC: the values
      * are read here from the system keychain (`secrets.rs`) and go straight
      * into the child's environment. Which keys a session gets is chosen per
-     * key, per agent, in Impostazioni › Chiavi API; bot turns pass none.
+     * key, per agent, in Impostazioni › Chiavi API, and checked again here
+     * against the agent the command starts; bot turns pass none.
      */
     secrets: Option<Vec<String>>,
 ) -> Result<(), String> {
@@ -450,7 +451,7 @@ pub async fn pty_spawn(
      * that cannot be read fails the launch: an agent started without the key
      * it was meant to have fails later, somewhere less obvious.
      */
-    for (name, value) in crate::secrets::env_for(&app, secrets.as_deref().unwrap_or_default())? {
+    for (name, value) in crate::secrets::env_for(&app, &command, secrets.as_deref().unwrap_or_default())? {
         builder.env(name, value);
     }
 

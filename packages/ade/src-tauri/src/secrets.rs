@@ -240,8 +240,63 @@ fn delete_in(vault: &dyn Vault, service: &str, path: &std::path::Path, name: &st
     write_index(path, &index)
 }
 
-/// The variables for a launch: `(ENV, value)` for each named key that exists.
-fn env_in(vault: &dyn Vault, service: &str, path: &std::path::Path, names: &[String]) -> Result<Vec<(String, String)>, String> {
+/// The agent id, as the index names agents, that a pty command starts.
+///
+/// Decided here from the command itself, not taken from the page: the page
+/// only asks, and a page (or a plugin loaded into it) that asked for every key
+/// on a `powershell` launch would otherwise read them all from the terminal.
+/// `None` for anything that is not an agent or a shell, such as `ssh`.
+pub fn agent_for_command(command: &str) -> Option<&'static str> {
+    let name = command.trim();
+    let stem = match name.rsplit_once('.') {
+        Some((head, ext)) if ["exe", "cmd", "bat", "com", "ps1"].iter().any(|known| known.eq_ignore_ascii_case(ext)) => head,
+        _ => name,
+    }
+    .to_ascii_lowercase();
+    match stem.as_str() {
+        "claude" => Some("claude-code"),
+        "codex" => Some("codex"),
+        "opencode" => Some("opencode"),
+        "nikcli" => Some("nikcli"),
+        "agy" => Some("agy"),
+        "kimi" => Some("kimi"),
+        "prime" => Some("prime"),
+        "pi" => Some("pi"),
+        "ohmypi" => Some("ohmypi"),
+        "hermes" => Some("hermes"),
+        "cmd" | "powershell" | "pwsh" | "sh" | "bash" | "zsh" | "fish" => Some("terminal"),
+        _ => None,
+    }
+}
+
+/// The keys the user gave to `agent`, as `(name, ENV)`; the index only, no keychain read.
+fn assigned_in(path: &std::path::Path, agent: &str) -> Vec<(String, String)> {
+    read_index(path)
+        .keys
+        .into_iter()
+        .filter(|key| key.agents.iter().any(|allowed| allowed == agent))
+        .map(|key| (key.name, key.env))
+        .collect()
+}
+
+/// The variables for a launch of `agent`: `(ENV, value)` for each named key.
+///
+/// Every name must be a key the user assigned to that agent in the index; one
+/// that is not refuses the whole launch, because the request did not come
+/// from the user's choice.
+fn env_in(
+    vault: &dyn Vault,
+    service: &str,
+    path: &std::path::Path,
+    agent: Option<&str>,
+    names: &[String],
+) -> Result<Vec<(String, String)>, String> {
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(agent) = agent else {
+        return Err("le chiavi API vanno solo ad agenti e terminali".into());
+    };
     let index = read_index(path);
     let by_name: BTreeMap<&str, &SecretInfo> = index.keys.iter().map(|key| (key.name.as_str(), key)).collect();
     let mut vars = Vec::new();
@@ -249,6 +304,9 @@ fn env_in(vault: &dyn Vault, service: &str, path: &std::path::Path, names: &[Str
         let Some(key) = by_name.get(name.as_str()) else {
             return Err(format!("chiave «{name}» non trovata"));
         };
+        if !key.agents.iter().any(|allowed| allowed == agent) {
+            return Err(format!("chiave «{name}» non assegnata a {agent} in Impostazioni › Chiavi API"));
+        }
         // Checked again: the index is a file the user could have edited.
         check_env(&key.env)?;
         match vault.get(service, name)? {
@@ -259,12 +317,33 @@ fn env_in(vault: &dyn Vault, service: &str, path: &std::path::Path, names: &[Str
     Ok(vars)
 }
 
-/// The variables `pty_spawn` sets for `names`. Called from Rust only.
-pub fn env_for(app: &AppHandle, names: &[String]) -> Result<Vec<(String, String)>, String> {
+/// The variables `pty_spawn` sets when `command` is started with `names`. Called from Rust only.
+pub fn env_for(app: &AppHandle, command: &str, names: &[String]) -> Result<Vec<(String, String)>, String> {
     if names.is_empty() {
         return Ok(Vec::new());
     }
-    env_in(&SystemVault, &service(app), &index_path(app)?, names)
+    env_in(&SystemVault, &service(app), &index_path(app)?, agent_for_command(command), names)
+}
+
+/// A key assigned to an agent, without its value.
+#[derive(Debug, Serialize)]
+pub struct AssignedSecret {
+    pub name: String,
+    pub env: String,
+}
+
+/// The keys the user gave to the agent `command` starts: names and variables,
+/// read from the index alone. What a launch asks for, without touching the
+/// keychain (which on macOS can prompt) for every key just to mask it.
+#[tauri::command]
+pub async fn secret_assigned(app: AppHandle, command: String) -> Result<Vec<AssignedSecret>, String> {
+    let Some(agent) = agent_for_command(&command) else {
+        return Ok(Vec::new());
+    };
+    Ok(assigned_in(&index_path(&app)?, agent)
+        .into_iter()
+        .map(|(name, env)| AssignedSecret { name, env })
+        .collect())
 }
 
 fn now_ms() -> u64 {
@@ -385,7 +464,10 @@ mod tests {
         save_in(&vault, "svc", &path, "Stripe", "STRIPE_SECRET_KEY", vec!["claude-code".into()], None, 9).unwrap();
         let listed = list_in(&vault, "svc", &path).unwrap();
         assert_eq!((listed[0].env.as_str(), listed[0].created_ms), ("STRIPE_SECRET_KEY", 1));
-        assert_eq!(env_in(&vault, "svc", &path, &["Stripe".into()]).unwrap(), vec![("STRIPE_SECRET_KEY".into(), FAKE.into())]);
+        assert_eq!(
+            env_in(&vault, "svc", &path, Some("claude-code"), &["Stripe".into()]).unwrap(),
+            vec![("STRIPE_SECRET_KEY".into(), FAKE.into())]
+        );
         delete_in(&vault, "svc", &path, "Stripe").unwrap();
         assert!(list_in(&vault, "svc", &path).unwrap().is_empty());
         assert_eq!(vault.get("svc", "Stripe").unwrap(), None);
@@ -403,7 +485,41 @@ mod tests {
     fn a_launch_asking_for_a_missing_key_fails_instead_of_starting_without_it() {
         let vault = MemoryVault::default();
         let path = temp_index("missing");
-        assert!(env_in(&vault, "svc", &path, &["Nope".into()]).is_err());
+        assert!(env_in(&vault, "svc", &path, Some("codex"), &["Nope".into()]).is_err());
+    }
+
+    /// The review's scenario: the page asks for every key on a shell, or for
+    /// a key the user did not give to Claude Code.
+    #[test]
+    fn a_launch_gets_only_keys_assigned_to_the_agent_its_command_starts() {
+        let vault = MemoryVault::default();
+        let path = temp_index("assigned");
+        save_in(&vault, "svc", &path, "Anthropic", "ANTHROPIC_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "OpenAI", "OPENAI_API_KEY", vec!["codex".into()], Some(FAKE), 1).unwrap();
+        let all = vec!["Anthropic".to_string(), "OpenAI".to_string()];
+
+        let shell = env_in(&vault, "svc", &path, agent_for_command("powershell.exe"), &all).unwrap_err();
+        assert!(shell.contains("non assegnata a terminal"), "{shell}");
+        let claude = env_in(&vault, "svc", &path, agent_for_command("claude"), &["Anthropic".into()]).unwrap_err();
+        assert!(claude.contains("non assegnata a claude-code"), "{claude}");
+        assert!(env_in(&vault, "svc", &path, agent_for_command("ssh"), &["OpenAI".into()]).is_err());
+
+        let codex = env_in(&vault, "svc", &path, agent_for_command("codex.cmd"), &["OpenAI".into()]).unwrap();
+        assert_eq!(codex, vec![("OPENAI_API_KEY".to_string(), FAKE.to_string())]);
+        assert_eq!(env_in(&vault, "svc", &path, None, &[]).unwrap(), vec![]);
+
+        assert_eq!(assigned_in(&path, "codex"), vec![("OpenAI".to_string(), "OPENAI_API_KEY".to_string())]);
+        assert!(assigned_in(&path, "claude-code").is_empty());
+    }
+
+    #[test]
+    fn commands_map_to_the_agent_ids_the_page_uses() {
+        assert_eq!(agent_for_command("claude"), Some("claude-code"));
+        assert_eq!(agent_for_command("CMD.EXE"), Some("terminal"));
+        assert_eq!(agent_for_command("zsh"), Some("terminal"));
+        assert_eq!(agent_for_command("kimi"), Some("kimi"));
+        assert_eq!(agent_for_command("ssh"), None);
+        assert_eq!(agent_for_command("evil"), None);
     }
 
     #[test]

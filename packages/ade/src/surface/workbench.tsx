@@ -14,7 +14,7 @@ import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
-import { KEYS_VERBS, keysForAgent, runKeysCommand } from "../secrets/keys"
+import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
   checkName,
@@ -3328,14 +3328,20 @@ export function Workbench() {
       appendLine(paneId, `${workDir}> ${[agent.command, ...displayArgs(extraArgs)].join(" ")}`, "shell")
 
       /*
-       * The keys chosen for this agent in Impostazioni › Chiavi API, by name.
-       * The transcript says which variables were set, never what they hold.
+       * The keys chosen for this agent in Impostazioni › Chiavi API, by name,
+       * read from the index alone; the host checks them again against the
+       * command. The transcript says which variables were set, never what
+       * they hold, and says so when the keys could not be read.
        */
-      const keyList = host.listSecrets ? await host.listSecrets().catch(() => []) : []
-      const secretNames = keysForAgent(keyList, agentId)
-      if (secretNames.length > 0) {
-        const vars = keyList.filter((key) => secretNames.includes(key.name)).map((key) => key.env)
-        appendLine(paneId, `Chiavi API passate: ${vars.join(", ")}`, "note")
+      let secretNames: string[] = []
+      if (host.assignedSecrets) {
+        try {
+          const assigned = await host.assignedSecrets(agent.command)
+          secretNames = assigned.map((key) => key.name)
+          if (assigned.length > 0) appendLine(paneId, `Chiavi API passate: ${assigned.map((key) => key.env).join(", ")}`, "note")
+        } catch (failure) {
+          appendLine(paneId, `Chiavi API non lette, la sessione parte senza: ${failure instanceof Error ? failure.message : String(failure)}`, "note")
+        }
       }
 
       /*

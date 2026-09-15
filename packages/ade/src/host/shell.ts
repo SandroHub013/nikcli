@@ -112,6 +112,8 @@ export interface Host {
   /** Saves a key; `value` absent keeps the stored one. Rejects with the reason. */
   saveSecret?: (draft: KeyDraft) => Promise<void>
   deleteSecret?: (name: string) => Promise<void>
+  /** The keys assigned to the agent `command` starts, from the index only: names and variables. */
+  assignedSecrets?: (command: string) => Promise<{ name: string; env: string }[]>
   /** Copies a key to the clipboard from the host; resolves to the seconds before it is cleared. */
   copySecret?: (name: string) => Promise<number>
 
@@ -433,6 +435,10 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       // Rejects with the keychain's or the validator's reason, in Italian.
       await invoke("secret_save", { name: draft.name, env: draft.env, agents: [...draft.agents], value: draft.value ?? null })
+    },
+    async assignedSecrets(command) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ name: string; env: string }[]>("secret_assigned", { command })
     },
     async deleteSecret(name) {
       const { invoke } = await import("@tauri-apps/api/core")

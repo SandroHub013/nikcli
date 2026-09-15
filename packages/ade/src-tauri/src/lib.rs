@@ -1078,6 +1078,7 @@ pub fn run() {
             secrets::secret_save,
             secrets::secret_delete,
             secrets::secret_copy,
+            secrets::secret_assigned,
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
         ])
