@@ -65,8 +65,7 @@ From `packages/voice`, the same two. For Rust changes, `cargo check` and
 on every push and pull request (`.github/workflows/ade-checks.yml`); the Rust
 half runs in the release build.
 
-Push only what has been tried in ADE Test and confirmed: anything releasable
-on `feat/ade` is published within about half a day.
+Push only what has been tried in ADE Test and confirmed.
 
 ## Pull requests
 
@@ -81,8 +80,10 @@ from the changed paths; two labels are set by hand and read at release time:
 
 ## Releases
 
-`.github/workflows/ade-auto-release.yml` runs every 12 hours and releases when
-all of these hold:
+The maintainer decides when ADE is released. The scheduled
+`.github/workflows/ade-auto-release.yml` is **disabled** on the fork, so a push
+to `feat/ade` publishes nothing by itself. Run by hand, or re-enabled by the
+maintainer, it releases when all of these hold:
 
 1. at least one releasable commit (table above) since the last `ade-v*` tag
    touches ADE;
@@ -96,9 +97,9 @@ Windows and Linux and publishes only if every platform succeeds. Installed
 copies of ADE then show the update in their notification bell. Release notes
 are the `feat`, `fix`/`revert` and `perf` subjects, grouped.
 
-To release now instead of waiting, run **ade-auto-release** from the Actions
-tab (`min_age_hours: 0`; `dry_run` shows the plan without tagging), or push a
-tag by hand: `git tag -a ade-vX.Y.Z -m "ADE X.Y.Z" && git push origin ade-vX.Y.Z`.
+To release, the maintainer runs **ade-auto-release** from the Actions tab
+(`min_age_hours: 0`; `dry_run` shows the plan without tagging), or pushes a
+tag: `git tag -a ade-vX.Y.Z -m "ADE X.Y.Z" && git push origin ade-vX.Y.Z`.
 
 To see what the next release would be, locally:
 

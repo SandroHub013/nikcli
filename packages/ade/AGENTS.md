@@ -10,6 +10,7 @@ apply to any agent changing ADE or `packages/voice`.
 |---|---|---|
 | Identifier | `ai.nikcli.ade` (`tauri.conf.json`) | `ai.nikcli.ade.test` (`src-tauri/tauri.test.conf.json`) |
 | Built by | the `ade-release` workflow from an `ade-v*` tag, or `bun run native:build` | `bun run native:dev`, `bun run native:build:test` |
+| Executable | `ade-desktop.exe` | `ade-test.exe` (`native:dev` runs the `ade-test` binary; `mainBinaryName` names it in `native:build:test`) |
 | Data, WebView2 profile, install folder | its own | its own |
 | Global voice hotkeys | registered | not registered |
 | Update notices | yes, from published `ade-v*` releases | never (version `0.0.0`) |
@@ -23,6 +24,11 @@ apply to any agent changing ADE or `packages/voice`.
   files outside the app data directory, CLI hook configuration) must not let
   the test build interfere with the official one. `is_test_build` in
   `src-tauri/src/lib.rs` is the switch.
+- Keep the executable names apart too. An ADE setup, and the in-app update
+  running one, closes every process of the user with the app's executable
+  name, without asking when silent: when ADE Test was also `ade-desktop.exe`, a
+  trial setup closed the user's ADE. Never run an ADE setup or uninstaller
+  unless asked, and never one built as `ade-desktop`.
 
 ## ADE Test: one per worktree
 
@@ -75,12 +81,11 @@ bun run test:app stop     # stop this worktree's instance, and only that
    `type(scope): description` format of [`CONTRIBUTING.md`](./CONTRIBUTING.md).
    Push goes to the fork (`origin`), never to the upstream repository; pushes
    and pull requests only when the user asks.
-5. Releases are automatic: every 12 hours `ade-auto-release` publishes a new
-   `ade-v*` when `feat/ade` has a `feat`, `fix`, `perf` or `revert` commit since
-   the last one, at least 2 hours old and green in `ade-checks`. So a pushed
-   releasable commit reaches every installed ADE within about half a day —
-   mark unfinished work `[skip release]`. A release by hand is still a tag
-   `ade-vX.Y.Z` pushed to `origin`, and only when the user asks.
+5. The user decides releases. `ade-auto-release` is disabled on the fork and
+   stays so; a push to `feat/ade` publishes nothing. When the user asks for a
+   release, it is a tag `ade-vX.Y.Z` pushed to `origin` (or `ade-auto-release`
+   run by hand); `ade-release.yml` builds every platform and publishes only if
+   all succeed, and installed copies offer it in their notification bell.
 
 ## Conventions
 
