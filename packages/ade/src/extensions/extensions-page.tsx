@@ -219,7 +219,9 @@ export function ExtensionsPage(props: {
                       <Logo entry={entry} name={entry.name} />
                       <div data-slot="ext-card-title">
                         <b>{entry.name}</b>
-                        <span>{entry.publisher}</span>
+                        <Show when={entry.publisher !== entry.name}>
+                          <span>{entry.publisher}</span>
+                        </Show>
                       </div>
                       <span data-slot="ext-badge" data-origin={entry.origin}>
                         {entry.origin === "official" ? "ufficiale" : "community"}
