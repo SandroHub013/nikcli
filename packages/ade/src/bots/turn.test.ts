@@ -10,9 +10,11 @@ import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnDeps } fr
 function machine() {
   const kills: { tree?: boolean }[] = []
   const exits: ((code: number | null) => void)[] = []
+  const lines: ((line: string) => void)[] = []
   const host = {
-    spawn: async (options: { onExit: (code: number | null) => void }) => {
+    spawn: async (options: { onExit: (code: number | null) => void; onLine: (line: string) => void }) => {
       exits.push(options.onExit)
+      lines.push(options.onLine)
       return {
         // A killed session unlistens and never reports its exit, as `host/shell.ts` does.
         kill: (options?: { tree?: boolean }) => void kills.push(options ?? {}),
@@ -22,7 +24,12 @@ function machine() {
     },
   }
   const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
-  return { deps, kills, exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code) }
+  return {
+    deps,
+    kills,
+    exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
+    say: (line: string, at = lines.length - 1) => lines[at]?.(line),
+  }
 }
 
 const open: Turn[] = []
@@ -65,6 +72,21 @@ describe("runTurn", () => {
     expect(result.status).toBe("stopped")
     expect(m.kills).toEqual([{ tree: true }])
     expect(turnsRunning("claude")).toBe(0)
+  })
+
+  test("the turn is over at Claude Code's result, without waiting for the process to exit", async () => {
+    const m = machine()
+    const turn = start(m)
+    await tick()
+    m.say(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Tre sessioni aperte." }] } }))
+    m.say(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "Tre sessioni aperte." }))
+    const result = await turn.result
+    expect(result.status).toBe("done")
+    expect(result.text).toBe("Tre sessioni aperte.")
+    expect(m.kills).toEqual([])
+    expect(turnsRunning("claude")).toBe(0)
+    // The exit arriving afterwards changes nothing.
+    m.exit(0)
   })
 
   test("a turn that exits on its own is done and kills nothing", async () => {

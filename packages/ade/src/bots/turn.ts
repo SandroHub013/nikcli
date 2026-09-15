@@ -183,7 +183,16 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             cols: 400,
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
-            onLine: (line) => update(applyRunnerLine(runner, talk, line, Date.now())),
+            onLine: (line) => {
+              update(applyRunnerLine(runner, talk, line, Date.now()))
+              /*
+               * The answer is complete at the CLI's final event. Waiting for the
+               * process to exit as well cost ~0.7 s of saving and shutting down
+               * on every spoken reply; the exit, when it comes, finds the wait
+               * already over.
+               */
+              if (talk.ended) resolve(0)
+            },
             onExit: resolve,
           })
           .then((session) => {
