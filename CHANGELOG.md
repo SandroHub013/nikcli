@@ -3,6 +3,22 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.357.0 (September 2026)
+
+## Core
+
+- Treat the background service's loopback listener as local (@nikomatt69)
+- Drive the update dialog off the check result, not the bus (@nikomatt69)
+- Implement local account session handling and improve request authorization (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(auth): implement local account session handling and improve request authorization
+  - fix(upgrade): drive the update dialog off the check result, not the bus
+  - fix(auth): treat the background service's loopback listener as local
+  - test(upgrade): assert the check wiring without pinning its line breaks
+
 ## v1.356.0 (September 2026)
 
 ## Core
