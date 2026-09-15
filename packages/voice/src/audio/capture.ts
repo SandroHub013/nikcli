@@ -232,6 +232,8 @@ export interface MicCapture {
   startSegment?(): void
   /** Commits and flushes any actively recorded speech segment immediately on demand. Returns true if segment was flushed. */
   commitSegment?(): boolean
+  /** Drops the segment being recorded; the detector can start a new one on the next speech. */
+  cancelSegment?(): void
   /** Feed a PCM buffer directly (useful for testing or virtual audio pipelines). */
   processAudioFrame(samples: Float32Array, inputSampleRate?: number): void
   /** Register or update RMS level listener. */
@@ -778,6 +780,22 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         return true
       }
       return false
+    },
+
+    cancelSegment(): void {
+      if (!isRecordingSegment) return
+      isRecordingSegment = false
+      recordedChunks = []
+      recordedPcmChunks = []
+      // With nothing pending, the recorder's own stop flushes nothing.
+      if (recorder && !pendingSegment) {
+        try {
+          if (recorder.state === "recording" || recorder.state === "paused") recorder.stop()
+        } catch {
+          // ignore
+        }
+      }
+      detector.reset()
     },
 
     onLevel(callback: MicLevelCallback): void {

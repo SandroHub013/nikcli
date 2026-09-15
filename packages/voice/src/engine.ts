@@ -181,6 +181,14 @@ const DICTATION_MEMORY = 6
  * still arrives and a hung one ends as that backend's timeout error.
  */
 export const DRAIN_TIMEOUT_MS = 32_000
+
+/**
+ * A push-to-talk press shorter than this is a tap, and a tap latches.
+ *
+ * Long enough for a deliberate press-and-let-go, short enough that nobody has
+ * said a word in it.
+ */
+export const PTT_TAP_MS = 350
 const DRAIN_POLL_MS = 25
 
 export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
@@ -286,6 +294,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   let chordHeld = false
   let openedWithoutChord = false
+  /* When the chord went down, to tell a tap from a hold on release. */
+  let pressedAt: number | undefined
+  /* A tap opened this session and it stays open until the next press. */
+  let latched = false
+  /* The press that ended a latch; its release must not start anything. */
+  let pressEndsLatch = false
 
   let pttGraceTimer: ReturnType<typeof setTimeout> | undefined
   let pttWatchdogTimer: ReturnType<typeof setTimeout> | undefined
@@ -446,6 +460,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     setDictated([])
     chordHeld = false
     openedWithoutChord = false
+    latched = false
+    pressedAt = undefined
     /* The next session is judged on its own: whatever opens it says what
        it is for, and if nothing says, the stored default decides. */
     setSessionMode(undefined)
@@ -854,8 +870,25 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     async pressToTalk(mode?: VoiceMode): Promise<void> {
       // Before touching the chord flags: the stop being joined resets them.
       if (stopping) await stopping
+
+      /* A press while a tap is holding the microphone open: this is the
+         "press again to close". The other feature's chord hands over instead,
+         as it does everywhere else. */
+      if (latched && isRunning()) {
+        if (mode !== undefined && mode !== activeMode()) {
+          setSessionMode(mode)
+          if (mode === "transcription") speaker.cancel()
+          pressEndsLatch = true
+          return
+        }
+        pressEndsLatch = true
+        await stop()
+        return
+      }
+
       clearPttTimers()
       chordHeld = true
+      pressedAt = now()
       /* Holding the other chord hands the microphone over mid-session, the
          same way pressing the other button does. */
       if (mode !== undefined) setSessionMode(mode)
@@ -865,6 +898,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (!isRunning()) {
         await this.start(mode)
       }
+      /* Released as a tap while the microphone was still opening: the
+         release has already made this session a latched one. */
+      if (latched) return
       // The chord is now the thing holding the mic open, so a session that
       // began as a button press stops being one — releasing the key ends it.
       openedWithoutChord = false
@@ -876,12 +912,38 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async releaseToTalk(): Promise<void> {
       chordHeld = false
+      // The release of the press that closed or handed over a latched session.
+      if (pressEndsLatch) {
+        pressEndsLatch = false
+        return
+      }
       if (programHandle) {
         await Effect.runPromise(programHandle.releaseToTalk)
       }
 
       if (currentSettings().activation === "push-to-talk" && !openedWithoutChord) {
         clearPttTimers()
+
+        /*
+         * A tap, not a hold: leave the microphone on until the next press.
+         *
+         * Push-to-talk used to treat a quick press like any other release —
+         * commit, then a 12 s watchdog — so someone who pressed the chord the
+         * way one presses a switch watched the widget open, listen, and close
+         * itself twelve seconds later with nothing asked of them. Holding
+         * still works exactly as before; only a press too short to have been
+         * spoken through becomes a latch. The half-second of segment the tap
+         * started is dropped, not sent: it is the sound of the key.
+         */
+        const held = pressedAt === undefined ? Number.POSITIVE_INFINITY : now() - pressedAt
+        pressedAt = undefined
+        if (held < PTT_TAP_MS) {
+          latched = true
+          openedWithoutChord = true
+          activeTranscriber?.cancelSegment?.()
+          return
+        }
+
         const committed = activeTranscriber?.commit?.() ?? false
 
         // Grace period for brief taps without speech: if no segment was committed,

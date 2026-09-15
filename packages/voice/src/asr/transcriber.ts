@@ -49,6 +49,9 @@ export interface Transcriber {
   /** Explicitly commit and flush the current utterance segment (e.g. on push-to-talk release). */
   commit?(): boolean
 
+  /** Drop the segment being recorded without sending it (e.g. the key sound of a tap). */
+  cancelSegment?(): void
+
   /**
    * Stop taking audio, but let what was already heard come back.
    *

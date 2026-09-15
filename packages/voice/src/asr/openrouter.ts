@@ -510,6 +510,10 @@ export function createOpenRouterTranscriber(
       return Boolean(micCapture.commitSegment?.())
     },
 
+    cancelSegment(): void {
+      micCapture.cancelSegment?.()
+    },
+
     finish(): void {
       // Stopping the capture closes the open segment and hands it to
       // `transcribeSegment` synchronously, so `hasInFlight` is already true

@@ -520,3 +520,76 @@ describe("engine/stop delivers what was already heard", () => {
     await engine.stop()
   })
 })
+
+describe("engine/push-to-talk tap latches", () => {
+  function setup() {
+    let clock = 50_000
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      settings: { activation: "push-to-talk", mode: "transcription" },
+      getContext: () => ({ focusedPaneId: "pane-1" }),
+    })
+    return { host, transcriber, engine, advance: (ms: number) => (clock += ms) }
+  }
+
+  test("a quick press leaves dictation on: no grace stop, and it survives a delivered sentence", async () => {
+    const { host, transcriber, engine, advance } = setup()
+    await engine.pressToTalk("transcription")
+    advance(120)
+    await engine.releaseToTalk()
+
+    // Past the old 250 ms grace, which closed a tap that recorded nothing.
+    await new Promise((r) => setTimeout(r, 300))
+    expect(engine.isRunning()).toBe(true)
+
+    transcriber.emit("prima frase", true)
+    await new Promise((r) => setTimeout(r, 20))
+    transcriber.emit("seconda frase", true)
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(host.calls.filter((c) => c.method === "insertText").map((c) => c.args[1])).toEqual([
+      "prima frase",
+      "seconda frase",
+    ])
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("the next press closes a latched session, and its release starts nothing", async () => {
+    const { engine, advance } = setup()
+    await engine.pressToTalk("transcription")
+    advance(100)
+    await engine.releaseToTalk()
+    expect(engine.isRunning()).toBe(true)
+
+    await engine.pressToTalk("transcription")
+    expect(engine.isRunning()).toBe(false)
+    advance(100)
+    await engine.releaseToTalk()
+    await new Promise((r) => setTimeout(r, 20))
+    expect(engine.isRunning()).toBe(false)
+
+    // And the one after that opens it again.
+    await engine.pressToTalk("transcription")
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("a hold is still push-to-talk: the sentence is delivered and the session ends", async () => {
+    const { host, transcriber, engine, advance } = setup()
+    await engine.pressToTalk("transcription")
+    advance(2_000)
+    await engine.releaseToTalk()
+
+    transcriber.emit("detto tenendo premuto", true)
+    await new Promise((r) => setTimeout(r, 40))
+
+    expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "detto tenendo premuto"] })
+    expect(engine.isRunning()).toBe(false)
+  })
+})

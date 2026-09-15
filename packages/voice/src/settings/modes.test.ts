@@ -2,6 +2,19 @@ import { describe, expect, test } from "bun:test"
 import { createVoiceEngine } from "../engine"
 import { createFakeTranscriber, type FakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"
+import { PTT_TAP_MS } from "../engine"
+
+/*
+ * These tests are about a held chord. A press released at once is a tap,
+ * which latches the microphone instead; the clock is moved past the tap
+ * threshold before each release so the hold is what is tested.
+ */
+let skew = 0
+const heldClock = () => Date.now() + skew
+const holdChord = () => {
+  skew += PTT_TAP_MS + 1
+}
+
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "../bridge/host"
 import type { TranscriberBackend } from "../asr/select"
 import type {
@@ -216,7 +229,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
-      now: () => Date.now(),
+      now: heldClock,
       settings: {
         mode: "agent",
         activation: "push-to-talk",
@@ -233,6 +246,7 @@ describe("Voice Modes & Settings Interaction", () => {
     ).toHaveLength(1)
 
     // Release to talk: event is dropped
+    holdChord()
     await engine.releaseToTalk()
     await engine.submitText("apri tavolozza")
     expect(
@@ -297,7 +311,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
-      now: () => Date.now(),
+      now: heldClock,
       settings: {
         mode: "agent",
         activation: "push-to-talk",
@@ -308,6 +322,7 @@ describe("Voice Modes & Settings Interaction", () => {
     expect(engine.isRunning()).toBe(true)
 
     // User released chord:
+    holdChord()
     await engine.releaseToTalk()
 
     // ASR completes and emits final transcript:
@@ -335,7 +350,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
-      now: () => Date.now(),
+      now: heldClock,
       settings: {
         mode: "agent",
         activation: "push-to-talk",
@@ -345,6 +360,7 @@ describe("Voice Modes & Settings Interaction", () => {
     await engine.pressToTalk()
     expect(engine.isRunning()).toBe(true)
 
+    holdChord()
     await engine.releaseToTalk()
 
     // Wait for the 250ms grace timeout
@@ -516,7 +532,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
-      now: () => Date.now(),
+      now: heldClock,
       settings: {
         mode: "agent",
         activation: "push-to-talk",
@@ -528,6 +544,7 @@ describe("Voice Modes & Settings Interaction", () => {
     expect(engine.isRunning()).toBe(true)
 
     // Release 1 (schedules grace timer)
+    holdChord()
     await engine.releaseToTalk()
 
     // Rapid Press 2 (before grace timer fires)
@@ -545,6 +562,7 @@ describe("Voice Modes & Settings Interaction", () => {
     await new Promise((r) => setTimeout(r, 50))
 
     // Now after release, it can stop
+    holdChord()
     await engine.releaseToTalk()
     await new Promise((r) => setTimeout(r, 300))
     expect(engine.isRunning()).toBe(false)
@@ -559,7 +577,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
-      now: () => Date.now(),
+      now: heldClock,
       settings: {
         mode: "agent",
         activation: "push-to-talk",
@@ -569,6 +587,7 @@ describe("Voice Modes & Settings Interaction", () => {
     await engine.pressToTalk()
     expect(engine.isRunning()).toBe(true)
 
+    holdChord()
     await engine.releaseToTalk()
 
     // Transcriber finishes and emits empty text
