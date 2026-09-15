@@ -124,7 +124,8 @@ describe("voice/agent", () => {
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
 
     const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })
-    expect(answer).toEqual({ ok: false, text: limitNotice("Claude Code") })
+    // `ran`: a turn did start, so the planner does not take the sentence over either.
+    expect(answer).toEqual({ ok: false, text: limitNotice("Claude Code"), ran: true })
     expect(answer.text).toContain("ADE non riprova")
     // Neither the same CLI again nor another engine: one sentence, one turn.
     expect(runner.requests).toHaveLength(1)
@@ -150,6 +151,7 @@ describe("voice/agent", () => {
     expect(await voice.askAgent!({ text: "quante sessioni ci sono?", engine: "claude" })).toEqual({
       ok: false,
       text: "Nessun host: un turno si esegue solo nell'app desktop.",
+      ran: true,
     })
   })
 })
