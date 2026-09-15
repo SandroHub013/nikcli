@@ -30,6 +30,7 @@ import type { DialogStatus } from "../dialog/session"
 import {
   DEFAULT_VOICE_SETTINGS,
   type AgentEngine,
+  type ReplyVoice,
   type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
@@ -279,6 +280,14 @@ function describeStatus(status: DialogStatus, running: boolean): StatusDescripto
  * group are excluded so the engine pills never steal the backend list's arrows.
  */
 /** The agent engines, as the panel offers them. */
+/** S15: Ugo first, the male voice the user chose; the Piper ones are downloaded on first use. */
+const REPLY_VOICE_CHOICES: readonly { value: ReplyVoice; title: string; desc: string }[] = [
+  { value: "ugo", title: "Ugo", desc: "Voce maschile naturale, offline" },
+  { value: "giorgio", title: "Giorgio", desc: "Voce maschile naturale, offline" },
+  { value: "paola", title: "Paola", desc: "Voce femminile naturale, offline" },
+  { value: "system", title: "Voce di sistema", desc: "Quella di Windows, senza scaricare nulla" },
+]
+
 const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; title: string; desc: string }[] = [
   { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code e Codex" },
   { value: "claude", title: "Claude Code", desc: "Con il tuo abbonamento Anthropic" },
@@ -901,6 +910,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     updateSettings({ transcriptionSend: value as TranscriptionSendMode }),
   )
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
+  const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const activationKeys = radioGroupKeys((value) =>
     selectActivation(value as VoiceActivation),
@@ -1225,6 +1235,40 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 </div>
               </div>
             </div>
+
+            <Show when={props.settings.speakReplies !== false}>
+              <div data-slot="sub-choice-box">
+                <span id="reply-voice-label" data-slot="sub-choice-label">
+                  Voce delle risposte
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="reply-voice-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={replyVoiceKeys}
+                >
+                  <For each={REPLY_VOICE_CHOICES}>
+                    {(choice) => (
+                      <div
+                        role="radio"
+                        data-value={choice.value}
+                        aria-checked={props.settings.replyVoice === choice.value}
+                        tabIndex={props.settings.replyVoice === choice.value ? 0 : -1}
+                        data-slot="sub-choice-item"
+                        onClick={() => updateSettings({ replyVoice: choice.value })}
+                      >
+                        <span data-slot="sub-item-title">{choice.title}</span>
+                        <span data-slot="sub-item-desc">{choice.desc}</span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+                <p data-slot="sub-choice-note">
+                  Le voci naturali si scaricano la prima volta che servono (circa 85 MB, solo su Windows) e poi
+                  funzionano senza rete. Finché il download non finisce risponde la voce di sistema.
+                </p>
+              </div>
+            </Show>
 
             {/*
               What answers what the grammar does not know. A CLI the user is

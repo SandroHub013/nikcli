@@ -199,3 +199,16 @@ describe("settings/model agentEngine", () => {
     expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, agentEngine: "codex" }).settings.agentEngine).toBe("codex")
   })
 })
+
+describe("settings/model replyVoice", () => {
+  test("Ugo by default, an unknown voice repaired to Ugo, a known one kept", () => {
+    expect(DEFAULT_VOICE_SETTINGS.replyVoice).toBe("ugo")
+    const absent = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: undefined } as never)
+    expect(absent.settings.replyVoice).toBe("ugo")
+    expect(absent.corrections).toEqual([])
+    const unknown = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "kokoro" } as never)
+    expect(unknown.settings.replyVoice).toBe("ugo")
+    expect(unknown.corrections.join()).toContain("kokoro")
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "system" }).settings.replyVoice).toBe("system")
+  })
+})

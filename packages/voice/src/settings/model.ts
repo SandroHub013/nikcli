@@ -19,6 +19,14 @@ export type ParakeetExecutionBackend = "webgpu" | "wasm" | "auto"
 export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
 export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
+/**
+ * The voice replies are read in: a Piper voice ADE downloads on first use, or
+ * `system` for the Web Speech voice. Ugo is the default: the male voice the
+ * user asked for, and the best of the offline ones S15 measured.
+ */
+export const REPLY_VOICES = ["ugo", "giorgio", "paola", "system"] as const
+export type ReplyVoice = (typeof REPLY_VOICES)[number]
+
 export const CURRENT_SETTINGS_VERSION = 1
 
 export interface VoiceSettings {
@@ -65,6 +73,8 @@ export interface VoiceSettings {
    * watching the pane anyway, who wants the microphone and not the voice.
    */
   readonly speakReplies: boolean
+  /** Which voice reads them; see `REPLY_VOICES`. */
+  readonly replyVoice: ReplyVoice
   /**
    * What answers a sentence the grammar does not know.
    *
@@ -131,6 +141,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
    */
   customWords: Object.freeze([]),
   speakReplies: true,
+  replyVoice: "ugo",
   agentEngine: "auto",
 })
 
@@ -354,6 +365,12 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   } else if (candidate.speakReplies !== undefined) {
     corrections.push("Lettura delle risposte non valida: ripristinata attiva.")
   }
+  let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
+  if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
+    replyVoice = candidate.replyVoice as ReplyVoice
+  } else if (candidate.replyVoice !== undefined) {
+    corrections.push(`Voce delle risposte '${String(candidate.replyVoice)}' non riconosciuta: ripristinata Ugo.`)
+  }
 
   /*
    * 14. The chosen audio devices, if any were chosen.
@@ -407,6 +424,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend,
     customWords,
     speakReplies,
+    replyVoice,
     agentEngine,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),

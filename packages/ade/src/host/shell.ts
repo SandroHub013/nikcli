@@ -123,6 +123,13 @@ export interface Host {
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
   mailboxResultReclaim?: (id: string, kind?: "result" | "update") => Promise<string | null>
 
+  // -- The assistant's Piper voice (see `src-tauri/src/tts.rs`) ------------
+  ttsPiperStatus?: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
+  /** Downloads the Piper runtime and the voice, checked against pinned digests. */
+  ttsPiperInstall?: (voice: string) => Promise<void>
+  /** One sentence as WAV bytes, from the resident Piper process. */
+  ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
@@ -478,6 +485,21 @@ export async function getHost(): Promise<Host | undefined> {
     async systemStats() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<SystemStats>("system_stats")
+    },
+
+    async ttsPiperStatus(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ supported: boolean; installed: boolean }>("tts_piper_status", { voiceId: voice })
+    },
+
+    async ttsPiperInstall(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_piper_install", { voiceId: voice })
+    },
+
+    async ttsPiperSpeak(voice, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text })
     },
 
     async mailboxTake() {

@@ -20,6 +20,7 @@ mod serve;
 mod shots;
 mod mailbox;
 mod stats;
+mod tts;
 mod usage;
 mod update;
 
@@ -994,6 +995,7 @@ pub fn run() {
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
         .manage(stats::Stats::new())
+        .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
         /*
          * The video panel's files.
@@ -1042,6 +1044,10 @@ pub fn run() {
             stats::system_stats,
             usage::transcript_usage,
             mailbox::mailbox_take,
+            tts::tts_piper_status,
+            tts::tts_piper_install,
+            tts::tts_piper_speak,
+            tts::tts_piper_stop,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
