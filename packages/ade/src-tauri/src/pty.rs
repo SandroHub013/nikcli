@@ -74,8 +74,10 @@ const ALLOWED_AGENTS: &[&str] = &[
 /// Prefixes, matched from the start of the name: a session marker set by one
 /// agent CLI is not something the next one should read, and the messaging
 /// socket and token under `CLAUDE_CODE_` are credentials scoped to a session
-/// that is not this one.
-const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID"];
+/// that is not this one. `ADE_MAILBOX_ROOT` is `test:app`'s choice for one
+/// ADE Test: a `native:dev` started from a session inside it would otherwise
+/// share that mailbox.
+const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID", "ADE_MAILBOX_ROOT"];
 
 /// Colour switches that describe the output of whatever launched ADE, not the
 /// pty an agent is given.
@@ -1114,6 +1116,7 @@ mod tests {
             "CLAUDE_CODE_ENTRYPOINT",
             "CLAUDECODE",
             "CLAUDE_PID",
+            "ADE_MAILBOX_ROOT",
         ] {
             assert!(
                 INHERITED_SESSION_MARKERS
@@ -1128,7 +1131,7 @@ mod tests {
     fn scrubbing_leaves_the_rest_of_the_environment_alone() {
         // An agent needs the environment it would have had in a terminal —
         // PATH above all, plus whatever the user configured for it.
-        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM"] {
+        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM", "ADE_MAILBOX", "ADE_PANE_ID"] {
             assert!(
                 !INHERITED_SESSION_MARKERS
                     .iter()

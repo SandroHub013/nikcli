@@ -150,6 +150,17 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
 ///
 /// A refused message used to vanish: the sender waited for a receipt that
 /// never came and printed "ADE non ha ancora confermato", as if it would.
+/// The receipt for a message not read because of its size. A size that could
+/// not be read is said as such, not as "0 KiB".
+fn too_big_receipt(size: Option<u64>) -> String {
+    let max = MAX_MESSAGE_BYTES / 1024;
+    let why = match size {
+        Some(len) => format!("messaggio troppo grande ({} KiB, massimo {max} KiB)", len / 1024),
+        None => format!("dimensione del messaggio non leggibile (massimo {max} KiB)"),
+    };
+    format!("errore: {why}: mandalo come file con --file o scrivilo in un file e manda il percorso")
+}
+
 fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
     let entries = fs::read_dir(outbox).map_err(|e| format!("casella non leggibile: {e}"))?;
@@ -171,11 +182,7 @@ fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<V
         match body {
             Some(body) => out.push(Outgoing { id, body }),
             None if too_big => {
-                let said = format!(
-                    "errore: messaggio troppo grande ({} KiB, massimo {} KiB): mandalo come file con --file o scrivilo in un file e manda il percorso",
-                    size.unwrap_or(0) / 1024,
-                    MAX_MESSAGE_BYTES / 1024
-                );
+                let said = too_big_receipt(size);
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
             }
             None => {
@@ -916,6 +923,14 @@ mod tests {
         assert!(receipt.starts_with("errore: messaggio troppo grande"));
         assert!(!receipts.join("1757860000000-aaaa.txt").exists());
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_size_that_cannot_be_read_is_not_said_as_zero() {
+        assert!(too_big_receipt(Some(300 * 1024)).contains("(300 KiB, massimo 256 KiB)"));
+        let unknown = too_big_receipt(None);
+        assert!(unknown.starts_with("errore: dimensione del messaggio non leggibile"));
+        assert!(!unknown.contains("0 KiB,"));
     }
 
     #[test]

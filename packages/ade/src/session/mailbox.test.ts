@@ -30,6 +30,7 @@ import {
   formatNudge,
   formatUpdate,
   parseActivity,
+  keptActivity,
   parseOpenRequests,
   shouldRering,
   requestState,
@@ -169,6 +170,16 @@ describe("when a session can be written to", () => {
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - 1000 }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS + 1 }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS }, now)).toBe(true)
+  })
+
+  test("an activity that cannot be read mid-turn keeps the turn busy", () => {
+    const busy = { state: "busy" as const, at: now - 60_000 }
+    const idle = { state: "idle" as const, at: now - 60_000 }
+    const kept = keptActivity(busy, undefined)
+    expect(kept).toEqual(busy)
+    expect(isFree({ hooked: true, permissionPending: false, activity: kept, lastOutputAt: now - 10 * UNKNOWN_FREE_MS }, now)).toBe(false)
+    expect(keptActivity(idle, undefined)).toBeUndefined()
+    expect(keptActivity(busy, idle)).toEqual(idle)
   })
 
   test("a busy that never ended, in a silent session, stops holding messages", () => {
