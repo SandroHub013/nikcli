@@ -2946,6 +2946,8 @@ export function Workbench() {
       // branch to render it.
       const target = ADE_VIEWS.find((view) => `view.${view}` === id)
       if (target) setWb(w => ({ ...w, view: target }))
+    } else if (id === "theme.set.light" || id === "theme.set.dark") {
+      themeState.set(id === "theme.set.light" ? "light" : "dark")
     } else if (id === "theme.toggle") {
       // The attribute goes on ADE's own root, not the document's: ADE is mounted
       // inside another application and must not restyle its host.
