@@ -137,7 +137,9 @@ import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
-import { pickProvider } from "../session/provider-pick"
+import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
+import { pickByQuota } from "../session/quota-pick"
+import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -1143,6 +1145,20 @@ export function Workbench() {
 
   const SPAWNABLE = AGENTS.filter((agent) => agent.id !== "terminal")
 
+  /*
+   * The quota rule for spawn (S9, `session/quota-pick.ts`).
+   *
+   * The report is read again at the moment of the spawn rather than taken from
+   * the last tick: a choice of agent made on a reading thirty seconds old can
+   * send work to a provider that has just run out. No timer is started on the
+   * picker's account, and a read that hangs gives up rather than hold the spawn.
+   */
+  setProviderPicker(async (input) => {
+    const store = await freshSharedQuota()
+    return pickByQuota(input, store.snapshot(), store.now())
+  })
+  onCleanup(() => setProviderPicker())
+
   /** The cap on sessions `spawn` keeps open at once; `ade.mailbox.maxSpawned` in localStorage overrides it. */
   const maxSpawned = () => {
     const stored = Number(readStored("ade.mailbox.maxSpawned"))
@@ -1635,12 +1651,16 @@ export function Workbench() {
        */
       let agent = asked
       let rerouted: string | undefined
-      if (!message.fork && !message.model) {
+      let quotaNote: string | undefined
+      if (mayReroute(message)) {
         const picked = await pickProvider({ agent: asked.id, from: message.from })
         const other = picked.agent !== asked.id ? resolveAgent(SPAWNABLE, picked.agent) : undefined
         if (other && !("error" in other)) {
           agent = other
           rerouted = `${asked.id} -> ${other.id}${picked.reason ? `: ${picked.reason}` : ""}`
+        } else if (picked.reason) {
+          // Started as asked, but the caller is told why that may not get far.
+          quotaNote = picked.reason
         }
       }
       /*
@@ -1835,7 +1855,8 @@ export function Workbench() {
           (fork ? " come fork della tua conversazione" : "") +
           (model || effort ? `; modello ${model ?? "predefinito"}, effort ${effort ?? "predefinito"}` : "") +
           (message.profile ? ` (profilo ${message.profile}${profileWhy ? `: ${briefOf(profileWhy, 80)}` : ""})` : "") +
-          (rerouted ? `; instradata ${rerouted}` : ""),
+          (rerouted ? `; instradata ${rerouted}` : "") +
+          (quotaNote ? `; attenzione: ${quotaNote}` : ""),
       )
       return true
     }

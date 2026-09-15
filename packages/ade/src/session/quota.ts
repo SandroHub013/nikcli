@@ -696,7 +696,8 @@ export function quotaForAgent(
   return { ...view, tooltip: `${view.tooltip}\nLetto da quota-axi alle ${clock(snapshot.generatedAt)}` }
 }
 
-function normalizeProviderId(agent: string): string {
+/** The provider an agent id or model name draws its quota from: `claude`, `codex`, `agy`, `nikcli`, or itself. */
+export function normalizeProviderId(agent: string): string {
   const low = agent.toLowerCase()
   /*
    * OpenAI's reasoning models are matched as whole words. As substrings, "o1"
