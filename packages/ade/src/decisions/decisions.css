@@ -521,3 +521,15 @@ button[data-slot="decision-row"]:hover {
   font-size: 11px;
   color: var(--ade-warning, #b7791f);
 }
+
+[data-slot="decisions-recipient-confirm"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+[data-slot="decisions-recipient-confirm"] span {
+  flex: 1 1 12rem;
+}

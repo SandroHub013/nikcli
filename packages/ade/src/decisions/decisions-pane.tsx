@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
-import type { RecipientStatus } from "./delivery"
+import { recipientChange, type RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
@@ -236,6 +236,18 @@ export function queuedText(recipient: RecipientStatus): string {
 function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
   const status = () => props.hub.recipient()
   const chosenId = () => (status().state === "non scelta" ? "" : (status() as { id: string }).id)
+  // A session picked while answers are queued, waiting for "Consegna".
+  const [pending, setPending] = createSignal<string>()
+  const pendingTitle = () => props.hub.sessions().find((pane) => pane.id === pending())?.title ?? pending()
+  const select = (value: string) => {
+    const next = value || undefined
+    const change = recipientChange(chosenId() || undefined, next, props.queued)
+    if (change === "conferma") setPending(next)
+    else {
+      setPending(undefined)
+      if (change === "applica") props.hub.choose(next)
+    }
+  }
   // A chosen session whose pane was closed is still listed, so the choice stays visible.
   const missing = () => {
     const current = status()
@@ -245,7 +257,7 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
     <div data-slot="decisions-recipient" data-state={status().state}>
       <label>
         <span>Risposte a</span>
-        <select value={chosenId()} onChange={(event) => props.hub.choose(event.currentTarget.value || undefined)}>
+        <select value={pending() ?? chosenId()} onChange={(event) => select(event.currentTarget.value)}>
           <option value="">nessuna sessione</option>
           <For each={props.hub.sessions()}>
             {(pane) => (
@@ -259,7 +271,28 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
           <Show when={missing()}>{(gone) => <option value={gone().id}>{gone().title} (chiusa)</option>}</Show>
         </select>
       </label>
-      <Show when={status().state !== "pronta"}>
+      <Show when={pending()}>
+        <div data-slot="decisions-recipient-confirm" role="alert">
+          <span>
+            Consegnare {props.queued === 1 ? "la risposta in coda" : `le ${props.queued} risposte in coda`} a «{pendingTitle()}»?
+          </span>
+          <button
+            type="button"
+            data-slot="decision-submit"
+            onClick={() => {
+              const next = pending()
+              setPending(undefined)
+              props.hub.choose(next)
+            }}
+          >
+            Consegna
+          </button>
+          <button type="button" data-slot="decision-ghost" onClick={() => setPending(undefined)}>
+            Annulla
+          </button>
+        </div>
+      </Show>
+      <Show when={!pending() && status().state !== "pronta"}>
         <p data-slot="decisions-recipient-warning" role="status">
           {status().state === "non scelta"
             ? "Nessuna sessione riceve le risposte: restano in coda finché non ne scegli una."

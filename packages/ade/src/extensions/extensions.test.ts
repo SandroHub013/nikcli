@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { afterInstallHint, cardAction, filterCatalog, installedServers, matchCatalog, MISSING_TYPE_PROBLEM, monogram } from "./extensions"
+import { afterInstallHint, cardAction, filterCatalog, installedServers, matchCatalog, MISSING_TYPE_NOTE, monogram } from "./extensions"
 import { findMcpServer, MCP_CATALOG } from "./mcp-catalog"
 import { addMcpServer } from "./mcp-config"
 
@@ -28,14 +28,16 @@ describe("installed servers", () => {
     expect(matchCatalog("altro", { url: "https://example.com/mcp" })).toBeUndefined()
   })
 
-  test("a remote server written without type says Claude Code ignores it", () => {
+  test("a remote server written without type gets a note, not an alarm", () => {
     const github = findMcpServer("github")!
     const raw = JSON.stringify({ mcpServers: { github: { url: github.installation.config.server.url }, ok: { type: "sse", url: "https://x.test/sse" } } })
     const [bare, sse] = installedServers(raw)
     expect(bare!.entry?.id).toBe("github")
-    expect(bare!.problem).toBe(MISSING_TYPE_PROBLEM)
-    expect(sse!.problem).toBeUndefined()
-    expect(installedServers(addMcpServer(undefined, github.installation.config))[0]!.problem).toBeUndefined()
+    // A note, not an error: other clients read the file as it is.
+    expect(bare!.note).toBe(MISSING_TYPE_NOTE)
+    expect(MISSING_TYPE_NOTE).not.toMatch(/errore|rimuov/i)
+    expect(sse!.note).toBeUndefined()
+    expect(installedServers(addMcpServer(undefined, github.installation.config))[0]!.note).toBeUndefined()
   })
 
   test("no file is no servers; a broken file says why", () => {
