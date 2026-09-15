@@ -405,6 +405,17 @@ export type RequestState = "in corso" | "attende un permesso" | "sessione chiusa
 export interface Activity {
   state: "busy" | "idle"
   at: number
+  /**
+   * Where the agent is working, from the hook's own input: a session that
+   * moved into another worktree reports it here, and its branch is that one's.
+   */
+  cwd?: string
+}
+
+/** Two paths the same directory, whatever the slashes, case (Windows) or trailing separator. */
+export function sameDir(a: string, b: string): boolean {
+  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(a) === norm(b)
 }
 
 /**
@@ -471,7 +482,7 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
     const raw = JSON.parse(text.replace(/^\ufeff/, "")) as Record<string, unknown>
     if ((raw.state !== "busy" && raw.state !== "idle") || typeof raw.at !== "number") return undefined
     if (sessionId && typeof raw.sessionId === "string" && raw.sessionId !== sessionId) return undefined
-    return { state: raw.state, at: raw.at }
+    return { state: raw.state, at: raw.at, ...(typeof raw.cwd === "string" && raw.cwd.trim() ? { cwd: raw.cwd } : {}) }
   } catch {
     return undefined
   }

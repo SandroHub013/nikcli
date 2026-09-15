@@ -168,6 +168,7 @@ import {
   formatDelivery,
   isFree,
   statusFromActivity,
+  sameDir,
   formatLateReply,
   formatRequest,
   parseMessage,
@@ -796,6 +797,28 @@ export function Workbench() {
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
   })
 
+  /*
+   * The branch a session shows is the one it is working on.
+   *
+   * It used to be the launch folder's forever, so a session that moved into a
+   * worktree kept showing the main tree's branch. The hook reports the
+   * agent's working directory each turn; when it changes, its branch is
+   * asked of git once and put on the pane. Sessions without hooks keep the
+   * branch they were started with, which for a `spawn --worktree` already is
+   * the worktree's.
+   */
+  const cwdSeen = new Map<string, string>()
+  const followCwd = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string, cwd: string) => {
+    const seen = cwdSeen.get(paneId)
+    if (seen !== undefined && sameDir(seen, cwd)) return
+    cwdSeen.set(paneId, cwd)
+    const result = await host.run("git", ["rev-parse", "--abbrev-ref", "HEAD"], cwd).catch(() => undefined)
+    const branch = result && result.code === 0 ? result.stdout.trim() : ""
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !branch || branch === "HEAD" || pane.tree?.branch === branch) return
+    setWb((w) => updatePane(w, paneId, { tree: { branch, fidelity: "full", note: `Lavora in ${cwd}` } }))
+  }
+
   /** When each pane was last set working, so an older idle from its hook does not end the new turn. */
   const workingSince = new Map<string, number>()
   const markWorking = (paneId: string) => {
@@ -821,6 +844,7 @@ export function Workbench() {
       const activity = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
       if (!activity) continue
       activityOf.set(paneId, activity)
+      if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
       const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
       if (next === "working") {
         workingSince.set(paneId, Date.now())

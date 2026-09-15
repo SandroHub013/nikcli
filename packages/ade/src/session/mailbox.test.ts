@@ -6,6 +6,7 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  sameDir,
   parseMessage,
   resolveAgent,
   resolveTarget,
@@ -114,6 +115,13 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
 test("who-owns carries the file as its text", () => {
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({ kind: "whoowns", text: "src/a.ts" })
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" "}')).toBeUndefined()
+})
+
+test("the activity carries the directory the agent works in", () => {
+  expect(parseActivity('{"state":"busy","sessionId":"s","cwd":"C:\\\\w\\\\tree","at":5}', "s")).toEqual({ state: "busy", at: 5, cwd: "C:\\w\\tree" })
+  expect(parseActivity('{"state":"idle","sessionId":"s","cwd":"","at":5}', "s")).toEqual({ state: "idle", at: 5 })
+  expect(sameDir("C:\\Users\\me\\repo\\", "c:/users/me/repo")).toBe(true)
+  expect(sameDir("C:/a", "C:/b")).toBe(false)
 })
 
 describe("a session's status follows its turn hooks", () => {

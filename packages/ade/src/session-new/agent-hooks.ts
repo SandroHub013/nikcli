@@ -456,6 +456,7 @@ if ($event -eq "UserPromptSubmit" -or $event -eq "Stop") {
   $activity = [ordered]@{
     state     = $(if ($event -eq "Stop") { "idle" } else { "busy" })
     sessionId = "$sessionId"
+    cwd       = "$($payload.cwd)"
     at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
   }
   $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
