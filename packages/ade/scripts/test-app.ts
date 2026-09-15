@@ -218,7 +218,9 @@ async function start(): Promise<void> {
    * The process table is only a backstop, read every 15 s, and an unreadable
    * table never counts as "gone".
    */
-  const deadline = Date.now() + 20 * 60_000
+  // Overridable so the timeout's cleanup can be tried without waiting 20 minutes.
+  const timeoutMs = Number(process.env.ADE_TEST_START_TIMEOUT_MS) || 20 * 60_000
+  const deadline = Date.now() + timeoutMs
   let lastProgress = ""
   let lastLiveness = Date.now()
   while (Date.now() < deadline) {
@@ -251,7 +253,7 @@ async function start(): Promise<void> {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
-  console.error(`\nADE Test non ha aperto la finestra entro 20 minuti. Log: ${plan.logPath}`)
+  console.error(`\nADE Test non ha aperto la finestra entro ${timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} minuti` : `${Math.round(timeoutMs / 1000)} secondi`}. Log: ${plan.logPath}`)
   stop(true)
   process.exit(1)
 }
