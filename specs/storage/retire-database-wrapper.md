@@ -2,11 +2,44 @@
 
 | Field   | Value                                                                                                                         |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Status  | **In progress** — group 1 landed 2026-09-11; groups 2-4 not started                                                           |
+| Status  | **In progress** — group 1 landed 2026-09-11; groups 3-4 under way 2026-09-15                                                  |
 | Scope   | `packages/nikcli/src/database/database.ts` and its 38 consumers                                                               |
 | Buys    | One database access shape, so a repository's failure mode is visible in its type                                              |
-| Depends | [effect-sqlite-package.md](./effect-sqlite-package.md) — the adapter has to exist before call sites can move onto it          |
+| Depends | Nothing. The adapter dependency is void — see below.                                                                          |
 | Tests   | `test/database/transaction-semantics.test.ts` (the two semantics), `test/database/wrapper-inventory.test.ts` (the count gate) |
+
+## The Adapter Was Never Needed — 2026-09-15
+
+This spec was written as a consumer of [effect-sqlite-package.md](./effect-sqlite-package.md), on the
+assumption that yieldable queries require Drizzle's Effect driver. Measured, they do not: taking
+Effect at the repository boundary costs 0.5µs a query, where swapping the driver costs 9µs, and both
+deliver the same thing — a failure in the signature, an executor passed in, a body that composes in
+`Effect.gen`. Groups 3 and 4 therefore proceed on the synchronous driver, and the 28 migrations are
+untouched.
+
+`Database.query(operation, run, executor?)` is the access shape: `run` is handed an executor and
+stays synchronous, and the failure surfaces as `Database.QueryError` naming the call site.
+
+### Landed
+
+- **`Database.transaction` is an Effect.** Its body is an Effect evaluated to completion before the
+  driver commits; a failure rolls back and surfaces as the body's own error, and an asynchronous body
+  fails instead of committing at its first suspension. All seven behaviours in
+  `transaction-semantics.test.ts` hold unchanged: nesting joins the outer transaction, `afterCommit`
+  drains after the commit and never on rollback, a nested queue drains with the outermost commit, and
+  a throwing post-commit effect does not stop the rest.
+- **Nine repositories converted**: `GoalRepo`, `PermissionRepo`, `MonitorRepo`, `TodoRepo`,
+  `SessionDiffRepo`, `ArtifactRepo`, `BackgroundRunRepo`, `ShareRepo`, and the `SessionGoal` service
+  that sat on top of one of them — whose layer lost its `Effect.sync` wrappers rather than gaining
+  any.
+- `syncDb` references: **32 → 23**. `wrapper-inventory.test.ts` now ratchets `syncDb` specifically;
+  the total is only a ceiling, because a converted repository trades a `syncDb` reference for a
+  `query` reference and often an executor parameter too.
+
+### Remaining
+
+`src/sync/*` (7 files), `src/session/{repo,message-repo,instruction-repo,pending,v2/entry-repo}.ts`,
+`src/{project,mobile,mission,loop,account,user,workspace}` and `src/server/httpapi/sync.ts`.
 
 ## Goal
 

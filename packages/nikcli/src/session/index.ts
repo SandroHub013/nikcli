@@ -538,7 +538,7 @@ export namespace Session {
   }
 
   async function diffImpl(sessionID: string) {
-    return SessionDiffRepo.get(sessionID)
+    return Effect.runSync(SessionDiffRepo.get(sessionID))
   }
 
   async function messagesImpl(ctx: InstanceContext, input: MessagesInput) {
@@ -679,12 +679,12 @@ export namespace Session {
         MessageRepo.removeMessage(sessionID, msg.id)
       }
       try {
-        SessionDiffRepo.remove(sessionID)
+        Effect.runSync(SessionDiffRepo.remove(sessionID))
       } catch (err) {
         log.error("Failed to remove session diff", { error: err })
       }
       try {
-        GoalRepo.remove(sessionID)
+        Effect.runSync(GoalRepo.remove(sessionID))
       } catch (err) {
         log.error("Failed to remove session goal", { error: err })
       }
@@ -1032,7 +1032,7 @@ export namespace Session {
       getShare: (id) =>
         Effect.tryPromise({
           try: async () => {
-            const share = ShareRepo.get(id)
+            const share = Effect.runSync(ShareRepo.get(id))
             if (!share)
               throw new SessionError.NotFoundError({
                 message: `Share not found: ${id}`,

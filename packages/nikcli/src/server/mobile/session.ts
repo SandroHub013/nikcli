@@ -391,5 +391,5 @@ async function questionRoute(
 
 export async function sessionTodo(sessionID: string) {
   await getSession(sessionID)
-  return { todos: TodoRepo.get(sessionID) }
+  return { todos: Effect.runSync(TodoRepo.get(sessionID)) }
 }

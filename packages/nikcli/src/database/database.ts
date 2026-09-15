@@ -232,15 +232,6 @@ export namespace Database {
   /** The queue shared by an outermost transaction and every nested call inside it. */
   type PostCommitQueue = (() => void)[]
 
-  /**
-   * A transaction body's return type, rejecting `Promise`.
-   *
-   * Drizzle 1.0 carries the same guard on the synchronous driver, but it
-   * cannot see through this wrapper's generic, so the constraint is stated
-   * here where callers meet it.
-   */
-  type Sync<T> = T extends Promise<unknown> ? never : T
-
   // ============================================================================
   // Effect access
   // ============================================================================
@@ -269,15 +260,19 @@ export namespace Database {
    * The executor defaults to the shared connection. Passing one explicitly is
    * how a repository joins a transaction it was handed.
    */
-  export function query<A>(
-    operation: string,
-    run: (db: TxOrDb) => A,
-    executor?: TxOrDb,
-  ): Effect.Effect<A, QueryError> {
+  export function query<A>(operation: string, run: (db: TxOrDb) => A, executor?: TxOrDb): Effect.Effect<A, QueryError> {
     return Effect.try({
       try: () => run(executor ?? (syncDb() as TxOrDb)),
       catch: (error) => new QueryError({ operation, message: errorMessage(error) }),
     })
+  }
+
+  /**
+   * Thrown to make `bun:sqlite` roll back, carrying the body's Exit back out
+   * so its own failure — not this marker — is what the caller sees.
+   */
+  class Rollback {
+    constructor(readonly exit: Exit.Exit<unknown, unknown>) {}
   }
 
   /**
@@ -292,19 +287,12 @@ export namespace Database {
    * a sequence number, then append) must take the write lock up front or two
    * processes sharing nikcli.db can both read the same number.
    *
-   * The body must be synchronous, which `Sync` enforces. `bun:sqlite` commits
-   * when the callback returns, so an `async` body would have the transaction
-   * commit at its first `await` with the rest of the work running outside it,
-   * and `afterCommit` effects draining before that work had happened.
+   * The body is an Effect, evaluated to completion before the driver commits.
+   * A failure rolls the transaction back and surfaces as the body's own error;
+   * a body that suspends on something asynchronous fails rather than
+   * committing at its first suspension, which is the rule `bun:sqlite` already
+   * imposes on an `async` callback.
    */
-  /**
-   * Thrown to make `bun:sqlite` roll back, carrying the body's Exit back out
-   * so its own failure — not this marker — is what the caller sees.
-   */
-  class Rollback {
-    constructor(readonly exit: Exit.Exit<unknown, unknown>) {}
-  }
-
   export function transaction<A, E, R>(
     fn: (tx: TxOrDb, ctx: TransactionContext) => Effect.Effect<A, E, R>,
     options: { behavior?: TransactionBehavior } = {},

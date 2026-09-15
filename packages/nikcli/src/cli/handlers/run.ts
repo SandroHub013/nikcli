@@ -352,7 +352,7 @@ export async function importShareReference(project: Project.Info, input: string)
   })
 
   if (normalized.diff) {
-    SessionDiffRepo.upsert(info.id, normalized.diff as Snapshot.FileDiff[])
+    Effect.runSync(SessionDiffRepo.upsert(info.id, normalized.diff as Snapshot.FileDiff[]))
   }
 
   const projectID = project.id

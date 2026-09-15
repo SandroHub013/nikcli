@@ -233,11 +233,11 @@ export namespace ShareNext {
   }
 
   async function get(sessionID: string) {
-    return ShareRepo.get(sessionID)
+    return Effect.runSync(ShareRepo.get(sessionID))
   }
 
   async function getLocal(shareID: string) {
-    return ShareRepo.getLocal(shareID) as LocalShare | undefined
+    return Effect.runSync(ShareRepo.getLocal(shareID)) as LocalShare | undefined
   }
 
   async function payload(sessionID: string): Promise<Data[]> {
@@ -290,19 +290,21 @@ export namespace ShareNext {
 
     const existing = await getLocal(shareID)
 
-    ShareRepo.putLocal({
-      id: shareID,
-      sessionID: existing?.sessionID ?? sessionID,
-      url: share.url,
-      time: {
-        created: existing?.time.created ?? Date.now(),
-        updated: Date.now(),
-      },
-      items: {
-        ...existing?.items,
-        ...toItemMap(data),
-      },
-    })
+    Effect.runSync(
+      ShareRepo.putLocal({
+        id: shareID,
+        sessionID: existing?.sessionID ?? sessionID,
+        url: share.url,
+        time: {
+          created: existing?.time.created ?? Date.now(),
+          updated: Date.now(),
+        },
+        items: {
+          ...existing?.items,
+          ...toItemMap(data),
+        },
+      }),
+    )
   }
 
   async function syncRemote(share: StoredShare, data: Data[]) {
@@ -344,9 +346,9 @@ export namespace ShareNext {
     const data = await payload(sessionID)
     Effect.runSync(
       Database.transaction((tx) =>
-        Effect.sync(() => {
-          ShareRepo.put(sessionID, share, tx)
-          ShareRepo.putLocal(
+        Effect.gen(function* () {
+          yield* ShareRepo.put(sessionID, share, tx)
+          yield* ShareRepo.putLocal(
             {
               id,
               sessionID,
@@ -392,7 +394,7 @@ export namespace ShareNext {
         url: result.url,
       }
 
-      await ShareRepo.put(sessionID, share)
+      Effect.runSync(ShareRepo.put(sessionID, share))
       await fullSync(sessionID)
       return share
     } catch (error) {
@@ -455,9 +457,9 @@ export namespace ShareNext {
     if (share.mode === "local") {
       Effect.runSync(
         Database.transaction((tx) =>
-          Effect.sync(() => {
-            if (share.id) ShareRepo.removeLocal(share.id, tx)
-            ShareRepo.remove(sessionID, tx)
+          Effect.gen(function* () {
+            if (share.id) yield* ShareRepo.removeLocal(share.id, tx)
+            yield* ShareRepo.remove(sessionID, tx)
           }),
         ),
       )
@@ -480,7 +482,7 @@ export namespace ShareNext {
       })
     }
 
-    await ShareRepo.remove(sessionID)
+    Effect.runSync(ShareRepo.remove(sessionID))
   }
 
   async function fullSync(sessionID: string) {

@@ -115,7 +115,9 @@ export namespace PermissionNext {
     Effect.gen(function* () {
       const state = yield* InstanceState.make<State>((ctx) =>
         Effect.gen(function* () {
-          const approved = Effect.sync(() => PermissionRepo.get(ctx.project.id))
+          // A ruleset that cannot be read is not recoverable here: the
+          // synchronous version threw out of state construction too.
+          const approved = PermissionRepo.get(ctx.project.id).pipe(Effect.orDie)
           return {
             pending: {},
             approved: yield* approved,
@@ -219,7 +221,7 @@ export namespace PermissionNext {
             s.approved.push(rule)
           }
           const ctx = yield* InstanceState.context
-          Effect.runSync(Effect.sync(() => PermissionRepo.upsert(ctx.project.id, s.approved)))
+          Effect.runSync(PermissionRepo.upsert(ctx.project.id, s.approved))
 
           existing.resolve()
 

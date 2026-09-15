@@ -1,4 +1,5 @@
 import path from "path"
+import { Effect } from "effect"
 import { Log } from "@nikcli-ai/util/log"
 import { UserDB } from "@/user/users"
 import { UserSession } from "@nikcli-ai/util/user-session"
@@ -256,15 +257,15 @@ export namespace Artifact {
   }
 
   async function write(record: StoredRecord) {
-    ArtifactRepo.upsert(record)
+    Effect.runSync(ArtifactRepo.upsert(record))
   }
 
   async function read(sessionID: string, artifactID: string): Promise<StoredRecord | undefined> {
-    return ArtifactRepo.get(sessionID, artifactID)
+    return Effect.runSync(ArtifactRepo.get(sessionID, artifactID))
   }
 
   /** Artifacts published from a session, newest first (secrets stripped). */
   export async function list(sessionID: string): Promise<Info[]> {
-    return ArtifactRepo.list(sessionID).map(({ secret: _secret, ...info }) => info)
+    return Effect.runSync(ArtifactRepo.list(sessionID)).map(({ secret: _secret, ...info }: StoredRecord) => info)
   }
 }

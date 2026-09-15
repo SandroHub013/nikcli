@@ -82,16 +82,14 @@ export namespace Todo {
   async function updateImpl(input: { sessionID: string; todos: Info[] }) {
     const prev = await getImpl(input.sessionID)
     const change = diff(prev, input.todos)
-    TodoRepo.upsert(input.sessionID, input.todos)
+    Effect.runSync(TodoRepo.upsert(input.sessionID, input.todos))
     await Bus.publish(Event.Updated, { ...input, diff: change })
   }
 
   async function getImpl(sessionID: string) {
-    try {
-      return TodoRepo.get(sessionID)
-    } catch {
-      return []
-    }
+    // A todo list that cannot be read is reported as empty, not as an error:
+    // the caller is rendering a sidebar, not reconciling state.
+    return Effect.runSync(TodoRepo.get(sessionID).pipe(Effect.orElseSucceed(() => [] as Info[])))
   }
 
   type ConnectorEntry = NonNullable<Config.Info["connectors"]>[string]
