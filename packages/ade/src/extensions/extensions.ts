@@ -21,12 +21,19 @@ export interface InstalledServer {
   readonly entry?: McpCatalogEntry
   /** `${VAR}` references in its definition: what the agent needs in its environment. */
   readonly variables: readonly string[]
-  /** Why the agents will not load it as written, when that can be told from the file. */
-  readonly problem?: string
+  /**
+   * A fact about how Claude Code reads it, when that differs from other
+   * clients. Informational: the file may well be right for the client that
+   * wrote it.
+   */
+  readonly note?: string
 }
 
-/** A remote server without `type` is skipped by Claude Code, even though the file looks right. */
-export const MISSING_TYPE_PROBLEM = 'manca type "http": Claude Code lo ignora. Rimuovilo e aggiungilo di nuovo.'
+/**
+ * A remote server without `type`. Cursor, VS Code and other clients accept
+ * it; Claude Code skips it. Said plainly, not as an error.
+ */
+export const MISSING_TYPE_NOTE = 'senza type "http": Claude Code non lo carica, altri client sì'
 
 
 const REFERENCE = /\$\{([A-Z_][A-Z0-9_]*)\}/g
@@ -75,7 +82,7 @@ export function installedServers(raw: string | undefined, catalog: readonly McpC
       transport: config.url ? "remote" : config.command ? "stdio" : "sconosciuto",
       variables: [...variables].sort(),
       ...(entry ? { entry } : {}),
-      ...(config.url && config.type !== "http" && config.type !== "sse" ? { problem: MISSING_TYPE_PROBLEM } : {}),
+      ...(config.url && config.type !== "http" && config.type !== "sse" ? { note: MISSING_TYPE_NOTE } : {}),
     }
   })
 }

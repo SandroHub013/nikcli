@@ -73,6 +73,18 @@ export type RecipientStatus =
   | { readonly state: "non attiva"; readonly id: string; readonly title: string }
 
 /**
+ * What a change in the "Risposte a" selector does. Arrow keys on a closed
+ * select change it one entry at a time, so a change that would send queued
+ * answers somewhere waits for a confirmation; choosing nobody, or a change
+ * with nothing queued, sends nothing and applies at once.
+ */
+export function recipientChange(currentId: string | undefined, nextId: string | undefined, queued: number): "nessuna" | "applica" | "conferma" {
+  if ((currentId ?? "") === (nextId ?? "")) return "nessuna"
+  if (!nextId || queued === 0) return "applica"
+  return "conferma"
+}
+
+/**
  * Who gets the answers: only the session the user chose, by pane id.
  *
  * No title is special. Which session coordinates is the user's call, and a

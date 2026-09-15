@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
-import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, resolveRecipient } from "./delivery"
+import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, resolveRecipient } from "./delivery"
 import type { DecisionEvent } from "./log"
 import { foldDecisions } from "./state"
 
@@ -93,6 +93,15 @@ describe("who hears about an answer", () => {
     expect(resolveRecipient(panes, { id: "b", title: "vecchio nome" })).toEqual({ state: "pronta", id: "b", title: "Master" })
     expect(resolveRecipient(panes, { id: "c", title: "master · S18" })).toEqual({ state: "non attiva", id: "c", title: "master · S18" })
     expect(resolveRecipient(panes, { id: "z", title: "Chiusa" })).toEqual({ state: "non attiva", id: "z", title: "Chiusa" })
+  })
+
+  test("moving through the selector sends nothing queued without a confirmation", () => {
+    expect(recipientChange(undefined, "a", 2)).toBe("conferma")
+    expect(recipientChange("a", "b", 1)).toBe("conferma")
+    expect(recipientChange(undefined, "a", 0)).toBe("applica")
+    expect(recipientChange("a", undefined, 3)).toBe("applica")
+    expect(recipientChange("a", "a", 3)).toBe("nessuna")
+    expect(recipientChange(undefined, undefined, 3)).toBe("nessuna")
   })
 
   test("the choice is kept per project and survives a bad value", () => {
