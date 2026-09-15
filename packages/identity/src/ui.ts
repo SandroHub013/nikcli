@@ -76,18 +76,28 @@ function page(
   )
 }
 
+/**
+ * @param lead Replaces the default explanation above the buttons. The device
+ *   flow uses it to say the approval is not finished yet: a user who has just
+ *   clicked "Approve device" believes they are done, and this page — titled
+ *   "Sign in or create an account", with no mention of the terminal — reads as
+ *   an unrelated detour. Closing it here leaves the terminal polling a code
+ *   nobody will ever approve, which is the single most common way a sign-in
+ *   that the user thought succeeded quietly does not.
+ */
 export function loginPage(
   c: Context,
   loginState: string,
   message?: string,
   status: ContentfulStatusCode = 200,
+  lead?: string,
 ): Response {
   const note = message
     ? `<div class="notice" role="alert">${escape(message)}</div>`
-    : "<p>Continue to the nikcli web app, Studio, or CLI without sharing a password. If this is your first time, your account will be created automatically after verification.</p>"
+    : `<p>${escape(lead ?? "Continue to the nikcli web app, Studio, or CLI without sharing a password. If this is your first time, your account will be created automatically after verification.")}</p>`
   return page(
     c,
-    "Sign in or create an account",
+    lead ? "One more step" : "Sign in or create an account",
     `${note}<div class="notice" id="passkey-error" hidden></div><div class="stack"><button type="button" id="passkey-btn">${keyIcon}Continue with passkey</button><a class="button secondary" href="/login/github?login_state=${encodeURIComponent(loginState)}">${nikcliMark}${githubIcon}Continue with GitHub</a><div class="or">or use email</div><form class="stack" method="post" action="/login/email/request"><input type="hidden" name="login_state" value="${escape(loginState)}"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" inputmode="email" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="you@example.com" required><button type="submit">${mailIcon}Email me a code</button></form></div>`,
     status,
     "default",
@@ -95,19 +105,21 @@ export function loginPage(
   )
 }
 
+/** @param lead See {@link loginPage} — the device flow says what "Not now" finishes. */
 export function passkeyOfferPage(
   c: Context,
   loginState: string,
   message?: string,
   status: ContentfulStatusCode = 200,
+  lead?: string,
 ): Response {
   const note = message
     ? `<div class="notice" role="alert">${escape(message)}</div>`
-    : "<p>Use Face ID, Touch ID, Windows Hello, or a password manager passkey next time so you can sign in without a code.</p>"
+    : `<p>${escape(lead ?? "Use Face ID, Touch ID, Windows Hello, or a password manager passkey next time so you can sign in without a code.")}</p>`
   return page(
     c,
     "Save a passkey",
-    `${note}<div class="notice" id="passkey-error" hidden></div><div class="stack"><button type="button" id="passkey-register-btn">${keyIcon}Save a passkey</button><form method="post" action="/login/passkey/skip"><input type="hidden" name="login_state" value="${escape(loginState)}"><button class="secondary" type="submit">Not now</button></form></div>`,
+    `${note}<div class="notice" id="passkey-error" hidden></div><div class="stack"><button type="button" id="passkey-register-btn">${keyIcon}Save a passkey</button><form method="post" action="/login/passkey/skip"><input type="hidden" name="login_state" value="${escape(loginState)}"><button class="secondary" type="submit" id="passkey-skip-btn">Not now</button></form></div>`,
     status,
     "default",
     passkeyScript(loginState, "register"),
@@ -126,9 +138,18 @@ function passkeyScript(loginState: string, mode: "authenticate" | "register"): s
   var mode = ${JSON.stringify(mode)};
   var authBtn = document.getElementById("passkey-btn");
   var registerBtn = document.getElementById("passkey-register-btn");
+  var skipBtn = document.getElementById("passkey-skip-btn");
+  // No WebAuthn at all: an older browser, a webview, a hardened profile. The
+  // offer page must not become a dead end for them — hiding the button that
+  // cannot work leaves "Not now" as the only control, so it stops reading as a
+  // refusal and becomes the way forward.
   if (!window.PublicKeyCredential) {
     if (authBtn) authBtn.hidden = true;
     if (registerBtn) registerBtn.hidden = true;
+    if (skipBtn) {
+      skipBtn.textContent = "Continue";
+      skipBtn.className = "";
+    }
     return;
   }
   function b64urlToBuf(value) {
@@ -177,7 +198,10 @@ function passkeyScript(loginState: string, mode: "authenticate" | "register"): s
       return;
     }
     if (result && result.device) {
-      location.reload();
+      // A stable confirmation URL, never a reload: reloading re-issues the
+      // request that rendered this page, and for a GitHub sign-in that means
+      // replaying an authorization code GitHub has already consumed.
+      location.assign("/device/connected");
       return;
     }
     throw new Error("Passkey sign-in did not complete");
@@ -245,8 +269,21 @@ function passkeyScript(loginState: string, mode: "authenticate" | "register"): s
       await action();
     } catch (error) {
       if (button) button.disabled = false;
-      if (error && (error.name === "NotAllowedError" || error.name === "AbortError")) return;
-      showError(error && error.message ? error.message : "Passkey sign-in failed");
+      var name = error && error.name;
+      // The authenticator already holds a credential for this account — which
+      // is exactly what excludeCredentials asks it to say. There is nothing to
+      // save and nothing went wrong, so finish the sign-in rather than showing
+      // the user a failure for being already set up.
+      if (name === "InvalidStateError" && mode === "register" && skipBtn) {
+        skipBtn.click();
+        return;
+      }
+      // The user dismissed the system prompt. Their choice, not an error.
+      if (name === "NotAllowedError" || name === "AbortError") return;
+      showError(
+        (error && error.message ? error.message : "Passkey sign-in failed") +
+          (mode === "register" ? " You can continue without one." : "")
+      );
     }
   }
   if (mode === "authenticate" && authBtn) {

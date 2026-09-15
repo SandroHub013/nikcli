@@ -90,4 +90,16 @@ export type PasskeyRow = {
 
 export type PasskeyOffer = {
   accountID: string
+  /**
+   * The login this offer interrupts.
+   *
+   * The offer is the last page of a sign-in that has *already succeeded* — the
+   * account is verified by the time it renders. Without a copy of the intent,
+   * finishing depended on the separate `login:` entry still being alive, so a
+   * user who read the passkey prompt, thought about it, and then chose was told
+   * "Session expired" and the terminal they had approved stayed unconnected.
+   * The offer key is reached only through the same unguessable `login_state`,
+   * so carrying the intent grants nothing the caller did not already hold.
+   */
+  intent?: LoginIntent
 }

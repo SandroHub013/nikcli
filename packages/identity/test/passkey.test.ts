@@ -176,6 +176,63 @@ describe("passkey skip after first-factor offer", () => {
   })
 })
 
+describe("passkey enrollment edge cases", () => {
+  /**
+   * The offer page renders *after* the account is verified, so the only thing
+   * it can still cost the user is the sign-in itself. The separate `login:`
+   * entry lapsing while they read the prompt used to do exactly that.
+   */
+  test("skip still finishes when the login intent lapsed on the offer page", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "device")
+    // What an expired KV entry looks like to the next request.
+    await kit.env.STATE.delete(`login:${loginState}`)
+
+    const skipped = await kit.postForm("/login/passkey/skip", { login_state: loginState })
+    expect(skipped.status).toBe(200)
+    expect(await skipped.text()).toContain("Device connected")
+  })
+
+  test("enrollment still opens when the login intent lapsed on the offer page", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "authorize")
+    await kit.env.STATE.delete(`login:${loginState}`)
+
+    const options = await kit.postJSON("/login/passkey/registration/options", { login_state: loginState })
+    expect(options.status).toBe(200)
+    const body = (await options.json()) as { authenticatorSelection?: Record<string, unknown> }
+    // No attachment pin: a security key or a phone over hybrid transport has to
+    // be allowed, or a machine without Touch ID/Hello can never enroll at all.
+    expect(body.authenticatorSelection?.authenticatorAttachment).toBeUndefined()
+    expect(body.authenticatorSelection?.residentKey).toBe("required")
+  })
+
+  test("offers a device approval a confirmation that survives a reload", async () => {
+    const kit = fixture()
+    const connected = await kit.get("/device/connected")
+    expect(connected.status).toBe(200)
+    expect(await connected.text()).toContain("Device connected")
+  })
+
+  test("a second skip replays the first instead of expiring", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "device")
+    expect((await kit.postForm("/login/passkey/skip", { login_state: loginState })).status).toBe(200)
+
+    const again = await kit.postForm("/login/passkey/skip", { login_state: loginState })
+    expect(again.status).toBe(200)
+    expect(await again.text()).toContain("Device connected")
+  })
+
+  test("refuses enrollment for a login_state that never had an offer", async () => {
+    const kit = fixture()
+    const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+    const options = await kit.postJSON("/login/passkey/registration/options", { login_state: loginState })
+    expect(options.status).toBe(400)
+    expect(((await options.json()) as { error_description?: string }).error_description).toMatch(/not available/i)
+  })
+})
+
 describe("passkey authentication verify", () => {
   test("returns 400 for a junk credential", async () => {
     const kit = fixture()

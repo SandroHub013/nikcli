@@ -13,7 +13,7 @@ import {
 } from "./constants"
 import { randomDigits, randomToken, secureEqual, sha256 } from "./crypto"
 import { countPasskeys, getDeviceByUserCode, linkAccount, setDeviceDecision } from "./database"
-import { HttpError, readForm, requestIP } from "./http"
+import { HttpError, logSignInFailure, readForm, requestIP } from "./http"
 import { consumeRateLimit } from "./rate-limit"
 import type { AuthCode, EmailChallenge, LoginIntent, PasskeyOffer } from "./types"
 import { devicePage, emailCodePage, loginPage, passkeyOfferPage, resultPage } from "./ui"
@@ -120,7 +120,15 @@ const COMPLETED_REPLAY_TTL_SECONDS = 60
  */
 const DEVICE_COMPLETED_MARKER = "device"
 
-function deviceConnectedPage(c: AppContext): Response {
+/**
+ * Exported because it is also served at `GET /device/connected`, a stable URL
+ * the passkey script can navigate to. It used to call `location.reload()`
+ * instead, which re-issued whatever request had rendered the page — for a
+ * GitHub sign-in that is `GET /callback/github` with an authorization code
+ * GitHub has already spent, so a device approval that had just *succeeded*
+ * repainted itself as "Sign-in failed".
+ */
+export function deviceConnectedPage(c: AppContext): Response {
   return resultPage(c, "Device connected", "You can close this window and return to your terminal.")
 }
 
@@ -167,14 +175,29 @@ export async function finalizeLogin(
   c: AppContext,
   loginState: string,
   accountID: string,
+  fallbackIntent?: LoginIntent,
 ): Promise<FinalizeLoginResult> {
-  const intent = await loadLoginIntent(c.env, loginState)
+  // A replay always answers first: a duplicate submit of a sign-in that already
+  // finished must re-serve its outcome, never redo it against a fallback.
+  const intent = (await loadLoginIntent(c.env, loginState)) ?? undefined
   if (!intent) {
     const replay = await c.env.STATE.get(completedKey(loginState))
     if (replay === DEVICE_COMPLETED_MARKER) return { kind: "device" }
     if (replay) return { kind: "redirect", url: replay }
-    throw new HttpError(400, "Session expired")
   }
+  // Only then the copy the passkey offer carries, for the case the `login:`
+  // entry lapsed while the user was deciding about the passkey.
+  const resolved = intent ?? fallbackIntent
+  if (!resolved) throw new HttpError(400, "Session expired")
+  return finalizeWithIntent(c, loginState, accountID, resolved)
+}
+
+async function finalizeWithIntent(
+  c: AppContext,
+  loginState: string,
+  accountID: string,
+  intent: LoginIntent,
+): Promise<FinalizeLoginResult> {
   await c.env.STATE.delete(loginKey(loginState))
   await c.env.STATE.delete(emailKey(loginState))
   await c.env.STATE.delete(`passkey:auth:${loginState}`)
@@ -219,15 +242,26 @@ export async function finalizeLogin(
   return { kind: "redirect", url: redirect.toString() }
 }
 
-export async function completeLogin(c: AppContext, loginState: string, accountID: string): Promise<Response> {
+export async function completeLogin(
+  c: AppContext,
+  loginState: string,
+  accountID: string,
+  fallbackIntent?: LoginIntent,
+): Promise<Response> {
   try {
-    const result = await finalizeLogin(c, loginState, accountID)
+    const result = await finalizeLogin(c, loginState, accountID, fallbackIntent)
     return result.kind === "device" ? deviceConnectedPage(c) : c.redirect(result.url, 302)
   } catch (error) {
     if (error instanceof HttpError && error.status === 400) {
       if (error.message === "Device code expired") {
+        // The user authenticated successfully and *then* lost the race with the
+        // device code's lifetime. That is the failure most worth counting: it
+        // is invisible to them (they did everything right) and it is the one a
+        // longer window actually fixes.
+        logSignInFailure(c, "complete-login", "device-code-expired")
         return resultPage(c, "Device code expired", "Return to the terminal and start sign-in again.", 400)
       }
+      logSignInFailure(c, "complete-login", "session-expired")
       return resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
     }
     throw error
@@ -240,19 +274,34 @@ export async function completeLogin(c: AppContext, loginState: string, accountID
  */
 async function completeOrOfferPasskey(c: AppContext, loginState: string, accountID: string): Promise<Response> {
   if ((await countPasskeys(c.env.DB, accountID)) > 0) return completeLogin(c, loginState, accountID)
-  const offer: PasskeyOffer = { accountID }
+  const intent = await loadLoginIntent(c.env, loginState)
+  const offer: PasskeyOffer = { accountID, ...(intent ? { intent } : {}) }
   await c.env.STATE.put(passkeyOfferKey(loginState), JSON.stringify(offer), {
     expirationTtl: LOGIN_STATE_TTL_SECONDS,
   })
-  return passkeyOfferPage(c, loginState)
+  // This page is the last thing standing between a device sign-in and the
+  // approval, and it looks entirely optional — "Save a passkey", with a "Not
+  // now" beside it. Abandoning it is a reasonable thing to do and it silently
+  // strands the terminal, so a device flow gets told what "Not now" is for.
+  return passkeyOfferPage(
+    c,
+    loginState,
+    undefined,
+    200,
+    intent?.kind === "device"
+      ? "Use Face ID, Touch ID, Windows Hello, or a password manager passkey next time. Either button connects your terminal — choose one to finish."
+      : undefined,
+  )
 }
 
 export async function startGitHub(c: AppContext): Promise<Response> {
   const unavailable = requireGitHubCredentials(c)
   if (unavailable) return unavailable
   const loginState = c.req.query("login_state") ?? ""
-  if (!(await loadLoginIntent(c.env, loginState)))
+  if (!(await loadLoginIntent(c.env, loginState))) {
+    logSignInFailure(c, "github-start", "no-login-intent", { hadState: loginState.length > 0 })
     return resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
+  }
   const callback = githubRedirectURI(c.env)
   const url = new URL("https://github.com/login/oauth/authorize")
   url.searchParams.set("client_id", c.env.GITHUB_CLIENT_ID)
@@ -268,8 +317,15 @@ export async function finishGitHub(c: AppContext): Promise<Response> {
 
   const loginState = c.req.query("state") ?? ""
   const code = c.req.query("code") ?? ""
-  if (!code || !(await loadLoginIntent(c.env, loginState)))
+  if (!code || !(await loadLoginIntent(c.env, loginState))) {
+    // GitHub sends `error=access_denied` when the user refuses on its consent
+    // screen, which is a decision rather than a fault — worth separating from
+    // a login intent that genuinely went missing between the two requests.
+    logSignInFailure(c, "github-callback", code ? "no-login-intent" : "no-code", {
+      githubError: c.req.query("error") ?? null,
+    })
     return resultPage(c, "Sign-in failed", "The GitHub sign-in session is invalid or expired.", 400)
+  }
 
   const callback = githubRedirectURI(c.env)
   const exchange = await fetch("https://github.com/login/oauth/access_token", {
@@ -547,5 +603,11 @@ export async function beginDeviceApproval(c: AppContext): Promise<Response> {
     kind: "device",
     userCode: formatted,
   })
-  return loginPage(c, loginState)
+  return loginPage(
+    c,
+    loginState,
+    undefined,
+    200,
+    "Your terminal is not connected yet — finish signing in below and keep this tab open until you see the confirmation.",
+  )
 }

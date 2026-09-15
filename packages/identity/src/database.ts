@@ -145,6 +145,24 @@ export async function consumeDeviceCode(db: D1Database, deviceHash: string, now:
   return changes(result) === 1
 }
 
+/**
+ * Drop refresh tokens that can no longer be presented.
+ *
+ * Same omission as `device_codes`, with a much faster clock: an access token
+ * lives fifteen minutes, so every signed-in client rotates its refresh token
+ * about a hundred times a day and each rotation leaves the superseded row
+ * behind forever. Unlike a user code, a spent row is never *wrong* — the hash
+ * is 48 random bytes — so this is growth rather than breakage, which is exactly
+ * why it would have gone unnoticed until the table became a problem.
+ *
+ * Only rows past their expiry go: a rotated or revoked token inside its window
+ * still has to be findable, because presenting one is how `refreshTokenPair`
+ * detects replay and kills the whole family.
+ */
+export async function pruneRefreshTokens(db: D1Database, now: number): Promise<number> {
+  return changes(await db.prepare("DELETE FROM refresh_tokens WHERE expires_at <= ?").bind(now).run())
+}
+
 export async function getRefreshToken(db: D1Database, tokenHash: string): Promise<RefreshTokenRow | null> {
   return db.prepare("SELECT * FROM refresh_tokens WHERE token_hash = ?").bind(tokenHash).first<RefreshTokenRow>()
 }
@@ -256,10 +274,23 @@ export async function getPasskeyByCredentialID(db: D1Database, credentialID: str
   return db.prepare("SELECT * FROM passkeys WHERE credential_id = ?").bind(credentialID).first<PasskeyRow>()
 }
 
-export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<void> {
-  await db
+/**
+ * Register a passkey, tolerating the one that is already there.
+ *
+ * `credential_id` is `UNIQUE` and this was a bare `INSERT`, so re-sending an
+ * attestation the server had already stored — a double-tap on "Save a passkey",
+ * a retried request, a browser replaying the POST — threw and answered 500 on a
+ * registration that had in fact succeeded. Storing the same credential twice is
+ * a no-op, not a failure.
+ *
+ * The one case that must not pass quietly is a credential already registered to
+ * a *different* account: succeeding there would let a sign-in appear to save a
+ * passkey that in fact authenticates as somebody else.
+ */
+export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<"inserted" | "already" | "conflict"> {
+  const result = await db
     .prepare(
-      "INSERT INTO passkeys (id, account_id, credential_id, public_key, sign_count, transports, backed_up, device_type, user_handle, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO passkeys (id, account_id, credential_id, public_key, sign_count, transports, backed_up, device_type, user_handle, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       row.id,
@@ -275,6 +306,9 @@ export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<vo
       row.last_used_at,
     )
     .run()
+  if (changes(result) === 1) return "inserted"
+  const existing = await getPasskeyByCredentialID(db, row.credential_id)
+  return existing?.account_id === row.account_id ? "already" : "conflict"
 }
 
 export async function updatePasskeyCounter(

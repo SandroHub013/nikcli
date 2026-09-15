@@ -127,7 +127,9 @@ describe("identity contracts", () => {
     expect(body.user_code).toMatch(/^\d{4}-\d{4}$/)
     expect(body.verification_url).toBe("https://auth.nikcli.store/device")
     expect(body.interval).toBe(5)
-    expect(body.expires_in).toBe(600)
+    // The window has to outlast a github.com round trip with 2FA plus the
+    // passkey offer, not just typing the code.
+    expect(body.expires_in).toBe(1200)
   })
 
   test("redraws the user code when the generated one is already taken", async () => {
@@ -196,6 +198,55 @@ describe("identity contracts", () => {
 
     expect(response.status).toBe(503)
     expect((await response.json()) as Record<string, unknown>).toMatchObject({ error: "temporarily_unavailable" })
+  })
+
+  /**
+   * A user who has just clicked "Approve device" is not finished, and the page
+   * they land on has to say so — closing it there is what leaves a terminal
+   * polling a code nobody will approve.
+   */
+  test("tells a device approval that the terminal is not connected yet", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() {
+            return this
+          },
+          async first() {
+            return {
+              device_code_hash: "hash",
+              user_code: "1234-5678",
+              client_id: "nikcli",
+              scope: "openid",
+              status: "pending",
+              account_id: null,
+              expires_at: Date.now() + 60_000,
+              last_poll_at: null,
+              created_at: Date.now(),
+            }
+          },
+          async run() {
+            return { success: true, meta: { changes: 1 } }
+          },
+        }
+      },
+    } as unknown as D1Database
+
+    const response = await app.fetch(
+      new Request("https://auth.nikcli.store/device", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ user_code: "1234-5678", decision: "approve" }).toString(),
+      }),
+      env({ DB: db }),
+    )
+
+    expect(response.status).toBe(200)
+    const page = await response.text()
+    expect(page).toContain("Your terminal is not connected yet")
+    expect(page).toContain("Continue with GitHub")
+    // The generic headline would read as an unrelated detour here.
+    expect(page).not.toContain("Sign in or create an account")
   })
 })
 
