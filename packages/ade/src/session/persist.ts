@@ -68,6 +68,11 @@ export interface PaneState {
   worktree?: string
   /** Arguments chosen at spawn, replayed on every start. */
   spawnArgs?: string[]
+  /**
+   * The cells the user resized the pane to. Absent means the default size,
+   * which is what lets Master be larger until the user says otherwise.
+   */
+  span?: { columns: number; rows: number }
 }
 
 export interface WorkspaceState {
@@ -81,7 +86,7 @@ export interface WorkspaceState {
 }
 
 /** The version this code writes. */
-export const CURRENT_VERSION = 4
+export const CURRENT_VERSION = 5
 
 // ---------------------------------------------------------------------------
 // Defaults — every field has one, so partial restores always produce a usable state
@@ -169,6 +174,7 @@ function sanitisePane(raw: unknown): PaneState {
   const model = asOptionalString(raw.model)
   const resumeId = asOptionalString(raw.resumeId)
   const lines = sanitiseLines(raw.lines)
+  const span = sanitiseSpan(raw.span)
   return {
     id: asString(raw.id, def.id),
     title: asString(raw.title, def.title),
@@ -186,7 +192,23 @@ function sanitisePane(raw: unknown): PaneState {
     ...(Array.isArray(raw.spawnArgs) && raw.spawnArgs.every((arg) => typeof arg === "string")
       ? { spawnArgs: raw.spawnArgs as string[] }
       : {}),
+    ...(span ? { span } : {}),
   }
+}
+
+/**
+ * A span is two small whole numbers or nothing.
+ *
+ * Nothing rather than a repaired value: a pane whose stored size cannot be
+ * read gets the default size, which is the size it had before it was resized.
+ */
+function sanitiseSpan(raw: unknown): { columns: number; rows: number } | undefined {
+  if (!isObject(raw)) return undefined
+  const columns = asOptionalNumber(raw.columns)
+  const rows = asOptionalNumber(raw.rows)
+  if (columns === undefined || rows === undefined) return undefined
+  const whole = (n: number) => Math.min(12, Math.max(1, Math.round(n)))
+  return { columns: whole(columns), rows: whole(rows) }
 }
 
 function sanitisePanes(raw: unknown): PaneState[] {
@@ -239,10 +261,21 @@ const migrateV2toV3: Migration = (raw) => ({ ...raw, version: 3 })
  */
 const migrateV3toV4: Migration = (raw) => ({ ...raw, version: 4 })
 
+/**
+ * v4 → v5: panes carry the size the user resized them to.
+ *
+ * Nothing to compute, and deliberately so: a v4 pane was never resized, so it
+ * has no span and takes the default size — Master larger, the rest one cell.
+ * Its order needs no migration either, because the order of `panes` already
+ * was the order of the grid.
+ */
+const migrateV4toV5: Migration = (raw) => ({ ...raw, version: 5 })
+
 const MIGRATIONS: Record<number, Migration> = {
   1: migrateV1toV2,
   2: migrateV2toV3,
   3: migrateV3toV4,
+  4: migrateV4toV5,
 }
 
 /** Apply all migrations from `fromVersion` up to `CURRENT_VERSION`. */

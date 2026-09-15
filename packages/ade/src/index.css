@@ -334,9 +334,91 @@ body,
 }
 
 [data-slot="grid-cell"] {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+
+/*
+ * Arranging the grid: a pane is picked up by its header, shows where it will
+ * land on the tile under the pointer, and is resized from its corner.
+ *
+ * The header says it can be grabbed only while the grid holds two panes or
+ * more — with one there is nowhere to put it. While a drag or a resize is in
+ * progress nothing inside the panes may select text or take the pointer, or a
+ * terminal under the cursor swallows the move and the drop never arrives.
+ */
+[data-component="session-grid"]:has(> [data-slot="grid-cell"] + [data-slot="grid-cell"])
+  [data-slot="pane-header"] {
+  cursor: grab;
+}
+
+[data-component="session-grid"][data-arranging] {
+  user-select: none;
+  cursor: grabbing;
+}
+
+[data-component="session-grid"][data-arranging] [data-slot="grid-cell"] > [data-component] {
+  pointer-events: none;
+}
+
+[data-slot="grid-cell"][data-dragging] > [data-component] {
+  opacity: 0.45;
+}
+
+[data-slot="drop-zone"] {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--ade-accent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ade-accent) 18%, transparent);
+}
+
+[data-slot="drop-zone"][data-zone="swap"] { inset: 0; }
+[data-slot="drop-zone"][data-zone="before"] { inset: 0 50% 0 0; }
+[data-slot="drop-zone"][data-zone="after"] { inset: 0 0 0 50%; }
+[data-slot="drop-zone"][data-zone="above"] { inset: 0 0 50% 0; }
+[data-slot="drop-zone"][data-zone="below"] { inset: 50% 0 0 0; }
+
+[data-slot="drop-zone-label"] {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ade-accent-fg);
+  background: var(--ade-accent);
+}
+
+/* A corner grip, visible when the tile is hovered or focused, so resting
+   panes show no extra chrome. */
+[data-slot="tile-resize"] {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 6;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  opacity: 0;
+  border-right: 2px solid var(--ade-text-weak);
+  border-bottom: 2px solid var(--ade-text-weak);
+  border-bottom-right-radius: 10px;
+  transition: opacity 120ms ease;
+}
+
+[data-slot="grid-cell"]:hover > [data-slot="tile-resize"],
+[data-slot="grid-cell"][data-focused] > [data-slot="tile-resize"],
+[data-component="session-grid"][data-arranging] [data-slot="tile-resize"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="tile-resize"] { transition: none; }
 }
 
 /* Pane rules live in grid/pane.css — the card owns its own stylesheet. */

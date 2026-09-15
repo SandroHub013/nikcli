@@ -1,3 +1,4 @@
+import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
 import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
@@ -130,6 +131,8 @@ export interface Pane {
   worktree?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
+  /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
+  span?: Span
 }
 
 /**
@@ -210,6 +213,33 @@ export function setColumns(workbench: Workbench, columns?: number): Workbench {
     ...workbench,
     pinnedColumns: columns,
     expandedId: undefined
+  }
+}
+
+/**
+ * The grid's panes in a new order, as the user dragged them.
+ *
+ * `order` is the visible panes only; the other projects' panes keep their
+ * places. The order of `panes` is what is saved, so this is also what makes
+ * the arrangement survive a restart.
+ */
+export function reorderPanes(workbench: Workbench, order: readonly string[]): Workbench {
+  return { ...workbench, panes: applyOrder(workbench.panes, order) }
+}
+
+/**
+ * The size the user chose for a pane, or `undefined` to give it back its
+ * default. Once set it is kept, which is how a resized Master stays the size
+ * the user made it rather than growing back on the next layout.
+ */
+export function resizePane(workbench: Workbench, paneId: string, span: Span | undefined): Workbench {
+  return {
+    ...workbench,
+    panes: workbench.panes.map((p) => {
+      if (p.id !== paneId) return p
+      const { span: _previous, ...rest } = p
+      return span ? { ...rest, span: { columns: span.columns, rows: span.rows } } : rest
+    }),
   }
 }
 
@@ -339,6 +369,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.worktree ? { worktree: p.worktree } : {}),
       ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
+      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
       /*
        * Recorded at save time, not derived at restore time.
        *
@@ -472,6 +503,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         workspaceId: p.project || owner,
         ...(p.worktree ? { worktree: p.worktree } : {}),
         ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
+        ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
         /*
          * Sessions run in the project itself, or in the worktree `spawn
          * --worktree` made for them; only a pane saved from one of the old

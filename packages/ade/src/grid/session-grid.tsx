@@ -1,11 +1,29 @@
-import { For, type JSX, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { type FocusDirection, focusAfterClose, moveFocus } from "./focus"
-import { GRID_GAP, MIN_PANE_HEIGHT, gridColumns, gridRows } from "./layout"
+import { For, type JSX, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import {
+  type Direction,
+  type DropZone,
+  type Span,
+  cellsWanted,
+  dropZone,
+  effectiveSpan,
+  moveTile,
+  neighbour,
+  packTiles,
+  swapTiles,
+} from "./arrange"
+import { focusAfterClose, moveFocus } from "./focus"
+import { GRID_GAP, MIN_PANE_HEIGHT, gridColumns } from "./layout"
 
 export interface GridPane {
   id: string
   /** Anything the pane should render as its body. */
   render: () => JSX.Element
+}
+
+/** What the grid needs to know about a tile to size it. Read reactively. */
+export interface GridTile {
+  title?: string
+  span?: Span
 }
 
 export interface SessionGridProps {
@@ -15,22 +33,42 @@ export interface SessionGridProps {
   onClose?: (id: string, nextFocus: string | undefined) => void
   /** User-chosen column count. Undefined lets the layout decide. */
   columns?: number
+  /** The title and chosen size of a tile. Without it every tile is one cell. */
+  tileOf?: (id: string) => GridTile | undefined
+  /** The visible panes in their new order, after a drag or a keyboard move. */
+  onMove?: (order: string[]) => void
+  /** A tile's new size, or `undefined` to give it back its default. */
+  onResize?: (id: string, span: Span | undefined) => void
 }
 
-const ARROWS: Record<string, FocusDirection> = {
+const ARROWS: Record<string, Direction> = {
   ArrowLeft: "left",
   ArrowRight: "right",
   ArrowUp: "up",
   ArrowDown: "down",
 }
 
+/** How far the pointer must travel before a press on a header becomes a drag. */
+const DRAG_THRESHOLD = 6
+
+/** A press on these inside the header is theirs, not the start of a drag. */
+const NOT_A_HANDLE = "button, input, textarea, select, a, [contenteditable], [role='button']"
+
+const ZONE_LABELS: Record<DropZone, string> = {
+  before: "Prima",
+  after: "Dopo",
+  above: "Sopra",
+  below: "Sotto",
+  swap: "Scambia",
+}
+
 /**
  * The tiled grid of live agent sessions.
  *
- * Everything about *where* panes go lives in `./layout`, and everything about
- * which one is focused lives in `./focus`. What is left here is measurement and
- * wiring — deliberately, because the two extracted parts are where the bugs are
- * and neither of them needs a DOM to be tested.
+ * Everything about *where* panes go lives in `./layout` and `./arrange`, and
+ * everything about which one is focused lives in `./focus`. What is left here
+ * is measurement and wiring — deliberately, because the extracted parts are
+ * where the bugs are and none of them needs a DOM to be tested.
  */
 export function SessionGrid(props: SessionGridProps) {
   let container!: HTMLDivElement
@@ -49,14 +87,45 @@ export function SessionGrid(props: SessionGridProps) {
     onCleanup(() => observer.disconnect())
   })
 
+  /** A size being dragged, shown before it is committed. */
+  const [resizing, setResizing] = createSignal<{ id: string; span: Span } | undefined>()
+
+  const tile = (id: string): GridTile => {
+    const live = resizing()
+    const base = props.tileOf?.(id) ?? {}
+    return live?.id === id ? { ...base, span: live.span } : base
+  }
+
   const columns = createMemo(() =>
     gridColumns({
-      count: props.panes.length,
+      count: cellsWanted(props.panes.map((pane) => tile(pane.id))),
       width: box().width,
       height: box().height,
       pinned: props.columns,
     }),
   )
+
+  const spans = createMemo(() => props.panes.map((pane) => effectiveSpan(tile(pane.id), columns())))
+  const layout = createMemo(() => packTiles(spans(), columns()))
+  const indexOf = createMemo(() => new Map(props.panes.map((pane, index) => [pane.id, index])))
+
+  /*
+   * The cells are drawn in the order panes first appeared, never re-sorted.
+   *
+   * Reordering the DOM is how a drag would naturally be drawn, and it is the
+   * wrong way here: moving a node that holds a browser pane's frame reloads
+   * the page, and moving a terminal's host costs it a re-measure mid-stream.
+   * Every cell is placed by `grid-row` and `grid-column` instead, so a drag
+   * changes two style attributes and nothing is reparented.
+   */
+  let seen: GridPane[] = []
+  const stable = createMemo(() => {
+    const present = new Set(props.panes.map((pane) => pane.id))
+    const kept = seen.filter((pane) => present.has(pane.id))
+    const known = new Set(kept.map((pane) => pane.id))
+    seen = [...kept, ...props.panes.filter((pane) => !known.has(pane.id))]
+    return seen
+  })
 
   const focusedIndex = createMemo(() => props.panes.findIndex((pane) => pane.id === props.focused))
 
@@ -73,14 +142,130 @@ export function SessionGrid(props: SessionGridProps) {
     // Only with a modifier: the arrows belong to whatever has focus inside the
     // pane — a prompt, a scrolled transcript — and stealing them would make the
     // composer unusable.
-    if (!direction || !event.altKey) return
+    if (!direction || !event.altKey || event.ctrlKey || event.metaKey) return
     const index = focusedIndex()
     if (index === -1) return
-    const next = moveFocus({ count: props.panes.length, columns: columns(), index, direction })
-    if (next === index) return
-    event.preventDefault()
+    const next = neighbour(layout().placements, index, direction)
+    if (next === -1) return
     const pane = props.panes[next]
-    if (pane) props.onFocus(pane.id)
+    const current = props.panes[index]
+    if (!pane || !current) return
+    event.preventDefault()
+    if (event.shiftKey) {
+      // Alt+Shift+Arrow carries the pane with it: the same move a drag onto the
+      // neighbour's middle makes, so the mouse is never the only way to arrange.
+      if (!props.onMove) return
+      props.onMove(swapTiles(props.panes.map((p) => p.id), current.id, pane.id))
+      return
+    }
+    props.onFocus(pane.id)
+  }
+
+  /* ---------------------------------------------------------------- drag */
+
+  const [dragging, setDragging] = createSignal<string | undefined>()
+  const [drop, setDrop] = createSignal<{ target: string; zone: DropZone } | undefined>()
+
+  const cellAt = (x: number, y: number) =>
+    document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-slot="grid-cell"]') ?? undefined
+
+  const startDrag = (id: string, event: PointerEvent) => {
+    if (!props.onMove || event.button !== 0 || props.panes.length < 2) return
+    const target = event.target as Element | null
+    if (!target?.closest('[data-slot="pane-header"]') || target.closest(NOT_A_HANDLE)) return
+    // A title being renamed is an input, excluded above; one being read is a
+    // handle, and its double click still reaches it because nothing is
+    // prevented until the pointer has actually travelled.
+    const startX = event.clientX
+    const startY = event.clientY
+    let active = false
+
+    const move = (e: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD) return
+        active = true
+        setDragging(id)
+      }
+      e.preventDefault()
+      const cell = cellAt(e.clientX, e.clientY)
+      const over = cell?.dataset.tileId
+      if (!cell || !over || over === id) {
+        setDrop(undefined)
+        return
+      }
+      const rect = cell.getBoundingClientRect()
+      setDrop({ target: over, zone: dropZone(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height) })
+    }
+
+    const finish = (commit: boolean) => {
+      window.removeEventListener("pointermove", move, true)
+      window.removeEventListener("pointerup", up, true)
+      window.removeEventListener("pointercancel", cancel, true)
+      window.removeEventListener("keydown", escape, true)
+      const landing = drop()
+      setDragging(undefined)
+      setDrop(undefined)
+      if (!commit || !active || !landing) return
+      const tiles = props.panes.map((pane, index) => ({ id: pane.id, span: spans()[index]! }))
+      const order = moveTile(tiles, id, landing.target, landing.zone, columns())
+      if (order.some((paneId, index) => paneId !== props.panes[index]?.id)) props.onMove?.(order)
+      props.onFocus(id)
+    }
+    const up = () => finish(true)
+    const cancel = () => finish(false)
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !active) return
+      e.preventDefault()
+      e.stopPropagation()
+      finish(false)
+    }
+
+    window.addEventListener("pointermove", move, true)
+    window.addEventListener("pointerup", up, true)
+    window.addEventListener("pointercancel", cancel, true)
+    window.addEventListener("keydown", escape, true)
+  }
+
+  /* -------------------------------------------------------------- resize */
+
+  const startResize = (id: string, event: PointerEvent) => {
+    if (!props.onResize || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const cell = (event.currentTarget as HTMLElement).parentElement
+    if (!cell) return
+    const rect = cell.getBoundingClientRect()
+    const index = indexOf().get(id)
+    if (index === undefined) return
+    const start = spans()[index]!
+    const style = getComputedStyle(container)
+    const columnGap = Number.parseFloat(style.columnGap) || GRID_GAP
+    const rowGap = Number.parseFloat(style.rowGap) || GRID_GAP
+    // One cell's size, recovered from the tile's own: the grid's tracks are
+    // not all the same height once it scrolls, but the tile's are.
+    const unitWidth = (rect.width - columnGap * (start.columns - 1)) / start.columns
+    const unitHeight = (rect.height - rowGap * (start.rows - 1)) / start.rows
+
+    const move = (e: PointerEvent) => {
+      e.preventDefault()
+      const across = Math.round((e.clientX - rect.left + columnGap) / (unitWidth + columnGap))
+      const down = Math.round((e.clientY - rect.top + rowGap) / (unitHeight + rowGap))
+      setResizing({ id, span: effectiveSpan({ span: { columns: across, rows: down } }, columns()) })
+    }
+    const up = () => {
+      window.removeEventListener("pointermove", move, true)
+      window.removeEventListener("pointerup", up, true)
+      window.removeEventListener("pointercancel", up, true)
+      const chosen = resizing()
+      setResizing(undefined)
+      // A press that did not change the size is not a choice: committing it
+      // would pin Master at its default and stop the default from applying.
+      if (!chosen || (chosen.span.columns === start.columns && chosen.span.rows === start.rows)) return
+      props.onResize?.(id, chosen.span)
+    }
+    window.addEventListener("pointermove", move, true)
+    window.addEventListener("pointerup", up, true)
+    window.addEventListener("pointercancel", up, true)
   }
 
   return (
@@ -88,25 +273,67 @@ export function SessionGrid(props: SessionGridProps) {
       ref={container}
       data-component="session-grid"
       data-empty={props.panes.length === 0 ? "true" : undefined}
+      data-arranging={dragging() || resizing() ? "true" : undefined}
       onKeyDown={onKeyDown}
       style={{
         "grid-template-columns": `repeat(${columns()}, minmax(0, 1fr))`,
         "grid-auto-rows": `minmax(${MIN_PANE_HEIGHT}px, calc((100% - ${
-          GRID_GAP * (gridRows(props.panes.length, columns()) - 1)
-        }px) / ${Math.max(1, gridRows(props.panes.length, columns()))}))`,
+          GRID_GAP * (layout().rows - 1)
+        }px) / ${Math.max(1, layout().rows)}))`,
       }}
     >
-      <For each={props.panes}>
-        {(pane) => (
-          <div
-            data-slot="grid-cell"
-            data-focused={pane.id === props.focused ? "true" : undefined}
-            onFocusIn={() => props.onFocus(pane.id)}
-            onPointerDown={() => props.onFocus(pane.id)}
-          >
-            {pane.render()}
-          </div>
-        )}
+      <For each={stable()}>
+        {(pane) => {
+          const place = () => {
+            const index = indexOf().get(pane.id)
+            return index === undefined ? undefined : layout().placements[index]
+          }
+          const zone = () => (drop()?.target === pane.id ? drop()!.zone : undefined)
+          return (
+            <div
+              data-slot="grid-cell"
+              data-tile-id={pane.id}
+              data-focused={pane.id === props.focused ? "true" : undefined}
+              data-dragging={dragging() === pane.id ? "true" : undefined}
+              data-sized={props.tileOf?.(pane.id)?.span ? "true" : undefined}
+              style={
+                place()
+                  ? {
+                      "grid-column": `${place()!.column + 1} / span ${place()!.columns}`,
+                      "grid-row": `${place()!.row + 1} / span ${place()!.rows}`,
+                    }
+                  : { display: "none" }
+              }
+              onFocusIn={() => props.onFocus(pane.id)}
+              onPointerDown={(event) => {
+                props.onFocus(pane.id)
+                startDrag(pane.id, event)
+              }}
+            >
+              {pane.render()}
+              <Show when={zone()}>
+                {(current) => (
+                  <div data-slot="drop-zone" data-zone={current()} aria-hidden="true">
+                    <span data-slot="drop-zone-label">{ZONE_LABELS[current()]}</span>
+                  </div>
+                )}
+              </Show>
+              <Show when={props.onResize}>
+                <div
+                  data-slot="tile-resize"
+                  role="separator"
+                  aria-label="Ridimensiona il pannello"
+                  title="Trascina per ridimensionare · doppio clic per la dimensione predefinita"
+                  onPointerDown={(event) => startResize(pane.id, event)}
+                  onDblClick={(event) => {
+                    event.stopPropagation()
+                    props.onResize?.(pane.id, undefined)
+                  }}
+                />
+              </Show>
+            </div>
+          )
+        }}
       </For>
     </div>
   )
