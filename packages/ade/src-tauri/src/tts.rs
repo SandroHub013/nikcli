@@ -333,7 +333,20 @@ fn fetch(download: &Download, path: &Path) -> Result<(), String> {
     let _ = std::fs::remove_file(path);
     run(
         system_tool("curl.exe"),
-        &["-fsSL".as_ref(), "--retry".as_ref(), "2".as_ref(), "-o".as_ref(), path.as_os_str(), download.url.as_ref()],
+        // Bounded: the install lock is held for the whole download, so a stalled
+        // connection used to leave every later request for this voice waiting.
+        &[
+            "-fsSL".as_ref(),
+            "--retry".as_ref(),
+            "2".as_ref(),
+            "--connect-timeout".as_ref(),
+            "20".as_ref(),
+            "--max-time".as_ref(),
+            "900".as_ref(),
+            "-o".as_ref(),
+            path.as_os_str(),
+            download.url.as_ref(),
+        ],
     )
     .map_err(|e| format!("Download della voce non riuscito: {e}"))?;
     let listing = run(system_tool("certutil.exe"), &["-hashfile".as_ref(), path.as_os_str(), "SHA256".as_ref()])?;
