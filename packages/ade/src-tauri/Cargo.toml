@@ -4,6 +4,24 @@ version = "0.0.0"
 description = "Agent Development Environment"
 authors = ["Nikcli"]
 edition = "2021"
+default-run = "ade-desktop"
+
+[[bin]]
+name = "ade-desktop"
+path = "src/main.rs"
+
+# ADE Test under an executable name of its own. An NSIS setup, and the updater
+# running one, closes every process of the user named like the app's binary;
+# with one shared `ade-desktop.exe` an update of the installed ADE closed every
+# ADE Test in development too, and a trial setup closed the installed ADE.
+# `tauri dev` ignores `mainBinaryName`, so development runs this target:
+#   tauri dev --config src-tauri/tauri.test.conf.json --features test-exe -- --bin ade-test
+# Behind a feature so the official bundle, which ships every enabled binary,
+# does not carry a second copy of the app.
+[[bin]]
+name = "ade-test"
+path = "src/test_main.rs"
+required-features = ["test-exe"]
 
 [lib]
 name = "ade_lib"
@@ -19,6 +37,8 @@ tauri-build = { version = "2", features = [] }
 # could open over the whole application. Opt in explicitly when a release build
 # really needs it: `cargo build --release --features devtools`.
 devtools = ["tauri/devtools"]
+# Builds the `ade-test` binary; see its [[bin]] entry.
+test-exe = []
 
 [dependencies]
 tauri = { version = "2.9.5", features = [] }
