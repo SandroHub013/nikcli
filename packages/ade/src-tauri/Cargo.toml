@@ -62,6 +62,10 @@ keyring = { version = "3", features = ["windows-native", "apple-native", "sync-s
 # far narrower grant than putting `cmd` on the shell allowlist, which would be
 # arbitrary execution for anything the page decides to run.
 junction = "1"
+# The WebView2 COM API Tauri already builds on (same versions as its lock), to
+# grant ADE's own page the microphone without the browser-style prompt.
+webview2-com = "0.38"
+windows-core = "0.61"
 
 [profile.release]
 # A desktop binary is built once and started many times, so the slower link
