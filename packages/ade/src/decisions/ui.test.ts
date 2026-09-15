@@ -1,25 +1,30 @@
 import { describe, expect, test } from "bun:test"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
-import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pickRecipient, pruneOutbox } from "./delivery"
+import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, resolveRecipient } from "./delivery"
 import type { DecisionEvent } from "./log"
 import { foldDecisions } from "./state"
 
 const decision = { k: "D21", options: [{ label: "A · Rifinitura" }, { label: "B · Estensioni" }] }
 
 describe("the window's keys", () => {
-  test("digits pick, Enter records, Esc closes, arrows move", () => {
-    expect(sheetKey({ key: "2" }, 2, false)).toEqual({ kind: "pick", index: 1 })
-    expect(sheetKey({ key: "3" }, 2, false)).toBeUndefined()
-    expect(sheetKey({ key: "Enter" }, 2, false)).toEqual({ kind: "submit" })
-    expect(sheetKey({ key: "Escape" }, 2, true)).toEqual({ kind: "close" })
-    expect(sheetKey({ key: "ArrowRight" }, 2, false)).toEqual({ kind: "next" })
+  test("digits pick, Enter records a choice, Esc closes, arrows move", () => {
+    expect(sheetKey({ key: "2" }, 2, false, false)).toEqual({ kind: "pick", index: 1 })
+    expect(sheetKey({ key: "3" }, 2, false, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 2, false, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "Escape" }, 2, true, false)).toEqual({ kind: "close" })
+    expect(sheetKey({ key: "ArrowRight" }, 2, false, false)).toEqual({ kind: "next" })
+  })
+
+  test("a stray Enter with nothing chosen records nothing", () => {
+    expect(sheetKey({ key: "Enter" }, 2, false, false)).toEqual({ kind: "need-choice" })
+    expect(sheetKey({ key: "Enter" }, 0, false, false)).toEqual({ kind: "need-choice" })
   })
 
   test("in the note, keys are typing; only Ctrl+Enter records", () => {
-    expect(sheetKey({ key: "2" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "Enter" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "ArrowLeft" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "2" }, 2, true, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 2, true, true)).toBeUndefined()
+    expect(sheetKey({ key: "ArrowLeft" }, 2, true, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true, false)).toEqual({ kind: "submit" })
   })
 })
 
@@ -80,12 +85,23 @@ describe("who hears about an answer", () => {
     { id: "d", title: "Master 2", project: "nikcli", running: true },
   ]
 
-  test("a running Master, here first and then in another project; else whoever raised it; else nobody", () => {
-    expect(pickRecipient(panes, { raisedBy: "Dario" }, "nikcli")?.id).toBe("d")
-    // Master works in another project than the one the user is looking at.
-    expect(pickRecipient(panes.slice(0, 3), { raisedBy: "dario" }, "nikcli")?.id).toBe("b")
-    expect(pickRecipient([panes[0]!, panes[2]!], { raisedBy: "dario" }, "nikcli")?.id).toBe("a")
-    expect(pickRecipient([panes[2]!], { raisedBy: "Dario" }, "nikcli")).toBeUndefined()
+  test("only the chosen session, whatever it is called; nobody chosen is nobody", () => {
+    // No title is special: a running "Master" gets nothing unless chosen.
+    expect(resolveRecipient(panes, undefined)).toEqual({ state: "non scelta" })
+    expect(resolveRecipient(panes, { id: "a", title: "Dario" })).toEqual({ state: "pronta", id: "a", title: "Dario" })
+    // Another project's session is as good as one here.
+    expect(resolveRecipient(panes, { id: "b", title: "vecchio nome" })).toEqual({ state: "pronta", id: "b", title: "Master" })
+    expect(resolveRecipient(panes, { id: "c", title: "master · S18" })).toEqual({ state: "non attiva", id: "c", title: "master · S18" })
+    expect(resolveRecipient(panes, { id: "z", title: "Chiusa" })).toEqual({ state: "non attiva", id: "z", title: "Chiusa" })
+  })
+
+  test("the choice is kept per project and survives a bad value", () => {
+    let all = chooseRecipient({}, "/p/.ade/decisions.jsonl", { id: "a", title: "Dario" })
+    all = chooseRecipient(all, "/q/.ade/decisions.jsonl", { id: "b", title: "Coordina" })
+    expect(parseRecipients(JSON.stringify(all))).toEqual(all)
+    expect(chooseRecipient(all, "/p/.ade/decisions.jsonl", undefined)).toEqual({ "/q/.ade/decisions.jsonl": { id: "b", title: "Coordina" } })
+    expect(parseRecipients("{rotto")).toEqual({})
+    expect(parseRecipients(JSON.stringify({ x: { id: 3 }, y: { id: "d", title: "T" } }))).toEqual({ y: { id: "d", title: "T" } })
   })
 
   test("the line starts with who it is from and the verb", () => {

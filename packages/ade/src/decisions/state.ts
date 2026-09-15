@@ -177,8 +177,8 @@ export function compareDecisions(a: Decision, b: Decision): number {
 export interface DecisionBuckets {
   /** Waiting on the user, in order. */
   readonly forYou: readonly Decision[]
-  /** Answered, waiting for Master to act and close. */
-  readonly awaitingMaster: readonly Decision[]
+  /** Answered, waiting for a session to act and close. */
+  readonly answered: readonly Decision[]
   /** Deferred to a date still ahead: the ROADMAP's "Prossimo". */
   readonly later: readonly Decision[]
   readonly closed: readonly Decision[]
@@ -189,7 +189,7 @@ export function bucketDecisions(decisions: readonly Decision[]): DecisionBuckets
   const sorted = [...decisions].sort(compareDecisions)
   return {
     forYou: sorted.filter((d) => d.status === "aperta"),
-    awaitingMaster: sorted.filter((d) => d.status === "risposta"),
+    answered: sorted.filter((d) => d.status === "risposta"),
     later: sorted
       .filter((d) => d.status === "rimandata")
       .sort((a, b) => Date.parse(a.deferredUntil ?? "") - Date.parse(b.deferredUntil ?? "")),

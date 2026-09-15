@@ -3,13 +3,14 @@
  *
  * The register is the record; the message is the nudge. When the user answers
  * in the panel, ADE appends the `risposta` event and then types a `risolta`
- * line into the coordinating session, so Master does not have to poll the
- * register to find out. If that session is not running, or is in the middle
- * of a turn, the line waits in an outbox and goes as soon as it can.
+ * line into the session the user chose for the project, so it does not have to
+ * poll the register to find out. If none is chosen, or it is not running, or
+ * it is in the middle of a turn, the line waits in an outbox and goes as soon
+ * as it can.
  *
  * The outbox holds only answers given in this ADE, kept in localStorage so a
  * restart does not lose one on its way. An answer written into the register
- * by somebody else — Master from the shell, an import — is not sent back to
+ * by somebody else — a session from the shell, an import — is not sent back to
  * anybody: whoever wrote it already knows.
  *
  * Plain `.ts`, so the choice of recipient and the outbox rules are testable.
@@ -26,32 +27,63 @@ export interface DeliveryCandidate {
   readonly running: boolean
 }
 
+/** The session the user chose to receive a project's answers, as it was titled when chosen. */
+export interface RecipientChoice {
+  readonly id: string
+  readonly title: string
+}
+
+/** Per register path: each project has its own recipient, or none. */
+export const RECIPIENT_KEY = "ade.decisions.recipient"
+
+export function parseRecipients(raw: string | null): Record<string, RecipientChoice> {
+  if (!raw) return {}
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+    const kept: Record<string, RecipientChoice> = {}
+    for (const [path, choice] of Object.entries(value as Record<string, unknown>)) {
+      const item = choice as Partial<RecipientChoice> | null
+      if (item && typeof item.id === "string" && typeof item.title === "string") kept[path] = { id: item.id, title: item.title }
+    }
+    return kept
+  } catch {
+    return {}
+  }
+}
+
+/** Sets, or with `undefined` clears, the recipient for one register. */
+export function chooseRecipient(
+  all: Readonly<Record<string, RecipientChoice>>,
+  path: string,
+  choice: RecipientChoice | undefined,
+): Record<string, RecipientChoice> {
+  const next = { ...all }
+  if (choice) next[path] = { id: choice.id, title: choice.title }
+  else delete next[path]
+  return next
+}
+
+export type RecipientStatus =
+  /** Chosen and running: answers go to it as soon as it is free. */
+  | { readonly state: "pronta"; readonly id: string; readonly title: string }
+  /** Nobody chosen: answers wait in the outbox. */
+  | { readonly state: "non scelta" }
+  /** Chosen, but closed or not running: answers wait until it runs again. */
+  | { readonly state: "non attiva"; readonly id: string; readonly title: string }
+
 /**
- * The session to tell: a running session titled Master, else the one that
- * raised the decision, else nobody yet. In the open project first, then in
- * any other: the coordinator often works from a different project than the
- * one the user is looking at, and looking only in the open one left the
- * answer queued for as long as the user stayed there.
+ * Who gets the answers: only the session the user chose, by pane id.
  *
- * A title, not a role flag, because that is how the team names its
- * coordinator today; "Master", "Master 2" and "master · S18" all count.
+ * No title is special. Which session coordinates is the user's call, and a
+ * guess by name would type an answer into a session that never asked for it.
+ * Pane ids survive a restart, so the choice holds across one.
  */
-export function pickRecipient(
-  candidates: readonly DeliveryCandidate[],
-  decision: Pick<Decision, "raisedBy">,
-  project?: string,
-): DeliveryCandidate | undefined {
-  const live = candidates.filter((pane) => pane.running)
-  const here = (pane: DeliveryCandidate) => project === undefined || pane.project === undefined || pane.project === project
-  const isMaster = (pane: DeliveryCandidate) => /^master\b/i.test(pane.title.trim())
-  const raisedBy = decision.raisedBy.trim().toLowerCase()
-  const isRaiser = (pane: DeliveryCandidate) => pane.title.trim().toLowerCase() === raisedBy
-  return (
-    live.find((pane) => isMaster(pane) && here(pane)) ??
-    live.find(isMaster) ??
-    live.find((pane) => isRaiser(pane) && here(pane)) ??
-    live.find(isRaiser)
-  )
+export function resolveRecipient(candidates: readonly DeliveryCandidate[], choice: RecipientChoice | undefined): RecipientStatus {
+  if (!choice) return { state: "non scelta" }
+  const pane = candidates.find((candidate) => candidate.id === choice.id)
+  if (pane?.running) return { state: "pronta", id: pane.id, title: pane.title }
+  return { state: "non attiva", id: choice.id, title: pane?.title ?? choice.title }
 }
 
 /** The line typed into the recipient's terminal. */
@@ -101,7 +133,7 @@ export function markDelivered(outbox: readonly OutboxItem[], item: OutboxItem, t
 
 /**
  * The items still worth keeping for one register: an answer that is still the
- * standing one and not yet closed. Once Master closes a decision, or the user
+ * standing one and not yet closed. Once a session closes a decision, or the user
  * changes the answer, the old item has nothing left to say.
  */
 export function pruneOutbox(outbox: readonly OutboxItem[], path: string, decisions: readonly Decision[]): OutboxItem[] {
@@ -123,7 +155,7 @@ export type DeliveryState =
   | { readonly state: "in coda" }
   | { readonly state: "fuori da ADE" }
 
-/** What to say under an answer that is waiting for Master. */
+/** What to say under an answer that is waiting to be carried out. */
 export function deliveryState(outbox: readonly OutboxItem[], path: string, decision: Decision): DeliveryState {
   const item = outbox.find((entry) => entry.path === path && entry.k === decision.k && entry.answeredAt === decision.answer?.at)
   if (!item) return { state: "fuori da ADE" }

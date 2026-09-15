@@ -154,7 +154,7 @@ describe("buckets and messages", () => {
     )
     const buckets = bucketDecisions(decisions)
     expect(buckets.forYou.map((d) => d.k)).toEqual(["D2", "D5", "D1"])
-    expect(buckets.awaitingMaster.map((d) => d.k)).toEqual(["D3"])
+    expect(buckets.answered.map((d) => d.k)).toEqual(["D3"])
     expect(buckets.later.map((d) => d.k)).toEqual(["D4"])
     expect(buckets.closed).toEqual([])
   })

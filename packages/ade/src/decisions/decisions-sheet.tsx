@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { sheetKey } from "./answer"
 import { DecisionCard } from "./decision-card"
+import type { RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions } from "./state"
 import "./decisions.css"
@@ -16,6 +17,7 @@ import "./decisions.css"
 export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; onOpenPanel: () => void }) {
   const buckets = createMemo(() => bucketDecisions(props.hub.register.state()?.decisions ?? []))
   const open = () => buckets().forYou
+  const queued = () => buckets().answered.filter((decision) => props.hub.delivery(decision).state === "in coda").length
   const [index, setIndex] = createSignal(0)
   // An answered decision leaves the list and the next one takes its place.
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
@@ -23,7 +25,26 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   let surface: HTMLDivElement | undefined
   let note: HTMLTextAreaElement | undefined
 
-  onMount(() => surface?.focus())
+  /*
+   * Nothing chosen when the window opens, whatever a draft in the panel held:
+   * the choice has to be made here, so Enter never records one by accident.
+   * The note is kept.
+   */
+  const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
+  const [needChoice, setNeedChoice] = createSignal<string>()
+  const pick = (k: string, picked: number) => {
+    props.hub.setDraft(k, { ...props.hub.draft(k), picked })
+    setChosenHere((keys) => new Set(keys).add(k))
+    setNeedChoice(undefined)
+  }
+
+  onMount(() => {
+    for (const decision of open()) {
+      const draft = props.hub.draft(decision.k)
+      if (draft.picked !== undefined) props.hub.setDraft(decision.k, { ...draft, picked: undefined })
+    }
+    surface?.focus()
+  })
 
   const submit = async () => {
     const decision = current()
@@ -33,13 +54,15 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
 
   const onKeyDown = (event: KeyboardEvent) => {
     const decision = current()
-    const action = sheetKey(event, decision?.options.length ?? 0, event.target === note)
+    const picked = Boolean(decision && chosenHere().has(decision.k) && props.hub.draft(decision.k).picked !== undefined)
+    const action = sheetKey(event, decision?.options.length ?? 0, event.target === note, picked)
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
     if (action.kind === "close") props.onClose()
     else if (!decision) return
-    else if (action.kind === "pick") props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked: action.index })
+    else if (action.kind === "pick") pick(decision.k, action.index)
+    else if (action.kind === "need-choice") setNeedChoice(decision.k)
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
@@ -91,11 +114,18 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                 picked={props.hub.draft(decision.k).picked}
                 note={props.hub.draft(decision.k).note}
                 busy={props.hub.busy(decision.k)}
-                problem={props.hub.problem(decision.k)}
+                problem={
+                  props.hub.problem(decision.k) ??
+                  (needChoice() === decision.k
+                    ? decision.options.length > 0
+                      ? "Nessuna scelta: premi 1–9 o clicca un'opzione, poi Invio"
+                      : "Scrivi la risposta nella nota, poi Ctrl+Invio"
+                    : undefined)
+                }
                 submitLabel={open().length > 1 ? "Registra e avanti" : "Registra"}
-                recipientHint={recipientHint(props.hub.recipient(decision))}
+                recipientHint={recipientHint(props.hub.recipient())}
                 now={props.hub.register.now()}
-                onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
+                onPick={(picked) => pick(decision.k, picked)}
                 onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
                 onSubmit={() => void submit()}
                 onDefer={(until) => void props.hub.defer(decision, until).then((done) => done && surface?.focus())}
@@ -106,10 +136,11 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
         </div>
 
         <footer data-slot="sheet-foot">
-          <span>1–9 sceglie · Invio registra · ← → scorre · Esc chiude</span>
-          <Show when={buckets().awaitingMaster.length > 0}>
-            <span>
-              {buckets().awaitingMaster.length === 1 ? "1 risposta" : `${buckets().awaitingMaster.length} risposte`} in attesa di Master
+          <span>1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude</span>
+          <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
+            <span data-tone="warn">
+              {queued() === 1 ? "1 risposta" : `${queued()} risposte`} in coda:{" "}
+              {props.hub.recipient().state === "non scelta" ? "nessuna sessione le riceve" : "la sessione scelta non è in esecuzione"}
             </span>
           </Show>
           <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
@@ -121,6 +152,8 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   )
 }
 
-export function recipientHint(recipient: string | undefined): string {
-  return recipient ? `→ ${recipient}, come messaggio` : "→ in coda: nessuna sessione Master attiva"
+export function recipientHint(recipient: RecipientStatus): string {
+  if (recipient.state === "pronta") return `→ ${recipient.title}, come messaggio`
+  if (recipient.state === "non attiva") return `→ in coda: «${recipient.title}» non è in esecuzione`
+  return "→ in coda: scegli chi riceve le risposte nella vista completa"
 }

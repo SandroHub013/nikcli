@@ -8,7 +8,7 @@
 
 import { createSignal } from "solid-js"
 import { answerEvent, deferEvent, reopenEvent } from "./answer"
-import type { DeliveryState } from "./delivery"
+import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredEvent } from "./log"
 import type { DecisionsRegister } from "./register"
 import type { Decision } from "./state"
@@ -20,8 +20,12 @@ export interface DecisionDraft {
 
 export interface DecisionsHub {
   readonly register: DecisionsRegister
-  /** The session an answer would be typed into now, if any. */
-  recipient: (decision: Decision) => string | undefined
+  /** Who the project's answers go to, as the user chose. */
+  recipient: () => RecipientStatus
+  /** The sessions the user can choose from, every project's. */
+  sessions: () => readonly DeliveryCandidate[]
+  /** Chooses the recipient by pane id; `undefined` chooses nobody. */
+  choose: (id: string | undefined) => void
   delivery: (decision: Decision) => DeliveryState
   draft: (k: string) => DecisionDraft
   setDraft: (k: string, draft: DecisionDraft) => void
@@ -35,7 +39,9 @@ export interface DecisionsHub {
 
 export function createDecisionsHub(deps: {
   register: DecisionsRegister
-  recipient: (decision: Decision) => string | undefined
+  recipient: () => RecipientStatus
+  sessions: () => readonly DeliveryCandidate[]
+  choose: (id: string | undefined) => void
   delivery: (decision: Decision) => DeliveryState
   /** Called after an answer is in the register, to queue the message. */
   onAnswered: (decision: Decision, event: AnsweredEvent) => void
@@ -80,6 +86,8 @@ export function createDecisionsHub(deps: {
   return {
     register: deps.register,
     recipient: deps.recipient,
+    sessions: deps.sessions,
+    choose: deps.choose,
     delivery: deps.delivery,
     draft,
     setDraft: (k, value) => {

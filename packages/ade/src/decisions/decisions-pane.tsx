@@ -2,13 +2,14 @@ import { For, Show, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
+import type { RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
 
 /**
- * The whole register in a grid pane: what waits for the user, what waits for
- * Master, what was put off and what is done.
+ * The whole register in a grid pane: who receives the answers, what waits for
+ * the user, what waits to be carried out, what was put off and what is done.
  *
  * The window is the quick way through the open ones; this is where an answer
  * is changed, a deferral brought back early, and a closed decision looked up.
@@ -40,7 +41,7 @@ export function DecisionsPane(props: {
       busy={props.hub.busy(decision.k)}
       problem={props.hub.problem(decision.k)}
       submitLabel="Registra"
-      recipientHint={recipientHint(props.hub.recipient(decision))}
+      recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
       onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
@@ -97,6 +98,7 @@ export function DecisionsPane(props: {
         </Show>
 
         <Show when={props.hub.register.path()}>
+          <RecipientPicker hub={props.hub} queued={buckets().answered.filter((decision) => props.hub.delivery(decision).state === "in coda").length} />
           <h4 data-slot="decisions-section">Da decidere, in ordine</h4>
           <Show when={buckets().forYou.length > 0} fallback={<p data-slot="decisions-none">Nessuna decisione aperta.</p>}>
             <div data-slot="decisions-list">
@@ -119,10 +121,10 @@ export function DecisionsPane(props: {
             </div>
           </Show>
 
-          <Show when={buckets().awaitingMaster.length > 0}>
-            <h4 data-slot="decisions-section">Risposte, in attesa che Master le esegua</h4>
+          <Show when={buckets().answered.length > 0}>
+            <h4 data-slot="decisions-section">Risposte, in attesa di esecuzione</h4>
             <div data-slot="decisions-list">
-              <For each={buckets().awaitingMaster}>
+              <For each={buckets().answered}>
                 {(decision) => (
                   <section data-slot="decision-card" data-state="risposta">
                     <header data-slot="decision-head">
@@ -216,9 +218,57 @@ export function DecisionsPane(props: {
 
 function deliveryText(hub: DecisionsHub, decision: Decision, now: Date): string {
   const delivery = hub.delivery(decision)
-  if (delivery.state === "consegnata") return `✓ consegnata a ${delivery.to} · ${formatMoment(delivery.at, now)} · Master la chiude quando l'ha eseguita`
-  if (delivery.state === "in coda") return "in coda: parte appena una sessione Master è attiva e libera"
+  if (delivery.state === "consegnata") return `✓ consegnata a ${delivery.to} · ${formatMoment(delivery.at, now)} · chi la esegue la chiude`
+  if (delivery.state === "in coda") return queuedText(hub.recipient())
   return `risposta di ${decision.answer?.by ?? "?"} · ${formatDay(decision.answer?.at ?? "", now)}`
+}
+
+export function queuedText(recipient: RecipientStatus): string {
+  if (recipient.state === "pronta") return `in coda: parte appena «${recipient.title}» è libera`
+  if (recipient.state === "non attiva") return `in coda: parte quando «${recipient.title}» è in esecuzione`
+  return "in coda: nessuna sessione scelta per le risposte"
+}
+
+/**
+ * "Risposte a": any session, from any project, or nobody. With nobody, or with
+ * a session that is not running, answers stay queued and the warning says so.
+ */
+function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
+  const status = () => props.hub.recipient()
+  const chosenId = () => (status().state === "non scelta" ? "" : (status() as { id: string }).id)
+  // A chosen session whose pane was closed is still listed, so the choice stays visible.
+  const missing = () => {
+    const current = status()
+    return current.state !== "non scelta" && !props.hub.sessions().some((pane) => pane.id === current.id) ? current : undefined
+  }
+  return (
+    <div data-slot="decisions-recipient" data-state={status().state}>
+      <label>
+        <span>Risposte a</span>
+        <select value={chosenId()} onChange={(event) => props.hub.choose(event.currentTarget.value || undefined)}>
+          <option value="">nessuna sessione</option>
+          <For each={props.hub.sessions()}>
+            {(pane) => (
+              <option value={pane.id}>
+                {pane.title}
+                {pane.project ? ` · ${pane.project}` : ""}
+                {pane.running ? "" : " (ferma)"}
+              </option>
+            )}
+          </For>
+          <Show when={missing()}>{(gone) => <option value={gone().id}>{gone().title} (chiusa)</option>}</Show>
+        </select>
+      </label>
+      <Show when={status().state !== "pronta"}>
+        <p data-slot="decisions-recipient-warning" role="status">
+          {status().state === "non scelta"
+            ? "Nessuna sessione riceve le risposte: restano in coda finché non ne scegli una."
+            : `«${(status() as { title: string }).title}» non è in esecuzione: le risposte restano in coda.`}
+          {props.queued > 0 ? ` ${props.queued === 1 ? "1 in attesa" : `${props.queued} in attesa`}.` : ""}
+        </p>
+      </Show>
+    </div>
+  )
 }
 
 export function DecisionsGlyph() {
