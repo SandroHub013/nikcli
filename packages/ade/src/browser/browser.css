@@ -584,3 +584,18 @@
 [data-fidelity="none"] [data-slot="browser-fidelity"] {
   color: var(--ade-text-weak);
 }
+
+/* The grip the grid picks the pane up by: quiet at rest, clear on hover. */
+[data-slot="pane-grip"] {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px;
+  color: var(--ade-text-weak);
+  fill: currentColor;
+  cursor: grab;
+}
+
+[data-slot="pane-grip"]:hover {
+  color: var(--ade-text);
+}

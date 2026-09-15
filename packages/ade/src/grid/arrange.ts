@@ -59,6 +59,20 @@ export function effectiveSpan(tile: { span?: Span }, gridColumns: number): Span 
 }
 
 /**
+ * The size each tile is laid out at, given how many tiles there are.
+ *
+ * A pane alone in the grid — the only session, or the one that was enlarged —
+ * fills it, whatever size it was given. Its span describes its share of a
+ * grid it is not in any more: a pane made one column wide and three tall,
+ * kept at that shape on its own, chose three columns and sat in a third of
+ * the window next to two empty ones. The stored span is not touched, so it
+ * applies again as soon as there is a second pane.
+ */
+export function spanInGrid(tile: { span?: Span }, tiles: number): { span?: Span } {
+  return tiles <= 1 ? {} : tile
+}
+
+/**
  * How many cells the tiles want, for choosing the column count.
  *
  * A resized pane counts as the cells it covers: choosing the columns as if it

@@ -416,6 +416,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       onPointerDown={() => props.onFocus?.()}
     >
       <header data-slot="browser-header">
+        {/* Picked up by the grid (`grid/session-grid.tsx`); the toolbar is
+            full of controls, so the pane offers one place that is only a
+            handle. */}
+        <span data-slot="pane-grip" title="Trascina per spostare il pannello" aria-hidden="true">
+          <svg viewBox="0 0 8 12" width="8" height="12">
+            <circle cx="2" cy="2" r="1" />
+            <circle cx="6" cy="2" r="1" />
+            <circle cx="2" cy="6" r="1" />
+            <circle cx="6" cy="6" r="1" />
+            <circle cx="2" cy="10" r="1" />
+            <circle cx="6" cy="10" r="1" />
+          </svg>
+        </span>
         <div data-slot="browser-nav-group">
           <button
             type="button"
