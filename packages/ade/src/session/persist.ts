@@ -71,6 +71,12 @@ export interface PaneState {
   /**
    * The cells the user resized the pane to. Absent means the default size
    * of one cell.
+   *
+   * Added without a version bump, on purpose. The field is optional and every
+   * reader skips what it does not know, while a reader handed a version newer
+   * than its own refuses the whole store — and the autosave then writes an
+   * empty workbench over it. Bumping for this would make going back to an
+   * earlier build lose every open session to gain nothing.
    */
   span?: { columns: number; rows: number }
 }
@@ -86,7 +92,7 @@ export interface WorkspaceState {
 }
 
 /** The version this code writes. */
-export const CURRENT_VERSION = 5
+export const CURRENT_VERSION = 4
 
 // ---------------------------------------------------------------------------
 // Defaults — every field has one, so partial restores always produce a usable state
@@ -261,21 +267,10 @@ const migrateV2toV3: Migration = (raw) => ({ ...raw, version: 3 })
  */
 const migrateV3toV4: Migration = (raw) => ({ ...raw, version: 4 })
 
-/**
- * v4 → v5: panes carry the size the user resized them to.
- *
- * Nothing to compute, and deliberately so: a v4 pane was never resized, so it
- * has no span and takes the default size of one cell, like every pane did.
- * Its order needs no migration either, because the order of `panes` already
- * was the order of the grid.
- */
-const migrateV4toV5: Migration = (raw) => ({ ...raw, version: 5 })
-
 const MIGRATIONS: Record<number, Migration> = {
   1: migrateV1toV2,
   2: migrateV2toV3,
   3: migrateV3toV4,
-  4: migrateV4toV5,
 }
 
 /** Apply all migrations from `fromVersion` up to `CURRENT_VERSION`. */

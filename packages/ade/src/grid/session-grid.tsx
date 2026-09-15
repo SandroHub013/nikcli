@@ -141,24 +141,44 @@ export function SessionGrid(props: SessionGridProps) {
     // Only with a modifier: the arrows belong to whatever has focus inside the
     // pane — a prompt, a scrolled transcript — and stealing them would make the
     // composer unusable.
-    if (!direction || !event.altKey || event.ctrlKey || event.metaKey) return
+    if (!direction || !event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return
     const index = focusedIndex()
     if (index === -1) return
     const next = neighbour(layout().placements, index, direction)
-    if (next === -1) return
     const pane = props.panes[next]
-    const current = props.panes[index]
-    if (!pane || !current) return
+    if (next === -1 || !pane) return
     event.preventDefault()
-    if (event.shiftKey) {
-      // Alt+Shift+Arrow carries the pane with it: the same move a drag onto the
-      // neighbour's middle makes, so the mouse is never the only way to arrange.
-      if (!props.onMove) return
-      props.onMove(swapTiles(props.panes.map((p) => p.id), current.id, pane.id))
-      return
-    }
     props.onFocus(pane.id)
   }
+
+  /*
+   * Alt+Shift+Arrow carries the focused pane with it: the same move a drag
+   * onto the neighbour's middle makes, so the mouse is never the only way to
+   * arrange the grid.
+   *
+   * Caught on the way down, not on the way up. By the time a keydown bubbles
+   * out of a terminal, xterm has already written the escape sequence to the
+   * shell, and an editor has already extended its selection: the panes swapped
+   * and the prompt received garbage. The chord is the grid's whether or not a
+   * neighbour exists, so it is swallowed at the edge too rather than leaking
+   * into the pane once there is nowhere left to move.
+   */
+  const onMoveKey = (event: KeyboardEvent) => {
+    const direction = ARROWS[event.key]
+    if (!direction || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || !props.onMove) return
+    event.preventDefault()
+    event.stopPropagation()
+    const index = focusedIndex()
+    const current = props.panes[index]
+    const pane = props.panes[neighbour(layout().placements, index, direction)]
+    if (!current || !pane) return
+    props.onMove(swapTiles(props.panes.map((p) => p.id), current.id, pane.id))
+  }
+
+  onMount(() => {
+    container.addEventListener("keydown", onMoveKey, true)
+    onCleanup(() => container.removeEventListener("keydown", onMoveKey, true))
+  })
 
   /* ---------------------------------------------------------------- drag */
 

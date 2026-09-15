@@ -213,7 +213,18 @@ describe("the arrangement survives a restart", () => {
     expect(reload(wb).panes[0]!.span).toBeUndefined()
   })
 
-  test("a v4 store migrates: same order, no sizes, one cell each", () => {
+  test("sizes do not bump the store version, so an earlier build still reads it", () => {
+    // 0.5.0 refuses a version newer than 4 and then autosaves an empty
+    // workbench over the store: a bump here would cost every open session.
+    let wb: Workbench = { ...createWorkbench(), panes: [pane("a", "A"), pane("b", "B")] }
+    wb = resizePane(wb, "b", { columns: 2, rows: 1 })
+    const saved = JSON.parse(serializeWorkspace(toWorkspaceState(wb)))
+    expect(CURRENT_VERSION).toBe(4)
+    expect(saved.version).toBe(4)
+    expect(saved.panes[1].span).toEqual({ columns: 2, rows: 1 })
+  })
+
+  test("a store saved before sizes existed: same order, one cell each", () => {
     const v4 = JSON.stringify({
       version: 4,
       panes: [
