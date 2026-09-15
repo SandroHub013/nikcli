@@ -85,6 +85,24 @@ describe("tts/natural-speaker", () => {
     expect(h.fallback.spoken).toEqual(["Seconda frase lunga. Terza frase lunga."])
   })
 
+  test("prepare loads an installed voice once, silently, and starts the download of a missing one", async () => {
+    const synthesized: string[] = []
+    const h = harness({ synthesize: async (_voice, text) => (synthesized.push(text), wav(text)) })
+    const speaker = createNaturalSpeaker(h.deps)
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(synthesized).toEqual(["Pronto."])
+    expect(h.played).toEqual([])
+
+    const missing = harness()
+    missing.setInstalled(false)
+    createNaturalSpeaker(missing.deps).prepare()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(missing.installs).toEqual(["ugo"])
+  })
+
   test("a new reply stops the one playing, and nothing of the old one plays after", async () => {
     let release: (() => void) | undefined
     const aborted: string[] = []

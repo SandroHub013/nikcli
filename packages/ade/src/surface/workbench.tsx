@@ -1999,6 +1999,17 @@ export function Workbench() {
     }),
   })
 
+  // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
+  createEffect(
+    on(
+      () => voiceEngine.isRunning(),
+      (running) => {
+        if (running && voiceSettings().speakReplies !== false) speaker.prepare()
+      },
+      { defer: true },
+    ),
+  )
+
   /* Set once the native shell has registered the voice hotkeys; see onMount. */
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
 

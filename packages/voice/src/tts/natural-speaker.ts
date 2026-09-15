@@ -57,12 +57,25 @@ export function splitSentences(text: string, minLength = 12): string[] {
   return sentences
 }
 
-export function createNaturalSpeaker(deps: NaturalSpeakerDeps): Speaker {
+export interface NaturalSpeaker extends Speaker {
+  /**
+   * Gets the voice ready before the first reply: starts its download, or has
+   * the host load it with a sentence nobody hears.
+   *
+   * Loading is what costs: the first sentence after Piper starts took 1.4–1.6 s
+   * in ADE Test, every later one 0.22–0.32 s. Called when the microphone
+   * opens, the reply that follows finds the voice warm. Once per voice.
+   */
+  prepare(): void
+}
+
+export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   let generation = 0
   let playing: AbortController | undefined
   /** Voices known to be installed, and the downloads already started. */
   const ready = new Set<string>()
   const installing = new Map<string, Promise<void>>()
+  let warmed: string | undefined
 
   function ensure(voice: string): void {
     if (ready.has(voice) || installing.has(voice)) return
@@ -140,6 +153,18 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): Speaker {
 
     cancel(): void {
       stopAll()
+    },
+
+    prepare(): void {
+      const voice = deps.voice()
+      if (voice === warmed) return
+      void usable(voice).then((ok) => {
+        if (!ok || warmed === voice) return
+        warmed = voice
+        deps.synthesize(voice, "Pronto.").catch(() => {
+          warmed = undefined
+        })
+      })
     },
   }
 }

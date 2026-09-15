@@ -124,6 +124,7 @@ export {
 export {
   createNaturalSpeaker,
   splitSentences,
+  type NaturalSpeaker,
   type NaturalSpeakerDeps,
 } from "./tts/natural-speaker"
 
