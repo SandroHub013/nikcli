@@ -85,6 +85,26 @@ describe("tts/natural-speaker", () => {
     expect(h.fallback.spoken).toEqual(["Seconda frase lunga. Terza frase lunga."])
   })
 
+  test("a Piper that never answers does not keep the reply silent: the old voice takes over", async () => {
+    const h = harness({
+      synthesisLimitMs: 30,
+      synthesize: (_voice, text) => (text.startsWith("Seconda") ? new Promise<ArrayBuffer>(() => {}) : Promise.resolve(wav(text))),
+    })
+    await createNaturalSpeaker(h.deps).speak("Prima frase lunga. Seconda frase lunga.")
+    expect(h.played).toEqual(["Prima frase lunga."])
+    expect(h.fallback.spoken).toEqual(["Seconda frase lunga."])
+  })
+
+  test("a sentence synthesised but not playable is said in the old voice", async () => {
+    const h = harness({
+      play: async () => {
+        throw new Error("play() rifiutato")
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak("Prima frase lunga. Seconda frase lunga.")
+    expect(h.fallback.spoken).toEqual(["Prima frase lunga. Seconda frase lunga."])
+  })
+
   test("prepare loads an installed voice once, silently, and starts the download of a missing one", async () => {
     const synthesized: string[] = []
     const h = harness({ synthesize: async (_voice, text) => (synthesized.push(text), wav(text)) })

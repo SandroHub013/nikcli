@@ -9,23 +9,34 @@ import { wavEnvelope, type PlaybackMeter } from "@nikcli-ai/voice/core"
  * reads the voice's loudness from the WAV itself (`meter`), at the element's
  * current time, rather than from an analyser in the audio path.
  */
+/**
+ * Rejects when the sound could not be played at all — a WAV the element will
+ * not decode, a `play()` the webview refuses — so the speaker can say the
+ * sentence in the system voice instead of skipping it without a sound.
+ */
 export function playWav(wav: ArrayBuffer, signal: AbortSignal, outputDeviceId?: string, meter?: PlaybackMeter): Promise<void> {
   if (signal.aborted) return Promise.resolve()
   const envelope = meter ? wavEnvelope(wav) : undefined
   const url = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }))
   const audio = new Audio(url)
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     let untrack: (() => void) | undefined
-    const done = () => {
+    let settled = false
+    const finish = (error?: unknown) => {
+      if (settled) return
+      settled = true
       untrack?.()
       audio.pause()
       audio.removeAttribute("src")
       URL.revokeObjectURL(url)
       signal.removeEventListener("abort", done)
-      resolve()
+      if (error && !signal.aborted) reject(error instanceof Error ? error : new Error("Riproduzione della voce non riuscita."))
+      else resolve()
     }
+    const done = () => finish()
+    const failed = (error?: unknown) => finish(error ?? new Error("Riproduzione della voce non riuscita."))
     audio.addEventListener("ended", done, { once: true })
-    audio.addEventListener("error", done, { once: true })
+    audio.addEventListener("error", () => failed(), { once: true })
     signal.addEventListener("abort", done, { once: true })
     const sink = outputDeviceId && "setSinkId" in audio
       ? (audio as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(outputDeviceId).catch(() => {})
@@ -33,7 +44,7 @@ export function playWav(wav: ArrayBuffer, signal: AbortSignal, outputDeviceId?: 
     void sink.then(() => {
       if (signal.aborted) return
       if (meter && envelope) untrack = meter.track(envelope, () => audio.currentTime)
-      return audio.play().catch(done)
+      return audio.play().catch(failed)
     })
   })
 }

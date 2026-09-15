@@ -18,6 +18,22 @@
 
 import type { Speaker } from "./speaker"
 
+/**
+ * How long a sentence may keep the reply silent. Piper answers a line in well
+ * under a second once warm; a host that has not answered in this long is stuck
+ * (its resident process holds a lock while it waits), and without a limit the
+ * dialogue waited with it, for ever.
+ */
+export const SYNTHESIS_LIMIT_MS = 15_000
+
+function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("La voce naturale non ha risposto in tempo.")), ms)
+  })
+  return Promise.race([pending, expired]).finally(() => clearTimeout(timer))
+}
+
 export interface NaturalSpeakerDeps {
   /** The chosen voice id, read at every reply so a change in the settings applies at once. `system` means Web Speech. */
   voice: () => string
@@ -29,6 +45,8 @@ export interface NaturalSpeakerDeps {
   synthesize: (voice: string, text: string) => Promise<ArrayBuffer>
   /** Plays WAV bytes; resolves when done, or when `signal` aborts. */
   play: (wav: ArrayBuffer, signal: AbortSignal) => Promise<void>
+  /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. */
+  synthesisLimitMs?: number
   /** What speaks while Piper cannot. */
   fallback: Speaker
   /** Told once when a download starts, ends or fails, for the settings panel. */
@@ -136,7 +154,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       for (let i = 0; i < sentences.length; i++) {
         let wav: ArrayBuffer
         try {
-          wav = await audio[i]!
+          // Timed from when this sentence is due, not when it was queued behind the others.
+          wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
         } catch {
           // The rest of the reply goes out in the old voice rather than not at all.
           if (mine === generation) await deps.fallback.speak(sentences.slice(i).join(" "))
@@ -145,7 +164,13 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (mine !== generation) return
         const controller = new AbortController()
         playing = controller
-        await deps.play(wav, controller.signal)
+        try {
+          await deps.play(wav, controller.signal)
+        } catch {
+          // Synthesised but not playable: the old voice still gets the words out.
+          if (mine === generation) await deps.fallback.speak(sentences.slice(i).join(" "))
+          return
+        }
         if (mine !== generation) return
       }
       playing = undefined

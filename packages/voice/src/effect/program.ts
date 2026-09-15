@@ -521,10 +521,22 @@ export function makeVoiceProgram(
      * worst a misheard sentence can do is open sessions and cost tokens.
      * Closing and killing stay in the grammar, which still asks.
      */
+    /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
+    let agentAbort: AbortController | null = null
+
     function runPlan(utterance: string): Effect.Effect<boolean> {
       return Effect.gen(function* () {
         const complete = options.plan
         if (!complete) return false
+
+        /*
+         * Held where a new sentence or «annulla» looks for the turn in
+         * progress: without it the plan could not be stopped, and a sentence
+         * said while it ran was dropped by the "executing" dialogue.
+         */
+        agentAbort?.abort()
+        const abort = new AbortController()
+        agentAbort = abort
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -554,7 +566,11 @@ export function makeVoiceProgram(
           activeProjectName: host.describeState?.().activeProject,
         }
 
-        const planned = yield* Effect.promise(() => planUtterance(utterance, context, complete))
+        const planned = yield* Effect.promise(() =>
+          planUtterance(utterance, context, complete, { signal: abort.signal }),
+        )
+        // Stopped while the model thought: whoever stopped it speaks next.
+        if (abort.signal.aborted) return true
 
         /*
          * A failure to reach the model is not "non ho capito": one is the
@@ -563,6 +579,7 @@ export function makeVoiceProgram(
          * key. Handing it back as unhandled would print the wrong one.
          */
         if (planned.failure) {
+          if (agentAbort === abort) agentAbort = null
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
           yield* say(planned.failure)
@@ -570,11 +587,13 @@ export function makeVoiceProgram(
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
+          if (agentAbort === abort) agentAbort = null
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
           return false
         }
 
+        if (agentAbort === abort) agentAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
@@ -600,9 +619,6 @@ export function makeVoiceProgram(
         return true
       })
     }
-
-    /* The agent turn in progress, so cancelling the dialogue can end it. */
-    let agentAbort: AbortController | null = null
 
     /**
      * Hands an unmatched sentence to the coding agent, and says its answer.

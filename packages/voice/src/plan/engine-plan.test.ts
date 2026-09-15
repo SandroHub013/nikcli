@@ -72,7 +72,7 @@ class PlanningHost implements VoiceHost {
   }
 }
 
-function setup(answer: string | (() => Promise<string>)) {
+function setup(answer: string | ((prompt: { signal?: AbortSignal }) => Promise<string>)) {
   const host = new PlanningHost()
   const transcriber = createFakeTranscriber()
   const speaker = createFakeSpeaker()
@@ -85,7 +85,7 @@ function setup(answer: string | (() => Promise<string>)) {
     now: () => 10_000,
     plan: async (prompt) => {
       prompts.push({ system: prompt.system, user: prompt.user })
-      return typeof answer === "string" ? answer : answer()
+      return typeof answer === "string" ? answer : answer(prompt)
     },
   })
 
@@ -113,6 +113,27 @@ describe("il pianificatore dentro il motore", () => {
     expect(host.started).toHaveLength(1)
     expect(speaker.lastSpoken).toBe("Ho avviato una sessione Claude Code.")
     expect(engine.history().some((entry) => entry.kind === "error" && entry.text.includes("mi serve Claude Code"))).toBe(true)
+    await engine.stop()
+  })
+
+  test("«annulla» mentre il pianificatore pensa ferma il piano: niente parte", async () => {
+    let aborted = false
+    const { engine, host } = setup(
+      (prompt) =>
+        new Promise((resolve) => {
+          prompt.signal?.addEventListener("abort", () => (aborted = true))
+          setTimeout(() => resolve(JSON.stringify([{ action: "start_session", agent: "claude", task: "x", project: "nikcli" }])), 60)
+        }),
+    )
+
+    void engine.submitText("avvia una sessione claude sul parser nel progetto nikcli")
+    await settle()
+    expect(engine.status()).toBe("executing")
+    await engine.submitText("annulla")
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(aborted).toBe(true)
+    expect(host.started).toHaveLength(0)
     await engine.stop()
   })
 
