@@ -38,7 +38,9 @@ import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan }
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import { BotSection, GridSection, McpSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { BotSection, GridSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { ExtensionsPage } from "../extensions/extensions-page"
+import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
 
@@ -4112,6 +4114,35 @@ export function Workbench() {
     void startProcess(id, agentId, "", undefined, [...runner.login])
   }
 
+  /** The host calls the Estensioni page edits `.mcp.json` with; undefined without a writable host. */
+  const [extensionsIo, setExtensionsIo] = createSignal<McpConfigIO>()
+  void getHost().then((host) => {
+    if (!host?.readTextFile || !host.writeTextFile) return
+    setExtensionsIo({
+      readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
+      writeTextFile: (path, contents) => host.writeTextFile!(path, contents),
+      ...(host.exists ? { exists: (path: string) => host.exists!(path) } : {}),
+    })
+  })
+
+  /** A server's guide or source, in a browser pane: ADE has no way to hand a URL to the system browser. */
+  const openGuide = (url: string) => {
+    setVoiceSettingsOpen(false)
+    setWb((w) => ({
+      ...addPane(w, {
+        id: `b${Date.now()}`,
+        title: "Guida MCP",
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl: url,
+        workspaceId: project()?.name ?? "workspace",
+        lines: [],
+      }),
+      view: "code",
+    }))
+  }
+
   const gridPanes = createPaneRenderer({
     wb,
     setWb,
@@ -4769,35 +4800,35 @@ export function Workbench() {
               render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
             },
             {
-              id: "set-sec-mcp",
-              label: "MCP",
-              glyph: "⇄",
-              render: () => <McpSection />,
-            },
-            {
-              id: "set-sec-plugins",
-              label: "Plugin",
+              /*
+               * MCP and plugins on one page (S16, variant B): what is
+               * installed, the verified MCP catalog, and the plugins. The two
+               * separate entries were one question — "what does ADE add to
+               * the agents?" — asked in two places, one of them empty.
+               */
+              id: "set-sec-extensions",
+              label: "Estensioni",
               glyph: "⊞",
               value: String(pluginRuntime.registry.sections().length),
               render: () => (
-                <>
-                  <div data-slot="section-head">
-                    <h3 data-slot="section-title" tabIndex={-1}>
-                      Plugin
-                    </h3>
-                    <p data-slot="section-desc">Cosa è caricato, e cosa ciascuno aggiunge ad ADE.</p>
-                  </div>
-                  <Show
-                    when={pluginRuntime.registry.sections().length > 0}
-                    fallback={<p data-slot="section-desc">Nessun plugin caricato.</p>}
-                  >
-                    <For each={pluginRuntime.registry.sections()}>
-                      {(section) => (
-                        <PluginSection title={section.title} render={() => section.render({})} />
-                      )}
-                    </For>
-                  </Show>
-                </>
+                <ExtensionsPage
+                  projectRoot={project()?.root}
+                  io={extensionsIo()}
+                  pluginCount={pluginRuntime.registry.sections().length}
+                  onOpenGuide={(url) => openGuide(url)}
+                  plugins={() => (
+                    <Show
+                      when={pluginRuntime.registry.sections().length > 0}
+                      fallback={<p data-slot="section-desc">Nessun plugin caricato.</p>}
+                    >
+                      <For each={pluginRuntime.registry.sections()}>
+                        {(section) => (
+                          <PluginSection title={section.title} render={() => section.render({})} />
+                        )}
+                      </For>
+                    </Show>
+                  )}
+                />
               ),
             },
             {
