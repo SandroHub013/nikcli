@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { parseUtterance } from "../intent/parse"
-import { triageWhileThinking } from "./while-thinking"
+import { isSendHeld, triageWhileThinking } from "./while-thinking"
 
-const heard = (text: string, confidence?: number) => triageWhileThinking(parseUtterance(text), { typed: false, confidence }).action
+const heard = (text: string) => triageWhileThinking(parseUtterance(text), { typed: false }).action
 const typed = (text: string) => triageWhileThinking(parseUtterance(text), { typed: true }).action
 
 describe("dialog/while-thinking", () => {
@@ -13,25 +13,27 @@ describe("dialog/while-thinking", () => {
     }
   })
 
-  test("sounds, fillers and fragments heard from the room are ignored", () => {
-    for (const text of ["ok", "okay", "sì", "si", "no", "mh", "mmm", "eh", "va bene", "grazie", "e poi", ""]) {
-      expect(heard(text)).toBe("ignore")
-    }
-  })
-
-  test("an unsure recognition is ignored, however long", () => {
-    expect(heard("apri la tavolozza dei comandi per favore", 0.4)).toBe("ignore")
-    expect(heard("apri la tavolozza dei comandi per favore", 0.9)).toBe("request")
-  })
-
-  test("a command or a sentence of three words or more is a request", () => {
+  test("a command the grammar knows is a request", () => {
     expect(heard("apri la tavolozza")).toBe("request")
     expect(heard("nuova sessione")).toBe("request")
-    expect(heard("quante sessioni ci sono")).toBe("request")
+  })
+
+  test("a free sentence is held, however long or confident: the television talks in long sentences", () => {
+    expect(heard("e adesso passiamo alle previsioni del tempo per domani su tutta la penisola")).toBe("hold")
+    expect(heard("il governo ha approvato la legge di bilancio nella notte")).toBe("hold")
+  })
+
+  test("fillers are left alone", () => {
+    for (const text of ["ok", "sì", "no", "mh", "va bene", "grazie", ""]) expect(heard(text)).toBe("ignore")
   })
 
   test("typed text is always meant", () => {
-    expect(typed("ok")).toBe("request")
+    expect(typed("quante sessioni ci sono")).toBe("request")
     expect(typed("no")).toBe("stop")
+  })
+
+  test("«invia questa» sends the held sentence; a bare «invia» does not", () => {
+    for (const text of ["invia questa", "Invia questa.", "mandala", "manda questa frase"]) expect(isSendHeld(text)).toBe(true)
+    for (const text of ["invia", "invia il messaggio al pannello due"]) expect(isSendHeld(text)).toBe(false)
   })
 })

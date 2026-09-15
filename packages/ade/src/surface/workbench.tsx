@@ -4763,6 +4763,7 @@ export function Workbench() {
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
+              held={voiceEngine.held()}
               onSubmit={(text) => void voiceEngine.submitText(text)}
               onToggleMic={() => void voiceEngine.toggle()}
               onOpenSettings={() => setVoiceSettingsOpen(true)}

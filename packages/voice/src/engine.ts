@@ -144,6 +144,12 @@ export interface VoiceEngine {
    * pane.
    */
   readonly dictated: () => readonly string[]
+  /**
+   * A free sentence heard while the assistant was thinking, set aside rather
+   * than allowed to stop the turn. Sent by submitting «invia questa»; `null`
+   * when there is none.
+   */
+  readonly held: () => string | null
 
   // Control methods
   /** Opens the microphone. With a mode, opens it for that mode only. */
@@ -264,6 +270,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   const [dictated, setDictated] = createSignal<string[]>([])
   const [history, setHistory] = createSignal<AgentEntry[]>([])
+  const [held, setHeld] = createSignal<string | null>(null)
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
@@ -656,6 +663,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
+    onHeld: (text) => setHeld(text),
     onTranscribed: (text) => {
       setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
       record({ kind: "user", text, at: now() })
@@ -785,6 +793,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     parakeetProgress,
     dictated,
     history,
+    held,
 
     async start(mode?: VoiceMode): Promise<void> {
       /* A session still delivering its last sentence owns the scopes this
