@@ -849,19 +849,69 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
 }
 
-/* Work in progress still needs a sign that is not a word: the halo breathes. */
+/*
+ * Work in progress still needs a sign that is not a word: the halo breathes.
+ *
+ * It used to breathe by animating the chip's own `box-shadow`, and a shadow is
+ * paint: every working pane repainted its header pill on every frame for as
+ * long as the agent ran, which with six busy panes is most of an idle window's
+ * CPU. Now the two ends of the breath are drawn once, each on a pseudo-element
+ * of its own — the resting ring on ::before, the wide one on ::after — and
+ * the breath is a crossfade between them, which the compositor does alone.
+ * At either end it is exactly one of the old keyframes; in between it is a
+ * blend of the two rings rather than a ring of in-between width, which at
+ * two pixels of difference reads the same.
+ *
+ * Shadows on an otherwise empty box, not filled discs: a shadow is not drawn
+ * under its own box, so neither ring tints the translucent chip it surrounds.
+ */
 [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"],
 [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"] {
-  animation: ade-pane-halo 1.6s ease-in-out infinite;
+  position: relative;
+  box-shadow: none;
 }
 
-@keyframes ade-pane-halo {
+[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
+[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
+[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before,
+[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: ade-pane-halo-rest 1.6s ease-in-out infinite;
+}
+
+[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
+[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
+}
+
+[data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
+[data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
+  opacity: 0;
+  animation-name: ade-pane-halo-peak;
+}
+
+@keyframes ade-pane-halo-rest {
   0%,
   100% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pane-status) 10%, transparent);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
+    opacity: 0;
+  }
+}
+
+@keyframes ade-pane-halo-peak {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -946,10 +996,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* The halo holds at its wider size instead of breathing. */
-  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"],
-  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"] {
+  /* The halo holds at its wider size instead of breathing: the wide ring on,
+     the resting one off, and nothing moving between them. */
+  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
+  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
+  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before,
+  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
     animation: none;
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--pane-status) 22%, transparent);
+  }
+  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
+  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::before {
+    opacity: 0;
+  }
+  [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::after,
+  [data-component="session-pane"][data-status="provisioning"] [data-slot="pane-identity"]::after {
+    opacity: 1;
   }
 }

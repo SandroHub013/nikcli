@@ -106,6 +106,17 @@
   animation: ade-orb-spin 2.6s linear infinite reverse;
 }
 
+/*
+ * Asleep the arcs are at opacity 0, and turning something nobody can see still
+ * costs a frame every frame for as long as the window is open. Paused rather
+ * than removed: a paused animation asks for nothing, and it keeps the angle it
+ * reached, so the arcs neither snap back to 0deg during the fade-out nor start
+ * from the same place every time the orb wakes.
+ */
+[data-component="orb-mark"]:not([data-awake]) [data-slot="orb-swirl"] {
+  animation-play-state: paused;
+}
+
 /* ── the eye ──────────────────────────────────────────────────────────────── */
 
 /*

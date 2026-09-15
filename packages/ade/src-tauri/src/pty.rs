@@ -13,9 +13,9 @@
 /// registry that lets `write`, `resize` and `kill` find their master again.
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::sync::mpsc::RecvTimeoutError;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tauri::{AppHandle, Emitter, Manager};
@@ -620,40 +620,17 @@ pub async fn pty_spawn(
     let stream_id = id.clone();
     std::thread::spawn(move || {
         let topic = data_topic(&stream_id);
-        let mut pending = String::new();
 
-        let flush = |pending: &mut String| {
-            if pending.is_empty() {
-                return;
-            }
+        // Returns once the reader has hung up and the last frame is out.
+        pump(&chunk_rx, |data| {
             let _ = emitter.emit(
                 &topic,
                 Chunk {
                     id: stream_id.clone(),
-                    data: std::mem::take(pending),
+                    data,
                 },
             );
-        };
-
-        loop {
-            match chunk_rx.recv_timeout(FLUSH_INTERVAL) {
-                Ok(text) => {
-                    pending.push_str(&text);
-                    // A burst larger than the cap goes out without waiting:
-                    // holding megabytes to save a message helps nobody, and a
-                    // `cat` of a large file is exactly that case.
-                    if pending.len() >= MAX_PENDING {
-                        flush(&mut pending);
-                    }
-                }
-                Err(RecvTimeoutError::Timeout) => flush(&mut pending),
-                Err(RecvTimeoutError::Disconnected) => {
-                    // The last thing it said, before the exit is announced.
-                    flush(&mut pending);
-                    break;
-                }
-            }
-        }
+        });
 
         let code = app
             .state::<Registry>()
@@ -674,6 +651,71 @@ pub async fn pty_spawn(
     });
 
     Ok(())
+}
+
+/*
+ * The sender's loop: coalesces what the reader hands over into at most one
+ * `emit` per `FLUSH_INTERVAL`, and returns when the reader hangs up.
+ *
+ * It sleeps in `recv()` while nothing is waiting to go out. The loop it
+ * replaced called `recv_timeout(16ms)` whatever the buffer held, so a silent
+ * session — most of them, most of the time — woke sixty times a second to
+ * find nothing to flush, and ten panes were six hundred wakeups a second of
+ * an idle window. The timeout is only needed once there is something to send.
+ *
+ * The timeout now runs to a deadline set by the first byte waiting, rather
+ * than restarting on every chunk. Restarting it meant an agent that printed
+ * a token every ten milliseconds never left a sixteen-millisecond gap, so
+ * nothing reached the pane until the 256 KB cap: the stream stalled for as
+ * long as it was streaming. "One frame, at most, behind" is the promise the
+ * comment on `FLUSH_INTERVAL` makes, and a deadline is what keeps it.
+ *
+ * Split out of `pty_spawn` so the rules can be tested with a channel and a
+ * closure, without a window to emit into.
+ */
+fn pump(chunks: &Receiver<String>, mut emit: impl FnMut(String)) {
+    let mut pending = String::new();
+    // Set while `pending` holds something; the moment it must go out.
+    let mut deadline: Option<Instant> = None;
+
+    let mut flush = |pending: &mut String, deadline: &mut Option<Instant>| {
+        *deadline = None;
+        if !pending.is_empty() {
+            emit(std::mem::take(pending));
+        }
+    };
+
+    loop {
+        let received = match deadline {
+            None => chunks.recv().map_err(|_| RecvTimeoutError::Disconnected),
+            Some(at) => chunks.recv_timeout(at.saturating_duration_since(Instant::now())),
+        };
+        match received {
+            Ok(text) => {
+                pending.push_str(&text);
+                // A burst larger than the cap goes out without waiting:
+                // holding megabytes to save a message helps nobody, and a
+                // `cat` of a large file is exactly that case.
+                if pending.len() >= MAX_PENDING {
+                    flush(&mut pending, &mut deadline);
+                    continue;
+                }
+                match deadline {
+                    None if !pending.is_empty() => deadline = Some(Instant::now() + FLUSH_INTERVAL),
+                    // A queue that is never empty would otherwise keep
+                    // `recv_timeout` answering `Ok` past the deadline.
+                    Some(at) if Instant::now() >= at => flush(&mut pending, &mut deadline),
+                    _ => {}
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => flush(&mut pending, &mut deadline),
+            Err(RecvTimeoutError::Disconnected) => {
+                // The last thing it said, before the exit is announced.
+                flush(&mut pending, &mut deadline);
+                return;
+            }
+        }
+    }
 }
 
 /// Types `data` into the session exactly as given.
@@ -901,6 +943,56 @@ mod tests {
         assert_eq!(text.matches('\u{FFFD}').count(), 2);
         assert!(text.starts_with('a') && text.ends_with('b'));
         assert!(tail.is_empty());
+    }
+
+    /*
+     * The sender's rules, without a stopwatch. Every chunk is queued and the
+     * reader's end dropped before `pump` starts, so what it emits is decided
+     * by the cap and the hang-up alone, never by how fast the machine is.
+     */
+    fn pumped(chunks: &[&str]) -> Vec<String> {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        for chunk in chunks {
+            tx.send(chunk.to_string()).unwrap();
+        }
+        drop(tx);
+        let mut emitted = Vec::new();
+        pump(&rx, |data| emitted.push(data));
+        emitted
+    }
+
+    #[test]
+    fn a_session_that_says_nothing_emits_nothing() {
+        assert!(pumped(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_last_words_go_out_when_the_reader_hangs_up() {
+        // However the chunks were grouped on the way, none is lost or reordered.
+        assert_eq!(pumped(&["a", "b", "c"]).concat(), "abc");
+    }
+
+    #[test]
+    fn a_line_followed_by_silence_still_reaches_the_pane() {
+        // The case the two-thread split exists for: output, then nothing, with
+        // the reader still connected. Only an upper bound is asserted — two
+        // seconds for a sixteen-millisecond deadline — so a slow machine passes.
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (out_tx, out_rx) = std::sync::mpsc::channel::<String>();
+        let sender = std::thread::spawn(move || pump(&rx, |data| out_tx.send(data).unwrap()));
+
+        tx.send("prompt> ".to_string()).unwrap();
+        assert_eq!(out_rx.recv_timeout(Duration::from_secs(2)).as_deref(), Ok("prompt> "));
+
+        drop(tx);
+        sender.join().unwrap();
+    }
+
+    #[test]
+    fn a_burst_past_the_cap_goes_out_without_waiting() {
+        let big = "x".repeat(MAX_PENDING);
+        let emitted = pumped(&[&big, "tail"]);
+        assert_eq!(emitted, vec![big, "tail".to_string()]);
     }
 
     #[test]

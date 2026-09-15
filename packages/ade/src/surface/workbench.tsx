@@ -1,6 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
+import { every } from "../host/every"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, openProject, type Project } from "../host/project"
@@ -1346,10 +1347,26 @@ export function Workbench() {
   }
 
   onMount(() => {
-    const timer = setInterval(() => void deliverMail(), 700)
-    onCleanup(() => clearInterval(timer))
-    const usageTimer = setInterval(() => void refreshUsage(), 15_000)
-    onCleanup(() => clearInterval(usageTimer))
+    /*
+     * Mail has to keep moving while ADE is minimised — agents message each
+     * other whether or not anyone is watching — but a hidden window can wait
+     * longer, and with no session running a pass every three seconds is
+     * plenty for a request arriving from outside.
+     */
+    let mailPass = 0
+    onCleanup(
+      every(
+        700,
+        () => {
+          mailPass++
+          if (running.size === 0 && mailPass % 4 !== 0) return
+          return deliverMail()
+        },
+        { whenHidden: 2_000 },
+      ),
+    )
+    // Usage only feeds what is on screen and `ade-msg stats`: paused while hidden.
+    onCleanup(every(15_000, () => refreshUsage()))
     void getHost().then((host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
       void host?.mailboxPublish?.(USAGE, "usage").catch(() => {})
@@ -2326,6 +2343,14 @@ export function Workbench() {
     records.forget(id)
     rawWindows.forget(id)
     forgetQuiet(id)
+    // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
+    // long day of opening and closing sessions used to keep every one of them.
+    lastOutputAt.delete(id)
+    usageOf.delete(id)
+    paneTokens.delete(id)
+    paneNonces.delete(id)
+    activityOf.delete(id)
+    bracketedPaste.delete(id)
   }
 
   const close = (id: string) => {
@@ -2938,7 +2963,10 @@ export function Workbench() {
           if (panes.some((pane) => pane.id !== paneId && pane.resumeId === id)) return
           if (panes.find((pane) => pane.id === paneId)?.resumeId === id) return
           setWb((w) => updatePane(w, paneId, { resumeId: id }))
-        }, 3000)
+          // Up to 1 MB read per pass, for the life of the session: often enough
+          // to catch a new conversation, not so often that it is the busiest
+          // thing an idle agy pane does.
+        }, 10_000)
         openingPolls.add(poll)
       }
 

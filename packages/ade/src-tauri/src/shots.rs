@@ -7,14 +7,14 @@
 /// slower than dragging the file yourself.
 ///
 /// Polled rather than hooked into the filesystem's change notifications. The
-/// folder gains a file every few minutes at most, a poll costs one directory
-/// listing, and ReadDirectoryChangesW brings a watcher handle, a cancellation
+/// folder gains a file every few minutes at most, a poll costs one metadata
+/// read and, when the folder changed, one directory listing, and ReadDirectoryChangesW brings a watcher handle, a cancellation
 /// path and a class of missed-event bugs that this does not have.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -138,15 +138,21 @@ pub async fn shots_watch(
     let mine = Arc::clone(&watch.generation);
 
     std::thread::spawn(move || {
+        // Read before the listing, never after: a file that lands between the
+        // two moves the folder's time past this value, and the next pass lists.
+        let mut listed_mtime = dir_modified(&path);
+        let mut listed_at = Instant::now();
         let mut seen: HashSet<PathBuf> = std::fs::read_dir(&path)
             .into_iter()
             .flatten()
             .flatten()
             .map(|entry| entry.path())
             .collect();
+        // An image found but not yet settled, which a skipped pass would strand.
+        let mut unsettled = false;
 
         loop {
-            std::thread::sleep(Duration::from_millis(1200));
+            std::thread::sleep(POLL_INTERVAL);
 
             // The window is gone: stop, rather than poll a folder for a page
             // that will never be told about it.
@@ -160,10 +166,22 @@ pub async fn shots_watch(
                 return;
             }
 
-            let entries: Vec<PathBuf> = match std::fs::read_dir(&path) {
+            let mtime = dir_modified(&path);
+            if !needs_listing(listed_mtime, mtime, unsettled, listed_at.elapsed()) {
+                continue;
+            }
+
+            let entries: HashSet<PathBuf> = match std::fs::read_dir(&path) {
                 Ok(read) => read.flatten().map(|entry| entry.path()).collect(),
-                Err(_) => continue,
+                Err(_) => {
+                    // Not listed, so nothing is known: the next pass tries again.
+                    listed_mtime = None;
+                    continue;
+                }
             };
+            listed_mtime = mtime;
+            listed_at = Instant::now();
+            unsettled = false;
 
             for entry in &entries {
                 if seen.contains(entry) || !entry.is_file() || !is_image(entry) {
@@ -181,6 +199,7 @@ pub async fn shots_watch(
                  * pass that arrived too early, and never looked at again.
                  */
                 if !settled(entry) {
+                    unsettled = true;
                     continue;
                 }
                 seen.insert(entry.clone());
@@ -189,13 +208,61 @@ pub async fn shots_watch(
                 }
             }
 
-            // Files deleted outside ADE should be forgotten, or the set grows
-            // for as long as the window is open and a re-created name is missed.
-            seen.retain(|known| entries.contains(known));
+            forget_missing(&mut seen, &entries);
         }
     });
 
     Ok(())
+}
+
+/*
+ * How often the folder is looked at, and how long it may go unlisted.
+ *
+ * Two and a half seconds: a screenshot is taken to be pasted somewhere, and
+ * the time it takes a person to switch to ADE and look for it is longer than
+ * that. Most passes list nothing at all — see `needs_listing`.
+ */
+const POLL_INTERVAL: Duration = Duration::from_millis(2500);
+const FULL_RELIST: Duration = Duration::from_secs(30);
+
+/// The folder's own modified time, which moves when a file is added, removed
+/// or renamed in it.
+fn dir_modified(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).and_then(|m| m.modified()).ok()
+}
+
+/*
+ * Whether this pass has to list the folder.
+ *
+ * A folder of months of screenshots is thousands of entries, and listing it
+ * every pass to find that nothing arrived was the whole cost of the watcher.
+ * NTFS and APFS move a directory's modified time whenever a file is created
+ * in it, so an unchanged time means an unchanged listing — on those, which are
+ * the two this is written for.
+ *
+ * Three reasons to list anyway. An image seen but not settled on the last pass
+ * has to be looked at again, and its growing does not touch the folder's time.
+ * A time that cannot be read is no evidence of anything. And some mounts —
+ * network shares, cloud-synced folders, filesystems with two-second times —
+ * do not keep the folder's time honestly, so every thirty seconds the folder
+ * is listed whatever its time says: a late screenshot, not a lost one.
+ */
+fn needs_listing(
+    listed: Option<SystemTime>,
+    current: Option<SystemTime>,
+    unsettled: bool,
+    since_listing: Duration,
+) -> bool {
+    unsettled || since_listing >= FULL_RELIST || current.is_none() || listed != current
+}
+
+/// Files deleted outside ADE should be forgotten, or the set grows for as long
+/// as the window is open and a re-created name is missed.
+///
+/// Both sides are sets: with a `Vec` of entries this was a scan of the whole
+/// folder for every file already seen, on every pass.
+fn forget_missing(seen: &mut HashSet<PathBuf>, entries: &HashSet<PathBuf>) {
+    seen.retain(|known| entries.contains(known));
 }
 
 /// Takes the next generation for `path`, or `None` when that folder is already
@@ -388,6 +455,46 @@ mod tests {
         assert!(!settled(&file));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_whose_time_did_not_move_is_not_listed() {
+        let t = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let later = t + Duration::from_millis(1);
+        let soon = Duration::from_secs(3);
+
+        assert!(!needs_listing(Some(t), Some(t), false, soon));
+        // A file arrived, or left.
+        assert!(needs_listing(Some(t), Some(later), false, soon));
+        // A time that cannot be read, now or last time, proves nothing.
+        assert!(needs_listing(Some(t), None, false, soon));
+        assert!(needs_listing(None, Some(t), false, soon));
+    }
+
+    #[test]
+    fn a_screenshot_still_being_written_keeps_the_folder_listed() {
+        // Its growing does not touch the folder's time, and skipping the pass
+        // would leave it unannounced until the fallback relist.
+        let t = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert!(needs_listing(Some(t), Some(t), true, Duration::from_secs(3)));
+    }
+
+    #[test]
+    fn the_folder_is_relisted_now_and_then_whatever_its_time_says() {
+        let t = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert!(needs_listing(Some(t), Some(t), false, FULL_RELIST));
+    }
+
+    #[test]
+    fn files_gone_from_the_folder_are_forgotten_and_the_rest_kept() {
+        let mut seen: HashSet<PathBuf> = ["a.png", "b.png", "c.png"].iter().map(PathBuf::from).collect();
+        let entries: HashSet<PathBuf> = ["b.png", "c.png", "d.png"].iter().map(PathBuf::from).collect();
+
+        forget_missing(&mut seen, &entries);
+
+        let expected: HashSet<PathBuf> = ["b.png", "c.png"].iter().map(PathBuf::from).collect();
+        // `d.png` is not added: only a settled file is marked as seen.
+        assert_eq!(seen, expected);
     }
 
     #[test]

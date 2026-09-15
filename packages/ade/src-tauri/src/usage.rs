@@ -41,12 +41,50 @@ struct FileState {
     offset: u64,
     usage: Usage,
     seen: HashSet<String>,
+    /// The `Files::clock` of the last call that asked about this file.
+    last_used: u64,
+}
+
+/*
+ * How many transcripts are remembered at once.
+ *
+ * Every session a pane has ever shown leaves its file here, message ids and
+ * all, and a window left open for a week of work is hundreds of sessions
+ * nobody is looking at any more. Far more than the panes a screen can hold,
+ * so a file still on screen is never the one let go.
+ *
+ * Forgetting a file costs nothing but time: the next call about it reads it
+ * again from the start and arrives at the same totals. That is also why the
+ * message ids inside a file are not capped — dropping some of those would let
+ * a repeated entry be counted twice, and the number would stop being true.
+ */
+const MAX_FILES: usize = 256;
+
+#[derive(Default)]
+struct Files {
+    by_path: HashMap<PathBuf, FileState>,
+    /// Ticks once per call; orders the files by when they were last wanted.
+    clock: u64,
 }
 
 #[derive(Default)]
 pub struct UsageCache {
-    files: Mutex<HashMap<PathBuf, FileState>>,
+    files: Mutex<Files>,
     codex_paths: Mutex<HashMap<String, PathBuf>>,
+}
+
+/// Lets go of the least recently wanted files until at most `cap` are left.
+fn evict_stale(files: &mut HashMap<PathBuf, FileState>, cap: usize) {
+    while files.len() > cap {
+        let Some(oldest) = files
+            .iter()
+            .min_by_key(|(_, state)| state.last_used)
+            .map(|(path, _)| path.clone())
+        else {
+            return;
+        };
+        files.remove(&oldest);
+    }
 }
 
 fn valid_session_id(id: &str) -> bool {
@@ -135,8 +173,9 @@ fn read_new(agent: &str, path: &Path, state: &mut FileState) -> Result<(), Strin
     let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
     let len = file.metadata().map_err(|e| e.to_string())?.len();
     if len < state.offset {
-        // Rewritten or truncated: start over.
-        *state = FileState::default();
+        // Rewritten or truncated: start over. Still the file this call wants,
+        // so it keeps its place in the eviction order.
+        *state = FileState { last_used: state.last_used, ..FileState::default() };
     }
     if len == state.offset {
         return Ok(());
@@ -192,7 +231,16 @@ pub async fn transcript_usage(
         return Ok(None);
     }
     let mut files = cache.files.lock().map_err(|_| "cache bloccata")?;
-    let state = files.entry(path.clone()).or_default();
+    let files = &mut *files;
+    files.clock += 1;
+    let clock = files.clock;
+    // Before the lookup, and with room for it: the file this call is about
+    // has not been stamped yet, so it must not be counted against the cap.
+    if !files.by_path.contains_key(&path) {
+        evict_stale(&mut files.by_path, MAX_FILES - 1);
+    }
+    let state = files.by_path.entry(path.clone()).or_default();
+    state.last_used = clock;
     read_new(&agent, &path, state)?;
     Ok(Some(state.usage))
 }
@@ -250,6 +298,29 @@ mod tests {
         assert_eq!(state.usage.cache_read, 99);
         assert_eq!(state.usage.requests, 2);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_files_let_go_are_the_ones_nobody_asked_about_lately() {
+        let mut files: HashMap<PathBuf, FileState> = (0..5)
+            .map(|n| (PathBuf::from(format!("{n}.jsonl")), FileState { last_used: n, ..FileState::default() }))
+            .collect();
+        // Asked about again just now, so the oldest by position is not the oldest by use.
+        files.get_mut(Path::new("0.jsonl")).unwrap().last_used = 10;
+
+        evict_stale(&mut files, 3);
+
+        let mut kept: Vec<_> = files.keys().map(|p| p.to_string_lossy().into_owned()).collect();
+        kept.sort();
+        assert_eq!(kept, ["0.jsonl", "3.jsonl", "4.jsonl"]);
+    }
+
+    #[test]
+    fn a_cache_within_its_cap_is_left_alone() {
+        let mut files: HashMap<PathBuf, FileState> =
+            (0..3).map(|n| (PathBuf::from(format!("{n}.jsonl")), FileState::default())).collect();
+        evict_stale(&mut files, 3);
+        assert_eq!(files.len(), 3);
     }
 
     #[test]

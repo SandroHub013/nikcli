@@ -847,10 +847,27 @@ struct GlobalVoiceEvent {
     state: &'static str,
 }
 
+/// True for the test build (`tauri.test.conf.json`).
+///
+/// The official ADE and the test one run side by side on the same machine:
+/// the test build is what gets rebuilt, restarted and killed all day, the
+/// official one is what the user is working in. They are told apart by the
+/// identifier, which already gives the test build its own data directory,
+/// WebView2 profile, mailbox and hooks; this covers what the identifier does
+/// not separate.
+pub(crate) fn is_test_build(app: &tauri::AppHandle) -> bool {
+    app.config().identifier.ends_with(".test")
+}
+
 #[tauri::command]
 async fn register_global_voice_shortcut(app: tauri::AppHandle, chord: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
     use std::str::FromStr;
+    // Hotkeys are system-wide: a test build that registers the voice chords
+    // takes them away from the official ADE, or fails because it holds them.
+    if is_test_build(&app) {
+        return Ok(());
+    }
     let shortcut = Shortcut::from_str(&chord).map_err(|e| format!("Scorciatoia non valida '{chord}': {e}"))?;
     app.global_shortcut().register(shortcut).map_err(|e| format!("Registrazione fallita per '{chord}': {e}"))?;
     Ok(())
@@ -870,8 +887,9 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// nothing but its event-target window, and neither the log nor the exit code
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let title = app.config().product_name.clone().unwrap_or_else(|| "ADE".into());
     let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
-        .title("ADE")
+        .title(title)
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
