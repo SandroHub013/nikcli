@@ -58,7 +58,7 @@ export type RemoteSyncHandle = {
   status(): {
     connected: boolean
     lastSeq: number
-    outbox: ReturnType<typeof Outbox.status>
+    outbox: { pending: number; failed: number; total: number }
   }
 }
 
@@ -87,7 +87,7 @@ export namespace RemoteSync {
       if (meta.origin !== "local") return
       for (const target of enqueueTargets) {
         try {
-          Outbox.enqueue(record.id, target)
+          Effect.runSync(Outbox.enqueue(record.id, target))
         } catch (error) {
           log.warn("outbox enqueue failed", { target, error })
         }
@@ -294,7 +294,7 @@ export namespace RemoteSync {
       status: () => ({
         connected,
         lastSeq,
-        outbox: Outbox.status(opts.url),
+        outbox: Effect.runSync(Outbox.status(opts.url)),
       }),
     }
 

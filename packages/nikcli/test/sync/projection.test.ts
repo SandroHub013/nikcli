@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
@@ -46,7 +47,7 @@ describe("SyncProjection", () => {
     expect(state.title).toBe("Renamed")
 
     // First replay persists the snapshot; the next read starts from it.
-    const snapshot = SyncSnapshot.load({ projectID, aggregate: sessionID, aggregateID: sessionID })
+    const snapshot = Effect.runSync(SyncSnapshot.load({ projectID, aggregate: sessionID, aggregateID: sessionID }))
     expect(snapshot?.lastSeq).toBe(3)
 
     const again = await SyncProjection.session(projectID, sessionID)
@@ -115,7 +116,7 @@ describe("replay across a compacted range", () => {
     const key = { projectID, aggregate: sessionID, aggregateID: sessionID }
     // A snapshot that has fallen behind, then compaction removing the events
     // it would have needed to catch up.
-    SyncSnapshot.save(key, 1, { id: sessionID, title: "stale" })
+    Effect.runSync(SyncSnapshot.save(key, 1, { id: sessionID, title: "stale" }))
     Database.syncDb()
       .delete(syncEvent)
       .where(and(eq(syncEvent.aggregate, sessionID), lte(syncEvent.seq, 2)))
@@ -128,7 +129,7 @@ describe("replay across a compacted range", () => {
 
     // The stale snapshot is still the one on disk: an incomplete projection
     // must not become the record the next cold start trusts.
-    expect(SyncSnapshot.load(key)?.lastSeq).toBe(1)
+    expect(Effect.runSync(SyncSnapshot.load(key))?.lastSeq).toBe(1)
   })
 })
 
@@ -158,7 +159,7 @@ describe("replay equivalence", () => {
 
     // Cold: drop the snapshot and replay the journal from zero.
     const key = { projectID, aggregate: sessionID, aggregateID: sessionID }
-    SyncSnapshot.save(key, 0, undefined)
+    Effect.runSync(SyncSnapshot.save(key, 0, undefined))
     const cold = await SyncProjection.session(projectID, sessionID)
 
     expect(warm.lastSeq).toBe(first.lastSeq)

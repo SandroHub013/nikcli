@@ -1,4 +1,5 @@
 import { Runtime } from "../../framework/runtime"
+import { Effect } from "effect"
 import { Commands } from "../../commands"
 import { Outbox } from "@/sync/outbox"
 import { readRemote } from "./shared"
@@ -10,7 +11,7 @@ export default Runtime.handler(Commands.commands["sync"].commands["status"], asy
     console.log("set NIKCLI_REMOTE_URL and NIKCLI_REMOTE_TOKEN, or use /sync in the TUI to save it")
     return
   }
-  const outbox = Outbox.status(remote.url)
+  const outbox = Effect.runSync(Outbox.status(remote.url))
   console.log(`target:        ${remote.url} (${remote.source === "env" ? "env vars" : "config file"})`)
   console.log(`outbox pending: ${outbox.pending}`)
   console.log(`outbox failed:  ${outbox.failed}`)
