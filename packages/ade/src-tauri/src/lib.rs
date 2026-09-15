@@ -888,7 +888,16 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// nothing but its event-target window, and neither the log nor the exit code
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let title = app.config().product_name.clone().unwrap_or_else(|| "ADE".into());
+    let mut title = app.config().product_name.clone().unwrap_or_else(|| "ADE".into());
+    // `bun run test:app` names the worktree and branch, so with several test
+    // instances open the taskbar says which is which.
+    if is_test_build(app) {
+        if let Ok(label) = std::env::var("ADE_TEST_LABEL") {
+            if !label.trim().is_empty() {
+                title = format!("{title} · {}", label.trim());
+            }
+        }
+    }
     let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title(title)
         .inner_size(1440.0, 900.0)

@@ -29,7 +29,8 @@
     "test": "bun run test:unit",
     "test:unit": "bun test --conditions=browser --preload ./happydom.ts ./src",
     "test:unit:watch": "bun test --watch --conditions=browser --preload ./happydom.ts ./src",
-    "native:dev": "bun scripts/medium-target.ts && tauri dev --config src-tauri/tauri.test.conf.json",
+    "test:app": "bun scripts/test-app.ts",
+    "native:dev":"bun scripts/medium-target.ts && tauri dev --config src-tauri/tauri.test.conf.json",
     "native:build": "tauri build",
     "native:build:test": "tauri build --config src-tauri/tauri.test.conf.json --bundles nsis"
   },

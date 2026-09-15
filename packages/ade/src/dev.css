@@ -454,7 +454,8 @@
 }
 
 :root[data-ade-build="test"] [data-slot="ade-brand"]::after {
-  content: "TEST";
+  /* The worktree name follows when `bun run test:app` started this instance. */
+  content: "TEST" var(--ade-test-label, "");
   padding: 1px 5px;
   border-radius: 3px;
   background: #ff8c00;

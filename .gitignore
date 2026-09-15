@@ -27,6 +27,7 @@ target
 # Local dev files
 nikcli-dev
 logs/
+.ade-test/
 *.bun-build
 packages/nikcli/bun/
 

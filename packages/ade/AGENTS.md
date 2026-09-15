@@ -24,6 +24,37 @@ apply to any agent changing ADE or `packages/voice`.
   the test build interfere with the official one. `is_test_build` in
   `src-tauri/src/lib.rs` is the switch.
 
+## ADE Test: one per worktree
+
+Several sessions work on ADE at the same time. Each works in its own git
+worktree, on its own branch off `feat/ade`, and tries its change in its own
+ADE Test:
+
+```
+bun run test:app          # start this worktree's ADE Test, or say it is already running
+bun run test:app --cdp    # same, with a WebView2 remote-debugging port to drive it
+bun run test:app status   # this worktree's instance
+bun run test:app list     # every worktree's instance
+bun run test:app stop     # stop this worktree's instance, and only that
+```
+
+- Port, WebView2 profile, temp folder and log are derived from the worktree
+  path and live in `.ade-test/` at its root. The window title and the TEST
+  badge name the worktree, so several open instances can be told apart.
+- **Do not start ADE Test with plain `tauri dev` while another worktree runs
+  one.** Vite is `strictPort`: the second Vite exits on the busy port and the
+  window loads the *other* worktree's code from it, with nothing on screen to
+  say so. `test:app` gives each worktree its own port for this reason.
+- Stop your instance with `test:app stop`, never by killing processes by
+  name: it checks the recorded start time before stopping anything.
+- The first start in a new worktree compiles the Rust host (several minutes);
+  later starts reuse that worktree's `src-tauri/target`.
+- The profile is new per worktree, so localStorage starts empty: open
+  workspaces are not carried over. The voice OpenRouter key is read again
+  from nikcli's `auth.json`.
+- `feat/ade` is where finished work is integrated; merges into it are
+  announced to the other sessions first.
+
 ## Workflow
 
 1. Change the code on the ADE branch (`feat/ade`).

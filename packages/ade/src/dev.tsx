@@ -17,7 +17,11 @@ if ("__TAURI_INTERNALS__" in window) {
   void import("@tauri-apps/api/app")
     .then(({ getIdentifier }) => getIdentifier())
     .then((identifier) => {
-      if (isTestIdentifier(identifier)) document.documentElement.dataset.adeBuild = "test"
+      if (!isTestIdentifier(identifier)) return
+      document.documentElement.dataset.adeBuild = "test"
+      // Set by `bun run test:app`: which worktree this instance is running.
+      const label = import.meta.env.VITE_ADE_TEST_LABEL
+      if (label) document.documentElement.style.setProperty("--ade-test-label", JSON.stringify(` ${label}`))
     })
     .catch(() => {})
 }
