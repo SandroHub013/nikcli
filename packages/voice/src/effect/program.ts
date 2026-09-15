@@ -733,6 +733,8 @@ export function makeVoiceProgram(
             options.onSpoken?.("Ho fermato la richiesta precedente.")
             return
           }
+          // Said on screen, not aloud: the answer to the new sentence is what should be heard.
+          options.onOutcome?.({ success: true, spoken: "Richiesta precedente interrotta: passo alla nuova." })
         }
 
         // 3. Ambiguous outcome: query user for clarification, never execute

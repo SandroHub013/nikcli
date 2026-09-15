@@ -707,6 +707,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       expect(aborted()).toBe(1)
       expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
       expect(engine.status()).toBe("idle")
+      expect(engine.history().some((entry) => entry.kind === "action" && entry.label.startsWith("Richiesta precedente interrotta"))).toBe(true)
     })
 
     test("«annulla» stops the turn and says so", async () => {
