@@ -553,6 +553,8 @@ export function parseQuotaAxiSnapshot(raw: unknown): ProviderQuota[] {
       let shortLabel = label
       if (id === "five_hour" || kind === "session") shortLabel = "5h"
       else if (id === "seven_day" || kind === "weekly") shortLabel = "sett."
+      else if (id.startsWith("window:")) shortLabel = id.replace("window:", "")
+      else if (label.endsWith(" window")) shortLabel = label.replace(" window", "")
 
       const remaining = typeof win.percentRemaining === "number" ? Math.max(0, Math.min(100, Math.round(win.percentRemaining))) : undefined
       const used = typeof win.percentUsed === "number" ? Math.round(win.percentUsed) : undefined
