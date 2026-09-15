@@ -129,9 +129,12 @@ export function getTerminal(id: string): SessionTerminal {
     /*
      * Scrollback is what makes a session reviewable after the fact. Agents are
      * verbose — a single tool call can be hundreds of lines — and the default
-     * thousand would quietly eat the beginning of most runs.
+     * thousand would quietly eat the beginning of most runs. Five thousand keeps
+     * a long run reviewable at half the memory of the ten thousand it was: the
+     * buffer is held for every terminal, hidden panes included, and a full one
+     * at wide columns ran to tens of megabytes each.
      */
-    scrollback: 10_000,
+    scrollback: 5_000,
     fontSize: 12,
     fontFamily: "'Cascadia Mono', 'JetBrains Mono', Consolas, ui-monospace, monospace",
     lineHeight: 1.25,

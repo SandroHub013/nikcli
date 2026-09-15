@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX 
 import { Badge } from "../ui/layout"
 import "./sidebar.css"
 import { getHost } from "../host/shell"
+import { every } from "../host/every"
 import { discoverProject, type Project } from "../host/project"
 import { toDisplayPath, basename, normalizePath } from "../host/path"
 import { fuzzyMatch } from "../command/match"
@@ -597,9 +598,9 @@ export function Sidebar(props: SidebarProps) {
   const [searchQuery, setSearchQuery] = createSignal("")
   const [now, setNow] = createSignal(Date.now())
 
+  // The clock the "2m ago" labels read. Nobody reads them in a hidden window.
   createEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    onCleanup(() => clearInterval(timer))
+    onCleanup(every(1000, () => setNow(Date.now())))
   })
 
   const loadDir = async (dirPath: string) => {
@@ -634,31 +635,26 @@ export function Sidebar(props: SidebarProps) {
   }
 
   /*
-   * CPU, RAM and ADE's memory, every two seconds.
+   * CPU, RAM and ADE's memory, every three seconds while the window is shown.
    *
    * Absent in the browser, where there is no host to ask: the strip then
    * simply shows the three buttons. A failed read keeps the last numbers
-   * rather than blinking the row away.
+   * rather than blinking the row away. Reading the machine's process table is
+   * the most expensive thing ADE does on a timer, so it stops while hidden.
    */
   const [stats, setStats] = createSignal<StatView | undefined>()
   createEffect(() => {
-    let alive = true
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const tick = async () => {
-      const host = await getHost()
-      if (!alive || !host?.systemStats) return
-      try {
-        setStats(describeStats(await host.systemStats()))
-      } catch {
-        // keep the last reading
-      }
-      if (alive) timer = setTimeout(tick, 2000)
-    }
-    void tick()
-    onCleanup(() => {
-      alive = false
-      clearTimeout(timer)
-    })
+    onCleanup(
+      every(
+        3000,
+        async () => {
+          const host = await getHost()
+          if (!host?.systemStats) return
+          setStats(describeStats(await host.systemStats()))
+        },
+        { immediate: true },
+      ),
+    )
   })
 
   const [home, setHome] = createSignal("")

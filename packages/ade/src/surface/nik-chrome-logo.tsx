@@ -27,27 +27,25 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
   const N_PATH =
     "M 11 34 C 10 24, 11 13, 12 8 C 13 4, 16.5 4, 18.5 8.5 L 26.5 27 C 28.5 31, 31.5 31, 32.5 27 C 33.5 21, 34 13.5, 34.5 8"
 
+  // Whether the loop is running. It drives the sheen sweep too, so the CSS
+  // animation and the rAF loop start and stop together.
+  const [live, setLive] = createSignal(false)
+
   onMount(() => {
-    let animId: number
+    // 0 means "no frame queued".
+    let animId = 0
     let isMounted = true
+
+    // ── Physics Simulation State ──────────────────────────────────────────
+    // Base 3D isometric rest pose
+    const BASE_ROTY = 20
+    const BASE_ROTX = 6
 
     // Reduced motion check
     const reducedMotion =
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-    if (reducedMotion) {
-      if (turntableRef) {
-        turntableRef.style.transform = "rotateY(20deg) rotateX(6deg)"
-      }
-      return
-    }
-
-    // ── Physics Simulation State ──────────────────────────────────────────
-    // Base 3D isometric rest pose
-    const BASE_ROTY = 20
-    const BASE_ROTX = 6
 
     // Angular orientation & spring dynamics
     let tiltX = 0
@@ -80,7 +78,63 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     const SPRING_K = 0.14
     const DAMPING = 0.82
 
+    // This mark sits in the title bar for the whole session, and a loop that
+    // never ends there repaints the bar (drop-shadows, a blend layer) sixty
+    // times a second while the user is doing nothing. So it moves only when
+    // there is a reason: a short intro after mount, and while the pointer is
+    // on it. When neither holds it winds down until the springs settle, then
+    // stops and freezes on whatever frame it reached — which is a frame of
+    // the animation, so the resting mark looks like the moving one.
+    const INTRO_MS = 2000
+    const introUntil = performance.now() + INTRO_MS
+    let pointerInside = false
+
+    const settled = () =>
+      Math.abs(velX) < 0.01 &&
+      Math.abs(velY) < 0.01 &&
+      Math.abs(tiltX - targetTiltX) < 0.05 &&
+      Math.abs(tiltY - targetTiltY) < 0.05 &&
+      wobbleAmp < 0.01
+
+    const start = () => {
+      if (reducedMotion || !isMounted || animId !== 0) return
+      setLive(true)
+      animId = requestAnimationFrame(updatePhysics)
+    }
+
+    const placeDroplets = () => {
+      if (dropletARef) {
+        const dScale = 1 + (dropAZ / 30) * 0.35
+        dropletARef.style.transform = `translate3d(${dropAX}px, ${dropAY}px, ${dropAZ}px) scale(${dScale})`
+        dropletARef.style.opacity = `${Math.max(0.4, Math.min(1, 0.75 + dropAZ * 0.025))}`
+      }
+      if (dropletBRef) {
+        const dScale = 1 + (dropBZ / 30) * 0.35
+        dropletBRef.style.transform = `translate3d(${dropBX}px, ${dropBY}px, ${dropBZ}px) scale(${dScale})`
+        dropletBRef.style.opacity = `${Math.max(0.4, Math.min(1, 0.75 + dropBZ * 0.025))}`
+      }
+    }
+
+    if (reducedMotion) {
+      // No motion at all, but not the collapsed pose either: put the droplets
+      // where the orbit would have them a moment in, so the mark still reads
+      // as the animated one caught mid-frame.
+      const t = 1
+      dropAX = Math.cos(t * 1.5) * 16
+      dropAY = Math.sin(t * 1.2) * 5
+      dropAZ = Math.sin(t * 1.5) * 12
+      dropBX = Math.cos(t * 1.1 + Math.PI) * 14
+      dropBY = Math.sin(t * 1.6 + Math.PI) * 6
+      dropBZ = Math.sin(t * 1.1 + Math.PI) * 12
+      placeDroplets()
+      if (turntableRef) {
+        turntableRef.style.transform = `rotateY(${BASE_ROTY}deg) rotateX(${BASE_ROTX}deg)`
+      }
+      return
+    }
+
     const updatePhysics = () => {
+      animId = 0
       if (!isMounted) return
       time += 0.02
 
@@ -116,12 +170,6 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       dropAY += dropAVelY
       dropAZ += dropAVelZ
 
-      if (dropletARef) {
-        const dScale = 1 + (dropAZ / 30) * 0.35
-        dropletARef.style.transform = `translate3d(${dropAX}px, ${dropAY}px, ${dropAZ}px) scale(${dScale})`
-        dropletARef.style.opacity = `${Math.max(0.4, Math.min(1, 0.75 + dropAZ * 0.025))}`
-      }
-
       // Droplet B: Spring physics orbiting around lower loop
       const targetDropBX = Math.cos(time * 1.1 + Math.PI) * 14 - tiltY * 0.25
       const targetDropBY = Math.sin(time * 1.6 + Math.PI) * 6 - tiltX * 0.25
@@ -134,16 +182,16 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       dropBY += dropBVelY
       dropBZ += dropBVelZ
 
-      if (dropletBRef) {
-        const dScale = 1 + (dropBZ / 30) * 0.35
-        dropletBRef.style.transform = `translate3d(${dropBX}px, ${dropBY}px, ${dropBZ}px) scale(${dScale})`
-        dropletBRef.style.opacity = `${Math.max(0.4, Math.min(1, 0.75 + dropBZ * 0.025))}`
-      }
+      placeDroplets()
 
-      animId = requestAnimationFrame(updatePhysics)
+      if (pointerInside || performance.now() < introUntil || !settled()) {
+        animId = requestAnimationFrame(updatePhysics)
+      } else {
+        setLive(false)
+      }
     }
 
-    animId = requestAnimationFrame(updatePhysics)
+    start()
 
     // ── Mouse & Interaction Handlers ─────────────────────────────────────
     const onMouseMove = (e: MouseEvent) => {
@@ -160,7 +208,9 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     }
 
     const onMouseEnter = () => {
+      pointerInside = true
       setHovered(true)
+      start()
       // Fluid impulse on hover
       velY += (Math.random() > 0.5 ? 1 : -1) * 6
       velX += 5
@@ -168,6 +218,9 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     }
 
     const onMouseLeave = () => {
+      // The loop is not cancelled here: it keeps going until the tilt has
+      // sprung back, and stops by itself once it has.
+      pointerInside = false
       setHovered(false)
       targetTiltX = 0
       targetTiltY = 0
@@ -180,6 +233,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
       velY += (Math.random() - 0.5) * 26
       dropAVelZ += 18
       dropBVelZ -= 18
+      start()
     }
 
     const el = containerRef
@@ -192,7 +246,8 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
 
     onCleanup(() => {
       isMounted = false
-      cancelAnimationFrame(animId)
+      if (animId !== 0) cancelAnimationFrame(animId)
+      animId = 0
       if (el) {
         el.removeEventListener("mousemove", onMouseMove)
         el.removeEventListener("mouseenter", onMouseEnter)
@@ -206,6 +261,7 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
     <span
       ref={containerRef}
       data-component="nik-chrome-logo"
+      data-live={live() ? "" : undefined}
       class={props.class}
       style={{
         display: "inline-flex",
@@ -236,9 +292,28 @@ export function NikChromeLogo(props: NikChromeLogoProps): JSX.Element {
           will-change: transform;
         }
 
+        /* Paused unless the physics loop is running. The negative delay
+           starts it at its midpoint (offset 0, near full opacity), so the
+           mark at rest shows the sheen across the ribbon rather than the
+           dim start of a sweep; pausing and resuming keep the frame they
+           reached, so neither end of a hover jumps. A paused animation
+           asks for no frames. */
         .nik-sheen-sweep {
           stroke-dasharray: 45 110;
-          animation: chromeSheenFlow 2.8s linear infinite;
+          animation: chromeSheenFlow 2.8s linear -1.4s infinite;
+          animation-play-state: paused;
+        }
+
+        [data-component="nik-chrome-logo"][data-live] .nik-sheen-sweep {
+          animation-play-state: running;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .nik-sheen-sweep {
+            animation: none;
+            stroke-dashoffset: 0;
+            opacity: 0.95;
+          }
         }
 
         .nik-physics-droplet-a {

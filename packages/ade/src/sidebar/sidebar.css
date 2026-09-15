@@ -1050,14 +1050,64 @@
 [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
   background-color: #facc15;
   box-shadow: 0 0 5px rgba(250, 204, 21, 0.55);
-  animation: ade-agent-pulse-yellow 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* 3. In attesa di input (Orange / Blocked-Waiting con pulse) */
 [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
   background-color: #f97316;
   box-shadow: 0 0 5px rgba(249, 115, 22, 0.55);
-  animation: ade-agent-pulse-amber 1.4s ease-in-out infinite;
+}
+
+/*
+ * The pulse, for as long as a session works or waits — which is most of the
+ * time a sidebar is on screen.
+ *
+ * It used to grow a `box-shadow` ring out of the dot, and a shadow is paint:
+ * each pulsing row repainted on every frame. The ring is a disc on ::after now,
+ * the dot's own colour at the ring's starting strength, grown with `scale` and
+ * faded with `opacity` — both of which the compositor animates without asking
+ * for paint. Scaling a 7px disc to 2x is the old 3.5px spread exactly, and the
+ * disc sits inside the dot's own transform, so it swells with the dot the way
+ * the shadow did. At rest it covers the dot in the dot's own colour, which
+ * changes nothing.
+ *
+ * The glow in the rules above is what the old animation replaced while it
+ * ran, so it goes while this runs too. With reduced motion none of this
+ * applies and the dot keeps its steady glow.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="agent-status-dot"][data-agent-status="a lavoro"],
+  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
+    position: relative;
+    box-shadow: none;
+  }
+
+  [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
+    animation: ade-agent-pulse-yellow 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
+    animation: ade-agent-pulse-amber 1.4s ease-in-out infinite;
+  }
+
+  [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after,
+  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after {
+    background: rgba(250, 204, 21, 0.6);
+    animation: ade-agent-ripple 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
+    background: rgba(249, 115, 22, 0.6);
+    animation: ade-agent-ripple 1.4s ease-in-out infinite;
+  }
 }
 
 /* 4. Task completata (Slate / Done) */
@@ -1076,12 +1126,10 @@
   0%, 100% {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.6);
   }
   50% {
     opacity: 0.75;
     transform: scale(1.22);
-    box-shadow: 0 0 0 3.5px rgba(250, 204, 21, 0);
   }
 }
 
@@ -1089,12 +1137,22 @@
   0%, 100% {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.6);
   }
   50% {
     opacity: 0.7;
     transform: scale(1.22);
-    box-shadow: 0 0 0 3.5px rgba(249, 115, 22, 0);
+  }
+}
+
+/* The ring of the two pulses above; see the comment on the rules that use it. */
+@keyframes ade-agent-ripple {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0;
+    transform: scale(2);
   }
 }
 

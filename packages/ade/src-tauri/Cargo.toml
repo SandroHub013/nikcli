@@ -39,3 +39,15 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 # far narrower grant than putting `cmd` on the shell allowlist, which would be
 # arbitrary execution for anything the page decides to run.
 junction = "1"
+
+[profile.release]
+# A desktop binary is built once and started many times, so the slower link
+# buys a smaller, faster executable for every launch after it.
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+# Not `panic = "abort"`. Every lock in `src/` is taken as `lock().map_err(..)`,
+# which only means something if a panicking thread unwinds and poisons it, and
+# a panic inside an async command is caught by the runtime as a failed task —
+# with abort it would take the whole window, and every agent in it, down.
