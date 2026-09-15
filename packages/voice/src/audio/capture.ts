@@ -716,7 +716,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
           }
           if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
             throw new Error(
-              "Accesso al microfono negato. Verifica i permessi audio nelle impostazioni del browser."
+              "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop)."
             )
           }
           if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {

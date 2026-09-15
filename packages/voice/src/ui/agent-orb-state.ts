@@ -18,6 +18,8 @@ export interface OrbPhaseInput {
   readonly mode: VoiceMode
   readonly status: DialogStatus
   readonly speaking: boolean
+  /** A reply is being synthesised or is between two sentences. */
+  readonly replying?: boolean
 }
 
 /**
@@ -29,7 +31,8 @@ export interface OrbPhaseInput {
 export function orbPhase(input: OrbPhaseInput): OrbPhase {
   if (input.mode === "transcription") return "idle"
   if (input.speaking) return "speak"
-  if (input.status === "executing") return "think"
+  // Piper can take seconds over a long first sentence: still thinking, not done.
+  if (input.status === "executing" || input.replying) return "think"
   if (input.running && input.status !== "asleep") return "listen"
   return "idle"
 }

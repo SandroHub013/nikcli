@@ -77,6 +77,36 @@ describe("tts/playback-level", () => {
     expect(meter.level()).toBe(0)
   })
 
+  test("a reply counts from its synthesis to its last sentence, and each stop counts once", () => {
+    const meter = createPlaybackMeter()
+    expect(meter.replying()).toBe(false)
+    const first = meter.reply()
+    const second = meter.reply()
+    expect(meter.replying()).toBe(true)
+    expect(meter.speaking()).toBe(false)
+    first()
+    first()
+    expect(meter.replying()).toBe(true)
+    second()
+    expect(meter.replying()).toBe(false)
+  })
+
+  test("the pause between two sentences of a reply is still speaking; the end of the reply is not", () => {
+    const meter = createPlaybackMeter()
+    const envelope = wavEnvelope(wav(0.2, 0.2))
+    const done = meter.reply()
+    expect(meter.speaking()).toBe(false)
+    meter.track(envelope, () => 0.3)()
+    expect(meter.speaking()).toBe(true)
+    expect(meter.level()).toBe(0)
+    done()
+    expect(meter.speaking()).toBe(false)
+    // The next reply starts silent again, until its own first sound.
+    const next = meter.reply()
+    expect(meter.speaking()).toBe(false)
+    next()
+  })
+
   test("the system voice pulses between a floor and a ceiling", () => {
     let clock = 0
     const meter = createPlaybackMeter(() => clock)

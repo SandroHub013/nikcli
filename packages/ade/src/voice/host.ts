@@ -87,6 +87,9 @@ function paneElement(paneId: string): HTMLElement | null {
 /**
  * Creates an implementation of VoiceHost wired to the ADE Workbench.
  */
+/** Commands whose result is a pane or the launch form, both shown only in the Code view. */
+const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model.new", "app.new", "pane.expand"])
+
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
    * The agent that answers what the grammar cannot, built on first use.
@@ -111,6 +114,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     async runCommand(id: string): Promise<void> {
+      /*
+       * What these open lives in the grid, and the grid is only on screen in
+       * the Code view. Said from the Agent view, where the voice console is,
+       * «apri il browser» answered «aperto» and the user saw nothing change.
+       */
+      if (OPENS_IN_GRID.has(id) && deps.wb().view !== "code") deps.setWb((w) => ({ ...w, view: "code" }))
       await deps.runCommand(id)
     },
 

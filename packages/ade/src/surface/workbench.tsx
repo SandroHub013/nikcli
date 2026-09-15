@@ -2305,7 +2305,7 @@ export function Workbench() {
    * system voice underneath while it downloads or when it fails. The host is
    * looked up per call, so the browser harness simply never gets past status.
    */
-  const speaker = createNaturalSpeaker({
+  const naturalSpeaker = createNaturalSpeaker({
     voice: () => voiceSettings().replyVoice,
     status: async (voice) => {
       const host = await getHost()
@@ -2327,6 +2327,22 @@ export function Workbench() {
       if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
     },
   })
+  /*
+   * The whole reply counts for the sphere, synthesis included: a long first
+   * sentence takes Piper longer than the sphere waits, and it flew home and
+   * back before the voice started.
+   */
+  const speaker = {
+    ...naturalSpeaker,
+    speak: async (text: string) => {
+      const stop = playbackMeter.reply()
+      try {
+        await naturalSpeaker.speak(text)
+      } finally {
+        stop()
+      }
+    },
+  }
 
   /*
    * The level meter drives the mic ring and the settings panel's waveform, and

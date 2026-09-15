@@ -955,9 +955,105 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 
     let window = builder.build()?;
 
+    #[cfg(windows)]
+    allow_own_microphone(&window);
+
     window.show()?;
     window.set_focus()?;
     Ok(())
+}
+
+/**
+ * The microphone for ADE's own page, without WebView2's permission prompt.
+ *
+ * WebView2 asks like a browser does — «tauri.localhost desidera usare i
+ * microfoni» — and remembers the answer in the profile. A desktop app has no
+ * browser settings to take a «Blocca» back, so one wrong click left the voice
+ * assistant refusing to start for good, with an error pointing at settings
+ * that do not exist. The page is the app itself: its request is granted, as a
+ * native app's would be, and Windows' own microphone privacy switch still
+ * applies. Anything else asking — a site in the browser pane's frame — keeps
+ * the prompt.
+ */
+/**
+ * Where ADE's page comes from. It is not loaded yet when the window is built,
+ * so its address is the one it will have: Vite's in development, Tauri's own
+ * scheme in a release (http://tauri.localhost on Windows, without
+ * useHttpsScheme).
+ */
+#[cfg_attr(not(windows), allow(dead_code))]
+fn own_origin(dev_url: Option<&tauri::Url>) -> String {
+    dev_url
+        .map(|url| url.origin().ascii_serialization())
+        .filter(|origin| origin != "null")
+        .unwrap_or_else(|| "http://tauri.localhost".to_string())
+}
+
+#[cfg(test)]
+mod own_origin_tests {
+    use super::own_origin;
+
+    #[test]
+    fn development_uses_the_dev_server_and_a_release_tauri_localhost() {
+        let dev = tauri::Url::parse("http://localhost:5270/").unwrap();
+        assert_eq!(own_origin(Some(&dev)), "http://localhost:5270");
+        assert_eq!(own_origin(None), "http://tauri.localhost");
+    }
+}
+
+#[cfg(windows)]
+fn allow_own_microphone(window: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Profile4, ICoreWebView2_13, COREWEBVIEW2_PERMISSION_KIND,
+        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+    };
+    use webview2_com::{take_pwstr, PermissionRequestedEventHandler, SetPermissionStateCompletedHandler};
+    use windows_core::{Interface, HSTRING};
+
+    #[cfg(debug_assertions)]
+    let origin = own_origin(tauri::Manager::config(window).build.dev_url.as_ref());
+    #[cfg(not(debug_assertions))]
+    let origin = own_origin(None);
+    let result = window.with_webview(move |webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        // A «Blocca» already saved in the profile is never asked again, so the
+        // handler below would not hear of it: the saved answer is replaced.
+        let profile = core.cast::<ICoreWebView2_13>().and_then(|core| core.Profile()).and_then(|p| p.cast::<ICoreWebView2Profile4>());
+        if let Ok(profile) = profile {
+            let done = SetPermissionStateCompletedHandler::create(Box::new(|_| Ok(())));
+            if let Err(error) = profile.SetPermissionState(
+                COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+                &HSTRING::from(origin.as_str()),
+                COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                &done,
+            ) {
+                eprintln!("ADE: permesso del microfono non salvato per {origin}: {error}");
+            }
+        }
+        let handler = PermissionRequestedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+            args.PermissionKind(&mut kind)?;
+            if kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                return Ok(());
+            }
+            let mut uri = windows_core::PWSTR::null();
+            args.Uri(&mut uri)?;
+            let uri = take_pwstr(uri);
+            let same_origin = tauri::Url::parse(&uri).map(|u| u.origin().ascii_serialization() == origin).unwrap_or(false);
+            if same_origin {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        if let Err(error) = core.add_PermissionRequested(&handler, &mut token) {
+            eprintln!("ADE: permesso del microfono non collegato: {error}");
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("ADE: permesso del microfono non collegato: {error}");
+    }
 }
 
 pub fn run() {

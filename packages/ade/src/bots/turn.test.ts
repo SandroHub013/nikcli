@@ -95,3 +95,30 @@ describe("runTurn", () => {
     expect((await next.result).status).toBe("done")
   })
 })
+
+/*
+ * From ade/voice-0.6.0 (3e04e88dd), the same fix found in the voice trial:
+ * spoken questions cut short by newer ones used to leak a slot each.
+ */
+describe("bots/turn, stopped by newer questions", () => {
+  test("four stopped turns in a row each end and give their slot back", async () => {
+    const m = machine()
+    for (let i = 0; i < 4; i++) {
+      const turn = runTurn({ runner: "claude", message: `domanda ${i}` }, m.deps)
+      await tick()
+      turn.stop()
+      expect((await turn.result).status).toBe("stopped")
+    }
+    expect(m.kills).toHaveLength(4)
+    expect(turnsRunning("claude")).toBe(0)
+  })
+
+  test("a turn stopped before its process started is killed as soon as it starts, and ends", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "claude", message: "subito fermata" }, m.deps)
+    turn.stop()
+    expect((await turn.result).status).toBe("stopped")
+    expect(m.kills).toEqual([{ tree: true }])
+    expect(turnsRunning("claude")).toBe(0)
+  })
+})
