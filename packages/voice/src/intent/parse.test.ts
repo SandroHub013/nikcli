@@ -3,6 +3,21 @@ import type { PaneSummary } from "../bridge/host"
 import { parseUtterance } from "./parse"
 
 describe("parseUtterance", () => {
+  test("the panels of the + menu each have a phrase, and the old ones keep theirs", () => {
+    const cases: [string, string][] = [
+      ["apri il video", "video.new"],
+      ["apri il modello 3D", "model.new"],
+      ["apri il simulatore", "app.new"],
+      ["apri le decisioni", "decisions.open"],
+      ["apri il browser", "browser.new"],
+      ["vai al pannello 2", "pane.focus"],
+    ]
+    for (const [sentence, intent] of cases) {
+      const parsed = parseUtterance(sentence)
+      expect([sentence, parsed.outcome, parsed.intent?.intent]).toEqual([sentence, "matched", intent])
+    }
+  })
+
   describe("synonyms and variants", () => {
     test("matches 'nuova sessione' and synonyms", () => {
       const res1 = parseUtterance("nuova sessione")

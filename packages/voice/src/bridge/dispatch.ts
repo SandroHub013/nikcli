@@ -152,8 +152,17 @@ export async function dispatch(
     switch (intentId) {
       // 1. Commands mapped to host.runCommand
       case "session.new": {
+        // It opens the form that starts one; nothing is running yet.
         await host.runCommand("session.new")
-        return { success: true, spoken: "Nuova sessione avviata." }
+        return { success: true, spoken: "Apro la schermata per avviare una nuova sessione." }
+      }
+
+      case "video.new":
+      case "model.new":
+      case "app.new":
+      case "decisions.open": {
+        await host.runCommand(intentId)
+        return { success: true, spoken: `${result.intent.readback}.` }
       }
 
       case "palette.open": {
