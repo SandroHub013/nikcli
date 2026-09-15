@@ -143,15 +143,18 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
 /**
  * The effort levels each agent takes at start, and how it is told.
  *
- * Read off each CLI's `--help` (2026-09-15):
+ * Read off each CLI's `--help` and checked in the transcripts (2026-09-15):
  *
- *   claude   --effort <low|medium|high|xhigh|max>
- *   agy      --effort <low|medium|high>
+ *   claude   --effort <low|medium|high|xhigh|max>; the transcript records it
+ *            for sonnet and opus, and nothing for haiku, which ignores it
  *   codex    -c model_reasoning_effort="<level>"   (no flag of its own)
+ *   agy      the effort is part of the model id (`gemini-3.8-flash-high`):
+ *            its `--effort` flag logs "not supported for model" and the
+ *            session runs at the model's own level
  *
  * nikcli's TUI has no effort flag: its effort is the agent's `variant`. An
- * agent that cannot be told is refused, never started at its default while
- * the caller believes it asked for more.
+ * effort that would be ignored is refused, never passed while the caller
+ * believes it took.
  */
 const EFFORTS: Record<string, readonly string[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
@@ -159,7 +162,7 @@ const EFFORTS: Record<string, readonly string[]> = {
   agy: ["low", "medium", "high"],
 }
 
-export function effortArgs(agentId: string, effort: string): string[] | { error: string } {
+export function effortArgs(agentId: string, effort: string, model?: string): string[] | { error: string } {
   const value = effort.trim().toLowerCase()
   const levels = EFFORTS[agentId]
   if (!levels) {
@@ -171,6 +174,16 @@ export function effortArgs(agentId: string, effort: string): string[] | { error:
     }
   }
   if (!levels.includes(value)) return { error: `effort "${effort}" non valido per ${agentId}: ${levels.join(", ")}` }
+  if (agentId === "agy") {
+    const suffix = /-(low|medium|high)$/.exec(model?.trim() ?? "")?.[1]
+    if (!model) return { error: `per agy l'effort è nel nome del modello: usa --model, per esempio gemini-3.8-flash-${value}` }
+    if (!suffix) return { error: `il modello ${model} di agy non ha livelli di effort: togli --effort` }
+    if (suffix !== value) return { error: `per agy l'effort è nel nome del modello: usa ${model.replace(/-(low|medium|high)$/, `-${value}`)}` }
+    return []
+  }
+  if (agentId === "claude-code" && /haiku/i.test(model ?? "")) {
+    return { error: `${model} ignora l'effort: togli --effort o scegli sonnet o opus` }
+  }
   return agentId === "codex" ? ["-c", `model_reasoning_effort="${value}"`] : ["--effort", value]
 }
 
@@ -232,6 +245,12 @@ export function dispatchChoice(json: string, profile: string, agentId: string): 
   const effort = text("effort")
   const why = text("why")
   return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(why ? { why } : {}) }
+}
+
+/** The model named in spawn arguments, if any. */
+export function modelIn(args: readonly string[]): string | undefined {
+  const at = args.findIndex((arg) => arg === "--model" || arg === "-m")
+  return at >= 0 ? args[at + 1] : undefined
 }
 
 /** Spawn arguments with any model choice taken out, so another can be put in. */

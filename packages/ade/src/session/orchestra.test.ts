@@ -121,9 +121,18 @@ test("withoutModel takes the model choice out and leaves the rest", () => {
 describe("effort and dispatch profiles at spawn", () => {
   test("each agent is told the effort its own way, and one that cannot be told is refused", () => {
     expect(effortArgs("claude-code", "XHigh")).toEqual(["--effort", "xhigh"])
-    expect(effortArgs("agy", "low")).toEqual(["--effort", "low"])
+    expect(effortArgs("claude-code", "low", "sonnet")).toEqual(["--effort", "low"])
     expect(effortArgs("codex", "high")).toEqual(["-c", 'model_reasoning_effort="high"'])
     expect(effortArgs("agy", "max")).toEqual({ error: expect.stringContaining("low, medium, high") })
+  })
+
+  test("an effort the model would ignore is refused, as the transcripts showed", () => {
+    expect(effortArgs("claude-code", "low", "haiku")).toEqual({ error: expect.stringContaining("ignora l'effort") })
+    // agy carries the effort in the model id; its --effort flag is not applied.
+    expect(effortArgs("agy", "medium", "gemini-3.8-flash-medium")).toEqual([])
+    expect(effortArgs("agy", "high", "gemini-3.8-flash-medium")).toEqual({ error: expect.stringContaining("gemini-3.8-flash-high") })
+    expect(effortArgs("agy", "high")).toEqual({ error: expect.stringContaining("--model") })
+    expect(effortArgs("agy", "high", "claude-sonnet-4-6")).toEqual({ error: expect.stringContaining("non ha livelli") })
     expect(effortArgs("nikcli", "high")).toEqual({ error: expect.stringContaining("variant") })
     expect(effortArgs("opencode", "high")).toEqual({ error: expect.stringContaining("senza --effort") })
   })
