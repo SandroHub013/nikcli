@@ -1349,8 +1349,11 @@ export function Workbench() {
 
   /*
    * A release notice installs the release: download, install, restart, all
-   * inside ADE. The restart ends every running session, so that is asked
-   * first when there is one. A platform the manifest does not cover (a .deb
+   * inside ADE. The restart stops every running agent; the workspace is
+   * written first, and not left to the autosave's debounce, because the
+   * installer ends this process without a `pagehide` — and that saved state is
+   * what brings the sessions back, resumed by conversation id, on the next
+   * start. Asked first when there is something running. A platform the manifest does not cover (a .deb
    * or .rpm install, Linux on ARM) or a failed download falls back to the
    * release page, so the notice is never a dead end.
    */
@@ -1365,12 +1368,15 @@ export function Workbench() {
     if (running > 0) {
       const { ask } = await import("@tauri-apps/plugin-dialog")
       const go = await ask(
-        `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso verrà chiusa" : `le ${running} sessioni in corso verranno chiuse`}.`,
+        `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso viene interrotta e ripresa" : `le ${running} sessioni in corso vengono interrotte e riprese`} alla riapertura.`,
         { title: "Aggiorna ADE", kind: "warning", okLabel: "Aggiorna e riavvia", cancelLabel: "Più tardi" },
       )
       if (!go) return
     }
     setUpdating(true)
+    autosave.flush()
+    // localStorage reaches WebView2's disk store a moment after setItem.
+    await new Promise((resolve) => setTimeout(resolve, 1500))
     try {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("ade_update_install")
@@ -1841,7 +1847,7 @@ export function Workbench() {
     setBooting(undefined)
   })
 
-  createAutosave({
+  const autosave = createAutosave({
     // The revision and not the store: reading `wb()` subscribes to nothing,
     // because a store is tracked per property and the save cares about all of
     // them.

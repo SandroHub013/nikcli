@@ -114,7 +114,11 @@ jobs:
             bundles: app
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            bundles: nsis,msi
+            # NSIS only. It installs per user into %LOCALAPPDATA%\ADE, where
+            # every earlier release is, and a newer setup replaces that copy;
+            # an MSI installs per machine into Program Files, beside it, as a
+            # second ADE with its own shortcuts.
+            bundles: nsis
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             bundles: deb,rpm,appimage
