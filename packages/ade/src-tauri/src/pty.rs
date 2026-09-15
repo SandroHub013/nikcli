@@ -399,6 +399,13 @@ pub async fn pty_spawn(
      * really comes from this pane.
      */
     pane_token: Option<String>,
+    /*
+     * API keys for this session, by name. Only names cross the IPC: the values
+     * are read here from the system keychain (`secrets.rs`) and go straight
+     * into the child's environment. Which keys a session gets is chosen per
+     * key, per agent, in Impostazioni › Chiavi API; bot turns pass none.
+     */
+    secrets: Option<Vec<String>>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
@@ -438,6 +445,14 @@ pub async fn pty_spawn(
      */
     builder.env("TERM", "xterm-256color");
     builder.env("COLORTERM", "truecolor");
+    /*
+     * The user's keys, before ADE's own variables so those always win. A key
+     * that cannot be read fails the launch: an agent started without the key
+     * it was meant to have fails later, somewhere less obvious.
+     */
+    for (name, value) in crate::secrets::env_for(&app, secrets.as_deref().unwrap_or_default())? {
+        builder.env(name, value);
+    }
 
     /*
      * Somebody else's session does not come along.

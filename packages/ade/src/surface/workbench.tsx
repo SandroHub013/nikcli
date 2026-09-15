@@ -13,6 +13,8 @@ import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
+import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
+import { KEYS_VERBS, keysForAgent, runKeysCommand } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
   checkName,
@@ -503,6 +505,37 @@ export function Workbench() {
       appendLine(paneId, line, "note")
     }
   }
+
+  /*
+   * API keys (S23): the host keeps the values in the system keychain; here
+   * only names travel. An agent can list what exists and ask the user for a
+   * key with `@ade keys ask ENV motivo`, which opens a dialog and nothing more.
+   */
+  const [keysAvailable, setKeysAvailable] = createSignal(false)
+  void getHost().then((host) => setKeysAvailable(Boolean(host?.listSecrets)))
+  const withKeys = async () => {
+    const host = await getHost()
+    if (!host?.listSecrets || !host.saveSecret || !host.deleteSecret || !host.copySecret) {
+      throw new Error("questa versione di ADE non ha il portachiavi")
+    }
+    return host as Required<Pick<typeof host, "listSecrets" | "saveSecret" | "deleteSecret" | "copySecret">>
+  }
+  const keysService: KeysHost = {
+    list: () => withKeys().then((host) => host.listSecrets()),
+    save: (draft) => withKeys().then((host) => host.saveSecret(draft)),
+    remove: (name) => withKeys().then((host) => host.deleteSecret(name)),
+    copy: (name) => withKeys().then((host) => host.copySecret(name)),
+  }
+  const keysHost = (): KeysHost | undefined => (keysAvailable() ? keysService : undefined)
+  const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string }>()
+  panels.register("keys", {
+    verbs: KEYS_VERBS,
+    run: (request) => {
+      return runKeysCommand({ list: keysService.list, ask: (env, reason) => setKeyRequest({ env, reason }) }, request).catch(
+        (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
+      )
+    },
+  })
 
   /** Announces a newly opened panel to every session currently running. */
   const announceToAll = (panel: string) => {
@@ -3295,6 +3328,17 @@ export function Workbench() {
       appendLine(paneId, `${workDir}> ${[agent.command, ...displayArgs(extraArgs)].join(" ")}`, "shell")
 
       /*
+       * The keys chosen for this agent in Impostazioni › Chiavi API, by name.
+       * The transcript says which variables were set, never what they hold.
+       */
+      const keyList = host.listSecrets ? await host.listSecrets().catch(() => []) : []
+      const secretNames = keysForAgent(keyList, agentId)
+      if (secretNames.length > 0) {
+        const vars = keyList.filter((key) => secretNames.includes(key.name)).map((key) => key.env)
+        appendLine(paneId, `Chiavi API passate: ${vars.join(", ")}`, "note")
+      }
+
+      /*
        * Started bare, the way the user would start it in their own terminal.
        *
        * No per-agent one-shot arguments any more: those turned every session
@@ -3352,6 +3396,7 @@ export function Workbench() {
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
+        ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
       spawned = session
@@ -4324,6 +4369,16 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={keyRequest() && keysHost()}>
+        <KeyRequestDialog
+          host={keysHost()!}
+          agents={AGENTS.filter((agent) => agent.id !== "terminal")}
+          env={keyRequest()!.env}
+          reason={keyRequest()!.reason}
+          onClose={() => setKeyRequest(undefined)}
+        />
+      </Show>
+
       <CommandPalette
         open={paletteOpen()}
         commands={allCommands()}
@@ -4402,6 +4457,12 @@ export function Workbench() {
               label: "Provider",
               glyph: "⚿",
               render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
+            },
+            {
+              id: "set-sec-keys",
+              label: "Chiavi API",
+              glyph: "⚷",
+              render: () => <KeysSection host={keysHost()} agents={AGENTS.filter((agent) => agent.id !== "terminal")} />,
             },
             {
               id: "set-sec-mcp",
