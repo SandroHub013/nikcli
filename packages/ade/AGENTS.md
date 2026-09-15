@@ -46,7 +46,8 @@ bun run test:app stop     # stop this worktree's instance, and only that
   window loads the *other* worktree's code from it, with nothing on screen to
   say so. `test:app` gives each worktree its own port for this reason.
 - Stop your instance with `test:app stop`, never by killing processes by
-  name: it checks the recorded start time before stopping anything.
+  name: it stops only processes that carry this worktree's config, profile or
+  build folder, and their children.
 - The first start in a new worktree compiles the Rust host (several minutes);
   later starts reuse that worktree's `src-tauri/target`.
 - The profile is new per worktree, so localStorage starts empty: open
