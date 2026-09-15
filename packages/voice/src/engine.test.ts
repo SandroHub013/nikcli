@@ -707,4 +707,18 @@ describe("engine/agent answers what the grammar does not know", () => {
     expect(speaker.lastSpoken).toBe("claude non si avvia")
     await engine.stop()
   })
+
+  test("a turn stopped by the plan's limit is said once and not handed over again", async () => {
+    const notice =
+      "Claude Code ha raggiunto il limite del tuo piano. ADE non riprova e non cambia account: attendi il reset indicato dalla CLI oppure usa una chiave API."
+    const { asked, speaker, engine } = setup("auto", { ok: false, text: notice })
+    await engine.start()
+    await engine.submitText("chiedi alla sessione dei test se ha finito")
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(asked).toHaveLength(1)
+    expect(engine.lastError()).toBe(notice)
+    expect(speaker.lastSpoken).toBe(notice)
+    await engine.stop()
+  })
 })

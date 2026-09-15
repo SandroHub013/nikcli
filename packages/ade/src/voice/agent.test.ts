@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentStatus } from "../session-new/availability"
+import { createWorkbench } from "../surface/state"
+import { createAdeVoiceHost } from "./host"
 import type { TurnRequest, TurnResult } from "../bots/turn"
+import { limitNotice } from "../bots/terms"
 import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
@@ -103,5 +106,39 @@ describe("voice/agent", () => {
     abort.abort()
     expect((await pending).ok).toBe(false)
     expect(runner.stops()).toBe(1)
+  })
+
+  test("a turn ended by the plan's limit is said as the bots say it, and never asked again", async () => {
+    const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+
+    const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })
+    expect(answer).toEqual({ ok: false, text: limitNotice("Claude Code") })
+    expect(answer.text).toContain("ADE non riprova")
+    // Neither the same CLI again nor another engine: one sentence, one turn.
+    expect(runner.requests).toHaveLength(1)
+  })
+
+  test("the voice host's sentences run through the bots' runTurn, where the plan's cap is held", async () => {
+    // S13: the cap on parallel turns is taken inside runTurn (bots/terms.ts
+    // acquireTurn), shared by bots and the voice agent. Without the desktop
+    // host runTurn stops at its own first check, and that answer can only
+    // come from runTurn: so a sentence reaching it proves the path.
+    const voice = createAdeVoiceHost({
+      wb: () => createWorkbench(),
+      setWb: () => {},
+      project: () => undefined,
+      runCommand: async () => {},
+      isRunning: () => false,
+      getRunningSession: () => undefined,
+      openFile: async () => {},
+      appendLine: () => {},
+      permissions: () => ({}),
+      answerPermission: () => {},
+    })
+    expect(await voice.askAgent!({ text: "quante sessioni ci sono?", engine: "claude" })).toEqual({
+      ok: false,
+      text: "Nessun host: un turno si esegue solo nell'app desktop.",
+    })
   })
 })
