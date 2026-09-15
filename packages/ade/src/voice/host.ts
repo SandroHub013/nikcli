@@ -15,6 +15,7 @@ import {
   type Workbench as WorkbenchState,
 } from "../surface/state"
 import { awaitPaneReply } from "./await-reply"
+import { createVoiceAgent, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
 
 /**
@@ -87,7 +88,28 @@ function paneElement(paneId: string): HTMLElement | null {
  * Creates an implementation of VoiceHost wired to the ADE Workbench.
  */
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
+  /*
+   * The agent that answers what the grammar cannot, built on first use.
+   *
+   * Imported lazily: `bots/turn` reaches the native host, and the voice host
+   * is also built by tests and the browser harness, where no sentence ever
+   * gets that far.
+   */
+  let agent: Promise<VoiceAgent> | undefined
+  const voiceAgent = () =>
+    (agent ??= import("../bots/turn").then(({ runTurn }) =>
+      createVoiceAgent({
+        runTurn,
+        statuses: () => deps.agentAvailability?.(),
+        cwd: () => deps.project()?.root,
+      }),
+    ))
+
   return {
+    async askAgent(request) {
+      return (await voiceAgent()).ask(request)
+    },
+
     async runCommand(id: string): Promise<void> {
       await deps.runCommand(id)
     },

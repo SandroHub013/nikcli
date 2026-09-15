@@ -29,6 +29,7 @@ import type { VoiceEngine } from "../engine"
 import type { DialogStatus } from "../dialog/session"
 import {
   DEFAULT_VOICE_SETTINGS,
+  type AgentEngine,
   type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
@@ -277,6 +278,15 @@ function describeStatus(status: DialogStatus, running: boolean): StatusDescripto
  * specified to do; Home and End jump to the ends. Radios belonging to a nested
  * group are excluded so the engine pills never steal the backend list's arrows.
  */
+/** The agent engines, as the panel offers them. */
+const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; title: string; desc: string }[] = [
+  { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code, Codex e nikcli" },
+  { value: "claude", title: "Claude Code", desc: "Con il tuo abbonamento Anthropic" },
+  { value: "codex", title: "Codex", desc: "Con il tuo abbonamento ChatGPT" },
+  { value: "nikcli", title: "nikcli", desc: "Con i provider configurati in nikcli" },
+  { value: "off", title: "Solo comandi", desc: "Nessun agente: capisce solo le frasi note" },
+]
+
 function radioGroupKeys(apply: (value: string) => void) {
   return (event: KeyboardEvent) => {
     const group = event.currentTarget
@@ -891,6 +901,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     updateSettings({ transcriptionSend: value as TranscriptionSendMode }),
   )
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
+  const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const activationKeys = radioGroupKeys((value) =>
     selectActivation(value as VoiceActivation),
   )
@@ -1212,6 +1223,39 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   <span data-slot="sub-item-title">Resta in silenzio</span>
                   <span data-slot="sub-item-desc">La risposta la leggi tu nel pannello</span>
                 </div>
+              </div>
+            </div>
+
+            {/*
+              What answers what the grammar does not know. A CLI the user is
+              signed in to, so it runs on their subscription; see
+              `VoiceSettings.agentEngine`.
+            */}
+            <div data-slot="sub-choice-box">
+              <span id="agent-engine-label" data-slot="sub-choice-label">
+                Motore dell'agente
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="agent-engine-label"
+                data-slot="sub-choice-row"
+                onKeyDown={engineKeys}
+              >
+                <For each={AGENT_ENGINE_CHOICES}>
+                  {(choice) => (
+                    <div
+                      role="radio"
+                      data-value={choice.value}
+                      aria-checked={props.settings.agentEngine === choice.value}
+                      tabIndex={props.settings.agentEngine === choice.value ? 0 : -1}
+                      data-slot="sub-choice-item"
+                      onClick={() => updateSettings({ agentEngine: choice.value })}
+                    >
+                      <span data-slot="sub-item-title">{choice.title}</span>
+                      <span data-slot="sub-item-desc">{choice.desc}</span>
+                    </div>
+                  )}
+                </For>
               </div>
             </div>
           </Show>

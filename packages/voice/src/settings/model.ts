@@ -16,6 +16,9 @@ export type TranscriptionSendMode = "manual" | "auto"
 
 export type ParakeetExecutionBackend = "webgpu" | "wasm" | "auto"
 
+export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
+export type AgentEngine = (typeof AGENT_ENGINES)[number]
+
 export const CURRENT_SETTINGS_VERSION = 1
 
 export interface VoiceSettings {
@@ -62,6 +65,18 @@ export interface VoiceSettings {
    * watching the pane anyway, who wants the microphone and not the voice.
    */
   readonly speakReplies: boolean
+  /**
+   * What answers a sentence the grammar does not know.
+   *
+   * The grammar covers what people say often, instantly and offline. The rest
+   * goes to a coding agent's CLI — Claude Code, Codex or nikcli — running as a
+   * turn with the user's own sign-in, so it spends the subscription they
+   * already have rather than a key billed per request, and it can manage
+   * ADE's sessions through `ade-msg`. `auto` takes the first of those that is
+   * installed; `off` keeps the old behaviour (the OpenRouter planner, when a
+   * key is set).
+   */
+  readonly agentEngine: AgentEngine
   /**
    * Which microphone to listen on. Absent means the system default.
    *
@@ -116,6 +131,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
    */
   customWords: Object.freeze([]),
   speakReplies: true,
+  agentEngine: "auto",
 })
 
 export interface NormalizedVoiceSettings extends VoiceSettings {
@@ -363,6 +379,20 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     outputDeviceId = candidate.outputDeviceId.trim()
   }
 
+  /*
+   * 15. The agent engine.
+   *
+   * Absent in every profile written before it existed, and that is the
+   * default, so absent says nothing. Only a value that is present and not one
+   * of the engines is repaired aloud.
+   */
+  let agentEngine = DEFAULT_VOICE_SETTINGS.agentEngine
+  if (AGENT_ENGINES.includes(candidate.agentEngine as AgentEngine)) {
+    agentEngine = candidate.agentEngine as AgentEngine
+  } else if (candidate.agentEngine !== undefined) {
+    corrections.push(`Motore dell'agente '${String(candidate.agentEngine)}' non riconosciuto: ripristinato automatico.`)
+  }
+
   const cleanSettings: VoiceSettings = {
     version: Number(version),
     mode,
@@ -377,6 +407,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend,
     customWords,
     speakReplies,
+    agentEngine,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),
   }

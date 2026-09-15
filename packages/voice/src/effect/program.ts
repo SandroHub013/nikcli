@@ -575,6 +575,65 @@ export function makeVoiceProgram(
       })
     }
 
+    /* The agent turn in progress, so cancelling the dialogue can end it. */
+    let agentAbort: AbortController | null = null
+
+    /**
+     * Hands an unmatched sentence to the coding agent, and says its answer.
+     *
+     * Returns whether the agent took it. `false` means there is no agent —
+     * the host cannot run one or the user turned it off — and the caller
+     * falls through to the planner and then to "non ho capito".
+     *
+     * Ahead of the planner on purpose: the agent can do everything the
+     * planner can, and what the planner cannot (ask a session, wait for it,
+     * close it), with the subscription the user already pays for rather than
+     * a key billed per request.
+     */
+    function runAgent(utterance: string): Effect.Effect<boolean> {
+      return Effect.gen(function* () {
+        const askAgent = host.askAgent
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        const engine = settings.agentEngine
+        if (!askAgent || engine === "off") return false
+
+        agentAbort?.abort()
+        const abort = new AbortController()
+        agentAbort = abort
+
+        currentState = { ...currentState, status: "executing" }
+        options.onStateChange?.(currentState)
+
+        const answer = yield* Effect.tryPromise({
+          try: () => askAgent.call(host, { text: utterance, engine, signal: abort.signal }),
+          catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
+        }).pipe(
+          Effect.catchAll((err) =>
+            Effect.succeed({
+              ok: false,
+              text: err.cause instanceof Error && err.cause.message ? err.cause.message : spokenMessage(err),
+            }),
+          ),
+        )
+        if (agentAbort === abort) agentAbort = null
+
+        // Cancelled while it worked: the user has moved on, so nothing is said.
+        if (abort.signal.aborted) return true
+
+        currentState = { ...currentState, status: "idle" }
+        options.onStateChange?.(currentState)
+
+        if (!answer.ok) options.onError?.(answer.text)
+        yield* say(answer.text)
+        return true
+      })
+    }
+
+    yield* Scope.addFinalizer(
+      programScope,
+      Effect.sync(() => agentAbort?.abort()),
+    )
+
     /** Speak, and never let the synthesiser's failure become the program's. */
     function say(text: string): Effect.Effect<void> {
       return Effect.gen(function* () {
@@ -670,6 +729,11 @@ export function makeVoiceProgram(
          * the planner first and "chiudi il pannello due" would take two
          * seconds and stop working on a train.
          */
+        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+          const handled = yield* runAgent(trimmed)
+          if (handled) return
+        }
+
         if (parsed.outcome === "unknown" && currentState.status !== "dictating" && options.plan) {
           const handled = yield* runPlan(trimmed)
           if (handled) return
@@ -871,6 +935,8 @@ export function makeVoiceProgram(
 
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer
+        agentAbort?.abort()
+        agentAbort = null
         pendingDisambiguation = null
         isWakeWordAwake = false
         options.onPartialTranscript?.("")

@@ -185,3 +185,17 @@ describe("settings/model - normalizeSettings", () => {
     })
   })
 })
+
+describe("settings/model agentEngine", () => {
+  test("absent is the default without a correction; unknown is repaired aloud", () => {
+    const absent = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, agentEngine: undefined } as never)
+    expect(absent.settings.agentEngine).toBe("auto")
+    expect(absent.corrections.some((c) => c.includes("Motore"))).toBe(false)
+
+    const unknown = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, agentEngine: "gemini" } as never)
+    expect(unknown.settings.agentEngine).toBe("auto")
+    expect(unknown.corrections.some((c) => c.includes("gemini"))).toBe(true)
+
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, agentEngine: "codex" }).settings.agentEngine).toBe("codex")
+  })
+})

@@ -593,3 +593,67 @@ describe("engine/push-to-talk tap latches", () => {
     expect(engine.isRunning()).toBe(false)
   })
 })
+
+describe("engine/agent answers what the grammar does not know", () => {
+  function setup(agentEngine: "auto" | "off", answer: { ok: boolean; text: string }) {
+    const host = new MockVoiceHost()
+    const asked: { text: string; engine: string }[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push({ text: request.text, engine: request.engine })
+      return answer
+    }
+    const speaker = createFakeSpeaker()
+    const engine = createVoiceEngine({
+      host,
+      transcriber: createFakeTranscriber(),
+      speaker,
+      now: () => 10_000,
+      settings: { agentEngine },
+    })
+    return { host, asked, speaker, engine }
+  }
+
+  test("an unmatched sentence goes to the agent and its answer is spoken", async () => {
+    const { asked, speaker, engine } = setup("auto", { ok: true, text: "Ho chiesto alla sessione due: ha finito." })
+    await engine.start()
+    await engine.submitText("chiedi alla sessione dei test se ha finito e dimmi cosa ha trovato")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(asked).toEqual([{ text: "chiedi alla sessione dei test se ha finito e dimmi cosa ha trovato", engine: "auto" }])
+    expect(speaker.lastSpoken).toBe("Ho chiesto alla sessione due: ha finito.")
+    expect(engine.status()).toBe("idle")
+    await engine.stop()
+  })
+
+  test("a known command never reaches the agent", async () => {
+    const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
+    await engine.start()
+    await engine.submitText("nuova sessione")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(asked).toHaveLength(0)
+    expect(host.calls).toContainEqual({ method: "runCommand", args: ["session.new"] })
+    await engine.stop()
+  })
+
+  test("with the agent off, an unmatched sentence is not handed over", async () => {
+    const { asked, engine } = setup("off", { ok: true, text: "no" })
+    await engine.start()
+    await engine.submitText("chiedi alla sessione dei test se ha finito")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(asked).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("a failed turn is shown as an error and said", async () => {
+    const { speaker, engine } = setup("auto", { ok: false, text: "claude non si avvia" })
+    await engine.start()
+    await engine.submitText("chiedi alla sessione dei test se ha finito")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(engine.lastError()).toBe("claude non si avvia")
+    expect(speaker.lastSpoken).toBe("claude non si avvia")
+    await engine.stop()
+  })
+})

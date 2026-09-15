@@ -292,7 +292,9 @@ export {
 // Voice settings, storage, languages, wake word, and shortcuts
 export {
   CURRENT_SETTINGS_VERSION,
+  AGENT_ENGINES,
   DEFAULT_VOICE_SETTINGS,
+  type AgentEngine,
   normalizeSettings,
   type NormalizedVoiceSettings,
   type ParakeetExecutionBackend,

@@ -157,6 +157,25 @@ export interface VoiceHost {
   }>
 
   /**
+   * Hand a sentence the grammar could not match to a coding agent, and get
+   * back what to say.
+   *
+   * The agent runs as one turn of a CLI the user is already signed in to, so
+   * it can reason about a request no phrase list covers and act on ADE's
+   * sessions itself. `engine` is the user's setting; the host resolves `auto`
+   * because only the host knows what is installed. The conversation carries
+   * over between calls until the host decides otherwise.
+   *
+   * Optional: a host without it leaves unmatched sentences to the planner.
+   */
+  askAgent?(request: {
+    text: string
+    /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
+    engine: "auto" | "claude" | "codex" | "nikcli"
+    signal?: AbortSignal
+  }): Promise<{ ok: boolean; text: string }>
+
+  /**
    * Insert text into a pane's composer without submitting it.
    *
    * Why this exists alongside sendPrompt:
