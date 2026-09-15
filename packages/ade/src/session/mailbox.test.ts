@@ -165,7 +165,7 @@ describe("when a session can be written to", () => {
   })
 
   test("a hooked session with no readable activity is held until it has been quiet a while", () => {
-    expect(isFree({ hooked: true, permissionPending: false }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - 1000 }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS + 1 }, now)).toBe(false)
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS }, now)).toBe(true)

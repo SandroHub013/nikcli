@@ -584,7 +584,8 @@ export function isFree(
   if (target.permissionPending) return false
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
-    if (!target.activity) return quietFor >= UNKNOWN_FREE_MS
+    // Nothing known at all, neither a turn nor a byte of output: not a reason to type.
+    if (!target.activity) return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
     if (target.activity.state === "idle") return true
     return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
   }
