@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
 import type { AgentStatus } from "../session-new/availability"
+import { createWorkbench } from "../surface/state"
+import { createAdeVoiceHost } from "./host"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { limitNotice } from "../bots/terms"
 import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS } from "./agent"
@@ -119,18 +119,26 @@ describe("voice/agent", () => {
     expect(runner.requests).toHaveLength(1)
   })
 
-  test("the full turns on a plan refuse a voice turn too: it runs through the bots' runTurn", () => {
-    // S13: the cap on parallel turns lives in runTurn (bots/terms.ts
-    // acquireTurn), shared by bots and the voice agent. These hold the wiring
-    // to that, since runTurn needs the desktop host to run.
-    const host = readFileSync(join(import.meta.dir, "host.ts"), "utf8")
-    expect(host).toMatch(/import\("\.\.\/bots\/turn"\)\.then\(\(\{ runTurn \}\) =>\s*createVoiceAgent\(\{\s*runTurn,/)
-
-    const turn = readFileSync(join(import.meta.dir, "..", "bots", "turn.ts"), "utf8")
-    const acquired = turn.indexOf("acquireTurn(runner.id")
-    expect(acquired).toBeGreaterThan(-1)
-    expect(turn.indexOf("if (\"problem\" in slot)", acquired)).toBeGreaterThan(acquired)
-    expect(turn.indexOf(".spawn(", acquired)).toBeGreaterThan(acquired)
-    expect(turn.indexOf("slot.release()", acquired)).toBeGreaterThan(turn.indexOf(".spawn(", acquired))
+  test("the voice host's sentences run through the bots' runTurn, where the plan's cap is held", async () => {
+    // S13: the cap on parallel turns is taken inside runTurn (bots/terms.ts
+    // acquireTurn), shared by bots and the voice agent. Without the desktop
+    // host runTurn stops at its own first check, and that answer can only
+    // come from runTurn: so a sentence reaching it proves the path.
+    const voice = createAdeVoiceHost({
+      wb: () => createWorkbench(),
+      setWb: () => {},
+      project: () => undefined,
+      runCommand: async () => {},
+      isRunning: () => false,
+      getRunningSession: () => undefined,
+      openFile: async () => {},
+      appendLine: () => {},
+      permissions: () => ({}),
+      answerPermission: () => {},
+    })
+    expect(await voice.askAgent!({ text: "quante sessioni ci sono?", engine: "claude" })).toEqual({
+      ok: false,
+      text: "Nessun host: un turno si esegue solo nell'app desktop.",
+    })
   })
 })
