@@ -150,6 +150,25 @@
 
 /* ── notice ───────────────────────────────────────────────────────────────── */
 
+[data-slot="agent-held"] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-4) var(--ade-space-7);
+  border-top: 1px solid var(--ade-border-subtle);
+  background: var(--ade-waiting-bg);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="agent-held-text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 [data-slot="agent-notice"] {
   flex: 0 0 auto;
   margin: 0;

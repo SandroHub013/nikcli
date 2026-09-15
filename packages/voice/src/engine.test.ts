@@ -744,6 +744,136 @@ describe("engine/agent answers what the grammar does not know", () => {
     })
   })
 
+  describe("heard while the agent is thinking: only a stop or a known command ends the turn", () => {
+    async function thinking() {
+      const host = new MockVoiceHost()
+      const asked: string[] = []
+      const answers: ((text: string) => void)[] = []
+      let aborted = 0
+      ;(host as VoiceHost).askAgent = (request) =>
+        new Promise((resolve) => {
+          asked.push(request.text)
+          answers.push((text) => resolve({ ok: true, text, ran: true }))
+          request.signal?.addEventListener("abort", () => {
+            aborted++
+            resolve({ ok: false, text: "", ran: true })
+          })
+        })
+      const transcriber = createFakeTranscriber()
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      await engine.start()
+      transcriber.emit("raccontami la storia di Roma in tre frasi", true)
+      await new Promise((r) => setTimeout(r, 20))
+      expect(engine.status()).toBe("executing")
+      const hear = async (text: string) => {
+        transcriber.emit(text, true)
+        await new Promise((r) => setTimeout(r, 20))
+      }
+      const answer = async (text: string) => {
+        answers.shift()!(text)
+        await new Promise((r) => setTimeout(r, 20))
+      }
+      return { host, asked, engine, hear, answer, aborted: () => aborted }
+    }
+
+    const TV = "il governo ha approvato la legge di bilancio nella notte"
+
+    test("a long free sentence from the room does not stop the turn: it is held and shown, and fillers are left alone", async () => {
+      const { asked, engine, hear, answer, aborted } = await thinking()
+      await hear("ok")
+      await hear(TV)
+
+      expect(aborted()).toBe(0)
+      expect(engine.status()).toBe("executing")
+      expect(engine.held()).toBe(TV)
+      expect(engine.history().some((entry) => entry.kind === "action" && entry.label.startsWith(`Sentito mentre pensavo: «${TV}»`))).toBe(true)
+
+      // Not confirmed: the turn answers and the held sentence is never asked.
+      await answer("Roma fu fondata nel 753 a.C.")
+      expect(asked).toEqual(["raccontami la storia di Roma in tre frasi"])
+      expect(engine.lastSpoken()).toBe("Roma fu fondata nel 753 a.C.")
+      await engine.stop()
+    })
+
+    test("«invia questa» during the turn sends the held sentence once the turn is over", async () => {
+      const { asked, engine, hear, answer, aborted } = await thinking()
+      await hear(TV)
+      await hear("invia questa")
+      expect(aborted()).toBe(0)
+      expect(asked).toHaveLength(1)
+
+      await answer("Fatto.")
+      expect(asked).toEqual(["raccontami la storia di Roma in tre frasi", TV])
+      expect(engine.held()).toBeNull()
+      await engine.stop()
+    })
+
+    test("«invia questa» after the turn, as the console's button does, sends it at once", async () => {
+      const { asked, engine, hear, answer } = await thinking()
+      await hear(TV)
+      await answer("Fatto.")
+      expect(engine.held()).toBe(TV)
+
+      void engine.submitText("invia questa")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(asked).toEqual(["raccontami la storia di Roma in tre frasi", TV])
+      await engine.stop()
+    })
+
+    test("another sentence drops the held one", async () => {
+      const { asked, engine, hear, answer } = await thinking()
+      await hear(TV)
+      await answer("Fatto.")
+      await engine.submitText("apri la tavolozza")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(engine.held()).toBeNull()
+      await engine.submitText("invia questa")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(asked).not.toContain(TV)
+      await engine.stop()
+    })
+
+    test("closing the microphone mid-turn stops the turn instead of waiting for it", async () => {
+      const { engine, aborted } = await thinking()
+      const started = Date.now()
+      await engine.stop()
+      expect(aborted()).toBe(1)
+      expect(Date.now() - started).toBeLessThan(1000)
+    })
+
+    test("«annulla» said aloud stops the turn at once, not after the answer", async () => {
+      const { host, engine, hear, aborted } = await thinking()
+      await hear("annulla")
+
+      expect(aborted()).toBe(1)
+      expect(engine.status()).toBe("idle")
+      expect(engine.lastSpoken()).toBe("Ho fermato la richiesta precedente.")
+      expect(host.calls.filter((call) => call.method === "runCommand")).toHaveLength(0)
+      await engine.stop()
+    })
+
+    test("a real request stops the turn and is carried out", async () => {
+      const { host, engine, hear, aborted } = await thinking()
+      await hear("apri la tavolozza")
+
+      expect(aborted()).toBe(1)
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
+      await engine.stop()
+    })
+  })
+
+  test("a command that cannot be carried out is said once, without an error code", async () => {
+    const { engine } = setup("auto", { ok: true, text: "no" })
+    await engine.start()
+    await engine.submitText("annulla")
+    await new Promise((r) => setTimeout(r, 20))
+
+    const lines = engine.history().filter((entry) => entry.kind !== "user")
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ kind: "assistant", text: "Non c'è niente da annullare." })
+    await engine.stop()
+  })
+
   test("a known command never reaches the agent", async () => {
     const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
     await engine.start()

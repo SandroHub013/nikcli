@@ -374,10 +374,9 @@ export function transition(
     }
 
     if (event.type === "command_failed") {
-      return withSpoken(
-        { ...state, status: "idle" },
-        `Errore durante l'esecuzione: ${event.error}`
-      )
+      // The dispatcher's sentence already says what went wrong, to the user:
+      // «Errore durante l'esecuzione: Non c'è niente da annullare» said it twice.
+      return withSpoken({ ...state, status: "idle" }, event.error)
     }
 
     return { state, effects: [] }

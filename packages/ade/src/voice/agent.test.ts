@@ -89,6 +89,7 @@ describe("voice/agent", () => {
     expect(await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })).toEqual({
       ok: true,
       text: "Ci sono due sessioni.",
+      ran: true,
     })
     await agent.ask({ text: "e la seconda?", engine: "claude" })
 
@@ -107,7 +108,9 @@ describe("voice/agent", () => {
     const runner = fakeRunner([{ status: "error", problem: "claude non si avvia: ENOENT" }, { status: "stopped" }])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => undefined })
 
-    expect(await agent.ask({ text: "x", engine: "claude" })).toEqual({ ok: false, text: "claude non si avvia: ENOENT" })
+    expect(await agent.ask({ text: "x", engine: "claude" })).toEqual({ ok: false, text: "claude non si avvia: ENOENT", ran: true })
+    // No runner at all: nothing ran, so the planner may still take the sentence.
+    expect(await agent.ask({ text: "x", engine: "nikcli" })).toMatchObject({ ok: false, ran: false })
 
     const abort = new AbortController()
     const pending = agent.ask({ text: "y", engine: "claude", signal: abort.signal })

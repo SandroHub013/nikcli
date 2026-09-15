@@ -102,7 +102,10 @@ function extractSlotsFromUtterance(
   }
 
   // 2. File path extraction: e.g. "apri file src/bridge/host.ts"
-  const fileMatch = cleaned.match(/\b(?:file)\s+([^\s]+)/i)
+  //
+  // Not after "cerca": "cerca file parser" is a search, and taking "parser"
+  // as a path here left step 7 with no query, so the search ran on nothing.
+  const fileMatch = cleaned.match(/(?<!\b(?:cerca|trova|ricerca)\s)\bfile\s+([^\s]+)/i)
   if (fileMatch) {
     slots.path = fileMatch[1]
     cleaned = cleaned.replace(fileMatch[0], "").replace(/\s+/g, " ").trim()

@@ -29,6 +29,8 @@ export interface AgentConsoleProps {
   partial: string
   /** Whether a planner key is configured; without one, plans cannot be made. */
   canPlan: boolean
+  /** A sentence heard while thinking and set aside, offered with a button to send it. */
+  held?: string | null
   onSubmit: (text: string) => void
   onToggleMic: () => void
   onOpenSettings: () => void
@@ -153,6 +155,20 @@ export function AgentConsole(props: AgentConsoleProps) {
           </Show>
         </Show>
       </div>
+
+      {/* Heard from the room while the assistant thought: not allowed to stop
+          the turn, and not lost either. The button says «invia questa» for
+          the user, so the engine has one path for voice and click. */}
+      <Show when={props.held}>
+        {(text) => (
+          <div data-slot="agent-held" role="status">
+            <span data-slot="agent-held-text">Sentito mentre pensavo: «{text()}»</span>
+            <button type="button" data-slot="agent-action" onClick={() => props.onSubmit("invia questa")}>
+              Invia questa
+            </button>
+          </div>
+        )}
+      </Show>
 
       <div data-slot="agent-composer">
         <textarea

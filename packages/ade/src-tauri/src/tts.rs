@@ -333,16 +333,20 @@ fn fetch(download: &Download, path: &Path) -> Result<(), String> {
     let _ = std::fs::remove_file(path);
     run(
         system_tool("curl.exe"),
-        // Bounded: the install lock is held for the whole download, so a stalled
-        // connection used to leave every later request for this voice waiting.
+        // Bounded by progress, not by a total: the install lock is held for the
+        // whole download, so a stalled connection left every later request for
+        // this voice waiting, while a fixed ceiling would also cut off a slow
+        // line that is still getting there. Under 1 KB/s for a minute is stalled.
         &[
             "-fsSL".as_ref(),
             "--retry".as_ref(),
             "2".as_ref(),
             "--connect-timeout".as_ref(),
             "20".as_ref(),
-            "--max-time".as_ref(),
-            "900".as_ref(),
+            "--speed-limit".as_ref(),
+            "1024".as_ref(),
+            "--speed-time".as_ref(),
+            "60".as_ref(),
             "-o".as_ref(),
             path.as_os_str(),
             download.url.as_ref(),
