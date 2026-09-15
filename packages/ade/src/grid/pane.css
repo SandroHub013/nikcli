@@ -1013,3 +1013,403 @@
     opacity: 1;
   }
 }
+
+/* ══ Proposta A · Barra densa (S8) ═════════════════════════════════════════ */
+
+:root {
+  --st-ask: var(--ade-ansi-magenta);
+  --st-limit: color-mix(in srgb, var(--ade-working) 45%, var(--ade-error));
+  --on-st: light-dark(#ffffff, #0e0c0c);
+}
+
+/* Canonical 6-state status colors on session pane */
+[data-component="session-pane"] {
+  --st: var(--ade-text-weak);
+}
+[data-component="session-pane"][data-st="work"] {
+  --st: var(--ade-working);
+  --pane-status: var(--ade-working);
+}
+[data-component="session-pane"][data-st="perm"] {
+  --st: var(--ade-waiting);
+  --pane-status: var(--ade-waiting);
+}
+[data-component="session-pane"][data-st="ask"] {
+  --st: var(--st-ask);
+  --pane-status: var(--st-ask);
+}
+[data-component="session-pane"][data-st="err"] {
+  --st: var(--ade-error);
+  --pane-status: var(--ade-error);
+}
+[data-component="session-pane"][data-st="limit"] {
+  --st: var(--st-limit);
+  --pane-status: var(--st-limit);
+}
+[data-component="session-pane"][data-st="idle"] {
+  --st: var(--ade-done);
+  --pane-status: var(--ade-done);
+}
+
+/* State vector icons: stroke-based on 16px grid */
+.ic {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--st);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+.ic .f {
+  fill: currentColor;
+  stroke: none;
+}
+.ic-work {
+  animation: ade-spin 1s linear infinite;
+}
+.ic-perm {
+  animation: ade-attn 1.6s steps(1, end) infinite;
+}
+.ic-ask .d1,
+.ic-ask .d2,
+.ic-ask .d3 {
+  animation: ade-dot 1.2s ease-in-out infinite;
+}
+.ic-ask .d2 {
+  animation-delay: 0.2s;
+}
+.ic-ask .d3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes ade-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ade-attn {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 0.3;
+  }
+}
+@keyframes ade-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* Dense header pill layout */
+.pill.hA {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  height: 30px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 9px;
+  border: 0;
+  border-radius: var(--ade-radius-full);
+  background: color-mix(in srgb, var(--ade-raised) 90%, transparent);
+  box-shadow:
+    var(--ade-shadow-sm),
+    inset 0 0 0 1px light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.06));
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  font-family: var(--ade-sans);
+  z-index: 3;
+}
+
+.hA .logo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.hA .nm {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--ade-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 4ch;
+  flex: 0 1 auto;
+}
+
+.hA .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px 0 5px;
+  border: 0;
+  border-radius: var(--ade-radius-full);
+  background: color-mix(in srgb, var(--st) 14%, transparent);
+  color: var(--ade-text-soft);
+  font: 500 11px / 1 var(--ade-sans);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  flex: 0 100 auto;
+  cursor: default;
+}
+
+.hA .lbl {
+  color: var(--st);
+  flex: 0 0 auto;
+}
+
+.hA .trunc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.hA .sp {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.hA .mono {
+  font-family: var(--ade-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hA .tok {
+  font: 10px var(--ade-mono);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.hA .a-state {
+  flex: 0 100 auto;
+}
+
+.hA .a-q {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.hA .q,
+.hA [data-lv] {
+  --qc: var(--ade-text-soft);
+}
+.hA [data-lv="low"] {
+  --qc: var(--ade-working);
+}
+.hA [data-lv="crit"] {
+  --qc: var(--ade-error);
+}
+
+.hA .qbar {
+  display: inline-block;
+  width: 28px;
+  height: 4px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-active);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.hA .qbar i {
+  display: block;
+  height: 100%;
+  width: calc(var(--r, 0) * 100%);
+  background: var(--qc);
+  border-radius: inherit;
+}
+
+.hA .qv {
+  font: 600 10px var(--ade-mono);
+  color: var(--qc);
+  font-variant-numeric: tabular-nums;
+}
+
+.hA [data-lv="crit"] .qv::before {
+  content: "!";
+  margin-right: 1px;
+}
+
+.hA .qk,
+.hA .qr {
+  font: 10px var(--ade-mono);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+.hA .a-br {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ade-text-weak);
+  font: 10px var(--ade-mono);
+  min-width: 0;
+  flex: 0 50 auto;
+}
+
+.hA .a-brt {
+  max-width: 22ch;
+}
+
+/* The tree's fidelity note, next to the branch: amber, because a tree that is
+   behind or has no dependencies is a condition, not a failure. */
+.hA .a-brn {
+  color: var(--ade-working);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.hA .a-br[data-fidelity="pending"] {
+  font-style: italic;
+}
+
+.hA .a-mode {
+  font: 10px var(--ade-mono);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* "quota n/d": no bar and no colour, so an absent reading never looks like a
+   low one. */
+.hA [data-lv="na"] .qv {
+  color: var(--ade-text-weak);
+  font-weight: 500;
+}
+
+.hA .acts {
+  display: flex;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.hA .act {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ade-radius-full);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+.hA .act:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+.hA .act:focus-visible {
+  border-radius: var(--ade-radius-full);
+  color: var(--ade-text);
+}
+
+.hA .more {
+  display: none;
+}
+
+.hA .gi {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hA .gi .f {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ── Container queries (ordine di collasso Proposal A) ── */
+@container (max-width: 720px) {
+  .hA .tok,
+  .hA .a-mode,
+  .hA .a-brt,
+  .hA .qr {
+    display: none;
+  }
+  .hA [data-urg] .qr {
+    display: inline;
+  }
+}
+
+@container (max-width: 400px) {
+  .hA .a-det,
+  .hA .a-el,
+  .hA .a-br,
+  .hA .qbar,
+  .hA .qk,
+  .hA .acts {
+    display: none;
+  }
+  .hA .more {
+    display: grid;
+  }
+  .hA .a-state {
+    flex: 0 0 auto;
+  }
+}
+
+@container (max-width: 240px) {
+  .hA {
+    gap: 5px;
+    padding-left: 7px;
+  }
+  .hA > .logo,
+  .hA .lbl {
+    display: none;
+  }
+  .hA .a-state {
+    padding: 0;
+    width: 20px;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+  .hA [data-urg] .qv {
+    display: none;
+  }
+  .hA [data-urg] .qr {
+    display: inline;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-work,
+  .ic-perm,
+  .ic-ask .d1,
+  .ic-ask .d2,
+  .ic-ask .d3 {
+    animation: none !important;
+  }
+}
