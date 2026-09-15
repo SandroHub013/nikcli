@@ -176,8 +176,13 @@ export async function dispatch(
       }
 
       case "project.recent": {
-        const root = slots.path ? `project.recent.${slots.path}` : "project.recent"
-        await host.runCommand(root)
+        // Without a name there is no recent project to open, and no host handles
+        // a bare `project.recent`: the project picker is where that choice is made.
+        if (!slots.path) {
+          await host.runCommand("project.open")
+          return { success: true, spoken: "Apro la scelta del progetto." }
+        }
+        await host.runCommand(`project.recent.${slots.path}`)
         return { success: true, spoken: "Apro il progetto recente richiesto." }
       }
 
@@ -229,6 +234,13 @@ export async function dispatch(
         const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
+        }
+        if (!resolved.pane!.hasLiveProcess) {
+          return {
+            success: false,
+            spoken: `Il pannello ${resolved.pane!.index} non ha un processo attivo da terminare.`,
+            error: "no_process",
+          }
         }
         host.focusPane(resolved.pane!.id)
         await host.runCommand("process.kill")
@@ -315,7 +327,9 @@ export async function dispatch(
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         const viewMode = slots.text === "diff" ? "diff" : "transcript"
-        host.setPaneView(resolved.pane!.id, viewMode)
+        if (host.setPaneView(resolved.pane!.id, viewMode) === false) {
+          return { success: false, spoken: "Questo pannello non ha una vista da cambiare.", error: "unsupported" }
+        }
         return {
           success: true,
           spoken: `Visualizzazione del pannello ${resolved.pane!.index} impostata su ${viewMode}.`,
@@ -335,7 +349,9 @@ export async function dispatch(
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         const url = slots.url || "http://localhost:3000"
-        host.browserNavigate(resolved.pane!.id, url)
+        if (host.browserNavigate(resolved.pane!.id, url) === false) {
+          return { success: false, spoken: "Non ho trovato il pannello browser da far navigare.", error: "pane_not_found" }
+        }
         return {
           success: true,
           spoken: `Browser navigato verso ${url}.`,
@@ -348,7 +364,9 @@ export async function dispatch(
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        host.answerPermission(resolved.pane!.id, "allow")
+        if (host.answerPermission(resolved.pane!.id, "allow") === false) {
+          return { success: false, spoken: "Non c'è nessuna richiesta di permesso in attesa.", error: "no_permission" }
+        }
         return {
           success: true,
           spoken: "Permesso concesso all'agente.",
@@ -361,7 +379,13 @@ export async function dispatch(
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        host.answerPermission(resolved.pane!.id, "deny")
+        if (host.answerPermission(resolved.pane!.id, "deny") === false) {
+          return {
+            success: false,
+            spoken: "Non ho negato nulla: nessuna richiesta in attesa, o nessuna risposta che sia un rifiuto.",
+            error: "no_permission",
+          }
+        }
         return {
           success: true,
           spoken: "Permesso negato all'agente.",
@@ -439,18 +463,17 @@ export async function dispatch(
         }
       }
 
+      /*
+       * Reaching the dispatcher means the dialogue had nothing of the kind in
+       * progress, so nothing was confirmed, cancelled or sent: saying so beats
+       * «Confermato» for an action that never ran.
+       */
       case "dialog.confirm": {
-        return {
-          success: true,
-          spoken: "Confermato.",
-        }
+        return { success: false, spoken: "Non c'è niente da confermare.", error: "nothing_pending" }
       }
 
       case "dialog.cancel": {
-        return {
-          success: true,
-          spoken: "Operazione annullata.",
-        }
+        return { success: false, spoken: "Non c'è niente da annullare.", error: "nothing_pending" }
       }
 
       case "dialog.repeat": {
@@ -468,10 +491,7 @@ export async function dispatch(
       }
 
       case "dictation.finish": {
-        return {
-          success: true,
-          spoken: "Dettatura completata.",
-        }
+        return { success: false, spoken: "Non c'è una dettatura in corso da inviare.", error: "nothing_pending" }
       }
 
       default:

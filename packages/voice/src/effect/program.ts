@@ -461,17 +461,29 @@ export function makeVoiceProgram(
             }
 
             case "send_prompt": {
+              /*
+               * «inizia dettatura pannello 2» stores the number that was said,
+               * not a pane id; and with no pane named, the text went to the
+               * first pane instead of the focused one. With no pane at all it
+               * went nowhere and nothing said so.
+               */
+              const panes = host.listPanes()
+              const focused = options.getContext?.().focusedPaneId
+              const target = effect.paneId
+                ? (panes.find((p) => p.id === effect.paneId) ?? panes.find((p) => String(p.index) === effect.paneId))
+                : (panes.find((p) => p.id === focused) ?? panes[0])
+              if (!target) {
+                const missing = effect.paneId
+                  ? `Non trovo il pannello ${effect.paneId}: la dettatura non è stata inviata.`
+                  : "Nessun pannello aperto: la dettatura non è stata inviata."
+                options.onError?.(missing)
+                yield* say(missing)
+                break
+              }
               const sent = yield* Effect.tryPromise({
                 try: async () => {
-                  let targetPaneId = effect.paneId
-                  if (!targetPaneId) {
-                    const panes = host.listPanes()
-                    targetPaneId = panes[0]?.id
-                  }
-                  if (targetPaneId) {
-                    await host.sendPrompt(targetPaneId, effect.text)
-                  }
-                  return targetPaneId
+                  await host.sendPrompt(target.id, effect.text)
+                  return target.id
                 },
                 catch: (err) =>
                   new HostActionFailed({

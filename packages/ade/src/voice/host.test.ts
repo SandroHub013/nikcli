@@ -250,10 +250,11 @@ describe("createAdeVoiceHost", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    host.answerPermission("p1", "allow")
+    // `false` is what lets the voice say so instead of «Permesso concesso».
+    expect(host.answerPermission("p1", "allow")).toBe(false)
     expect(answered).toBe(false)
 
-    host.answerPermission("p1", "deny")
+    expect(host.answerPermission("p1", "deny")).toBe(false)
     expect(answered).toBe(false)
   })
 
@@ -276,7 +277,7 @@ describe("createAdeVoiceHost", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    host.answerPermission("p1", "allow")
+    expect(host.answerPermission("p1", "allow")).toBe(true)
     expect(answered).toHaveLength(1)
     expect(answered[0].send).toBe("y")
 

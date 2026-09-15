@@ -199,17 +199,17 @@ export interface VoiceHost {
   /**
    * Switch the view inside a pane between transcript stream and diff inspector.
    */
-  setPaneView(paneId: string, view: "transcript" | "diff"): void
+  setPaneView(paneId: string, view: "transcript" | "diff"): boolean | void
 
   /**
    * Navigate an embedded browser pane to a target URL.
    */
-  browserNavigate(paneId: string, url: string): void
+  browserNavigate(paneId: string, url: string): boolean | void
 
   /**
    * Respond to an agent's interactive permission confirmation.
    */
-  answerPermission(paneId: string, answer: "allow" | "deny"): void
+  answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
 
   /**
    * Configure the number of grid columns on the workbench.
