@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, readLoginStatus, runnerById, turnCommand } from "./runners"
+import { applyRunnerLine, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -135,6 +135,22 @@ describe("gli eventi di Codex", () => {
     const talk = fold("codex", ['{"type":"turn.failed","error":{"message":"usage limit reached"}}'])
     expect(talk.status).toBe("error")
     expect(talk.messages.at(-1)?.text).toBe("usage limit reached")
+  })
+})
+
+describe("la risposta finale di un turno", () => {
+  test("sono i messaggi del bot dopo l'ultima domanda, senza strumenti né errori", () => {
+    const talk = fold("claude", [
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Controllo."},{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Ci sono 3 file."}]}}',
+    ])
+    expect(finalText(talk)).toBe("Controllo.\n\nCi sono 3 file.")
+    expect(finalText(sendMessage(talk, "e poi?", 2))).toBe("")
+  })
+
+  test("nikcli senza agente usa quello predefinito", () => {
+    const { args } = turnCommand(runnerById("nikcli"), { bot: { ...bot, identifier: "" }, message: "ciao" })
+    expect(args).not.toContain("--agent")
   })
 })
 

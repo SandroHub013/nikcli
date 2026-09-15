@@ -393,6 +393,21 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
   }
 }
 
+/**
+ * The answer a turn gave, for a caller that wants words rather than a thread:
+ * the bot's messages after the last thing the user said, joined. Tool calls
+ * and errors are not the answer.
+ */
+export function finalText(talk: Talk): string {
+  const lastUser = talk.messages.map((message) => message.role).lastIndexOf("user")
+  return talk.messages
+    .slice(lastUser + 1)
+    .filter((message) => message.role === "bot")
+    .map((message) => message.text.trim())
+    .filter(Boolean)
+    .join("\n\n")
+}
+
 /* ── signed in or not ───────────────────────────────────────────────────── */
 
 export interface LoginState {

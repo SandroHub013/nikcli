@@ -122,6 +122,7 @@ import { Chat } from "../chat/chat"
 import { BotsMain, BotsRoster } from "../bots/bots"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
+import { senderToken } from "../session/senders"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -909,7 +910,8 @@ export function Workbench() {
     if (!host?.mailboxTake || !host.mailboxReceipt) return
     for (const { id, body } of await host.mailboxTake().catch(() => [])) {
       const parsed = parseMessage(body)
-      const message = parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : undefined))
+      // A pane's token, or a background turn's (voice agent, bot) registered for its length.
+      const message = parsed && verifySender(parsed, (paneId) => (running.has(paneId) ? paneTokens.get(paneId) : senderToken(paneId)))
       if (message) mailQueue.push({ id, message, at: Date.now() })
       else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }

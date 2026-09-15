@@ -96,7 +96,8 @@ export function runArgs(input: {
   readonly model?: string
   readonly effort?: string
 }): string[] {
-  const args = ["run", "--agent", input.identifier, "--format", "json"]
+  // No identifier: nikcli's own default agent, for a turn that is not a bot's.
+  const args = input.identifier ? ["run", "--agent", input.identifier, "--format", "json"] : ["run", "--format", "json"]
   if (input.model) args.push("--model", input.model)
   if (input.effort) args.push("--variant", input.effort)
   if (input.sessionId) args.push("--session", input.sessionId)
