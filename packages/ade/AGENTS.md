@@ -48,6 +48,12 @@ bun run test:app stop     # stop this worktree's instance, and only that
 - Stop your instance with `test:app stop`, never by killing processes by
   name: it stops only processes that carry this worktree's config, profile or
   build folder, and their children.
+- **The user tries `feat/ade` in `nikcli-ade-prova`, never in `nikcli-ade`.**
+  `nikcli-ade` is where branches are integrated: every merge there rebuilds
+  and reloads the app under the user mid-test (a voice turn lost its history
+  this way). `Desktop\ADE Test.cmd` checks out `feat/ade` detached in
+  `nikcli-ade-prova` and starts its ADE Test. Nobody edits files or commits
+  in that worktree.
 - The first start in a new worktree compiles the Rust host (several minutes);
   later starts reuse that worktree's `src-tauri/target`.
 - The profile is new per worktree, so localStorage starts empty: open
