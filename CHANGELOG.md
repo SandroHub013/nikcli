@@ -3,6 +3,39 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.356.0 (September 2026)
+
+## Core
+
+- Enhance database interactions with Effect.runSync (@nikomatt69)
+- Retire the synchronous singleton — syncDb has no callers in src (@nikomatt69)
+- Move MobileAuth, SyncSnapshot and Outbox onto Effect (@nikomatt69)
+- Move UserDB onto Effect-returning queries (@nikomatt69)
+- Move SessionPending onto Effect-returning queries (@nikomatt69)
+- Move SessionRepo onto Effect-returning queries (@nikomatt69)
+- Move MessageRepo onto Effect-returning queries (@nikomatt69)
+- Move SessionEntryRepo and InstructionRepo onto Effect (@nikomatt69)
+- Move AccountDB and ProjectRepo onto Effect-returning queries (@nikomatt69)
+- Move WorkspaceDB onto Effect-returning queries (@nikomatt69)
+- Move loop, mission and routine repositories onto Effect (@nikomatt69)
+- Move nine repositories onto Effect-returning queries (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(database): move nine repositories onto Effect-returning queries
+  - refactor(database): move loop, mission and routine repositories onto Effect
+  - refactor(database): move WorkspaceDB onto Effect-returning queries
+  - refactor(database): move AccountDB and ProjectRepo onto Effect-returning queries
+  - refactor(database): move SessionEntryRepo and InstructionRepo onto Effect
+  - refactor(database): move MessageRepo onto Effect-returning queries
+  - refactor(database): move SessionRepo onto Effect-returning queries
+  - refactor(database): move SessionPending onto Effect-returning queries
+  - refactor(database): move UserDB onto Effect-returning queries
+  - refactor(database): move MobileAuth, SyncSnapshot and Outbox onto Effect
+  - refactor(database): retire the synchronous singleton — syncDb has no callers in src
+  - refactor(database): enhance database interactions with Effect.runSync
+
 ## v1.355.0 (September 2026)
 
 ## Core

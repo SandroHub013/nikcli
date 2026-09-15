@@ -5,7 +5,7 @@
  * Kept free of Solid/OpenTUI imports so it can be unit-tested the same way
  * as `analytics-utils.ts`. The dialog mounts `Renderer` on the resulting spec.
  */
-import type { AggregatedStats, DayStats } from "./analytics-aggregator";
+import type { AggregatedStats, DayStats } from "./analytics-aggregator"
 import {
   buildDurationHistogram,
   formatCompact,
@@ -13,170 +13,146 @@ import {
   periodDelta,
   sampleForSparkline,
   weightedToolSuccess,
-} from "./analytics-utils";
-import {
-  VizCatalog,
-  type OpenTUIVizSpecType,
-  type VizComponent,
-  type VizSeverity,
-} from "@nikcli-ai/util/viz";
+} from "./analytics-utils"
+import { VizCatalog, type OpenTUIVizSpecType, type VizComponent, type VizSeverity } from "@nikcli-ai/util/viz"
 
-export type CommandCenterSource = "live" | "live+history";
+export type CommandCenterSource = "live" | "live+history"
 
 export type CommandCenterLatticeItem = {
-  label: string;
-  status: VizSeverity;
-  detail: string;
-};
+  label: string
+  status: VizSeverity
+  detail: string
+}
 
 export type CommandCenterLattice = {
-  items: CommandCenterLatticeItem[];
-  source: CommandCenterSource;
-  historyLoading: boolean;
-  refreshedAt: number;
-};
+  items: CommandCenterLatticeItem[]
+  source: CommandCenterSource
+  historyLoading: boolean
+  refreshedAt: number
+}
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 2,
-});
+})
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const
 
 function finite(n: number, fallback = 0): number {
-  return Number.isFinite(n) ? n : fallback;
+  return Number.isFinite(n) ? n : fallback
 }
 
 function clampPct(n: number): number {
-  return Math.max(0, Math.min(100, finite(n)));
+  return Math.max(0, Math.min(100, finite(n)))
 }
 
 function padSeries(values: number[], min = 2): number[] {
-  const clean = values.map((v) => finite(v));
-  if (clean.length >= min) return clean;
-  if (clean.length === 1) return [clean[0]!, clean[0]!];
-  return [0, 0];
+  const clean = values.map((v) => finite(v))
+  if (clean.length >= min) return clean
+  if (clean.length === 1) return [clean[0]!, clean[0]!]
+  return [0, 0]
 }
 
 function last(values: number[]): number {
-  return values[values.length - 1] ?? 0;
+  return values[values.length - 1] ?? 0
 }
 
 function mondayIndex(date: string): number {
-  const day = new Date(`${date}T00:00:00.000Z`).getUTCDay();
-  return (day + 6) % 7;
+  const day = new Date(`${date}T00:00:00.000Z`).getUTCDay()
+  return (day + 6) % 7
 }
 
 function activityHeatmap(days: DayStats[]): {
-  rowLabels: string[];
-  colLabels: string[];
-  values: number[][];
+  rowLabels: string[]
+  colLabels: string[]
+  values: number[][]
 } {
-  const window = days.slice(-28);
+  const window = days.slice(-28)
   if (window.length === 0) {
     return {
       rowLabels: [...WEEKDAYS],
       colLabels: ["W1"],
       values: WEEKDAYS.map(() => [0]),
-    };
+    }
   }
-  const weeks = Math.max(1, Math.ceil(window.length / 7));
-  const values = WEEKDAYS.map(() => Array.from({ length: weeks }, () => 0));
-  const first = window[0]!.date;
-  const origin = Date.parse(`${first}T00:00:00.000Z`);
+  const weeks = Math.max(1, Math.ceil(window.length / 7))
+  const values = WEEKDAYS.map(() => Array.from({ length: weeks }, () => 0))
+  const first = window[0]!.date
+  const origin = Date.parse(`${first}T00:00:00.000Z`)
   for (const day of window) {
-    const ts = Date.parse(`${day.date}T00:00:00.000Z`);
-    if (!Number.isFinite(ts)) continue;
-    const week = Math.min(
-      weeks - 1,
-      Math.max(0, Math.floor((ts - origin) / (7 * 24 * 60 * 60 * 1000))),
-    );
-    values[mondayIndex(day.date)]![week] = finite(day.tokens);
+    const ts = Date.parse(`${day.date}T00:00:00.000Z`)
+    if (!Number.isFinite(ts)) continue
+    const week = Math.min(weeks - 1, Math.max(0, Math.floor((ts - origin) / (7 * 24 * 60 * 60 * 1000))))
+    values[mondayIndex(day.date)]![week] = finite(day.tokens)
   }
   return {
     rowLabels: [...WEEKDAYS],
     colLabels: Array.from({ length: weeks }, (_, i) => `W${i + 1}`),
     values,
-  };
+  }
 }
 
 function sourceLabel(lattice: CommandCenterLattice): string {
-  if (lattice.source === "live+history") return "live sync + persisted history";
-  if (lattice.historyLoading) return "live sync · loading history…";
-  return "live sync";
+  if (lattice.source === "live+history") return "live sync + persisted history"
+  if (lattice.historyLoading) return "live sync · loading history…"
+  return "live sync"
 }
 
 function refreshedLabel(at: number): string {
-  if (at <= 0) return "now";
+  if (at <= 0) return "now"
   return new Date(at).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
-  });
+  })
 }
 
 function rangeLabel(days: DayStats[]): string {
-  const first = days.find(
-    (d) => d.tokens > 0 || d.messages > 0 || d.cost > 0,
-  )?.date;
-  const lastDay = [...days]
-    .reverse()
-    .find((d) => d.tokens > 0 || d.messages > 0 || d.cost > 0)?.date;
-  if (first && lastDay) return `${first} → ${lastDay}`;
-  return "current activity";
+  const first = days.find((d) => d.tokens > 0 || d.messages > 0 || d.cost > 0)?.date
+  const lastDay = [...days].reverse().find((d) => d.tokens > 0 || d.messages > 0 || d.cost > 0)?.date
+  if (first && lastDay) return `${first} → ${lastDay}`
+  return "current activity"
 }
 
-function deltaText(
-  trend: "up" | "down" | "flat",
-  absolute: number,
-  format: (n: number) => string,
-): string {
-  const sign = trend === "up" ? "+" : "";
-  return `${sign}${format(absolute)}`;
+function deltaText(trend: "up" | "down" | "flat", absolute: number, format: (n: number) => string): string {
+  const sign = trend === "up" ? "+" : ""
+  return `${sign}${format(absolute)}`
 }
 
 /**
  * Build the command-center visualization. Always returns a catalog-valid spec
  * (empty accounts still get a readable empty state rather than a blank panel).
  */
-export function buildCommandCenterSpec(
-  stats: AggregatedStats,
-  lattice: CommandCenterLattice,
-): OpenTUIVizSpecType {
-  const g = stats.global;
-  const tokens = g.tokens;
-  const nonCache = tokens.input + tokens.output + tokens.reasoning;
-  const last30 = stats.days.slice(-30);
-  const last14 = last30.slice(-14);
-  const tokenSeries = padSeries(last14.map((d) => d.tokens));
-  const messageSeries = padSeries(last14.map((d) => d.messages));
-  const costSeries = padSeries(last14.map((d) => d.cost));
-  const sessionSeries = padSeries(last14.map((d) => d.sessions));
-  const xLabels = last14.map((d) => d.date.slice(5));
-  while (xLabels.length < tokenSeries.length)
-    xLabels.push(xLabels[xLabels.length - 1] ?? "—");
+export function buildCommandCenterSpec(stats: AggregatedStats, lattice: CommandCenterLattice): OpenTUIVizSpecType {
+  const g = stats.global
+  const tokens = g.tokens
+  const nonCache = tokens.input + tokens.output + tokens.reasoning
+  const last30 = stats.days.slice(-30)
+  const last14 = last30.slice(-14)
+  const tokenSeries = padSeries(last14.map((d) => d.tokens))
+  const messageSeries = padSeries(last14.map((d) => d.messages))
+  const costSeries = padSeries(last14.map((d) => d.cost))
+  const sessionSeries = padSeries(last14.map((d) => d.sessions))
+  const xLabels = last14.map((d) => d.date.slice(5))
+  while (xLabels.length < tokenSeries.length) xLabels.push(xLabels[xLabels.length - 1] ?? "—")
 
-  const sessionsDelta = periodDelta(last30, 7, (d) => d.sessions);
-  const tokensDelta = periodDelta(last30, 7, (d) => d.tokens);
-  const costDelta = periodDelta(last30, 7, (d) => d.cost);
-  const messagesDelta = periodDelta(last30, 7, (d) => d.messages);
+  const sessionsDelta = periodDelta(last30, 7, (d) => d.sessions)
+  const tokensDelta = periodDelta(last30, 7, (d) => d.tokens)
+  const costDelta = periodDelta(last30, 7, (d) => d.cost)
+  const messagesDelta = periodDelta(last30, 7, (d) => d.messages)
 
-  const cacheDenom = tokens.cacheRead + tokens.input;
-  const cacheHit = cacheDenom > 0 ? (tokens.cacheRead / cacheDenom) * 100 : 0;
-  const ioDenom = tokens.input + tokens.output;
-  const outputRatio = ioDenom > 0 ? (tokens.output / ioDenom) * 100 : 0;
-  const activeRatio =
-    g.sessions > 0 ? ((g.sessions - g.archivedSessions) / g.sessions) * 100 : 0;
-  const bgSuccess =
-    g.backgroundRuns.total > 0 ? g.backgroundRuns.successRate : 0;
-  const toolSuccess = weightedToolSuccess(g.toolUsage);
-  const todoRate = g.todos.total > 0 ? g.todos.completionRate : 0;
+  const cacheDenom = tokens.cacheRead + tokens.input
+  const cacheHit = cacheDenom > 0 ? (tokens.cacheRead / cacheDenom) * 100 : 0
+  const ioDenom = tokens.input + tokens.output
+  const outputRatio = ioDenom > 0 ? (tokens.output / ioDenom) * 100 : 0
+  const activeRatio = g.sessions > 0 ? ((g.sessions - g.archivedSessions) / g.sessions) * 100 : 0
+  const bgSuccess = g.backgroundRuns.total > 0 ? g.backgroundRuns.successRate : 0
+  const toolSuccess = weightedToolSuccess(g.toolUsage)
+  const todoRate = g.todos.total > 0 ? g.todos.completionRate : 0
 
-  const heatmap = activityHeatmap(last30);
-  const duration = buildDurationHistogram(stats.sessions);
-  const recent = [...stats.sessions]
-    .sort((a, b) => b.updated - a.updated)
-    .slice(0, 6);
+  const heatmap = activityHeatmap(last30)
+  const duration = buildDurationHistogram(stats.sessions)
+  const recent = [...stats.sessions].sort((a, b) => b.updated - a.updated).slice(0, 6)
   const mix = [
     { label: "Input", value: finite(tokens.input), color: "primary" as const },
     {
@@ -194,38 +170,21 @@ export function buildCommandCenterSpec(
       value: finite(tokens.reasoning),
       color: "accent" as const,
     },
-  ].filter((item) => item.value > 0);
-  const mixItems =
-    mix.length > 0
-      ? mix
-      : [{ label: "Idle", value: 1, color: "muted" as const }];
+  ].filter((item) => item.value > 0)
+  const mixItems = mix.length > 0 ? mix : [{ label: "Idle", value: 1, color: "muted" as const }]
 
-  const activeDays = last30.filter(
-    (d) => d.tokens > 0 || d.messages > 0 || d.cost > 0,
-  ).length;
+  const activeDays = last30.filter((d) => d.tokens > 0 || d.messages > 0 || d.cost > 0).length
   const operational: CommandCenterLatticeItem[] = [
     {
       label: "Activity",
-      detail:
-        activeDays > 0
-          ? `${activeDays} active days`
-          : "No recorded activity yet",
+      detail: activeDays > 0 ? `${activeDays} active days` : "No recorded activity yet",
       status: activeDays > 0 ? "success" : "info",
     },
     {
       label: "Tools",
-      detail:
-        g.toolUsage.total > 0
-          ? `${toolSuccess.toFixed(1)}% weighted success`
-          : "No tool calls recorded",
+      detail: g.toolUsage.total > 0 ? `${toolSuccess.toFixed(1)}% weighted success` : "No tool calls recorded",
       status:
-        g.toolUsage.total === 0
-          ? "info"
-          : toolSuccess >= 90
-            ? "success"
-            : toolSuccess >= 70
-              ? "warning"
-              : "error",
+        g.toolUsage.total === 0 ? "info" : toolSuccess >= 90 ? "success" : toolSuccess >= 70 ? "warning" : "error",
     },
     {
       label: "Background",
@@ -258,28 +217,18 @@ export function buildCommandCenterSpec(
             : "info",
     },
     ...lattice.items.slice(0, 8),
-  ];
+  ]
 
-  const watch: string[] = [];
-  if (g.workspaces.disconnected > 0)
-    watch.push(`${g.workspaces.disconnected} workspace(s) disconnected`);
-  if (g.backgroundRuns.error > 0)
-    watch.push(`${g.backgroundRuns.error} background run(s) failed`);
-  if (g.toolUsage.total > 0 && toolSuccess < 90)
-    watch.push(`Tool success at ${toolSuccess.toFixed(1)}%`);
+  const watch: string[] = []
+  if (g.workspaces.disconnected > 0) watch.push(`${g.workspaces.disconnected} workspace(s) disconnected`)
+  if (g.backgroundRuns.error > 0) watch.push(`${g.backgroundRuns.error} background run(s) failed`)
+  if (g.toolUsage.total > 0 && toolSuccess < 90) watch.push(`Tool success at ${toolSuccess.toFixed(1)}%`)
   for (const item of lattice.items) {
-    if (item.status === "error" || item.status === "warning")
-      watch.push(`${item.label}: ${item.detail}`);
+    if (item.status === "error" || item.status === "warning") watch.push(`${item.label}: ${item.detail}`)
   }
 
   const toolBadgeStatus: VizSeverity =
-    g.toolUsage.total === 0
-      ? "info"
-      : toolSuccess >= 90
-        ? "success"
-        : toolSuccess >= 70
-          ? "warning"
-          : "error";
+    g.toolUsage.total === 0 ? "info" : toolSuccess >= 90 ? "success" : toolSuccess >= 70 ? "warning" : "error"
   const timelineEvents =
     recent.length > 0
       ? recent.map((session, index) => ({
@@ -295,15 +244,12 @@ export function buildCommandCenterSpec(
             status: "pending" as const,
             detail: "Open a session to populate this log",
           },
-        ];
+        ]
 
   const components: VizComponent[] = [
     {
       type: "alert",
-      severity:
-        lattice.historyLoading && lattice.source !== "live+history"
-          ? "warning"
-          : "info",
+      severity: lattice.historyLoading && lattice.source !== "live+history" ? "warning" : "info",
       title: "Data source",
       message: `${sourceLabel(lattice)} · ${rangeLabel(stats.days)} · refreshed ${refreshedLabel(lattice.refreshedAt)}`,
     },
@@ -329,11 +275,7 @@ export function buildCommandCenterSpec(
             },
             {
               label: "Δ7d",
-              value: deltaText(
-                sessionsDelta.trend,
-                sessionsDelta.absolute,
-                formatCompact,
-              ),
+              value: deltaText(sessionsDelta.trend, sessionsDelta.absolute, formatCompact),
             },
           ],
         },
@@ -352,11 +294,7 @@ export function buildCommandCenterSpec(
             },
             {
               label: "Δ7d",
-              value: deltaText(
-                tokensDelta.trend,
-                tokensDelta.absolute,
-                formatCompact,
-              ),
+              value: deltaText(tokensDelta.trend, tokensDelta.absolute, formatCompact),
             },
           ],
         },
@@ -373,9 +311,7 @@ export function buildCommandCenterSpec(
             { label: "total", value: money.format(g.cost), status: "warning" },
             {
               label: "Δ7d",
-              value: deltaText(costDelta.trend, costDelta.absolute, (n) =>
-                money.format(n),
-              ),
+              value: deltaText(costDelta.trend, costDelta.absolute, (n) => money.format(n)),
             },
           ],
         },
@@ -387,10 +323,7 @@ export function buildCommandCenterSpec(
             label: g.toolUsage.total > 0 ? `${toolSuccess.toFixed(0)}%` : "—",
             status: toolBadgeStatus,
           },
-          body:
-            g.toolUsage.total > 0
-              ? `${formatCompact(g.toolUsage.total)} calls`
-              : "No tool calls yet",
+          body: g.toolUsage.total > 0 ? `${formatCompact(g.toolUsage.total)} calls` : "No tool calls yet",
           metrics: [
             { label: "calls", value: g.toolUsage.total, format: "compact" },
             { label: "bg", value: g.backgroundRuns.total, format: "compact" },
@@ -553,46 +486,26 @@ export function buildCommandCenterSpec(
           label: "Sessions",
           left: formatCompact(sessionsDelta.current),
           right: formatCompact(sessionsDelta.previous),
-          winner:
-            sessionsDelta.trend === "up"
-              ? "left"
-              : sessionsDelta.trend === "down"
-                ? "right"
-                : "tie",
+          winner: sessionsDelta.trend === "up" ? "left" : sessionsDelta.trend === "down" ? "right" : "tie",
         },
         {
           label: "Tokens",
           left: formatCompact(tokensDelta.current),
           right: formatCompact(tokensDelta.previous),
-          winner:
-            tokensDelta.trend === "up"
-              ? "left"
-              : tokensDelta.trend === "down"
-                ? "right"
-                : "tie",
+          winner: tokensDelta.trend === "up" ? "left" : tokensDelta.trend === "down" ? "right" : "tie",
         },
         {
           label: "Cost",
           left: money.format(costDelta.current),
           right: money.format(costDelta.previous),
-          winner:
-            costDelta.trend === "down"
-              ? "left"
-              : costDelta.trend === "up"
-                ? "right"
-                : "tie",
+          winner: costDelta.trend === "down" ? "left" : costDelta.trend === "up" ? "right" : "tie",
           note: "lower is better",
         },
         {
           label: "Messages",
           left: formatCompact(messagesDelta.current),
           right: formatCompact(messagesDelta.previous),
-          winner:
-            messagesDelta.trend === "up"
-              ? "left"
-              : messagesDelta.trend === "down"
-                ? "right"
-                : "tie",
+          winner: messagesDelta.trend === "up" ? "left" : messagesDelta.trend === "down" ? "right" : "tie",
         },
       ],
     },
@@ -657,10 +570,7 @@ export function buildCommandCenterSpec(
           title: "Watch items",
           subtitle: watch.length > 0 ? `${watch.length} open` : "all clear",
           open: watch.length > 0,
-          content:
-            watch.length > 0
-              ? watch.map((item) => `- ${item}`).join("\n")
-              : "Nothing paging. Lattice is quiet.",
+          content: watch.length > 0 ? watch.map((item) => `- ${item}`).join("\n") : "Nothing paging. Lattice is quiet.",
         },
         {
           title: "Efficiency",
@@ -698,57 +608,47 @@ export function buildCommandCenterSpec(
               formatRelativeTime(session.updated),
               (session.title || "Untitled").slice(0, 32),
               session.model || "—",
-              formatCompact(
-                session.tokens.input +
-                  session.tokens.output +
-                  session.tokens.reasoning,
-              ),
+              formatCompact(session.tokens.input + session.tokens.output + session.tokens.reasoning),
               money.format(session.cost),
             ])
           : [["—", "No sessions", "—", "0", money.format(0)]],
     },
-  ];
+  ]
 
   return VizCatalog.validate({
     title: "nikcli Command Center",
     subtitle: `${rangeLabel(stats.days)} · ${g.sessions} sessions · ${formatCompact(nonCache)} tokens · ${money.format(g.cost)}`,
     components,
-  }).spec;
+  }).spec
 }
 
 /** MCP / LSP rows for the lattice strip. Status strings match the sync store. */
 export function latticeFromSync(input: {
-  mcp: Record<string, { status: string; error?: string }>;
-  lsp: Array<{ id: string; status: string; root?: string }>;
+  mcp: Record<string, { status: string; error?: string }>
+  lsp: Array<{ id: string; status: string; root?: string }>
 }): CommandCenterLatticeItem[] {
-  const items: CommandCenterLatticeItem[] = [];
+  const items: CommandCenterLatticeItem[] = []
   for (const [name, item] of Object.entries(input.mcp)) {
     const status: VizSeverity =
       item.status === "connected"
         ? "success"
-        : item.status === "failed" ||
-            item.status === "needs_client_registration"
+        : item.status === "failed" || item.status === "needs_client_registration"
           ? "error"
           : item.status === "needs_auth"
             ? "warning"
-            : "info";
+            : "info"
     items.push({
       label: `MCP ${name}`,
       status,
       detail: item.status === "failed" && item.error ? item.error : item.status,
-    });
+    })
   }
   for (const item of input.lsp) {
     items.push({
       label: `LSP ${item.id}`,
-      status:
-        item.status === "connected"
-          ? "success"
-          : item.status === "error"
-            ? "error"
-            : "info",
+      status: item.status === "connected" ? "success" : item.status === "error" ? "error" : "info",
       detail: item.root ?? item.status,
-    });
+    })
   }
-  return items.slice(0, 8);
+  return items.slice(0, 8)
 }
