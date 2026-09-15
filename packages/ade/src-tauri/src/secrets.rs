@@ -37,7 +37,7 @@ pub struct SecretInfo {
     #[serde(default)]
     pub created_ms: u64,
     /// `••••••••abcd`, computed in Rust; absent when the keychain has no value.
-    #[serde(default, skip_deserializing)]
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub masked: Option<String>,
 }
 
@@ -369,7 +369,7 @@ mod tests {
         let path = temp_index("file");
         save_in(&vault, "svc", &path, "OpenAI", "OPENAI_API_KEY", vec!["codex".into(), "codex".into()], Some(FAKE), 7).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains(FAKE) && !text.contains("abcd"), "the index holds no part of the value");
+        assert!(!text.contains(FAKE) && !text.contains("abcd") && !text.contains("masked"), "the index holds no part of the value");
         let listed = list_in(&vault, "svc", &path).unwrap();
         assert_eq!(listed[0].masked.as_deref(), Some("••••••••abcd"));
         assert_eq!(listed[0].agents, vec!["codex".to_string()]);

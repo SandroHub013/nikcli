@@ -4372,7 +4372,7 @@ export function Workbench() {
       <Show when={keyRequest() && keysHost()}>
         <KeyRequestDialog
           host={keysHost()!}
-          agents={AGENTS.filter((agent) => agent.id !== "terminal")}
+          agents={AGENTS}
           env={keyRequest()!.env}
           reason={keyRequest()!.reason}
           onClose={() => setKeyRequest(undefined)}
@@ -4462,7 +4462,7 @@ export function Workbench() {
               id: "set-sec-keys",
               label: "Chiavi API",
               glyph: "⚷",
-              render: () => <KeysSection host={keysHost()} agents={AGENTS.filter((agent) => agent.id !== "terminal")} />,
+              render: () => <KeysSection host={keysHost()} agents={AGENTS} />,
             },
             {
               id: "set-sec-mcp",
