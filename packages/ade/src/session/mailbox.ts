@@ -442,6 +442,12 @@ export function statusFromActivity(
 
 /** A CLI without turn hooks counts as free once it has printed nothing for this long. */
 export const QUIET_FREE_MS = 4000
+/**
+ * A hooked session whose activity cannot be read (no turn yet, a file gone or
+ * garbled, another conversation's) counts as free only after this much
+ * silence: not knowing is not knowing it is idle, and a working TUI repaints.
+ */
+export const UNKNOWN_FREE_MS = 15_000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
 export const STALE_BUSY_MS = 30 * 60_000
 
@@ -463,7 +469,8 @@ export function isFree(
   if (target.permissionPending) return false
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
-    if (target.activity?.state !== "busy") return true
+    if (!target.activity) return quietFor >= UNKNOWN_FREE_MS
+    if (target.activity.state === "idle") return true
     return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
   }
   return quietFor >= QUIET_FREE_MS

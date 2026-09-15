@@ -672,8 +672,9 @@ export function Workbench() {
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      activity = parseActivity(await host.readAgentActivity(nonce), resumeId) ?? activity
+      activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
       if (activity) activityOf.set(paneId, activity)
+      else activityOf.delete(paneId)
     }
     return isFree(
       {
@@ -849,7 +850,11 @@ export function Workbench() {
       if (!nonce || !hooked(paneId)) continue
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
       const activity = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
-      if (!activity) continue
+      if (!activity) {
+        // Gone or unreadable: an old idle kept here would let mail in mid-turn.
+        activityOf.delete(paneId)
+        continue
+      }
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
       const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined

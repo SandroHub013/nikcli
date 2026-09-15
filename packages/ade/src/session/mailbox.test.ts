@@ -6,6 +6,7 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  UNKNOWN_FREE_MS,
   sameDir,
   parseMessage,
   resolveAgent,
@@ -145,9 +146,15 @@ describe("a session's status follows its turn hooks", () => {
 describe("when a session can be written to", () => {
   const now = 10_000_000
   test("a hooked session is free unless its turn is running", () => {
-    expect(isFree({ hooked: true, permissionPending: false }, now)).toBe(true)
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 } }, now)).toBe(true)
     expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 5 }, lastOutputAt: now - 90_000 }, now)).toBe(false)
+  })
+
+  test("a hooked session with no readable activity is held until it has been quiet a while", () => {
+    expect(isFree({ hooked: true, permissionPending: false }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - 1000 }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS + 1 }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS }, now)).toBe(true)
   })
 
   test("a busy that never ended, in a silent session, stops holding messages", () => {
