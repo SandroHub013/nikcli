@@ -272,15 +272,16 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       }
       const host = await deps.getHost()
       const current = deps.project()
-      if (!host || !current) {
-        return []
-      }
+      // Thrown, not answered with an empty list: «0 risultati» and a search
+      // that could not run are different things to the person who asked.
+      if (!host) throw new Error("la ricerca nel progetto funziona solo nell'app desktop")
+      if (!current) throw new Error("non c'è nessun progetto aperto in cui cercare")
       try {
         const result = await walkProject({ host, root: current.root })
         const hits = findByName(result.files, query, 40)
         return hits.map((hit) => ({ path: hit.path }))
-      } catch {
-        return []
+      } catch (error) {
+        throw new Error(`non riesco a leggere i file del progetto (${error instanceof Error ? error.message : String(error)})`)
       }
     },
 
@@ -289,16 +290,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
      * the session pane, so there is nothing to switch to. The method stays
      * because `VoiceHost` (packages/voice) still declares it.
      */
-    setPaneView(): void {},
-
-    browserNavigate(paneId: string, url: string): void {
-      deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
+    setPaneView(): boolean {
+      return false
     },
 
-    answerPermission(paneId: string, answer: "allow" | "deny"): void {
+    browserNavigate(paneId: string, url: string): boolean {
+      if (!deps.wb().panes.some((pane) => pane.id === paneId)) return false
+      deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
+      return true
+    },
+
+    answerPermission(paneId: string, answer: "allow" | "deny"): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {
-        return
+        return false
       }
 
       let chosen: PermissionAnswer | undefined
@@ -331,7 +336,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
       if (chosen) {
         deps.answerPermission(paneId, chosen)
-        return
+        return true
       }
 
       if (answer === "deny") {
@@ -341,6 +346,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           "note",
         )
       }
+      return false
     },
 
     setColumns(columns?: number): void {

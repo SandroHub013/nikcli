@@ -37,6 +37,9 @@ import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
 import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type TranscriberService } from "./services"
 
+/** Intents whose result is information to hear, not an action to see. */
+const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "project.search"])
+
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
@@ -405,7 +408,16 @@ export function makeVoiceProgram(
 
               if (outcomeResult._tag === "Right") {
                 const outcome = outcomeResult.right
-                options.onOutcome?.(outcome)
+                /*
+                 * An answer, not a confirmation. Readbacks stay unspoken — the
+                 * panel opening is the confirmation — but «elenca pannelli» or
+                 * «cosa sta succedendo» have nothing to show but what they say,
+                 * and a user talking without looking at the console heard
+                 * nothing at all. Said, and so not logged a second time.
+                 */
+                const answers = outcome.success && Boolean(outcome.spoken) && SPOKEN_RESULTS.has(effect.intent.intent)
+                options.onOutcome?.(answers ? { ...outcome, spoken: "" } : outcome)
+                if (answers) yield* say(outcome.spoken)
                 if (outcome.success) {
                   yield* applyDialogEvent({
                     type: "command_success",
@@ -449,17 +461,29 @@ export function makeVoiceProgram(
             }
 
             case "send_prompt": {
+              /*
+               * «inizia dettatura pannello 2» stores the number that was said,
+               * not a pane id; and with no pane named, the text went to the
+               * first pane instead of the focused one. With no pane at all it
+               * went nowhere and nothing said so.
+               */
+              const panes = host.listPanes()
+              const focused = options.getContext?.().focusedPaneId
+              const target = effect.paneId
+                ? (panes.find((p) => p.id === effect.paneId) ?? panes.find((p) => String(p.index) === effect.paneId))
+                : (panes.find((p) => p.id === focused) ?? panes[0])
+              if (!target) {
+                const missing = effect.paneId
+                  ? `Non trovo il pannello ${effect.paneId}: la dettatura non è stata inviata.`
+                  : "Nessun pannello aperto: la dettatura non è stata inviata."
+                options.onError?.(missing)
+                yield* say(missing)
+                break
+              }
               const sent = yield* Effect.tryPromise({
                 try: async () => {
-                  let targetPaneId = effect.paneId
-                  if (!targetPaneId) {
-                    const panes = host.listPanes()
-                    targetPaneId = panes[0]?.id
-                  }
-                  if (targetPaneId) {
-                    await host.sendPrompt(targetPaneId, effect.text)
-                  }
-                  return targetPaneId
+                  await host.sendPrompt(target.id, effect.text)
+                  return target.id
                 },
                 catch: (err) =>
                   new HostActionFailed({
@@ -497,10 +521,22 @@ export function makeVoiceProgram(
      * worst a misheard sentence can do is open sessions and cost tokens.
      * Closing and killing stay in the grammar, which still asks.
      */
+    /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
+    let agentAbort: AbortController | null = null
+
     function runPlan(utterance: string): Effect.Effect<boolean> {
       return Effect.gen(function* () {
         const complete = options.plan
         if (!complete) return false
+
+        /*
+         * Held where a new sentence or «annulla» looks for the turn in
+         * progress: without it the plan could not be stopped, and a sentence
+         * said while it ran was dropped by the "executing" dialogue.
+         */
+        agentAbort?.abort()
+        const abort = new AbortController()
+        agentAbort = abort
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -530,7 +566,11 @@ export function makeVoiceProgram(
           activeProjectName: host.describeState?.().activeProject,
         }
 
-        const planned = yield* Effect.promise(() => planUtterance(utterance, context, complete))
+        const planned = yield* Effect.promise(() =>
+          planUtterance(utterance, context, complete, { signal: abort.signal }),
+        )
+        // Stopped while the model thought: whoever stopped it speaks next.
+        if (abort.signal.aborted) return true
 
         /*
          * A failure to reach the model is not "non ho capito": one is the
@@ -539,6 +579,7 @@ export function makeVoiceProgram(
          * key. Handing it back as unhandled would print the wrong one.
          */
         if (planned.failure) {
+          if (agentAbort === abort) agentAbort = null
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
           yield* say(planned.failure)
@@ -546,11 +587,13 @@ export function makeVoiceProgram(
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
+          if (agentAbort === abort) agentAbort = null
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
           return false
         }
 
+        if (agentAbort === abort) agentAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
@@ -558,8 +601,10 @@ export function makeVoiceProgram(
         options.onStateChange?.(currentState)
 
         if (planned.speech) {
-          const failures =
-            execution.failures.length > 0 ? ` Nota: ${execution.failures.join(" ")}` : ""
+          // What the plan refused is as much news as what failed: «copilot» not
+          // started was silently dropped whenever the model also said something.
+          const problems = [...planned.refusals, ...execution.failures]
+          const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
           yield* say(`${planned.speech}${failures}`)
         } else {
           const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
@@ -574,9 +619,6 @@ export function makeVoiceProgram(
         return true
       })
     }
-
-    /* The agent turn in progress, so cancelling the dialogue can end it. */
-    let agentAbort: AbortController | null = null
 
     /**
      * Hands an unmatched sentence to the coding agent, and says its answer.
@@ -623,7 +665,17 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "idle" }
         options.onStateChange?.(currentState)
 
-        if (!answer.ok) options.onError?.(answer.text)
+        if (!answer.ok) {
+          options.onError?.(answer.text)
+          /*
+           * The agent could not take it — no CLI installed, a plan's limit, a
+           * crash — and the planner may still. Returning true here meant the
+           * planner never ran in ADE, whose host always offers an agent: with
+           * a key set and no Claude Code, every sentence ended in «mi serve
+           * Claude Code o Codex». The problem stays on screen either way.
+           */
+          if (options.plan) return false
+        }
         yield* say(answer.text)
         return true
       })
@@ -753,18 +805,28 @@ export function makeVoiceProgram(
          * the planner first and "chiudi il pannello due" would take two
          * seconds and stop working on a train.
          */
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+        /*
+         * Asleep, a sentence is not for the assistant until «svegliati»; while
+         * a confirmation is pending, the only answers are yes and no. Both
+         * used to be handed to the agent anyway — a turn, its cost and its
+         * actions after «vai a dormire», or in place of the answer awaited.
+         * The dialogue keeps them, and says what it expects.
+         */
+        const openToModels =
+          currentState.status !== "dictating" && currentState.status !== "asleep" && currentState.status !== "confirming"
+
+        if (parsed.outcome === "unknown" && openToModels) {
           const handled = yield* runAgent(trimmed)
           if (handled) return
         }
 
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating" && options.plan) {
+        if (parsed.outcome === "unknown" && openToModels && options.plan) {
           const handled = yield* runPlan(trimmed)
           if (handled) return
         }
 
         // 4. Unknown outcome: do NOT speak offline fallback suggestions.
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+        if (parsed.outcome === "unknown" && openToModels) {
           options.onError?.("Comando non riconosciuto.")
           return
         }

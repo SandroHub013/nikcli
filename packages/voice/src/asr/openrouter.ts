@@ -224,6 +224,9 @@ export function createOpenRouterTranscriber(
     if (!segment.blob || segment.blob.size === 0) return
 
     inFlightRequests++
+    // Cleared once the body is read, not when the headers arrive: a body that
+    // trickles in was the one part of the request with no limit.
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
       if (!apiKey || apiKey.trim().length === 0) {
         errorCb(
@@ -283,7 +286,7 @@ export function createOpenRouterTranscriber(
       }
 
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      timer = setTimeout(() => controller.abort(), timeoutMs)
 
       const primaryModel = options.model ?? OPENROUTER_MODEL
       const requestPayload: Record<string, any> = {
@@ -387,8 +390,6 @@ export function createOpenRouterTranscriber(
         )
       )
       return
-    } finally {
-      clearTimeout(timer)
     }
 
     if (!response.ok) {
@@ -465,6 +466,15 @@ export function createOpenRouterTranscriber(
         })
       }
     } catch (parseErr: any) {
+      if (parseErr?.name === "AbortError") {
+        errorCb(
+          new RequestTimeout({
+            timeoutMs,
+            message: `Richiesta di trascrizione OpenRouter scaduta per timeout (dopo ${Math.round(timeoutMs / 1000)} secondi).`,
+          }) as unknown as Error
+        )
+        return
+      }
       errorCb(
         new Error(
           `Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`
@@ -472,6 +482,7 @@ export function createOpenRouterTranscriber(
       )
     }
   } finally {
+    clearTimeout(timer)
     inFlightRequests--
   }
 }

@@ -189,10 +189,62 @@ describe("dispatch", () => {
     test("ma li esegue sul pannello a fuoco", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "process.kill")!
-      const outcome = await dispatch(makeParseResult(spec), host, { focusedPaneId: "pane-2" })
+      const outcome = await dispatch(makeParseResult(spec), host, { focusedPaneId: "pane-1" })
 
       expect(outcome.success).toBe(true)
-      expect(host.calls.some((c) => c.method === "focusPane" && c.args[0] === "pane-2")).toBe(true)
+      expect(host.calls.some((c) => c.method === "focusPane" && c.args[0] === "pane-1")).toBe(true)
+    })
+  })
+
+  describe("non dice fatto quando non ha fatto nulla", () => {
+    const run = async (intent: string, slots: Record<string, any>, host = new MockVoiceHost()) => {
+      const spec = VOCABULARY.find((v) => v.intent === intent)!
+      const outcome = await dispatch(makeParseResult(spec, slots), host)
+      return { outcome, host }
+    }
+
+    test("terminare un pannello senza processo attivo", async () => {
+      const { outcome, host } = await run("process.kill", { paneIndex: 2 })
+      expect(outcome.success).toBe(false)
+      expect(outcome.spoken).toContain("non ha un processo attivo")
+      expect(host.calls.some((c) => c.method === "runCommand")).toBe(false)
+    })
+
+    test.each([
+      ["permission.allow", "answerPermission"],
+      ["permission.deny", "answerPermission"],
+      ["pane.view.set", "setPaneView"],
+      ["browser.navigate", "browserNavigate"],
+    ] as const)("%s quando l'host non ha fatto nulla", async (intent, method) => {
+      const host = new MockVoiceHost()
+      ;(host as any)[method] = () => false
+      const { outcome } = await run(intent, { paneIndex: 1, text: "diff", url: "http://localhost:5173" }, host)
+      expect(outcome.success).toBe(false)
+    })
+
+    test.each(["dialog.confirm", "dialog.cancel", "dictation.finish"])(
+      "%s senza nulla in corso",
+      async (intent) => {
+        const { outcome } = await run(intent, {})
+        expect(outcome.success).toBe(false)
+        expect(outcome.spoken).toStartWith("Non c'è")
+      },
+    )
+
+    test("progetto recente senza nome apre la scelta del progetto", async () => {
+      const { outcome, host } = await run("project.recent", {})
+      expect(outcome.success).toBe(true)
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["project.open"] })
+    })
+
+    test("una ricerca che non può partire è un errore, non zero risultati", async () => {
+      const host = new MockVoiceHost()
+      host.searchProject = async () => {
+        throw new Error("non c'è nessun progetto aperto in cui cercare")
+      }
+      const { outcome } = await run("project.search", { text: "x" }, host)
+      expect(outcome.success).toBe(false)
+      expect(outcome.spoken).toContain("nessun progetto aperto")
     })
   })
 
@@ -343,7 +395,9 @@ describe("dispatch", () => {
 
         const outcome = await dispatch(makeParseResult(spec, dummySlots), host)
 
-        expect(outcome.success).toBe(true)
+        // Outside a confirmation or a dictation these have nothing to act on.
+        const nothingPending = ["dialog.confirm", "dialog.cancel", "dictation.finish"].includes(spec.intent)
+        expect(outcome.success).toBe(!nothingPending)
         expect(outcome.spoken).toBeDefined()
         expect(outcome.spoken.length).toBeGreaterThan(0)
       }
