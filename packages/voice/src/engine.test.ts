@@ -320,6 +320,25 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.status()).toBe("idle")
   })
 
+  test("while a confirmation is pending, an unknown sentence is not handed to the agent", async () => {
+    const { engine, host, transcriber, speaker } = setupEngine()
+    let asked = 0
+    ;(host as VoiceHost).askAgent = async () => {
+      asked++
+      return { ok: true, text: "fatto" }
+    }
+    await engine.start()
+    transcriber.emit("chiudi pannello 1", true)
+    await new Promise((r) => setTimeout(r, 10))
+    transcriber.emit("raccontami una barzelletta", true)
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(asked).toBe(0)
+    expect(engine.status()).toBe("confirming")
+    expect(speaker.lastSpoken!.toLowerCase()).toContain("sì")
+    await engine.stop()
+  })
+
   test("canceling destructive confirmation does not execute command", async () => {
     const { engine, host, transcriber, speaker } = setupEngine()
 

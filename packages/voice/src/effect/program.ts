@@ -37,6 +37,9 @@ import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
 import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type TranscriberService } from "./services"
 
+/** Intents whose result is information to hear, not an action to see. */
+const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "project.search"])
+
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
@@ -405,7 +408,16 @@ export function makeVoiceProgram(
 
               if (outcomeResult._tag === "Right") {
                 const outcome = outcomeResult.right
-                options.onOutcome?.(outcome)
+                /*
+                 * An answer, not a confirmation. Readbacks stay unspoken — the
+                 * panel opening is the confirmation — but «elenca pannelli» or
+                 * «cosa sta succedendo» have nothing to show but what they say,
+                 * and a user talking without looking at the console heard
+                 * nothing at all. Said, and so not logged a second time.
+                 */
+                const answers = outcome.success && Boolean(outcome.spoken) && SPOKEN_RESULTS.has(effect.intent.intent)
+                options.onOutcome?.(answers ? { ...outcome, spoken: "" } : outcome)
+                if (answers) yield* say(outcome.spoken)
                 if (outcome.success) {
                   yield* applyDialogEvent({
                     type: "command_success",
@@ -558,8 +570,10 @@ export function makeVoiceProgram(
         options.onStateChange?.(currentState)
 
         if (planned.speech) {
-          const failures =
-            execution.failures.length > 0 ? ` Nota: ${execution.failures.join(" ")}` : ""
+          // What the plan refused is as much news as what failed: «copilot» not
+          // started was silently dropped whenever the model also said something.
+          const problems = [...planned.refusals, ...execution.failures]
+          const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
           yield* say(`${planned.speech}${failures}`)
         } else {
           const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
@@ -623,7 +637,17 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "idle" }
         options.onStateChange?.(currentState)
 
-        if (!answer.ok) options.onError?.(answer.text)
+        if (!answer.ok) {
+          options.onError?.(answer.text)
+          /*
+           * The agent could not take it — no CLI installed, a plan's limit, a
+           * crash — and the planner may still. Returning true here meant the
+           * planner never ran in ADE, whose host always offers an agent: with
+           * a key set and no Claude Code, every sentence ended in «mi serve
+           * Claude Code o Codex». The problem stays on screen either way.
+           */
+          if (options.plan) return false
+        }
         yield* say(answer.text)
         return true
       })
@@ -753,18 +777,28 @@ export function makeVoiceProgram(
          * the planner first and "chiudi il pannello due" would take two
          * seconds and stop working on a train.
          */
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+        /*
+         * Asleep, a sentence is not for the assistant until «svegliati»; while
+         * a confirmation is pending, the only answers are yes and no. Both
+         * used to be handed to the agent anyway — a turn, its cost and its
+         * actions after «vai a dormire», or in place of the answer awaited.
+         * The dialogue keeps them, and says what it expects.
+         */
+        const openToModels =
+          currentState.status !== "dictating" && currentState.status !== "asleep" && currentState.status !== "confirming"
+
+        if (parsed.outcome === "unknown" && openToModels) {
           const handled = yield* runAgent(trimmed)
           if (handled) return
         }
 
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating" && options.plan) {
+        if (parsed.outcome === "unknown" && openToModels && options.plan) {
           const handled = yield* runPlan(trimmed)
           if (handled) return
         }
 
         // 4. Unknown outcome: do NOT speak offline fallback suggestions.
-        if (parsed.outcome === "unknown" && currentState.status !== "dictating") {
+        if (parsed.outcome === "unknown" && openToModels) {
           options.onError?.("Comando non riconosciuto.")
           return
         }
