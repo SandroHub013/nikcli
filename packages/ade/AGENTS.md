@@ -31,14 +31,16 @@ apply to any agent changing ADE or `packages/voice`.
 3. Before committing, run from this directory: `bun run typecheck` and
    `bun run test`; from `../voice`: `bun run typecheck` and `bun run test`.
    For Rust changes, `cargo check` and `cargo test` in `src-tauri`.
-4. Commit only what the user has confirmed works. Push goes to the fork
-   (`origin`), never to the upstream repository; pull requests only when the
-   user asks.
-5. Releases are cut only when the user asks: push a tag `ade-vX.Y.Z` with a
-   version higher than the last one. `.github/workflows/ade-release.yml`
-   drafts the release, builds macOS/Windows/Linux, and publishes it only if
-   every platform succeeds; running official apps then show the update in
-   their notification bell.
+4. Commit only what the user has confirmed works, with a subject in the
+   `type(scope): description` format of [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+   Push goes to the fork (`origin`), never to the upstream repository; pushes
+   and pull requests only when the user asks.
+5. Releases are automatic: every 12 hours `ade-auto-release` publishes a new
+   `ade-v*` when `feat/ade` has a `feat`, `fix`, `perf` or `revert` commit since
+   the last one, at least 2 hours old and green in `ade-checks`. So a pushed
+   releasable commit reaches every installed ADE within about half a day —
+   mark unfinished work `[skip release]`. A release by hand is still a tag
+   `ade-vX.Y.Z` pushed to `origin`, and only when the user asks.
 
 ## Conventions
 

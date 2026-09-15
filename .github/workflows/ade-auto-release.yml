@@ -1,0 +1,143 @@
+name: ade-auto-release
+
+# Every 12 hours, releases ADE if `feat/ade` has something a user would notice
+# since the last `ade-v*` tag. The rules are in `packages/ade/CONTRIBUTING.md`
+# and `packages/ade/src/update/release-plan.ts`; in short:
+#
+#   - feat → minor, fix / perf / revert → patch, `!` or BREAKING CHANGE → major
+#     (minor while ADE is 0.x); docs, tests, chores and refactors never release;
+#   - `[skip release]` in a commit, or a merged pull request labelled
+#     `release:skip`, keeps it from causing one; `release:major` forces a major;
+#   - the newest commit must be at least `min_age_hours` old;
+#   - `ade-checks` must pass on that exact commit;
+#   - no other ADE release may still be a draft (one is building).
+#
+# The tag is pushed with GITHUB_TOKEN, and a tag pushed that way starts no
+# workflow, so `ade-release` is called here directly instead of relying on
+# its tag trigger.
+#
+# GitHub only runs `schedule` from the repository's default branch.
+on:
+  schedule:
+    - cron: "17 */12 * * *"
+  workflow_dispatch:
+    inputs:
+      min_age_hours:
+        description: "Minimum age of the newest commit, in hours"
+        default: "2"
+        type: string
+      dry_run:
+        description: "Plan and check, but do not tag or release"
+        default: false
+        type: boolean
+
+concurrency:
+  group: ade-auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: github.repository == 'SandroHub013/nikcli'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/ade
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Pull request labels
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for label in release:skip release:major; do
+            gh pr list --repo "$GITHUB_REPOSITORY" --base feat/ade --state merged --label "$label" \
+              --limit 100 --json commits --jq '.[].commits[].oid' > "${label#release:}-shas.txt"
+          done
+
+      - name: A release still building
+        id: busy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DRAFTS="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName,isDraft \
+            --jq '[.[] | select(.isDraft and (.tagName | startswith("ade-v")))] | length')"
+          echo "drafts=$DRAFTS" >> "$GITHUB_OUTPUT"
+
+      - name: Plan
+        id: plan
+        shell: bash
+        env:
+          MIN_AGE: ${{ inputs.min_age_hours || '2' }}
+          DRAFTS: ${{ steps.busy.outputs.drafts }}
+        run: |
+          set -euo pipefail
+          if [ "$DRAFTS" != "0" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "an ADE release is still a draft; trying again next time" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          bun packages/ade/script/release-plan.ts plan --min-age-hours "$MIN_AGE" \
+            --skip-shas skip-shas.txt --major-shas major-shas.txt | tee plan.txt
+          {
+            echo "### ADE auto-release"
+            echo
+            sed 's/^/    /' plan.txt
+            if [ -f release-notes.md ]; then echo; cat release-notes.md; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    uses: ./.github/workflows/ade-checks.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+
+  tag:
+    needs: [plan, checks]
+    if: needs.plan.outputs.release == 'true' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - name: Tag
+        shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "ADE ${TAG#ade-v}"
+          git push origin "$TAG"
+
+  release:
+    needs: [plan, tag]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/ade-release.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+    secrets: inherit

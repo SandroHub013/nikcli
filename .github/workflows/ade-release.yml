@@ -26,6 +26,14 @@ on:
         description: "Existing tag to release, e.g. ade-v1.2.3"
         required: true
         type: string
+  # `ade-auto-release` tags with GITHUB_TOKEN, which starts no workflow, and
+  # calls this one directly.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Existing tag to release, e.g. ade-v1.2.3"
+        required: true
+        type: string
 
 concurrency:
   group: ade-release-${{ inputs.tag || github.ref_name }}
@@ -48,6 +56,10 @@ jobs:
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
 
       - name: Version from tag
         id: version
@@ -73,7 +85,7 @@ jobs:
           fi
           PREVIOUS="$(git tag --list 'ade-v*' --sort=-v:refname | grep -vx "$TAG" | head -1 || true)"
           if [ -n "$PREVIOUS" ]; then
-            NOTES="$(git log --no-merges --format='- %s' "$PREVIOUS..$TAG" -- packages/ade packages/voice packages/plugin/src/v2/ade)"
+            NOTES="$(bun packages/ade/script/release-plan.ts notes "$PREVIOUS" "$TAG")"
           else
             NOTES="Prima release di ADE."
           fi
