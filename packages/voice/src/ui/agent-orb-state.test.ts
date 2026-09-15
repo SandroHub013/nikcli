@@ -11,6 +11,9 @@ describe("ui/agent-orb-state", () => {
     expect(orbPhase({ ...base, running: false })).toBe("idle")
     // A reply typed with the microphone off is still spoken by the orb.
     expect(orbPhase({ ...base, running: false, speaking: true })).toBe("speak")
+    // Piper still synthesising the first sentence: the sphere keeps thinking instead of flying home.
+    expect(orbPhase({ ...base, running: false, replying: true })).toBe("think")
+    expect(orbPhase({ ...base, replying: true, speaking: true })).toBe("speak")
   })
 
   test("dictation keeps the pill: the orb never rises for it", () => {

@@ -63,6 +63,7 @@ export function AgentOrb(props: AgentOrbProps) {
       mode: props.engine.activeMode(),
       status: props.engine.status(),
       speaking: props.meter.speaking(),
+      replying: props.meter.replying(),
     }),
   )
 

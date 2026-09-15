@@ -105,7 +105,10 @@ export function syntheticSpeechLevel(seconds: number): number {
 }
 
 export interface PlaybackMeter {
-  /** True while a reply is being spoken. Reactive. */
+  /**
+   * True while a reply is being spoken: from its first sound to its end, the
+   * pauses between its sentences included. Reactive.
+   */
   readonly speaking: Accessor<boolean>
   /** Loudness now, 0–1. Read every frame by whoever draws; not reactive. */
   level(): number
@@ -113,31 +116,54 @@ export interface PlaybackMeter {
   track(envelope: Envelope, position: () => number): () => void
   /** A voice without samples is speaking. Returns the stop. */
   pulse(): () => void
+  /**
+   * True from the moment a reply is handed to the speaker until it has been
+   * spoken, including the synthesis before the first sentence and the gaps
+   * between sentences. Reactive.
+   */
+  readonly replying: Accessor<boolean>
+  /** A reply is on its way to the speaker. Returns the stop. */
+  reply(): () => void
 }
 
 export function createPlaybackMeter(now: () => number = () => performance.now() / 1000): PlaybackMeter {
-  const [speaking, setSpeaking] = createSignal(false)
+  const [sounding, setSounding] = createSignal(false)
   let source: (() => number) | undefined
   let generation = 0
+  const [replies, setReplies] = createSignal(0)
+  /** The reply now under way has already made a sound: its pauses are still speech. */
+  const [sounded, setSounded] = createSignal(false)
 
   const begin = (read: () => number) => {
     const mine = ++generation
     source = read
-    setSpeaking(true)
+    setSounding(true)
+    if (replies() > 0) setSounded(true)
     return () => {
       if (mine !== generation) return
       source = undefined
-      setSpeaking(false)
+      setSounding(false)
     }
   }
 
   return {
-    speaking,
+    speaking: () => sounding() || (replies() > 0 && sounded()),
     level: () => (source ? Math.max(0, Math.min(1, source())) : 0),
     track: (envelope, position) => begin(() => levelAt(envelope, position())),
     pulse: () => {
       const started = now()
       return begin(() => syntheticSpeechLevel(now() - started))
+    },
+    replying: () => replies() > 0,
+    reply: () => {
+      setReplies((count) => count + 1)
+      let stopped = false
+      return () => {
+        if (stopped) return
+        stopped = true
+        setReplies((count) => count - 1)
+        if (replies() === 0) setSounded(false)
+      }
     },
   }
 }
