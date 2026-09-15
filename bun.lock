@@ -6178,8 +6178,6 @@
 
     "@nikcli-ai/desktop/@actions/artifact": ["@actions/artifact@4.0.0", "", { "dependencies": { "@actions/core": "^1.10.0", "@actions/github": "^6.0.1", "@actions/http-client": "^2.1.0", "@azure/core-http": "^3.0.5", "@azure/storage-blob": "^12.15.0", "@octokit/core": "^5.2.1", "@octokit/plugin-request-log": "^1.0.4", "@octokit/plugin-retry": "^3.0.9", "@octokit/request": "^8.4.1", "@octokit/request-error": "^5.1.1", "@protobuf-ts/plugin": "^2.2.3-alpha.1", "archiver": "^7.0.1", "jwt-decode": "^3.1.2", "unzip-stream": "^0.3.1" } }, "sha512-HCc2jMJRAfviGFAh0FsOR/jNfWhirxl7W6z8zDtttt0GltwxBLdEIjLiweOPFl9WbyJRW1VWnPUSAixJqcWUMQ=="],
 
-    "@nikcli-ai/desktop/@tauri-apps/plugin-dialog": ["@tauri-apps/plugin-dialog@2.7.1", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-OK1UBXYt+ojcmxMktzzuyonYIFta8CmAASpX+CA+DTGK24KlHjhYI6x2iOJ/TjZF4N7/ACK1oFmEOjIY9IhzOQ=="],
-
     "@nikcli-ai/desktop/typescript": ["typescript@5.6.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-hjcS1mhfuyi4WW8IWtjP7brDrG2cuDZukyrYrSauoXGNgx0S7zceP07adYkJycEr56BOUTNPzbInooiN3fn1qw=="],
 
     "@nikcli-ai/discord/@cloudflare/workers-types": ["@cloudflare/workers-types@4.20260621.1", "", {}, "sha512-c4xrf4shZdDOK1ihh1UKzlS/3MDYiGThT/Oqr4Y3qR9NLCSNzHB7rt+Vk/LOp0ZSNjA+7WNJEQsOhpiQtpT2GA=="],
