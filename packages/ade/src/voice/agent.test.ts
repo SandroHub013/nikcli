@@ -45,7 +45,7 @@ describe("voice/agent", () => {
     })
     await agent.ask({ text: "e la seconda?", engine: "claude" })
 
-    expect(runner.requests[0]).toMatchObject({ runner: "claude", cwd: "C:/p", mailbox: { id: "voce" } })
+    expect(runner.requests[0]).toMatchObject({ runner: "claude", cwd: "C:/p", mailbox: { id: "voce" }, lean: true })
     expect(runner.requests[0].instructions).toBe(VOICE_AGENT_INSTRUCTIONS)
     expect(runner.requests[0].sessionId).toBeUndefined()
     expect(runner.requests[1].sessionId).toBe("s1")

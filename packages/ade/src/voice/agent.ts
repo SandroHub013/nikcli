@@ -112,6 +112,9 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         ...(previous ? { sessionId: previous } : {}),
         ...(cwd ? { cwd } : {}),
         mailbox: { id: "voce" },
+        // No MCP servers or user settings: a spoken answer is worth more than
+        // the user's connectors, and loading them tripled the wait.
+        lean: true,
       })
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
