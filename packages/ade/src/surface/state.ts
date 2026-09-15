@@ -143,7 +143,7 @@ export interface Pane {
 export function isPanelPane(pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">): boolean {
   return Boolean(
     pane.browserUrl || pane.filePath || pane.videoPath || pane.modelPath || pane.appUrl || pane.plugin ||
-      pane.mode === "video" || pane.mode === "model" || pane.mode === "app",
+      pane.mode === "video" || pane.mode === "model" || pane.mode === "app" || pane.mode === "decisions",
   )
 }
 

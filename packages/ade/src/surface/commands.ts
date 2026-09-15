@@ -201,6 +201,18 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["simulatore", "emulatore", "telefono", "mobile", "expo", "tauri", "dispositivo", "finestra"],
     },
     {
+      id: "decisions.open",
+      title: "Decisioni per te",
+      group: "Pannello",
+      keywords: ["decisioni", "decidere", "scelte", "domande", "master", "bearings", "rispondi"],
+    },
+    {
+      id: "decisions.pane",
+      title: "Apri pannello Decisioni",
+      group: "Pannello",
+      keywords: ["decisioni", "registro", "risposte", "rimandate", "chiuse", "bearings"],
+    },
+    {
       id: "process.kill",
       title: "Uccidi processo",
       group: "Processo",

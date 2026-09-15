@@ -20,7 +20,7 @@ export interface NewPaneItem {
   /** One line under the label: what this pane is actually for. */
   readonly hint: string
   /** Drawn by the component; named here so the order and the icon agree. */
-  readonly glyph: "session" | "browser" | "video" | "model" | "app"
+  readonly glyph: "session" | "browser" | "video" | "model" | "app" | "decisions"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -63,6 +63,12 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
     label: "Simulatore app",
     hint: "l'app del dev server in un telefono o in una finestra",
     glyph: "app",
+  },
+  {
+    commandId: "decisions.pane",
+    label: "Decisioni",
+    hint: "tutto il registro: aperte, risposte, rimandate, chiuse",
+    glyph: "decisions",
   },
 ]
 

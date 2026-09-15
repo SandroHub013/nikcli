@@ -23,6 +23,8 @@ import { runSimulatorCommand } from "../simulator/commands"
 import { SIMULATOR_VERBS, type DevServerGuess } from "../simulator/simulator"
 import { SimulatorPane } from "../simulator/simulator-pane"
 import { createPanelStack } from "../panels/stack"
+import { DecisionsPane } from "../decisions/decisions-pane"
+import type { DecisionsHub } from "../decisions/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
@@ -71,6 +73,8 @@ export interface PaneRendererDeps {
   readDir?: (path: string) => Promise<DirEntry[]>
   /** Where the open project's dev server probably is, for the simulator. */
   guessServers: () => Promise<DevServerGuess[]>
+  /** The project's decisions register, shared with the bar's badge and window. */
+  decisions: DecisionsHub
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
@@ -261,6 +265,16 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    const decisionsPane = () => (
+      <DecisionsPane
+        hub={deps.decisions}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -445,7 +459,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
              */
             <Show when={current().mode === "video"} fallback={
               <Show when={current().mode === "model"} fallback={
-                <Show when={current().mode === "app"} fallback={sessionPane()}>
+                <Show when={current().mode === "app"} fallback={
+                  <Show when={current().mode === "decisions"} fallback={sessionPane()}>
+                    {decisionsPane()}
+                  </Show>
+                }>
                   {simulatorPane()}
                 </Show>
               }>
