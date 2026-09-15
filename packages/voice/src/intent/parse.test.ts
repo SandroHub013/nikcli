@@ -65,6 +65,16 @@ describe("parseUtterance", () => {
   })
 
   describe("slot extraction", () => {
+    test("«cerca file X» searches for X instead of losing it to a file path", () => {
+      const search = parseUtterance("cerca file parser")
+      expect(search.intent?.intent).toBe("project.search")
+      expect(search.slots.text).toBe("parser")
+      expect(search.slots.path).toBeUndefined()
+
+      // Opening a file still takes its path.
+      expect(parseUtterance("apri file src/bridge/host.ts").slots.path).toBe("src/bridge/host.ts")
+    })
+
     test("extracts paneIndex from written and numeric numbers", () => {
       const res1 = parseUtterance("chiudi il pannello 3")
       expect(res1.slots.paneIndex).toBe(3)
