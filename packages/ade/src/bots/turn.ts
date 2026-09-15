@@ -141,7 +141,7 @@ export function runTurn(request: TurnRequest): Turn {
       update(applyProblem(talk, `${runner.label} non si avvia: ${said}`, Date.now()))
       return finish("error", talk.problem)
     } finally {
-      if (request.mailbox) unregisterSender(request.mailbox.id)
+      if (request.mailbox && token) unregisterSender(request.mailbox.id, token)
     }
   })()
 

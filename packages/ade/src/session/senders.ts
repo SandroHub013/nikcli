@@ -24,8 +24,14 @@ export function registerSender(id: string, token: string): void {
   tokens.set(id, token)
 }
 
-export function unregisterSender(id: string): void {
-  tokens.delete(id)
+/**
+ * Ends the identity a turn registered, and only that one.
+ *
+ * Two turns of the same agent share its id: an old turn that ends after a new
+ * one started must not take the new turn's token away with it.
+ */
+export function unregisterSender(id: string, token: string): void {
+  if (tokens.get(id) === token) tokens.delete(id)
 }
 
 /** The token a registered background sender proves itself with, if any. */
