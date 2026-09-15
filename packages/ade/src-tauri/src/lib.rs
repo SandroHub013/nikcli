@@ -21,6 +21,7 @@ mod shots;
 mod mailbox;
 mod stats;
 mod usage;
+mod update;
 
 use serde::Serialize;
 use std::ffi::OsStr;
@@ -977,6 +978,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
@@ -1016,6 +1018,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
+            update::ade_update_install,
             allow_write_root,
             git_run,
             bot_delete,

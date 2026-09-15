@@ -26,6 +26,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# In-app updates from the fork's signed `latest.json` (see ade-release.yml).
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"

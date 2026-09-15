@@ -25,5 +25,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExMDFFMDY3Njk0NzkyOUUKUldTZWtrZHBaK0FCb1RoUloreWxRMlRienJnSFdhaW1oY3lNNlN0MHd6N01nbVpDaWhPMGN5WG0K",
+      "endpoints": ["https://github.com/SandroHub013/nikcli/releases/download/ade-updater/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
   }
 }

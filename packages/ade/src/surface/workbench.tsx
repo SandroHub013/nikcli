@@ -1317,7 +1317,7 @@ export function Workbench() {
 
   /*
    * New releases reach the bell by themselves: a published `ade-v*` release
-   * on the fork is announced once, with a link to its downloads. Desktop only,
+   * on the fork is announced once, with a button that installs it. Desktop only,
    * since a browser tab of the dev server has no installed version to be behind.
    */
   onMount(() => {
@@ -1344,6 +1344,40 @@ export function Workbench() {
       await invoke("ade_open_release", { url: href })
     } catch (error) {
       report(`Impossibile aprire la pagina: ${String(error)}`)
+    }
+  }
+
+  /*
+   * A release notice installs the release: download, install, restart, all
+   * inside ADE. The restart ends every running session, so that is asked
+   * first when there is one. A platform the manifest does not cover (a .deb
+   * or .rpm install, Linux on ARM) or a failed download falls back to the
+   * release page, so the notice is never a dead end.
+   */
+  const [updating, setUpdating] = createSignal(false)
+  const installUpdate = async (href: string) => {
+    if (updating()) return
+    const running = wb().panes.filter(
+      (pane) =>
+        !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model) &&
+        pane.status !== "done" && pane.status !== "error",
+    ).length
+    if (running > 0) {
+      const { ask } = await import("@tauri-apps/plugin-dialog")
+      const go = await ask(
+        `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso verrà chiusa" : `le ${running} sessioni in corso verranno chiuse`}.`,
+        { title: "Aggiorna ADE", kind: "warning", okLabel: "Aggiorna e riavvia", cancelLabel: "Più tardi" },
+      )
+      if (!go) return
+    }
+    setUpdating(true)
+    try {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("ade_update_install")
+    } catch (error) {
+      setUpdating(false)
+      report(`Aggiornamento non riuscito (${String(error)}): apro la pagina della release.`)
+      await openNoticeLink(href)
     }
   }
 
@@ -3770,9 +3804,10 @@ export function Workbench() {
                                 <button
                                   type="button"
                                   data-slot="ade-notice-link"
-                                  onClick={() => void openNoticeLink(href())}
+                                  disabled={updating()}
+                                  onClick={() => void installUpdate(href())}
                                 >
-                                  Scarica
+                                  {updating() ? "Aggiornamento…" : "Aggiorna"}
                                 </button>
                               )}
                             </Show>
