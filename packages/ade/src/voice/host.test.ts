@@ -69,6 +69,18 @@ function makePane(overrides: Partial<Pane> = {}): Pane {
 }
 
 describe("createAdeVoiceHost", () => {
+  test("a command that opens a pane brings the Code view up; one that does not leaves the view alone", async () => {
+    const { deps, commandsRun, currentWb } = createMockDeps()
+    deps.setWb((w) => ({ ...w, view: "agent" }))
+    const host = createAdeVoiceHost(deps)
+
+    await host.runCommand("decisions.open")
+    expect(currentWb().view).toBe("agent")
+    await host.runCommand("app.new")
+    expect(currentWb().view).toBe("code")
+    expect(commandsRun).toEqual(["decisions.open", "app.new"])
+  })
+
   test("listPanes produces 1-based indices and consistent flags", () => {
     const { deps, currentWb } = createMockDeps()
     deps.setWb((w) => ({
