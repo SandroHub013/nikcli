@@ -134,6 +134,11 @@ export interface Host {
    * `writeTextFile` would write the text of the image rather than the image.
    */
   writeBytes?: (path: string, contents: Uint8Array) => Promise<string | null>
+  /**
+   * A project file's bytes, whole; rejects outside every open project or
+   * above `maxBytes`. For the 3D panel, whose models and textures are binary.
+   */
+  readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
@@ -454,6 +459,13 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         return error instanceof Error ? error.message : String(error)
       }
+    },
+
+    async readBytes(path, maxBytes) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // A raw IPC response arrives as an ArrayBuffer, not as JSON numbers.
+      const buffer = await invoke<ArrayBuffer>("read_project_bytes", { path, maxBytes })
+      return new Uint8Array(buffer)
     },
 
     async currentDir() {
