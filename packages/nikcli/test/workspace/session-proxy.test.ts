@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -128,22 +129,24 @@ describe("workspace session proxy", () => {
   it("forwards a non-GET request for a remote workspace to that workspace's server", async () => {
     const response = await inInstance(async () => {
       const instance = (await import("@/effect")).InstanceState.ambient()
-      WorkspaceDB.upsert({
-        id: REMOTE_WORKSPACE,
-        projectID: instance.project.id,
-        name: "remote stub",
-        branch: null,
-        timeUsed: Date.now(),
-        config: {
-          type: "container",
-          directory: projectDir,
-          runtime: "docker",
-          image: "nikcli/workspace:test",
-          containerName: "nikcli-workspace-test",
-          port: remotePort,
-          serverUrl: `http://127.0.0.1:${remotePort}`,
-        },
-      })
+      Effect.runSync(
+        WorkspaceDB.upsert({
+          id: REMOTE_WORKSPACE,
+          projectID: instance.project.id,
+          name: "remote stub",
+          branch: null,
+          timeUsed: Date.now(),
+          config: {
+            type: "container",
+            directory: projectDir,
+            runtime: "docker",
+            image: "nikcli/workspace:test",
+            containerName: "nikcli-workspace-test",
+            port: remotePort,
+            serverUrl: `http://127.0.0.1:${remotePort}`,
+          },
+        }),
+      )
       return proxySessionRequest(
         new Request("http://nikcli.local/session/ses_remote/message", {
           method: "POST",

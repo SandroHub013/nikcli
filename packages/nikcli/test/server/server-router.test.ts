@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { companionResponse } from "../../src/server/companion"
 import { ServerRouter } from "../../src/server/server-router"
 import { Server } from "../../src/server/server"
@@ -49,14 +50,16 @@ async function withContextFixture(fn: (fixture: { directory: string; session: Se
 }
 
 function putWorkspace(session: Session.Info, config: WorkspaceDB.Info["config"]) {
-  return WorkspaceDB.upsert({
-    id: "wrk_router_context",
-    projectID: session.projectID,
-    name: "router-context",
-    branch: null,
-    timeUsed: 1,
-    config,
-  })
+  return Effect.runSync(
+    WorkspaceDB.upsert({
+      id: "wrk_router_context",
+      projectID: session.projectID,
+      name: "router-context",
+      branch: null,
+      timeUsed: 1,
+      config,
+    }),
+  )
 }
 
 describe("framework-neutral server router", () => {
@@ -257,7 +260,12 @@ describe("server request context", () => {
       const space = putWorkspace(session, { type: "worktree", directory })
       Database.syncDb().update(workspace).set({ config: "{" }).where(eq(workspace.id, space.id)).run()
       const request = contextRequest("/path", directory, space.id)
-      await expect(ServerRouter.context(request)).rejects.toBeInstanceOf(SyntaxError)
+      // The decode failure used to reach here as the `SyntaxError` that
+      // `JSON.parse` threw. `WorkspaceDB.get` is an Effect now, so it travels
+      // as a defect and arrives wrapped. What this test is actually about is
+      // unchanged, and asserted below: a malformed record must not be served
+      // as a missing workspace.
+      await expect(ServerRouter.context(request)).rejects.toThrow()
       const response = await Server.fetch(request)
       expect(response.status).toBe(500)
       expect(await response.json()).toMatchObject({ name: "Unknown" })

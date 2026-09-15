@@ -493,7 +493,7 @@ export namespace Session {
     log.info("created", result)
     SessionSync.install()
     SyncEvent.run(SessionSync.Created, { sessionID: result.id, info: result }, { projectID: ctx.project.id })
-    if (result.workspaceID) WorkspaceDB.touch(result.workspaceID, result.time.created)
+    if (result.workspaceID) Effect.runSync(WorkspaceDB.touch(result.workspaceID, result.time.created))
     const cfg = await configGet(ctx)
     if (!result.parentID && (Flag.NIKCLI_AUTO_SHARE || cfg.share === "auto"))
       shareImpl(ctx, result.id)

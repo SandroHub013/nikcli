@@ -226,7 +226,7 @@ export namespace Workspace {
 
       try {
         await init()
-        previousInfo = WorkspaceDB.get(id)
+        previousInfo = Effect.runSync(WorkspaceDB.get(id))
         await WorkspaceProjection.emitLifecycle(input.projectID, id, "workspace.created", {
           config: info.config,
           branch: info.branch,
@@ -234,15 +234,15 @@ export namespace Workspace {
           timeUsed: info.timeUsed,
         })
         wroteDB = true
-        WorkspaceDB.setStatusColumn(id, info.config.type === "worktree" ? "connected" : "connecting")
+        Effect.runSync(WorkspaceDB.setStatusColumn(id, info.config.type === "worktree" ? "connected" : "connecting"))
         startSpaceSync(info)
       } catch (error) {
         stopSpaceSync(id)
         if (wroteDB) {
           if (previousInfo) {
-            WorkspaceDB.upsert(previousInfo)
+            Effect.runSync(WorkspaceDB.upsert(previousInfo))
           } else {
-            WorkspaceDB.remove(id)
+            Effect.runSync(WorkspaceDB.remove(id))
           }
         }
         SandboxRegistry.invalidateWorkspace(id)
@@ -279,7 +279,7 @@ export namespace Workspace {
         error,
       })
     })
-    return WorkspaceDB.list(project.id).map(fromRow)
+    return Effect.runSync(WorkspaceDB.list(project.id)).map(fromRow)
   }
 
   /**
@@ -348,7 +348,7 @@ export namespace Workspace {
               workspaceID: tracked.id,
               error,
             })
-            WorkspaceDB.upsert({ ...tracked, branch: item.branch ?? null })
+            Effect.runSync(WorkspaceDB.upsert({ ...tracked, branch: item.branch ?? null }))
           })
         }
         continue
@@ -375,10 +375,10 @@ export namespace Workspace {
           workspaceID: info.id,
           error,
         })
-        WorkspaceDB.upsert(info)
+        Effect.runSync(WorkspaceDB.upsert(info))
       })
       if (directory) byDirectory.set(directory, info)
-      WorkspaceDB.setStatusColumn(info.id, info.config.type === "worktree" ? "connected" : "connecting")
+      Effect.runSync(WorkspaceDB.setStatusColumn(info.id, info.config.type === "worktree" ? "connected" : "connecting"))
       startSpaceSync(info)
     }
 
@@ -386,7 +386,7 @@ export namespace Workspace {
   }
 
   export const get = fn(Identifier.schema("workspace"), async (id) => {
-    const row = WorkspaceDB.get(id)
+    const row = Effect.runSync(WorkspaceDB.get(id))
     return row ? fromRow(row) : undefined
   })
 
@@ -427,7 +427,7 @@ export namespace Workspace {
           workspaceID: id,
           error,
         })
-        WorkspaceDB.remove(id)
+        Effect.runSync(WorkspaceDB.remove(id))
       })
       SandboxRegistry.invalidateWorkspace(id)
       WorkspaceConnection.forget(id)

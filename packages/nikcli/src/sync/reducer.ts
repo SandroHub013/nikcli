@@ -10,6 +10,7 @@
  * replay (capped at `SNAPSHOT_INTERVAL` events on a healthy cache).
  */
 import { Sync, type SyncEventRecord } from "./index"
+import { Effect } from "effect"
 import { SyncSnapshot, SNAPSHOT_INTERVAL, type SnapshotKey } from "./snapshot"
 import { detectSequenceGap, type SequenceGap } from "./gap"
 import { Log } from "@nikcli-ai/util/log"

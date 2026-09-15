@@ -10,6 +10,8 @@ function getChanges(result: void | RunResult): number {
 }
 
 export namespace WorkspaceDB {
+  type Executor = Database.TxOrDb
+
   export type Row = {
     id: string
     project_id: string
@@ -29,13 +31,6 @@ export namespace WorkspaceDB {
     timeUsed: number
     branch: string | null
     config: Config
-  }
-
-  /**
-   * Get the shared Drizzle database instance from the central Database.Service.
-   */
-  function db() {
-    return Database.syncDb()
   }
 
   // ============================================================================
@@ -58,20 +53,38 @@ export namespace WorkspaceDB {
   // CRUD operations
   // ============================================================================
 
-  export function get(id: string): Info | undefined {
-    const row = db().select().from(workspace).where(eq(workspace.id, id)).get()
-    return row ? toInfo(row) : undefined
+  export function get(id: string, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.get",
+      (db) => {
+        const row = db.select().from(workspace).where(eq(workspace.id, id)).get()
+        return row ? toInfo(row) : undefined
+      },
+      executor,
+    )
   }
 
-  export function list(projectID?: string): Info[] {
-    const query = db().select().from(workspace).orderBy(workspace.id)
-    const rows = projectID ? query.where(eq(workspace.projectId, projectID)).all() : query.all()
-    return rows.map(toInfo)
+  export function list(projectID?: string, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.list",
+      (db) => {
+        const query = db.select().from(workspace).orderBy(workspace.id)
+        const rows = projectID ? query.where(eq(workspace.projectId, projectID)).all() : query.all()
+        return rows.map(toInfo)
+      },
+      executor,
+    )
   }
 
-  export function getStatus(id: string): string | undefined {
-    const row = db().select({ status: workspace.status }).from(workspace).where(eq(workspace.id, id)).get()
-    return row?.status ?? undefined
+  export function getStatus(id: string, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.getStatus",
+      (db) => {
+        const row = db.select({ status: workspace.status }).from(workspace).where(eq(workspace.id, id)).get()
+        return row?.status ?? undefined
+      },
+      executor,
+    )
   }
 
   /**
@@ -79,50 +92,73 @@ export namespace WorkspaceDB {
    * the old `updateState` because state.events and state.eventLimit are
    * gone — events live in `sync_event`, the limit in `sync_snapshot`.
    */
-  export function setStatusColumn(id: string, status: string): void {
-    db().update(workspace).set({ status, updatedAt: Date.now() }).where(eq(workspace.id, id)).run()
+  export function setStatusColumn(id: string, status: string, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.setStatusColumn",
+      (db) => {
+        db.update(workspace).set({ status, updatedAt: Date.now() }).where(eq(workspace.id, id)).run()
+      },
+      executor,
+    )
   }
 
   /**
    * Insert or update a workspace using UPSERT.
    * Replaces the old read-then-write pattern with a single atomic operation.
    */
-  export function upsert(info: Info): Info {
-    const now = Date.now()
-    db()
-      .insert(workspace)
-      .values({
-        id: info.id,
-        projectId: info.projectID,
-        name: info.name ?? "",
-        branch: info.branch,
-        config: JSON.stringify(info.config),
-        timeUsed: info.timeUsed ?? now,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: workspace.id,
-        set: {
-          projectId: info.projectID,
-          name: info.name ?? "",
-          branch: info.branch,
-          config: JSON.stringify(info.config),
-          timeUsed: info.timeUsed ?? now,
-          updatedAt: now,
-        },
-      })
-      .run()
-    return info
+  export function upsert(info: Info, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.upsert",
+      (db) => {
+        const now = Date.now()
+        db.insert(workspace)
+          .values({
+            id: info.id,
+            projectId: info.projectID,
+            name: info.name ?? "",
+            branch: info.branch,
+            config: JSON.stringify(info.config),
+            timeUsed: info.timeUsed ?? now,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: workspace.id,
+            set: {
+              projectId: info.projectID,
+              name: info.name ?? "",
+              branch: info.branch,
+              config: JSON.stringify(info.config),
+              timeUsed: info.timeUsed ?? now,
+              updatedAt: now,
+            },
+          })
+          .run()
+        return info
+      },
+      executor,
+    )
   }
 
-  export function touch(id: string, timeUsed = Date.now()): boolean {
-    const result = db().update(workspace).set({ timeUsed }).where(eq(workspace.id, id)).run()
-    return getChanges(result) > 0
+  export function touch(id: string, timeUsed = Date.now(), executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.touch",
+      (db) => {
+        const result = db.update(workspace).set({ timeUsed }).where(eq(workspace.id, id)).run()
+        return getChanges(result) > 0
+      },
+      executor,
+    )
   }
 
-  export function remove(id: string): boolean {
-    const result = db().delete(workspace).where(eq(workspace.id, id)).run()
-    return getChanges(result) > 0
+  export function remove(id: string, executor?: Executor) {
+    return Database.query(
+      "WorkspaceDB.remove",
+      (db) => {
+        const result = db.delete(workspace).where(eq(workspace.id, id)).run()
+        return getChanges(result) > 0
+      },
+      executor,
+    )
   }
 }

@@ -172,7 +172,7 @@ function setStatus(workspaceID: string, next: ConnectionStatus) {
   const prev = statuses.get(workspaceID)
   if (prev === next) return
   statuses.set(workspaceID, next)
-  WorkspaceDB.setStatusColumn(workspaceID, next)
+  Effect.runSync(WorkspaceDB.setStatusColumn(workspaceID, next))
   void Bus.publish(StatusEvent, { workspaceID, status: next }).catch(() => undefined)
 }
 
@@ -236,7 +236,9 @@ async function workspaceEventLoop(space: WorkspaceInfo, stop: AbortSignal, targe
 export const WorkspaceConnection = {
   /** Returns the current in-memory status; falls back to the DB column, then "disconnected". */
   status(workspaceID: string): ConnectionStatus {
-    return (statuses.get(workspaceID) ?? WorkspaceDB.getStatus(workspaceID) ?? "disconnected") as ConnectionStatus
+    return (statuses.get(workspaceID) ??
+      Effect.runSync(WorkspaceDB.getStatus(workspaceID)) ??
+      "disconnected") as ConnectionStatus
   },
 
   /** In-memory status only (no DB read). Used by callers that need the

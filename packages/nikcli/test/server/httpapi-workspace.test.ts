@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -191,7 +192,7 @@ describe("Workspace HttpApi bridge", () => {
     workspaces = (await request("/experimental/workspace", directory)) as typeof workspaces
     expect(workspaces).toContainEqual(expect.objectContaining({ id: workspaceID }))
     await Bun.sleep(2)
-    WorkspaceDB.setStatusColumn(workspaceID, "connected")
+    Effect.runSync(WorkspaceDB.setStatusColumn(workspaceID, "connected"))
     const afterStatusUpdate = (await request("/experimental/workspace", directory)) as Array<{
       id: string
       timeUsed: number
