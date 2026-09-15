@@ -39,6 +39,8 @@ describe("host/test-app", () => {
     const plan = planTestApp({ root: "C:/Users/me/Favorites/nikcli-ade-testapp", branch: "ade/test-app" })
     expect(plan.name).toBe("nikcli-ade-testapp")
     expect(plan.label).toBe("nikcli-ade-testapp · ade/test-app")
+    // S25: its own ade-msg mailbox, not the one every test build shares.
+    expect(plan.mailboxDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/nikcli-ade-testapp/.ade-test/mailbox")
     expect(plan.profileDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/nikcli-ade-testapp/.ade-test/webview2")
   })
 
