@@ -45,6 +45,34 @@ export interface TurnRequest {
   readonly lean?: boolean
   /** Every change to the turn as it happens: tool calls, partial text, a permission question. */
   readonly onUpdate?: (talk: Talk) => void
+  /** How long the turn may run before it is stopped with its child processes; `TURN_TIMEOUT_MS` when absent. */
+  readonly timeoutMs?: number
+}
+
+/**
+ * How long one turn may run.
+ *
+ * A turn waits on a CLI that can hang — a stuck network call, an `ade-msg ask`
+ * whose session never answers (110 s each), a permission prompt nobody sees —
+ * and whoever called it waits with it: the voice assistant stayed in
+ * "executing" and kept one of the plan's parallel-turn slots (`terms.ts`).
+ * Five minutes is above a turn that lists, asks and spawns, and below what a
+ * person waits for a spoken answer before giving up on it.
+ */
+export const TURN_TIMEOUT_MS = 5 * 60_000
+
+/** What the caller is told when a turn ran out of time. */
+export function timeoutProblem(label: string, timeoutMs: number): string {
+  const minutes = timeoutMs / 60_000
+  const span = Number.isInteger(minutes)
+    ? `${minutes} ${minutes === 1 ? "minuto" : "minuti"}`
+    : `${Math.max(1, Math.round(timeoutMs / 1000))} secondi`
+  return `${label} non ha finito il turno in ${span}: l'ho fermato.`
+}
+
+/** What a turn needs from the app; the machine, passed in so a test can run one. */
+export interface TurnDeps {
+  readonly host?: () => ReturnType<typeof getHost>
 }
 
 export interface TurnResult {
@@ -67,10 +95,15 @@ export interface Turn {
   readonly stop: () => void
 }
 
-export function runTurn(request: TurnRequest): Turn {
+export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
   let kill: (() => void) | undefined
+  /*
+   * Ends the wait for the exit. A killed session unlistens before it could
+   * report one, so a stopped or timed-out turn resolved here or never.
+   */
+  let settle: ((code: number | null) => void) | undefined
 
   const result = (async (): Promise<TurnResult> => {
     let talk = sendMessage(emptyTalk(), request.message, Date.now())
@@ -88,7 +121,7 @@ export function runTurn(request: TurnRequest): Turn {
       talk,
     })
 
-    const host = await getHost()
+    const host = await (deps.host ?? getHost)()
     if (!host?.spawn) {
       update(applyProblem(talk, "Nessun host: un turno si esegue solo nell'app desktop.", Date.now()))
       return finish("error", talk.problem)
@@ -131,8 +164,17 @@ export function runTurn(request: TurnRequest): Turn {
 
     const token = request.mailbox ? crypto.randomUUID() : undefined
     if (request.mailbox && token) registerSender(request.mailbox.id, token)
+    const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
       const code = await new Promise<number | null>((resolve, reject) => {
+        settle = resolve
+        timer = setTimeout(() => {
+          timedOut = true
+          kill?.()
+          resolve(null)
+        }, timeoutMs)
         host
           .spawn({
             command,
@@ -145,11 +187,19 @@ export function runTurn(request: TurnRequest): Turn {
             onExit: resolve,
           })
           .then((session) => {
-            kill = () => session.kill()
-            if (stopped) session.kill()
+            kill = () => session.kill({ tree: true })
+            if (stopped || timedOut) {
+              kill()
+              resolve(null)
+            }
           })
           .catch(reject)
       })
+      if (timedOut) {
+        const problem = timeoutProblem(runner.label, timeoutMs)
+        update(applyProblem(talk, problem, Date.now()))
+        return finish("error", problem)
+      }
       update(applyExit(talk, code, Date.now(), runner.label))
       if (stopped) return finish("stopped")
       return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text) : finish("done")
@@ -158,6 +208,8 @@ export function runTurn(request: TurnRequest): Turn {
       update(applyProblem(talk, `${runner.label} non si avvia: ${said}`, Date.now()))
       return finish("error", talk.problem)
     } finally {
+      clearTimeout(timer)
+      settle = undefined
       slot.release()
       if (request.mailbox && token) unregisterSender(request.mailbox.id, token)
     }
@@ -168,6 +220,7 @@ export function runTurn(request: TurnRequest): Turn {
     stop: () => {
       stopped = true
       kill?.()
+      settle?.(null)
     },
   }
 }

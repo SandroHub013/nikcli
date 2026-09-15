@@ -863,17 +863,87 @@ pub async fn pty_resize(
         .map_err(|e| format!("resize fallito: {e}"))
 }
 
+/// One row of the process table, as far as walking a tree needs.
+#[derive(Clone, Copy)]
+struct ProcRow {
+    pid: u32,
+    parent: Option<u32>,
+    /// Seconds since the epoch.
+    started: u64,
+}
+
+/// `root` and every process below it, children before their parents.
+///
+/// Walked down from `root`, and a child counts only if it started no earlier
+/// than its parent. Windows reuses pids and keeps a dead parent's id in its
+/// children's records, so a process whose recorded parent id is ours but which
+/// predates that parent is someone else's — `taskkill /T` follows the id alone
+/// and could take an unrelated tree with it, ADE's own included.
+fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
+    let started = |pid: u32| rows.iter().find(|row| row.pid == pid).map(|row| row.started);
+    let Some(_) = started(root) else { return Vec::new() };
+    let mut order = vec![root];
+    let mut next = 0;
+    while next < order.len() {
+        let parent = order[next];
+        let parent_started = started(parent).unwrap_or(u64::MAX);
+        for row in rows {
+            if row.parent == Some(parent) && row.pid != parent && row.started >= parent_started && !order.contains(&row.pid) {
+                order.push(row.pid);
+            }
+        }
+        next += 1;
+    }
+    order.reverse();
+    order
+}
+
+/// Kills `pid` and the processes it started, one by one (see `tree_of`).
+///
+/// A CLI turn that runs past its time has children of its own — a shell, an
+/// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
+/// running, holding the turn's mailbox identity and its files.
+fn kill_tree(pid: u32) {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    let rows: Vec<ProcRow> = sys
+        .processes()
+        .values()
+        .map(|process| ProcRow {
+            pid: process.pid().as_u32(),
+            parent: process.parent().map(|parent| parent.as_u32()),
+            started: process.start_time(),
+        })
+        .collect();
+    for member in tree_of(pid, &rows) {
+        if let Some(process) = sys.process(Pid::from_u32(member)) {
+            process.kill();
+        }
+    }
+}
+
 /// Ends the session. Safe to call on one that already ended.
+///
+/// With `tree`, the processes the child started go too (see `kill_tree`).
+/// Panes do not ask for it: closing a pane has always ended the agent, not a
+/// dev server it left running on purpose.
 ///
 /// `async` because `wait()` below is exactly as blocking as the write is: a
 /// child that takes its time dying would otherwise take the window with it.
 #[tauri::command]
-pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String) -> Result<(), String> {
+pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Option<bool>) -> Result<(), String> {
     let mut session = {
         let mut sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
         sessions.remove(&id)
     };
     if let Some(session) = session.as_mut() {
+        if tree == Some(true) {
+            if let Some(pid) = session.child.process_id() {
+                // Reading the process table takes a moment: off the async worker.
+                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree(pid)).await;
+            }
+        }
         let _ = session.child.kill();
         /*
          * Reaped here rather than left to the reader thread, which cannot do it:
@@ -1141,6 +1211,32 @@ mod tests {
                 "{leaked} should not reach a spawned agent"
             );
         }
+    }
+
+    #[test]
+    fn a_tree_is_walked_down_by_start_time_and_killed_children_first() {
+        let row = |pid, parent, started| ProcRow { pid, parent, started };
+        let rows = [
+            row(100, Some(1), 1_000),
+            row(110, Some(100), 1_001),
+            row(111, Some(110), 1_002),
+            row(120, Some(100), 1_000),
+            // Claims 100 as its parent but started before it: an older process
+            // whose real parent died and left the id to be reused.
+            row(130, Some(100), 900),
+            row(131, Some(130), 950),
+            // Unrelated.
+            row(200, Some(1), 500),
+        ];
+        let tree = tree_of(100, &rows);
+        assert_eq!(tree.len(), 4);
+        for pid in [100, 110, 111, 120] {
+            assert!(tree.contains(&pid));
+        }
+        assert!(!tree.contains(&130) && !tree.contains(&131) && !tree.contains(&200));
+        let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
+        assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
+        assert!(tree_of(999, &rows).is_empty());
     }
 
     #[test]
