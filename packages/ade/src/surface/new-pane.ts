@@ -20,7 +20,7 @@ export interface NewPaneItem {
   /** One line under the label: what this pane is actually for. */
   readonly hint: string
   /** Drawn by the component; named here so the order and the icon agree. */
-  readonly glyph: "session" | "browser" | "video"
+  readonly glyph: "session" | "browser" | "video" | "model" | "app"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -51,6 +51,18 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
     label: "Video",
     hint: "guarda un file del progetto, e falla guardare all'agente",
     glyph: "video",
+  },
+  {
+    commandId: "model.new",
+    label: "Modello 3D",
+    hint: "glTF, OBJ, STL o FBX, ricaricato quando il file cambia",
+    glyph: "model",
+  },
+  {
+    commandId: "app.new",
+    label: "Simulatore app",
+    hint: "l'app del dev server in un telefono o in una finestra",
+    glyph: "app",
   },
 ]
 

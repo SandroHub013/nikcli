@@ -108,6 +108,7 @@ import {
   addPane,
   closePane,
   updatePane,
+  isPanelPane,
   expandPane,
   setColumns,
   deriveWorkspaces,
@@ -214,6 +215,8 @@ import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter } from "../panels/router"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
+import { isModel, MODEL_EXTENSIONS } from "../model3d/model"
+import { guessDevServers } from "../simulator/simulator"
 import {
   createMicMeter,
   createVoiceEngine,
@@ -518,6 +521,55 @@ export function Workbench() {
     })
   }
 
+  /** The native picker, narrowed to the formats the 3D panel reads. */
+  const pickModel = async () => {
+    const host = await getHost()
+    return host?.pickFile?.({
+      title: "Scegli un modello 3D",
+      filters: [{ name: "Modelli 3D", extensions: [...MODEL_EXTENSIONS] }],
+    })
+  }
+
+  /** Opens a 3D panel on `path`, or focuses the one already showing it. */
+  const openModel = (path: string) => {
+    const existing = wb().panes.find((pane) => pane.mode === "model" && pane.modelPath === path)
+    if (existing) {
+      setWb((w) => ({ ...w, focusedId: existing.id }))
+      return
+    }
+    setWb((w) => addPane(w, {
+      id: `m${Date.now()}`,
+      title: path ? (path.split(/[\\/]/).pop() ?? "Modello 3D") : "Modello 3D",
+      status: "working",
+      model: "—",
+      mode: "model",
+      modelPath: path,
+      workspaceId: project()?.name ?? "workspace",
+      lines: [],
+    }))
+  }
+
+  /**
+   * Where the open project serves its app, read from its own config.
+   *
+   * Three small files, read when a simulator opens; any that is missing is
+   * simply not evidence.
+   */
+  const guessServers = async () => {
+    const host = await getHost()
+    const root = project()?.root
+    if (!host?.readTextFile || !root) return []
+    const base = root.replace(/[/\\]+$/, "")
+    const read = (relative: string) =>
+      host.readTextFile!(`${base}/${relative}`, 256_000).then((file) => file.text, () => undefined)
+    const [packageJson, tauriConf, appJson] = await Promise.all([
+      read("package.json"),
+      read("src-tauri/tauri.conf.json"),
+      read("app.json"),
+    ])
+    return guessDevServers({ packageJson, tauriConf, appJson })
+  }
+
   /**
    * Writes a captured frame next to the project, and says where it went.
    *
@@ -568,7 +620,7 @@ export function Workbench() {
     // Grouped by project, which is also the order `ade-msg list` numbers them in.
     byProject(
       wb()
-        .panes.filter((pane) => !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model))
+        .panes.filter((pane) => !isPanelPane(pane) && (pane.agent ?? pane.model))
         .map((pane) => ({
           id: pane.id,
           title: pane.title,
@@ -1743,7 +1795,7 @@ export function Workbench() {
     if (updating()) return
     const running = wb().panes.filter(
       (pane) =>
-        !pane.browserUrl && !pane.filePath && !pane.videoPath && !pane.plugin && (pane.agent ?? pane.model) &&
+        !isPanelPane(pane) && (pane.agent ?? pane.model) &&
         pane.status !== "done" && pane.status !== "error",
     ).length
     if (running > 0) {
@@ -2043,14 +2095,14 @@ export function Workbench() {
           return { name: current.name, root: current.root, branch: current.branch }
         },
         session: {
-          list: () => wb().panes.filter((pane) => !pane.browserUrl && !pane.plugin).map(toPluginSession),
+          list: () => wb().panes.filter((pane) => !isPanelPane(pane)).map(toPluginSession),
           get: (id) => {
             const pane = wb().panes.find((item) => item.id === id)
-            return pane && !pane.browserUrl && !pane.plugin ? toPluginSession(pane) : undefined
+            return pane && !isPanelPane(pane) ? toPluginSession(pane) : undefined
           },
           focused: () => {
             const pane = wb().panes.find((item) => item.id === wb().focusedId)
-            return pane && !pane.browserUrl && !pane.plugin ? toPluginSession(pane) : undefined
+            return pane && !isPanelPane(pane) ? toPluginSession(pane) : undefined
           },
         },
       },
@@ -2198,7 +2250,7 @@ export function Workbench() {
         const planned = new Set(sessions.map((session) => session.pane.id))
         for (const pane of wb().panes) {
           if (planned.has(pane.id)) continue
-          if (pane.browserUrl || pane.filePath || pane.videoPath || pane.plugin) continue
+          if (isPanelPane(pane)) continue
           if (!(pane.agent ?? pane.model)) continue
           void reopen(pane)
         }
@@ -2542,6 +2594,25 @@ export function Workbench() {
         workspaceId: project()?.name ?? "workspace",
         lines: []
       }))
+    } else if (id === "model.new") {
+      // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
+      openModel("")
+    } else if (id === "app.new") {
+      /*
+       * Opened empty: the panel lists the dev servers the project's config
+       * points at, and guessing one to load would load the wrong app half
+       * the time — or ADE's own Vite server.
+       */
+      setWb(w => addPane(w, {
+        id: `a${Date.now()}`,
+        title: "Simulatore",
+        status: "working",
+        model: "—",
+        mode: "app",
+        appUrl: "",
+        workspaceId: project()?.name ?? "workspace",
+        lines: []
+      }))
     } else if (id === "browser.new") {
       const newId = `b${Date.now()}`
       setWb(w => addPane(w, {
@@ -2878,6 +2949,12 @@ export function Workbench() {
    */
   const openFile = async (path: string) => {
     setSelectedFile(path)
+
+    // A model is looked at, not edited as text: it opens in the 3D panel.
+    if (isModel(path)) {
+      openModel(path)
+      return
+    }
 
     const existing = wb().panes.find((pane) => pane.filePath === path)
     if (existing) {
@@ -3794,7 +3871,16 @@ export function Workbench() {
     answerPermission,
     restart: (pane, line) => void reopen(pane, line),
     pickVideo,
+    pickModel,
+    readBytes: (path, maxBytes) =>
+      getHost().then((host) => {
+        if (!host?.readBytes) throw new Error("questo host non può leggere file binari")
+        return host.readBytes(path, maxBytes)
+      }),
+    readDir: (path) =>
+      getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
+    guessServers,
     panels,
     announceToAll,
     pluginRuntime,
@@ -3858,7 +3944,7 @@ export function Workbench() {
             </span>
           </Show>
           <ProjectBar project={project()} />
-          <span data-slot="ade-count">{wb().panes.filter(p => !p.browserUrl && !p.plugin).length} sessioni</span>
+          <span data-slot="ade-count">{wb().panes.filter(p => !isPanelPane(p)).length} sessioni</span>
         </div>
 
         <div data-slot="ade-bar-center">
@@ -4458,7 +4544,7 @@ export function Workbench() {
           return focused?.title
         })()}
         onCycleTarget={() => {
-          const sessionPanes = wb().panes.filter((p) => !p.browserUrl && !p.plugin && !p.filePath && !p.videoPath)
+          const sessionPanes = wb().panes.filter((p) => !isPanelPane(p))
           if (sessionPanes.length <= 1) return
           const currentIndex = sessionPanes.findIndex((p) => p.id === wb().focusedId)
           const nextIndex = (currentIndex + 1) % sessionPanes.length
@@ -4493,6 +4579,14 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
       <Show when={props.kind === "video"}>
         <rect x="1.8" y="3.4" width="12.4" height="9.2" rx="1.6" />
         <path d="M6.6 6.4l3.8 2.2-3.8 2.2z" stroke-linejoin="round" />
+      </Show>
+      <Show when={props.kind === "app"}>
+        <rect x="4.2" y="1.5" width="7.6" height="13" rx="1.6" />
+        <path d="M7 12.4h2" stroke-linecap="round" />
+      </Show>
+      <Show when={props.kind === "model"}>
+        <path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z" stroke-linejoin="round" />
+        <path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2" stroke-linejoin="round" />
       </Show>
     </svg>
   )
