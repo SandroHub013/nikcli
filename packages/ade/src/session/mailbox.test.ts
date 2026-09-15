@@ -6,6 +6,16 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  INLINE_MAX,
+  MAX_REBELLS,
+  REBELL_AFTER_MS,
+  formatBell,
+  formatUnread,
+  goesToInbox,
+  inboxAction,
+  inboxName,
+  parseInbox,
+  type InboxEntry,
   UNKNOWN_FREE_MS,
   sameDir,
   parseMessage,
@@ -383,5 +393,44 @@ describe("turn activity from the CLI's hooks", () => {
       model: "sonnet",
       fresh: true,
     })
+  })
+})
+describe("long messages travel through the inbox", () => {
+  const sender = { id: "p1", title: "Master", agent: "claude-code" }
+  const entry: InboxEntry = { id: "r1", paneId: "p2", name: inboxName("r1", 5), from: "p1", kind: "ask", chars: 20_000, at: 0, ringAt: 0, rings: 0 }
+
+  test("only a line too long to type goes to a file, and the bell stays short", () => {
+    expect(goesToInbox("x".repeat(INLINE_MAX))).toBe(false)
+    expect(goesToInbox("x".repeat(20_000))).toBe(true)
+    const bell = formatBell(entry, sender, 20_000)
+    expect(bell).toContain("ade-msg inbox")
+    expect(bell.length).toBeLessThan(120)
+    expect(inboxName("a/b", 5)).toBe("0000000000005-a_b")
+  })
+
+  test("an unread message rings again when the session is free, then the sender is told", () => {
+    let current = { ...entry }
+    let now = 0
+    const seen: string[] = []
+    for (let step = 0; step < 10 && seen.at(-1) !== "warn"; step++) {
+      now += REBELL_AFTER_MS
+      const action = inboxAction(current, { running: true, free: true, read: false }, now)
+      seen.push(action)
+      if (action === "ring") current = { ...current, rings: current.rings + 1, ringAt: now }
+    }
+    expect(seen).toEqual([...Array(MAX_REBELLS).fill("ring"), "warn"])
+    expect(formatUnread(current, { id: "p2", title: "Fabio" })).toContain(`dopo ${MAX_REBELLS + 1} avvisi`)
+  })
+
+  test("a busy session is not rung, and a read or closed one is done", () => {
+    expect(inboxAction(entry, { running: true, free: false, read: false }, REBELL_AFTER_MS * 5)).toBe("wait")
+    expect(inboxAction(entry, { running: true, free: true, read: false }, REBELL_AFTER_MS - 1)).toBe("wait")
+    expect(inboxAction(entry, { running: true, free: true, read: true }, REBELL_AFTER_MS * 5)).toBe("done")
+    expect(inboxAction(entry, { running: false, free: false, read: false }, 0)).toBe("done")
+  })
+
+  test("restored entries keep only well-formed ones", () => {
+    expect(parseInbox(JSON.stringify([entry, { id: 3 }]))).toEqual([entry])
+    expect(parseInbox("non json")).toEqual([])
   })
 })

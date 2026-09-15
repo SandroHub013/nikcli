@@ -69,7 +69,7 @@ export const UPDATE_STATES = ["bloccata", "decisione"] as const
 export type UpdateState = (typeof UPDATE_STATES)[number]
 
 /** Longest text delivered. Past this it is a file, and should be sent as a path. */
-export const MAX_TEXT = 4000
+export const MAX_TEXT = 40_000
 
 /** A request id names a file; the same shape `mailbox.rs` accepts. */
 export function isRequestId(id: string): boolean {
@@ -364,6 +364,105 @@ export function formatUpdate(id: string, state: UpdateState, text: string, repli
 /** Typed into a session that went quiet with a request still unanswered. */
 export function formatNudge(id: string, caller: MailPane | undefined): string {
   return `[Promemoria] ${who(caller)} aspetta la richiesta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
+}
+
+// ---------------------------------------------------------------------------
+// The inbox: long messages travel as files, and reading them is the receipt
+
+/**
+ * The longest line still typed into a terminal whole.
+ *
+ * A message is typed in as keystrokes, and a TUI takes a long run of them for
+ * a paste: codex and agy lost the Enter after one (S17). Past this length the
+ * text goes to `mailbox/inbox/<pane>/<name>.msg` and only a short bell is
+ * typed; the session prints it with `ade-msg inbox`, which moves it to
+ * `handled/`, and that move is the receipt. Short lines stay typed: a bell and
+ * a command to read it would cost a tool call more than the message itself.
+ */
+export const INLINE_MAX = 600
+/** A bell nobody answered, in a session free to answer, rings again after this long. */
+export const REBELL_AFTER_MS = 120_000
+/** Rings after the first; then the sender is told the message was not read. */
+export const MAX_REBELLS = 3
+
+export interface InboxEntry {
+  /** The message or request id, as the sender knows it. */
+  id: string
+  paneId: string
+  /** File name without `.msg`: ordered by time, safe as a path. */
+  name: string
+  /** The sending pane; empty when anonymous. */
+  from: string
+  kind: "send" | "ask" | "spawn" | "reply" | "update"
+  /** Length of the message, repeated in each bell. */
+  chars: number
+  at: number
+  ringAt: number
+  rings: number
+}
+
+/** A file name for a message: its time first, so `ade-msg inbox` prints them in order. */
+export function inboxName(id: string, at: number): string {
+  return `${String(at).padStart(13, "0")}-${id.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 80)
+}
+
+/** Whether a line is too long to type, and goes to the inbox instead. */
+export function goesToInbox(line: string): boolean {
+  return line.length > INLINE_MAX
+}
+
+/** The short line typed in place of a long message. */
+export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailPane | undefined, chars: number): string {
+  const what =
+    entry.kind === "ask" || entry.kind === "spawn"
+      ? `Richiesta ${entry.id} da ${who(sender)}`
+      : entry.kind === "reply"
+        ? `Risposta alla richiesta ${entry.id} da ${who(sender)}`
+        : entry.kind === "update"
+          ? `Aggiornamento della richiesta ${entry.id} da ${who(sender)}`
+          : `Messaggio da ${who(sender)}`
+  return `[${what}, ${chars} caratteri] in attesa: leggilo con ade-msg inbox`
+}
+
+/**
+ * What to do with a message not yet confirmed read.
+ *
+ * `done` once it was read or its session is gone (a request to a closed
+ * session is settled by the request table). A bell rings again only in a
+ * session free to act on it and after {@link REBELL_AFTER_MS}; after
+ * {@link MAX_REBELLS} the sender is told, once, and the entry is dropped.
+ */
+export function inboxAction(
+  entry: InboxEntry,
+  target: { running: boolean; free: boolean; read: boolean },
+  now: number,
+): "done" | "wait" | "ring" | "warn" {
+  if (target.read || !target.running) return "done"
+  if (!target.free || now - entry.ringAt < REBELL_AFTER_MS) return "wait"
+  return entry.rings < MAX_REBELLS ? "ring" : "warn"
+}
+
+/** Told to the sender when a long message was never read. */
+export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
+  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+  return `[ade-msg] ${who(reader)} non ha letto ${what} dopo ${entry.rings + 1} avvisi: resta nella sua inbox; ricordaglielo o annulla la richiesta`
+}
+
+/** Entries restored from storage; anything malformed is dropped. */
+export function parseInbox(raw: string | null): InboxEntry[] {
+  try {
+    const list: unknown = JSON.parse(raw ?? "[]")
+    if (!Array.isArray(list)) return []
+    return list.filter(
+      (item): item is InboxEntry =>
+        typeof item === "object" &&
+        item !== null &&
+        ["id", "paneId", "name", "from", "kind"].every((key) => typeof (item as Record<string, unknown>)[key] === "string") &&
+        ["chars", "at", "ringAt", "rings"].every((key) => typeof (item as Record<string, unknown>)[key] === "number"),
+    )
+  } catch {
+    return []
+  }
 }
 
 /** Typed into a session whose request was withdrawn. */
@@ -704,6 +803,7 @@ export const USAGE =
   "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
   "  ade-msg stats                           token per sessione e quota letta dalla cache\n" +
   "  ade-msg who-owns <file>                chi possiede il file secondo la bacheca del team (TEAM.md)\n" +
+  "  ade-msg inbox                          stampa i messaggi lunghi arrivati per te e li segna come letti\n" +
   "  ade-msg agents | whoami\n" +
   "opzioni:\n" +
   "  --no-wait        ask/spawn: stampa subito l'id, poi usa wait (per lanciare in parallelo)\n" +

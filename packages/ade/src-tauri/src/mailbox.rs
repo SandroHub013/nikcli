@@ -69,7 +69,12 @@ pub fn install(app: &tauri::AppHandle) {
     }
 
     let now = SystemTime::now();
-    for sub in ["receipts", "results"] {
+    // Read messages are kept a day, like receipts, then go.
+    let handled = fs::read_dir(dir.join("inbox"))
+        .map(|panes| panes.flatten().map(|pane| pane.path().join("handled")).collect::<Vec<_>>())
+        .unwrap_or_default();
+    for sub in ["receipts".into(), "results".into()].into_iter().chain(handled) {
+        let sub: PathBuf = sub;
         let Ok(entries) = fs::read_dir(dir.join(sub)) else { continue };
         for entry in entries.flatten() {
             let old = entry
@@ -207,6 +212,30 @@ pub async fn mailbox_state(app: tauri::AppHandle, id: String, text: String, kind
     write_whole(dir, &format!("{id}.{ext}"), &text)
 }
 
+/// Leaves a long message in `inbox/<pane>/<name>.msg`, for `ade-msg inbox` to print.
+///
+/// Typed into a terminal, a long message was taken for a paste and its Enter
+/// lost (S17); here only a short bell is typed, and the text waits as a file.
+#[tauri::command]
+pub async fn mailbox_inbox_put(app: tauri::AppHandle, pane: String, name: String, text: String) -> Result<(), String> {
+    if !valid_id(&pane) || !valid_id(&name) {
+        return Err("id non valido".into());
+    }
+    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
+    fs::create_dir_all(dir.join("handled")).map_err(|e| format!("inbox non creata: {e}"))?;
+    write_whole(dir, &format!("{name}.msg"), &text)
+}
+
+/// Whether the message was read: `ade-msg inbox` moves what it prints to `handled/`.
+#[tauri::command]
+pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: String) -> Result<bool, String> {
+    if !valid_id(&pane) || !valid_id(&name) {
+        return Err("id non valido".into());
+    }
+    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
+    Ok(!dir.join(format!("{name}.msg")).exists())
+}
+
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
 /// `agents`, `requests` for `status`, `usage` for the help text.
 #[tauri::command]
@@ -290,7 +319,7 @@ if ($file) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Fail "file non trovato: $file" }
   $item = Get-Item -LiteralPath $file
   $content = [IO.File]::ReadAllText($item.FullName, $utf8)
-  if ($content.Length -gt 3800) {
+  if ($content.Length -gt 40000) {
     $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, 1500)
   }
   $text = if ($text) { "$text`n`n$content" } else { $content }
@@ -300,7 +329,7 @@ function Post($fields) {
   $id = ('{0}-{1}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), ([guid]::NewGuid().ToString('N').Substring(0, 8)))
   # Past one message ADE would cut the text; the whole of it goes to a file the recipient can read.
   $long = [string]$fields['text']
-  if ($long.Length -gt 3800) {
+  if ($long.Length -gt 40000) {
     $path = Join-Path (Join-Path $box 'results') "$id.long.txt"
     [IO.File]::WriteAllText($path, $long, $utf8)
     $fields['text'] = "Testo completo ($($long.Length) caratteri) in $path, leggilo da li'. Inizio: " + $long.Substring(0, 1500)
@@ -429,6 +458,22 @@ switch ($cmd) {
   'help' { $f = Join-Path $box 'usage.txt'; if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }; exit 0 }
   'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
+  'inbox' {
+    # Prints the long messages left for this session, oldest first, and moves each to handled/: that move tells ADE it was read.
+    if (-not $env:ADE_PANE_ID) { Fail 'ADE_PANE_ID mancante' }
+    $dir = Join-Path (Join-Path $box 'inbox') $env:ADE_PANE_ID
+    $files = @()
+    try { $files = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction Stop | Where-Object { $_.Extension -eq '.msg' } | Sort-Object Name) } catch {}
+    if ($files.Count -eq 0) { Write-Output 'nessun messaggio in attesa'; exit 0 }
+    $done = Join-Path $dir 'handled'
+    if (-not (Test-Path -LiteralPath $done)) { [void](New-Item -ItemType Directory -Path $done) }
+    foreach ($f in $files) {
+      Write-Output ([IO.File]::ReadAllText($f.FullName, $utf8))
+      Write-Output ''
+      Move-Item -LiteralPath $f.FullName -Destination (Join-Path $done $f.Name) -Force
+    }
+    exit 0
+  }
   'who-owns' { if (-not $head) { Usage }; PostAndPrint ([ordered]@{ kind = 'whoowns'; text = (@($pos) -join ' ') }) }
   'stats' { $f = Join-Path $box 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
   'kv' {
@@ -553,7 +598,7 @@ if [ -n "$file" ]; then
   [ -f "$file" ] || fail "file non trovato: $file"
   size=$(wc -c < "$file" | tr -d ' ')
   full="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
-  if [ "$size" -gt 3800 ]; then
+  if [ "$size" -gt 40000 ]; then
     content="Il contenuto completo e' nel file $full ($size byte); leggilo da li'. Inizio:
 $(head -c 1500 "$file")"
   else
@@ -566,7 +611,7 @@ fi
 
 post() {
   id="$(date +%s)000-$$"
-  if [ "${#text}" -gt 3800 ]; then
+  if [ "${#text}" -gt 40000 ]; then
     long="$box/results/$id.long.txt"; printf '%s' "$text" > "$long"
     text="Testo completo (${#text} caratteri) in $long, leggilo da li'. Inizio: $(printf '%s' "$text" | head -c 1500)"
   fi
@@ -650,6 +695,14 @@ case "$cmd" in
   help) if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
+  inbox)
+    [ -n "$ADE_PANE_ID" ] || fail "ADE_PANE_ID mancante"
+    dir="$box/inbox/$ADE_PANE_ID"; found=0
+    for f in "$dir"/*.msg; do
+      [ -f "$f" ] || continue
+      found=1; mkdir -p "$dir/handled"; cat "$f"; printf '\n\n'; mv -f "$f" "$dir/handled/"
+    done
+    [ $found = 1 ] || echo "nessun messaggio in attesa" ;;
   who-owns) [ -n "$head" ] || usage; text="$head${text:+ $text}"; show "\"kind\":\"whoowns\"" ;;
   stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
   kv)
@@ -769,6 +822,13 @@ mod tests {
         // A path with a space, unquoted, arrives as two words: both must reach the lookup.
         assert!(SH.contains("who-owns) [ -n \"$head\" ] || usage; text=\"$head${text:+ $text}\""));
         assert!(PS1.contains("text = (@($pos) -join ' ')"));
+    }
+
+    #[test]
+    fn both_scripts_read_the_inbox_and_move_what_they_print() {
+        assert!(PS1.contains("'inbox' {") && PS1.contains("Join-Path $dir 'handled'"));
+        assert!(SH.contains("  inbox)") && SH.contains("mv -f \"$f\" \"$dir/handled/\""));
+        assert!(!PS1.contains("3800") && !SH.contains("3800"));
     }
 
     #[test]

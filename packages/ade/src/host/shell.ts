@@ -112,6 +112,10 @@ export interface Host {
   transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
   mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
+  /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
+  mailboxInboxPut?: (pane: string, name: string, text: string) => Promise<void>
+  /** Whether pane `pane` has read message `name` (the file left its inbox). */
+  mailboxInboxRead?: (pane: string, name: string) => Promise<boolean>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -501,6 +505,16 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxState(id, text, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_state", { id, text, kind: kind ?? null })
+    },
+
+    async mailboxInboxPut(pane, name, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("mailbox_inbox_put", { pane, name, text })
+    },
+
+    async mailboxInboxRead(pane, name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<boolean>("mailbox_inbox_read", { pane, name })
     },
 
     async mailboxResult(id, text) {

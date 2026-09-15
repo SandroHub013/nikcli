@@ -1047,6 +1047,8 @@ pub fn run() {
             mailbox::mailbox_result,
             mailbox::mailbox_result_reclaim,
             mailbox::mailbox_state,
+            mailbox::mailbox_inbox_put,
+            mailbox::mailbox_inbox_read,
             agent_link::agent_activity_read,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,

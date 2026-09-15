@@ -43,7 +43,7 @@ export const INTRO_TEXT =
   "usa ade-msg wait ID solo se ti serve subito, e non ripeterlo in ciclo. " +
   "Delega compiti grandi, non piccoli, e chiedi sintesi brevi con i dettagli su file. " +
   "A ogni [Richiesta ID ...] rispondi con ade-msg reply ID seguito dalla sintesi; se sei bloccata usa ade-msg update ID bloccata seguito dal motivo. " +
-  "Se esiste .ade/memory.md del progetto leggilo prima di esplorare. Tutti gli altri comandi: ade-msg help. " +
+  "Se esiste .ade/memory.md del progetto leggilo prima di esplorare. Un avviso che dice ade-msg inbox si legge con quel comando. Tutti gli altri comandi: ade-msg help. " +
   "Usalo quando l'utente lo chiede o quando coordinarti serve al compito."
 
 /** Arguments that put the notice in the CLI's instructions, or none. */

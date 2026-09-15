@@ -178,7 +178,17 @@ import {
   verifySender,
   type MailPane,
   type Message,
+  formatBell,
+  formatUnread,
+  goesToInbox,
+  inboxAction,
+  inboxName,
+  parseInbox,
+  type InboxEntry,
 } from "../session/mailbox"
+
+/** Who a message is from and what it is, for the inbox when it is too long to type. */
+type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
 import {
   applyKv,
   emptySpace,
@@ -663,7 +673,7 @@ export function Workbench() {
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta }[] = []
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
@@ -714,6 +724,66 @@ export function Workbench() {
   /** The `ask` and `spawn` requests still waiting for a reply. */
   const openRequests = new Map<string, OpenRequest>(parseOpenRequests(readStored(REQUESTS_KEY)).map((request) => [request.id, request]))
   const saveRequests = () => writeStored(REQUESTS_KEY, JSON.stringify([...openRequests.values()]))
+
+  /** Long messages left in an inbox and not yet read (S20). */
+  const INBOX_KEY = "ade.mailbox.inbox"
+  const inboxPending: InboxEntry[] = parseInbox(readStored(INBOX_KEY))
+  const saveInbox = () => writeStored(INBOX_KEY, JSON.stringify(inboxPending))
+
+  /**
+   * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
+   *
+   * Only a line too long to type safely goes to the inbox (`goesToInbox`); a
+   * host without the inbox, or a write that fails, types it as before. False
+   * when the session went away.
+   */
+  const deliverText = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    paneId: string,
+    line: string,
+    meta: InboxMeta,
+  ): Promise<boolean> => {
+    const session = running.get(paneId)
+    if (!session) return false
+    if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return typeLine(session, line)
+    const at = Date.now()
+    const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: line.length, at, ringAt: at, rings: 0 }
+    const stored = await host.mailboxInboxPut(paneId, entry.name, line).then(
+      () => true,
+      () => false,
+    )
+    if (!stored) return typeLine(session, line)
+    inboxPending.push(entry)
+    saveInbox()
+    return typeLine(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length))
+  }
+
+  /** Rings again for unread inbox messages, and tells the sender of one never read. */
+  const followInbox = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
+    if (!host.mailboxInboxRead || inboxPending.length === 0) return
+    let changed = false
+    for (const entry of [...inboxPending]) {
+      const session = running.get(entry.paneId)
+      const read = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => false) : false
+      const free = session && !read ? await freeNow(host, entry.paneId) : false
+      const action = inboxAction(entry, { running: Boolean(session), free, read }, now)
+      if (action === "wait") continue
+      const panes = mailPanes()
+      if (action === "ring" && session) {
+        entry.rings += 1
+        entry.ringAt = now
+        void typeLine(session, formatBell(entry, panes.find((pane) => pane.id === entry.from), entry.chars))
+        appendLine(entry.paneId, `Avviso ripetuto: messaggio non ancora letto (${entry.rings}/3)`, "note")
+      } else {
+        inboxPending.splice(inboxPending.indexOf(entry), 1)
+        if (action === "warn" && entry.from && running.has(entry.from)) {
+          heldLines.push({ paneId: entry.from, text: formatUnread(entry, panes.find((pane) => pane.id === entry.paneId)) })
+        }
+      }
+      changed = true
+    }
+    if (changed) saveInbox()
+  }
   /*
    * Restored requests count their grace from now, not from when they were
    * made: their sessions are being reopened, and "not running" during that is
@@ -986,7 +1056,7 @@ export function Workbench() {
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
-        void typeLine(session, item.text)
+        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
       }
     }
 
@@ -1030,6 +1100,8 @@ export function Workbench() {
       }
     }
 
+    await followInbox(host, now)
+
     const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now)
     if (table !== publishedRequests) {
       publishedRequests = table
@@ -1065,7 +1137,13 @@ export function Workbench() {
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
           // Held until the caller's turn ends, like every other message.
-          if (text != null && caller && running.has(caller.id)) heldLines.push({ paneId: caller.id, text: formatLateReply(message.ref, text, sender) })
+          if (text != null && caller && running.has(caller.id)) {
+            heldLines.push({
+              paneId: caller.id,
+              text: formatLateReply(message.ref, text, sender),
+              inbox: { id: message.ref, kind: "reply", from: message.from },
+            })
+          }
         })
       }, CLAIM_WINDOW_MS)
       if (request?.autoClose) {
@@ -1100,7 +1178,9 @@ export function Workbench() {
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
-          if (text != null && caller && running.has(caller.id)) heldLines.push({ paneId: caller.id, text })
+          if (text != null && caller && running.has(caller.id)) {
+            heldLines.push({ paneId: caller.id, text, inbox: { id: request.id, kind: "update", from: message.from } })
+          }
         })
       }, CLAIM_WINDOW_MS)
       return true
@@ -1450,7 +1530,7 @@ export function Workbench() {
             maxDepth: maxDepth(),
           })
         : formatDelivery(message, sender)
-    if (!(await typeLine(session, line))) {
+    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }))) {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -3246,7 +3326,14 @@ export function Workbench() {
             // Opening tasks only — a line the user typed later is theirs alone.
             // Text and Enter apart, for the reason `typeLine` gives.
             const session = running.get(paneId)
-            if (session) void typeLine(session, typeIntoResumed ? task : withIntro(agentId, task))
+            const opening = typeIntoResumed ? task : withIntro(agentId, task)
+            // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
+            const spawned = [...openRequests.values()].find((request) => request.kind === "spawn" && request.to === paneId)
+            if (session && spawned) {
+              void getHost().then((host) =>
+                host ? deliverText(host, paneId, opening, { id: spawned.id, kind: "spawn", from: spawned.from }) : typeLine(session, opening),
+              )
+            } else if (session) void typeLine(session, opening)
             return
           }
           /*
