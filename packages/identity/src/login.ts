@@ -135,6 +135,19 @@ export function deviceConnectedPage(c: AppContext): Response {
 }
 
 /**
+ * What the sign-in pages say when the login they interrupt is a terminal
+ * waiting to be approved. Every page that can be reached mid-approval carries
+ * it, errors included — losing it is how a user stops understanding that the
+ * terminal still depends on this tab.
+ */
+const DEVICE_LEAD =
+  "Your terminal is not connected yet — finish signing in below and keep this tab open until you see the confirmation."
+
+function leadFor(intent: LoginIntent | null | undefined): string | undefined {
+  return intent?.kind === "device" ? DEVICE_LEAD : undefined
+}
+
+/**
  * Re-serve whatever a completed login already produced. Every duplicate submit
  * of the same `login_state` — autofill racing a tap, a double-tap, a browser
  * retry — reaches here after the first one consumed the intent, and telling
@@ -428,11 +441,14 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
   const form = await readForm(c.req.raw)
   const loginState = form.get("login_state") ?? ""
   const email = (form.get("email") ?? "").trim().toLowerCase()
-  if (!(await loadLoginIntent(c.env, loginState))) {
+  const intent = await loadLoginIntent(c.env, loginState)
+  if (!intent) {
     const replay = await replayCompleted(c, loginState)
     return replay ?? resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
   }
-  if (!EMAIL_PATTERN.test(email) || email.length > 254) return loginPage(c, loginState, "Enter a valid email address.")
+  const lead = leadFor(intent)
+  if (!EMAIL_PATTERN.test(email) || email.length > 254)
+    return loginPage(c, loginState, "Enter a valid email address.", 200, lead)
 
   // Two budgets bound what one address can be made to receive; the third bounds
   // what one network can make the issuer send in total, across addresses.
@@ -455,10 +471,18 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
     // Whose budget ran out changes what the user can do about it: waiting helps
     // for their own address, while a shared network says nothing about the code
     // they may already be holding.
-    const reason = addressLimited ? "Too many codes were sent to this address." : "Too many sign-in codes were requested from this network."
+    const reason = addressLimited
+      ? "Too many codes were sent to this address."
+      : "Too many sign-in codes were requested from this network."
     return pending
-      ? emailCodePage(c, loginState, email, `${reason} Enter the code you already received, or request another in ${wait}.`, 429)
-      : loginPage(c, loginState, `${reason} Try again in ${wait}.`, 429)
+      ? emailCodePage(
+          c,
+          loginState,
+          email,
+          `${reason} Enter the code you already received, or request another in ${wait}.`,
+          429,
+        )
+      : loginPage(c, loginState, `${reason} Try again in ${wait}.`, 429, lead)
   }
 
   const code = randomDigits(6)
@@ -495,6 +519,7 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
       loginState,
       "We could not send the code right now. Try again in a moment, or continue with GitHub.",
       502,
+      lead,
     )
   }
   // Persist only after the mail is accepted: a challenge nobody can satisfy
@@ -510,7 +535,8 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
   const loginState = form.get("login_state") ?? ""
   const code = digitsOnly(form.get("code") ?? "")
   const challenge = await c.env.STATE.get<EmailChallenge>(emailKey(loginState), "json")
-  if (!challenge || !(await loadLoginIntent(c.env, loginState))) {
+  const intent = await loadLoginIntent(c.env, loginState)
+  if (!challenge || !intent) {
     // A prior submit for this same login_state may have already verified the
     // code and consumed both KV entries — replay its outcome instead of
     // telling a merely-late duplicate request its code is expired.
@@ -518,11 +544,12 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
     if (replay) return replay
     return resultPage(c, "Code expired", "Request a new sign-in code.", 400)
   }
+  const lead = leadFor(intent)
 
   const expiresAt = challenge.expiresAt ?? Date.now() + EMAIL_CODE_TTL_SECONDS * 1000
   if (expiresAt <= Date.now()) {
     await c.env.STATE.delete(emailKey(loginState))
-    return loginPage(c, loginState, "That code expired. Request a new one.")
+    return loginPage(c, loginState, "That code expired. Request a new one.", 200, lead)
   }
 
   // Empty or short submissions are typos and half-finished autofills, not
@@ -537,7 +564,7 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
     await c.env.STATE.delete(emailKey(loginState))
     // The login intent is still alive, so offer a new code here rather than
     // sending the user back to the terminal to restart the whole flow.
-    return loginPage(c, loginState, "Too many wrong codes. Request a new one.", 429)
+    return loginPage(c, loginState, "Too many wrong codes. Request a new one.", 429, lead)
   }
   await c.env.STATE.put(emailKey(loginState), JSON.stringify({ ...challenge, expiresAt }), {
     expirationTtl: remainingTtl(expiresAt),
@@ -610,11 +637,5 @@ export async function beginDeviceApproval(c: AppContext): Promise<Response> {
     kind: "device",
     userCode: formatted,
   })
-  return loginPage(
-    c,
-    loginState,
-    undefined,
-    200,
-    "Your terminal is not connected yet — finish signing in below and keep this tab open until you see the confirmation.",
-  )
+  return loginPage(c, loginState, undefined, 200, DEVICE_LEAD)
 }

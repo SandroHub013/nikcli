@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import app from "../src/index"
+import { EMAIL_CODE_IP_LIMIT } from "../src/constants"
 import { memoryD1, type MemoryD1 } from "./support/d1"
 
 type SentEmail = { to: string; subject: string; text: string }
@@ -222,6 +223,62 @@ describe("passkey enrollment edge cases", () => {
     const again = await kit.postForm("/login/passkey/skip", { login_state: loginState })
     expect(again.status).toBe(200)
     expect(await again.text()).toContain("Device connected")
+  })
+
+  /**
+   * An error must not cancel the context: a device approval that mistypes its
+   * email still has a terminal waiting on this tab.
+   */
+  test("keeps the device context on an email error", async () => {
+    const kit = fixture()
+    const device = await kit.startDevice()
+    const approved = await kit.postForm("/device", { user_code: device.user_code, decision: "approve" })
+    const loginState = loginStateOf(await approved.text())
+
+    const rejected = await kit.postForm("/login/email/request", { login_state: loginState, email: "not-an-email" })
+    const page = await rejected.text()
+    expect(page).toContain("Enter a valid email address")
+    expect(page).toContain("Your terminal is not connected yet")
+    expect(page).toContain("One more step")
+    expect(page).not.toContain("Sign in or create an account")
+  })
+
+  test("an authorize flow keeps its own copy on the same error", async () => {
+    const kit = fixture()
+    const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+    const page = await kit
+      .postForm("/login/email/request", { login_state: loginState, email: "not-an-email" })
+      .then((r) => r.text())
+    expect(page).toContain("Enter a valid email address")
+    expect(page).toContain("Sign in or create an account")
+    expect(page).not.toContain("Your terminal is not connected yet")
+  })
+
+  /**
+   * The per-address budgets bound what one mailbox receives and nothing else.
+   * Varying the address was unlimited, and what comes out is mail signed by the
+   * issuer's own domain.
+   */
+  test("caps sign-in codes per network across different addresses", async () => {
+    const kit = fixture()
+    let sent = 0
+    let limited = 0
+    for (let i = 0; i < EMAIL_CODE_IP_LIMIT + 3; i++) {
+      const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+      const response = await kit.postForm("/login/email/request", {
+        login_state: loginState,
+        email: `person-${i}@example.com`,
+      })
+      if (response.status === 429) {
+        limited++
+        expect(await response.text()).toContain("from this network")
+      } else {
+        sent++
+      }
+    }
+    expect(sent).toBe(EMAIL_CODE_IP_LIMIT)
+    expect(limited).toBe(3)
+    expect(kit.sent).toHaveLength(EMAIL_CODE_IP_LIMIT)
   })
 
   test("refuses enrollment for a login_state that never had an offer", async () => {

@@ -92,9 +92,18 @@ export function loginPage(
   status: ContentfulStatusCode = 200,
   lead?: string,
 ): Response {
-  const note = message
-    ? `<div class="notice" role="alert">${escape(message)}</div>`
-    : `<p>${escape(lead ?? "Continue to the nikcli web app, Studio, or CLI without sharing a password. If this is your first time, your account will be created automatically after verification.")}</p>`
+  // An error does not cancel the context. A device approval that mistyped its
+  // email still has a terminal waiting, and dropping back to the generic
+  // headline told them they were merely "signing in" — the one thing this page
+  // exists to correct. The notice and the lead are shown together; without a
+  // lead the behaviour is exactly what it was.
+  const notice = message ? `<div class="notice" role="alert">${escape(message)}</div>` : ""
+  const explanation =
+    lead ??
+    (message
+      ? undefined
+      : "Continue to the nikcli web app, Studio, or CLI without sharing a password. If this is your first time, your account will be created automatically after verification.")
+  const note = `${notice}${explanation ? `<p>${escape(explanation)}</p>` : ""}`
   return page(
     c,
     lead ? "One more step" : "Sign in or create an account",
