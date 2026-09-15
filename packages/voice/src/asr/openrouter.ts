@@ -543,7 +543,7 @@ export function createOpenRouterTranscriber(
         const lower = String(err?.message ?? "").toLowerCase()
         if (lower.includes("negato") || lower.includes("notallowed") || lower.includes("permission")) {
           const permErr = new MicPermissionDenied({
-            message: "Accesso al microfono negato. Concedi il permesso audio nelle impostazioni del browser.",
+            message: "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
             cause: err,
           })
           errorCb(permErr as unknown as Error)

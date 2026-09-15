@@ -201,7 +201,7 @@ export function spokenMessage(error: unknown): string {
       /* The sentence says where the fix is, because for these two there is
          one and it is not in this window. */
       case "MicPermissionDenied":
-        return "Accesso al microfono negato. Concedi il permesso audio nelle impostazioni del browser."
+        return "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop)."
       case "MicUnavailable":
         return "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova."
       case "AudioFormatUnsupported":
