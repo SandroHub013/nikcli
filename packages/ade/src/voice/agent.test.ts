@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import type { AgentStatus } from "../session-new/availability"
 import type { TurnRequest, TurnResult } from "../bots/turn"
+import { limitNotice } from "../bots/terms"
 import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
@@ -103,5 +106,31 @@ describe("voice/agent", () => {
     abort.abort()
     expect((await pending).ok).toBe(false)
     expect(runner.stops()).toBe(1)
+  })
+
+  test("a turn ended by the plan's limit is said as the bots say it, and never asked again", async () => {
+    const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+
+    const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })
+    expect(answer).toEqual({ ok: false, text: limitNotice("Claude Code") })
+    expect(answer.text).toContain("ADE non riprova")
+    // Neither the same CLI again nor another engine: one sentence, one turn.
+    expect(runner.requests).toHaveLength(1)
+  })
+
+  test("the full turns on a plan refuse a voice turn too: it runs through the bots' runTurn", () => {
+    // S13: the cap on parallel turns lives in runTurn (bots/terms.ts
+    // acquireTurn), shared by bots and the voice agent. These hold the wiring
+    // to that, since runTurn needs the desktop host to run.
+    const host = readFileSync(join(import.meta.dir, "host.ts"), "utf8")
+    expect(host).toMatch(/import\("\.\.\/bots\/turn"\)\.then\(\(\{ runTurn \}\) =>\s*createVoiceAgent\(\{\s*runTurn,/)
+
+    const turn = readFileSync(join(import.meta.dir, "..", "bots", "turn.ts"), "utf8")
+    const acquired = turn.indexOf("acquireTurn(runner.id")
+    expect(acquired).toBeGreaterThan(-1)
+    expect(turn.indexOf("if (\"problem\" in slot)", acquired)).toBeGreaterThan(acquired)
+    expect(turn.indexOf(".spawn(", acquired)).toBeGreaterThan(acquired)
+    expect(turn.indexOf("slot.release()", acquired)).toBeGreaterThan(turn.indexOf(".spawn(", acquired))
   })
 })
