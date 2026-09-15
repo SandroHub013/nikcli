@@ -87,14 +87,31 @@ describe("Proposal A state vocabulary", () => {
 describe("Proposal A Quota Horizon data integration", () => {
   const now = 1_000_000
 
-  test("Claude provider quota generates binding 5h window with countdown", () => {
+  test("Claude provider quota generates binding weekly window with countdown from live quota", () => {
     const claude = getProviderQuota("claude-code", now)
     expect(claude).toBeDefined()
-    expect(claude?.bindingKey).toBe("5h")
-    expect(claude?.displayValue).toBe("62%")
+    expect(claude?.bindingKey).toBe("sett.")
+    expect(claude?.displayValue).toMatch(/^\d+%$/)
     expect(claude?.level).toBe("ok")
-    expect(claude?.countdown).toBe("1h 40m")
-    expect(claude?.tooltip).toContain("5h: 62% rimasto")
+    expect(claude?.countdown).toBe("21/09")
+    expect(claude?.tooltip).toContain("sett.:")
+    expect(claude?.tooltip).toContain("reset il 21/09")
+  })
+
+  test("Claude provider quota generates binding 5h window when 5h has lower remaining", () => {
+    const quota: ProviderQuota = {
+      id: "claude",
+      name: "Anthropic · Max",
+      status: "ok",
+      metrics: [
+        { label: "5h", remaining: 45, resetAt: new Date(now + 6_000_000).toISOString() },
+        { label: "sett.", remaining: 71, resetAt: new Date(now + 172_800_000).toISOString() },
+      ],
+    }
+    const view = formatSessionQuota(quota, now)
+    expect(view.bindingKey).toBe("5h")
+    expect(view.displayValue).toBe("45%")
+    expect(view.countdown).toBe("1h 40m")
   })
 
   test("Rate limited Claude shows limit flag and countdown for urg styling", () => {

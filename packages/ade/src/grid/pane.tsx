@@ -4,7 +4,7 @@ import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
-import { getProviderQuota, type SessionQuotaView } from "../session/quota"
+import { getProviderQuota, refreshQuotaFromHost, type SessionQuotaView } from "../session/quota"
 
 /** The screenshot tray's own drag type. See the drop handler for why. */
 const SHOT_MIME = "application/x-ade-shot"
@@ -425,6 +425,10 @@ export function SessionPane(props: SessionPaneProps) {
     }
     if (refocus) focusPane(root)
   }
+
+  createEffect(() => {
+    void refreshQuotaFromHost()
+  })
 
   const quota = createMemo<SessionQuotaView | undefined>(() => {
     if (props.quota) return props.quota

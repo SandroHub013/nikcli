@@ -10,6 +10,7 @@ import {
   formatCountdown,
   formatSessionQuota,
   getProviderQuota,
+  parseQuotaAxiSnapshot,
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
@@ -387,5 +388,50 @@ describe("formatSessionQuota and getProviderQuota", () => {
     const codexView = getProviderQuota("codex", now)
     expect(codexView).toBeDefined()
     expect(codexView?.providerName).toBe("OpenAI · ChatGPT Plus")
+  })
+})
+
+describe("parseQuotaAxiSnapshot", () => {
+  test("correctly parses quota-axi json format for claude and codex", () => {
+    const raw = {
+      generatedAt: "2026-09-15T18:45:14.212Z",
+      schemaVersion: 1,
+      providers: [
+        {
+          provider: "claude",
+          label: "Claude",
+          plan: "max",
+          windows: [
+            { id: "five_hour", label: "session", kind: "session", percentUsed: 21, percentRemaining: 79, resetsAt: "2026-09-15T22:40:00Z" },
+            { id: "seven_day", label: "week", kind: "weekly", percentUsed: 41, percentRemaining: 59, resetsAt: "2026-09-21T13:00:00Z" },
+          ],
+        },
+        {
+          provider: "codex",
+          label: "Codex",
+          plan: "free",
+          windows: [
+            { id: "window:720h", label: "720h window", kind: "unknown", percentUsed: 100, percentRemaining: 0, resetsAt: "2026-10-13T13:12:12Z" },
+          ],
+        },
+      ],
+    }
+    const parsed = parseQuotaAxiSnapshot(raw)
+    expect(parsed.length).toBe(2)
+
+    const claude = parsed.find((p) => p.id === "claude")
+    expect(claude).toBeDefined()
+    expect(claude?.name).toBe("Anthropic · Max")
+    expect(claude?.metrics.find((m) => m.label === "5h")?.remaining).toBe(79)
+    expect(claude?.metrics.find((m) => m.label === "sett.")?.remaining).toBe(59)
+
+    const view = formatSessionQuota(claude!)
+    expect(view.bindingKey).toBe("sett.")
+    expect(view.displayValue).toBe("59%")
+    expect(view.countdown).toBe("21/09")
+
+    const codex = parsed.find((p) => p.id === "codex")
+    expect(codex).toBeDefined()
+    expect(codex?.status).toBe("rate_limited")
   })
 })

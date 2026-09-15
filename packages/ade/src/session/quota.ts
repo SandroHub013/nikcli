@@ -455,7 +455,26 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
       ratio = Math.max(0, Math.min(1.0, 1 - m.used / m.limit))
     }
     const cd = cooldownRemainingMs(m, now)
-    const resetText = cd > 0 ? formatCountdown(cd) : m.resetAt ? m.resetAt : undefined
+    let resetText: string | undefined
+    if (cd > 0) {
+      if (cd > 24 * 3600_000 && m.resetAt) {
+        const d = new Date(m.resetAt)
+        if (!isNaN(d.getTime())) {
+          resetText = d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+        } else {
+          resetText = formatCountdown(cd)
+        }
+      } else {
+        resetText = formatCountdown(cd)
+      }
+    } else if (m.resetAt) {
+      const d = new Date(m.resetAt)
+      if (!isNaN(d.getTime())) {
+        resetText = d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+      } else {
+        resetText = m.resetAt
+      }
+    }
     return {
       key: m.label,
       label: m.label,
@@ -479,7 +498,7 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
     `Quota ${quota.name}`,
     ...windows.map((w) => {
       const pct = `${Math.round(w.ratio * 100)}% rimasto`
-      const rst = w.resetText ? ` · reset tra ${w.resetText}` : ""
+      const rst = w.resetText ? ` · reset ${w.resetText.includes("/") ? "il " + w.resetText : "tra " + w.resetText}` : ""
       return `${w.label}: ${pct}${rst}`
     }),
   ]
@@ -504,10 +523,138 @@ export function setProviderQuota(quota: ProviderQuota): void {
   quotaRegistry.set(quota.id, quota)
 }
 
+/**
+ * Parser per lo snapshot emesso da quota-axi (~/.cache/quota-axi/quotas.json).
+ */
+export function parseQuotaAxiSnapshot(raw: unknown): ProviderQuota[] {
+  if (!raw || typeof raw !== "object") return []
+  const providersRaw = (raw as Record<string, unknown>).providers
+  if (!Array.isArray(providersRaw)) return []
+
+  const results: ProviderQuota[] = []
+  for (const item of providersRaw) {
+    if (!item || typeof item !== "object") continue
+    const p = item as Record<string, unknown>
+    const providerId = typeof p.provider === "string" ? p.provider : ""
+    if (!providerId) continue
+
+    const name = typeof p.label === "string" ? p.label : providerId
+    const plan = typeof p.plan === "string" ? p.plan : undefined
+    const windowsRaw = Array.isArray(p.windows) ? p.windows : []
+    const metrics: QuotaMetric[] = []
+
+    for (const w of windowsRaw) {
+      if (!w || typeof w !== "object") continue
+      const win = w as Record<string, unknown>
+      const id = typeof win.id === "string" ? win.id : ""
+      const kind = typeof win.kind === "string" ? win.kind : ""
+      const label = typeof win.label === "string" ? win.label : id
+
+      let shortLabel = label
+      if (id === "five_hour" || kind === "session") shortLabel = "5h"
+      else if (id === "seven_day" || kind === "weekly") shortLabel = "sett."
+
+      const remaining = typeof win.percentRemaining === "number" ? Math.max(0, Math.min(100, Math.round(win.percentRemaining))) : undefined
+      const used = typeof win.percentUsed === "number" ? Math.round(win.percentUsed) : undefined
+      const resetAt = typeof win.resetsAt === "string" ? win.resetsAt : undefined
+      const isRateLimited = remaining !== undefined && remaining <= 0
+
+      metrics.push({
+        label: shortLabel,
+        remaining,
+        used,
+        limit: 100,
+        unit: "percent",
+        resetAt,
+        isRateLimited,
+      })
+    }
+
+    const isExhausted = metrics.some((m) => m.isRateLimited)
+    const normalizedId = normalizeProviderId(providerId)
+    const displayName =
+      providerId === "claude"
+        ? `Anthropic · ${plan ? (plan.toLowerCase() === "max" ? "Max" : plan) : "Max"}`
+        : providerId === "codex"
+          ? `OpenAI · ChatGPT ${plan ? (plan.toLowerCase() === "free" ? "Plus" : plan) : "Plus"}`
+          : name
+
+    results.push({
+      id: normalizedId,
+      name: displayName,
+      status: isExhausted ? "rate_limited" : "ok",
+      plan,
+      metrics,
+      sourceUpdatedAt: typeof (raw as Record<string, unknown>).generatedAt === "string" ? ((raw as Record<string, unknown>).generatedAt as string) : undefined,
+    })
+  }
+  return results
+}
+
+/**
+ * Prova a leggere il file di cache di quota-axi sincrono (per ambiente Bun/Node).
+ */
+export function loadQuotaAxiFile(): boolean {
+  try {
+    if (typeof process !== "undefined" && process.env) {
+      const home = process.env.USERPROFILE || process.env.HOME
+      if (home) {
+        const sep = home.includes("\\") ? "\\" : "/"
+        const filePath = `${home}${sep}.cache${sep}quota-axi${sep}quotas.json`
+        const getReq = (import.meta as unknown as { require?: (mod: string) => unknown }).require
+          ?? (globalThis as unknown as { require?: (mod: string) => unknown }).require
+        if (typeof getReq === "function") {
+          const fs = getReq("node:fs") as { existsSync: (p: string) => boolean; readFileSync: (p: string, enc: string) => string }
+          if (fs && fs.existsSync(filePath)) {
+            const text = fs.readFileSync(filePath, "utf-8")
+            const parsed = JSON.parse(text)
+            const quotas = parseQuotaAxiSnapshot(parsed)
+            for (const q of quotas) {
+              setProviderQuota(q)
+            }
+            return true
+          }
+        }
+      }
+    }
+  } catch {}
+  return false
+}
+
+/**
+ * Aggiorna i dati di quota in tempo reale dall'host Tauri (per ambiente WebView2).
+ */
+export async function refreshQuotaFromHost(): Promise<boolean> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    const home = await invoke<string>("home_dir")
+    if (!home) return false
+    const sep = home.includes("\\") ? "\\" : "/"
+    const path = `${home}${sep}.cache${sep}quota-axi${sep}quotas.json`
+    const res = await invoke<{ text: string }>("read_text_file", { path, maxBytes: 1_000_000 })
+    if (res && res.text) {
+      const parsed = JSON.parse(res.text)
+      const quotas = parseQuotaAxiSnapshot(parsed)
+      for (const q of quotas) {
+        setProviderQuota(q)
+      }
+      return true
+    }
+  } catch {}
+  return false
+}
+
+// Inizializza immediatamente se in ambiente Bun/Node
+loadQuotaAxiFile()
+
 export function getProviderQuota(agentId?: string, now = Date.now()): SessionQuotaView | undefined {
   if (!agentId) return undefined
   const id = normalizeProviderId(agentId)
   let q = quotaRegistry.get(id)
+  if (!q) {
+    loadQuotaAxiFile()
+    q = quotaRegistry.get(id)
+  }
   if (!q) {
     q = defaultProviderQuota(id, now)
     if (q) quotaRegistry.set(id, q)
@@ -533,12 +680,12 @@ function defaultProviderQuota(providerId: string, now: number): ProviderQuota | 
         status: "ok",
         plan: "Max",
         metrics: [
-          { label: "5h", remaining: 62, resetAt: new Date(now + 6_000_000).toISOString() },
-          { label: "sett.", remaining: 71, resetAt: new Date(now + 172_800_000).toISOString() },
+          { label: "5h", remaining: 79, resetAt: "2026-09-15T22:40:00.179326+00:00" },
+          { label: "sett.", remaining: 59, resetAt: "2026-09-21T13:00:00.179344+00:00" },
         ],
       }
     case "codex": {
-      const resetTime = new Date("2026-10-13T15:12:00Z").getTime()
+      const resetTime = new Date("2026-10-13T13:12:12Z").getTime()
       const isExhausted = now < resetTime
       return {
         id: "codex",
@@ -548,12 +695,11 @@ function defaultProviderQuota(providerId: string, now: number): ProviderQuota | 
         message: isExhausted ? "You've hit your usage limit" : undefined,
         metrics: [
           {
-            label: "5h",
+            label: "720h",
             remaining: isExhausted ? 0 : 38,
-            resetAt: isExhausted ? "2026-10-13T15:12:00Z" : new Date(now + 7_500_000).toISOString(),
+            resetAt: "2026-10-13T13:12:12.000Z",
             isRateLimited: isExhausted,
           },
-          { label: "sett.", remaining: 80, resetAt: new Date(now + 259_200_000).toISOString() },
         ],
       }
     }
@@ -582,3 +728,4 @@ function defaultProviderQuota(providerId: string, now: number): ProviderQuota | 
       return undefined
   }
 }
+
