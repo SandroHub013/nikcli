@@ -26,6 +26,14 @@ import { QUOTA_AXI_FILE, type QuotaSnapshot, readQuotaAxiSnapshot } from "./quot
  */
 export const QUOTA_REFRESH_MS = 30_000
 
+/**
+ * How long one read of the report may take.
+ *
+ * A spawn waits on this read, so a host call that never returns must not hold
+ * the spawn with it. The file is a few kilobytes: two seconds is long.
+ */
+export const QUOTA_READ_TIMEOUT_MS = 2_000
+
 /** Reads the quota-axi report's text, or `undefined` when there is none. */
 export type QuotaReader = () => Promise<string | undefined>
 
@@ -38,28 +46,50 @@ export interface QuotaStore {
   start: (options?: { immediate?: boolean }) => () => void
 }
 
-export function createQuotaStore(read: QuotaReader, clock: () => number = Date.now): QuotaStore {
+export function createQuotaStore(
+  read: QuotaReader,
+  clock: () => number = Date.now,
+  timeoutMs: number = QUOTA_READ_TIMEOUT_MS,
+): QuotaStore {
   return createRoot(() => {
     const [snapshot, setSnapshot] = createSignal<QuotaSnapshot | undefined>()
     const [now, setNow] = createSignal(clock())
 
+    /*
+     * A read that fails keeps the last reading; only a read that finds no
+     * report clears it.
+     *
+     * Failing is a hiccup of the read — a timeout, a file caught half-written
+     * — and says nothing about the quota, so it should not blank six panes
+     * for thirty seconds. The last reading is not trusted forever for that:
+     * `quotaForAgent` turns it into "n/d" once it is older than
+     * `QUOTA_STALE_MS`, however it was kept.
+     */
     const refresh = async () => {
       let text: string | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
       try {
-        text = await read()
+        text = await Promise.race([
+          read(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("timeout")), timeoutMs)
+          }),
+        ])
       } catch {
-        text = undefined
+        setNow(clock())
+        return
+      } finally {
+        if (timer) clearTimeout(timer)
       }
-      let next: QuotaSnapshot | undefined
-      if (text) {
+      if (!text) {
+        setSnapshot(undefined)
+      } else {
         try {
-          next = readQuotaAxiSnapshot(JSON.parse(text))
+          setSnapshot(readQuotaAxiSnapshot(JSON.parse(text)))
         } catch {
-          // A report caught half-written reads as no report, never as zeros.
-          next = undefined
+          // Half-written: keep what was read last.
         }
       }
-      setSnapshot(next)
       setNow(clock())
     }
 
@@ -86,6 +116,19 @@ async function readFromHost(): Promise<string | undefined> {
 }
 
 let shared: QuotaStore | undefined
+
+/**
+ * The shared store after one fresh read, without starting its timer.
+ *
+ * For a decision taken now (the spawn picker), where holding the store would
+ * start the periodic refresh and its immediate read on top of this one.
+ */
+export async function freshSharedQuota(): Promise<QuotaStore> {
+  shared ??= createQuotaStore(readFromHost)
+  await shared.refresh()
+  return shared
+}
+
 let users = 0
 let stop: (() => void) | undefined
 

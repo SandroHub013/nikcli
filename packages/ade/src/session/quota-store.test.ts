@@ -46,7 +46,7 @@ describe("createQuotaStore", () => {
     expect(after.countdown).toBe("2h 30m")
   })
 
-  test("a failed read, a half-written file or no file leaves no figure behind", async () => {
+  test("a failed or half-written read keeps the last reading; a read that finds no report clears it", async () => {
     const clock = () => Date.parse("2026-09-15T20:00:00Z")
     let mode: "good" | "broken" | "throws" | "none" = "good"
     const store = createQuotaStore(async () => {
@@ -55,14 +55,50 @@ describe("createQuotaStore", () => {
       if (mode === "none") return undefined
       return report(64, "2026-09-15T19:59:00Z")
     }, clock)
+    const shown = () => quotaForAgent("claude-code", store.snapshot(), store.now())
 
-    for (const next of ["broken", "throws", "none"] as const) {
-      mode = "good"
+    await store.refresh()
+    for (const hiccup of ["broken", "throws"] as const) {
+      mode = hiccup
       await store.refresh()
-      expect(isQuotaUnavailable(quotaForAgent("claude-code", store.snapshot(), store.now()))).toBe(false)
-      mode = next
-      await store.refresh()
-      expect(isQuotaUnavailable(quotaForAgent("claude-code", store.snapshot(), store.now()))).toBe(true)
+      const kept = shown()
+      if (!kept || isQuotaUnavailable(kept)) throw new Error(`${hiccup} blanked the reading`)
+      expect(kept.displayValue).toBe("64%")
     }
+    mode = "none"
+    await store.refresh()
+    expect(isQuotaUnavailable(shown())).toBe(true)
+  })
+
+  test("a read that never answers gives up after the timeout and keeps the last reading", async () => {
+    const clock = () => Date.parse("2026-09-15T20:00:00Z")
+    let hang = false
+    const store = createQuotaStore(
+      () => (hang ? new Promise<string>(() => {}) : Promise.resolve(report(64, "2026-09-15T19:59:00Z"))),
+      clock,
+      20,
+    )
+    await store.refresh()
+    hang = true
+    const started = Date.now()
+    await store.refresh()
+    expect(Date.now() - started).toBeLessThan(1_000)
+    const kept = quotaForAgent("claude-code", store.snapshot(), store.now())
+    if (!kept || isQuotaUnavailable(kept)) throw new Error("the timeout blanked the reading")
+    expect(kept.displayValue).toBe("64%")
+  })
+
+  test("a reading kept through failures still turns n/d once it is too old", async () => {
+    let clock = Date.parse("2026-09-15T20:00:00Z")
+    let fail = false
+    const store = createQuotaStore(async () => {
+      if (fail) throw new Error("EPERM")
+      return report(64, "2026-09-15T19:59:00Z")
+    }, () => clock)
+    await store.refresh()
+    fail = true
+    clock += 31 * 60_000
+    await store.refresh()
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", store.snapshot(), store.now()))).toBe(true)
   })
 })

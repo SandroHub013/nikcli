@@ -137,9 +137,9 @@ import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
-import { pickProvider, setProviderPicker } from "../session/provider-pick"
+import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
 import { pickByQuota } from "../session/quota-pick"
-import { useSharedQuota } from "../session/quota-store"
+import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -1149,17 +1149,12 @@ export function Workbench() {
    *
    * The report is read again at the moment of the spawn rather than taken from
    * the last tick: a choice of agent made on a reading thirty seconds old can
-   * send work to a provider that has just run out. The store is held only for
-   * that read, so no timer runs on the picker's account.
+   * send work to a provider that has just run out. No timer is started on the
+   * picker's account, and a read that hangs gives up rather than hold the spawn.
    */
   setProviderPicker(async (input) => {
-    const quota = useSharedQuota()
-    try {
-      await quota.store.refresh()
-      return pickByQuota(input, quota.store.snapshot(), quota.store.now())
-    } finally {
-      quota.release()
-    }
+    const store = await freshSharedQuota()
+    return pickByQuota(input, store.snapshot(), store.now())
   })
   onCleanup(() => setProviderPicker())
 
@@ -1656,7 +1651,7 @@ export function Workbench() {
       let agent = asked
       let rerouted: string | undefined
       let quotaNote: string | undefined
-      if (!message.fork && !message.model) {
+      if (mayReroute(message)) {
         const picked = await pickProvider({ agent: asked.id, from: message.from })
         const other = picked.agent !== asked.id ? resolveAgent(SPAWNABLE, picked.agent) : undefined
         if (other && !("error" in other)) {
