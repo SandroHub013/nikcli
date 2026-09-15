@@ -632,10 +632,21 @@ export function Workbench() {
         activityOf.set(paneId, activity)
         return
       }
+      /*
+       * Busy from before the line was typed: the CLI queued it behind the
+       * current turn, and it will be submitted when that turn ends. An Enter
+       * now would land in whatever the turn is doing.
+       */
+      if (activity?.state === "busy") return
       session.write("\r")
       appendLine(paneId, "Invio ripetuto: il messaggio non era partito", "note")
     }
   }
+
+  /** Notes held for a busy recipient, whose sender has already been told. */
+  const heldNotes = new Set<string>()
+  /** The longest a note waits for its recipient's turn to end. */
+  const NOTE_HOLD_MS = 10 * 60_000
 
   /** Messages taken from the outbox and not delivered yet, oldest first. */
   const mailQueue: { id: string; message: Message; at: number }[] = []
@@ -1284,6 +1295,29 @@ export function Workbench() {
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
     if (permissions()[target.pane.id]) return false
 
+    /*
+     * A note is not something anyone is blocked on, so it waits for the
+     * recipient's turn to end instead of landing in the middle of its work,
+     * where it costs a detour and a turn. Only where the turn hooks can say
+     * the session is busy, and never for longer than NOTE_HOLD_MS. The sender
+     * is told at once, so it has no reason to send again.
+     */
+    if (message.kind === "send" && host.readAgentActivity) {
+      const nonce = paneNonces.get(target.pane.id)
+      const queuedAt = mailQueue.find((item) => item.id === id)?.at ?? Date.now()
+      if (nonce && hooked(target.pane.id) && Date.now() - queuedAt < NOTE_HOLD_MS) {
+        const resumeId = wb().panes.find((pane) => pane.id === target.pane.id)?.resumeId
+        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+        if (activity?.state === "busy") {
+          if (!heldNotes.has(id)) {
+            heldNotes.add(id)
+            await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+          }
+          return false
+        }
+      }
+    }
+
     const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
     const targetDepth = depthOf(target.pane.id, parentOf)
     const line =
@@ -1313,6 +1347,8 @@ export function Workbench() {
     const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
     appendLine(target.pane.id, `${what} ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
     if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
+    // A held note's sender was answered when it was held, and has stopped listening since.
+    if (heldNotes.delete(id)) return true
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
     return true
   }

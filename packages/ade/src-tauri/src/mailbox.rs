@@ -290,14 +290,21 @@ if ($file) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Fail "file non trovato: $file" }
   $item = Get-Item -LiteralPath $file
   $content = [IO.File]::ReadAllText($item.FullName, $utf8)
-  if ($item.Length -gt 60000) {
-    $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, [Math]::Min(3000, $content.Length))
+  if ($content.Length -gt 3800) {
+    $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, 1500)
   }
   $text = if ($text) { "$text`n`n$content" } else { $content }
 }
 
 function Post($fields) {
   $id = ('{0}-{1}' -f [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(), ([guid]::NewGuid().ToString('N').Substring(0, 8)))
+  # Past one message ADE would cut the text; the whole of it goes to a file the recipient can read.
+  $long = [string]$fields['text']
+  if ($long.Length -gt 3800) {
+    $path = Join-Path (Join-Path $box 'results') "$id.long.txt"
+    [IO.File]::WriteAllText($path, $long, $utf8)
+    $fields['text'] = "Testo completo ($($long.Length) caratteri) in $path, leggilo da li'. Inizio: " + $long.Substring(0, 1500)
+  }
   $fields['from'] = $env:ADE_PANE_ID
   $fields['token'] = $env:ADE_PANE_TOKEN
   $json = $fields | ConvertTo-Json -Compress
@@ -545,9 +552,9 @@ if [ -n "$file" ]; then
   [ -f "$file" ] || fail "file non trovato: $file"
   size=$(wc -c < "$file" | tr -d ' ')
   full="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
-  if [ "$size" -gt 60000 ]; then
+  if [ "$size" -gt 3800 ]; then
     content="Il contenuto completo e' nel file $full ($size byte); leggilo da li'. Inizio:
-$(head -c 3000 "$file")"
+$(head -c 1500 "$file")"
   else
     content="$(cat "$file")"
   fi
@@ -558,6 +565,10 @@ fi
 
 post() {
   id="$(date +%s)000-$$"
+  if [ "${#text}" -gt 3800 ]; then
+    long="$box/results/$id.long.txt"; printf '%s' "$text" > "$long"
+    text="Testo completo (${#text} caratteri) in $long, leggilo da li'. Inizio: $(printf '%s' "$text" | head -c 1500)"
+  fi
   printf '{"from":"%s","token":"%s",%s,"text":"%s"}' "$(esc "$ADE_PANE_ID")" "$(esc "$ADE_PANE_TOKEN")" "$1" "$(esc "$text")" > "$box/outbox/$id.part"
   mv "$box/outbox/$id.part" "$box/outbox/$id.json"
 }
