@@ -66,9 +66,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Commits one pull request at a time, over REST: asking GraphQL for the
+          # commits of a hundred pull requests at once exceeds its node limit.
           for label in release:skip release:major; do
-            gh pr list --repo "$GITHUB_REPOSITORY" --base feat/ade --state merged --label "$label" \
-              --limit 100 --json commits --jq '.[].commits[].oid' > "${label#release:}-shas.txt"
+            : > "${label#release:}-shas.txt"
+            for pr in $(gh pr list --repo "$GITHUB_REPOSITORY" --base feat/ade --state merged --label "$label" \
+              --limit 100 --json number --jq '.[].number'); do
+              gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$pr/commits" --jq '.[].sha' >> "${label#release:}-shas.txt"
+            done
           done
 
       - name: A release still building
