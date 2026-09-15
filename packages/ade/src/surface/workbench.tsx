@@ -2293,6 +2293,29 @@ export function Workbench() {
   }
 
   /**
+   * Opens a session from its row in the sidebar.
+   *
+   * The row used to set `focusedId` and nothing else, so clicking a session
+   * did nothing visible whenever it was not already on screen: in another
+   * project, behind another section (`agent`, `chat`), or outside an
+   * expansion of a different pane. Opening it means making it the thing on
+   * screen — its project, the terminals section, and that session expanded —
+   * the same place a new session lands.
+   */
+  const openSession = async (id: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === id)
+    if (!pane) return
+    const owner = pane.workspaceId
+    if (owner && owner !== project()?.name) {
+      const entry = recents().find((candidate) => candidate.name === owner)
+      if (entry) await switchProjectTo(entry.root)
+    }
+    // The new-session form covers the grid while it is open.
+    setStarting(false)
+    setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: id }))
+  }
+
+  /**
    * Everything keyed by pane id, forgotten in one place.
    *
    * `close` used to clear the process, the terminal and the pane, and leave
@@ -3583,7 +3606,7 @@ export function Workbench() {
         <Sidebar
           workspaces={workspaces()}
           selectedSessionId={wb().focusedId}
-          onSelectSession={(id) => setWb(w => ({ ...w, focusedId: id }))}
+          onSelectSession={(id) => void openSession(id)}
           /* No picker in the browser harness, so no button that could not work. */
           onAddProject={hasHost() ? () => void addProject() : undefined}
           onAddRemote={hasHost() ? () => setRemoteOpen(true) : undefined}
