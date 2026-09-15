@@ -21,6 +21,7 @@ import {
   devConfig,
   instanceProcesses,
   instanceRunning,
+  killOrder,
   parseRecord,
   planTestApp,
   startFailure,
@@ -64,7 +65,9 @@ function processTable(): ProcessRow[] | undefined {
       [
         "-NoProfile",
         "-Command",
-        "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress",
+        "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine," +
+          "@{n='Created';e={if ($_.CreationDate) { [DateTimeOffset]::new($_.CreationDate).ToUnixTimeMilliseconds() }}}" +
+          " | ConvertTo-Json -Compress",
       ],
       { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     )
@@ -75,24 +78,34 @@ function processTable(): ProcessRow[] | undefined {
         ParentProcessId: number
         ExecutablePath?: string | null
         CommandLine?: string | null
+        Created?: number | null
       }[]
       return rows.map((row) => ({
         pid: row.ProcessId,
         ppid: row.ParentProcessId,
         exe: row.ExecutablePath ?? undefined,
         cmd: row.CommandLine ?? undefined,
+        created: typeof row.Created === "number" ? row.Created : undefined,
       }))
     } catch {
       return undefined
     }
   }
-  const run = spawnSync("ps", ["-eo", "pid=,ppid=,args="], { encoding: "utf8" })
+  const run = spawnSync("ps", ["-eo", "pid=,ppid=,etimes=,args="], { encoding: "utf8" })
   if (run.status !== 0) return undefined
+  const now = Date.now()
   return run.stdout
     .split("\n")
-    .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/))
+    .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/))
     .filter((match): match is RegExpMatchArray => match !== null)
-    .map((match) => ({ pid: Number(match[1]), ppid: Number(match[2]), cmd: match[3], exe: match[3].split(" ")[0] }))
+    .map((match) => ({
+      pid: Number(match[1]),
+      ppid: Number(match[2]),
+      // Elapsed whole seconds: the start is known to within one.
+      created: now - (Number(match[3]) + 1) * 1000,
+      cmd: match[4],
+      exe: match[4].split(" ")[0],
+    }))
 }
 
 function readRecord(path: string): TestAppRecord | undefined {
@@ -141,7 +154,7 @@ function stripAnsi(text: string): string {
 function state(target: TestAppPlan, treeRoot: string, record?: TestAppRecord): boolean | undefined {
   const rows = processTable()
   if (!rows) return undefined
-  return instanceRunning(instanceProcesses(rows, target, treeRoot, record?.port), target, treeRoot)
+  return instanceRunning(instanceProcesses(rows, target, treeRoot, record?.port, record?.startedAt), target, treeRoot)
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +181,7 @@ async function start(): Promise<void> {
     .join(" ")
 
   const out = openSync(plan.logPath, "a")
+  const startedAt = Date.now()
   const child = spawn(
     process.execPath,
     ["x", "tauri", "dev", "--config", "src-tauri/tauri.test.conf.json", "--config", plan.configPath],
@@ -193,7 +207,7 @@ async function start(): Promise<void> {
   )
   child.unref()
 
-  const record: TestAppRecord = { port, cdpPort, label: plan.label, root }
+  const record: TestAppRecord = { port, cdpPort, label: plan.label, root, startedAt }
   writeFileSync(plan.recordPath, JSON.stringify(record, null, 2))
 
   console.log(`ADE Test in avvio (la prima compilazione Rust di una cartella nuova richiede minuti):\n${describe(record)}`)
@@ -225,6 +239,8 @@ async function start(): Promise<void> {
       lastLiveness = Date.now()
       if (state(plan, root, record) === false) {
         console.error(`\nADE Test si è chiusa durante l'avvio. Log: ${plan.logPath}`)
+        // What it left running (a Vite, a WebView2) and the record go with it.
+        stop(true)
         process.exit(1)
       }
     }
@@ -236,6 +252,7 @@ async function start(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1000))
   }
   console.error(`\nADE Test non ha aperto la finestra entro 20 minuti. Log: ${plan.logPath}`)
+  stop(true)
   process.exit(1)
 }
 
@@ -246,16 +263,27 @@ function stop(quiet = false): void {
     console.error("ADE Test: non riesco a leggere l'elenco dei processi; non chiudo nulla.")
     process.exit(1)
   }
-  const members = instanceProcesses(rows, plan, root, record?.port)
-  /*
-   * Parents first, then whatever is left: killing `tauri dev` takes its tree
-   * with it, and a process orphaned earlier is still in the list by its
-   * arguments.
-   */
-  const pids = new Set(members.map((row) => row.pid))
-  for (const row of members) {
-    if (row.pid === process.pid || !pids.has(row.pid)) continue
-    if (isWindows) spawnSync("taskkill", ["/PID", String(row.pid), "/T", "/F"], { stdio: "ignore" })
+  if (record?.startedAt === undefined) {
+    /*
+     * Arguments alone do not say who started a process, and the record that
+     * would is missing or predates `startedAt`: nothing is killed on a guess.
+     */
+    const found = instanceProcesses(rows, plan, root, record?.port)
+    if (found.length === 0) {
+      rmSync(plan.recordPath, { force: true })
+      if (!quiet) console.log("Nessuna ADE Test in esecuzione per questa cartella.")
+      return
+    }
+    console.error(
+      "ADE Test: non c'è una registrazione di quando è partita, quindi non chiudo processi che non so di aver avviato.\n" +
+        `Chiudili a mano se sono tuoi (pid ${found.map((row) => row.pid).join(", ")}).`,
+    )
+    process.exit(1)
+  }
+  const members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
+  for (const row of killOrder(members)) {
+    if (row.pid === process.pid) continue
+    if (isWindows) spawnSync("taskkill", ["/PID", String(row.pid), "/F"], { stdio: "ignore" })
     else {
       try {
         process.kill(row.pid, "SIGTERM")

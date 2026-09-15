@@ -6,6 +6,7 @@ import {
   hashPath,
   instanceProcesses,
   instanceRunning,
+  killOrder,
   type ProcessRow,
   parseRecord,
   planTestApp,
@@ -84,6 +85,45 @@ describe("host/test-app", () => {
     test("a Vite or a WebView2 left alone does not count as running", () => {
       const leftovers = rows.filter((row) => row.pid === 14 || row.pid === 15)
       expect(instanceRunning(instanceProcesses(leftovers, plan, root, 5270), plan, root)).toBe(false)
+    })
+
+    describe("with the start recorded, only what that start created", () => {
+      const startedAt = 1_000_000
+      const at = (row: ProcessRow, created: number | undefined): ProcessRow => ({ ...row, created })
+      const timed = rows.map((row) => at(row, startedAt + row.pid))
+
+      test("the instance it started, orphans included", () => {
+        const pids = instanceProcesses(timed, plan, root, 5270, startedAt).map((row) => row.pid).sort((a, b) => a - b)
+        expect(pids).toEqual([10, 11, 12, 13, 14, 15, 16])
+      })
+
+      test("a process naming the same paths but started before is someone else's, with its tree", () => {
+        const earlier = timed.map((row) => (row.pid === 10 ? at(row, startedAt - 60_000) : row))
+        // 11 and 12 hang below it and stay with it; 13 and 15 are roots of their own.
+        const pids = instanceProcesses(earlier, plan, root, 5270, startedAt).map((row) => row.pid).sort((a, b) => a - b)
+        expect(pids).toEqual([13, 14, 15, 16])
+      })
+
+      test("a child older than its parent reused a dead process's pid, and is not ours", () => {
+        const reused: ProcessRow = { pid: 40, ppid: 12, cmd: "notepad.exe", created: startedAt - 3_600_000 }
+        const pids = instanceProcesses([...timed, reused], plan, root, 5270, startedAt).map((row) => row.pid)
+        expect(pids).not.toContain(40)
+      })
+
+      test("a process whose creation time is unknown is left alone", () => {
+        const unknown = timed.map((row) => (row.pid === 15 ? at(row, undefined) : row))
+        const pids = instanceProcesses(unknown, plan, root, 5270, startedAt).map((row) => row.pid)
+        expect(pids).not.toContain(15)
+        expect(pids).not.toContain(16)
+      })
+
+      test("children are killed before their parents, one by one", () => {
+        const order = killOrder(instanceProcesses(timed, plan, root, 5270, startedAt)).map((row) => row.pid)
+        expect(order.indexOf(14)).toBeLessThan(order.indexOf(13))
+        expect(order.indexOf(13)).toBeLessThan(order.indexOf(12))
+        expect(order.indexOf(11)).toBeLessThan(order.indexOf(10))
+        expect(order.indexOf(16)).toBeLessThan(order.indexOf(15))
+      })
     })
   })
 

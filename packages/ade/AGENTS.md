@@ -47,7 +47,9 @@ bun run test:app stop     # stop this worktree's instance, and only that
   say so. `test:app` gives each worktree its own port for this reason.
 - Stop your instance with `test:app stop`, never by killing processes by
   name: it stops only processes that carry this worktree's config, profile or
-  build folder, and their children.
+  build folder and were created after the start in `.ade-test/record.json`,
+  and their children created after them, one process at a time. An instance
+  whose record has no start time is not stopped: close it by hand.
 - **The user tries `feat/ade` in `nikcli-ade-prova`, never in `nikcli-ade`.**
   `nikcli-ade` is where branches are integrated: every merge there rebuilds
   and reloads the app under the user mid-test (a voice turn lost its history
