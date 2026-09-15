@@ -30,14 +30,28 @@ export interface MailPane {
 
 /** `token` is what proves `from`; see {@link verifySender}. */
 export type Message = { from: string; token?: string; text: string } & (
-  | { kind: "send" | "ask"; to: string }
+  /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
+  | { kind: "send" | "ask"; to: string; effort?: string }
   /**
    * `autoClose`: closed once it has replied, unless it has work not yet
    * integrated. `name` titles it; `worktree` gives it its own checkout;
    * `model` picks the model where ADE knows the flag.
    */
   /** `fork`: starts from the sender's own conversation, so its prompt cache carries over. */
-  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; base?: string; model?: string; fork: boolean }
+  | {
+      kind: "spawn"
+      agent: string
+      autoClose: boolean
+      name?: string
+      worktree: boolean
+      base?: string
+      model?: string
+      /** Reasoning effort, translated per agent (`effortArgs`). */
+      effort?: string
+      /** A class of work in `dispatch.json`, which supplies model and effort when not given. */
+      profile?: string
+      fork: boolean
+    }
   /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
   | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
   /** The project's shared memory file; `type` for `add`, `text` is the entry. */
@@ -56,7 +70,7 @@ export type Message = { from: string; token?: string; text: string } & (
    * Restarts a session the sender spawned, in the same pane and worktree:
    * its own conversation back unless `fresh`, on another model if `model`.
    */
-  | { kind: "relaunch"; to: string; model?: string; fresh: boolean; note: string }
+  | { kind: "relaunch"; to: string; model?: string; effort?: string; fresh: boolean; note: string }
   /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
   | { kind: "interrupt"; to: string }
   /** Withdraws a request the sender made. `text` is empty. */
@@ -101,7 +115,10 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "relaunch") {
     const to = str("to")
     const model = str("model")
-    return to ? { kind, from, token, to, fresh: record.fresh === true, note: str("note"), ...(model ? { model } : {}), text: "" } : undefined
+    const effort = str("effort")
+    return to
+      ? { kind, from, token, to, fresh: record.fresh === true, note: str("note"), ...(model ? { model } : {}), ...(effort ? { effort } : {}), text: "" }
+      : undefined
   }
   if (kind === "interrupt") {
     const to = str("to")
@@ -130,7 +147,8 @@ export function parseMessage(body: string): Message | undefined {
   if (!text.trim()) return undefined
   if (kind === "send" || kind === "ask") {
     const to = str("to")
-    return to ? { kind, from, token, to, text } : undefined
+    const effort = str("effort")
+    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}) } : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
@@ -138,6 +156,8 @@ export function parseMessage(body: string): Message | undefined {
     const name = str("name")
     const model = str("model")
     const base = str("base")
+    const effort = str("effort")
+    const profile = str("profile")
     return {
       kind,
       from,
@@ -148,6 +168,8 @@ export function parseMessage(body: string): Message | undefined {
       fork: record.fork === true,
       ...(name ? { name } : {}),
       ...(base ? { base } : {}),
+      ...(effort ? { effort } : {}),
+      ...(profile ? { profile } : {}),
       ...(model ? { model } : {}),
       text,
     }
@@ -904,6 +926,8 @@ export const USAGE =
   "  --name <nome>    spawn: nome della sessione, usabile poi come destinatario\n" +
   "  --worktree       spawn: lavora in una git worktree sul branch ade/<nome>, accanto al progetto\n" +
   "  --model <id>     spawn: modello (claude, codex, agy)\n" +
+  "  --effort <liv>   spawn, relaunch: low|medium|high|xhigh|max (claude), low..high (agy), minimal..max (codex)\n" +
+  "  --profile <nome> spawn: modello ed effort dalla classe di lavoro in dispatch.json della bacheca\n" +
   "  --base <branch>  spawn --worktree: branch o commit da cui parte (predefinito: il branch della sessione che chiama)\n" +
   "  --fork           spawn: parte dalla tua conversazione e ne riusa la cache (claude, codex;\n" +
   "                   stesso agente e modello, non con --worktree)\n" +

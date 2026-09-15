@@ -345,6 +345,8 @@ $name = $null
 $model = $null
 $base = $null
 $note = $null
+$effort = $null
+$profile = $null
 $file = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
@@ -360,6 +362,8 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--base' -and $hasNext) { $base = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--note' -and $hasNext) { $note = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--effort' -and $hasNext) { $effort = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--profile' -and $hasNext) { $profile = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -584,17 +588,21 @@ switch ($cmd) {
     if (-not $head) { Usage }
     $fields = [ordered]@{ kind = 'relaunch'; to = $head; fresh = $fresh; note = $(if ($note) { $note } else { $text }) }
     if ($model) { $fields['model'] = $model }
+    if ($effort) { $fields['effort'] = $effort }
     PostAndConfirm $fields
   }
   { $_ -eq 'ask' -or $_ -eq 'spawn' } {
     if (-not $head -or -not $text) { Usage }
     if ($cmd -eq 'ask') {
       $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
+      if ($effort) { $fields['effort'] = $effort }
     } else {
       $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
       if ($model) { $fields['model'] = $model }
       if ($base) { $fields['base'] = $base }
+      if ($effort) { $fields['effort'] = $effort }
+      if ($profile) { $fields['profile'] = $profile }
       $fields['text'] = $text
     }
     $id = Post $fields
@@ -633,7 +641,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; file=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""
 lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -647,6 +655,8 @@ while [ $# -gt 0 ]; do
       --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
       --base) [ $# -ge 2 ] && { base="$2"; shift 2; continue; } ;;
       --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
+      --effort) [ $# -ge 2 ] && { effort="$2"; shift 2; continue; } ;;
+      --profile) [ $# -ge 2 ] && { profile="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -802,17 +812,21 @@ case "$cmd" in
   relaunch)
     [ -n "$head" ] || usage
     extra=""; [ -n "$model" ] && extra=",\"model\":\"$(esc "$model")\""
+    [ -n "$effort" ] && extra="$extra,\"effort\":\"$(esc "$effort")\""
     [ -n "$note" ] || note="$text"
     confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh,\"note\":\"$(esc "$note")\"$extra" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
     if [ "$cmd" = ask ]; then
-      post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\""
+      extra=""; [ -n "$effort" ] && extra=",\"effort\":\"$(esc "$effort")\""
+      post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\"$extra"
     else
       extra=""
       [ -n "$name" ] && extra="$extra,\"name\":\"$(esc "$name")\""
       [ -n "$model" ] && extra="$extra,\"model\":\"$(esc "$model")\""
       [ -n "$base" ] && extra="$extra,\"base\":\"$(esc "$base")\""
+      [ -n "$effort" ] && extra="$extra,\"effort\":\"$(esc "$effort")\""
+      [ -n "$profile" ] && extra="$extra,\"profile\":\"$(esc "$profile")\""
       post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree,\"fork\":$fork$extra"
     fi
     if receipt; then
@@ -935,6 +949,7 @@ mod tests {
         assert!(SH.contains("  inbox)") && SH.contains("mv -f \"$f\" \"$dir/handled/\""));
         assert!(!PS1.contains("3800") && !SH.contains("3800"));
         assert!(PS1.contains("kind = 'interrupt'") && SH.contains("interrupt) [ -n"));
+        assert!(PS1.contains("$fields['effort'] = $effort") && SH.contains("--effort)") && SH.contains("--profile)"));
         assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
     }
 
