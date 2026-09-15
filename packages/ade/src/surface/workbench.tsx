@@ -608,6 +608,7 @@ export function Workbench() {
       return {
         readTextFile: (path: string, maxBytes?: number) => host.readTextFile!(path, maxBytes),
         writeTextFile: (path: string, contents: string) => host.writeTextFile!(path, contents),
+        ...(host.appendTextFile ? { appendTextFile: (path: string, text: string) => host.appendTextFile!(path, text) } : {}),
         ...(host.readDir ? { readDir: (path: string) => host.readDir!(path) } : {}),
       }
     },
@@ -652,9 +653,9 @@ export function Workbench() {
       for (const item of pending) {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         const target = decision && decisionRecipient(decision)
-        const session = target && running.get(target.id)
-        if (!decision || !target || !session || !(await freeNow(host, target.id))) continue
-        if (!(await typeLine(session, deliveryLine(decision)))) continue
+        if (!decision || !target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
+        if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, `Decisione ${decision.k} consegnata dal pannello Decisioni`, "note")

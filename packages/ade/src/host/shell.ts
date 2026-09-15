@@ -128,6 +128,11 @@ export interface Host {
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
   writeTextFile?: (path: string, contents: string) => Promise<string | null>
   /**
+   * Adds `text` at the end of a project file, creating it; resolves to the
+   * failure. A real append: a line another process added meanwhile stays.
+   */
+  appendTextFile?: (path: string, text: string) => Promise<string | null>
+  /**
    * The same write for content that is not text; resolves to the failure.
    *
    * Needed by the video panel, whose frame captures are PNGs: base64 through
@@ -442,6 +447,16 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
         await invoke("write_text_file", { path, contents })
+        return null
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    },
+
+    async appendTextFile(path, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        await invoke("append_text_file", { path, text })
         return null
       } catch (error) {
         return error instanceof Error ? error.message : String(error)

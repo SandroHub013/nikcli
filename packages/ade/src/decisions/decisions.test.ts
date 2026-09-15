@@ -230,6 +230,29 @@ describe("the store", () => {
     expect(files.get(path)!.endsWith("\n")).toBe(true)
   })
 
+  test("with a real append, a line Master added from the shell after ADE read the file stays", async () => {
+    const path = "/p/.ade/decisions.jsonl"
+    let disk = serializeDecisionEvent(opened("D1"))
+    const io: DecisionsIo = {
+      readTextFile: async () => {
+        const snapshot = { text: disk, truncated: false }
+        // The shell appends right after ADE's read.
+        disk += serializeDecisionEvent(opened("D2"))
+        return snapshot
+      },
+      writeTextFile: async (_, contents) => {
+        disk = contents
+        return null
+      },
+      appendTextFile: async (_, text) => {
+        disk += text
+        return null
+      },
+    }
+    await appendDecisionEvent(io, path, answered("D1", "sì"))
+    expect(parseDecisionLog(disk).events.map((event) => `${event.type} ${event.k}`)).toEqual(["aperta D1", "aperta D2", "risposta D1"])
+  })
+
   test("a host write failure is reported, a truncated read is refused", async () => {
     const path = "/p/.ade/decisions.jsonl"
     const failing: DecisionsIo = {

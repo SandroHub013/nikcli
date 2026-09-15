@@ -80,10 +80,12 @@ describe("who hears about an answer", () => {
     { id: "d", title: "Master 2", project: "nikcli", running: true },
   ]
 
-  test("the running Master of the project, else whoever raised it, else nobody", () => {
+  test("a running Master, here first and then in another project; else whoever raised it; else nobody", () => {
     expect(pickRecipient(panes, { raisedBy: "Dario" }, "nikcli")?.id).toBe("d")
-    expect(pickRecipient(panes.slice(0, 3), { raisedBy: "dario" }, "nikcli")?.id).toBe("a")
-    expect(pickRecipient(panes.slice(1, 3), { raisedBy: "Dario" }, "nikcli")).toBeUndefined()
+    // Master works in another project than the one the user is looking at.
+    expect(pickRecipient(panes.slice(0, 3), { raisedBy: "dario" }, "nikcli")?.id).toBe("b")
+    expect(pickRecipient([panes[0]!, panes[2]!], { raisedBy: "dario" }, "nikcli")?.id).toBe("a")
+    expect(pickRecipient([panes[2]!], { raisedBy: "Dario" }, "nikcli")).toBeUndefined()
   })
 
   test("the line starts with who it is from and the verb", () => {

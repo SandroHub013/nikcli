@@ -6,12 +6,12 @@
  * shared by several projects. The path stays configurable for a team that
  * wants the shared folder anyway.
  *
- * Appending goes through `readTextFile` + `writeTextFile`, which already exist
- * and are confined to the project: no new Rust command, no new permission.
- * The write is read-then-write, not an OS append, so two writers at the same
- * instant can lose a line; `append` re-reads right before writing to keep that
- * window to one IPC round trip, and refuses an event the current state would
- * reject, so a lost race shows up as an error rather than as a wrong answer.
+ * Appending goes through `appendTextFile`, a real append confined to the
+ * project (`src-tauri/src/append.rs`): Master adds lines from a shell with
+ * `>>` while ADE adds the user's answers, and a read-then-rewrite lost the
+ * shell's line whenever it landed between the two. The register is read first
+ * only to refuse an event the current state would reject. A host without the
+ * append falls back to rewriting the file.
  */
 
 import { parseDecisionLog, serializeDecisionEvent, type DecisionEvent, type ParsedLog } from "./log"
@@ -45,6 +45,7 @@ function isAbsolute(path: string): boolean {
 export interface DecisionsIo {
   readTextFile: (path: string, maxBytes?: number) => Promise<{ text: string; truncated: boolean }>
   writeTextFile: (path: string, contents: string) => Promise<string | null>
+  appendTextFile?: (path: string, text: string) => Promise<string | null>
   exists?: (path: string) => Promise<boolean>
 }
 
@@ -96,7 +97,9 @@ export async function appendDecisionEvent(
   // A file whose writer died mid-line ends without a newline; start ours on a
   // fresh line so that damage stays confined to the broken line.
   const joiner = text.length > 0 && !text.endsWith("\n") ? "\n" : ""
-  const failure = await io.writeTextFile(path, `${text}${joiner}${line}`)
+  const failure = io.appendTextFile
+    ? await io.appendTextFile(path, `${joiner}${line}`)
+    : await io.writeTextFile(path, `${text}${joiner}${line}`)
   if (failure) throw new Error(failure)
   return after
 }

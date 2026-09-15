@@ -27,8 +27,11 @@ export interface DeliveryCandidate {
 }
 
 /**
- * The session to tell: a running session titled Master in the project, else
- * the one that raised the decision, else nobody yet.
+ * The session to tell: a running session titled Master, else the one that
+ * raised the decision, else nobody yet. In the open project first, then in
+ * any other: the coordinator often works from a different project than the
+ * one the user is looking at, and looking only in the open one left the
+ * answer queued for as long as the user stayed there.
  *
  * A title, not a role flag, because that is how the team names its
  * coordinator today; "Master", "Master 2" and "master · S18" all count.
@@ -38,11 +41,17 @@ export function pickRecipient(
   decision: Pick<Decision, "raisedBy">,
   project?: string,
 ): DeliveryCandidate | undefined {
-  const live = candidates.filter((pane) => pane.running && (project === undefined || pane.project === undefined || pane.project === project))
-  const master = live.find((pane) => /^master\b/i.test(pane.title.trim()))
-  if (master) return master
+  const live = candidates.filter((pane) => pane.running)
+  const here = (pane: DeliveryCandidate) => project === undefined || pane.project === undefined || pane.project === project
+  const isMaster = (pane: DeliveryCandidate) => /^master\b/i.test(pane.title.trim())
   const raisedBy = decision.raisedBy.trim().toLowerCase()
-  return live.find((pane) => pane.title.trim().toLowerCase() === raisedBy)
+  const isRaiser = (pane: DeliveryCandidate) => pane.title.trim().toLowerCase() === raisedBy
+  return (
+    live.find((pane) => isMaster(pane) && here(pane)) ??
+    live.find(isMaster) ??
+    live.find((pane) => isRaiser(pane) && here(pane)) ??
+    live.find(isRaiser)
+  )
 }
 
 /** The line typed into the recipient's terminal. */
