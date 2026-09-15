@@ -336,10 +336,11 @@ export function stopInstance(input: {
     const alive = new Set(input.waitExit(apps, input.closeTimeoutMs ?? TEST_APP_CLOSE_TIMEOUT_MS))
     closed.push(...apps.filter((pid) => !alive.has(pid)))
     // Read again, with the same start filter, so a pid reused meanwhile is not taken for ours.
+    // Unreadable: the app and its children are left alone, since after the wait nothing proves those pids are still theirs.
     const fresh = input.reread?.()
     members = fresh
       ? instanceProcesses(fresh, plan, root, record.port, record.startedAt)
-      : members.filter((row) => !closed.includes(row.pid))
+      : members.filter((row) => !apps.includes(row.pid) && !apps.includes(row.ppid))
   }
   const killed: number[] = []
   for (const row of killOrder(members)) {

@@ -129,7 +129,7 @@ describe("host/test-app start and stop", () => {
       { pid: 21, ppid: 20, created: startedAt + 61_000, cmd: `msedgewebview2.exe --user-data-dir=${plan.profileDir}` },
     ]
 
-    function run(appCloses: boolean) {
+    function run(appCloses: boolean, tableReadable = true) {
       let rows = table()
       const calls: string[] = []
       let waited = 0
@@ -151,7 +151,7 @@ describe("host/test-app start and stop", () => {
           if (appCloses) rows = rows.filter((row) => row.pid !== 20 && row.pid !== 21)
           return pids.filter((pid) => rows.some((row) => row.pid === pid))
         },
-        reread: () => rows,
+        reread: () => (tableReadable ? rows : undefined),
       })
       return { result, calls, waited }
     }
@@ -172,6 +172,14 @@ describe("host/test-app start and stop", () => {
       expect(calls.indexOf("kill 21")).toBeLessThan(calls.indexOf("kill 20"))
       expect(calls.indexOf("kill 20")).toBeLessThan(calls.indexOf("kill 10"))
       expect(result).toMatchObject({ outcome: "stopped", closed: [] })
+    })
+
+    test("with the table unreadable after the wait, the app's pids are not killed: they may be reused", () => {
+      const { calls } = run(false, false)
+      expect(calls).not.toContain("kill 20")
+      expect(calls).not.toContain("kill 21")
+      expect(calls).toContain("kill 10")
+      expect(calls).toContain("kill 15")
     })
   })
 
