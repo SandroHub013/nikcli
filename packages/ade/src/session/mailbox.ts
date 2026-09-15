@@ -42,6 +42,8 @@ export type Message = { from: string; token?: string; text: string } & (
   | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
   /** The project's shared memory file; `type` for `add`, `text` is the entry. */
   | { kind: "memory"; op: "add" | "show"; type: string }
+  /** Who owns the file named in `text`, from the team board (`owners.ts`). */
+  | { kind: "whoowns" }
   | { kind: "reply"; ref: string }
   /**
    * Not an answer: the session is blocked or needs a decision. The waiter
@@ -111,6 +113,7 @@ export function parseMessage(body: string): Message | undefined {
     if (op === "set" && !text.trim()) return undefined
     return { kind, from, token, op, key, ttl, force: record.force === true, text }
   }
+  if (kind === "whoowns") return text.trim() ? { kind, from, token, text: text.trim() } : undefined
   if (kind === "memory") {
     const op = str("op")
     if (op === "show") return { kind, from, token, op, type: "", text: "" }
@@ -660,6 +663,7 @@ export const USAGE =
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
   "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
   "  ade-msg stats                           token per sessione e quota letta dalla cache\n" +
+  "  ade-msg who-owns <file>                chi possiede il file secondo la bacheca del team (TEAM.md)\n" +
   "  ade-msg agents | whoami\n" +
   "opzioni:\n" +
   "  --no-wait        ask/spawn: stampa subito l'id, poi usa wait (per lanciare in parallelo)\n" +

@@ -123,6 +123,7 @@ import { BotsMain, BotsRoster } from "../bots/bots"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -1073,6 +1074,22 @@ export function Workbench() {
         saveKv()
       }
       await answer(result.reply)
+      return true
+    }
+
+    if (message.kind === "whoowns") {
+      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      if (!owner || owner.remote || !host.readTextFile) {
+        await answer("errore: la bacheca del team si legge solo nei progetti locali")
+        return true
+      }
+      for (const path of boardCandidates(owner.root)) {
+        const text = await host.readTextFile(path).then((read) => read.text).catch(() => undefined)
+        if (text === undefined) continue
+        await answer(`ok\n${whoOwns(parseOwners(text), message.text)}`)
+        return true
+      }
+      await answer(`errore: nessuna bacheca del team (${boardCandidates(owner.root).join(" o ")})`)
       return true
     }
 

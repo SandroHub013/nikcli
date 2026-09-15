@@ -110,6 +110,11 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
   expect("error" in resolveAgent(agents, "gemini")).toBe(true)
 })
 
+test("who-owns carries the file as its text", () => {
+  expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({ kind: "whoowns", text: "src/a.ts" })
+  expect(parseMessage('{"kind":"whoowns","from":"a","text":" "}')).toBeUndefined()
+})
+
 describe("when a session can be written to", () => {
   const now = 10_000_000
   test("a hooked session is free unless its turn is running", () => {

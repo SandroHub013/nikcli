@@ -429,6 +429,7 @@ switch ($cmd) {
   'help' { $f = Join-Path $box 'usage.txt'; if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }; exit 0 }
   'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
+  'who-owns' { if (-not $head) { Usage }; PostAndPrint ([ordered]@{ kind = 'whoowns'; text = (@($pos) -join ' ') }) }
   'stats' { $f = Join-Path $box 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
   'kv' {
     $op = $head
@@ -649,6 +650,7 @@ case "$cmd" in
   help) if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
+  who-owns) [ -n "$head" ] || usage; text="$head"; show "\"kind\":\"whoowns\"" ;;
   stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
   kv)
     key="\"key\":\"$(esc "$second")\""
