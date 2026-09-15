@@ -75,10 +75,30 @@ export async function getDeviceByUserCode(db: D1Database, userCode: string): Pro
   return db.prepare("SELECT * FROM device_codes WHERE user_code = ?").bind(userCode).first<DeviceCodeRow>()
 }
 
-export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Promise<void> {
-  await db
+/**
+ * Drop device codes that can no longer be used.
+ *
+ * Nothing else ever deleted from this table, and `user_code` is `UNIQUE`: every
+ * eight-digit code ever issued stayed reserved forever, so the space a new code
+ * is drawn from shrank on every sign-in and the `INSERT` eventually started
+ * losing to a code somebody used months ago — surfacing as a 500 from
+ * `/oauth/device/code` and "Failed to start device code flow" in the terminal.
+ * A code past `expires_at` cannot be approved, polled, or consumed, so keeping
+ * the row buys nothing.
+ */
+export async function pruneDeviceCodes(db: D1Database, now: number): Promise<number> {
+  return changes(await db.prepare("DELETE FROM device_codes WHERE expires_at <= ?").bind(now).run())
+}
+
+/**
+ * Insert a device code, reporting rather than throwing when the generated
+ * `user_code` is already taken. The caller draws another one; a bare `INSERT`
+ * turned that collision into a 500.
+ */
+export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Promise<boolean> {
+  const result = await db
     .prepare(
-      "INSERT INTO device_codes (device_code_hash, user_code, client_id, scope, status, account_id, expires_at, last_poll_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO device_codes (device_code_hash, user_code, client_id, scope, status, account_id, expires_at, last_poll_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       row.device_code_hash,
@@ -92,6 +112,7 @@ export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Prom
       row.created_at,
     )
     .run()
+  return changes(result) === 1
 }
 
 export async function setDeviceDecision(

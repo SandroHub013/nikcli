@@ -867,7 +867,15 @@ async function refreshGithubToken(key: string): Promise<string | null> {
     refresh_token_expires_in?: number
     error?: string
   }
-  if (!payload.access_token) return null
+  if (!payload.access_token) {
+    // GitHub answers 200 with an `error` field here, so the only signal that a
+    // refresh is failing is this body. Silently dropping it is how
+    // `incorrect_client_credentials` — what GitHub returns when a refresh
+    // arrives without the app's client secret, which a public CLI client does
+    // not have — stayed invisible while every GitHub call quietly went stale.
+    log.warn("github token refresh rejected", { connector: key, error: payload.error ?? "no access_token" })
+    return null
+  }
 
   await storeGithubToken({
     accessToken: payload.access_token,
@@ -893,6 +901,13 @@ export async function githubToken() {
   if (expired) {
     const refreshed = await refreshGithubToken(key)
     if (refreshed) return refreshed
+    // The refresh did not produce a token, and the stored one is known dead.
+    // Handing it back anyway is what turned an expired GitHub grant into a
+    // stream of unexplained 401s and 404s from api.github.com instead of the
+    // one thing the user can act on — "GitHub token not configured", which is
+    // what re-opens the sign-in. An explicitly configured credential (an env
+    // token or a PAT in nikcli.json) is a different secret and still wins.
+    return explicitGithubCredential(connector)
   }
 
   const credential = await resolveCredential(key, connector)
@@ -903,6 +918,18 @@ export async function githubToken() {
   }
 
   return null
+}
+
+/**
+ * A GitHub credential that does not come from the OAuth store: `NIKCLI_GITHUB_TOKEN`
+ * or a `token` on the connector in `nikcli.json`. `resolveCredential` reads
+ * those first and the stored grant only last, so asking for them alone is the
+ * same lookup with the expired grant left out.
+ */
+async function explicitGithubCredential(connector: Config.Connector): Promise<string | null> {
+  const flag = Flag.NIKCLI_GITHUB_TOKEN?.trim()
+  if (flag) return flag
+  return connector.type === "github" ? (connector.token?.trim() ?? null) : null
 }
 
 export async function githubOAuthClientID() {

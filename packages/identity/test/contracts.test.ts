@@ -30,7 +30,13 @@ function fakeDb() {
           return this
         },
         async run() {
-          if (!sql.includes("INSERT INTO device_codes")) throw new Error(`Unexpected SQL: ${sql}`)
+          // Issuing a device code first clears the expired rows whose
+          // `user_code` would otherwise stay reserved forever.
+          if (sql.includes("DELETE FROM device_codes")) {
+            expect(values).toHaveLength(1)
+            return { success: true, meta: { changes: 0 } }
+          }
+          if (!sql.includes("INSERT OR IGNORE INTO device_codes")) throw new Error(`Unexpected SQL: ${sql}`)
           expect(values).toHaveLength(9)
           return { success: true, meta: { changes: 1 } }
         },
@@ -122,6 +128,74 @@ describe("identity contracts", () => {
     expect(body.verification_url).toBe("https://auth.nikcli.store/device")
     expect(body.interval).toBe(5)
     expect(body.expires_in).toBe(600)
+  })
+
+  test("redraws the user code when the generated one is already taken", async () => {
+    // `device_codes.user_code` is UNIQUE and rows outlive their expiry, so a
+    // freshly drawn eight-digit code can collide with one issued long ago. The
+    // plain INSERT turned that into a 500 and "Failed to start device code
+    // flow" in the terminal; the redraw is what keeps it a non-event.
+    const attempted: string[] = []
+    const db = {
+      prepare(sql: string) {
+        let values: unknown[] = []
+        return {
+          bind(...input: unknown[]) {
+            values = input
+            return this
+          },
+          async run() {
+            if (sql.includes("DELETE FROM device_codes")) return { success: true, meta: { changes: 0 } }
+            attempted.push(values[1] as string)
+            // Refuse the first draw exactly as a UNIQUE conflict would.
+            return { success: true, meta: { changes: attempted.length === 1 ? 0 : 1 } }
+          },
+        }
+      },
+    } as unknown as D1Database
+
+    const response = await app.fetch(
+      new Request("https://auth.nikcli.store/oauth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: "nikcli" }),
+      }),
+      env({ DB: db }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(attempted).toHaveLength(2)
+    expect(attempted[0]).not.toBe(attempted[1])
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body.user_code).toBe(attempted[1])
+  })
+
+  test("reports a device code it could not allocate instead of failing opaquely", async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() {
+            return this
+          },
+          async run() {
+            if (sql.includes("DELETE FROM device_codes")) return { success: true, meta: { changes: 0 } }
+            return { success: true, meta: { changes: 0 } }
+          },
+        }
+      },
+    } as unknown as D1Database
+
+    const response = await app.fetch(
+      new Request("https://auth.nikcli.store/oauth/device/code", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: "nikcli" }),
+      }),
+      env({ DB: db }),
+    )
+
+    expect(response.status).toBe(503)
+    expect((await response.json()) as Record<string, unknown>).toMatchObject({ error: "temporarily_unavailable" })
   })
 })
 

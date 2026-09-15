@@ -15,6 +15,7 @@ import {
   hashDeviceCode,
   listPublicSigningKeys,
   markDevicePolled,
+  pruneDeviceCodes,
   revokeRefreshByHash,
 } from "./database"
 import { bearerToken, HttpError, noStore, oauthError, readForm, readJson, requestIP } from "./http"
@@ -151,22 +152,35 @@ app.post("/oauth/device/code", async (c) => {
   const body = await readJson(c.req.raw)
   const clientID = typeof body.client_id === "string" ? body.client_id : ""
   if (!isClientID(clientID)) return oauthError(c, "invalid_client", "Unknown public client")
-  const deviceCode = randomToken(48)
-  const userDigits = randomDigits(8)
-  const userCode = `${userDigits.slice(0, 4)}-${userDigits.slice(4)}`
   const now = Date.now()
-  const row: DeviceCodeRow = {
-    device_code_hash: await hashDeviceCode(deviceCode),
-    user_code: userCode,
-    client_id: clientID,
-    scope: typeof body.scope === "string" ? body.scope : "openid profile email offline_access",
-    status: "pending",
-    account_id: null,
-    expires_at: now + DEVICE_CODE_TTL_SECONDS * 1000,
-    last_poll_at: null,
-    created_at: now,
+  // Expired codes hold their `user_code` against every later sign-in, so clear
+  // them before drawing one. This is the only writer of the table, so it is
+  // also the only place the cleanup can live without a scheduled worker.
+  await pruneDeviceCodes(c.env.DB, now).catch(() => 0)
+  const scope = typeof body.scope === "string" ? body.scope : "openid profile email offline_access"
+  const expiresAt = now + DEVICE_CODE_TTL_SECONDS * 1000
+  // A taken `user_code` is not a failure, it is a redraw. Three attempts put
+  // the odds of giving up below any rate the table can reach.
+  let created: { deviceCode: string; userCode: string } | undefined
+  for (let attempt = 0; attempt < 3 && !created; attempt++) {
+    const deviceCode = randomToken(48)
+    const userDigits = randomDigits(8)
+    const userCode = `${userDigits.slice(0, 4)}-${userDigits.slice(4)}`
+    const row: DeviceCodeRow = {
+      device_code_hash: await hashDeviceCode(deviceCode),
+      user_code: userCode,
+      client_id: clientID,
+      scope,
+      status: "pending",
+      account_id: null,
+      expires_at: expiresAt,
+      last_poll_at: null,
+      created_at: now,
+    }
+    if (await createDeviceCode(c.env.DB, row)) created = { deviceCode, userCode }
   }
-  await createDeviceCode(c.env.DB, row)
+  if (!created) return oauthError(c, "temporarily_unavailable", "Could not allocate a device code", 503)
+  const { deviceCode, userCode } = created
   const verificationURL = new URL("/device", c.env.ISSUER).toString()
   return c.json({
     device_code: deviceCode,
