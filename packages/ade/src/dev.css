@@ -443,6 +443,29 @@
   color: var(--ade-text);
 }
 
+/*
+ * ADE Test runs beside the official app. The exception to the monochrome bar
+ * is deliberate: an orange mark and a TEST badge, matching its orange icon,
+ * so a glance says which window is the one being tried out.
+ */
+:root[data-ade-build="test"] [data-slot="ade-brand"] {
+  gap: 6px;
+  color: #ff8c00;
+}
+
+:root[data-ade-build="test"] [data-slot="ade-brand"]::after {
+  content: "TEST";
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #ff8c00;
+  color: #000;
+  font-family: var(--ade-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 14px;
+}
+
 /* A hairline separates identity (left) from session state and controls. */
 [data-slot="ade-divider"] {
   width: 1px;
