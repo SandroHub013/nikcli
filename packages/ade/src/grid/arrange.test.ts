@@ -20,6 +20,7 @@ import {
   moveTile,
   neighbour,
   packTiles,
+  spanInGrid,
   swapTiles,
 } from "./arrange"
 import { gridColumns } from "./layout"
@@ -253,5 +254,26 @@ describe("the arrangement survives a restart", () => {
     const state = parseWorkspace(damaged)!
     expect(state.panes[0]!.span).toBeUndefined()
     expect(state.panes[1]!.span).toEqual({ columns: 12, rows: 1 })
+  })
+})
+
+describe("a pane alone in the grid", () => {
+  const tall = { span: { columns: 1, rows: 3 } }
+  const box = { width: 1800, height: 900 }
+
+  test("fills the row instead of keeping its resized shape", () => {
+    const tiles = [spanInGrid(tall, 1)]
+    const columns = gridColumns({ count: cellsWanted(tiles), ...box })
+    expect(columns).toBe(1)
+    const { placements, rows } = packTiles(tiles.map((tile) => effectiveSpan(tile, columns)), columns)
+    expect(placements[0]).toEqual({ row: 0, column: 0, columns: 1, rows: 1 })
+    expect(rows).toBe(1)
+  })
+
+  test("gets its size back once there is a second pane", () => {
+    const tiles = [spanInGrid(tall, 2), spanInGrid({}, 2)]
+    expect(tiles[0]).toEqual(tall)
+    const columns = gridColumns({ count: cellsWanted(tiles), ...box })
+    expect(effectiveSpan(tiles[0]!, columns).rows).toBe(3)
   })
 })

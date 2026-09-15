@@ -4,6 +4,7 @@ import {
   type DropZone,
   type Span,
   cellsWanted,
+  spanInGrid,
   dropZone,
   effectiveSpan,
   moveTile,
@@ -51,6 +52,14 @@ const ARROWS: Record<string, Direction> = {
 const DRAG_THRESHOLD = 6
 
 /** A press on these inside the header is theirs, not the start of a drag. */
+/**
+ * Where a pane can be picked up: a session's header, a browser's toolbar, or
+ * the grip a pane draws for the purpose. The browser has no session header —
+ * its toolbar is the top of the pane — so without it being a handle too, it
+ * was the one pane that could only be moved by dragging the others onto it.
+ */
+const HANDLE = '[data-slot="pane-header"], [data-slot="browser-header"], [data-slot="pane-grip"]'
+
 const NOT_A_HANDLE = "button, input, textarea, select, a, [contenteditable], [role='button']"
 
 const ZONE_LABELS: Record<DropZone, string> = {
@@ -91,7 +100,7 @@ export function SessionGrid(props: SessionGridProps) {
 
   const tile = (id: string): GridTile => {
     const live = resizing()
-    const base = props.tileOf?.(id) ?? {}
+    const base = spanInGrid(props.tileOf?.(id) ?? {}, props.panes.length)
     return live?.id === id ? { ...base, span: live.span } : base
   }
 
@@ -191,7 +200,7 @@ export function SessionGrid(props: SessionGridProps) {
   const startDrag = (id: string, event: PointerEvent) => {
     if (!props.onMove || event.button !== 0 || props.panes.length < 2) return
     const target = event.target as Element | null
-    if (!target?.closest('[data-slot="pane-header"]') || target.closest(NOT_A_HANDLE)) return
+    if (!target?.closest(HANDLE) || target.closest(NOT_A_HANDLE)) return
     // A title being renamed is an input, excluded above; one being read is a
     // handle, and its double click still reaches it because nothing is
     // prevented until the pointer has actually travelled.
