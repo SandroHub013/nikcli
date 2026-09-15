@@ -102,51 +102,65 @@ export function calculateReadiness(quota: ProviderQuota, now: number): ProviderR
 
   // Verifica percentuali rimanenti tra le metriche note
   let worstRemaining: number | undefined = undefined
-  let worstResetAt: string | undefined = undefined
-  let maxCooldown = 0
+  let bindingResetAt: string | undefined = undefined
+  let exhaustedCooldown = 0
+  let exhaustedResetAt: string | undefined = undefined
+  let hasExhausted = false
 
   for (const m of quota.metrics) {
     let remaining = m.remaining
-    if (remaining === undefined && m.used !== undefined && m.limit && m.limit > 0) {
-      remaining = Math.max(0, Math.min(100, Math.round(100 - (m.used / m.limit) * 100)))
+    if (typeof remaining === "number") {
+      if (Number.isNaN(remaining)) {
+        remaining = 0
+      } else {
+        remaining = Math.max(0, Math.min(100, remaining))
+      }
+    } else if (m.used !== undefined && m.limit && m.limit > 0) {
+      const calc = Math.round(100 - (m.used / m.limit) * 100)
+      remaining = Math.max(0, Math.min(100, Number.isNaN(calc) ? 0 : calc))
     }
 
     if (remaining !== undefined) {
       if (worstRemaining === undefined || remaining < worstRemaining) {
         worstRemaining = remaining
-        worstResetAt = m.resetAt
+        bindingResetAt = m.resetAt
       }
     }
 
-    const cd = cooldownRemainingMs(m, now)
-    if (cd > maxCooldown) {
-      maxCooldown = cd
-      worstResetAt = m.resetAt
+    const isExhausted = (remaining !== undefined && remaining <= 0) || m.isRateLimited
+    if (isExhausted) {
+      hasExhausted = true
+      const cd = cooldownRemainingMs(m, now)
+      if (cd > exhaustedCooldown) {
+        exhaustedCooldown = cd
+        exhaustedResetAt = m.resetAt
+      }
     }
   }
 
-  // Se la peggiore metrica è 0%, il provider è esaurito
-  if (worstRemaining !== undefined && worstRemaining <= 0) {
+  // Se la peggiore metrica è 0% o è esaurita/rate-limited, il provider non è disponibile
+  if (hasExhausted || (worstRemaining !== undefined && worstRemaining <= 0)) {
     return {
       providerId: quota.id,
       score: 0.0,
       isAvailable: false,
-      cooldownMs: maxCooldown,
+      cooldownMs: exhaustedCooldown,
       worstRemainingPct: 0,
-      resetAt: worstResetAt,
+      resetAt: exhaustedResetAt ?? bindingResetAt,
       reason: "quota esaurita per la finestra corrente",
     }
   }
 
-  const baseScore = worstRemaining !== undefined ? Math.max(0.01, worstRemaining / 100) : quota.status === "ok" ? 1.0 : 0.5
+  const baseScore = worstRemaining !== undefined ? Math.max(0.01, Math.min(1.0, worstRemaining / 100)) : quota.status === "ok" ? 1.0 : 0.5
+  const clampedScore = Math.max(0, Math.min(1.0, Math.round(baseScore * 100) / 100))
 
   return {
     providerId: quota.id,
-    score: Math.round(baseScore * 100) / 100,
+    score: clampedScore,
     isAvailable: true,
-    cooldownMs: maxCooldown,
+    cooldownMs: 0,
     worstRemainingPct: worstRemaining,
-    resetAt: worstResetAt,
+    resetAt: bindingResetAt,
     reason: worstRemaining !== undefined ? `${worstRemaining}% di quota residua` : "disponibile (senza limite esplicito)",
   }
 }
@@ -386,5 +400,175 @@ export function compareUsage(ledger: TokenUsage, transcript: TokenUsage): UsageC
     outputDiff,
     totalDiff,
     match,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quota View per l'Header di Sessione (S8)
+// ---------------------------------------------------------------------------
+
+export interface SessionQuotaWindow {
+  readonly key: string
+  readonly label: string
+  readonly ratio: number
+  readonly val?: string
+  readonly resetText?: string
+}
+
+export interface SessionQuotaView {
+  readonly providerName: string
+  readonly isLimit?: boolean
+  readonly remainingRatio: number
+  readonly bindingKey: string
+  readonly displayValue: string
+  readonly countdown?: string
+  readonly level: "ok" | "low" | "crit"
+  readonly windows: readonly SessionQuotaWindow[]
+  readonly tooltip: string
+}
+
+export function formatCountdown(ms: number): string {
+  if (ms <= 0) return "0s"
+  const totalSec = Math.floor(ms / 1000)
+  const hours = Math.floor(totalSec / 3600)
+  const minutes = Math.floor((totalSec % 3600) / 60)
+  const seconds = totalSec % 60
+  if (hours > 0) {
+    return `${hours}h ${minutes.toString().padStart(2, "0")}m`
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`
+  }
+  return `${seconds}s`
+}
+
+export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): SessionQuotaView {
+  const readiness = calculateReadiness(quota, now)
+  const isLimit = !readiness.isAvailable && quota.status === "rate_limited"
+
+  const windows: SessionQuotaWindow[] = quota.metrics.map((m) => {
+    let ratio = 1.0
+    if (m.remaining !== undefined) {
+      ratio = Math.max(0, Math.min(1.0, m.remaining / 100))
+    } else if (m.used !== undefined && m.limit && m.limit > 0) {
+      ratio = Math.max(0, Math.min(1.0, 1 - m.used / m.limit))
+    }
+    const cd = cooldownRemainingMs(m, now)
+    const resetText = cd > 0 ? formatCountdown(cd) : m.resetAt ? m.resetAt : undefined
+    return {
+      key: m.label,
+      label: m.label,
+      ratio,
+      val: m.remaining !== undefined ? `${Math.round(ratio * 100)}%` : undefined,
+      resetText,
+    }
+  })
+
+  // Finestra vincolante (rapporto più basso)
+  const binding = windows.reduce(
+    (min, w) => (w.ratio < min.ratio ? w : min),
+    windows[0] ?? { key: "quota", label: "Quota", ratio: 1.0 },
+  )
+
+  const remainingRatio = binding.ratio
+  const level: "ok" | "low" | "crit" = remainingRatio < 0.2 ? "crit" : remainingRatio < 0.5 ? "low" : "ok"
+  const countdown = binding.resetText ?? (readiness.cooldownMs > 0 ? formatCountdown(readiness.cooldownMs) : undefined)
+
+  const tipLines = [
+    `Quota ${quota.name}`,
+    ...windows.map((w) => {
+      const pct = `${Math.round(w.ratio * 100)}% rimasto`
+      const rst = w.resetText ? ` · reset tra ${w.resetText}` : ""
+      return `${w.label}: ${pct}${rst}`
+    }),
+  ]
+
+  return {
+    providerName: quota.name,
+    isLimit: isLimit || remainingRatio <= 0,
+    remainingRatio,
+    bindingKey: binding.key,
+    displayValue: `${Math.round(remainingRatio * 100)}%`,
+    countdown,
+    level,
+    windows,
+    tooltip: tipLines.join("\n"),
+  }
+}
+
+// Registro dei provider per snapshot di quota in memoria
+const quotaRegistry = new Map<string, ProviderQuota>()
+
+export function setProviderQuota(quota: ProviderQuota): void {
+  quotaRegistry.set(quota.id, quota)
+}
+
+export function getProviderQuota(agentId?: string, now = Date.now()): SessionQuotaView | undefined {
+  if (!agentId) return undefined
+  const id = normalizeProviderId(agentId)
+  let q = quotaRegistry.get(id)
+  if (!q) {
+    q = defaultProviderQuota(id, now)
+    if (q) quotaRegistry.set(id, q)
+  }
+  return q ? formatSessionQuota(q, now) : undefined
+}
+
+function normalizeProviderId(agent: string): string {
+  const low = agent.toLowerCase()
+  if (low.includes("claude")) return "claude"
+  if (low.includes("codex") || low.includes("openai")) return "codex"
+  if (low.includes("agy") || low.includes("gemini")) return "agy"
+  if (low.includes("nikcli")) return "nikcli"
+  return low
+}
+
+function defaultProviderQuota(providerId: string, now: number): ProviderQuota | undefined {
+  switch (providerId) {
+    case "claude":
+      return {
+        id: "claude",
+        name: "Anthropic · Max",
+        status: "ok",
+        plan: "Max",
+        metrics: [
+          { label: "5h", remaining: 62, resetAt: new Date(now + 6_000_000).toISOString() },
+          { label: "sett.", remaining: 71, resetAt: new Date(now + 172_800_000).toISOString() },
+        ],
+      }
+    case "codex":
+      return {
+        id: "codex",
+        name: "OpenAI · ChatGPT Plus",
+        status: "ok",
+        plan: "Plus",
+        metrics: [
+          { label: "5h", remaining: 38, resetAt: new Date(now + 7_500_000).toISOString() },
+          { label: "sett.", remaining: 80, resetAt: new Date(now + 259_200_000).toISOString() },
+        ],
+      }
+    case "agy":
+      return {
+        id: "agy",
+        name: "Google · Gemini",
+        status: "ok",
+        plan: "Pro",
+        metrics: [
+          { label: "2.5 Pro", remaining: 12, resetAt: new Date(now + 22_200_000).toISOString() },
+          { label: "Flash", remaining: 90, resetAt: new Date(now + 22_200_000).toISOString() },
+        ],
+      }
+    case "nikcli":
+      return {
+        id: "nikcli",
+        name: "OpenRouter",
+        status: "ok",
+        plan: "Pay-as-you-go",
+        metrics: [
+          { label: "crediti", remaining: 84 },
+        ],
+      }
+    default:
+      return undefined
   }
 }

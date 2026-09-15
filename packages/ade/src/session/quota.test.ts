@@ -7,6 +7,9 @@ import {
   parseClaudeSnapshot,
   parseAntigravitySnapshot,
   compareUsage,
+  formatCountdown,
+  formatSessionQuota,
+  getProviderQuota,
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
@@ -102,6 +105,61 @@ describe("calculateReadiness", () => {
     const r = calculateReadiness(quota, now)
     expect(r.score).toBe(1.0)
     expect(r.isAvailable).toBe(true)
+  })
+
+  test("multi-window: cooldown is taken only from the exhausted metric, not longer healthy ones (P1)", () => {
+    const oneHour = 3_600_000
+    const sevenDays = 7 * 24 * 3_600_000
+    const quota: ProviderQuota = {
+      id: "claude",
+      name: "Claude Code",
+      status: "ok",
+      metrics: [
+        { label: "5h", remaining: 0, resetAt: new Date(now + oneHour).toISOString() },
+        { label: "7d", remaining: 50, resetAt: new Date(now + sevenDays).toISOString() },
+      ],
+    }
+    const r = calculateReadiness(quota, now)
+    expect(r.score).toBe(0.0)
+    expect(r.isAvailable).toBe(false)
+    expect(r.cooldownMs).toBe(oneHour)
+    expect(r.resetAt).toBe(new Date(now + oneHour).toISOString())
+
+    const plan = backoffForProvider(quota, now)
+    expect(plan.mustWait).toBe(true)
+    expect(plan.waitMs).toBe(oneHour + 500)
+  })
+
+  test("remaining percentage is clamped to [0, 100] and NaN safely handled (P2)", () => {
+    const over100: ProviderQuota = {
+      id: "claude",
+      name: "Claude Code",
+      status: "ok",
+      metrics: [{ label: "credits", remaining: 150 }],
+    }
+    const r1 = calculateReadiness(over100, now)
+    expect(r1.score).toBe(1.0)
+    expect(r1.worstRemainingPct).toBe(100)
+
+    const negative: ProviderQuota = {
+      id: "claude",
+      name: "Claude Code",
+      status: "ok",
+      metrics: [{ label: "credits", remaining: -20 }],
+    }
+    const r2 = calculateReadiness(negative, now)
+    expect(r2.score).toBe(0.0)
+    expect(r2.isAvailable).toBe(false)
+
+    const nanMetric: ProviderQuota = {
+      id: "claude",
+      name: "Claude Code",
+      status: "ok",
+      metrics: [{ label: "credits", remaining: Number.NaN }],
+    }
+    const r3 = calculateReadiness(nanMetric, now)
+    expect(r3.score).toBe(0.0)
+    expect(r3.isAvailable).toBe(false)
   })
 })
 
@@ -258,5 +316,76 @@ describe("compareUsage", () => {
     expect(res.cacheReadDiff).toBe(30)
     expect(res.outputDiff).toBe(10)
     expect(res.totalDiff).toBe(30)
+  })
+})
+
+describe("formatCountdown", () => {
+  test("formats hours and minutes", () => {
+    const ms = 1 * 3600_000 + 40 * 60_000 // 1h 40m
+    expect(formatCountdown(ms)).toBe("1h 40m")
+  })
+
+  test("formats minutes and seconds", () => {
+    const ms = 5 * 60_000 + 12_000 // 5m 12s
+    expect(formatCountdown(ms)).toBe("5m 12s")
+  })
+
+  test("formats seconds only", () => {
+    expect(formatCountdown(45_000)).toBe("45s")
+  })
+
+  test("returns 0s for zero or negative values", () => {
+    expect(formatCountdown(0)).toBe("0s")
+    expect(formatCountdown(-5000)).toBe("0s")
+  })
+})
+
+describe("formatSessionQuota and getProviderQuota", () => {
+  const now = 1_000_000
+
+  test("formats provider quota with binding window, level and countdown", () => {
+    const quota: ProviderQuota = {
+      id: "claude",
+      name: "Anthropic · Max",
+      status: "ok",
+      metrics: [
+        { label: "5h", remaining: 62, resetAt: new Date(now + 6_000_000).toISOString() }, // 1h 40m
+        { label: "sett.", remaining: 71, resetAt: new Date(now + 172_800_000).toISOString() },
+      ],
+    }
+    const view = formatSessionQuota(quota, now)
+    expect(view.bindingKey).toBe("5h")
+    expect(view.remainingRatio).toBe(0.62)
+    expect(view.displayValue).toBe("62%")
+    expect(view.level).toBe("ok")
+    expect(view.countdown).toBe("1h 40m")
+    expect(view.tooltip).toContain("Quota Anthropic · Max")
+    expect(view.tooltip).toContain("5h: 62% rimasto")
+  })
+
+  test("flags critical level when remaining ratio is below 20%", () => {
+    const quota: ProviderQuota = {
+      id: "agy",
+      name: "Google · Gemini",
+      status: "ok",
+      metrics: [
+        { label: "2.5 Pro", remaining: 12, resetAt: new Date(now + 22_200_000).toISOString() },
+        { label: "Flash", remaining: 90 },
+      ],
+    }
+    const view = formatSessionQuota(quota, now)
+    expect(view.bindingKey).toBe("2.5 Pro")
+    expect(view.remainingRatio).toBe(0.12)
+    expect(view.level).toBe("crit")
+  })
+
+  test("getProviderQuota returns default formatted view for known agents", () => {
+    const claudeView = getProviderQuota("claude-code", now)
+    expect(claudeView).toBeDefined()
+    expect(claudeView?.providerName).toBe("Anthropic · Max")
+
+    const codexView = getProviderQuota("codex", now)
+    expect(codexView).toBeDefined()
+    expect(codexView?.providerName).toBe("OpenAI · ChatGPT Plus")
   })
 })
