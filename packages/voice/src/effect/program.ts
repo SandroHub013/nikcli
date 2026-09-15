@@ -713,6 +713,28 @@ export function makeVoiceProgram(
         const parsed = parseUtterance(trimmed, ctx)
         options.onParseResult?.(parsed)
 
+        /*
+         * 2b. A sentence while the agent is still thinking about the last one.
+         *
+         * The dialogue ignores every utterance while it is "executing", so a
+         * command typed or said during a turn appeared in the console and was
+         * never answered, and «annulla» did not stop the turn either. The
+         * newest sentence wins, as a new question already did in `runAgent`:
+         * the turn is stopped and the sentence is handled as if idle, except
+         * a cancel, which only stops.
+         */
+        if (currentState.status === "executing" && agentAbort) {
+          agentAbort.abort()
+          agentAbort = null
+          yield* speaker.cancel
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+          if (parsed.outcome === "matched" && parsed.intent?.intent === "dialog.cancel") {
+            options.onSpoken?.("Ho fermato la richiesta precedente.")
+            return
+          }
+        }
+
         // 3. Ambiguous outcome: query user for clarification, never execute
         if (parsed.outcome === "ambiguous") {
           pendingDisambiguation = { candidates: parsed.candidates, slots: parsed.slots }

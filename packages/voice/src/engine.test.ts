@@ -676,6 +676,54 @@ describe("engine/agent answers what the grammar does not know", () => {
     await engine.stop()
   })
 
+  describe("a sentence while the agent is still thinking", () => {
+    function busy() {
+      const host = new MockVoiceHost()
+      const asked: string[] = []
+      let aborted = 0
+      ;(host as VoiceHost).askAgent = (request) =>
+        new Promise((resolve) => {
+          asked.push(request.text)
+          request.signal?.addEventListener("abort", () => {
+            aborted++
+            resolve({ ok: false, text: "" })
+          })
+        })
+      const speaker = createFakeSpeaker()
+      const engine = createVoiceEngine({ host, transcriber: createFakeTranscriber(), speaker, now: () => 10_000, settings: { agentEngine: "auto" } })
+      return { host, asked, speaker, engine, aborted: () => aborted }
+    }
+
+    test("a known command is carried out instead of vanishing, and the turn is stopped", async () => {
+      const { host, asked, engine, aborted } = busy()
+      void engine.submitText("raccontami la storia di Roma in tre frasi")
+      await new Promise((r) => setTimeout(r, 20))
+      expect(engine.status()).toBe("executing")
+
+      await engine.submitText("apri la tavolozza")
+      await new Promise((r) => setTimeout(r, 20))
+
+      expect(asked).toEqual(["raccontami la storia di Roma in tre frasi"])
+      expect(aborted()).toBe(1)
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
+      expect(engine.status()).toBe("idle")
+    })
+
+    test("«annulla» stops the turn and says so", async () => {
+      const { host, engine, aborted } = busy()
+      void engine.submitText("raccontami la storia di Roma in tre frasi")
+      await new Promise((r) => setTimeout(r, 20))
+
+      await engine.submitText("annulla")
+      await new Promise((r) => setTimeout(r, 20))
+
+      expect(aborted()).toBe(1)
+      expect(engine.status()).toBe("idle")
+      expect(engine.lastSpoken()).toBe("Ho fermato la richiesta precedente.")
+      expect(host.calls.filter((call) => call.method === "runCommand")).toHaveLength(0)
+    })
+  })
+
   test("a known command never reaches the agent", async () => {
     const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
     await engine.start()
