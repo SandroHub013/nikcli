@@ -6,6 +6,10 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  WEDGE_MS,
+  formatWedged,
+  interruptKeys,
+  openDecisions,
   INLINE_MAX,
   MAX_REBELLS,
   REBELL_AFTER_MS,
@@ -432,5 +436,45 @@ describe("long messages travel through the inbox", () => {
   test("restored entries keep only well-formed ones", () => {
     expect(parseInbox(JSON.stringify([entry, { id: 3 }]))).toEqual([entry])
     expect(parseInbox("non json")).toEqual([])
+  })
+})
+
+describe("stuck sessions, interrupts and relaunch notes", () => {
+  const now = 10 * WEDGE_MS
+  const request = { id: "r1", kind: "ask" as const, from: "a", to: "b", at: 0, deliveredAt: 0, brief: "x" }
+  const longTurn = { running: true, permissionPending: false, activity: { state: "busy" as const, at: now - WEDGE_MS } }
+
+  test("a turn of an hour with no output and no writes may be stuck; one that writes is not", () => {
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - WEDGE_MS }, now)).toBe("forse bloccata")
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS }, now)).toBe("forse bloccata")
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - WEDGE_MS, lastWriteAt: now - 60_000 }, now)).toBe("in corso")
+    expect(requestState(request, { ...longTurn, lastOutputAt: now - 1000 }, now)).toBe("in corso")
+    expect(requestState(request, { ...longTurn, activity: { state: "busy", at: now - WEDGE_MS + 1 } }, now)).toBe("in corso")
+    expect(formatWedged(request, { id: "b", title: "Fabio" }, now)).toContain("ade-msg interrupt b")
+  })
+
+  test("interrupt sends Esc to the agents that cancel a turn on it, Ctrl-C to the rest", () => {
+    expect(interruptKeys("claude-code")).toBe(String.fromCharCode(27))
+    expect(interruptKeys("codex")).toBe(String.fromCharCode(27))
+    expect(interruptKeys("nikcli")).toBe(String.fromCharCode(3))
+  })
+
+  test("relaunch carries its note and interrupt its target", () => {
+    expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2", note: " rifai i test " }))).toMatchObject({ kind: "relaunch", note: "rifai i test" })
+    expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2" }))).toMatchObject({ kind: "relaunch", note: "" })
+    expect(parseMessage(JSON.stringify({ kind: "interrupt", to: "2" }))).toMatchObject({ kind: "interrupt", to: "2" })
+    expect(parseMessage(JSON.stringify({ kind: "interrupt" }))).toBeUndefined()
+  })
+
+  test("open decisions are the keyed ones no later risolta answered, and status prints them", () => {
+    const log = [
+      "2026-09-15T16:40 Voice decisione [k=S25-casella] quale variabile",
+      "2026-09-15T16:41 Sessione 1 — agy decisione [k=quota] soglia del 10%?",
+      "2026-09-15T16:50 Fabio risolta [k=S25-casella] ADE_MAILBOX_ROOT",
+      "2026-09-15T16:55 Fabio in-corso S21",
+    ].join("\n")
+    const open = openDecisions([{ spec: "S25", text: log }])
+    expect(open).toEqual([{ spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" }])
+    expect(requestsTable([], [], () => "in corso", now, open)).toContain("decisioni aperte:\n  S25 [k=quota]")
   })
 })

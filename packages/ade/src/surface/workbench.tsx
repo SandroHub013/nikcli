@@ -182,6 +182,11 @@ import {
   type Message,
   formatBell,
   formatUnread,
+  formatWedged,
+  interruptKeys,
+  WEDGE_MS,
+  openDecisions,
+  type OpenDecision,
   goesToInbox,
   inboxAction,
   inboxName,
@@ -875,7 +880,62 @@ export function Workbench() {
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
+    ...(folderChanges.has(request.to) ? { lastWriteAt: folderChanges.get(request.to)!.changedAt } : {}),
   })
+
+  /*
+   * Whether a long turn is changing its folder, for "forse bloccata" (S21).
+   *
+   * Looked at only for a session already busy half the wedge time, and at
+   * most every five minutes: a `git status` snapshot, and the time it last
+   * differed. The first look counts from the start of the turn, so a turn
+   * that has written nothing since its baseline reads as silent.
+   */
+  const folderChanges = new Map<string, { snapshot: string; changedAt: number; checkedAt: number }>()
+  const watchFolders = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
+    if (!host.run) return
+    for (const request of openRequests.values()) {
+      const activity = activityOf.get(request.to)
+      if (activity?.state !== "busy" || now - activity.at < WEDGE_MS / 2) {
+        folderChanges.delete(request.to)
+        continue
+      }
+      const seen = folderChanges.get(request.to)
+      if (seen && now - seen.checkedAt < 5 * 60_000) continue
+      const pane = wb().panes.find((candidate) => candidate.id === request.to)
+      const dir = pane?.worktree ?? pane?.cwd
+      if (!dir) continue
+      const status = await host.run("git", ["status", "--porcelain"], dir).catch(() => undefined)
+      if (!status || status.code !== 0) continue
+      const snapshot = status.stdout
+      folderChanges.set(request.to, {
+        snapshot,
+        checkedAt: now,
+        changedAt: !seen ? activity.at : seen.snapshot !== snapshot ? now : seen.changedAt,
+      })
+    }
+  }
+
+  /** Open decisions from the team board's `status/*.log`, read at most once a minute. */
+  let decisions: OpenDecision[] = []
+  let decisionsReadAt = 0
+  const readDecisions = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
+    const current = project()
+    if (now - decisionsReadAt < 60_000 || !current || current.remote || !host.readDir || !host.readTextFile) return
+    decisionsReadAt = now
+    const logs: { spec: string; text: string }[] = []
+    for (const board of boardCandidates(current.root)) {
+      const dir = `${board.replace(/[\\/][^\\/]+$/, "")}/status`
+      const entries = await host.readDir(dir).catch(() => [])
+      for (const entry of entries) {
+        if (entry.is_dir || !entry.name.endsWith(".log")) continue
+        const text = await host.readTextFile(entry.path).then((read) => read.text).catch(() => "")
+        logs.push({ spec: entry.name.slice(0, -4), text })
+      }
+      if (entries.length) break
+    }
+    decisions = openDecisions(logs)
+  }
 
   /*
    * The branch a session shows is the one it is working on.
@@ -1070,6 +1130,8 @@ export function Workbench() {
     await readActivities(host)
     const now = Date.now()
     const panes = mailPanes()
+    await watchFolders(host, now)
+    await readDecisions(host, now)
     for (const request of [...openRequests.values()]) {
       const state = stateOf(request, now)
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
@@ -1077,6 +1139,14 @@ export function Workbench() {
         const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
         await settle(host, request.id, `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`)
         continue
+      }
+      if (state === "forse bloccata" && !request.wedgeWarned) {
+        request.wedgeWarned = true
+        saveRequests()
+        if (request.from && running.has(request.from)) {
+          heldLines.push({ paneId: request.from, text: formatWedged(request, panes.find((pane) => pane.id === request.to), now) })
+        }
+        appendLine(request.to, `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request.id})`, "note")
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
@@ -1104,7 +1174,7 @@ export function Workbench() {
 
     await followInbox(host, now)
 
-    const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now)
+    const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now, decisions)
     if (table !== publishedRequests) {
       publishedRequests = table
       await host.mailboxPublish?.(table, "requests").catch(() => {})
@@ -1453,9 +1523,41 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "interrupt") {
+      if (!message.from) {
+        await answer("errore: interrupt si usa solo da una sessione ADE")
+        return true
+      }
+      const session = running.get(target.pane.id)
+      if (!session) {
+        await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
+        return true
+      }
+      const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
+      session.write(interruptKeys(pane?.agent ?? pane?.model))
+      appendLine(target.pane.id, `Interrotta da ${sender?.title ?? "una sessione"}`, "note")
+      // The point is to stop the work, not the session: say which happened.
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await answer(
+        running.get(target.pane.id) === session
+          ? `ok: interrotta "${target.pane.title}", la sessione resta aperta; mandale una riga correttiva con ade-msg send`
+          : `attenzione: "${target.pane.title}" si è chiusa dopo l'interruzione`,
+      )
+      return true
+    }
+
     if (message.kind === "relaunch") {
       if (!message.from || spawnedBy.get(target.pane.id) !== message.from) {
         await answer(`errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
+        return true
+      }
+      /*
+       * The replacement starts from its brief and a note on where things
+       * stand. Without one it redoes the job, or resumes the loop that got it
+       * relaunched.
+       */
+      if (!message.note.trim()) {
+        await answer(`errore: relaunch richiede --note "<a che punto è e cosa fare adesso>": la sessione riparte da quella nota`)
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
@@ -1495,9 +1597,19 @@ export function Workbench() {
         if (updated) void reopen(updated)
       }
       appendLine(pane.id, `Riavviata da ${sender?.title ?? "una sessione"}${message.model ? ` con il modello ${message.model}` : ""}${message.fresh ? ", da zero" : ""}`, "note")
+      // The note is typed once the new process is up, like any held line; given up after a minute.
+      const noteText = `[Nota di ripresa da ${sender?.title ?? "una sessione"}]: ${message.note.trim()}`
+      const waitStart = Date.now()
+      const waitForRestart = setInterval(() => {
+        const up = running.get(pane.id)
+        if (up && up !== old) {
+          clearInterval(waitForRestart)
+          heldLines.push({ paneId: pane.id, text: noteText, inbox: { id: id, kind: "send", from: message.from } })
+        } else if (Date.now() - waitStart > 60_000) clearInterval(waitForRestart)
+      }, 1000)
       await answer(
         `ok: riavviata "${pane.title}"${message.model ? ` con ${message.model}` : ""}` +
-          (message.fresh ? " da zero: mandale il compito con ade-msg ask" : "; riprende la sua conversazione e le richieste aperte restano valide"),
+          (message.fresh ? " da zero con la tua nota: se serve il compito intero mandalo con ade-msg ask" : " con la tua nota; riprende la sua conversazione e le richieste aperte restano valide"),
       )
       return true
     }

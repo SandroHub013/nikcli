@@ -56,7 +56,9 @@ export type Message = { from: string; token?: string; text: string } & (
    * Restarts a session the sender spawned, in the same pane and worktree:
    * its own conversation back unless `fresh`, on another model if `model`.
    */
-  | { kind: "relaunch"; to: string; model?: string; fresh: boolean }
+  | { kind: "relaunch"; to: string; model?: string; fresh: boolean; note: string }
+  /** Esc or Ctrl-C in a session, to stop what it is doing; the session stays open. `text` is empty. */
+  | { kind: "interrupt"; to: string }
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
 )
@@ -99,7 +101,11 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "relaunch") {
     const to = str("to")
     const model = str("model")
-    return to ? { kind, from, token, to, fresh: record.fresh === true, ...(model ? { model } : {}), text: "" } : undefined
+    return to ? { kind, from, token, to, fresh: record.fresh === true, note: str("note"), ...(model ? { model } : {}), text: "" } : undefined
+  }
+  if (kind === "interrupt") {
+    const to = str("to")
+    return to ? { kind, from, token, to, text: "" } : undefined
   }
   if (kind === "cancel") {
     const ref = str("ref")
@@ -498,9 +504,17 @@ export interface OpenRequest {
   deliveredAt?: number
   /** Extra Enters sent because the line never started a turn. */
   rings?: number
+  /** Its caller was told the session may be stuck; said once. */
+  wedgeWarned?: boolean
 }
 
-export type RequestState = "in corso" | "attende un permesso" | "sessione chiusa" | "in avvio" | "inattiva senza risposta"
+export type RequestState =
+  | "in corso"
+  | "attende un permesso"
+  | "sessione chiusa"
+  | "in avvio"
+  | "inattiva senza risposta"
+  | "forse bloccata"
 
 /** Whether an agent is in a turn, from its CLI's own hooks. Absent means unknown, never idle. */
 export interface Activity {
@@ -599,9 +613,19 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
 /** How long a freshly spawned session has to come up before "not running" means closed. */
 export const SPAWN_GRACE_MS = 30_000
 
+/** A turn this long, with no output and no change in its folder for as long, may be stuck. */
+export const WEDGE_MS = 60 * 60_000
+
 export function requestState(
   request: OpenRequest,
-  target: { running: boolean; permissionPending: boolean; activity?: Activity },
+  target: {
+    running: boolean
+    permissionPending: boolean
+    activity?: Activity
+    lastOutputAt?: number
+    /** When the session's folder was last seen to change; absent when never looked at. */
+    lastWriteAt?: number
+  },
   now: number,
 ): RequestState {
   if (!target.running) return now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
@@ -609,7 +633,69 @@ export function requestState(
   // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
   const reached = request.deliveredAt ?? request.at
   if (target.activity?.state === "idle" && target.activity.at > reached && !request.update) return "inattiva senza risposta"
+  /*
+   * Working for an hour and neither printing nor changing a file: said, never
+   * acted on. A long build prints and a long refactor writes; a session that
+   * does neither is waiting on something nobody will answer.
+   */
+  const quiet = (at: number | undefined) => at === undefined || now - at >= WEDGE_MS
+  if (target.activity?.state === "busy" && now - target.activity.at >= WEDGE_MS && quiet(target.lastOutputAt) && quiet(target.lastWriteAt)) {
+    return "forse bloccata"
+  }
   return "in corso"
+}
+
+/** Told once to the caller of a request whose session may be stuck. */
+export function formatWedged(request: OpenRequest, answerer: MailPane | undefined, now: number): string {
+  return (
+    `[ade-msg] ${who(answerer)} lavora alla richiesta ${request.id} da ${age(now - (request.deliveredAt ?? request.at))} ` +
+    `senza output né modifiche: forse bloccata. Guarda il suo pane, poi ade-msg interrupt ${answerer?.id ?? "<sessione>"} o relaunch --note.`
+  )
+}
+
+/**
+ * The keys that stop what an agent is doing without closing it.
+ *
+ * Esc for the CLIs that cancel a turn on it and keep the session (Claude
+ * Code, codex, agy); Ctrl-C for the rest, which is what a shell expects.
+ * Ctrl-C to Claude Code twice would quit it, so it is never sent there.
+ */
+export function interruptKeys(agentId: string | undefined): string {
+  return agentId === "claude-code" || agentId === "codex" || agentId === "agy" ? String.fromCharCode(27) : String.fromCharCode(3)
+}
+
+/** A decision still waiting for an answer, from the specs' event logs. */
+export interface OpenDecision {
+  spec: string
+  key: string
+  session: string
+  text: string
+  at: string
+}
+
+const LOG_LINE = /^(\S+)\s+(.+?)\s+(decisione|risolta)\s+\[k=([^\]\s]+)\]\s*(.*)$/
+
+/**
+ * The `decisione [k=…]` lines no `risolta [k=…]` has answered yet.
+ *
+ * Each spec logs its events in `status/<spec>.log`, one line each:
+ * `2026-09-15T16:40 <sessione> <verbo> [k=<chiave>] <testo>`. A key is
+ * answered by any later `risolta` with the same key in the same log.
+ */
+export function openDecisions(logs: readonly { spec: string; text: string }[]): OpenDecision[] {
+  const open: OpenDecision[] = []
+  for (const log of logs) {
+    const pending = new Map<string, OpenDecision>()
+    for (const line of log.text.split(/\r?\n/)) {
+      const match = LOG_LINE.exec(line.trim())
+      if (!match) continue
+      const [, at, session, verb, key, text] = match
+      if (verb === "decisione") pending.set(key!, { spec: log.spec, key: key!, session: session!, text: text!, at: at! })
+      else pending.delete(key!)
+    }
+    open.push(...pending.values())
+  }
+  return open
 }
 
 /** After an agent's turn ends without a reply, how long before it is reminded. */
@@ -699,8 +785,12 @@ export function requestsTable(
   panes: readonly MailPane[],
   stateOf: (request: OpenRequest) => RequestState,
   now: number,
+  decisions: readonly OpenDecision[] = [],
 ): string {
-  if (requests.length === 0) return "nessuna richiesta in corso\n"
+  const pending = decisions.length
+    ? `\ndecisioni aperte:\n${decisions.map((d) => `  ${d.spec} [k=${d.key}] ${d.session}: ${briefOf(d.text, 80)}`).join("\n")}\n`
+    : ""
+  if (requests.length === 0) return `nessuna richiesta in corso\n${pending}`
   const title = (id: string) => (id ? panes.find((pane) => pane.id === id)?.title ?? id : "anonima")
   const rows = requests.map((request) => [
     request.id,
@@ -712,7 +802,7 @@ export function requestsTable(
   ])
   const widths = [0, 1, 2, 3].map((col) => Math.max(...rows.map((row) => row[col]!.length)))
   const lines = rows.map((row) => row.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  "))
-  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any]   annulla: ade-msg cancel <id>\n`
+  return `${lines.join("\n")}\n\nattendi: ade-msg wait <id> [<id>...] [--any]   annulla: ade-msg cancel <id>\n${pending}`
 }
 
 /** Requests as saved across a restart; anything malformed is dropped. */
@@ -793,9 +883,10 @@ export const USAGE =
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
-  "  ade-msg relaunch <sessione> [--model <id>] [--fresh]\n" +
+  "  ade-msg relaunch <sessione> --note \"<a che punto è>\" [--model <id>] [--fresh]\n" +
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
-  "                                          riprende la sua conversazione (o da zero con --fresh)\n" +
+  "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
+  "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
   "  ade-msg memory add decisione|fatto|trappola|todo \"<testo>\"\n" +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +

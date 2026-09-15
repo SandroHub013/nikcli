@@ -318,6 +318,7 @@ $ttl = 0
 $name = $null
 $model = $null
 $base = $null
+$note = $null
 $file = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
@@ -332,6 +333,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--name' -and $hasNext) { $name = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--base' -and $hasNext) { $base = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--note' -and $hasNext) { $note = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -544,13 +546,17 @@ switch ($cmd) {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$' -or ($second -ne 'bloccata' -and $second -ne 'decisione') -or -not $text) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'update'; ref = $head; state = $second; text = $text })
   }
+  'interrupt' {
+    if (-not $head) { Usage }
+    PostAndConfirm ([ordered]@{ kind = 'interrupt'; to = $head })
+  }
   'close' {
     if (-not $head) { Usage }
     PostAndConfirm ([ordered]@{ kind = 'close'; to = $head; force = $force })
   }
   'relaunch' {
     if (-not $head) { Usage }
-    $fields = [ordered]@{ kind = 'relaunch'; to = $head; fresh = $fresh }
+    $fields = [ordered]@{ kind = 'relaunch'; to = $head; fresh = $fresh; note = $(if ($note) { $note } else { $text }) }
     if ($model) { $fields['model'] = $model }
     PostAndConfirm $fields
   }
@@ -601,7 +607,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; file=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; file=""
 lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -614,6 +620,7 @@ while [ $# -gt 0 ]; do
       --name) [ $# -ge 2 ] && { name="$2"; shift 2; continue; } ;;
       --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
       --base) [ $# -ge 2 ] && { base="$2"; shift 2; continue; } ;;
+      --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -764,11 +771,13 @@ case "$cmd" in
     case "$second" in bloccata|decisione) ;; *) usage ;; esac
     [ -n "$text" ] || usage
     confirm "\"kind\":\"update\",\"ref\":\"$head\",\"state\":\"$second\"" ;;
+  interrupt) [ -n "$head" ] || usage; confirm "\"kind\":\"interrupt\",\"to\":\"$(esc "$head")\"" ;;
   close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\",\"force\":$force" ;;
   relaunch)
     [ -n "$head" ] || usage
     extra=""; [ -n "$model" ] && extra=",\"model\":\"$(esc "$model")\""
-    confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh$extra" ;;
+    [ -n "$note" ] || note="$text"
+    confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh,\"note\":\"$(esc "$note")\"$extra" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
     if [ "$cmd" = ask ]; then
@@ -876,6 +885,8 @@ mod tests {
         assert!(PS1.contains("'inbox' {") && PS1.contains("Join-Path $dir 'handled'"));
         assert!(SH.contains("  inbox)") && SH.contains("mv -f \"$f\" \"$dir/handled/\""));
         assert!(!PS1.contains("3800") && !SH.contains("3800"));
+        assert!(PS1.contains("kind = 'interrupt'") && SH.contains("interrupt) [ -n"));
+        assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
     }
 
     #[test]
