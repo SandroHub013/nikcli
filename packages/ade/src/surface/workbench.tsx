@@ -214,11 +214,13 @@ import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter } from "../panels/router"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
+import { playWav } from "../voice/wav-player"
 import {
   createMicMeter,
   createVoiceEngine,
   createWebSpeechSpeaker,
   createFakeSpeaker,
+  createNaturalSpeaker,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -1925,10 +1927,37 @@ export function Workbench() {
     onFinal: () => {},
     onError: () => {},
   }
-  const speaker =
+  const systemSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
       ? createWebSpeechSpeaker({ lang: "it-IT" })
       : createFakeSpeaker()
+  /*
+   * S15: replies in Piper's voice where the desktop host has it, with the
+   * system voice underneath while it downloads or when it fails. The host is
+   * looked up per call, so the browser harness simply never gets past status.
+   */
+  const speaker = createNaturalSpeaker({
+    voice: () => voiceSettings().replyVoice,
+    status: async (voice) => {
+      const host = await getHost()
+      return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
+    },
+    install: async (voice) => {
+      const host = await getHost()
+      if (!host?.ttsPiperInstall) throw new Error("Nessun host per scaricare la voce.")
+      await host.ttsPiperInstall(voice)
+    },
+    synthesize: async (voice, text) => {
+      const host = await getHost()
+      if (!host?.ttsPiperSpeak) throw new Error("Nessun host per la voce.")
+      return host.ttsPiperSpeak(voice, text)
+    },
+    play: (wav, signal) => playWav(wav, signal, voiceSettings().outputDeviceId),
+    fallback: systemSpeaker,
+    onInstall: (voice, state, problem) => {
+      if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+    },
+  })
 
   /*
    * The level meter drives the mic ring and the settings panel's waveform, and
@@ -1969,6 +1998,17 @@ export function Workbench() {
       focusedPaneId: wb().focusedId,
     }),
   })
+
+  // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
+  createEffect(
+    on(
+      () => voiceEngine.isRunning(),
+      (running) => {
+        if (running && voiceSettings().speakReplies !== false) speaker.prepare()
+      },
+      { defer: true },
+    ),
+  )
 
   /* Set once the native shell has registered the voice hotkeys; see onMount. */
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
@@ -4347,6 +4387,7 @@ export function Workbench() {
           settings={voiceSettings()}
           onChange={handleVoiceSettingsChange}
           onClose={() => setVoiceSettingsOpen(false)}
+          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
           title="Impostazioni"
           subtitle="Voce, routine, bot, codice, MCP, plugin e competenze"

@@ -15,6 +15,7 @@
  * - Strictly typed without type assertions or compiler suppression annotations.
  */
 
+import { REPLY_VOICE_CHOICES } from "../settings/reply-voices"
 import {
   createEffect,
   createMemo,
@@ -30,6 +31,7 @@ import type { DialogStatus } from "../dialog/session"
 import {
   DEFAULT_VOICE_SETTINGS,
   type AgentEngine,
+  type ReplyVoice,
   type ParakeetExecutionBackend,
   type TranscriptionSendMode,
   type VoiceActivation,
@@ -111,6 +113,8 @@ export interface VoiceSettingsPanelProps {
   onClose?: () => void
   /** Optional existing ADE keymap bindings to evaluate for shortcut collision. */
   existingBindings?: readonly Binding[]
+  /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
+  onOpenVoiceSource?: (voice: ReplyVoice) => void
   /** Optional Parakeet neural model download progress. */
   parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
@@ -901,6 +905,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     updateSettings({ transcriptionSend: value as TranscriptionSendMode }),
   )
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
+  const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const activationKeys = radioGroupKeys((value) =>
     selectActivation(value as VoiceActivation),
@@ -1225,6 +1230,58 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 </div>
               </div>
             </div>
+
+            <Show when={props.settings.speakReplies !== false}>
+              <div data-slot="sub-choice-box">
+                <span id="reply-voice-label" data-slot="sub-choice-label">
+                  Voce delle risposte
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="reply-voice-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={replyVoiceKeys}
+                >
+                  <For each={REPLY_VOICE_CHOICES}>
+                    {(choice) => (
+                      <div
+                        role="radio"
+                        data-value={choice.value}
+                        aria-checked={props.settings.replyVoice === choice.value}
+                        tabIndex={props.settings.replyVoice === choice.value ? 0 : -1}
+                        data-slot="sub-choice-item"
+                        onClick={() => updateSettings({ replyVoice: choice.value })}
+                      >
+                        <span data-slot="sub-item-title">{choice.title}</span>
+                        <span data-slot="sub-item-desc">{choice.desc}</span>
+                        <Show when={choice.licence}>
+                          <span data-slot="sub-item-licence">
+                            {choice.licence}{" "}
+                            <Show when={props.onOpenVoiceSource}>
+                              <button
+                                type="button"
+                                data-slot="link-button"
+                                onClick={(event) => {
+                                  // The link sits inside the radio: opening the source must not also pick the voice.
+                                  event.stopPropagation()
+                                  props.onOpenVoiceSource?.(choice.value)
+                                }}
+                              >
+                                Fonte
+                              </button>
+                            </Show>
+                          </span>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+                <p data-slot="sub-choice-note">
+                  Le voci naturali si scaricano la prima volta che servono (circa 85 MB, solo su Windows) e poi
+                  funzionano senza rete. Finché il download non finisce risponde la voce di sistema.
+                </p>
+              </div>
+            </Show>
 
             {/*
               What answers what the grammar does not know. A CLI the user is

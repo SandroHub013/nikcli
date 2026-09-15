@@ -107,6 +107,12 @@ export {
   type Speaker,
   type WebSpeechSpeakerOptions,
 } from "./tts/speaker"
+export {
+  createNaturalSpeaker,
+  splitSentences,
+  type NaturalSpeaker,
+  type NaturalSpeakerDeps,
+} from "./tts/natural-speaker"
 
 export {
   replySpeech,
@@ -293,6 +299,8 @@ export {
 export {
   CURRENT_SETTINGS_VERSION,
   AGENT_ENGINES,
+  REPLY_VOICES,
+  type ReplyVoice,
   DEFAULT_VOICE_SETTINGS,
   type AgentEngine,
   normalizeSettings,
