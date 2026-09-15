@@ -115,6 +115,9 @@ export interface TurnSpec {
    * noise. The account still works, since the login is not a setting. Without
    * user settings `ade-msg` is no longer allowed, so it is allowed here by
    * pattern. Codex gains nothing measurable from the same, so it ignores it.
+   *
+   * Auto-memory is off too: a bot asked to remember a number wrote it into the
+   * user's own Claude memory, where every other session then reads it.
    */
   readonly lean?: boolean
 }
@@ -171,7 +174,10 @@ export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command:
       if (bot.effort) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
       if (sessionId) args.push("--resume", sessionId)
-      if (spec.lean) args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "local")
+      if (spec.lean) {
+        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "local")
+        args.push("--settings", '{"autoMemoryEnabled":false}')
+      }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
         .filter(([tool]) => !bot.disabledTools.includes(tool))

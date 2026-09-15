@@ -34,6 +34,7 @@ import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
 import { applyRunnerLine, runnerById, RUNNERS, type Runner } from "./runners"
+import { PLAN_RUNNERS, TERMS_NOTICE } from "./terms"
 import { startTurn, type TurnHandle } from "./session"
 import {
   createBot,
@@ -1123,6 +1124,11 @@ function EngineFields(props: {
         <span data-slot="bots-hint">
           {runner().account} Gli accessi si controllano in Impostazioni › Provider.
         </span>
+        <Show when={PLAN_RUNNERS.includes(runner().id)}>
+          <span data-slot="bots-hint" data-terms="">
+            {TERMS_NOTICE}
+          </span>
+        </Show>
       </label>
 
       <div data-slot="bots-row-fields">

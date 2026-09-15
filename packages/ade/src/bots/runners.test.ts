@@ -68,6 +68,7 @@ describe("gli argomenti di un turno", () => {
     expect(args).toContain("--strict-mcp-config")
     expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
     expect(args[args.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(args[args.indexOf("--settings") + 1]).toBe('{"autoMemoryEnabled":false}')
     expect(args[args.indexOf("--allowedTools") + 1]).toContain("PowerShell(ade-msg *)")
     expect(turnCommand(runnerById("claude"), { bot, message: "x" }).args).not.toContain("--strict-mcp-config")
   })

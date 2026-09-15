@@ -19,6 +19,7 @@
 import { getHost } from "../host/shell"
 import type { AgentFile } from "./nikcli"
 import { runnerById, turnCommand } from "./runners"
+import { acquireTurn } from "./terms"
 
 export interface TurnHandle {
   /** Keystrokes, exactly as given. Used to answer the permission menu. */
@@ -45,10 +46,14 @@ export async function startTurn(input: TurnInput): Promise<TurnStart> {
   if (!host?.spawn) return { ok: false, problem: "Nessun host: si parla con un bot solo nell'app desktop." }
 
   const runner = runnerById(input.bot.runner)
+  const slot = acquireTurn(runner.id, runner.label)
+  if ("problem" in slot) return { ok: false, problem: slot.problem }
   const { command, args } = turnCommand(runner, {
     bot: input.bot,
     message: input.message,
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).
+    lean: true,
   })
 
   try {
@@ -60,10 +65,14 @@ export async function startTurn(input: TurnInput): Promise<TurnStart> {
       rows: 50,
       onData: input.onData,
       onLine: (line) => input.onLine(line),
-      onExit: input.onExit,
+      onExit: (code) => {
+        slot.release()
+        input.onExit(code)
+      },
     })
     return { ok: true, handle: { write: (keys) => session.write(keys), kill: () => session.kill() } }
   } catch (error) {
+    slot.release()
     const said = error instanceof Error ? error.message : String(error)
     return { ok: false, problem: `${runner.label} non si avvia: ${said}` }
   }

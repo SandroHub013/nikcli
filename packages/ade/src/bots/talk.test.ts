@@ -160,6 +160,13 @@ describe("applyExit", () => {
     expect(afterError.messages).toHaveLength(1)
     expect(afterError.status).toBe("error")
   })
+
+  test("a turn ended by the plan's limit says nothing will retry it, once", () => {
+    const limited = applyLine(sendMessage(emptyTalk(), "x", T0), event("error", { error: "Claude AI usage limit reached" }), T0)
+    const ended = applyExit(limited, 1, T0 + 1, "Claude Code")
+    expect(ended.messages.at(-1)?.text).toContain("ADE non riprova")
+    expect(applyExit(ended, 1, T0 + 2, "Claude Code").messages).toHaveLength(ended.messages.length)
+  })
 })
 
 describe("lastLine", () => {

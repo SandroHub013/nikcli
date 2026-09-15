@@ -27,6 +27,7 @@
  */
 
 import { stripAnsi } from "../session/stream"
+import { limitNotice, limitReached } from "./terms"
 
 export type TalkStatus = "idle" | "working" | "waiting" | "error"
 
@@ -356,6 +357,8 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * error already on the thread, is said once so the silence has a reason.
  */
 export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli"): Talk {
+  const limited = withLimitNotice(talk, code, at, program)
+  if (limited) return limited
   if (code === 0 || code === null) {
     return { ...talk, status: talk.status === "error" ? "error" : "idle", permission: undefined, updatedAt: at }
   }
@@ -368,6 +371,29 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
     messages: alreadySaid
       ? talk.messages
       : [...talk.messages, { id: nextId("e", at), role: "error", text: `${program} è uscito con codice ${code}.`, at }],
+  }
+}
+
+/**
+ * A turn that ended on the plan's limit says so, and that nothing will retry it.
+ *
+ * Looked for in what the CLI said since the user's last message, so an old
+ * limit already answered does not come back.
+ */
+function withLimitNotice(talk: Talk, code: number | null, at: number, program: string): Talk | undefined {
+  if (talk.status !== "error" && (code === 0 || code === null)) return undefined
+  const lastUser = talk.messages.findLastIndex((message) => message.role === "user")
+  const said = talk.messages.slice(lastUser + 1)
+  if (!said.some((message) => limitReached(message.text)) && !limitReached(talk.problem ?? "")) return undefined
+  const notice = limitNotice(program)
+  return {
+    ...talk,
+    status: "error",
+    permission: undefined,
+    updatedAt: at,
+    messages: said.some((message) => message.text === notice)
+      ? talk.messages
+      : [...talk.messages, { id: nextId("e", at), role: "error", text: notice, at }],
   }
 }
 

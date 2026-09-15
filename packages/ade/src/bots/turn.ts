@@ -20,6 +20,7 @@
 
 import { getHost } from "../host/shell"
 import { registerSender, unregisterSender } from "../session/senders"
+import { acquireTurn } from "./terms"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, finalText, runnerById, turnCommand, type RunnerId } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
@@ -112,6 +113,12 @@ export function runTurn(request: TurnRequest): Turn {
       ...(request.lean ? { lean: true } : {}),
     })
 
+    const slot = acquireTurn(runner.id, runner.label)
+    if ("problem" in slot) {
+      update(applyProblem(talk, slot.problem, Date.now()))
+      return finish("error", slot.problem)
+    }
+
     const token = request.mailbox ? crypto.randomUUID() : undefined
     if (request.mailbox && token) registerSender(request.mailbox.id, token)
     try {
@@ -141,6 +148,7 @@ export function runTurn(request: TurnRequest): Turn {
       update(applyProblem(talk, `${runner.label} non si avvia: ${said}`, Date.now()))
       return finish("error", talk.problem)
     } finally {
+      slot.release()
       if (request.mailbox && token) unregisterSender(request.mailbox.id, token)
     }
   })()

@@ -3,6 +3,7 @@ import type { AgentFile } from "../bots/nikcli"
 import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
+import { MAX_PARALLEL_TURNS } from "../bots/terms"
 import "./sections.css"
 
 /**
@@ -285,6 +286,13 @@ export function ProviderSection(props: ProviderSectionProps) {
           I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento
           Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti
           da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.
+        </p>
+        <p data-slot="section-desc">
+          ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli
+          abbonamenti sono per uso personale e ADE tiene al massimo {MAX_PARALLEL_TURNS} turni insieme
+          per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API
+          (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con{" "}
+          <code>codex login --with-api-key</code>).
         </p>
       </div>
 
