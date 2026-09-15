@@ -516,19 +516,16 @@ export function Workbench() {
   const panels = createPanelRouter()
 
   /**
-   * Tells one session which panels it can drive.
+   * Notes in one session's transcript which panels it can drive.
    *
-   * Typed into the pty rather than only written to the transcript: the agent
-   * reads its stdin, not ADE's interface, and a capability it is never told
-   * about is a channel with no door.
+   * Never typed into the pty. Each line typed there is a prompt submitted to
+   * the agent: opening one 3D panel queued six in Claude Code, and agy
+   * redrew the usage lines where `onLine` read them back as requests, which
+   * answered with an error, which agy redrew, with no end (0.5.0 trial).
    */
   const announcePanels = (paneId: string, panel: string) => {
-    const session = running.get(paneId)
-    if (!session) return
-    for (const line of panels.greeting(panel)) {
-      session.write(asSubmittedLine(line))
-      appendLine(paneId, line, "note")
-    }
+    if (!running.has(paneId)) return
+    for (const line of panels.greeting(panel)) appendLine(paneId, line, "note")
   }
 
   /** Announces a newly opened panel to every session currently running. */
@@ -739,11 +736,12 @@ export function Workbench() {
    * where only the user can see it leaves the session stopped forever.
    */
   const handlePanelRequest = async (paneId: string, line: string) => {
-    const handled = await panels.handle(line)
+    const handled = await panels.handle(line, paneId)
     if (!handled) return
     // Written to the transcript too, because what an agent did to a panel is
     // something the user has to be able to see afterwards.
     appendLine(paneId, handled.reply, "note")
+    panels.typed(paneId, handled.reply)
     running.get(paneId)?.write(asSubmittedLine(handled.reply))
   }
 
@@ -812,6 +810,8 @@ export function Workbench() {
      * reply contract were still being taken in when a fixed 400 ms Enter came.
      */
     const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
+    // A message that quotes an `@ade` line must not run it when the TUI echoes it.
+    if (paneId !== undefined) panels.typed(paneId, line)
     const typedAt = Date.now()
     session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
     if (bracketed) {

@@ -131,12 +131,12 @@ export interface PanelVerb {
 /**
  * What ADE tells a session so its agent knows any of this exists.
  *
- * Typed into the session once, when a panel it can drive is opened. Without
- * it the protocol is a door with no handle: the agent has no way to discover
- * a channel that no CLI documents and no model was trained on.
+ * Noted in the session's transcript when a panel it can drive is opened,
+ * never typed into its pty: every typed line is a prompt the agent must
+ * answer, and a TUI redrawing the usage lines handed them back to `onLine`
+ * as requests. See `announcePanels` in `workbench.tsx`.
  *
- * Returned as an array of lines for the caller to type one at a time —
- * a pty submits on every line break, so this cannot be one string.
+ * Returned as an array of lines, one transcript line each.
  */
 export function describeCapabilities(panel: string, verbs: readonly PanelVerb[]): string[] {
   if (verbs.length === 0) return []

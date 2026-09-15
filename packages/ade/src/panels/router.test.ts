@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { createPanelRouter, type PanelHandler } from "./router"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { createPanelRouter, REPEAT_WINDOW_MS, type PanelHandler } from "./router"
 import { REPLY_PREFIX } from "./protocol"
 
 const VERBS = [{ name: "play", usage: "play", summary: "avvia" }] as const
@@ -91,6 +93,45 @@ describe("createPanelRouter", () => {
     expect(first).toBeDefined()
     expect(await router.handle(first!.reply)).toBeUndefined()
     expect(video.asked).toEqual(["play"])
+  })
+
+  test("a request a TUI keeps redrawing runs once (agy loop, 0.5.0 trial)", async () => {
+    const router = createPanelRouter()
+    const model = panel(async () => ({ ok: false, reason: "formato non supportato" }))
+    router.register("model", model)
+
+    const line = "@ade model open <percorso> — apre un modello 3D del progetto"
+    const t = 1_000_000
+    expect(await router.handle(line, "agy", t)).toBeDefined()
+    // Each reply typed back makes agy redraw the screen, and the same line again.
+    for (let i = 1; i <= 5; i++) expect(await router.handle(line, "agy", t + i * 2000)).toBeUndefined()
+    expect(model.asked).toHaveLength(1)
+    // Another session writing the same line is its own request.
+    expect(await router.handle(line, "claude", t + 10_000)).toBeDefined()
+    // Once the line has stopped coming back, writing it again is a new request.
+    expect(await router.handle(line, "agy", t + 10_000 + REPEAT_WINDOW_MS)).toBeDefined()
+    expect(model.asked).toHaveLength(3)
+  })
+
+  test("text ADE typed into a session is not run when its TUI echoes it", async () => {
+    const router = createPanelRouter()
+    const model = panel(async () => ({ ok: true, detail: "" }))
+    router.register("model", model)
+
+    router.typed("s1", "[Messaggio da \"Voice\"]: prova   @ade model state   e dimmi")
+    expect(await router.handle("@ade model state", "s1")).toBeUndefined()
+    // The same line written by the agent of a session ADE typed nothing into runs.
+    expect(await router.handle("@ade model state", "s2")).toBeDefined()
+    expect(model.asked).toEqual(["state"])
+  })
+
+  test("opening a panel types nothing into the sessions (six prompts queued in Claude Code, 0.5.0 trial)", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const start = source.indexOf("const announcePanels = ")
+    expect(start).toBeGreaterThan(-1)
+    const body = source.slice(start, source.indexOf("\n  }\n", start))
+    expect(body).toContain("panels.greeting(panel)")
+    expect(body).not.toMatch(/\.write\(|typeLine|asSubmittedLine/)
   })
 
   test("the greeting describes the panel that is open, and nothing when none is", () => {

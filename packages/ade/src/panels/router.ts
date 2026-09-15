@@ -46,18 +46,49 @@ export interface PanelRouter {
   /** The panels that can be driven right now, in the order they opened. */
   open(): string[]
   /**
-   * Reads one line of agent output.
+   * Reads one line of agent output from session `from`.
    *
    * Resolves to `undefined` when the line was not a request at all, which is
-   * almost every line — the caller must not treat that as a failure.
+   * almost every line — the caller must not treat that as a failure. Also
+   * `undefined` for a line that is text ADE typed into that session coming
+   * back as echo, and for a request the session showed within
+   * `REPEAT_WINDOW_MS`: a TUI redraws its screen, and every redraw hands the
+   * same line to `onLine` again.
    */
-  handle(line: string): Promise<HandledRequest | undefined>
+  handle(line: string, from?: string, now?: number): Promise<HandledRequest | undefined>
+  /** Records text ADE typed into session `from`, so its echo is not read as the agent's. */
+  typed(from: string, text: string, now?: number): void
   /** The lines that tell a session a panel exists. Empty when it does not. */
   greeting(panel: string): string[]
 }
 
+/** A request line seen again this soon after its last sighting is a redraw, not a new request. */
+export const REPEAT_WINDOW_MS = 30_000
+/** How long text ADE typed into a session can come back as its echo. */
+export const ECHO_WINDOW_MS = 10 * 60_000
+/** The most typed texts remembered per session. */
+const MAX_TYPED = 32
+
+const normalize = (text: string) => text.replace(/\s+/g, " ").trim()
+
 export function createPanelRouter(): PanelRouter {
   const handlers = new Map<string, PanelHandler>()
+  const typedBy = new Map<string, { text: string; at: number }[]>()
+  const seenBy = new Map<string, Map<string, number>>()
+
+  /** Whether `raw` is part of something ADE typed into `from`, echoed or redrawn by its TUI. */
+  const isEcho = (from: string, raw: string, now: number) =>
+    (typedBy.get(from) ?? []).some((entry) => now - entry.at < ECHO_WINDOW_MS && entry.text.includes(raw))
+
+  /** Whether `raw` was already seen in `from` within the window; each sighting restarts it. */
+  const isRepeat = (from: string, raw: string, now: number) => {
+    let seen = seenBy.get(from)
+    if (!seen) seenBy.set(from, (seen = new Map()))
+    const last = seen.get(raw)
+    seen.set(raw, now)
+    if (seen.size > 64) for (const [key, at] of seen) if (now - at >= REPEAT_WINDOW_MS) seen.delete(key)
+    return last !== undefined && now - last < REPEAT_WINDOW_MS
+  }
 
   return {
     register(panel, handler) {
@@ -73,9 +104,17 @@ export function createPanelRouter(): PanelRouter {
       return [...handlers.keys()]
     },
 
-    async handle(line) {
+    typed(from, text, now = Date.now()) {
+      const entries = (typedBy.get(from) ?? []).filter((entry) => now - entry.at < ECHO_WINDOW_MS)
+      entries.push({ text: normalize(text), at: now })
+      typedBy.set(from, entries.slice(-MAX_TYPED))
+    },
+
+    async handle(line, from = "", now = Date.now()) {
       const request = parseRequest(line)
       if (!request) return undefined
+      const raw = normalize(request.raw)
+      if (isEcho(from, raw, now) || isRepeat(from, raw, now)) return undefined
 
       const handler = handlers.get(request.panel)
       if (!handler) {
