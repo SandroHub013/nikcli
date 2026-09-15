@@ -39,8 +39,31 @@ const LEFTOVER_TTL: Duration = Duration::from_secs(60 * 60 * 24);
 /// A message larger than this is not a message; the file is dropped unread.
 const MAX_MESSAGE_BYTES: u64 = 64 * 1024;
 
-pub fn mailbox_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let dir = app.path().app_local_data_dir().ok()?.join(MAILBOX_SUBDIR);
+/// Set by `bun run test:app` to give each worktree's ADE Test its own mailbox.
+const MAILBOX_ROOT_ENV: &str = "ADE_MAILBOX_ROOT";
+
+/// Where the mailbox is: the app's data directory, or for a test build the
+/// absolute folder in `ADE_MAILBOX_ROOT`.
+///
+/// Every ADE Test shares one identifier, so without this two of them, from
+/// two worktrees, shared a mailbox: each took the other's messages and the
+/// last one started rewrote `ade-msg` with its own version (S25). The
+/// official ADE never reads the variable, so a session that inherits it
+/// cannot move the user's mailbox.
+fn choose_root(test_build: bool, env: Option<std::ffi::OsString>, default: Option<PathBuf>) -> Option<PathBuf> {
+    let custom = env.map(PathBuf::from).filter(|path| path.is_absolute());
+    match (test_build, custom) {
+        (true, Some(path)) => Some(path),
+        _ => default,
+    }
+}
+
+pub fn mailbox_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let dir = choose_root(
+        crate::is_test_build(app),
+        std::env::var_os(MAILBOX_ROOT_ENV),
+        app.path().app_local_data_dir().ok().map(|data| data.join(MAILBOX_SUBDIR)),
+    )?;
     for sub in ["outbox", "receipts", "results", "bin"] {
         fs::create_dir_all(dir.join(sub)).ok()?;
     }
@@ -49,7 +72,7 @@ pub fn mailbox_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// The directory prepended to every session's PATH.
 pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
-    mailbox_dir(app).map(|dir| dir.join("bin"))
+    mailbox_path(app).map(|dir| dir.join("bin"))
 }
 
 /// Writes the `ade-msg` scripts and clears old leftovers. Called at startup.
@@ -57,7 +80,7 @@ pub fn bin_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
 /// Rewritten every launch rather than only when missing, so a session always
 /// runs the version that matches the ADE that will read its messages.
 pub fn install(app: &tauri::AppHandle) {
-    let Some(dir) = mailbox_dir(app) else { return };
+    let Some(dir) = mailbox_path(app) else { return };
     let bin = dir.join("bin");
     let _ = fs::write(bin.join("ade-msg.ps1"), PS1);
     let _ = fs::write(bin.join("ade-msg.cmd"), CMD);
@@ -116,7 +139,7 @@ pub struct Outgoing {
 /// what makes a message delivered at most once.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("outbox");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("outbox");
     let mut out = Vec::new();
     let entries = fs::read_dir(&dir).map_err(|e| format!("casella non leggibile: {e}"))?;
     for entry in entries.flatten() {
@@ -137,13 +160,21 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
     Ok(out)
 }
 
+/// The mailbox folder, for the frontend code that writes to it directly (the voice outbox).
+#[tauri::command]
+pub async fn mailbox_dir(app: tauri::AppHandle) -> Result<String, String> {
+    mailbox_path(&app)
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .ok_or_else(|| "casella non disponibile".into())
+}
+
 /// Tells the waiting `ade-msg` what happened to its message.
 #[tauri::command]
 pub async fn mailbox_receipt(app: tauri::AppHandle, id: String, text: String) -> Result<(), String> {
     if !valid_id(&id) {
         return Err("id messaggio non valido".into());
     }
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("receipts");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("receipts");
     write_whole(dir, &format!("{id}.txt"), &text)
 }
 
@@ -153,7 +184,7 @@ pub async fn mailbox_result(app: tauri::AppHandle, id: String, text: String) -> 
     if !valid_id(&id) {
         return Err("id richiesta non valido".into());
     }
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("results");
     write_whole(dir, &format!("{id}.txt"), &text)
 }
 
@@ -170,7 +201,7 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String, kind: Opt
     if !valid_id(&id) {
         return Err("id richiesta non valido".into());
     }
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("results");
     if kind.as_deref() == Some("update") {
         let taken = dir.join(format!("{id}.update-typed"));
         if fs::rename(dir.join(format!("{id}.update")), &taken).is_err() {
@@ -204,7 +235,7 @@ pub async fn mailbox_state(app: tauri::AppHandle, id: String, text: String, kind
         Some("update") => "update",
         Some(_) => return Err("tipo di stato sconosciuto".into()),
     };
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("results");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("results");
     if text.is_empty() {
         let _ = fs::remove_file(dir.join(format!("{id}.{ext}")));
         return Ok(());
@@ -221,7 +252,7 @@ pub async fn mailbox_inbox_put(app: tauri::AppHandle, pane: String, name: String
     if !valid_id(&pane) || !valid_id(&name) {
         return Err("id non valido".into());
     }
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
     fs::create_dir_all(dir.join("handled")).map_err(|e| format!("inbox non creata: {e}"))?;
     write_whole(dir, &format!("{name}.msg"), &text)
 }
@@ -232,7 +263,7 @@ pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: Strin
     if !valid_id(&pane) || !valid_id(&name) {
         return Err("id non valido".into());
     }
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
     Ok(!dir.join(format!("{name}.msg")).exists())
 }
 
@@ -248,7 +279,7 @@ pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: 
         Some("stats") => "stats",
         Some(_) => return Err("elenco sconosciuto".into()),
     };
-    let dir = mailbox_dir(&app).ok_or("casella non disponibile")?;
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
     write_whole(dir, &format!("{name}.txt"), &text)
 }
 
@@ -827,6 +858,17 @@ mod tests {
         // A path with a space, unquoted, arrives as two words: both must reach the lookup.
         assert!(SH.contains("who-owns) [ -n \"$head\" ] || usage; text=\"$head${text:+ $text}\""));
         assert!(PS1.contains("text = (@($pos) -join ' ')"));
+    }
+
+    #[test]
+    fn only_a_test_build_moves_the_mailbox_and_only_to_an_absolute_folder() {
+        let default = Some(PathBuf::from("default"));
+        let absolute = if cfg!(windows) { "C:\\w\\.ade-test\\mailbox" } else { "/w/.ade-test/mailbox" };
+        let env = || Some(std::ffi::OsString::from(absolute));
+        assert_eq!(choose_root(true, env(), default.clone()), Some(PathBuf::from(absolute)));
+        assert_eq!(choose_root(false, env(), default.clone()), default);
+        assert_eq!(choose_root(true, Some("relativa".into()), default.clone()), default);
+        assert_eq!(choose_root(true, None, default.clone()), default);
     }
 
     #[test]

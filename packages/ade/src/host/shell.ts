@@ -112,6 +112,8 @@ export interface Host {
   transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
   mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
+  /** The mailbox folder (per worktree in ADE Test, see `ADE_MAILBOX_ROOT`). */
+  mailboxDir?: () => Promise<string>
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
   mailboxInboxPut?: (pane: string, name: string, text: string) => Promise<void>
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
@@ -505,6 +507,11 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxState(id, text, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_state", { id, text, kind: kind ?? null })
+    },
+
+    async mailboxDir() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string>("mailbox_dir")
     },
 
     async mailboxInboxPut(pane, name, text) {

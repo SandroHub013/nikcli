@@ -497,7 +497,7 @@ pub async fn pty_spawn(
     if let (Some(pane), Some(bin), Some(box_dir)) = (
         pane.as_ref().filter(|p| !p.is_empty()),
         crate::mailbox::bin_dir(&app),
-        crate::mailbox::mailbox_dir(&app),
+        crate::mailbox::mailbox_path(&app),
     ) {
         let path = std::env::var_os("PATH").unwrap_or_default();
         let mut parts = vec![bin];
