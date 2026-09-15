@@ -237,7 +237,12 @@ export function ExtensionsPage(props: {
                     </Show>
                     <div data-slot="ext-card-actions">
                       <Show when={action().kind === "installed"}>
-                        <span data-slot="ext-installed">✓ Nel progetto</span>
+                        <Show
+                          when={installed().servers.find((server) => server.entry?.id === entry.id)?.problem}
+                          fallback={<span data-slot="ext-installed">✓ Nel progetto</span>}
+                        >
+                          {(problem) => <span data-slot="ext-warning">{problem()}</span>}
+                        </Show>
                       </Show>
                       <Show when={action().kind === "add"}>
                         <button
@@ -294,6 +299,9 @@ export function ExtensionsPage(props: {
                   <div data-slot="ext-row-text">
                     <b>{server.entry?.name ?? server.name}</b>
                     <code>{server.detail || "definizione incompleta"}</code>
+                    <Show when={server.problem}>
+                      <span data-slot="ext-warning">{server.problem}</span>
+                    </Show>
                     <Show when={server.variables.length > 0}>
                       <span data-slot="settings-meta">variabili: {server.variables.join(", ")}</span>
                     </Show>

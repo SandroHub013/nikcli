@@ -22,6 +22,19 @@ describe("MCP catalog", () => {
     }
   })
 
+  test("every remote card is written with the transport Claude Code needs", () => {
+    const remotes = MCP_CATALOG.filter((server) => server.installation.config.server.url)
+    expect(remotes.length).toBeGreaterThan(0)
+    for (const server of remotes) {
+      const config = server.installation.config.server
+      // The catalog has no SSE endpoint today; one would say "sse" explicitly.
+      expect(config.type).toBe(/\/sse\/?$/.test(config.url!) ? "sse" : "http")
+    }
+    for (const server of MCP_CATALOG.filter((entry) => entry.installation.config.server.command)) {
+      expect(server.installation.config.server.type).toBeUndefined()
+    }
+  })
+
   test("marks one-click entries only when they carry a complete configuration", () => {
     for (const server of MCP_CATALOG) {
       if (server.installation.mode === "one-click") {

@@ -114,6 +114,19 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
     throw new McpConfigError("invalid-server-config", "La configurazione MCP deve avere url oppure command.")
   }
 
+  if (hasUrl && hasCommand) {
+    throw new McpConfigError("invalid-server-config", "La configurazione MCP deve avere url oppure command, non entrambi.")
+  }
+  if (hasUrl && config.type !== "http" && config.type !== "sse") {
+    throw new McpConfigError(
+      "invalid-server-config",
+      'Un server MCP remoto deve dichiarare type "http" o "sse": senza, Claude Code lo ignora.',
+    )
+  }
+  if (hasCommand && config.type !== undefined && config.type !== "stdio") {
+    throw new McpConfigError("invalid-server-config", 'Un server MCP con command ha type "stdio" o nessun type.')
+  }
+
   if (hasUrl) {
     assertString(config.url, "url")
     try {
