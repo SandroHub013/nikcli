@@ -278,7 +278,7 @@ export namespace SessionProjector {
    */
   function isUserMessage(sessionID: string, messageID: string): boolean {
     try {
-      return MessageRepo.getMessage(sessionID, messageID)?.role === "user"
+      return Effect.runSync(MessageRepo.getMessage(sessionID, messageID))?.role === "user"
     } catch (error) {
       log.warn("failed to resolve message role", { sessionID, messageID, error })
       return false

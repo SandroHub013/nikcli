@@ -428,9 +428,9 @@ export namespace SessionPrompt {
   }
 
   function existingAdmission(sessionID: string, messageID: string, promptData: string) {
-    const existing = MessageRepo.getMessageWithParts(sessionID, messageID)
+    const existing = Effect.runSync(MessageRepo.getMessageWithParts(sessionID, messageID))
     if (!existing) return undefined
-    if (MessageRepo.getPromptData(sessionID, messageID) !== promptData) {
+    if (Effect.runSync(MessageRepo.getPromptData(sessionID, messageID)) !== promptData) {
       throw new SessionPending.ConflictError(sessionID, messageID)
     }
     return existing
@@ -520,7 +520,7 @@ export namespace SessionPrompt {
         if (!pending) {
           return {
             messageID,
-            message: MessageRepo.getMessageWithParts(admitted.sessionID, messageID),
+            message: Effect.runSync(MessageRepo.getMessageWithParts(admitted.sessionID, messageID)),
             controller,
             retry: true,
           } satisfies Admission
@@ -572,14 +572,14 @@ export namespace SessionPrompt {
     }
 
     if (admission.retry && admission.message) {
-      const reply = MessageRepo.listMessages(input.sessionID)
+      const reply = Effect.runSync(MessageRepo.listMessages(input.sessionID))
         .filter((message): message is MessageV2.Assistant => message.role === "assistant")
         .findLast((message) => message.parentID === admission.messageID && !!message.finish)
       if (reply) {
         if (admission.controller) {
           await PromptState.finish(input.sessionID, admission.controller)
         }
-        return MessageRepo.getMessageWithParts(input.sessionID, reply.id)!
+        return Effect.runSync(MessageRepo.getMessageWithParts(input.sessionID, reply.id))!
       }
     }
 

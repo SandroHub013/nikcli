@@ -199,7 +199,9 @@ export namespace SessionV2 {
    */
   export async function entries(sessionID: string): Promise<SessionEntry.Entry[]> {
     const rows = Effect.runSync(SessionEntryRepo.list(sessionID))
-    if (Effect.runSync(SessionEntryRepo.messageCount(sessionID)) >= MessageRepo.countMessages(sessionID)) return rows
+    const projected = Effect.runSync(SessionEntryRepo.messageCount(sessionID))
+    const stored = Effect.runSync(MessageRepo.countMessages(sessionID))
+    if (projected >= stored) return rows
 
     const messages = await runSession(
       Effect.gen(function* () {

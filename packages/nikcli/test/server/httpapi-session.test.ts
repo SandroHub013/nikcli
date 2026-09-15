@@ -1,4 +1,5 @@
 import type { JsonValue } from "@/util/json"
+import { Effect } from "effect"
 import type { Session } from "@/session"
 import type { SessionStatus } from "@/session/status"
 import { preserveTestEnv } from "../helpers/env"
@@ -524,8 +525,8 @@ describe("Session HttpApi bridge", () => {
     }
     // message reads go through the SQL repo since the Drizzle adoption, so
     // the fixture must be written there, not into legacy JSON storage
-    MessageRepo.upsertMessage(message as never)
-    MessageRepo.upsertPart(part as never)
+    Effect.runSync(MessageRepo.upsertMessage(message as never))
+    Effect.runSync(MessageRepo.upsertPart(part as never))
 
     const single = (await request(`/session/${created.id}/message/${messageID}`, directory)) as {
       info: { id: string }
@@ -566,7 +567,7 @@ describe("Session HttpApi bridge", () => {
     )) as boolean
     expect(removedPart).toBe(true)
 
-    MessageRepo.upsertPart(part as never)
+    Effect.runSync(MessageRepo.upsertPart(part as never))
     const removedMessage = (await remove(`/session/${created.id}/message/${messageID}`, directory)) as boolean
     expect(removedMessage).toBe(true)
 
@@ -683,21 +684,25 @@ describe("Session HttpApi bridge", () => {
 
     const messageID = "msg_mismatch"
     const partID = "prt_mismatch"
-    MessageRepo.upsertMessage({
-      id: messageID,
-      sessionID: created.id,
-      role: "user",
-      time: { created: Date.now() },
-      agent: "general",
-      model: { providerID: "openai", modelID: "gpt-5" },
-    } as never)
-    MessageRepo.upsertPart({
-      id: partID,
-      sessionID: created.id,
-      messageID,
-      type: "text",
-      text: "hello",
-    } as never)
+    Effect.runSync(
+      MessageRepo.upsertMessage({
+        id: messageID,
+        sessionID: created.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "general",
+        model: { providerID: "openai", modelID: "gpt-5" },
+      } as never),
+    )
+    Effect.runSync(
+      MessageRepo.upsertPart({
+        id: partID,
+        sessionID: created.id,
+        messageID,
+        type: "text",
+        text: "hello",
+      } as never),
+    )
 
     const url = new URL(`/session/${created.id}/message/${messageID}/part/${partID}`, "http://nikcli.local")
     url.searchParams.set("directory", directory)

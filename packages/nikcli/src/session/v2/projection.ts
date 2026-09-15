@@ -30,7 +30,7 @@ export namespace SessionEntryProjection {
    * memory so the write does not depend on `message_part` already holding it.
    */
   function partsForUser(messageID: string, incoming?: MessageV2.Part, without?: string): MessageV2.Part[] {
-    let parts = MessageRepo.listParts(messageID)
+    let parts = Effect.runSync(MessageRepo.listParts(messageID))
     if (without) parts = parts.filter((part) => part.id !== without)
     if (!incoming) return parts
     const index = parts.findIndex((part) => part.id === incoming.id)
@@ -99,7 +99,7 @@ export namespace SessionEntryProjection {
    * of its own, upserted on the part id so a stream of deltas stays one row.
    */
   export function part(tx: Executor, input: MessageV2.Part): SessionEntry.Entry | undefined {
-    const info = MessageRepo.getMessage(input.sessionID, input.messageID)
+    const info = Effect.runSync(MessageRepo.getMessage(input.sessionID, input.messageID))
     if (info?.role === "user" && SessionEntry.foldsIntoUser(input)) {
       return user(tx, info, input)
     }
@@ -123,7 +123,7 @@ export namespace SessionEntryProjection {
   }
 
   export function partRemoved(tx: Executor, sessionID: string, messageID: string, partID: string): void {
-    const info = MessageRepo.getMessage(sessionID, messageID)
+    const info = Effect.runSync(MessageRepo.getMessage(sessionID, messageID))
     if (info?.role === "user") {
       user(tx, info, undefined, partID)
     }

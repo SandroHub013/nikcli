@@ -598,7 +598,7 @@ export namespace Session {
       const session = await getImpl(ctx, sessionID)
 
       // Record session end analytics before removing
-      const sessionMessages = MessageRepo.listMessages(sessionID)
+      const sessionMessages = Effect.runSync(MessageRepo.listMessages(sessionID))
       let totalInput = 0,
         totalOutput = 0,
         totalReasoning = 0,
@@ -629,7 +629,7 @@ export namespace Session {
       // Count tool parts
       for (const msg of sessionMessages) {
         try {
-          const parts = MessageRepo.listParts(msg.id)
+          const parts = Effect.runSync(MessageRepo.listParts(msg.id))
           for (const part of parts) {
             try {
               if (part.type === "tool") toolCalls++
@@ -676,7 +676,7 @@ export namespace Session {
       })
       // Remove all messages and their parts via SQL
       for (const msg of sessionMessages) {
-        MessageRepo.removeMessage(sessionID, msg.id)
+        Effect.runSync(MessageRepo.removeMessage(sessionID, msg.id))
       }
       try {
         Effect.runSync(SessionDiffRepo.remove(sessionID))

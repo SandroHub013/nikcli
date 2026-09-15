@@ -297,10 +297,10 @@ describe("SessionV2 write API", () => {
           (entry) => entry.type === "user",
         ) as SessionEntryTypes.User
         expect(user.text).toBe("from persist")
-        expect(MessageRepo.getMessage(session.id, messageID)).toEqual(
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, messageID))).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([user]))),
         )
-        expect(MessageRepo.getPromptData(session.id, messageID)).toBe(promptData)
+        expect(Effect.runSync(MessageRepo.getPromptData(session.id, messageID))).toBe(promptData)
       },
     })
   })
@@ -353,7 +353,7 @@ describe("SessionV2 write API", () => {
           )
         }).toThrow("boom")
         expect(Effect.runSync(SessionEntryRepo.list(session.id)).some((entry) => entry.type === "user")).toBe(false)
-        expect(MessageRepo.getMessage(session.id, messageID)).toBeUndefined()
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, messageID))).toBeUndefined()
       },
     })
   })

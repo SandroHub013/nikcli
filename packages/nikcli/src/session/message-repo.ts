@@ -1,4 +1,5 @@
 import { eq, asc, count } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { messageInfo, messagePart } from "./message.sql"
 import type { MessageV2 } from "./message-v2"
@@ -8,10 +9,6 @@ import type { MessageV2 } from "./message-v2"
  * Provides synchronous CRUD operations against the central nikcli.db.
  */
 export namespace MessageRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   /**
    * Writes accept an executor so a projector can run inside the same
    * transaction that appends its event (see sync/sync-event.ts). Reads stay
@@ -23,20 +20,32 @@ export namespace MessageRepo {
   // Message operations
   // ============================================================================
 
-  export function getMessage(sessionId: string, messageId: string): MessageV2.Info | undefined {
-    const row = db().select().from(messageInfo).where(eq(messageInfo.id, messageId)).get()
-    if (!row) return undefined
-    return JSON.parse(row.info) as MessageV2.Info
+  export function getMessage(sessionId: string, messageId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.getMessage",
+      (db) => {
+        const row = db.select().from(messageInfo).where(eq(messageInfo.id, messageId)).get()
+        if (!row) return undefined
+        return JSON.parse(row.info) as MessageV2.Info
+      },
+      executor,
+    )
   }
 
-  export function listMessages(sessionId: string): MessageV2.Info[] {
-    const rows = db()
-      .select()
-      .from(messageInfo)
-      .where(eq(messageInfo.sessionId, sessionId))
-      .orderBy(asc(messageInfo.createdAt))
-      .all()
-    return rows.map((row) => JSON.parse(row.info) as MessageV2.Info)
+  export function listMessages(sessionId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.listMessages",
+      (db) => {
+        const rows = db
+          .select()
+          .from(messageInfo)
+          .where(eq(messageInfo.sessionId, sessionId))
+          .orderBy(asc(messageInfo.createdAt))
+          .all()
+        return rows.map((row) => JSON.parse(row.info) as MessageV2.Info)
+      },
+      executor,
+    )
   }
 
   /**
@@ -49,99 +58,155 @@ export namespace MessageRepo {
    * `SELECT COUNT(*)` instead of `SELECT id … array.length` so the database
    * never streams full row data for a query whose only product is a number.
    */
-  export function countMessages(sessionId: string): number {
-    return db().select({ c: count() }).from(messageInfo).where(eq(messageInfo.sessionId, sessionId)).get()?.c ?? 0
+  export function countMessages(sessionId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.countMessages",
+      (db) => {
+        return db.select({ c: count() }).from(messageInfo).where(eq(messageInfo.sessionId, sessionId)).get()?.c ?? 0
+      },
+      executor,
+    )
   }
 
-  export function upsertMessage(msg: MessageV2.Info, tx: Executor = db()): void {
-    tx.insert(messageInfo)
-      .values({
-        id: msg.id,
-        sessionId: msg.sessionID,
-        role: msg.role,
-        info: JSON.stringify(msg),
-        createdAt: msg.time.created,
-      })
-      .onConflictDoUpdate({
-        target: messageInfo.id,
-        set: {
-          info: JSON.stringify(msg),
-        },
-      })
-      .run()
+  export function upsertMessage(msg: MessageV2.Info, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.upsertMessage",
+      (db) => {
+        db.insert(messageInfo)
+          .values({
+            id: msg.id,
+            sessionId: msg.sessionID,
+            role: msg.role,
+            info: JSON.stringify(msg),
+            createdAt: msg.time.created,
+          })
+          .onConflictDoUpdate({
+            target: messageInfo.id,
+            set: {
+              info: JSON.stringify(msg),
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function removeMessage(sessionId: string, messageId: string, tx: Executor = db()): boolean {
-    // Remove associated parts first
-    tx.delete(messagePart).where(eq(messagePart.messageId, messageId)).run()
-    const result = tx.delete(messageInfo).where(eq(messageInfo.id, messageId)).run()
-    return (result as any).changes > 0
+  export function removeMessage(sessionId: string, messageId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.removeMessage",
+      (db) => {
+        // Remove associated parts first
+        db.delete(messagePart).where(eq(messagePart.messageId, messageId)).run()
+        const result = db.delete(messageInfo).where(eq(messageInfo.id, messageId)).run()
+        return (result as { changes: number }).changes > 0
+      },
+      executor,
+    )
   }
 
   // ============================================================================
   // Part operations
   // ============================================================================
 
-  export function getPart(messageId: string, partId: string): MessageV2.Part | undefined {
-    const row = db().select().from(messagePart).where(eq(messagePart.id, partId)).get()
-    if (!row) return undefined
-    return JSON.parse(row.info) as MessageV2.Part
+  export function getPart(messageId: string, partId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.getPart",
+      (db) => {
+        const row = db.select().from(messagePart).where(eq(messagePart.id, partId)).get()
+        if (!row) return undefined
+        return JSON.parse(row.info) as MessageV2.Part
+      },
+      executor,
+    )
   }
 
-  export function listParts(messageId: string): MessageV2.Part[] {
-    const rows = db()
-      .select()
-      .from(messagePart)
-      .where(eq(messagePart.messageId, messageId))
-      .orderBy(asc(messagePart.sortKey))
-      .all()
-    return rows.map((row) => JSON.parse(row.info) as MessageV2.Part)
+  export function listParts(messageId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.listParts",
+      (db) => {
+        const rows = db
+          .select()
+          .from(messagePart)
+          .where(eq(messagePart.messageId, messageId))
+          .orderBy(asc(messagePart.sortKey))
+          .all()
+        return rows.map((row) => JSON.parse(row.info) as MessageV2.Part)
+      },
+      executor,
+    )
   }
 
-  export function upsertPart(part: MessageV2.Part, tx: Executor = db()): void {
-    tx.insert(messagePart)
-      .values({
-        id: part.id,
-        messageId: part.messageID,
-        sessionId: part.sessionID,
-        type: part.type,
-        info: JSON.stringify(part),
-        sortKey: part.id,
-      })
-      .onConflictDoUpdate({
-        target: messagePart.id,
-        set: {
-          type: part.type,
-          info: JSON.stringify(part),
-        },
-      })
-      .run()
+  export function upsertPart(part: MessageV2.Part, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.upsertPart",
+      (db) => {
+        db.insert(messagePart)
+          .values({
+            id: part.id,
+            messageId: part.messageID,
+            sessionId: part.sessionID,
+            type: part.type,
+            info: JSON.stringify(part),
+            sortKey: part.id,
+          })
+          .onConflictDoUpdate({
+            target: messagePart.id,
+            set: {
+              type: part.type,
+              info: JSON.stringify(part),
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function removePart(messageId: string, partId: string, tx: Executor = db()): boolean {
-    const result = tx.delete(messagePart).where(eq(messagePart.id, partId)).run()
-    return (result as any).changes > 0
+  export function removePart(messageId: string, partId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.removePart",
+      (db) => {
+        const result = db.delete(messagePart).where(eq(messagePart.id, partId)).run()
+        return (result as { changes: number }).changes > 0
+      },
+      executor,
+    )
   }
 
   // ============================================================================
   // Composite operations
   // ============================================================================
 
-  export function getMessageWithParts(sessionId: string, messageId: string): MessageV2.WithParts | undefined {
-    const info = getMessage(sessionId, messageId)
-    if (!info) return undefined
-    const parts = listParts(messageId)
-    return { info, parts }
+  export function getMessageWithParts(sessionId: string, messageId: string, executor?: Executor) {
+    return Effect.gen(function* () {
+      const info = yield* getMessage(sessionId, messageId, executor)
+      if (!info) return undefined
+      const parts = yield* listParts(messageId, executor)
+      return { info, parts }
+    })
   }
 
-  export function getPromptData(sessionId: string, messageId: string, tx: Executor = db()): string | undefined {
-    return (
-      tx.select({ promptData: messageInfo.promptData }).from(messageInfo).where(eq(messageInfo.id, messageId)).get()
-        ?.promptData ?? undefined
+  export function getPromptData(sessionId: string, messageId: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.getPromptData",
+      (db) => {
+        return (
+          db.select({ promptData: messageInfo.promptData }).from(messageInfo).where(eq(messageInfo.id, messageId)).get()
+            ?.promptData ?? undefined
+        )
+      },
+      executor,
     )
   }
 
-  export function setPromptData(messageId: string, promptData: string, tx: Executor = db()): void {
-    tx.update(messageInfo).set({ promptData }).where(eq(messageInfo.id, messageId)).run()
+  export function setPromptData(messageId: string, promptData: string, executor?: Executor) {
+    return Database.query(
+      "MessageRepo.setPromptData",
+      (db) => {
+        db.update(messageInfo).set({ promptData }).where(eq(messageInfo.id, messageId)).run()
+      },
+      executor,
+    )
   }
 }
