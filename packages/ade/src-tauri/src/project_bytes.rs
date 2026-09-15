@@ -14,6 +14,12 @@ use std::io::Read;
 
 use crate::{within_roots, WriteRoots};
 
+/// The most any caller gets, whatever `max_bytes` it asks for. The panel's
+/// own limit (`MAX_MODEL_BYTES`, 256 MB) is a request from the page, and the
+/// page is not the only thing that can call this: a limit only the caller
+/// enforces lets one `invoke` pull a multi-gigabyte pack file into memory.
+pub const HARD_CAP_BYTES: u64 = 256 * 1024 * 1024;
+
 /// The file's bytes, refused when it is outside every open project or larger
 /// than `max_bytes`.
 ///
@@ -29,6 +35,7 @@ pub async fn read_project_bytes(
 }
 
 fn read_confined(roots: &WriteRoots, path: &str, max_bytes: u64) -> Result<Vec<u8>, String> {
+    let max_bytes = max_bytes.min(HARD_CAP_BYTES);
     let resolved = within_roots(roots, path)?;
     let file = std::fs::File::open(&resolved).map_err(|e| format!("{path}: {e}"))?;
     let meta = file.metadata().map_err(|e| format!("{path}: {e}"))?;
@@ -109,5 +116,41 @@ mod tests {
         std::fs::write(&file, vec![0u8; 4096]).unwrap();
         let error = read_confined(&dir.roots(), &file.to_string_lossy(), 1024).unwrap_err();
         assert!(error.contains("troppo grande"));
+    }
+
+    #[test]
+    fn a_huge_limit_from_the_caller_is_capped_by_the_host() {
+        let dir = TempDir::new("cap");
+        let file = dir.0.join("pack.bin");
+        let handle = std::fs::File::create(&file).unwrap();
+        // Sparse where the filesystem allows it: the length is what is checked.
+        handle.set_len(HARD_CAP_BYTES + 1).unwrap();
+        drop(handle);
+        let error = read_confined(&dir.roots(), &file.to_string_lossy(), u64::MAX).unwrap_err();
+        assert!(error.contains("il limite è 256 MB"), "{error}");
+    }
+
+    #[test]
+    fn refuses_a_directory_and_a_missing_file() {
+        let dir = TempDir::new("kinds");
+        std::fs::create_dir_all(dir.0.join("models")).unwrap();
+        assert!(read_confined(&dir.roots(), &dir.0.join("models").to_string_lossy(), 1024).is_err());
+        assert!(read_confined(&dir.roots(), &dir.0.join("nope.glb").to_string_lossy(), 1024).is_err());
+    }
+
+    /// A link inside the project that points outside it is outside it.
+    #[test]
+    fn refuses_a_file_reached_through_a_link_that_leaves_the_project() {
+        let project = TempDir::new("linked");
+        let other = TempDir::new("elsewhere");
+        std::fs::write(other.0.join("secret.bin"), b"x").unwrap();
+        let link = project.0.join("escape");
+        #[cfg(windows)]
+        junction::create(&other.0, &link).expect("junction");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&other.0, &link).expect("symlink");
+        let through = link.join("secret.bin");
+        assert!(through.exists(), "the link works");
+        assert!(read_confined(&project.roots(), &through.to_string_lossy(), 1024).is_err());
     }
 }

@@ -202,6 +202,28 @@ export interface ReloadDecision {
  * on the previous poll. A reload happens only when a change has held still
  * for a whole interval, and never for a file that is currently missing.
  */
+/**
+ * The files to stamp before loading `path`: what the last load of the same
+ * file read, so a texture saved during the load counts; just the file for
+ * one not loaded before.
+ */
+export function filesToStamp(path: string, framed: string, watched: readonly string[]): readonly string[] {
+  return path === framed && watched.length > 0 ? watched : [path]
+}
+
+export function sameFiles(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((file) => set.has(file))
+}
+
+/** The reason a load overtaken by a later one gives; not an error to show. */
+export const SUPERSEDED = "caricamento superato da uno più recente"
+
+export function isSuperseded(failure: unknown): boolean {
+  return failure instanceof Error && failure.message === SUPERSEDED
+}
+
 export function decideReload(loaded: string, pending: string | undefined, next: string): ReloadDecision {
   if (next === loaded) return { pending: undefined, reload: false }
   if (next.split("|")[0] === "-") return { pending: undefined, reload: false }

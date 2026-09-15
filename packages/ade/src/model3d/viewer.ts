@@ -28,6 +28,7 @@ import {
   mtlTextures,
   objMaterialLibraries,
   resolveResource,
+  SUPERSEDED,
   viewDirection,
   type ModelStats,
   type ViewPreset,
@@ -45,7 +46,11 @@ export interface LoadResult {
 
 export interface ModelViewer {
   /** `reframe` false keeps the camera where the user put it: a reload of the same file. */
-  load(path: string, read: ReadBytes, reframe: boolean): Promise<LoadResult>
+  /**
+   * `isCurrent` is asked right before the scene is replaced: a load that was
+   * overtaken by a later one is parsed, disposed and never shown.
+   */
+  load(path: string, read: ReadBytes, reframe: boolean, isCurrent?: () => boolean): Promise<LoadResult>
   view(preset: ViewPreset): void
   /** Re-reads the colours from the stage element, after a theme change. */
   syncTheme(): void
@@ -196,7 +201,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
 
   /* ── Loading ──────────────────────────────────────────────────────── */
 
-  const load = async (path: string, read: ReadBytes, reframe: boolean): Promise<LoadResult> => {
+  const load = async (path: string, read: ReadBytes, reframe: boolean, isCurrent?: () => boolean): Promise<LoadResult> => {
     const format = modelFormat(path)
     if (!format) throw new Error("formato non supportato")
 
@@ -298,6 +303,10 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
       }
 
       await loadsSettled()
+      if (isCurrent && !isCurrent()) {
+        disposeObject(object)
+        throw new Error(SUPERSEDED)
+      }
       replaceModel(object, reframe)
       return { stats: statsOf(object, animations), files, missing }
     } finally {
@@ -392,13 +401,23 @@ function statsOf(object: THREE.Object3D, animations: number): ModelStats {
   return { meshes, triangles, size: [size.x, size.y, size.z], animations }
 }
 
+/*
+ * Every drawable, not only meshes: `OBJLoader` makes `LineSegments` for `l`
+ * records and `Points` for `p`, and FBX can carry lines. Skipping them left
+ * their buffers on the GPU after every reload.
+ */
 function disposeObject(object: THREE.Object3D) {
   object.traverse((child) => {
-    const mesh = child as THREE.Mesh
-    if (!mesh.isMesh) return
-    mesh.geometry.dispose()
-    disposeMaterial(mesh.material)
+    const drawable = child as THREE.Mesh | THREE.Line | THREE.Points
+    if (!isDrawable(drawable)) return
+    drawable.geometry.dispose()
+    disposeMaterial(drawable.material)
   })
+}
+
+function isDrawable(object: THREE.Object3D): object is THREE.Mesh | THREE.Line | THREE.Points {
+  const flags = object as Partial<Record<"isMesh" | "isLine" | "isPoints", boolean>>
+  return Boolean(flags.isMesh || flags.isLine || flags.isPoints)
 }
 
 function disposeMaterial(material: THREE.Material | THREE.Material[]) {

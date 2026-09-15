@@ -6,6 +6,9 @@ import type { ModelController } from "./commands"
 import {
   changeStamp,
   decideReload,
+  filesToStamp,
+  isSuperseded,
+  sameFiles,
   describeModelState,
   directoryOf,
   isModel,
@@ -71,7 +74,11 @@ export function ModelPane(props: ModelPaneProps) {
   let watched: readonly string[] = []
   let loadedStamp = ""
   let pendingStamp: string | undefined
-  /* Loads are serialised: a save during a load reloads after it, not over it. */
+  /*
+   * Only the latest load reaches the scene. Two can overlap — an agent opens
+   * a file while the watcher reloads another — and the one that finishes
+   * last is not always the one that started last.
+   */
   let generation = 0
   /* The file the camera was last framed on; a reload of it keeps the view. */
   let framed = ""
@@ -116,24 +123,34 @@ export function ModelPane(props: ModelPaneProps) {
     const read = props.readBytes
     setLoading(true)
     setError(undefined)
+    /*
+     * Stamped before the read, not after: a save that lands while the file is
+     * being parsed must look like a change on the next poll. Stamped after,
+     * it matched what was on disk by then and the pane stayed on the old
+     * model, or on the error from the half-written one.
+     */
+    const expected = filesToStamp(path, framed, watched)
+    const before = await stampNow(expected)
     try {
       const scene = await ensureViewer()
-      const result = await scene.load(path, (file) => read(file, MAX_MODEL_BYTES), path !== framed)
+      const result = await scene.load(path, (file) => read(file, MAX_MODEL_BYTES), path !== framed, () => mine === generation)
       if (mine !== generation) return
       framed = path
       setStats(result.stats)
       setNote(result.missing.length > 0 ? `risorse non trovate: ${result.missing.join(", ")}` : undefined)
       watched = result.files
-      loadedStamp = await stampNow(watched)
+      // Files first seen in this load have no earlier stamp; one poll re-reads them.
+      loadedStamp = sameFiles(expected, watched) ? before : ""
       pendingStamp = undefined
     } catch (failure) {
-      if (mine !== generation) return
+      if (mine !== generation || isSuperseded(failure)) return
       setStats(undefined)
       setError(failure instanceof Error ? failure.message : String(failure))
       // Watched anyway: a file that failed to parse halfway through an export
       // is exactly the one that will be fixed by the next save.
       watched = [path]
-      loadedStamp = await stampNow(watched)
+      loadedStamp = before
+      pendingStamp = undefined
     } finally {
       if (mine === generation) setLoading(false)
     }
