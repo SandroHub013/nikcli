@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
-import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, resolveRecipient } from "./delivery"
+import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, recipientOptions, resolveRecipient } from "./delivery"
 import type { DecisionEvent } from "./log"
 import { foldDecisions } from "./state"
 
@@ -102,6 +102,20 @@ describe("who hears about an answer", () => {
     expect(recipientChange("a", undefined, 3)).toBe("applica")
     expect(recipientChange("a", "a", 3)).toBe("nessuna")
     expect(recipientChange(undefined, undefined, 3)).toBe("nessuna")
+  })
+
+  test("the selector shows the real recipient, not its first entry", () => {
+    const shown = (options: { value: string; selected: boolean }[]) => options.filter((option) => option.selected).map((option) => option.value)
+    // After "Consegna": the recipient is chosen and nothing is pending.
+    expect(shown(recipientOptions(panes, { state: "pronta", id: "b", title: "Master" }))).toEqual(["b"])
+    // Rebuilt from fresh session objects, as a delivery note causes: still "b".
+    expect(shown(recipientOptions(panes.map((pane) => ({ ...pane })), { state: "pronta", id: "b", title: "Master" }))).toEqual(["b"])
+    expect(shown(recipientOptions(panes, { state: "non scelta" }))).toEqual([""])
+    // A pick waiting for confirmation is what the select shows meanwhile.
+    expect(shown(recipientOptions(panes, { state: "non scelta" }, "a"))).toEqual(["a"])
+    const closed = recipientOptions(panes, { state: "non attiva", id: "z", title: "Vecchia" })
+    expect(closed.at(-1)).toEqual({ value: "z", label: "Vecchia (chiusa)", selected: true })
+    expect(recipientOptions(panes, { state: "non scelta" }).map((option) => option.label)).toContain("master · S18 · nikcli (ferma)")
   })
 
   test("the choice is kept per project and survives a bad value", () => {

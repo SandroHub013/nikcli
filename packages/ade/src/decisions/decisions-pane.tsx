@@ -1,8 +1,8 @@
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
-import { recipientChange, type RecipientStatus } from "./delivery"
+import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
@@ -248,27 +248,25 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
       if (change === "applica") props.hub.choose(next)
     }
   }
-  // A chosen session whose pane was closed is still listed, so the choice stays visible.
-  const missing = () => {
-    const current = status()
-    return current.state !== "non scelta" && !props.hub.sessions().some((pane) => pane.id === current.id) ? current : undefined
-  }
+  const options = createMemo(() => recipientOptions(props.hub.sessions(), status(), pending()))
+  let selectEl: HTMLSelectElement | undefined
+  // After the options are rebuilt, put the select back on the entry it must show.
+  createEffect(() => {
+    const shown = options().find((option) => option.selected)?.value ?? ""
+    if (selectEl && selectEl.value !== shown) selectEl.value = shown
+  })
   return (
     <div data-slot="decisions-recipient" data-state={status().state}>
       <label>
         <span>Risposte a</span>
-        <select value={pending() ?? chosenId()} onChange={(event) => select(event.currentTarget.value)}>
-          <option value="">nessuna sessione</option>
-          <For each={props.hub.sessions()}>
-            {(pane) => (
-              <option value={pane.id}>
-                {pane.title}
-                {pane.project ? ` · ${pane.project}` : ""}
-                {pane.running ? "" : " (ferma)"}
+        <select ref={selectEl} onChange={(event) => select(event.currentTarget.value)}>
+          <For each={options()}>
+            {(option) => (
+              <option value={option.value} selected={option.selected}>
+                {option.label}
               </option>
             )}
           </For>
-          <Show when={missing()}>{(gone) => <option value={gone().id}>{gone().title} (chiusa)</option>}</Show>
         </select>
       </label>
       <Show when={pending()}>
@@ -281,8 +279,8 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
             data-slot="decision-submit"
             onClick={() => {
               const next = pending()
-              setPending(undefined)
               props.hub.choose(next)
+              setPending(undefined)
             }}
           >
             Consegna

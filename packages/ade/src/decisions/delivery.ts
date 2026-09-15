@@ -72,6 +72,39 @@ export type RecipientStatus =
   /** Chosen, but closed or not running: answers wait until it runs again. */
   | { readonly state: "non attiva"; readonly id: string; readonly title: string }
 
+export interface RecipientOption {
+  readonly value: string
+  readonly label: string
+  readonly selected: boolean
+}
+
+/**
+ * The entries of the "Risposte a" selector, with the one it shows marked.
+ *
+ * What it shows is the confirmation waiting, else the real recipient: never
+ * "nessuna sessione" while answers are going to somebody. Each option carries
+ * `selected` because the list is rebuilt whenever a session changes (a note
+ * appended on delivery is enough), and a rebuilt list left to the select's own
+ * `value` fell back to its first entry.
+ */
+export function recipientOptions(
+  sessions: readonly DeliveryCandidate[],
+  recipient: RecipientStatus,
+  pending?: string,
+): RecipientOption[] {
+  const shown = pending ?? (recipient.state === "non scelta" ? "" : recipient.id)
+  const options: RecipientOption[] = [{ value: "", label: "nessuna sessione", selected: shown === "" }]
+  for (const pane of sessions) {
+    const label = `${pane.title}${pane.project ? ` · ${pane.project}` : ""}${pane.running ? "" : " (ferma)"}`
+    options.push({ value: pane.id, label, selected: pane.id === shown })
+  }
+  // A chosen session whose pane was closed is still listed, so the choice stays visible.
+  if (recipient.state !== "non scelta" && !sessions.some((pane) => pane.id === recipient.id)) {
+    options.push({ value: recipient.id, label: `${recipient.title} (chiusa)`, selected: recipient.id === shown })
+  }
+  return options
+}
+
 /**
  * What a change in the "Risposte a" selector does. Arrow keys on a closed
  * select change it one entry at a time, so a change that would send queued
