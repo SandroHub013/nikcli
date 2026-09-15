@@ -113,6 +113,15 @@ export {
   type NaturalSpeaker,
   type NaturalSpeakerDeps,
 } from "./tts/natural-speaker"
+export {
+  createPlaybackMeter,
+  levelAt,
+  syntheticSpeechLevel,
+  wavEnvelope,
+  type Envelope,
+  type PlaybackMeter,
+} from "./tts/playback-level"
+export { orbPhase, orbCentered, type OrbPhase } from "./ui/agent-orb-state"
 
 export {
   replySpeech,
@@ -157,6 +166,7 @@ export { VoiceOrb, orbLevel, type VoiceOrbProps } from "./ui/voice-orb"
 export { OrbMark, type OrbMarkProps, type OrbRim } from "./ui/orb-mark"
 
 export { VoiceHud, type VoiceHudProps } from "./ui/voice-hud"
+export { AgentOrb, type AgentOrbProps } from "./ui/agent-orb"
 
 export { NikMic, type NikMicProps } from "./ui/nik-mic"
 

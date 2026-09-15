@@ -127,6 +127,26 @@ export {
   type NaturalSpeaker,
   type NaturalSpeakerDeps,
 } from "./tts/natural-speaker"
+export {
+  createPlaybackMeter,
+  levelAt,
+  syntheticSpeechLevel,
+  wavEnvelope,
+  type Envelope,
+  type PlaybackMeter,
+} from "./tts/playback-level"
+export {
+  MAX_PUSH,
+  ORB_CENTER_SIZE,
+  ORB_DOCK_SIZE,
+  orbCentered,
+  orbColor,
+  orbPhase,
+  projectPoint,
+  spherePoints,
+  type OrbPhase,
+  type OrbPhaseInput,
+} from "./ui/agent-orb-state"
 
 // Voice orchestration engine
 export {

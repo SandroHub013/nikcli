@@ -255,7 +255,9 @@ import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
 import { decisionsPath } from "../decisions/store"
 import {
+  AgentOrb,
   createMicMeter,
+  createPlaybackMeter,
   createVoiceEngine,
   createWebSpeechSpeaker,
   createFakeSpeaker,
@@ -2262,10 +2264,28 @@ export function Workbench() {
     onFinal: () => {},
     onError: () => {},
   }
-  const systemSpeaker =
+  /*
+   * S33: how loud the reply is while it plays, for the agent's sphere. Piper's
+   * sentences are measured from their WAV; the system voice has no samples, so
+   * while it speaks the meter pulses instead.
+   */
+  const playbackMeter = createPlaybackMeter()
+  const webSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
       ? createWebSpeechSpeaker({ lang: "it-IT" })
       : createFakeSpeaker()
+  const systemSpeaker = {
+    ...webSpeaker,
+    speak: async (text: string) => {
+      const stop = playbackMeter.pulse()
+      try {
+        await webSpeaker.speak(text)
+      } finally {
+        stop()
+      }
+    },
+    cancel: () => webSpeaker.cancel(),
+  }
   /*
    * S15: replies in Piper's voice where the desktop host has it, with the
    * system voice underneath while it downloads or when it fails. The host is
@@ -2287,7 +2307,7 @@ export function Workbench() {
       if (!host?.ttsPiperSpeak) throw new Error("Nessun host per la voce.")
       return host.ttsPiperSpeak(voice, text)
     },
-    play: (wav, signal) => playWav(wav, signal, voiceSettings().outputDeviceId),
+    play: (wav, signal) => playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter),
     fallback: systemSpeaker,
     onInstall: (voice, state, problem) => {
       if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
@@ -4971,6 +4991,13 @@ export function Workbench() {
           }
         }}
         onOpenSettings={() => setVoiceSettingsOpen(true)}
+      />
+
+      {/* S33: the agent speaks through its own sphere, over the workspace. */}
+      <AgentOrb
+        engine={voiceEngine}
+        meter={playbackMeter}
+        stage={() => document.querySelector('[data-slot="ade-main"]')}
       />
     </div>
   )

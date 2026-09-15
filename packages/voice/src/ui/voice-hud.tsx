@@ -145,12 +145,6 @@ export function VoiceHud(props: VoiceHudProps) {
    * earlier: the first use of the local model downloads it, and that wait is
    * far too long to spend showing nothing.
    */
-  const visible = createMemo(() =>
-    props.open !== undefined
-      ? props.open
-      : running() || preparing() !== undefined || failure() !== undefined,
-  )
-
   const readback = createMemo(() => {
     const result = parse()
     return result?.outcome === "matched" ? result.intent?.readback : undefined
@@ -161,6 +155,22 @@ export function VoiceHud(props: VoiceHudProps) {
     if (result?.outcome !== "ambiguous") return []
     return (result.candidates ?? []).slice(0, 2)
   })
+
+  /*
+   * S33: the agent has its own widget now, the sphere in `agent-orb.tsx`, and
+   * the pill is dictation's. The agent pill still comes up for the two moments
+   * that need buttons — a destructive command asking first, an ambiguous one
+   * offering its candidates — because a sphere has nowhere to put "sì" and "no".
+   */
+  const agentNeedsPill = () => status() === "confirming" || candidates().length >= 2
+
+  const visible = createMemo(() =>
+    props.open !== undefined
+      ? props.open
+      : (running() && (mode() === "transcription" || agentNeedsPill())) ||
+        preparing() !== undefined ||
+        failure() !== undefined,
+  )
 
   const state = createMemo<HudState>(() => {
     const warmup = preparing()
