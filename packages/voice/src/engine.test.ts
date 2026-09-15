@@ -158,6 +158,20 @@ describe("engine/createVoiceEngine", () => {
     })
   })
 
+  test("text typed with the microphone off still reaches the assistant, and opens no microphone", async () => {
+    const { engine, host } = setupEngine()
+
+    await engine.submitText("apri la tavolozza")
+    await engine.submitText("apri la tavolozza")
+
+    expect(host.calls.filter((call) => call.method === "runCommand")).toEqual([
+      { method: "runCommand", args: ["palette.open"] },
+      { method: "runCommand", args: ["palette.open"] },
+    ])
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.history().filter((entry) => entry.kind === "user")).toHaveLength(2)
+  })
+
   /*
    * Starting is not instant. With the local backend it means downloading and
    * initialising a model — minutes, not milliseconds — and `isRunning()` was

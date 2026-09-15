@@ -16,7 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { Effect, Exit, Scope } from "effect"
+import { Effect, Exit, Scope, Stream } from "effect"
 import type { VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"
 import { createInitialDialogState, type DialogState, type DialogStatus } from "./dialog/session"
@@ -38,6 +38,7 @@ import {
   Transcriber as TranscriberTag,
   VoiceHostService,
   type SpeakerService,
+  type TranscriberService,
 } from "./effect/services"
 import { bridgeTranscriber } from "./effect/layers"
 import { makeVoiceProgram, type VoiceProgramHandle } from "./effect/program"
@@ -584,7 +585,19 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       ),
     )
 
-    const speakerService: SpeakerService = {
+    programScope = Effect.runSync(Scope.make())
+
+    programHandle = await Effect.runPromise(
+      Scope.extend(makeVoiceProgram(programOptions()), programScope).pipe(
+        Effect.provideService(TranscriberTag, transcriberService),
+        Effect.provideService(SpeakerTag, speakerService),
+        Effect.provideService(VoiceHostService, host),
+      ),
+    )
+  }
+
+  /** What the program says through: nothing in pure transcription mode. */
+  const speakerService: SpeakerService = {
       speak: (text: string) => {
         // Pure transcription mode must NEVER speak: it is strictly a silent speech-to-text bridge.
         if (activeMode() === "transcription") {
@@ -601,118 +614,147 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         })
       },
       cancel: Effect.sync(() => speaker.cancel()),
+  }
+
+  const programOptions = (): Parameters<typeof makeVoiceProgram>[0] => ({
+    initialStatus: dialogState().status === "asleep" ? "asleep" : "idle",
+    now,
+    getContext: options.getContext,
+    getSettings: effectiveSettings,
+    getHistory: () => history(),
+    isPushToTalkActive: () => chordHeld || openedWithoutChord,
+    onStateChange: (state) => setDialogState(state),
+    onPartialTranscript: (text) => setPartialTranscript(text),
+    onSpoken: (text) => {
+      if (activeMode() === "transcription") return
+      setLastSpoken(text)
+      record({ kind: "assistant", text, at: now() })
+    },
+    onOutcome: (outcome) => {
+      setLastOutcome(outcome)
+      /*
+       * Only outcomes that say something are worth a line. A successful
+       * action whose `spoken` is empty has already been announced by the
+       * intent's readback, and logging it again would double every turn.
+       */
+      const label = outcome.spoken || outcome.error
+      if (label) {
+        record({
+          kind: "action",
+          label,
+          ok: outcome.success,
+          ...(outcome.success ? {} : outcome.error ? { detail: outcome.error } : {}),
+          at: now(),
+        })
+      }
+      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+        clearPttTimers()
+        if (dialogState().status !== "confirming") {
+          void stop()
+        }
+      }
+    },
+    onUtterance: (text) => record({ kind: "user", text, at: now() }),
+    onTranscribed: (text) => {
+      setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
+      record({ kind: "user", text, at: now() })
+      if (typeof window !== "undefined") {
+        const win = window as unknown as {
+          __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
+          __TAURI__?: { core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } }
+        }
+        const invoke = win.__TAURI_INTERNALS__?.invoke ?? win.__TAURI__?.core?.invoke
+        if (invoke) {
+          void invoke("write_clipboard", { text }).catch(() => {})
+        }
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {})
+      }
+      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+        clearPttTimers()
+        void stop()
+      }
+    },
+    onPlan: (result) => {
+      record({
+        kind: "plan",
+        /*
+         * Both halves, in the order the reader needs them: what ran,
+         * then why the rest did not. `failures` is already phrased as a
+         * sentence, so it is shown as-is rather than re-described.
+         */
+        steps: [...result.execution.done.map(describeStep), ...result.execution.failures],
+        ok: result.execution.done.length,
+        failed: result.execution.failures.length,
+        at: now(),
+      })
+    },
+    onError: (err: unknown) => {
+      const message =
+        typeof err === "string"
+          ? err
+          : spokenMessage(err) ||
+            (err && typeof err === "object" && err instanceof Error
+              ? err.message
+              : undefined)
+      noteError(err, message)
+      if (message) record({ kind: "error", text: message, at: now() })
+      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+        clearPttTimers()
+        void stop()
+      }
+    },
+    onParseResult: (res) => setLastParseResult(res),
+    /*
+     * Resolved per run, not captured once: the key and the model live
+     * in settings the user can change while the app is open, and a
+     * planner pinned at construction would keep using the old ones.
+     */
+    plan: resolvePlanner(),
+  })
+
+  /*
+   * A transcriber that never hears anything, for text typed with the
+   * microphone off.
+   */
+  const silentTranscriber: TranscriberService = {
+    start: Effect.void,
+    stop: Effect.void,
+    finals: Stream.never,
+    partials: Stream.never,
+    stream: Stream.never,
+    events: Stream.never,
+    idle: Effect.succeed(true),
+  }
+
+  let textHandle: Promise<VoiceProgramHandle> | null = null
+
+  /**
+   * The program that answers typed text while the microphone is off.
+   *
+   * The agent console says "talk to the assistant or write to it", and writing
+   * used to do nothing at all until the microphone was opened: the text was
+   * cleared from the box and never reached anyone. Built once, on the first
+   * sentence typed, with no microphone behind it; a session opened later
+   * takes the text over, since it is the one the user is also speaking to.
+   */
+  const textProgram = (): Promise<VoiceProgramHandle> => {
+    if (!textHandle) {
+      const scope = Effect.runSync(Scope.make())
+      textHandle = Effect.runPromise(
+        Scope.extend(makeVoiceProgram(programOptions()), scope).pipe(
+          Effect.provideService(TranscriberTag, silentTranscriber),
+          Effect.provideService(SpeakerTag, speakerService),
+          Effect.provideService(VoiceHostService, host),
+        ),
+      )
+      textHandle.catch(() => {
+        textHandle = null
+        void closeScope(scope, "programma testuale")
+      })
     }
-
-    const initialStatus = dialogState().status === "asleep" ? "asleep" : "idle"
-
-    programScope = Effect.runSync(Scope.make())
-
-    programHandle = await Effect.runPromise(
-      Scope.extend(
-        makeVoiceProgram({
-          initialStatus,
-          now,
-          getContext: options.getContext,
-          getSettings: effectiveSettings,
-          getHistory: () => history(),
-          isPushToTalkActive: () => chordHeld || openedWithoutChord,
-          onStateChange: (state) => setDialogState(state),
-          onPartialTranscript: (text) => setPartialTranscript(text),
-          onSpoken: (text) => {
-            if (activeMode() === "transcription") return
-            setLastSpoken(text)
-            record({ kind: "assistant", text, at: now() })
-          },
-          onOutcome: (outcome) => {
-            setLastOutcome(outcome)
-            /*
-             * Only outcomes that say something are worth a line. A successful
-             * action whose `spoken` is empty has already been announced by the
-             * intent's readback, and logging it again would double every turn.
-             */
-            const label = outcome.spoken || outcome.error
-            if (label) {
-              record({
-                kind: "action",
-                label,
-                ok: outcome.success,
-                ...(outcome.success ? {} : outcome.error ? { detail: outcome.error } : {}),
-                at: now(),
-              })
-            }
-            if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
-              clearPttTimers()
-              if (dialogState().status !== "confirming") {
-                void stop()
-              }
-            }
-          },
-          onUtterance: (text) => record({ kind: "user", text, at: now() }),
-          onTranscribed: (text) => {
-            setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
-            record({ kind: "user", text, at: now() })
-            if (typeof window !== "undefined") {
-              const win = window as unknown as {
-                __TAURI_INTERNALS__?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> }
-                __TAURI__?: { core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> } }
-              }
-              const invoke = win.__TAURI_INTERNALS__?.invoke ?? win.__TAURI__?.core?.invoke
-              if (invoke) {
-                void invoke("write_clipboard", { text }).catch(() => {})
-              }
-            }
-            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(text).catch(() => {})
-            }
-            if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
-              clearPttTimers()
-              void stop()
-            }
-          },
-          onPlan: (result) => {
-            record({
-              kind: "plan",
-              /*
-               * Both halves, in the order the reader needs them: what ran,
-               * then why the rest did not. `failures` is already phrased as a
-               * sentence, so it is shown as-is rather than re-described.
-               */
-              steps: [...result.execution.done.map(describeStep), ...result.execution.failures],
-              ok: result.execution.done.length,
-              failed: result.execution.failures.length,
-              at: now(),
-            })
-          },
-          onError: (err: unknown) => {
-            const message =
-              typeof err === "string"
-                ? err
-                : spokenMessage(err) ||
-                  (err && typeof err === "object" && err instanceof Error
-                    ? err.message
-                    : undefined)
-            noteError(err, message)
-            if (message) record({ kind: "error", text: message, at: now() })
-            if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
-              clearPttTimers()
-              void stop()
-            }
-          },
-          onParseResult: (res) => setLastParseResult(res),
-          /*
-           * Resolved per run, not captured once: the key and the model live
-           * in settings the user can change while the app is open, and a
-           * planner pinned at construction would keep using the old ones.
-           */
-          plan: resolvePlanner(),
-        }),
-        programScope,
-      ).pipe(
-        Effect.provideService(TranscriberTag, transcriberService),
-        Effect.provideService(SpeakerTag, speakerService),
-        Effect.provideService(VoiceHostService, host),
-      ),
-    )
+    return textHandle
   }
 
   return {
@@ -848,9 +890,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async submitText(text: string): Promise<void> {
       setPartialTranscript("")
-      if (programHandle) {
-        await Effect.runPromise(programHandle.submitText(text))
-      }
+      const handle = programHandle ?? (await textProgram())
+      await Effect.runPromise(handle.submitText(text))
     },
 
     async handlePermissionRequest(paneId: string, what: string): Promise<void> {
