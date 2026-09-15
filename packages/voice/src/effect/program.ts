@@ -646,7 +646,7 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
 
-        const answer = yield* Effect.tryPromise({
+        const answer: { ok: boolean; text: string; ran?: boolean } = yield* Effect.tryPromise({
           try: () => askAgent.call(host, { text: utterance, engine, signal: abort.signal }),
           catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
         }).pipe(
@@ -654,6 +654,7 @@ export function makeVoiceProgram(
             Effect.succeed({
               ok: false,
               text: err.cause instanceof Error && err.cause.message ? err.cause.message : spokenMessage(err),
+              ran: true,
             }),
           ),
         )
@@ -674,7 +675,9 @@ export function makeVoiceProgram(
            * a key set and no Claude Code, every sentence ended in «mi serve
            * Claude Code o Codex». The problem stays on screen either way.
            */
-          if (options.plan) return false
+          // Only when no turn ran: one that started may already have opened
+          // sessions before its error or timeout, and the planner would open them again.
+          if (options.plan && answer.ran === false) return false
         }
         yield* say(answer.text)
         return true

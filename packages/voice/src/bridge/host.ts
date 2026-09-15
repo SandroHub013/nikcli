@@ -173,7 +173,17 @@ export interface VoiceHost {
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
     signal?: AbortSignal
-  }): Promise<{ ok: boolean; text: string }>
+  }): Promise<{
+    ok: boolean
+    text: string
+    /**
+     * `false` only when no agent ran at all (none installed, none allowed), so
+     * nothing can have been done yet. A turn that started may have opened
+     * sessions before it failed, and handing the sentence to the planner then
+     * would do it twice. Absent is read as "it ran".
+     */
+    ran?: boolean
+  }>
 
   /**
    * Insert text into a pane's composer without submitting it.

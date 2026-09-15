@@ -94,7 +94,8 @@ export interface VoiceAgentDeps {
 }
 
 export interface VoiceAgent {
-  ask(request: { text: string; engine: VoiceAgentEngine; signal?: AbortSignal }): Promise<{ ok: boolean; text: string }>
+  /** `ran` is false only when no turn started: see `VoiceHost.askAgent`. */
+  ask(request: { text: string; engine: VoiceAgentEngine; signal?: AbortSignal }): Promise<{ ok: boolean; text: string; ran: boolean }>
   /** Starts the next sentence in a new conversation. */
   forget(): void
 }
@@ -118,7 +119,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   return {
     async ask({ text, engine, signal }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
-      if ("problem" in resolved) return { ok: false, text: resolved.problem }
+      if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
       const generation = ++latest
       const cwd = deps.cwd()
@@ -143,10 +144,10 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         const result = await turn.result
         if (result.sessionId && generation === latest) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
         if (result.status === "done") {
-          return { ok: true, text: result.text || "Fatto." }
+          return { ok: true, text: result.text || "Fatto.", ran: true }
         }
-        if (result.status === "stopped") return { ok: false, text: "" }
-        return { ok: false, text: result.problem || "L'agente non ha risposto." }
+        if (result.status === "stopped") return { ok: false, text: "", ran: true }
+        return { ok: false, text: result.problem || "L'agente non ha risposto.", ran: true }
       } finally {
         signal?.removeEventListener("abort", onAbort)
       }
