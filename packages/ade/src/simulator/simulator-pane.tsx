@@ -116,14 +116,23 @@ export function SimulatorPane(props: SimulatorPaneProps) {
     reachable: reachable(),
   })
 
+  /*
+   * Each load has a number, and only the latest one's probe is believed. A
+   * probe of a dead port takes its whole timeout; one of a live server that
+   * started after it answers first, and without this the late "no" hid an app
+   * that was running.
+   */
+  let loads = 0
   const load = async (url: string): Promise<boolean> => {
     if (!isLoadableAppUrl(url, window.location.origin)) {
       throw new Error("questo indirizzo è ADE stessa; apri il dev server della tua app")
     }
+    const mine = ++loads
     setNote(undefined)
     setDraft(url)
     if (url !== props.url) props.onChange({ appUrl: url })
     const answered = await probe(url)
+    if (mine !== loads) return answered
     setReachable(answered)
     setLoadKey((key) => key + 1)
     return answered

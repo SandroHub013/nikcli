@@ -22,6 +22,7 @@ import type { DirEntry } from "../host/shell"
 import { runSimulatorCommand } from "../simulator/commands"
 import { SIMULATOR_VERBS, type DevServerGuess } from "../simulator/simulator"
 import { SimulatorPane } from "../simulator/simulator-pane"
+import { createPanelStack } from "../panels/stack"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
@@ -82,6 +83,12 @@ export interface PaneRendererDeps {
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
   const { buffers, bufferLoading, reports, permissions } = records
+  /* Panes of one kind share a panel name; see `panels/stack.ts`. */
+  const stacks = {
+    video: createPanelStack(panels, "video"),
+    model: createPanelStack(panels, "model"),
+    app: createPanelStack(panels, "app"),
+  }
 
   /*
    * The rendered tile is built once per pane and kept.
@@ -210,13 +217,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * least surprising of the wrong answers available.
            */
           if (controller) {
-            panels.register("video", {
+            stacks.video.push(current().id, {
               verbs: VIDEO_VERBS,
               run: (request) => runVideoCommand(controller, request),
             })
             deps.announceToAll("video")
           } else {
-            panels.unregister("video")
+            stacks.video.remove(current().id)
           }
         }}
         onFocus={focus}
@@ -239,13 +246,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onController={(controller) => {
           // One panel name for every 3D pane, as for video: the last opened answers.
           if (controller) {
-            panels.register("model", {
+            stacks.model.push(current().id, {
               verbs: MODEL_VERBS,
               run: (request) => runModelCommand(controller, request),
             })
             deps.announceToAll("model")
           } else {
-            panels.unregister("model")
+            stacks.model.remove(current().id)
           }
         }}
         onFocus={focus}
@@ -267,13 +274,13 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         guessServers={() => deps.guessServers()}
         onController={(controller) => {
           if (controller) {
-            panels.register("app", {
+            stacks.app.push(current().id, {
               verbs: SIMULATOR_VERBS,
               run: (request) => runSimulatorCommand(controller, request),
             })
             deps.announceToAll("app")
           } else {
-            panels.unregister("app")
+            stacks.app.remove(current().id)
           }
         }}
         onFocus={focus}

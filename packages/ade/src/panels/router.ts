@@ -37,7 +37,12 @@ export interface HandledRequest {
 
 export interface PanelRouter {
   register(panel: string, handler: PanelHandler): void
-  unregister(panel: string): void
+  /**
+   * Removes `panel`. With `handler`, only if that is still the one registered:
+   * two panes of one kind share a name, and closing the older one must not
+   * silence the one still open.
+   */
+  unregister(panel: string, handler?: PanelHandler): void
   /** The panels that can be driven right now, in the order they opened. */
   open(): string[]
   /**
@@ -59,7 +64,8 @@ export function createPanelRouter(): PanelRouter {
       handlers.set(panel, handler)
     },
 
-    unregister(panel) {
+    unregister(panel, handler) {
+      if (handler && handlers.get(panel) !== handler) return
       handlers.delete(panel)
     },
 
