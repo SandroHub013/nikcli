@@ -310,9 +310,13 @@ export function createOpenRouterTranscriber(
 
         // If OpenRouter returns 400 (e.g. "Provider returned 400" because Azure MAI-Transcribe 2
         // has an upstream provider failure or rejects language/temperature parameters):
-        if (!response.ok && (response.status === 400 || response.status >= 500)) {
+        // A 429 is the upstream provider being rate limited, not this app
+        // sending too much: the first sentence of a session got one in ADE
+        // Test and was lost. It goes straight to the fallback model, since
+        // asking the same model again at once would only be refused again.
+        if (!response.ok && (response.status === 400 || response.status === 429 || response.status >= 500)) {
           // Attempt 1: Retry without language and temperature
-          try {
+          if (response.status !== 429) try {
             const retryResponse = await fetchFn(OPENROUTER_ENDPOINT, {
               method: "POST",
               headers: {
@@ -411,7 +415,7 @@ export function createOpenRouterTranscriber(
       if (response.status === 429) {
         errorCb(
           new Error(
-            "Limite di frequenza OpenRouter superato: troppe richieste simultanee."
+            "OpenRouter ha rifiutato la trascrizione per troppe richieste (429), anche con il modello di riserva: riprova tra qualche secondo."
           )
         )
         return

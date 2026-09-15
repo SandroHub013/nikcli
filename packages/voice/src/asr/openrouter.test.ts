@@ -421,6 +421,26 @@ describe("asr/openrouter", () => {
     expect(finals[0].text).toBe("trascrizione recuperata da whisper")
   })
 
+  test("a rate-limited primary model (429) goes straight to the fallback model", async () => {
+    const attempts: any[] = []
+    const finals: any[] = []
+    const mockFetch = async (_url: any, opts: any) => {
+      const body = JSON.parse(opts.body)
+      attempts.push(body.model)
+      if (body.model === OPENROUTER_MODEL) {
+        return new Response(JSON.stringify({ error: { message: "Provider returned 429" } }), { status: 429 })
+      }
+      return new Response(JSON.stringify({ text: "capitale dell'Australia" }), { status: 200 })
+    }
+    let segmentCb: any = null
+    const capture = { start: async () => {}, stop: () => {}, onSegment: (cb: any) => { segmentCb = cb }, onError: () => {} } as any
+    const transcriber = createOpenRouterTranscriber({ apiKey: "test-key", capture, fetch: mockFetch as any, onFinal: (evt) => finals.push(evt) })
+    await transcriber.start()
+    await segmentCb({ blob: new Blob(["audio-bytes"]), format: "wav", durationMs: 1500 })
+    expect(attempts).toEqual([OPENROUTER_MODEL, OPENROUTER_FALLBACK_MODEL])
+    expect(finals.map((f) => f.text)).toEqual(["capitale dell'Australia"])
+  })
+
   test("extracts text from segments array when text field is missing", async () => {
     const finals: any[] = []
     const mockFetch = async () => {
