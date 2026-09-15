@@ -22,7 +22,6 @@ export interface GridPane {
 
 /** What the grid needs to know about a tile to size it. Read reactively. */
 export interface GridTile {
-  title?: string
   span?: Span
 }
 
@@ -33,7 +32,7 @@ export interface SessionGridProps {
   onClose?: (id: string, nextFocus: string | undefined) => void
   /** User-chosen column count. Undefined lets the layout decide. */
   columns?: number
-  /** The title and chosen size of a tile. Without it every tile is one cell. */
+  /** The size the user chose for a tile. Without it every tile is one cell. */
   tileOf?: (id: string) => GridTile | undefined
   /** The visible panes in their new order, after a drag or a keyboard move. */
   onMove?: (order: string[]) => void
@@ -259,7 +258,8 @@ export function SessionGrid(props: SessionGridProps) {
       const chosen = resizing()
       setResizing(undefined)
       // A press that did not change the size is not a choice: committing it
-      // would pin Master at its default and stop the default from applying.
+      // would overwrite a size the grid only clamped for now, or pin a
+      // pane on the default it was never resized from.
       if (!chosen || (chosen.span.columns === start.columns && chosen.span.rows === start.rows)) return
       props.onResize?.(id, chosen.span)
     }

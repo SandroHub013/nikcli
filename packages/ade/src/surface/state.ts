@@ -229,8 +229,8 @@ export function reorderPanes(workbench: Workbench, order: readonly string[]): Wo
 
 /**
  * The size the user chose for a pane, or `undefined` to give it back its
- * default. Once set it is kept, which is how a resized Master stays the size
- * the user made it rather than growing back on the next layout.
+ * default. Once set it is kept, and survives restarts and layout changes,
+ * clamped to the grid but never rewritten by it.
  */
 export function resizePane(workbench: Workbench, paneId: string, span: Span | undefined): Workbench {
   return {

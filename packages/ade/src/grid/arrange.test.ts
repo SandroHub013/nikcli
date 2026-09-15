@@ -11,9 +11,10 @@ import {
 } from "../surface/state"
 import {
   type ArrangeTile,
+  type Span,
   applyOrder,
   cellsWanted,
-  defaultSpan,
+  DEFAULT_SPAN,
   dropZone,
   effectiveSpan,
   moveTile,
@@ -144,33 +145,25 @@ describe("packTiles", () => {
   })
 })
 
-describe("Master is larger by default", () => {
-  test("twice as wide as the others, or twice as tall in a single column", () => {
-    expect(defaultSpan("Master", 3)).toEqual({ columns: 2, rows: 1 })
-    expect(defaultSpan("Master", 1)).toEqual({ columns: 1, rows: 2 })
-    expect(defaultSpan("Worker", 3)).toEqual(one)
-  })
-
-  test("only the exact title", () => {
-    expect(defaultSpan("master", 3)).toEqual(one)
-    expect(defaultSpan("Master 2", 3)).toEqual(one)
-  })
-
-  test("four sessions with a Master: Master covers two cells, the others one", () => {
-    const list = [{ title: "Master" }, { title: "A" }, { title: "B" }, { title: "C" }]
+describe("sizes", () => {
+  test("every session starts as one cell, whatever it is called", () => {
+    const list: Array<{ title: string; span?: Span }> = [{ title: "Master" }, { title: "A" }, { title: "B" }, { title: "C" }]
     const columns = gridColumns({ count: cellsWanted(list), width: 1800, height: 900 })
-    const spans = list.map((tile) => effectiveSpan(tile, columns))
-    expect(spans[0]!.columns * spans[0]!.rows).toBe(2)
-    expect(spans.slice(1).every((s) => s.columns === 1 && s.rows === 1)).toBe(true)
+    expect(cellsWanted(list)).toBe(4)
+    expect(list.every((tile) => effectiveSpan(tile, columns).columns === 1 && effectiveSpan(tile, columns).rows === 1)).toBe(true)
+    expect(DEFAULT_SPAN).toEqual(one)
   })
 
-  test("the user's size wins, even when it is smaller than the default", () => {
-    expect(effectiveSpan({ title: "Master", span: one }, 3)).toEqual(one)
-    expect(effectiveSpan({ title: "A", span: { columns: 3, rows: 2 } }, 3)).toEqual({ columns: 3, rows: 2 })
+  test("a resized pane counts the cells it covers when choosing columns", () => {
+    expect(cellsWanted([{ span: { columns: 2, rows: 2 } }, {}, {}])).toBe(6)
+  })
+
+  test("the user's size wins", () => {
+    expect(effectiveSpan({ span: { columns: 3, rows: 2 } }, 3)).toEqual({ columns: 3, rows: 2 })
   })
 
   test("a chosen size is clamped to the grid, not rewritten", () => {
-    expect(effectiveSpan({ title: "A", span: { columns: 3, rows: 9 } }, 2)).toEqual({ columns: 2, rows: 3 })
+    expect(effectiveSpan({ span: { columns: 3, rows: 9 } }, 2)).toEqual({ columns: 2, rows: 3 })
   })
 })
 
@@ -220,7 +213,7 @@ describe("the arrangement survives a restart", () => {
     expect(reload(wb).panes[0]!.span).toBeUndefined()
   })
 
-  test("a v4 store migrates: same order, no sizes, Master on its default", () => {
+  test("a v4 store migrates: same order, no sizes, one cell each", () => {
     const v4 = JSON.stringify({
       version: 4,
       panes: [
@@ -235,7 +228,7 @@ describe("the arrangement survives a restart", () => {
     expect(state.panes.map((p) => p.id)).toEqual(["a", "m"])
     expect(state.panes.every((p) => p.span === undefined)).toBe(true)
     const master = fromWorkspaceState(state, "proj").panes[1]!
-    expect(effectiveSpan(master, 3)).toEqual({ columns: 2, rows: 1 })
+    expect(effectiveSpan(master, 3)).toEqual(one)
   })
 
   test("a damaged size is dropped rather than repaired", () => {

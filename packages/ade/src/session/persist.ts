@@ -69,8 +69,8 @@ export interface PaneState {
   /** Arguments chosen at spawn, replayed on every start. */
   spawnArgs?: string[]
   /**
-   * The cells the user resized the pane to. Absent means the default size,
-   * which is what lets Master be larger until the user says otherwise.
+   * The cells the user resized the pane to. Absent means the default size
+   * of one cell.
    */
   span?: { columns: number; rows: number }
 }
@@ -265,7 +265,7 @@ const migrateV3toV4: Migration = (raw) => ({ ...raw, version: 4 })
  * v4 → v5: panes carry the size the user resized them to.
  *
  * Nothing to compute, and deliberately so: a v4 pane was never resized, so it
- * has no span and takes the default size — Master larger, the rest one cell.
+ * has no span and takes the default size of one cell, like every pane did.
  * Its order needs no migration either, because the order of `panes` already
  * was the order of the grid.
  */

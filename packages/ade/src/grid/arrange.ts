@@ -24,35 +24,20 @@ export interface Placement {
 }
 
 /**
- * The title that makes a session the coordinator.
- *
- * Compared exactly, the same way the mailbox recognises it: "master" or
- * "Master 2" are sessions somebody named, not the one that runs the others.
- */
-export const MASTER_TITLE = "Master"
-
-/**
  * The tallest a tile may be dragged. Past three rows a pane is taller than
  * any window it will be shown in, and the grid starts scrolling to show one
  * session.
  */
 export const MAX_SPAN_ROWS = 3
 
-export function isMaster(title: string | undefined): boolean {
-  return title === MASTER_TITLE
-}
-
 /**
- * The size a tile has when the user has not chosen one.
+ * The size every tile has until the user resizes it: one cell.
  *
- * Master reads everyone else's reports and writes the briefs, so it is the
- * pane with the most text worth reading: twice as wide as the others. In a
- * single column there is no width to give it, so it gets the height instead.
+ * The same for every session, whatever it is called. Giving one session more
+ * room by its title decides how the user orchestrates their work for them,
+ * and whoever coordinates is free to make their own pane larger.
  */
-export function defaultSpan(title: string | undefined, gridColumns: number): Span {
-  if (!isMaster(title)) return { columns: 1, rows: 1 }
-  return gridColumns >= 2 ? { columns: 2, rows: 1 } : { columns: 1, rows: 2 }
-}
+export const DEFAULT_SPAN: Span = { columns: 1, rows: 1 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -64,9 +49,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
  * made three wide on a large monitor is three wide again when the window
  * grows back, instead of having been silently shrunk by a narrow moment.
  */
-export function effectiveSpan(tile: { title?: string; span?: Span }, gridColumns: number): Span {
+export function effectiveSpan(tile: { span?: Span }, gridColumns: number): Span {
   const columns = Math.max(1, Math.floor(gridColumns))
-  const chosen = tile.span ?? defaultSpan(tile.title, columns)
+  const chosen = tile.span ?? DEFAULT_SPAN
   return {
     columns: clamp(Math.round(chosen.columns) || 1, 1, columns),
     rows: clamp(Math.round(chosen.rows) || 1, 1, MAX_SPAN_ROWS),
@@ -76,15 +61,14 @@ export function effectiveSpan(tile: { title?: string; span?: Span }, gridColumns
 /**
  * How many cells the tiles want, for choosing the column count.
  *
- * Measured before the column count is known, so a default span counts as the
- * two cells it will usually be. Counting Master as one cell would choose the
- * columns for a grid it is not, and leave a row with a hole in it.
+ * A resized pane counts as the cells it covers: choosing the columns as if it
+ * were one cell would lay out a grid it is not, and leave a row with a hole.
  */
-export function cellsWanted(tiles: ReadonlyArray<{ title?: string; span?: Span }>): number {
+export function cellsWanted(tiles: ReadonlyArray<{ span?: Span }>): number {
   let cells = 0
   for (const tile of tiles) {
-    if (tile.span) cells += Math.max(1, Math.round(tile.span.columns)) * Math.max(1, Math.round(tile.span.rows))
-    else cells += isMaster(tile.title) ? 2 : 1
+    const span = tile.span ?? DEFAULT_SPAN
+    cells += Math.max(1, Math.round(span.columns)) * Math.max(1, Math.round(span.rows))
   }
   return cells
 }
@@ -240,7 +224,7 @@ export type Direction = "left" | "right" | "up" | "down"
  * The tile next to `index` in `direction`, or -1 when there is none.
  *
  * Geometric rather than by index, because with spans the index arithmetic of
- * `moveFocus` is wrong: next to a two-wide Master, "down" is not `index +
+ * `moveFocus` is wrong: next to a two-wide pane, "down" is not `index +
  * columns`. Sideways stays in the row, as `moveFocus` does, so a right arrow
  * never silently drops to the next row. Up and down take the nearest row and
  * then the nearest column, which lands a down arrow into a short last row on
