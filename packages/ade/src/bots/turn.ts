@@ -47,6 +47,8 @@ export interface TurnRequest {
   readonly onUpdate?: (talk: Talk) => void
   /** How long the turn may run before it is stopped with its child processes; `TURN_TIMEOUT_MS` when absent. */
   readonly timeoutMs?: number
+  /** How long the CLI may take to exit after its final event before it is killed; `TURN_EXIT_GRACE_MS` when absent. */
+  readonly exitGraceMs?: number
 }
 
 /**
@@ -60,6 +62,16 @@ export interface TurnRequest {
  * person waits for a spoken answer before giving up on it.
  */
 export const TURN_TIMEOUT_MS = 5 * 60_000
+
+/**
+ * How long a CLI may take to exit once its answer is complete.
+ *
+ * The turn ends at the final event, and the process is left to save and shut
+ * down on its own, which takes under a second. One that hangs while closing
+ * would stay alive with nobody waiting on it, so past this it is killed with
+ * its children.
+ */
+export const TURN_EXIT_GRACE_MS = 10_000
 
 /** What the caller is told when a turn ran out of time. */
 export function timeoutProblem(label: string, timeoutMs: number): string {
@@ -167,6 +179,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
     let timedOut = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    let exited = false
+    let lingering: ReturnType<typeof setTimeout> | undefined
     try {
       const code = await new Promise<number | null>((resolve, reject) => {
         settle = resolve
@@ -183,8 +197,27 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             cols: 400,
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
-            onLine: (line) => update(applyRunnerLine(runner, talk, line, Date.now())),
-            onExit: resolve,
+            onLine: (line) => {
+              update(applyRunnerLine(runner, talk, line, Date.now()))
+              /*
+               * The answer is complete at the CLI's final event. Waiting for the
+               * process to exit as well cost ~0.7 s of saving and shutting down
+               * on every spoken reply; the exit, when it comes, finds the wait
+               * already over.
+               */
+              if (talk.ended && !lingering && !exited) {
+                resolve(0)
+                // Outlives the turn on purpose: see `TURN_EXIT_GRACE_MS`.
+                lingering = setTimeout(() => {
+                  if (!exited) kill?.()
+                }, request.exitGraceMs ?? TURN_EXIT_GRACE_MS)
+              }
+            },
+            onExit: (code) => {
+              exited = true
+              clearTimeout(lingering)
+              resolve(code)
+            },
           })
           .then((session) => {
             kill = () => session.kill({ tree: true })

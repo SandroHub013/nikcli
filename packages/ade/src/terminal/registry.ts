@@ -175,6 +175,30 @@ export function writeToTerminal(id: string, chunk: string): void {
   getTerminal(id).terminal.write(chunk)
 }
 
+/**
+ * What moves a written screen into the scrollback and puts the cursor home.
+ *
+ * A process started in a pane begins at 1;1: that is what `pty.rs` tells
+ * ConPTY, which asks before it lets the child speak. A pane reused by a
+ * restart still shows the last run with the cursor somewhere below it, and the
+ * new shell drew over it from the top. One newline per row, from wherever the
+ * cursor is, scrolls every visible line out; nothing is erased.
+ */
+export function cleanScreenSequence(rows: number, written: boolean): string {
+  return written ? "\r\n".repeat(Math.max(1, rows)) + "[H" : ""
+}
+
+/** Gives the next process in `id` an empty screen at 1;1, the old one kept in the scrollback. */
+export function startOnCleanScreen(id: string): void {
+  const session = terminals.get(id)
+  if (!session) return
+  const { terminal } = session
+  const buffer = terminal.buffer.active
+  const written = buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
+  const sequence = cleanScreenSequence(terminal.rows, written)
+  if (sequence) terminal.write(sequence)
+}
+
 /** Prints a line of ADE's own, marked so it cannot be mistaken for the agent. */
 export function noteInTerminal(id: string, text: string): void {
   getTerminal(id).terminal.writeln(`\u001b[2m${text}\u001b[0m`)

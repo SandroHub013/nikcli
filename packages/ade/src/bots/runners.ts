@@ -339,7 +339,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
     }
     case "result": {
       const cost = typeof event["total_cost_usd"] === "number" ? (event["total_cost_usd"] as number) : 0
-      next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost }
+      next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost, ended: true }
       const denials = list(event["permission_denials"])
       if (denials.length > 0) {
         const names = [...new Set(denials.map((d) => str(rec(d)?.["tool_name"]) ?? "tool"))].join(", ")
@@ -431,11 +431,11 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
     }
     case "turn.completed":
       /* `cached_input_tokens` is part of `input_tokens`, not on top of it. */
-      return { ...next, tokens: next.tokens + codexTokens(event["usage"]) }
+      return { ...next, tokens: next.tokens + codexTokens(event["usage"]), ended: true }
     case "turn.failed":
     case "error": {
       const text = errorText(event["error"] ?? event["message"] ?? event)
-      return { ...appendMessage(next, { role: "error", text }, at), status: "error" }
+      return { ...appendMessage(next, { role: "error", text }, at), status: "error", ...(event["type"] === "turn.failed" ? { ended: true } : {}) }
     }
     default:
       return next

@@ -301,6 +301,80 @@ fn is_executable_extension(ext: &str) -> bool {
         .any(|known| known.eq_ignore_ascii_case(ext))
 }
 
+/*
+ * The two questions ConPTY asks before it lets a process speak.
+ *
+ * portable-pty opens the pseudo console with `PSEUDOCONSOLE_INHERIT_CURSOR`,
+ * and with it ConPTY starts by asking the terminal where the cursor is
+ * (`ESC[6n`) and what it is (`ESC[c`), and holds every byte of the child's
+ * output until both are answered or three seconds pass. Nobody answers a voice
+ * or bot turn, which has no terminal, and a pane's xterm answers only after
+ * the round trip through the window: `cmd /c echo` took 3.04 s to print in a
+ * pty and 32 ms once answered here, and a spoken question waited those three
+ * seconds before Claude Code even started.
+ *
+ * So the first of each, within `STARTUP_QUERY_WINDOW` of the spawn, is
+ * answered here and taken out of the output: a fresh terminal's cursor is at
+ * 1;1. The device attributes must claim VT level 61 or above: xterm's own
+ * `ESC[?1;2c` does not release the output (measured, still 3 s), which is why
+ * panes waited too although xterm answers. The window never sees the
+ * question, so it never sends a second answer into the child's input.
+ * Later queries (an agent asking for itself) pass through untouched.
+ *
+ * Only ConPTY asks these on its own. Elsewhere the same bytes come from the
+ * child itself (Codex, nvim asking where the cursor is), and a made-up answer
+ * would be a lie told to a program that then draws by it: off Windows
+ * nothing is answered. Level 61 with no extensions (`ESC[?61c`) is enough to
+ * release ConPTY; claiming sixel (`;4`) would invite an agent to send images
+ * the pane may not draw.
+ */
+const STARTUP_QUERY_WINDOW: Duration = Duration::from_secs(5);
+const CURSOR_QUERY: &str = "\x1b[6n";
+const CURSOR_REPLY: &str = "\x1b[1;1R";
+const DEVICE_QUERY: &str = "\x1b[c";
+const DEVICE_REPLY: &str = "\x1b[?61c";
+
+struct StartupQueries {
+    cursor_answered: bool,
+    device_answered: bool,
+}
+
+impl StartupQueries {
+    /// `conpty`: whether the pty is ConPTY, whose questions these are. When not,
+    /// there is nothing to answer and everything passes through.
+    fn new(conpty: bool) -> Self {
+        Self {
+            cursor_answered: !conpty,
+            device_answered: !conpty,
+        }
+    }
+
+    fn done(&self) -> bool {
+        self.cursor_answered && self.device_answered
+    }
+
+    /// `text` without the startup questions it answered, and the answer to send.
+    fn take(&mut self, text: &str) -> (String, String) {
+        let mut forward = text.to_string();
+        let mut reply = String::new();
+        if !self.cursor_answered {
+            if let Some(at) = forward.find(CURSOR_QUERY) {
+                forward.replace_range(at..at + CURSOR_QUERY.len(), "");
+                reply.push_str(CURSOR_REPLY);
+                self.cursor_answered = true;
+            }
+        }
+        if !self.device_answered {
+            if let Some(at) = forward.find(DEVICE_QUERY) {
+                forward.replace_range(at..at + DEVICE_QUERY.len(), "");
+                reply.push_str(DEVICE_REPLY);
+                self.device_answered = true;
+            }
+        }
+        (forward, reply)
+    }
+}
+
 /// Takes everything decodable out of `tail`, leaving at most one incomplete
 /// character behind for the next read to finish.
 ///
@@ -565,9 +639,12 @@ pub async fn pty_spawn(
         Err(e) => abort_with!(format!("pty non leggibile: {e}")),
     };
     let writer = match pair.master.take_writer() {
-        Ok(writer) => writer,
+        Ok(writer) => Arc::new(Mutex::new(writer)),
         Err(e) => abort_with!(format!("pty non scrivibile: {e}")),
     };
+    // The reader answers ConPTY's startup questions with it: see `StartupQueries`.
+    let answerer = Arc::clone(&writer);
+    let spawned_at = Instant::now();
 
     {
         let mut sessions = match registry.0.lock() {
@@ -578,7 +655,7 @@ pub async fn pty_spawn(
             id.clone(),
             Session {
                 master: pair.master,
-                writer: Arc::new(Mutex::new(writer)),
+                writer,
                 child,
             },
         );
@@ -613,12 +690,22 @@ pub async fn pty_spawn(
          * completes. Carrying the tail over keeps the split invisible.
          */
         let mut tail: Vec<u8> = Vec::new();
+        let mut queries = StartupQueries::new(cfg!(windows));
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     tail.extend_from_slice(&buffer[..n]);
-                    let text = decode_stream_chunk(&mut tail);
+                    let mut text = decode_stream_chunk(&mut tail);
+                    if !queries.done() && spawned_at.elapsed() < STARTUP_QUERY_WINDOW {
+                        let (forward, reply) = queries.take(&text);
+                        if !reply.is_empty() {
+                            if let Ok(mut writer) = answerer.lock() {
+                                let _ = writer.write_all(reply.as_bytes()).and_then(|_| writer.flush());
+                            }
+                        }
+                        text = forward;
+                    }
                     if text.is_empty() {
                         continue;
                     }
@@ -1322,5 +1409,86 @@ mod tests {
         assert!(!is_allowed_command("evil.exe.cmd"));
         // Stripping one known extension must not uncover a second name.
         assert!(!is_allowed_command("claude.evil"));
+    }
+
+    #[test]
+    fn conpty_startup_questions_are_answered_once_and_kept_from_the_window() {
+        let mut queries = StartupQueries::new(true);
+        let (forward, reply) = queries.take("\x1b[1t\x1b[6n\x1b[c\x1b[?1004h");
+        assert_eq!(forward, "\x1b[1t\x1b[?1004h");
+        assert_eq!(reply, "\x1b[1;1R\x1b[?61c");
+        assert!(queries.done());
+        // An agent asking later gets its question through, to the real terminal.
+        let (forward, reply) = queries.take("\x1b[6n");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n", ""));
+        // A secondary device-attributes query is not the startup one.
+        let mut fresh = StartupQueries::new(true);
+        let (forward, reply) = fresh.take("\x1b[>c");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[>c", ""));
+    }
+
+    #[test]
+    fn without_conpty_a_child_asking_for_the_cursor_gets_the_real_terminal() {
+        // On unix the question is Codex's or nvim's own, not the pty's.
+        let mut queries = StartupQueries::new(false);
+        assert!(queries.done());
+        let (forward, reply) = queries.take("\x1b[6n\x1b[c");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n\x1b[c", ""));
+    }
+
+    /// How long a process in a pty takes to print, answering the startup questions as
+    /// `pty_spawn` does or not. `cargo test --lib pty::tests::startup_probe -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn startup_probe() {
+        for answer in [false, true] {
+            let pty = native_pty_system();
+            let pair = pty.openpty(PtySize { rows: 30, cols: 120, pixel_width: 0, pixel_height: 0 }).unwrap();
+            let mut cmd = if cfg!(windows) { CommandBuilder::new("cmd") } else { CommandBuilder::new("sh") };
+            // PROBE_CMD: another command whose output ends in "pronto", e.g. `claude --version & echo pronto`.
+            let line = std::env::var("PROBE_CMD").unwrap_or_else(|_| "echo pronto".into());
+            if cfg!(windows) {
+                cmd.args(["/c", &line]);
+            } else {
+                cmd.args(["-c", &line]);
+            }
+            let start = Instant::now();
+            let mut child = pair.slave.spawn_command(cmd).unwrap();
+            drop(pair.slave);
+            let mut reader = pair.master.try_clone_reader().unwrap();
+            let mut writer = pair.master.take_writer().unwrap();
+            let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            if tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+            let mut queries = StartupQueries::new(true);
+            let mut seen = String::new();
+            while let Ok(chunk) = rx.recv_timeout(Duration::from_secs(10)) {
+                let text = String::from_utf8_lossy(&chunk).into_owned();
+                if answer {
+                    let (_, reply) = queries.take(&text);
+                    if !reply.is_empty() {
+                        writer.write_all(reply.as_bytes()).unwrap();
+                        writer.flush().unwrap();
+                    }
+                }
+                seen.push_str(&text);
+                if seen.contains("pronto") {
+                    break;
+                }
+            }
+            println!("answer={answer} pronto={:?}", start.elapsed());
+            let _ = child.kill();
+        }
     }
 }
