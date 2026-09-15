@@ -113,7 +113,7 @@ export function runTurn(request: TurnRequest): Turn {
     }
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
     const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
-    const outbox = mailbox ? `${mailbox.replace(/[\/]+$/, "")}/outbox` : undefined
+    const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
     const { command, args, cwd } = turnCommand(runner, {
       bot,
       message: request.message,
