@@ -15,6 +15,7 @@
 mod agent_link;
 mod frontend;
 mod media;
+mod project_bytes;
 mod pty;
 mod serve;
 mod shots;
@@ -1075,6 +1076,7 @@ pub fn run() {
             shots::shots_watch,
             shots::shot_bytes,
             shots::shot_delete,
+            project_bytes::read_project_bytes,
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,

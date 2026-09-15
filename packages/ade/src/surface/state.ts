@@ -89,6 +89,15 @@ export interface Pane {
    * the two are laid out by different components.
    */
   videoPath?: string
+  /** The 3D panel's model file; "" while the panel waits for one, like `videoPath`. */
+  modelPath?: string
+  /** The app simulator's dev server URL; "" while the panel waits for one. */
+  appUrl?: string
+  /** The simulator's device id, from `simulator/simulator.ts`. */
+  appDevice?: string
+  appLandscape?: boolean
+  /** A desktop window's size, once the user has dragged it. */
+  appWindow?: { width: number; height: number }
   cwd?: string
   tree?: PaneTree
   workspaceId: string
@@ -121,6 +130,21 @@ export interface Pane {
   worktree?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
+}
+
+/**
+ * True for a pane that draws something other than an agent session.
+ *
+ * Asked by everything that counts, restores or messages sessions. The video
+ * and 3D panels are recognised by their mode, not by their path: both open
+ * with an empty path, and `!pane.videoPath` read "" as "no video here", so an
+ * empty player was listed as a session and offered to be restarted as one.
+ */
+export function isPanelPane(pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">): boolean {
+  return Boolean(
+    pane.browserUrl || pane.filePath || pane.videoPath || pane.modelPath || pane.appUrl || pane.plugin ||
+      pane.mode === "video" || pane.mode === "model" || pane.mode === "app",
+  )
 }
 
 export interface Workbench {
@@ -232,7 +256,7 @@ export function deriveWorkspaces(
     // Neither a browser nor a plugin tile is a session, and the sidebar is a
     // list of sessions: counting them there would make "3 sessioni" mean
     // something different from the number of agents running.
-    if (pane.browserUrl || pane.plugin) continue
+    if (isPanelPane(pane)) continue
 
     if (!workspaces[pane.workspaceId]) {
       workspaces[pane.workspaceId] = {
@@ -282,9 +306,9 @@ function lastSegment(path: string | undefined): string | undefined {
  * resuming a session, it is opening a new one that happens to share a name.
  */
 export function isResumable(
-  pane: Pick<Pane, "status" | "task" | "resumeId" | "browserUrl" | "filePath" | "plugin">,
+  pane: Pick<Pane, "status" | "task" | "resumeId" | "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">,
 ): boolean {
-  if (pane.browserUrl || pane.filePath || pane.plugin) return false
+  if (isPanelPane(pane)) return false
   const hasTask = (pane.task ?? "").trim().length > 0
   const hasConversation = (pane.resumeId ?? "").trim().length > 0
   if (!hasTask && !hasConversation) return false
@@ -300,7 +324,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * answer than no pane. The plugin opens its own tiles when it loads.
    */
   const saved = workbench.panes
-    .filter((p) => !p.browserUrl && !p.plugin)
+    .filter((p) => !isPanelPane(p))
     .map((p) => ({
       id: p.id,
       title: p.title,

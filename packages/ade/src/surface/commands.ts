@@ -189,6 +189,18 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["riproduttore", "player", "registrazione", "mp4", "fotogramma"],
     },
     {
+      id: "model.new",
+      title: "Apri modello 3D",
+      group: "Pannello",
+      keywords: ["3d", "gltf", "glb", "obj", "stl", "fbx", "mesh", "visualizzatore"],
+    },
+    {
+      id: "app.new",
+      title: "Apri simulatore app",
+      group: "Pannello",
+      keywords: ["simulatore", "emulatore", "telefono", "mobile", "expo", "tauri", "dispositivo", "finestra"],
+    },
+    {
       id: "process.kill",
       title: "Uccidi processo",
       group: "Processo",

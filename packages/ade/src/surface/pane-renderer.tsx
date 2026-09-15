@@ -15,6 +15,14 @@ import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
 import { VideoPane } from "../video/video-pane"
+import { runModelCommand } from "../model3d/commands"
+import { MODEL_VERBS } from "../model3d/model"
+import { ModelPane } from "../model3d/model-pane"
+import type { DirEntry } from "../host/shell"
+import { runSimulatorCommand } from "../simulator/commands"
+import { SIMULATOR_VERBS, type DevServerGuess } from "../simulator/simulator"
+import { SimulatorPane } from "../simulator/simulator-pane"
+import { createPanelStack } from "../panels/stack"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
@@ -55,6 +63,14 @@ export interface PaneRendererDeps {
   restart: (pane: Pane, line?: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
+  /** The native file picker, narrowed to the formats the 3D panel reads. */
+  pickModel: () => Promise<string | undefined>
+  /** A project file's bytes, for the 3D panel; absent when the host cannot. */
+  readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** A directory listing, for the 3D panel's change watcher. */
+  readDir?: (path: string) => Promise<DirEntry[]>
+  /** Where the open project's dev server probably is, for the simulator. */
+  guessServers: () => Promise<DevServerGuess[]>
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
@@ -67,6 +83,12 @@ export interface PaneRendererDeps {
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
   const { buffers, bufferLoading, reports, permissions } = records
+  /* Panes of one kind share a panel name; see `panels/stack.ts`. */
+  const stacks = {
+    video: createPanelStack(panels, "video"),
+    model: createPanelStack(panels, "model"),
+    app: createPanelStack(panels, "app"),
+  }
 
   /*
    * The rendered tile is built once per pane and kept.
@@ -195,13 +217,70 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * least surprising of the wrong answers available.
            */
           if (controller) {
-            panels.register("video", {
+            stacks.video.push(current().id, {
               verbs: VIDEO_VERBS,
               run: (request) => runVideoCommand(controller, request),
             })
             deps.announceToAll("video")
           } else {
-            panels.unregister("video")
+            stacks.video.remove(current().id)
+          }
+        }}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const modelPane = () => (
+      <ModelPane
+        id={current().id}
+        title={current().title}
+        path={current().modelPath ?? ""}
+        focused={isFocused()}
+        onOpen={(path) => setWb((w) => updatePane(w, current().id, { modelPath: path }))}
+        onPick={() => deps.pickModel()}
+        readBytes={deps.readBytes}
+        readDir={deps.readDir}
+        onCapture={(name, png) => deps.captureFrame(name, png)}
+        onController={(controller) => {
+          // One panel name for every 3D pane, as for video: the last opened answers.
+          if (controller) {
+            stacks.model.push(current().id, {
+              verbs: MODEL_VERBS,
+              run: (request) => runModelCommand(controller, request),
+            })
+            deps.announceToAll("model")
+          } else {
+            stacks.model.remove(current().id)
+          }
+        }}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const simulatorPane = () => (
+      <SimulatorPane
+        id={current().id}
+        title={current().title}
+        url={current().appUrl ?? ""}
+        deviceId={current().appDevice}
+        landscape={current().appLandscape}
+        windowSize={current().appWindow}
+        focused={isFocused()}
+        onChange={(patch) => setWb((w) => updatePane(w, current().id, patch))}
+        guessServers={() => deps.guessServers()}
+        onController={(controller) => {
+          if (controller) {
+            stacks.app.push(current().id, {
+              verbs: SIMULATOR_VERBS,
+              run: (request) => runSimulatorCommand(controller, request),
+            })
+            deps.announceToAll("app")
+          } else {
+            stacks.app.remove(current().id)
           }
         }}
         onFocus={focus}
@@ -364,7 +443,15 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
              * path drew a terminal in a pane with no session behind it and no
              * way to get one.
              */
-            <Show when={current().mode === "video"} fallback={sessionPane()}>
+            <Show when={current().mode === "video"} fallback={
+              <Show when={current().mode === "model"} fallback={
+                <Show when={current().mode === "app"} fallback={sessionPane()}>
+                  {simulatorPane()}
+                </Show>
+              }>
+                {modelPane()}
+              </Show>
+            }>
               {videoPane()}
             </Show>
           }>
