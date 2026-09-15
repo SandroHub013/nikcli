@@ -119,6 +119,23 @@ describe("createPanelRouter", () => {
     expect(model.asked).toHaveLength(3)
   })
 
+  test("a slow panel's reply still keeps its own busy from counting as a new turn", async () => {
+    let clock = 0
+    const router = createPanelRouter(() => clock)
+    const model = panel(async () => {
+      clock += 6000
+      return { ok: true, detail: "catturato" }
+    })
+    router.register("model", model)
+
+    const t = 1_000_000
+    expect(replyOf(await router.handle("@ade model capture", "agy", t))).toBeDefined()
+    // The reply was typed 6 s after the request; its busy arrives 3 s later.
+    router.newTurn("agy", t + 9000)
+    await router.handle("@ade model capture", "agy", t + 10_000)
+    expect(model.asked).toEqual(["capture"])
+  })
+
   test("state, view, state across turns all run", async () => {
     const router = createPanelRouter()
     const model = panel(async () => ({ ok: true, detail: "" }))

@@ -95,7 +95,8 @@ const MAX_TYPED = 32
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim()
 
-export function createPanelRouter(): PanelRouter {
+/** `clock` is only for tests: it tells how long a handler took. */
+export function createPanelRouter(clock: () => number = Date.now): PanelRouter {
   const handlers = new Map<string, PanelHandler>()
   const typedBy = new Map<string, { text: string; at: number }[]>()
   /** Each request line a session showed this turn: when last, and whether its skip was already said. */
@@ -181,8 +182,11 @@ export function createPanelRouter(): PanelRouter {
         return { request, skipped: `Riga non eseguita: ${raw} — ${why}` }
       }
       seen.set(raw, { at: now, noted: false })
+      const started = clock()
       const reply = await answer(request)
-      repliedAt.set(from, now)
+      // When the reply is typed, not when the request came: a capture can take
+      // seconds, and the busy that the reply causes must still fall within the window.
+      repliedAt.set(from, now + (clock() - started))
       return { request, reply }
     },
 
