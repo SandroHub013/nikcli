@@ -41,6 +41,7 @@ for (const dir of ["data", "cache", "config", "state"]) {
 const { Instance } = await import("@/project/instance")
 const { Server } = await import("@/server/server")
 const { Auth } = await import("@/server/httpapi/auth")
+const { ServerRouter } = await import("@/server/server-router")
 const { AccountRepo } = await import("@/account/repo")
 
 const ACCOUNT_ID = "acc_localsession"
@@ -64,6 +65,25 @@ function request(pathname: string, token?: string) {
     new Request(`http://nikcli.local${pathname}`, {
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
     }),
+  )
+}
+
+/**
+ * As the TUI calls it *since the background service became the default*: over a
+ * real socket, on a listener bound to loopback. `server` is what separates this
+ * from `Server.fetch`, and it is the only argument the router looks at besides
+ * the hostname it was built for.
+ */
+function overListener(hostname: string, pathname: string, token?: string) {
+  const handler = ServerRouter.make({
+    fallback: (request) => Server.fetch(request),
+    listenHostname: hostname,
+  })
+  return handler(
+    new Request(`http://127.0.0.1:4096${pathname}`, {
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    }),
+    {} as never,
   )
 }
 
@@ -104,10 +124,29 @@ describe("local account session", () => {
     expect(((await response.json()) as { email: string } | null)?.email).toBe(EMAIL)
   })
 
+  it("answers over the background service's loopback socket", async () => {
+    // The regression this guards: the fallback originally required "no
+    // `Bun.Server`", but the default TUI stopped being in-process when the
+    // background service landed — it dials a loopback listener, so every
+    // launch past the token's fifteen minutes reopened the sign-in dialog.
+    const response = await overListener("127.0.0.1", "/user/me", await jwt(-60))
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { email: string }).email).toBe(EMAIL)
+  })
+
+  it("does not answer on a listener that is reachable from off the machine", async () => {
+    // The gate is the *listener*, never the peer: a server bound to every
+    // interface has callers this machine does not vouch for, so an expired
+    // bearer stays expired there.
+    expect((await overListener("0.0.0.0", "/user/me", await jwt(-60))).status).toBe(401)
+    const account = await overListener("0.0.0.0", "/account", await jwt(-60))
+    expect(await account.json()).toBeNull()
+  })
+
   it("never falls back for a request that crossed a socket", async () => {
-    // `Auth.markLocal` is the whole gate, and only `ServerRouter` sets it — for
-    // requests it is handed without a `Bun.Server`. An unmarked request is one
-    // that came off the wire, and it gets the pre-existing answer: nothing.
+    // `Auth.markLocal` is the whole gate, and only `ServerRouter` sets it. An
+    // unmarked request is one this machine does not vouch for, and it gets the
+    // pre-existing answer: nothing.
     const remote = new Request("http://nikcli.local/user/me")
     expect(Auth.isLocal(remote)).toBe(false)
     expect(await Auth.sessionFor(remote)).toBeNull()

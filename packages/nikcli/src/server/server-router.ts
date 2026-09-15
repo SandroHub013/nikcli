@@ -331,10 +331,20 @@ export namespace ServerRouter {
 
   export function make(options: Options): Fetch {
     return async (request, server) => {
-      // No `Bun.Server` means no socket: this is `Server.fetch` called from
-      // inside the process. It is the only signal that separates the TUI
-      // worker, CLI and plugins from anything that dialed in.
-      if (!server) Auth.markLocal(request)
+      // Two ways a request can be this machine's own. No `Bun.Server` means no
+      // socket at all: `Server.fetch` called from inside the process (the TUI
+      // worker, the CLI, plugins, sdk-next). A loopback-bound listener means
+      // the only peers that can reach it are on this machine — which is what
+      // the background service is, and since it became the default the TUI
+      // talks to it over exactly that socket rather than in-process.
+      //
+      // Checking the *listener*, not the peer address, is deliberate: a
+      // non-loopback listener never qualifies, so nothing a remote caller puts
+      // in a header or a forwarded address can buy this. And it grants no
+      // authority — on a loopback listener with no `NIKCLI_SERVER_PASSWORD` a
+      // caller with no bearer is already admitted as `open`; this only lets
+      // `Auth.sessionFor` answer "who is signed in on this machine".
+      if (!server || Auth.isLoopbackHostname(options.listenHostname)) Auth.markLocal(request)
       const limited = bodyLimitResponse(request)
       if (limited) return withCors(limited, request, options)
       if (request.method === "OPTIONS") return preflight(request, options)
