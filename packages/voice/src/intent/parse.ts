@@ -105,7 +105,7 @@ function extractSlotsFromUtterance(
   //
   // Not after "cerca": "cerca file parser" is a search, and taking "parser"
   // as a path here left step 7 with no query, so the search ran on nothing.
-  const fileMatch = cleaned.match(/(?<!\b(?:cerca|trova|ricerca)\s)\bfile\s+([^\s]+)/i)
+  const fileMatch = cleaned.match(/(?<!\b(?:cerca|trova|ricerca)\s(?:(?:il|un|i|dei|del|lo)\s)?)\bfile\s+([^\s]+)/i)
   if (fileMatch) {
     slots.path = fileMatch[1]
     cleaned = cleaned.replace(fileMatch[0], "").replace(/\s+/g, " ").trim()
@@ -171,7 +171,7 @@ function extractSlotsFromUtterance(
 
   // 7. Search query extraction: e.g. "cerca nel progetto parseUtterance"
   const searchMatch = cleaned.match(
-    /\b(cerca nel progetto|trova nel progetto|cerca file|ricerca nel progetto|trova simbolo)\s+(.+)$/i
+    /\b(cerca nel progetto|trova nel progetto|cerca (?:(?:il|un|i|dei|del|lo)\s)?file|ricerca nel progetto|trova simbolo)\s+(.+)$/i
   )
   if (searchMatch) {
     slots.text = searchMatch[2].trim()

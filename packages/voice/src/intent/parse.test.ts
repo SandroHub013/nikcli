@@ -71,6 +71,11 @@ describe("parseUtterance", () => {
       expect(search.slots.text).toBe("parser")
       expect(search.slots.path).toBeUndefined()
 
+      const withArticle = parseUtterance("cerca il file parser")
+      expect(withArticle.intent?.intent).toBe("project.search")
+      expect(withArticle.slots.text).toBe("parser")
+      expect(withArticle.slots.path).toBeUndefined()
+
       // Opening a file still takes its path.
       expect(parseUtterance("apri file src/bridge/host.ts").slots.path).toBe("src/bridge/host.ts")
     })
