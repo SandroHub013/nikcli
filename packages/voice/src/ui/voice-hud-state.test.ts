@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import {
   agentHudState,
+  latestExchange,
   HUD_WAVE,
   orbRim,
   preparingHudState,
@@ -128,6 +129,50 @@ describe("agentHudState", () => {
     const state = agentHudState({ ...base, status: "executing", spoken: "chiudi tutto" })
     expect(state.tone).toBe("working")
     expect(state.line).toBe("chiudi tutto")
+  })
+
+  it("while an agent turn runs, shows the user's sentence, not the assistant's previous line", () => {
+    const state = agentHudState({
+      ...base,
+      status: "executing",
+      spoken: "Sono sveglio e in ascolto.",
+      utterance: "quante sessioni ci sono aperte in ADE?",
+    })
+    expect(state.line).toBe("quante sessioni ci sono aperte in ADE?")
+    expect(state.quoted).toBe(true)
+    expect(state.label).toBe("eseguo")
+  })
+
+  it("a matched command still reads back what it does while executing", () => {
+    const state = agentHudState({ ...base, status: "executing", readback: "apro la tavolozza", utterance: "apri la tavolozza" })
+    expect(state.line).toBe("apro la tavolozza")
+    expect(state.quoted).toBe(false)
+  })
+
+  it("after the turn, shows the answer instead of 'parla pure'", () => {
+    const state = agentHudState({ ...base, status: "idle", utterance: "quante sessioni?", answer: "Ci sono tre sessioni aperte." })
+    expect(state).toMatchObject({ label: "risposta", line: "Ci sono tre sessioni aperte.", quoted: false, tone: "done" })
+    // New speech still wins over the old answer.
+    expect(agentHudState({ ...base, status: "listening", partial: "e la", answer: "Ci sono tre sessioni aperte." }).line).toBe("e la")
+  })
+
+  it("latestExchange pairs the latest sentence with an answer only when it came after it", () => {
+    const at = 1
+    expect(latestExchange([{ kind: "assistant", text: "Sono sveglio e in ascolto.", at }])).toEqual({})
+    expect(
+      latestExchange([
+        { kind: "assistant", text: "Sono sveglio e in ascolto.", at },
+        { kind: "user", text: "quante sessioni?", at },
+      ]),
+    ).toEqual({ utterance: "quante sessioni?" })
+    expect(
+      latestExchange([
+        { kind: "user", text: "prima", at },
+        { kind: "assistant", text: "risposta vecchia", at },
+        { kind: "user", text: "seconda", at },
+        { kind: "assistant", text: "risposta nuova", at },
+      ]),
+    ).toEqual({ utterance: "seconda", answer: "risposta nuova" })
   })
 
   it("treats dictation as the user's words", () => {

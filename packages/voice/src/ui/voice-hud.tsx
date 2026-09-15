@@ -35,6 +35,7 @@ import { OrbMark } from "./orb-mark"
 import { orbLevel } from "./voice-orb"
 import {
   agentHudState,
+  latestExchange,
   HUD_WAVE,
   orbRim,
   preparingHudState,
@@ -170,6 +171,7 @@ export function VoiceHud(props: VoiceHudProps) {
       spoken: spoken(),
       readback: readback(),
       wakeWord: props.engine.settings().wakeWord,
+      ...latestExchange(props.engine.history()),
     })
   })
 
