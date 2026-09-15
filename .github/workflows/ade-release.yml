@@ -102,6 +102,11 @@ jobs:
 
   build:
     needs: draft
+    env:
+      # Authenticode signing through SignPath Foundation starts the day its API
+      # token is added as a secret; until then the Windows setup ships
+      # unsigned, as before. See packages/ade/CODE_SIGNING.md.
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -182,6 +187,48 @@ jobs:
           fi
           CONFIG_JSON="{\"version\":\"$VERSION\",\"build\":{\"beforeBuildCommand\":\"\"},\"bundle\":{\"createUpdaterArtifacts\":true,\"macOS\":{\"signingIdentity\":\"-\"}}}"
           bun x tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$CONFIG_JSON"
+
+      # The setup goes to SignPath, comes back with an Authenticode signature,
+      # and replaces the unsigned one. Its updater signature was computed over
+      # the unsigned bytes, so it is made again over the signed ones: the app
+      # checks the file it downloads against exactly this .sig.
+      - name: Upload the Windows setup for signing
+        id: unsigned
+        if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ade-unsigned-${{ matrix.target }}
+          path: packages/ade/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Authenticode signing (SignPath)
+        if: steps.unsigned.outcome == 'success'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Use the signed setup
+        if: steps.unsigned.outcome == 'success'
+        working-directory: packages/ade
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.ADE_UPDATER_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.ADE_UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          NSIS="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+          cp ../../signed/*-setup.exe "$NSIS/"
+          for setup in "$NSIS"/*-setup.exe; do
+            rm -f "$setup.sig"
+            bun x tauri signer sign "$setup"
+          done
 
       - name: Collect and upload
         shell: bash
