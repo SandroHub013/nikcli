@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Flag } from "@nikcli-ai/util/flag"
 import { MobileAuth } from "@/mobile/auth"
 import { UserDB } from "@/user/users"
-import { externalSessionForToken } from "@/server/identity-auth"
+import { externalSessionForToken, localAccountSession } from "@/server/identity-auth"
 import { Log } from "@nikcli-ai/util/log"
 
 /**
@@ -51,6 +51,25 @@ export namespace Auth {
 
   export function remember(request: Request, value: Principal) {
     principals.set(request, value)
+  }
+
+  const localRequests = new WeakSet<Request>()
+
+  /**
+   * Record that a request never crossed a socket.
+   *
+   * `ServerRouter` marks every request it is handed without a `Bun.Server` —
+   * the in-process entry points (`Server.fetch` from the TUI worker, the CLI,
+   * plugins, sdk-next) and nothing else. Such a caller is already inside the
+   * trust boundary: it needs no credentials to be admitted, it can read the
+   * same database directly, and the token file it presents is its own.
+   */
+  export function markLocal(request: Request) {
+    localRequests.add(request)
+  }
+
+  export function isLocal(request: Request): boolean {
+    return localRequests.has(request)
   }
 
   const upstreamVerified = new WeakSet<Request>()
@@ -211,7 +230,14 @@ export namespace Auth {
     if (bearer) {
       const principal = await resolveBearer(request)
       if (principal) return { ok: true, principal }
-      return unauthorized()
+      // A local caller is admitted with no bearer at all, so an expired one
+      // must not leave it *less* authorized than sending none. The terminal
+      // holds a fifteen-minute issuer token on disk and sends it on every
+      // `/user/*` call; rejecting the request outright turned "my token aged
+      // out" into "signed out" for a machine whose account is still valid and
+      // still refreshing. Fall through to the credential-free decision below —
+      // the stale token buys nothing, it is simply ignored.
+      if (!isLocal(request)) return unauthorized()
     }
 
     if (options?.mobileAuthRequired || (Flag.NIKCLI_REQUIRE_OAUTH && !Flag.NIKCLI_LEGACY_LOGIN)) {
@@ -245,6 +271,23 @@ export namespace Auth {
         headers: { "www-authenticate": challenge },
       }),
     }
+  }
+
+  /**
+   * The user session behind a request, for the `/user/*` and `/account`
+   * handlers that need an identity rather than an authorization decision.
+   *
+   * A valid bearer answers first and always wins. Only when there is none —
+   * and only for a request that never crossed a socket — does this fall back
+   * to the account this machine is signed into, whose token is refreshed and
+   * verified by `localAccountSession`. A remote caller gets `null`, exactly as
+   * before.
+   */
+  export async function sessionFor(request: Request): Promise<{ user: UserDB.PublicUser; token: string } | null> {
+    const principal = await resolveBearer(request).catch(() => undefined)
+    if (principal?.type === "user") return principal.session
+    if (!isLocal(request)) return null
+    return (await localAccountSession().catch(() => undefined)) ?? null
   }
 
   function unauthorized(): AuthenticateResult {

@@ -1,6 +1,8 @@
 import { verifyAccessToken, type VerifyAccessTokenOptions } from "@nikcli-ai/auth"
 import { Effect } from "effect"
 import { Flag } from "@nikcli-ai/util/flag"
+import { Account } from "@/account"
+import { runPromiseWithLayer } from "@/effect"
 import { UserDB } from "@/user/users"
 
 const DEFAULT_ISSUER = "https://auth.nikcli.store"
@@ -40,4 +42,35 @@ export async function externalSessionForToken(
     user: Effect.runSync(UserDB.ensureExternalUser({ sub: auth.accountID, email: auth.email })),
     token,
   }
+}
+
+/**
+ * The session this machine holds, independent of what the caller presented.
+ *
+ * The terminal stores the issuer access token in a file and sends it as its
+ * bearer, but that token lives about fifteen minutes while the account row
+ * beside it carries a refresh token and renews itself. Every launch after the
+ * first quarter hour therefore arrived with a dead bearer and read as signed
+ * out — which is how a signed-in user got the sign-in dialog on every start.
+ *
+ * Identity is resolved from the renewing side instead. `Account.token`
+ * refreshes when the stored token is close to expiry, and what it hands back
+ * is verified here exactly like any other bearer: the caller's expired token
+ * is never trusted, it is ignored. That is also why only callers the router
+ * already admits without credentials may reach this — see `Auth.sessionFor`.
+ * It answers "who is signed in on this machine", not "who sent this request".
+ */
+export async function localAccountSession(): Promise<{ user: UserDB.PublicUser; token: string } | undefined> {
+  if (!identityVerifierOptions()) return
+  const token = await runPromiseWithLayer(
+    Account.defaultLayer,
+    Effect.gen(function* () {
+      const account = yield* Account.Service
+      const active = yield* account.active()
+      if (!active) return undefined
+      return yield* account.token(active.id)
+    }),
+  )
+  if (!token) return
+  return externalSessionForToken(token)
 }

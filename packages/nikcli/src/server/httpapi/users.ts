@@ -60,8 +60,7 @@ export namespace UsersHttp {
   }
 
   async function sessionFor(request: Request): Promise<{ user: UserDB.PublicUser; token: string } | null> {
-    const principal = await Auth.resolveBearer(request).catch(() => undefined)
-    return principal?.type === "user" ? principal.session : null
+    return Auth.sessionFor(request)
   }
 
   async function readJson(request: Request): Promise<JsonValue | undefined> {

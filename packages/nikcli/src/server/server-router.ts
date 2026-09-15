@@ -331,6 +331,10 @@ export namespace ServerRouter {
 
   export function make(options: Options): Fetch {
     return async (request, server) => {
+      // No `Bun.Server` means no socket: this is `Server.fetch` called from
+      // inside the process. It is the only signal that separates the TUI
+      // worker, CLI and plugins from anything that dialed in.
+      if (!server) Auth.markLocal(request)
       const limited = bodyLimitResponse(request)
       if (limited) return withCors(limited, request, options)
       if (request.method === "OPTIONS") return preflight(request, options)

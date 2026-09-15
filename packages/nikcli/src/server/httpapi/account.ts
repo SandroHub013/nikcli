@@ -47,13 +47,14 @@ export namespace AccountHttp {
    *
    * `null` and not 401 for an unauthenticated caller: "who is signed in" and
    * "nobody is" are the same answer to a dialog, and the terminal asks this on
-   * mount, before any sign-in has happened. The bearer check exists because
+   * mount, before any sign-in has happened. The session check exists because
    * this route carries an email address and the server can be listening on a
-   * port — in process, nothing was reachable to ask.
+   * port — in process, nothing was reachable to ask, which is also why
+   * `Auth.sessionFor` lets a local caller through on the machine's own account
+   * when its stored bearer has aged out.
    */
   async function active(request: Request): Promise<Response> {
-    const principal = await Auth.resolveBearer(request).catch(() => undefined)
-    if (principal?.type !== "user") return json(null)
+    if (!(await Auth.sessionFor(request))) return json(null)
 
     const info = await runAccount(
       Effect.gen(function* () {
