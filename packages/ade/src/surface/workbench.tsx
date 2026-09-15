@@ -124,6 +124,7 @@ import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
+import { pickProvider } from "../session/provider-pick"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -1154,10 +1155,25 @@ export function Workbench() {
     }
 
     if (message.kind === "spawn") {
-      const agent = resolveAgent(SPAWNABLE, message.agent)
-      if ("error" in agent) {
-        await answer(`errore: ${agent.error}`)
+      const asked = resolveAgent(SPAWNABLE, message.agent)
+      if ("error" in asked) {
+        await answer(`errore: ${asked.error}`)
         return true
+      }
+      /*
+       * The quota router may send it to another agent (S9, `provider-pick.ts`).
+       * Not for a fork, whose conversation belongs to its CLI, nor when the
+       * caller chose a model; an answer ADE cannot start is ignored.
+       */
+      let agent = asked
+      let rerouted: string | undefined
+      if (!message.fork && !message.model) {
+        const picked = await pickProvider({ agent: asked.id, from: message.from })
+        const other = picked.agent !== asked.id ? resolveAgent(SPAWNABLE, picked.agent) : undefined
+        if (other && !("error" in other)) {
+          agent = other
+          rerouted = `${asked.id} -> ${other.id}${picked.reason ? `: ${picked.reason}` : ""}`
+        }
       }
       /*
        * A fork starts from the sender's own conversation: same CLI, same model,
@@ -1280,7 +1296,8 @@ export function Workbench() {
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch}` : "") +
-          (fork ? " come fork della tua conversazione" : ""),
+          (fork ? " come fork della tua conversazione" : "") +
+          (rerouted ? `; instradata ${rerouted}` : ""),
       )
       return true
     }
