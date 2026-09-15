@@ -130,6 +130,15 @@ export interface SidebarProps {
    * the theme is its signal and the notices are its list.
    */
   footerActions?: JSX.Element
+  /**
+   * Something else in place of the header and the sections.
+   *
+   * The bot section puts its roster here: one column, not two lists side by
+   * side competing for the same eye. The foot of the column stays as it is
+   * everywhere — the screenshots a bot will be shown, and the way into
+   * settings.
+   */
+  content?: JSX.Element
   files?: FileNode[]
   selectedFilePath?: string
   onSelectFile?: (path: string) => void
@@ -944,6 +953,10 @@ export function Sidebar(props: SidebarProps) {
       data-resizing={isResizing() ? "true" : undefined}
       style={{ width: `${width()}px` }}
     >
+      <Show when={props.content}>
+        <div data-slot="sidebar-content">{props.content}</div>
+      </Show>
+
       {/*
         The whole header, and not only its contents, is behind the guard.
         It used to be mounted always with a `<Show>` inside it, so with no
@@ -951,7 +964,7 @@ export function Sidebar(props: SidebarProps) {
         top of a sidebar reads as a search field that will not take text.
         Nothing to say, nothing drawn.
       */}
-      <Show when={project()}>
+      <Show when={project() && !props.content}>
         <header data-slot="sidebar-header-project">
           <div data-slot="project-name">
             <span data-slot="project-name-text" title={project()!.name}>{project()!.name}</span>
@@ -984,7 +997,7 @@ export function Sidebar(props: SidebarProps) {
         </header>
       </Show>
 
-      <div data-slot="sidebar-sections">
+      <div data-slot="sidebar-sections" hidden={props.content !== undefined}>
         {/*
           Sized to its content, never to a stored pixel height and never to
           the leftover space. `data-scrolls` marks the one section allowed to

@@ -1679,3 +1679,25 @@ aside[data-component="ade-sidebar"] {
     gap: 5px;
   }
 }
+
+/*
+ * Un contenuto al posto delle sezioni: la sezione bot.
+ *
+ * Con `content` la colonna non ha intestazione né sezioni; al loro posto c'è
+ * quello che la sezione passa — la rubrica dei bot — e il piede resta com'è
+ * nella sezione code: le schermate in una striscia bassa che scorre, e sotto
+ * le impostazioni.
+ */
+[data-slot="sidebar-content"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* `hidden` has to win over the sections' own `display`, or the bot roster
+   would sit on top of the sessions and files it replaces. */
+[data-slot="sidebar-sections"][hidden] {
+  display: none;
+}

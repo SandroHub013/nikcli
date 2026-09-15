@@ -1,5 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import type { AgentFile } from "../bots/nikcli"
+import { providerState, type ProviderState } from "../bots/providers"
+import { RUNNERS, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import "./sections.css"
 
@@ -231,6 +233,95 @@ export function GridSection(props: GridSectionProps) {
             </button>
           )}
         </For>
+      </div>
+    </>
+  )
+}
+
+export interface ProviderSectionProps {
+  /** Opens the runner's sign-in in a terminal pane. Absent: no button. */
+  onLogin?: (runner: Runner) => void
+}
+
+/**
+ * The programs a bot can run on, and whether each is signed in.
+ *
+ * ADE keeps no keys of its own for bots. Each runner uses the account its CLI
+ * already has — an Anthropic subscription through Claude Code, ChatGPT through
+ * Codex, the providers `nikcli auth` holds — so this screen only reports what
+ * each CLI says, and "Accedi" opens that CLI's own sign-in in a terminal.
+ */
+export function ProviderSection(props: ProviderSectionProps) {
+  const [states, setStates] = createSignal<Record<string, ProviderState>>({})
+  const [checking, setChecking] = createSignal(false)
+
+  const check = () => {
+    if (checking()) return
+    setChecking(true)
+    setStates({})
+    void Promise.all(
+      RUNNERS.map((runner) =>
+        providerState(runner).then((state) => setStates((prev) => ({ ...prev, [runner.id]: state }))),
+      ),
+    ).finally(() => setChecking(false))
+  }
+  onMount(check)
+
+  const label = (state: ProviderState | undefined) => {
+    if (!state) return "Controllo…"
+    if (!state.installed) return "Non installato"
+    if (state.login.state === "in") return "Collegato"
+    if (state.login.state === "out") return "Non collegato"
+    return "Da verificare"
+  }
+
+  return (
+    <>
+      <div data-slot="section-head">
+        <h3 data-slot="section-title" tabIndex={-1}>
+          Provider
+        </h3>
+        <p data-slot="section-desc">
+          I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento
+          Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti
+          da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.
+        </p>
+      </div>
+
+      <ul data-slot="settings-list">
+        <For each={RUNNERS}>
+          {(runner) => {
+            const state = () => states()[runner.id]
+            return (
+              <li data-slot="provider-row" data-state={state()?.installed === false ? "missing" : state()?.login.state}>
+                <div data-slot="provider-head">
+                  <span data-slot="settings-name">{runner.label}</span>
+                  <span data-slot="provider-badge">{label(state())}</span>
+                  <Show when={props.onLogin && state()?.installed && runner.login.length > 0}>
+                    <button
+                      type="button"
+                      data-slot="settings-choice"
+                      onClick={() => props.onLogin?.(runner)}
+                      title={`${runner.command} ${runner.login.join(" ")}`}
+                    >
+                      {state()?.login.state === "in" ? "Cambia account" : "Accedi"}
+                    </button>
+                  </Show>
+                </div>
+                <span data-slot="provider-detail">{runner.account}</span>
+                <Show when={state()?.login.detail}>
+                  <span data-slot="settings-meta">{state()!.login.detail}</span>
+                </Show>
+              </li>
+            )
+          }}
+        </For>
+      </ul>
+
+      <div data-slot="settings-choices">
+        <button type="button" data-slot="settings-choice" disabled={checking()} onClick={check}>
+          {checking() ? "Controllo…" : "Controlla di nuovo"}
+        </button>
       </div>
     </>
   )

@@ -110,3 +110,57 @@
   outline: none;
   box-shadow: var(--ade-focus-ring);
 }
+
+/*
+ * One runner: its name and state on a line, whose account it uses under it,
+ * and what its CLI said. The badge is ink for signed in and quiet otherwise.
+ */
+[data-slot="provider-row"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  padding: var(--ade-space-4);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+}
+
+[data-slot="provider-head"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="provider-head"] [data-slot="settings-choice"] {
+  height: 26px;
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="provider-badge"] {
+  padding: 1px var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: 999px;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="provider-row"][data-state="in"] [data-slot="provider-badge"] {
+  border-color: var(--ade-ansi-green);
+  color: var(--ade-ansi-green);
+}
+
+[data-slot="provider-row"][data-state="out"] [data-slot="provider-badge"],
+[data-slot="provider-row"][data-state="missing"] [data-slot="provider-badge"] {
+  border-color: var(--ade-ansi-yellow);
+  color: var(--ade-ansi-yellow);
+}
+
+[data-slot="provider-detail"] {
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="provider-row"] [data-slot="settings-meta"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

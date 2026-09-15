@@ -181,6 +181,48 @@ describe("serializeAgentFile", () => {
   })
 })
 
+describe("la faccia scelta", () => {
+  test("va nel file come chiave propria e torna indietro", () => {
+    const text = serializeAgentFile({
+      description: "Revisiona",
+      mode: "primary",
+      avatar: "hex/red",
+      prompt: "Sei un revisore.",
+    })
+    expect(text).toContain('avatar: "hex/red"')
+    const bot = readAgentFile({ path: "/p/.nikcli/agent/revisore.md", scope: "project", text })
+    expect(bot.avatar).toBe("hex/red")
+  })
+
+  test("si cambia e si toglie senza toccare il resto", () => {
+    const text = serializeAgentFile({ description: "Revisiona", mode: "primary", avatar: "hex/red", prompt: "Sei un revisore." })
+    const changed = editedAgentFile(text, { avatar: "drop/blue" })
+    expect(changed).toContain('avatar: "drop/blue"')
+    expect(changed).not.toContain("hex/red")
+    const cleared = editedAgentFile(text, { avatar: undefined })
+    expect(cleared).not.toContain("avatar:")
+    expect(editedAgentFile(text, { description: "Altro" })).toContain('avatar: "hex/red"')
+  })
+})
+
+describe("il motore scelto", () => {
+  test("nikcli non si scrive, gli altri sì, e tornano indietro", () => {
+    expect(serializeAgentFile({ description: "d", mode: "primary", runner: "nikcli", prompt: "p" })).not.toContain("runner:")
+    const text = serializeAgentFile({ description: "d", mode: "primary", runner: "claude", model: "sonnet", prompt: "p" })
+    expect(text).toContain('runner: "claude"')
+    expect(readAgentFile({ path: "/p/.nikcli/agent/x.md", scope: "project", text }).runner).toBe("claude")
+  })
+
+  test("si cambia e si toglie senza toccare il resto", () => {
+    const text = serializeAgentFile({ description: "d", mode: "primary", runner: "codex", avatar: "hex/red", prompt: "p" })
+    expect(editedAgentFile(text, { runner: "claude" })).toContain('runner: "claude"')
+    const cleared = editedAgentFile(text, { runner: undefined })
+    expect(cleared).not.toContain("runner:")
+    expect(cleared).toContain('avatar: "hex/red"')
+    expect(editedAgentFile(text, { description: "Altro" })).toContain('runner: "codex"')
+  })
+})
+
 describe("readAgentFile", () => {
   test("un file letto è un bot con tutto quello che serve per mostrarlo", () => {
     const bot = readAgentFile({

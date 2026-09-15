@@ -163,6 +163,10 @@ export interface CreateBotInput {
   readonly mode?: AgentMode
   /** Which tools it may use. Omitted means all of them. */
   readonly tools?: readonly string[]
+  /** The face the user picked, `shape/color`. Omitted: the name decides. */
+  readonly avatar?: string
+  /** The program its turns run on (`runners.ts`). Omitted: nikcli. */
+  readonly runner?: string
 }
 
 export type CreateBotResult =
@@ -241,6 +245,8 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
   const settings = {
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
+    ...(input.avatar ? { avatar: input.avatar } : {}),
+    ...(input.runner && input.runner !== "nikcli" ? { runner: input.runner } : {}),
     ...(input.objectives && input.objectives.length > 0 ? { objectives: input.objectives } : {}),
   }
   if (Object.keys(settings).length > 0 && host.readTextFile && host.writeTextFile) {
@@ -294,6 +300,8 @@ async function writeBot(
       mode: input.mode,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
+      ...(input.avatar ? { avatar: input.avatar } : {}),
+      ...(input.runner ? { runner: input.runner } : {}),
       prompt: joinPrompt({
         persona: input.persona ?? "",
         objectives: input.objectives ?? [],
@@ -312,6 +320,10 @@ export interface BotChanges {
   readonly effort?: string | undefined
   readonly persona?: string
   readonly objectives?: readonly string[]
+  /** `undefined` in the object goes back to the face the name gives. */
+  readonly avatar?: string | undefined
+  /** `undefined` in the object goes back to nikcli. */
+  readonly runner?: string | undefined
 }
 
 /**
@@ -369,6 +381,27 @@ export async function listModels(cwd?: string): Promise<string[]> {
 }
 
 /** What to run to open a session as this bot. */
-export function botLaunch(bot: AgentFile): { command: string; args: string[] } {
-  return { command: NIKCLI_COMMAND, args: launchArgs(bot.identifier, bot.model) }
+export function botLaunch(bot: AgentFile): { agentId: string; command: string; args: string[] } | undefined {
+  /*
+   * The runner's own TUI, with as much of the bot as its flags can carry.
+   * Claude Code takes the persona as an appended system prompt; Codex only the
+   * model and effort.
+   */
+  switch (bot.runner) {
+    case "claude": {
+      const args: string[] = []
+      if (bot.model) args.push("--model", bot.model)
+      if (bot.effort) args.push("--effort", bot.effort)
+      if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
+      return { agentId: "claude-code", command: "claude", args }
+    }
+    case "codex": {
+      const args: string[] = []
+      if (bot.model) args.push("-m", bot.model)
+      if (bot.effort) args.push("-c", `model_reasoning_effort="${bot.effort}"`)
+      return { agentId: "codex", command: "codex", args }
+    }
+    default:
+      return { agentId: "nikcli", command: NIKCLI_COMMAND, args: launchArgs(bot.identifier, bot.model) }
+  }
 }

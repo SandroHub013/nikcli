@@ -32,7 +32,7 @@ import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan }
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import { BotSection, GridSection, McpSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { BotSection, GridSection, McpSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
 
@@ -119,8 +119,9 @@ import {
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
 import { Chat } from "../chat/chat"
-import { Bots } from "../bots/bots"
+import { BotsMain, BotsRoster } from "../bots/bots"
 import type { AgentFile } from "../bots/nikcli"
+import type { Runner } from "../bots/runners"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createAdePluginRuntime } from "../plugin/runtime"
@@ -3298,6 +3299,7 @@ export function Workbench() {
    */
   const openBotSession = (bot: AgentFile) => {
     const launch = botLaunch(bot)
+    if (!launch) return undefined
     const owner = project()?.name
     const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
     const id = `n${Date.now()}-bot-${++paneSequence}`
@@ -3307,8 +3309,8 @@ export function Workbench() {
       title: bot.identifier,
       status: "idle",
       activity: "Disponibile",
-      model: "nikcli",
-      agent: "nikcli",
+      model: bot.model ?? launch.command,
+      agent: launch.agentId,
       mode: "bot",
       task: "",
       lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
@@ -3318,8 +3320,34 @@ export function Workbench() {
        expanded and the one just started is off screen. */
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
-    void startProcess(id, "nikcli", "", undefined, launch.args)
+    void startProcess(id, launch.agentId, "", undefined, launch.args)
     return { id, index: mine.length + 1 }
+  }
+
+  /*
+   * A runner's own sign-in, in a pane of its own: the browser flow and the
+   * code to paste are the CLI's, and a terminal is where it expects them.
+   */
+  const openLoginSession = (runner: Runner) => {
+    const agentId = runner.id === "claude" ? "claude-code" : runner.id
+    if (!agentById(agentId) || runner.login.length === 0) return
+    const owner = project()?.name
+    const id = `n${Date.now()}-login-${++paneSequence}`
+    setWb((w) => addPane(w, {
+      id,
+      title: `${runner.label} · accesso`,
+      status: "idle",
+      activity: "Disponibile",
+      model: runner.command,
+      agent: agentId,
+      mode: "bot",
+      task: "",
+      lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
+      workspaceId: owner || "workspace",
+    }))
+    setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
+    setStarting(false)
+    void startProcess(id, agentId, "", undefined, [...runner.login])
   }
 
   const gridPanes = createPaneRenderer({
@@ -3634,6 +3662,14 @@ export function Workbench() {
         <Sidebar
           workspaces={workspaces()}
           selectedSessionId={wb().focusedId}
+          /* The bot section's roster lives in this column, where the sessions
+             and files are otherwise: one list on the left, not two. The foot
+             stays: the screenshots are what a bot will be shown. */
+          content={
+            wb().view === "bot" ? (
+              <BotsRoster {...(project()?.root ? { projectRoot: project()!.root } : {})} />
+            ) : undefined
+          }
           onSelectSession={(id) => void openSession(id)}
           /* No picker in the browser harness, so no button that could not work. */
           onAddProject={hasHost() ? () => void addProject() : undefined}
@@ -3807,7 +3843,7 @@ export function Workbench() {
             {/* A bot is a nikcli agent, so there is no key to ask for and no
                 roster of ADE's own: the section reads the files nikcli reads,
                 and starting one is the session the user would start. */}
-            <Bots
+            <BotsMain
               {...(project()?.root ? { projectRoot: project()!.root } : {})}
               onLaunch={(bot) => openBotSession(bot)}
               onOpenFile={(path) => void openFile(path)}
@@ -3929,6 +3965,12 @@ export function Workbench() {
                   />
                 </>
               ),
+            },
+            {
+              id: "set-sec-provider",
+              label: "Provider",
+              glyph: "⚿",
+              render: () => <ProviderSection onLogin={(runner) => openLoginSession(runner)} />,
             },
             {
               id: "set-sec-mcp",

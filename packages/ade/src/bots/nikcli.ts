@@ -104,6 +104,19 @@ export interface AgentFile {
   readonly prompt: string
   /** Only the tools explicitly turned off; everything absent is allowed. */
   readonly disabledTools: readonly string[]
+  /**
+   * The face the user chose, as `shape/color` — see `avatar.ts`.
+   *
+   * ADE's own key in nikcli's file. nikcli ignores keys it does not know, so
+   * it costs nothing there, and it means the face travels with the bot rather
+   * than living in one machine's browser storage. Absent: the name decides.
+   */
+  readonly avatar?: string
+  /**
+   * The program its turns run on — see `runners.ts`. ADE's own key, like
+   * `avatar`. Absent: nikcli.
+   */
+  readonly runner?: string
 }
 
 /**
@@ -479,6 +492,10 @@ export function serializeAgentFile(input: {
   readonly effort?: string
   readonly disabledTools?: readonly string[]
   readonly prompt: string
+  /** The chosen face, `shape/color`. Omitted when the name decides. */
+  readonly avatar?: string
+  /** The runner, when it is not nikcli. */
+  readonly runner?: string
   /**
    * Frontmatter this writer does not model, as the source lines it came from.
    *
@@ -499,6 +516,8 @@ export function serializeAgentFile(input: {
   const lines = ["---", `description: ${quote(input.description)}`, `mode: ${input.mode}`]
   if (input.model) lines.push(`model: ${quote(input.model)}`)
   if (input.effort) lines.push(`variant: ${quote(input.effort)}`)
+  if (input.avatar) lines.push(`avatar: ${quote(input.avatar)}`)
+  if (input.runner && input.runner !== "nikcli") lines.push(`runner: ${quote(input.runner)}`)
   lines.push(...(input.carried ?? []))
   if (input.disabledTools && input.disabledTools.length > 0) {
     lines.push("tools:")
@@ -515,7 +534,7 @@ export function serializeAgentFile(input: {
  * nikcli — the loader rewrites it into `permission` — but reproducing what the
  * file already said is not ADE's decision to change.
  */
-const KNOWN_KEYS = new Set(["description", "mode", "model", "variant", "tools"])
+const KNOWN_KEYS = new Set(["description", "mode", "model", "variant", "tools", "avatar", "runner"])
 
 /**
  * Every line of frontmatter this writer would otherwise lose.
@@ -559,6 +578,8 @@ export function readAgentFile(input: {
     mode: readMode(parsed.front.values["mode"]),
     ...(parsed.front.values["model"] ? { model: parsed.front.values["model"] } : {}),
     ...(parsed.front.values["variant"] ? { effort: parsed.front.values["variant"] } : {}),
+    ...(parsed.front.values["avatar"] ? { avatar: parsed.front.values["avatar"] } : {}),
+    ...(parsed.front.values["runner"] ? { runner: parsed.front.values["runner"] } : {}),
     prompt: parsed.prompt,
     disabledTools: disabled,
   }
@@ -580,9 +601,15 @@ export function editedAgentFile(
     readonly effort?: string | undefined
     readonly persona?: string
     readonly objectives?: readonly string[]
+    /** `undefined` in the object clears the choice; omit the key to leave it alone. */
+    readonly avatar?: string | undefined
+    /** Same rule as `avatar`. */
+    readonly runner?: string | undefined
   },
 ): string {
   const parsed = parseAgentFile(text)
+  const avatar = "avatar" in changes ? changes.avatar : parsed.front.values["avatar"]
+  const runner = "runner" in changes ? changes.runner : parsed.front.values["runner"]
   const disabled = Object.entries(parsed.front.maps["tools"] ?? {})
     .filter(([, enabled]) => !enabled)
     .map(([tool]) => tool)
@@ -606,6 +633,8 @@ export function editedAgentFile(
     mode: readMode(parsed.front.values["mode"]),
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
+    ...(avatar ? { avatar } : {}),
+    ...(runner ? { runner } : {}),
     carried: carriedLines(parsed.front),
     disabledTools: disabled,
     prompt: joinPrompt({
