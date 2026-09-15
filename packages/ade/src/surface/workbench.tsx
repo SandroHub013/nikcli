@@ -276,7 +276,7 @@ import {
   type VoiceSettings,
 } from "@nikcli-ai/voice"
 import { ShotTray, createShotSource } from "../shots"
-import { disposeTerminal, noteInTerminal, refreshTerminalThemes, writeToTerminal } from "../terminal/registry"
+import { disposeTerminal, noteInTerminal, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createRawWindows } from "../session/raw-window"
@@ -3769,6 +3769,8 @@ export function Workbench() {
       let firstByteAt: number | undefined
       let lastByteAt: number | undefined
 
+      // A restart reuses the pane's terminal; the new process starts at 1;1.
+      startOnCleanScreen(paneId)
       const session = await host.spawn({
         command: agent.command,
         args: extraArgs,
@@ -3994,6 +3996,7 @@ export function Workbench() {
     let tail = ""
     let spawned: SpawnedSession | undefined
     try {
+      startOnCleanScreen(paneId)
       const session = await host.spawn({
         command: "ssh",
         args,
