@@ -140,6 +140,100 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
   }
 }
 
+/**
+ * The effort levels each agent takes at start, and how it is told.
+ *
+ * Read off each CLI's `--help` (2026-09-15):
+ *
+ *   claude   --effort <low|medium|high|xhigh|max>
+ *   agy      --effort <low|medium|high>
+ *   codex    -c model_reasoning_effort="<level>"   (no flag of its own)
+ *
+ * nikcli's TUI has no effort flag: its effort is the agent's `variant`. An
+ * agent that cannot be told is refused, never started at its default while
+ * the caller believes it asked for more.
+ */
+const EFFORTS: Record<string, readonly string[]> = {
+  "claude-code": ["low", "medium", "high", "xhigh", "max"],
+  codex: ["minimal", "low", "medium", "high", "xhigh", "max"],
+  agy: ["low", "medium", "high"],
+}
+
+export function effortArgs(agentId: string, effort: string): string[] | { error: string } {
+  const value = effort.trim().toLowerCase()
+  const levels = EFFORTS[agentId]
+  if (!levels) {
+    return {
+      error:
+        agentId === "nikcli"
+          ? "nikcli non ha un flag per l'effort all'avvio: si imposta nel variant dell'agente; avvialo senza --effort"
+          : `ADE non sa come scegliere l'effort per ${agentId}: avvialo senza --effort`,
+    }
+  }
+  if (!levels.includes(value)) return { error: `effort "${effort}" non valido per ${agentId}: ${levels.join(", ")}` }
+  return agentId === "codex" ? ["-c", `model_reasoning_effort="${value}"`] : ["--effort", value]
+}
+
+/** Spawn arguments with any effort choice taken out, so another can be put in. */
+export function withoutEffort(args: readonly string[]): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const next = args[i + 1]
+    if (args[i] === "--effort" && next !== undefined) {
+      i++
+      continue
+    }
+    if (args[i] === "-c" && next?.startsWith("model_reasoning_effort=")) {
+      i++
+      continue
+    }
+    out.push(args[i]!)
+  }
+  return out
+}
+
+export interface DispatchChoice {
+  model?: string
+  effort?: string
+  why?: string
+}
+
+/**
+ * The model and effort a dispatch profile names for `agentId`.
+ *
+ * `dispatch.json` (the team board's folder) lists classes of work, each with
+ * candidates `{agent, model, effort, why}`. The caller still names the agent:
+ * a profile picks how that agent runs, it does not pick a different one.
+ */
+export function dispatchChoice(json: string, profile: string, agentId: string): DispatchChoice | { error: string } {
+  let data: unknown
+  try {
+    data = JSON.parse(json)
+  } catch {
+    return { error: "dispatch.json non è JSON valido" }
+  }
+  const classes = (data as { classes?: unknown }).classes
+  if (!Array.isArray(classes)) return { error: "dispatch.json non ha classes" }
+  const named = classes.find((entry) => entry && typeof entry === "object" && (entry as { when?: unknown }).when === profile) as
+    | { candidates?: unknown }
+    | undefined
+  if (!named) {
+    const names = classes.map((entry) => (entry as { when?: unknown })?.when).filter((name) => typeof name === "string")
+    return { error: `profilo "${profile}" non trovato in dispatch.json: ${names.join(", ")}` }
+  }
+  const candidates = Array.isArray(named.candidates) ? (named.candidates as Record<string, unknown>[]) : []
+  const hit = candidates.find((candidate) => candidate?.agent === agentId)
+  if (!hit) {
+    const agents = candidates.map((candidate) => candidate?.agent).filter((agent) => typeof agent === "string")
+    return { error: `il profilo "${profile}" non prevede ${agentId}: candidati ${agents.join(", ") || "nessuno"}` }
+  }
+  const text = (key: string) => (typeof hit[key] === "string" && (hit[key] as string).trim() ? (hit[key] as string).trim() : undefined)
+  const model = text("model")
+  const effort = text("effort")
+  const why = text("why")
+  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(why ? { why } : {}) }
+}
+
 /** Spawn arguments with any model choice taken out, so another can be put in. */
 export function withoutModel(args: readonly string[]): string[] {
   const out: string[] = []

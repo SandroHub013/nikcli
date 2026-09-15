@@ -26,6 +26,9 @@ import {
   slugify,
   worktreeArgs,
   worktreePlan,
+  effortArgs,
+  withoutEffort,
+  dispatchChoice,
   isBaseRef,
   worktreeAddArgs,
 } from "../session/orchestra"
@@ -1422,15 +1425,56 @@ export function Workbench() {
         name = checked.name
       }
 
+      /*
+       * Model and effort per task (S28): what the caller says, else what the
+       * dispatch profile names for this agent. Both are printed in the receipt,
+       * and an agent that cannot take one is refused rather than started at
+       * its default.
+       */
+      let profileModel: string | undefined
+      let profileEffort: string | undefined
+      let profileWhy: string | undefined
+      if (message.profile) {
+        const board = message.from ? await projectOfPane(host, message.from) : project()
+        let json: string | undefined
+        for (const path of board && !board.remote && host.readTextFile ? boardCandidates(board.root) : []) {
+          const dispatchPath = `${path.replace(/[\\/][^\\/]+$/, "")}/dispatch.json`
+          json = await host.readTextFile!(dispatchPath).then((read) => read.text).catch(() => undefined)
+          if (json !== undefined) break
+        }
+        if (json === undefined) {
+          await answer("errore: --profile legge dispatch.json accanto a TEAM.md della bacheca, e non c'è")
+          return true
+        }
+        const choice = dispatchChoice(json, message.profile, agent.id)
+        if ("error" in choice) {
+          await answer(`errore: ${choice.error}`)
+          return true
+        }
+        profileModel = choice.model
+        profileEffort = choice.effort
+        profileWhy = choice.why
+      }
+      const model = message.model ?? (fork ? undefined : profileModel)
+      const effort = message.effort ?? profileEffort
+
       // A fork keeps the parent's model choice: a different model is a different cache.
       const spawnArgs: string[] = fork ? [...(wb().panes.find((pane) => pane.id === message.from)?.spawnArgs ?? [])] : []
-      if (message.model) {
-        const chosen = modelArgs(agent.id, message.model)
+      if (model) {
+        const chosen = modelArgs(agent.id, model)
         if ("error" in chosen) {
           await answer(`errore: ${chosen.error}`)
           return true
         }
         spawnArgs.push(...chosen)
+      }
+      if (effort) {
+        const chosen = effortArgs(agent.id, effort)
+        if ("error" in chosen) {
+          await answer(`errore: ${chosen.error}`)
+          return true
+        }
+        spawnArgs.splice(0, spawnArgs.length, ...withoutEffort(spawnArgs), ...chosen)
       }
 
       // A subagent works in its caller's project, whichever one is open in ADE.
@@ -1512,6 +1556,8 @@ export function Workbench() {
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
           (fork ? " come fork della tua conversazione" : "") +
+          (model || effort ? `; modello ${model ?? "predefinito"}, effort ${effort ?? "predefinito"}` : "") +
+          (message.profile ? ` (profilo ${message.profile}${profileWhy ? `: ${briefOf(profileWhy, 80)}` : ""})` : "") +
           (rerouted ? `; instradata ${rerouted}` : ""),
       )
       return true
@@ -1575,6 +1621,14 @@ export function Workbench() {
         }
         spawnArgs = [...withoutModel(spawnArgs), ...chosen]
       }
+      if (message.effort) {
+        const chosen = effortArgs(agentId, message.effort)
+        if ("error" in chosen) {
+          await answer(`errore: ${chosen.error}`)
+          return true
+        }
+        spawnArgs = [...withoutEffort(spawnArgs), ...chosen]
+      }
       /*
        * Same pane, same worktree, same place in the tree. The old process goes
        * first; its exit is ignored because `running` already holds nothing for
@@ -1608,7 +1662,7 @@ export function Workbench() {
         } else if (Date.now() - waitStart > 60_000) clearInterval(waitForRestart)
       }, 1000)
       await answer(
-        `ok: riavviata "${pane.title}"${message.model ? ` con ${message.model}` : ""}` +
+        `ok: riavviata "${pane.title}"${message.model ? ` con ${message.model}` : ""}${message.effort ? `, effort ${message.effort}` : ""}` +
           (message.fresh ? " da zero con la tua nota: se serve il compito intero mandalo con ade-msg ask" : " con la tua nota; riprende la sua conversazione e le richieste aperte restano valide"),
       )
       return true
@@ -1631,6 +1685,10 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "ask" && message.effort) {
+      await answer("errore: l'effort di una sessione aperta non si cambia con ask: usa spawn --effort, oppure relaunch --effort --note")
+      return true
+    }
     if (message.kind === "ask" && target.pane.id === message.from) {
       await answer("errore: una sessione non può fare una richiesta a se stessa")
       return true

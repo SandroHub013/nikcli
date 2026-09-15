@@ -11,6 +11,9 @@ import {
   withoutModel,
   worktreeArgs,
   worktreePlan,
+  effortArgs,
+  withoutEffort,
+  dispatchChoice,
   isBaseRef,
   worktreeAddArgs,
 } from "./orchestra"
@@ -114,4 +117,32 @@ test("results live in .ade/results, kept out of git once", () => {
 test("withoutModel takes the model choice out and leaves the rest", () => {
   expect(withoutModel(["--model", "a", "--add-dir", "C:\\w"])).toEqual(["--add-dir", "C:\\w"])
   expect(withoutModel(["-m", "gpt-5"])).toEqual([])
+})
+describe("effort and dispatch profiles at spawn", () => {
+  test("each agent is told the effort its own way, and one that cannot be told is refused", () => {
+    expect(effortArgs("claude-code", "XHigh")).toEqual(["--effort", "xhigh"])
+    expect(effortArgs("agy", "low")).toEqual(["--effort", "low"])
+    expect(effortArgs("codex", "high")).toEqual(["-c", 'model_reasoning_effort="high"'])
+    expect(effortArgs("agy", "max")).toEqual({ error: expect.stringContaining("low, medium, high") })
+    expect(effortArgs("nikcli", "high")).toEqual({ error: expect.stringContaining("variant") })
+    expect(effortArgs("opencode", "high")).toEqual({ error: expect.stringContaining("senza --effort") })
+  })
+
+  test("a relaunch can replace the effort", () => {
+    expect(withoutEffort(["--model", "haiku", "--effort", "low"])).toEqual(["--model", "haiku"])
+    expect(withoutEffort(["-c", 'model_reasoning_effort="high"', "-c", 'sandbox_mode="x"'])).toEqual(["-c", 'sandbox_mode="x"'])
+  })
+
+  test("a profile gives the named agent its model and effort, and says why it cannot", () => {
+    const json = JSON.stringify({
+      classes: [
+        { when: "revisione-audit", candidates: [{ agent: "claude-code", model: "claude-opus-5", effort: "high", why: "aderenza" }] },
+        { when: "compito-piccolo", candidates: [{ agent: "agy", model: "gemini-3.8-flash-medium", effort: "medium" }] },
+      ],
+    })
+    expect(dispatchChoice(json, "revisione-audit", "claude-code")).toEqual({ model: "claude-opus-5", effort: "high", why: "aderenza" })
+    expect(dispatchChoice(json, "revisione-audit", "agy")).toEqual({ error: expect.stringContaining("candidati claude-code") })
+    expect(dispatchChoice(json, "boh", "agy")).toEqual({ error: expect.stringContaining("revisione-audit, compito-piccolo") })
+    expect(dispatchChoice("{", "x", "agy")).toEqual({ error: "dispatch.json non è JSON valido" })
+  })
 })
