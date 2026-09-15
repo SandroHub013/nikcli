@@ -323,19 +323,20 @@ export function formatRequest(
     ? ` Lavori nella worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica solo lì, fai commit sul branch, non toccare il progetto principale.`
     : ""
   const results = context.resultsDir ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md` : undefined
+  /*
+   * The contract, and nothing the intro already says. This line is paid for
+   * on every request, so the sender is named once and the "you may delegate"
+   * sentence appears only where it changes something: at the last level.
+   */
   const delegate =
-    context.depth === undefined || context.maxDepth === undefined
-      ? ""
-      : context.depth < context.maxDepth
-        ? ` Puoi delegare sottocompiti grandi con ade-msg spawn (sei al livello ${context.depth} di ${context.maxDepth}); quelli piccoli falli tu.`
-        : " Non avviare altre sessioni: sei all'ultimo livello consentito."
+    context.depth !== undefined && context.maxDepth !== undefined && context.depth >= context.maxDepth
+      ? " Non avviare altre sessioni: sei all'ultimo livello consentito."
+      : ""
   return (
     `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} —${where}${delegate} ` +
-    `${who(sender)} è in attesa. Quando hai finito rispondi con ade-msg reply ${id} "<sintesi>": ` +
-    `al massimo 15 righe con ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO` +
-    (results ? `; i dettagli lunghi scrivili in ${results} e metti il percorso nella risposta` : "") +
-    `. Se sei bloccata o serve una decisione usa ade-msg update ${id} bloccata|decisione "<motivo>" e aspetta. ` +
-    `Dopo la risposta la sessione resta aperta per eventuali seguiti.`
+    `Rispondi con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO` +
+    (results ? `; dettagli in ${results}` : "") +
+    `); se sei bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
   )
 }
 
@@ -359,11 +360,7 @@ export function formatUpdate(id: string, state: UpdateState, text: string, repli
 
 /** Typed into a session that went quiet with a request still unanswered. */
 export function formatNudge(id: string, caller: MailPane | undefined): string {
-  return (
-    `[Promemoria ade-msg] ${who(caller)} aspetta ancora la risposta alla richiesta ${id}: ` +
-    `se hai finito rispondi con ade-msg reply ${id} "<risultato completo>" (o --file <percorso>); ` +
-    `se non puoi farla rispondi comunque spiegando perché`
-  )
+  return `[Promemoria] ${who(caller)} aspetta la richiesta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
 }
 
 /** Typed into a session whose request was withdrawn. */
@@ -490,10 +487,22 @@ export const MAX_NUDGES = 2
  */
 export function shouldNudge(
   request: OpenRequest,
-  target: { running: boolean; permissionPending: boolean; lastOutputAt?: number; activity?: Activity },
+  target: {
+    running: boolean
+    permissionPending: boolean
+    lastOutputAt?: number
+    activity?: Activity
+    /**
+     * The target has requests of its own still open. It is quiet because it
+     * is waiting on them, the way an orchestrator should, and a reminder
+     * would only cost it a turn.
+     */
+    waitingOnOthers?: boolean
+  },
   now: number,
 ): boolean {
   if (!target.running || target.permissionPending) return false
+  if (target.waitingOnOthers) return false
   // A session that said it is blocked is waiting on its caller, not forgetting to answer.
   if (request.update) return false
   if ((request.nudges ?? 0) >= MAX_NUDGES) return false
@@ -590,7 +599,8 @@ export function sessionsTable(panes: readonly MailPane[]): string {
     }
     out.push(`  ${rows[i]!.map((cell, col) => (col < 4 ? cell.padEnd(widths[col]!) : cell)).join("  ")}`)
   })
-  return `${out.join("\n")}\n\n${USAGE}`
+  /* The full help is ~800 tokens; `list` is called often and needs none of it. */
+  return `${out.join("\n")}\n\naltri comandi: ade-msg help\n`
 }
 
 /** What `ade-msg agents` prints: the CLIs a `spawn` can start. */

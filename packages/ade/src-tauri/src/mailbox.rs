@@ -155,7 +155,8 @@ pub async fn mailbox_result(app: tauri::AppHandle, id: String, text: String) -> 
 /// Takes back an answer nobody claimed, and returns it to be typed instead.
 ///
 /// A rename, like the waiter's claim, so exactly one of the two wins. The
-/// answer stays as `<id>.typed`, where a later `ade-msg wait` still finds it.
+/// file is removed once read: the answer is now in the caller's terminal, and
+/// a later `ade-msg wait` printing it a second time only doubled its cost.
 #[tauri::command]
 ///
 /// `kind: "update"` does the same for an `ade-msg update` no waiter woke on;
@@ -178,7 +179,9 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String, kind: Opt
     if fs::rename(dir.join(format!("{id}.txt")), &typed).is_err() {
         return Ok(None);
     }
-    Ok(fs::read_to_string(&typed).ok())
+    let text = fs::read_to_string(&typed).ok();
+    let _ = fs::remove_file(&typed);
+    Ok(text)
 }
 
 /// What request `id` is waiting on, for the `ade-msg wait` blocked on it to
@@ -237,6 +240,9 @@ function Usage {
   exit 1
 }
 function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 1 }
+# A probe that cannot fail. Under 'Stop' a denied Test-Path (a caller at a
+# lower integrity level than the mailbox) was a screenful of PowerShell error.
+function Has($path) { try { return [IO.File]::Exists($path) } catch { return $false } }
 
 $all = @($args | ForEach-Object { [string]$_ })
 $cmd = if ($all.Count -gt 0) { $all[0] } else { '' }
@@ -342,7 +348,7 @@ function TakeResult($id) {
   $ready = Join-Path $dir "$id.txt"
   $taken = Join-Path $dir "$id.taken"
   $typed = Join-Path $dir "$id.typed"
-  if (Test-Path $ready) {
+  if (Has $ready) {
     $claimed = $true
     try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
     if ($claimed) {
@@ -351,7 +357,7 @@ function TakeResult($id) {
       return $r
     }
   }
-  if (Test-Path $typed) {
+  if (Has $typed) {
     $r = [IO.File]::ReadAllText($typed, $utf8)
     Remove-Item -LiteralPath $typed -ErrorAction SilentlyContinue
     return $r
@@ -371,7 +377,7 @@ function AwaitIds([string[]]$ids) {
     foreach ($id in @($pending)) {
       # An update is not an answer, but it is the caller's turn: wake with it.
       $updateFile = Join-Path $dir "$id.update"
-      if (Test-Path $updateFile) {
+      if (Has $updateFile) {
         $claimed = Join-Path $dir "$id.update-taken"
         $ok = $true
         try { Move-Item -LiteralPath $updateFile -Destination $claimed -Force } catch { $ok = $false }
@@ -397,7 +403,7 @@ function AwaitIds([string[]]$ids) {
         }
         continue
       }
-      if (Test-Path $stateFile) {
+      if (Has $stateFile) {
         $s = $null
         try { $s = [IO.File]::ReadAllText($stateFile, $utf8).Trim() } catch {}
         if ($s -and $seen[$id] -ne $s) { $seen[$id] = $s; [Console]::Error.WriteLine("ade-msg: richiesta $id - $s") }
@@ -406,13 +412,14 @@ function AwaitIds([string[]]$ids) {
     if ($pending.Count -gt 0) { Start-Sleep -Milliseconds 250 }
   }
   if ($pending.Count -eq 0) { exit 0 }
-  Write-Output "ancora in corso: $($pending -join ' ') senza risposta. Riprendi l'attesa con: ade-msg wait $($pending -join ' ') (stato: ade-msg status; se una risposta arriva mentre non aspetti, ADE la scrive nel tuo terminale)"
+  Write-Output "in corso: $($pending -join ' '). Non ripetere wait: la risposta ti arriva da sola nel terminale."
   exit 0
 }
 
 switch ($cmd) {
   'list' { $f = Join-Path $box 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
   'agents' { $f = Join-Path $box 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
+  'help' { $f = Join-Path $box 'usage.txt'; if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }; exit 0 }
   'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'stats' { $f = Join-Path $box 'stats.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun dato di consumo ancora' }; exit 0 }
@@ -621,13 +628,14 @@ await() {
     [ -n "$pending" ] && sleep 0.25
   done
   [ -z "$pending" ] && exit 0
-  echo "ancora in corso: $pending senza risposta. Riprendi l'attesa con: ade-msg wait $pending (stato: ade-msg status)"
+  echo "in corso: $pending. Non ripetere wait: la risposta ti arriva da sola nel terminale."
   exit 0
 }
 
 case "$cmd" in
   list) if [ -f "$box/sessions.txt" ]; then cat "$box/sessions.txt"; else echo "nessuna sessione pubblicata"; fi ;;
   agents) if [ -f "$box/agents.txt" ]; then cat "$box/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
+  help) if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
   stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;

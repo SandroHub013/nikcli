@@ -752,6 +752,7 @@ export function Workbench() {
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
+    waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
   })
 
   /** Refreshes the turn activity of the sessions that owe an answer; the others are not asked. */
@@ -898,7 +899,8 @@ export function Workbench() {
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
-        await host.mailboxState?.(request.id, state).catch(() => {})
+        /* "in corso" is what every request is; printing it tells the waiter nothing. Empty removes the file. */
+        await host.mailboxState?.(request.id, state === "in corso" ? "" : state).catch(() => {})
       }
       const session = running.get(request.to)
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.

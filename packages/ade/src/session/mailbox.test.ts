@@ -120,6 +120,7 @@ describe("what lands in the terminal", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
     expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
     expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
+    expect(line.length).toBeLessThan(300)
     expect(line).toContain("ade-msg update 171-ab")
   })
 
@@ -138,11 +139,12 @@ describe("what lands in the terminal", () => {
   })
 })
 
-test("sessionsTable lists numbers, ids and titles, and the commands", () => {
+test("sessionsTable lists numbers, ids and titles, and points to help instead of printing it", () => {
   const table = sessionsTable(panes)
   expect(table).toContain("progetto senza progetto (3 sessioni)")
   expect(table).toContain("  1  n1-0  claude-code  idle     Sessione 1 — claude-code")
-  expect(table).toContain("ade-msg spawn")
+  expect(table).toContain("ade-msg help")
+  expect(table).not.toContain("--timeout")
 })
 
 describe("by project", () => {
@@ -211,6 +213,7 @@ describe("orchestration", () => {
     expect(shouldNudge({ ...request, nudges: 1, nudgedAt: 70_000 }, quiet, 200_000)).toBe(true)
     expect(shouldNudge({ ...request, nudges: 2, nudgedAt: 0 }, quiet, 900_000)).toBe(false)
     expect(formatNudge("171-ab", panes[0])).toContain("ade-msg reply 171-ab")
+    expect(shouldNudge(request, { ...quiet, waitingOnOthers: true }, 70_000)).toBe(false) // an orchestrator waiting on its own requests
   })
 
   test("status lists who waits on whom, and how long", () => {
@@ -253,8 +256,7 @@ describe("spawn options, updates and the request contract", () => {
     expect(line).toContain("worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
     expect(line).toContain("ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO")
     expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
-    expect(line).toContain("livello 1 di 2")
-    expect(line).toContain("resta aperta")
+    expect(line).not.toContain("livello 1 di 2")
     expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare altre sessioni")
   })
 

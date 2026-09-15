@@ -23,26 +23,28 @@
  * an argument crosses cmd.exe on its way to the program.
  */
 
+/*
+ * Short on purpose: it rides in every session's system prompt, including the
+ * many that never message anyone, and each request repeats the reply contract
+ * anyway. What is rarely needed (kv, memory, fork, stats, close) is one
+ * `ade-msg help` away rather than paid for up front.
+ *
+ * The one habit worth its words is not polling. A reply that nobody is
+ * waiting for is typed into the caller by ADE, so `--no-wait` and carrying on
+ * costs nothing, while every `wait` that times out is a whole model turn
+ * re-reading the context.
+ */
 export const INTRO_TEXT =
-  "Sei una sessione dentro ADE, accanto ad altre sessioni di agenti che possono usare CLI diverse (Claude Code, Codex e altre). " +
-  "Puoi comunicare con loro dalla shell con il comando ade-msg: " +
-  "ade-msg list mostra le sessioni aperte di tutti i progetti, divise per progetto, con numero, id, agente e titolo; " +
-  "ade-msg ask SESSIONE RICHIESTA manda una richiesta e resta in attesa finche quella sessione risponde, poi stampa la risposta (come un subagent); " +
-  "ade-msg spawn AGENTE COMPITO apre una nuova sessione con quell'agente (claude, codex, agy...), le affida il compito e stampa il risultato quando ha finito; " +
-  "ade-msg send SESSIONE TESTO manda solo una nota, senza attendere; " +
-  "SESSIONE e il numero, l'id, il titolo o il nome dell'agente; un nome da solo cerca prima nel tuo progetto, PROGETTO/NOME cerca in un altro. " +
-  "Se ask o spawn stampano ancora in corso, riprendi l'attesa con ade-msg wait ID. " +
-  "Per orchestrare: lancia piu ade-msg spawn AGENTE COMPITO --no-wait --name NOME (ognuno stampa un id), poi ade-msg wait ID1 ID2 ... per raccogliere i risultati (o --any per il primo). " +
-  "Aggiungi --worktree quando il subagent deve modificare file (lavora su un branch ade/NOME in una cartella separata, e poi integri tu), --model ID per un modello piu economico sui compiti semplici. " +
-  "Le sessioni restano aperte dopo aver risposto: riusale con ade-msg ask NOME per i seguiti, e chiudile con ade-msg close NOME quando il loro lavoro e integrato. " +
-  "ade-msg status mostra le richieste in corso, ade-msg cancel ID ne annulla una; --file PERCORSO usa il contenuto di un file come testo. " +
-  "Per risparmiare contesto: delega compiti grandi e non piccoli, chiedi sintesi brevi con i dettagli su file, e leggi i file solo se servono. " +
-  "Contesto condiviso: se esiste, leggi .ade/memory.md del progetto prima di esplorare; aggiungi solo fatti stabili utili a tutte le sessioni con ade-msg memory add TIPO TESTO (tipi: decisione, fatto, trappola, todo). " +
-  "Per lo stato condiviso usa ade-msg kv set CHIAVE VALORE, kv get CHIAVE e kv list; prima di modificare un'area che altre sessioni possono toccare prendi ade-msg kv lock CHIAVE e poi rilascialo con kv unlock CHIAVE. " +
-  "Se un subagent ha bisogno del contesto che hai gia accumulato, avvialo con --fork: parte dalla tua conversazione e ne riusa la cache (stesso agente e modello, senza --worktree); per compiti indipendenti non serve. ade-msg stats mostra quanta parte del prompt arriva dalla cache. " +
-  "Le richieste che ricevi iniziano con [Richiesta ID da ...]: fai il lavoro e rispondi SEMPRE con ade-msg reply ID seguito da una sintesi, perche chi chiede e bloccato finche non rispondi; se sei bloccata o serve una decisione usa ade-msg update ID bloccata oppure decisione seguito dal motivo. " +
-  "I messaggi [Messaggio da ...] sono note e dicono come rispondere. " +
-  "Usalo quando l'utente te lo chiede o quando delegare o coordinarti con un'altra sessione serve al compito."
+  "Sei una sessione dentro ADE, con altre sessioni di agenti. Dalla shell usa ade-msg: " +
+  "ade-msg list per le sessioni aperte; ade-msg ask SESSIONE TESTO per una richiesta; " +
+  "ade-msg spawn AGENTE COMPITO per aprire una sessione nuova (--name NOME, --worktree se deve modificare file, --model ID per compiti semplici); " +
+  "ade-msg send SESSIONE TESTO per una nota. SESSIONE e numero, id, titolo o agente. " +
+  "Non fare polling: con --no-wait continua il tuo lavoro o chiudi il turno, la risposta ti arriva da sola come [Risposta alla richiesta ...]; " +
+  "usa ade-msg wait ID solo se ti serve subito, e non ripeterlo in ciclo. " +
+  "Delega compiti grandi, non piccoli, e chiedi sintesi brevi con i dettagli su file. " +
+  "A ogni [Richiesta ID ...] rispondi con ade-msg reply ID seguito dalla sintesi; se sei bloccata usa ade-msg update ID bloccata seguito dal motivo. " +
+  "Se esiste .ade/memory.md del progetto leggilo prima di esplorare. Tutti gli altri comandi: ade-msg help. " +
+  "Usalo quando l'utente lo chiede o quando coordinarti serve al compito."
 
 /** Arguments that put the notice in the CLI's instructions, or none. */
 export function introArgs(agentId: string, text = INTRO_TEXT): string[] {
