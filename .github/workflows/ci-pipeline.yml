@@ -199,7 +199,12 @@ jobs:
 
   autofix:
     needs: validate
+    # `always()` is load-bearing: a job whose `needs` failed is skipped before
+    # its `if` is ever evaluated, so `needs.validate.result == 'failure'` alone
+    # can never be true here — which is why autofix was skipped on every red
+    # run instead of repairing it. `report-failure` below already knew this.
     if: >-
+      always() &&
       needs.validate.result == 'failure' &&
       github.repository == 'nikomatt69/nikcli' &&
       (
