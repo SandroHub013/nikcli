@@ -218,6 +218,24 @@ import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { isModel, MODEL_EXTENSIONS } from "../model3d/model"
 import { guessDevServers } from "../simulator/simulator"
+import { countLabel } from "../decisions/answer"
+import { DecisionsSheet } from "../decisions/decisions-sheet"
+import {
+  deliveryLine,
+  deliveryState,
+  enqueue,
+  markDelivered,
+  OUTBOX_KEY,
+  parseOutbox,
+  pendingFor,
+  pickRecipient,
+  pruneOutbox,
+  type OutboxItem,
+} from "../decisions/delivery"
+import { createDecisionsHub } from "../decisions/hub"
+import { createDecisionsRegister } from "../decisions/register"
+import type { Decision } from "../decisions/state"
+import { decisionsPath } from "../decisions/store"
 import {
   createMicMeter,
   createVoiceEngine,
@@ -570,6 +588,125 @@ export function Workbench() {
       read("app.json"),
     ])
     return guessDevServers({ packageJson, tauriConf, appJson })
+  }
+
+  /*
+   * Decisions: the register in `.ade/decisions.jsonl`, a badge in the bar
+   * while any waits for the user, the window that goes through them one at a
+   * time, and the panel with all of them. See `decisions/`.
+   *
+   * An answer given here is appended to the register and then typed into the
+   * Master session as a `risolta` line, when that session is running and
+   * between turns; until then it waits in an outbox that survives a restart.
+   */
+  const decisionsRegister = createDecisionsRegister({
+    path: () => {
+      const root = project()?.root
+      return root ? decisionsPath(root) : undefined
+    },
+    io: async () => {
+      const host = await getHost()
+      if (!host?.readTextFile || !host.writeTextFile) return undefined
+      return {
+        readTextFile: (path: string, maxBytes?: number) => host.readTextFile!(path, maxBytes),
+        writeTextFile: (path: string, contents: string) => host.writeTextFile!(path, contents),
+        ...(host.appendTextFile ? { appendTextFile: (path: string, text: string) => host.appendTextFile!(path, text) } : {}),
+        ...(host.readDir ? { readDir: (path: string) => host.readDir!(path) } : {}),
+      }
+    },
+  })
+
+  const [decisionsOutbox, setDecisionsOutbox] = createSignal<OutboxItem[]>(
+    (() => {
+      try {
+        return parseOutbox(localStorage.getItem(OUTBOX_KEY))
+      } catch {
+        return []
+      }
+    })(),
+  )
+  const saveDecisionsOutbox = (items: OutboxItem[]) => {
+    setDecisionsOutbox(items)
+    try {
+      localStorage.setItem(OUTBOX_KEY, JSON.stringify(items))
+    } catch {}
+  }
+
+  const decisionRecipient = (decision: Pick<Decision, "raisedBy">) =>
+    pickRecipient(
+      mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: running.has(pane.id) })),
+      decision,
+      project()?.name,
+    )
+
+  let deliveringDecisions = false
+  const deliverDecisions = async () => {
+    const path = decisionsRegister.path()
+    const state = decisionsRegister.state()
+    if (!path || !state || deliveringDecisions) return
+    const kept = pruneOutbox(decisionsOutbox(), path, state.decisions)
+    if (kept.length !== decisionsOutbox().length) saveDecisionsOutbox(kept)
+    const pending = pendingFor(kept, path)
+    if (pending.length === 0) return
+    const host = await getHost()
+    if (!host) return
+    deliveringDecisions = true
+    try {
+      for (const item of pending) {
+        const decision = state.decisions.find((entry) => entry.k === item.k)
+        const target = decision && decisionRecipient(decision)
+        if (!decision || !target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
+        if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
+        const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
+        if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
+        appendLine(target.id, `Decisione ${decision.k} consegnata dal pannello Decisioni`, "note")
+      }
+    } finally {
+      deliveringDecisions = false
+    }
+  }
+
+  const decisionsHub = createDecisionsHub({
+    register: decisionsRegister,
+    recipient: (decision) => decisionRecipient(decision)?.title,
+    delivery: (decision) => deliveryState(decisionsOutbox(), decisionsRegister.path() ?? "", decision),
+    onAnswered: (decision, event) => {
+      const path = decisionsRegister.path()
+      if (!path) return
+      saveDecisionsOutbox(enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }))
+      void deliverDecisions()
+    },
+  })
+
+  const [decisionsOpen, setDecisionsOpen] = createSignal(false)
+  const decisionsWaiting = createMemo(() => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "aperta").length ?? 0)
+
+  onMount(() => {
+    onCleanup(decisionsRegister.watch())
+    // Only does work while an answer is waiting to go out.
+    onCleanup(every(3000, () => deliverDecisions(), { whenHidden: 15_000 }))
+  })
+
+  /** Opens the Decisions panel, or focuses the one already open. */
+  const openDecisionsPane = () => {
+    const existing = wb().panes.find((pane) => pane.mode === "decisions")
+    if (existing) {
+      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
+      return
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: `d${Date.now()}`,
+        title: "Decisioni",
+        status: "working",
+        model: "—",
+        mode: "decisions",
+        workspaceId: project()?.name ?? "workspace",
+        lines: [],
+      }),
+      view: "code",
+    }))
   }
 
   /**
@@ -2634,6 +2771,10 @@ export function Workbench() {
         workspaceId: project()?.name ?? "workspace",
         lines: []
       }))
+    } else if (id === "decisions.open") {
+      setDecisionsOpen(true)
+    } else if (id === "decisions.pane") {
+      openDecisionsPane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -3921,6 +4062,7 @@ export function Workbench() {
       getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
     guessServers,
+    decisions: decisionsHub,
     panels,
     announceToAll,
     pluginRuntime,
@@ -4025,6 +4167,17 @@ export function Workbench() {
             <path d="M10.2 10.2L14 14" stroke-linecap="round" />
           </svg>
         </button>
+        {/* Decisions waiting for the user. Hidden at zero; opens only when pressed. */}
+        <Show when={decisionsWaiting() > 0}>
+          <button
+            type="button"
+            data-slot="decisions-badge"
+            onClick={() => setDecisionsOpen(true)}
+            title="Decisioni che aspettano te"
+          >
+            {countLabel(decisionsWaiting())}
+          </button>
+        </Show>
         </div>
 
         <div data-slot="ade-bar-side" data-side="end">
@@ -4450,6 +4603,17 @@ export function Workbench() {
         onConnect={(target) => void addRemoteSpace(target)}
       />
 
+      <Show when={decisionsOpen()}>
+        <DecisionsSheet
+          hub={decisionsHub}
+          onClose={() => setDecisionsOpen(false)}
+          onOpenPanel={() => {
+            setDecisionsOpen(false)
+            openDecisionsPane()
+          }}
+        />
+      </Show>
+
       <CommandPalette
         open={paletteOpen()}
         commands={allCommands()}
@@ -4628,6 +4792,11 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
       <Show when={props.kind === "model"}>
         <path d="M8 1.8l5.6 3.1v6.2L8 14.2l-5.6-3.1V4.9z" stroke-linejoin="round" />
         <path d="M2.4 4.9L8 8l5.6-3.1M8 8v6.2" stroke-linejoin="round" />
+      </Show>
+      <Show when={props.kind === "decisions"}>
+        <path d="M8 1.8v3.4M8 5.2L3.2 9.4M8 5.2l4.8 4.2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="3.2" cy="11.6" r="2.2" />
+        <circle cx="12.8" cy="11.6" r="2.2" />
       </Show>
     </svg>
   )
