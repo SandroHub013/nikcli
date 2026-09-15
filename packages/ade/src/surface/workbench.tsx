@@ -166,6 +166,7 @@ import {
   type OpenRequest,
   formatDelivery,
   isFree,
+  statusFromActivity,
   formatLateReply,
   formatRequest,
   parseMessage,
@@ -600,7 +601,11 @@ export function Workbench() {
     await new Promise((resolve) => setTimeout(resolve, bracketed ? 120 : Math.min(2500, SUBMIT_DELAY_MS + line.length)))
     if (![...running.values()].includes(session)) return false
     session.write("\r")
-    if (paneId !== undefined) void confirmSubmitted(paneId, session, typedAt)
+    if (paneId !== undefined) {
+      // A line ADE submits starts a turn exactly as the user's Enter does.
+      markWorking(paneId)
+      void confirmSubmitted(paneId, session, typedAt)
+    }
     return true
   }
 
@@ -790,16 +795,38 @@ export function Workbench() {
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
   })
 
-  /** Refreshes the turn activity of the sessions that owe an answer; the others are not asked. */
+  /** When each pane was last set working, so an older idle from its hook does not end the new turn. */
+  const workingSince = new Map<string, number>()
+  const markWorking = (paneId: string) => {
+    workingSince.set(paneId, Date.now())
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (pane?.status === "idle") setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+    settleWhenQuiet(paneId)
+  }
+
+  /*
+   * The turn activity of every running session with hooks, each mail pass.
+   *
+   * Not only of those that owe an answer: the status in the sidebar and in
+   * `ade-msg list` comes from here, and a session is at work whoever started
+   * its turn. One small file read per hooked session.
+   */
   const readActivities = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
     if (!host.readAgentActivity) return
-    const targets = new Set([...openRequests.values()].map((request) => request.to))
-    for (const paneId of targets) {
+    for (const paneId of running.keys()) {
       const nonce = paneNonces.get(paneId)
       if (!nonce || !hooked(paneId)) continue
-      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
-      if (activity) activityOf.set(paneId, activity)
+      const pane = wb().panes.find((candidate) => candidate.id === paneId)
+      const activity = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
+      if (!activity) continue
+      activityOf.set(paneId, activity)
+      const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
+      if (next === "working") {
+        workingSince.set(paneId, Date.now())
+        setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+      } else if (next === "idle") {
+        setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+      }
     }
   }
   const stateOf = (request: OpenRequest, now = Date.now()) =>
@@ -2338,6 +2365,8 @@ export function Workbench() {
     quietTimers.set(paneId, setTimeout(() => {
       quietTimers.delete(paneId)
       if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
+      // With turn hooks, silence is not the end of a turn (a long tool call is silent): the hook says when.
+      if (hooked(paneId) && activityOf.get(paneId)?.state === "busy") return
       setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
     }, QUIET_MS))
   }

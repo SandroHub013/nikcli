@@ -407,6 +407,28 @@ export interface Activity {
   at: number
 }
 
+/**
+ * The pane status a turn hook implies, or `undefined` to leave it alone.
+ *
+ * The status used to change only when the user pressed Enter in the pane, so
+ * a session working on a request typed in by `ade-msg` stayed "Disponibile"
+ * for its whole turn, in the sidebar and in `ade-msg list`. Where the CLI has
+ * turn hooks they are the truth both ways. An idle written before the pane was
+ * last set working is the previous turn's and does not end this one; a
+ * permission question, an error or a pane still opening is not overridden.
+ */
+export function statusFromActivity(
+  status: string,
+  activity: Activity | undefined,
+  workingSince: number | undefined,
+): "working" | "idle" | undefined {
+  if (!activity) return undefined
+  if (status !== "idle" && status !== "working") return undefined
+  if (activity.state === "busy") return status === "working" ? undefined : "working"
+  if (status !== "working") return undefined
+  return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
+}
+
 /** A CLI without turn hooks counts as free once it has printed nothing for this long. */
 export const QUIET_FREE_MS = 4000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */

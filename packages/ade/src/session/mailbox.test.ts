@@ -5,6 +5,7 @@ import {
   formatLateReply,
   formatRequest,
   isFree,
+  statusFromActivity,
   parseMessage,
   resolveAgent,
   resolveTarget,
@@ -113,6 +114,24 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
 test("who-owns carries the file as its text", () => {
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" src/a.ts "}')).toMatchObject({ kind: "whoowns", text: "src/a.ts" })
   expect(parseMessage('{"kind":"whoowns","from":"a","text":" "}')).toBeUndefined()
+})
+
+describe("a session's status follows its turn hooks", () => {
+  test("a turn started by a message shows as working, and ends when the hook says so", () => {
+    expect(statusFromActivity("idle", { state: "busy", at: 100 }, undefined)).toBe("working")
+    expect(statusFromActivity("working", { state: "idle", at: 200 }, 150)).toBe("idle")
+  })
+
+  test("the previous turn's idle does not end the turn just typed", () => {
+    expect(statusFromActivity("working", { state: "idle", at: 100 }, 150)).toBeUndefined()
+  })
+
+  test("a permission question, an error or no hook data are left alone", () => {
+    expect(statusFromActivity("waiting", { state: "idle", at: 200 }, 0)).toBeUndefined()
+    expect(statusFromActivity("error", { state: "busy", at: 200 }, 0)).toBeUndefined()
+    expect(statusFromActivity("idle", undefined, 0)).toBeUndefined()
+    expect(statusFromActivity("working", { state: "busy", at: 200 }, 0)).toBeUndefined()
+  })
 })
 
 describe("when a session can be written to", () => {
