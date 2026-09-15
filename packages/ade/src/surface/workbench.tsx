@@ -176,6 +176,7 @@ import {
   shouldRering,
   type Activity,
   requestState,
+  relaunchRefusal,
   requestsTable,
   shouldNudge,
   type OpenRequest,
@@ -1869,17 +1870,9 @@ export function Workbench() {
     }
 
     if (message.kind === "relaunch") {
-      if (!message.from || spawnedBy.get(target.pane.id) !== message.from) {
-        await answer(`errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.pane.title}" non lo è)`)
-        return true
-      }
-      /*
-       * The replacement starts from its brief and a note on where things
-       * stand. Without one it redoes the job, or resumes the loop that got it
-       * relaunched.
-       */
-      if (!message.note.trim()) {
-        await answer(`errore: relaunch richiede --note "<a che punto è e cosa fare adesso>": la sessione riparte da quella nota`)
+      const refusal = relaunchRefusal(message, target.pane, spawnedBy.get(target.pane.id))
+      if (refusal) {
+        await answer(refusal)
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)

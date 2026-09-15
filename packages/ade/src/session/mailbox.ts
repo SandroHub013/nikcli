@@ -678,6 +678,27 @@ export function requestState(
   return "in corso"
 }
 
+/**
+ * Why `ade-msg relaunch` is refused, or `undefined` when it may go ahead.
+ *
+ * Only the session that spawned the target may relaunch it, and only with a
+ * note: the replacement starts from its brief and that note. Without one it
+ * redoes the job, or resumes the loop that got it relaunched.
+ */
+export function relaunchRefusal(
+  message: { from: string; note: string },
+  target: { id: string; title: string },
+  spawner: string | undefined,
+): string | undefined {
+  if (!message.from || spawner !== message.from) {
+    return `errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.title}" non lo è)`
+  }
+  if (!message.note.trim()) {
+    return `errore: relaunch richiede --note "<a che punto è e cosa fare adesso>": la sessione riparte da quella nota`
+  }
+  return undefined
+}
+
 /** Told once to the caller of a request whose session may be stuck. */
 export function formatWedged(request: OpenRequest, answerer: MailPane | undefined, now: number): string {
   return (

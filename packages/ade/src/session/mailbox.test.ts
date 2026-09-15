@@ -8,6 +8,7 @@ import {
   statusFromActivity,
   WEDGE_MS,
   formatWedged,
+  relaunchRefusal,
   interruptKeys,
   openDecisions,
   INLINE_MAX,
@@ -468,6 +469,15 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(interruptKeys("claude-code")).toBe(String.fromCharCode(27))
     expect(interruptKeys("codex")).toBe(String.fromCharCode(27))
     expect(interruptKeys("nikcli")).toBe(String.fromCharCode(3))
+  })
+
+  test("relaunch without --note, or of a session somebody else spawned, is refused with the reason", () => {
+    const target = { id: "p2", title: "Revisore" }
+    expect(relaunchRefusal({ from: "p1", note: "" }, target, "p1")).toContain('relaunch richiede --note "')
+    expect(relaunchRefusal({ from: "p1", note: "   " }, target, "p1")).toContain("richiede --note")
+    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p9")).toContain('"Revisore" non lo è')
+    expect(relaunchRefusal({ from: "", note: "x" }, target, undefined)).toContain("avviate da questa sessione")
+    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p1")).toBeUndefined()
   })
 
   test("relaunch carries its note and interrupt its target", () => {
