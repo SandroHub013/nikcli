@@ -274,11 +274,12 @@ export default Runtime.handler(Commands, async (input) => {
           prompt: args.prompt,
         },
         checkUpgrade: async () => {
-          await withUpgradeInstance(async () => {
+          return withUpgradeInstance(async () => {
             const { upgrade } = await import("@/cli/upgrade")
-            await upgrade()
+            return upgrade()
           }).catch((error) => {
             Log.Default.debug("upgrade check failed", { error: errorMessage(error) })
+            return undefined
           })
         },
         upgradeNow: async (method: string, version: string) => {
@@ -459,10 +460,11 @@ export default Runtime.handler(Commands, async (input) => {
       onExit: stop,
       onRestart: restart,
       checkUpgrade: async () => {
-        await client.call("checkUpgrade", { directory: cwd }).catch((error) => {
+        return client.call("checkUpgrade", { directory: cwd }).catch((error) => {
           Log.Default.warn("upgrade check failed", {
             error: errorMessage(error),
           })
+          return undefined
         })
       },
       upgradeNow: async (method: string, version: string) => {

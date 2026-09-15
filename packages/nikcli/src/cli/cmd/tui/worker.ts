@@ -156,11 +156,15 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
-    await withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
-      await upgrade().catch((error) => {
+    // Returns the result rather than relying on the published event: the TUI
+    // runs on the other side of this RPC hop and `Bus` does not cross it in
+    // the background-service path. See `upgrade()`'s doc.
+    return withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
+      return upgrade().catch((error) => {
         Log.Default.debug("upgrade check failed", {
           error: error instanceof Error ? error.message : String(error),
         })
+        return undefined
       })
     })
   },

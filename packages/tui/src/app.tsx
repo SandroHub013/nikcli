@@ -17,7 +17,7 @@ import {
   batch,
   on,
 } from "solid-js"
-import { InstallationEventName, VERSION, type InstallMethod } from "@nikcli-ai/util/version"
+import { VERSION, type InstallMethod } from "@nikcli-ai/util/version"
 import { Flag } from "@nikcli-ai/util/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
@@ -126,6 +126,20 @@ import { Log } from "@nikcli-ai/util/log"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
 
+/**
+ * What an update check found.
+ *
+ * Mirrors the payload of `installation.update-available`, but reaches the TUI as the *return
+ * value* of `checkUpgrade` rather than over the event stream: the check runs in the CLI process
+ * (the upgrade replaces the installed binary, so it cannot run in the long-lived background
+ * service) while the event stream comes from that service, and the Bus does not cross processes.
+ */
+export type UpdateAvailable = {
+  version: string
+  method?: InstallMethod
+  current: string
+}
+
 const log = Log.create({ service: "tui.app" })
 
 export function tui(input: {
@@ -136,7 +150,7 @@ export function tui(input: {
   events?: EventSource
   onExit?: () => Promise<void>
   onRestart?: () => Promise<void>
-  checkUpgrade?: () => Promise<void>
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   upgradeNow?: (method: string, version: string) => Promise<void>
   startServer?: (options?: StartServerOptions) => Promise<string>
   /**
@@ -321,7 +335,7 @@ function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
   return "sessionID" in route ? route.sessionID : undefined
 }
 
-function App(props: { checkUpgrade?: () => Promise<void> }) {
+function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -341,6 +355,89 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
   const promptRef = usePromptRef()
   const attention = useAttention()
   const keybind = useKeybind()
+
+  /**
+   * Offer the update the check found, and install it if the user agrees.
+   *
+   * Driven by `checkUpgrade`'s return value rather than by the `installation.update-available`
+   * event: that event is published on the Bus of whichever process ran the check, and since the
+   * background service became the default that process is this CLI — not the server the event
+   * stream comes from, so the TUI never saw it. See `UpdateAvailable`.
+   */
+  async function offerUpdate(available: UpdateAvailable) {
+    const { version, method } = available
+    const currentVersion = available.current || VERSION
+
+    // Skip version already dismissed by the user
+    const skipped = kv.get("skipped_version")
+    if (skipped && version === skipped) return
+
+    const hint = method ? ` via ${method}` : ""
+    const choice = await DialogConfirm.show(
+      dialog,
+      `Update Available`,
+      `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
+      "confirm",
+    )
+
+    if (choice === false) {
+      kv.set("skipped_version", version)
+      return
+    }
+
+    if (!choice) return
+
+    // No detected installation method (e.g. running from source / unknown
+    // package manager). The TUI still shows the dialog so the user is
+    // aware, but the actual install has to be triggered manually.
+    if (!method) {
+      await DialogAlert.show(
+        dialog,
+        "Update Available",
+        `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
+      )
+      return
+    }
+
+    toast.show({
+      variant: "info",
+      message: `Updating to v${version}...`,
+      duration: 30_000,
+    })
+
+    try {
+      await upgradeCtx.upgradeNow?.(method, version)
+    } catch (error) {
+      // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
+      // is what made this toast show a blank body for every failed update.
+      //
+      // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
+      // comes back over RPC as a plain `Error`, so the class check was always false and this
+      // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
+      const stderr = (error as { stderr?: unknown }).stderr
+      const message =
+        error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
+          ? stderr
+          : error instanceof Error
+            ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
+            : "Update failed"
+      toast.show({
+        variant: "error",
+        title: "Update Failed",
+        message,
+        duration: 10_000,
+      })
+      return
+    }
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to v${version}. Please restart the application.`,
+    )
+
+    await exit()
+  }
 
   // Plugin routes — mutable map + reactive stamp for re-renders
   const routes: RouteMap = new Map()
@@ -1470,81 +1567,6 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
           duration: 5000,
         })
       }),
-      sdk.event.on(InstallationEventName.updateAvailable, async (evt) => {
-        const version = evt.properties.version
-        const method = (evt.properties as { method?: InstallMethod }).method
-        const currentVersion = (evt.properties as { current?: string }).current ?? VERSION
-
-        // Skip version already dismissed by the user
-        const skipped = kv.get("skipped_version")
-        if (skipped && version === skipped) return
-
-        const hint = method ? ` via ${method}` : ""
-        const choice = await DialogConfirm.show(
-          dialog,
-          `Update Available`,
-          `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
-          "confirm",
-        )
-
-        if (choice === false) {
-          kv.set("skipped_version", version)
-          return
-        }
-
-        if (!choice) return
-
-        // No detected installation method (e.g. running from source / unknown
-        // package manager). The TUI still shows the dialog so the user is
-        // aware, but the actual install has to be triggered manually.
-        if (!method) {
-          await DialogAlert.show(
-            dialog,
-            "Update Available",
-            `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
-          )
-          return
-        }
-
-        toast.show({
-          variant: "info",
-          message: `Updating to v${version}...`,
-          duration: 30_000,
-        })
-
-        try {
-          await upgradeCtx.upgradeNow?.(method, version)
-        } catch (error) {
-          // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
-          // is what made this toast show a blank body for every failed update.
-          //
-          // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
-          // comes back over RPC as a plain `Error`, so the class check was always false and this
-          // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
-          const stderr = (error as { stderr?: unknown }).stderr
-          const message =
-            error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
-              ? stderr
-              : error instanceof Error
-                ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
-                : "Update failed"
-          toast.show({
-            variant: "error",
-            title: "Update Failed",
-            message,
-            duration: 10_000,
-          })
-          return
-        }
-
-        await DialogAlert.show(
-          dialog,
-          "Update Complete",
-          `Successfully updated to v${version}. Please restart the application.`,
-        )
-
-        await exit()
-      }),
       sdk.event.on("permission.asked", () => {
         const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
         if (tuiCfg?.sound === false) return
@@ -1559,7 +1581,9 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       }),
     ]
 
-    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade).catch(() => undefined)
+    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade)
+      .then((available) => (available ? offerUpdate(available) : undefined))
+      .catch(() => undefined)
 
     onCleanup(() => {
       renderer.off("focus", refocusPrompt)
