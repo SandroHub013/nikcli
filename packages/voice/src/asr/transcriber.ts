@@ -49,6 +49,18 @@ export interface Transcriber {
   /** Explicitly commit and flush the current utterance segment (e.g. on push-to-talk release). */
   commit?(): boolean
 
+  /**
+   * Stop taking audio, but let what was already heard come back.
+   *
+   * `stop()` is the other half of a session ending and it discards: the
+   * recognition loop is torn down with it, so a sentence still on its way
+   * back from the service lands on nobody. Closing dictation right after
+   * speaking — the most natural way to end it — lost the last sentence every
+   * time. The engine calls this first, waits for `hasInFlight` to settle, and
+   * only then stops.
+   */
+  finish?(): void
+
   /** Whether audio processing or transcription is currently in flight. */
   readonly hasInFlight?: boolean
 }

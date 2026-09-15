@@ -655,6 +655,13 @@ export function createParakeetTranscriber(
       return true
     },
 
+    finish(): void {
+      // Finalisation is queued before the microphone goes, and `stop()` —
+      // which resets the streaming state — is left for after it has run.
+      this.commit()
+      micCapture.stop()
+    },
+
     async warmup(): Promise<void> {
       await initializeModel()
     },

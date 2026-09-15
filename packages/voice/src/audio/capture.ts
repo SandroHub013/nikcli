@@ -33,6 +33,17 @@ export const MIN_SEGMENT_DURATION_MS = 500
  */
 export const MAX_SEGMENT_DURATION_MS = 45_000
 
+/**
+ * Audio kept from just before speech was recognised as speech.
+ *
+ * The detector needs more than one loud frame to call it speaking, and a
+ * frame is 256 ms at the buffer size used here; the segment used to start
+ * after that, so the first word arrived without its first syllables —
+ * "apri il file" came back as "il file". The frames before the decision are
+ * held here and put at the front of the segment.
+ */
+export const PRE_ROLL_MS = 400
+
 // ---------------------------------------------------------------------------
 // Format Detection
 // ---------------------------------------------------------------------------
@@ -273,6 +284,9 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   let recorder: any = null
   let recordedChunks: Blob[] = []
   let recordedPcmChunks: Float32Array[] = []
+  /* The most recent frames heard outside a segment; see PRE_ROLL_MS. */
+  let preRoll: Float32Array[] = []
+  const preRollSamples = Math.round((PRE_ROLL_MS / 1000) * 16000)
   let segmentStartTime = 0
   let isRecordingSegment = false
   /**
@@ -454,10 +468,13 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
   }
 
-  function startSegmentRecording(): void {
+  function startSegmentRecording(withPreRoll = false): void {
     if (isRecordingSegment) return
     recordedChunks = []
-    recordedPcmChunks = []
+    // Only for a start the detector decided on. A key press marks the start
+    // itself, and what came before it is the key.
+    recordedPcmChunks = withPreRoll ? preRoll : []
+    preRoll = []
     segmentStartTime = nowFn()
     isRecordingSegment = true
     if (recorder) {
@@ -609,7 +626,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     // Handle state transitions
     if (currentStatus === "speaking") {
       if (prevStatus !== "speaking") {
-        startSegmentRecording()
+        startSegmentRecording(true)
         onSpeechStartCb()
       } else if (isRecordingSegment && currentTime - segmentStartTime >= maxDuration) {
         // Segment duration reached upper threshold (OpenRouter 60s limit protection)
@@ -633,6 +650,14 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     if (isRecordingSegment) {
       recordedPcmChunks.push(new Float32Array(pcm16k))
+    } else {
+      preRoll.push(new Float32Array(pcm16k))
+      let held = 0
+      for (const frame of preRoll) held += frame.length
+      while (preRoll.length > 1 && held - preRoll[0].length >= preRollSamples) {
+        held -= preRoll[0].length
+        preRoll.shift()
+      }
     }
   }
 
@@ -736,6 +761,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
       releaseHardware()
       detector.reset()
+      preRoll = []
       onLevelCb(0.0)
     },
 

@@ -29,6 +29,14 @@ export interface TranscriberService {
   readonly stream: Stream.Stream<TranscriptEvent, VoiceError>
   /** Unified event stream preserving failures inline so processing loops never terminate on error. */
   readonly events: Stream.Stream<TranscriberEvent, never>
+  /**
+   * Whether every event produced so far has been taken off the stream.
+   *
+   * Optional, because a hand-built service in a test has no queue to ask.
+   * A session that is ending waits on this so a final transcript that has
+   * arrived but not yet been read is not dropped with the scope.
+   */
+  readonly idle?: Effect.Effect<boolean>
 }
 
 export const Transcriber = Context.GenericTag<TranscriberService>(

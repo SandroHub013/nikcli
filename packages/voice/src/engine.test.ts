@@ -430,3 +430,93 @@ describe("engine/createVoiceEngine", () => {
     expect(speaker.lastSpoken).toBe("Sto parlando di una risposta lunga...")
   })
 })
+
+describe("engine/stop delivers what was already heard", () => {
+  function setup(drainTimeoutMs?: number) {
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      getContext: () => ({ focusedPaneId: "pane-1" }),
+      ...(drainTimeoutMs === undefined ? {} : { drainTimeoutMs }),
+    })
+    return { host, transcriber, engine }
+  }
+
+  test("a sentence still in flight when dictation is closed reaches the pane", async () => {
+    const { host, transcriber, engine } = setup()
+    await engine.start("transcription")
+
+    // The request for the last sentence has left; the user closes dictation.
+    transcriber.setHasInFlight(true)
+    const stopped = engine.stop()
+    expect(engine.isRunning()).toBe(false)
+
+    // The answer comes back after the press, as it does over the network.
+    await new Promise((r) => setTimeout(r, 40))
+    transcriber.emit("aggiungi un test", true)
+    transcriber.setHasInFlight(false)
+    await stopped
+
+    expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "aggiungi un test"] })
+    expect(transcriber.isStarted).toBe(false)
+  })
+
+  test("the drained sentence is still dictation, not a command", async () => {
+    const { host, transcriber, engine } = setup()
+    await engine.start("transcription")
+
+    transcriber.setHasInFlight(true)
+    const stopped = engine.stop()
+    await new Promise((r) => setTimeout(r, 30))
+    transcriber.emit("nuova sessione", true)
+    transcriber.setHasInFlight(false)
+    await stopped
+
+    expect(host.calls.some((c) => c.method === "runCommand")).toBe(false)
+    expect(host.calls).toContainEqual({ method: "insertText", args: ["pane-1", "nuova sessione"] })
+  })
+
+  test("a request that never returns does not hold the stop forever", async () => {
+    const { transcriber, engine } = setup(100)
+    await engine.start("transcription")
+
+    transcriber.setHasInFlight(true)
+    await engine.stop()
+
+    expect(engine.isRunning()).toBe(false)
+    expect(transcriber.isStarted).toBe(false)
+  })
+
+  test("a start pressed during the drain waits for it instead of racing it", async () => {
+    const { transcriber, engine } = setup()
+    await engine.start("transcription")
+
+    transcriber.setHasInFlight(true)
+    const stopped = engine.stop()
+    const restarted = engine.start("transcription")
+    await new Promise((r) => setTimeout(r, 30))
+    transcriber.setHasInFlight(false)
+    await stopped
+    await restarted
+
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.activeMode()).toBe("transcription")
+    await engine.stop()
+  })
+
+  test("dictation with no pane open says so instead of doing nothing", async () => {
+    const { host, transcriber, engine } = setup()
+    host.panes = []
+    await engine.start("transcription")
+
+    transcriber.emit("aggiungi un test", true)
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(engine.lastError()).toContain("Nessun pannello aperto")
+    await engine.stop()
+  })
+})

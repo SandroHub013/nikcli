@@ -273,3 +273,77 @@ describe("audio/capture", () => {
     expect(track2.readyState).toBe("ended")
   })
 })
+
+describe("audio/capture pre-roll", () => {
+  test("a detector-started segment keeps the audio from before speech was confirmed", async () => {
+    let simulatedTime = 10_000
+    const segments: CapturedSegment[] = []
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      preferredFormat: "wav",
+      onSegment: (seg) => {
+        segments.push(seg)
+      },
+      speechDetectorConfig: { speechThreshold: 0.05, minSpeechDurationMs: 200, silenceDurationMs: 300 },
+    })
+    await capture.start()
+
+    const frame = 4096
+    const quiet = new Float32Array(frame).fill(0)
+    const loud = new Float32Array(frame).fill(0.5)
+
+    // Room noise, then the first loud frame — which the detector does not
+    // yet call speech — then the frame that confirms it.
+    capture.processAudioFrame(quiet)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    simulatedTime += 256
+    capture.processAudioFrame(loud)
+    // Silence is measured from the first quiet frame, so it takes two.
+    simulatedTime += 256
+    capture.processAudioFrame(quiet)
+    simulatedTime += 400
+    capture.processAudioFrame(quiet)
+
+    expect(segments).toHaveLength(1)
+    const samples = (segments[0].blob.size - 44) / 2
+    // Two confirmed frames plus the closing frame would be 3; the pre-roll
+    // brings back the unconfirmed first syllable and the room tone before it.
+    expect(samples).toBeGreaterThanOrEqual(frame * 4)
+    capture.stop()
+  })
+
+  test("a segment started by a key press has no pre-roll", async () => {
+    const segments: CapturedSegment[] = []
+    let simulatedTime = 10_000
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      preferredFormat: "wav",
+      onSegment: (seg) => {
+        segments.push(seg)
+      },
+      speechDetectorConfig: { speechThreshold: 0.9 },
+    })
+    await capture.start()
+
+    const frame = new Float32Array(1600).fill(0.1)
+    capture.processAudioFrame(frame)
+    capture.processAudioFrame(frame)
+    capture.startSegment?.()
+    simulatedTime += 200
+    capture.processAudioFrame(frame)
+    capture.commitSegment?.()
+
+    expect(segments).toHaveLength(1)
+    expect((segments[0].blob.size - 44) / 2).toBe(1600)
+    capture.stop()
+  })
+})

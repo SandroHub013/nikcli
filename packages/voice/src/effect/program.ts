@@ -52,7 +52,15 @@ export function dispatchTranscription(
       const panes = host.listPanes()
       const targetPane = focusedPaneId ? (panes.find((p) => p.id === focusedPaneId)?.id ?? panes[0]?.id) : panes[0]?.id
 
-      if (!targetPane) return
+      /*
+       * Said, not skipped. With no pane open this used to return quietly: the
+       * request was paid for, the text went to the clipboard, and nothing on
+       * screen said so — dictation looked broken to someone who had simply
+       * not opened a session yet.
+       */
+      if (!targetPane) {
+        throw new Error("Nessun pannello aperto: il testo dettato è negli appunti.")
+      }
 
       if (sendMode === "auto") {
         await host.sendPrompt(targetPane, text)
@@ -64,7 +72,12 @@ export function dispatchTranscription(
       new HostActionFailed({
         action: sendMode === "auto" ? "sendPrompt" : "insertText",
         cause: err,
-        message: "Errore durante l'inserimento del testo trascritto nel pannello.",
+        // The host's own sentence when it has one: "the pane has no process
+        // listening" tells the user what to do, a generic failure does not.
+        message:
+          err instanceof Error && err.message
+            ? err.message
+            : "Errore durante l'inserimento del testo trascritto nel pannello.",
       }),
   })
 }
@@ -178,6 +191,15 @@ export interface VoiceProgramHandle {
   readonly getDialogState: Effect.Effect<DialogState>
   readonly pressToTalk: Effect.Effect<void>
   readonly releaseToTalk: Effect.Effect<void>
+  /**
+   * True when no transcriber event is waiting and none is being handled.
+   *
+   * A dictated sentence is only delivered once the loop has put it in the
+   * pane, which is an await or two after the transcriber reported it; closing
+   * the scope in between drops it just as surely as closing it before the
+   * request came back.
+   */
+  readonly isIdle: Effect.Effect<boolean>
 }
 
 export type ExternalCommand =
@@ -677,7 +699,9 @@ export function makeVoiceProgram(
         yield* dispatchTranscription(text, host, settings.transcriptionSend, focusedPaneId).pipe(
           Effect.catchAll((err) =>
             Effect.sync(() => {
-              options.onError?.(spokenMessage(err))
+              // `spokenMessage` turns every HostActionFailed into one generic
+              // sentence; dictation is silent, so the specific one can be shown.
+              options.onError?.(err.message || spokenMessage(err))
             }),
           ),
         )
@@ -773,9 +797,13 @@ export function makeVoiceProgram(
       })
     }
 
+    /* Events taken off the stream whose handling has not finished; see `isIdle`. */
+    let handling = 0
+
     // Stream consumption loop for continuous speech recognition events
     const recognitionLoop = Stream.runForEach(transcriber.events, (ev) =>
       Effect.gen(function* () {
+        handling++
         const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
         const isPtt = options.isPushToTalkActive !== undefined ? options.isPushToTalkActive() : isPushToTalkPressed
 
@@ -828,6 +856,7 @@ export function makeVoiceProgram(
             options.onError?.(spokenMessage(err))
           }),
         ),
+        Effect.ensuring(Effect.sync(() => handling--)),
       ),
     )
 
@@ -868,6 +897,11 @@ export function makeVoiceProgram(
 
       releaseToTalk: Effect.sync(() => {
         isPushToTalkPressed = false
+      }),
+
+      isIdle: Effect.gen(function* () {
+        if (handling > 0) return false
+        return transcriber.idle ? yield* transcriber.idle : true
       }),
     }
   })

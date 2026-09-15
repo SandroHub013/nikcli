@@ -79,6 +79,8 @@ export interface VoiceEngineOptions {
   plan?: Completion
   /** Overrides the planner model. */
   plannerModel?: string
+  /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
+  drainTimeoutMs?: number
 }
 
 export interface VoiceEngine {
@@ -172,8 +174,18 @@ export interface VoiceEngine {
 /** How many dictated sentences the widget keeps in view. */
 const DICTATION_MEMORY = 6
 
+/**
+ * Longest a stop waits for speech already sent to come back.
+ *
+ * Just above the cloud backend's own 30 s request timeout, so a slow answer
+ * still arrives and a hung one ends as that backend's timeout error.
+ */
+export const DRAIN_TIMEOUT_MS = 32_000
+const DRAIN_POLL_MS = 25
+
 export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const { host, speaker, micMeter, now } = options
+  const drainTimeoutMs = options.drainTimeoutMs ?? DRAIN_TIMEOUT_MS
   const transcriberFactory = options.createTranscriber ?? createTranscriberFor
 
   const initialSettings = normalizeSettings({
@@ -357,13 +369,78 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
   }
 
-  const stop = async (): Promise<void> => {
+  /**
+   * Lets the words already heard reach their pane before the session goes.
+   *
+   * Without this, closing dictation right after speaking — which is how
+   * anyone ends it — sent the last sentence to the service, paid for it, and
+   * then closed the scope the answer was coming back to. The recording only
+   * splits itself after most of a second of silence, so a press that came
+   * sooner lost everything said since the previous pause.
+   *
+   * The microphone stops taking audio at once; only the wait is long. Bounded,
+   * because a request that never returns must not keep a stop from finishing.
+   */
+  const drainSession = async (): Promise<void> => {
+    const transcriber = activeTranscriber
+    const handle = programHandle
+    if (!transcriber || !handle) return
+
+    if (transcriber.finish) transcriber.finish()
+    else transcriber.commit?.()
+
+    const settled = async () =>
+      !transcriber.hasInFlight && (await Effect.runPromise(handle.isIdle))
+
+    /*
+     * Settled twice, one macrotask apart: a final transcript can sit between
+     * leaving the queue and the loop starting on it, and a single look taken
+     * in that instant would call it done.
+     */
+    let waited = 0
+    for (;;) {
+      if (await settled()) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        if (await settled()) return
+      }
+      if (waited >= drainTimeoutMs) return
+      await new Promise((resolve) => setTimeout(resolve, DRAIN_POLL_MS))
+      waited += DRAIN_POLL_MS
+    }
+  }
+
+  /*
+   * The stop in progress. A second stop joins it rather than starting over —
+   * the dictation path itself calls `stop()` once a push-to-talk sentence is
+   * delivered, which is while the first stop is still waiting on that very
+   * sentence.
+   */
+  let stopping: Promise<void> | null = null
+
+  const stop = (): Promise<void> => {
+    if (stopping) return stopping
+    stopping = (async () => {
+      try {
+        await stopNow()
+      } finally {
+        stopping = null
+      }
+    })()
+    return stopping
+  }
+
+  const stopNow = async (): Promise<void> => {
     /* Before anything else: a start still in flight must find its number
        stale and free what it has built rather than install it. */
     sessionGeneration++
     clearPttTimers()
 
     setIsRunning(false)
+
+    /* Drained before the mode is forgotten: a dictated sentence read after
+       `setSessionMode(undefined)` would be parsed as a command. */
+    await drainSession()
+
     setPartialTranscript("")
     setParakeetProgress(undefined)
     setDictated([])
@@ -640,6 +717,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     history,
 
     async start(mode?: VoiceMode): Promise<void> {
+      /* A session still delivering its last sentence owns the scopes this
+         start would overwrite; and the stop resets the mode, so wait first. */
+      if (stopping) await stopping
       if (mode !== undefined) setSessionMode(mode)
       if (activeMode() === "transcription") {
         speaker.cancel()
@@ -772,6 +852,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     },
 
     async pressToTalk(mode?: VoiceMode): Promise<void> {
+      // Before touching the chord flags: the stop being joined resets them.
+      if (stopping) await stopping
       clearPttTimers()
       chordHeld = true
       /* Holding the other chord hands the microphone over mid-session, the

@@ -210,6 +210,7 @@ export function bridgeTranscriber(
        */
       start: Effect.void,
       stop: Effect.promise(() => Promise.resolve(transcriber.stop())),
+      idle: Effect.map(Queue.size(eventsQueue), (size) => size <= 0),
       events: eventsStream,
       finals,
       partials,

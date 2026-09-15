@@ -510,6 +510,14 @@ export function createOpenRouterTranscriber(
       return Boolean(micCapture.commitSegment?.())
     },
 
+    finish(): void {
+      // Stopping the capture closes the open segment and hands it to
+      // `transcribeSegment` synchronously, so `hasInFlight` is already true
+      // when this returns and the caller's wait sees the request.
+      userStopped = true
+      micCapture.stop()
+    },
+
     async start(): Promise<void> {
       userStopped = false
       // Reported and rethrown: a start() that resolves is a promise to the
