@@ -67,10 +67,20 @@ export interface Turn {
   readonly stop: () => void
 }
 
-export function runTurn(request: TurnRequest): Turn {
+/** `hostFor` is only for tests: the desktop host, or a stand-in for it. */
+export function runTurn(request: TurnRequest, hostFor: typeof getHost = getHost): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
   let kill: (() => void) | undefined
+  /*
+   * Ends the wait for the exit ourselves once the process has been killed.
+   * `pty_kill` takes the session out of the registry, and the threads that
+   * report an exit find nothing left to report: a stopped turn waited for an
+   * exit that never came, and kept its slot. After three spoken questions
+   * interrupted by newer ones, the voice agent answered «già 3 turni in
+   * corso» until ADE was restarted.
+   */
+  let endWait: ((code: number | null) => void) | undefined
 
   const result = (async (): Promise<TurnResult> => {
     let talk = sendMessage(emptyTalk(), request.message, Date.now())
@@ -88,7 +98,7 @@ export function runTurn(request: TurnRequest): Turn {
       talk,
     })
 
-    const host = await getHost()
+    const host = await hostFor()
     if (!host?.spawn) {
       update(applyProblem(talk, "Nessun host: un turno si esegue solo nell'app desktop.", Date.now()))
       return finish("error", talk.problem)
@@ -133,6 +143,7 @@ export function runTurn(request: TurnRequest): Turn {
     if (request.mailbox && token) registerSender(request.mailbox.id, token)
     try {
       const code = await new Promise<number | null>((resolve, reject) => {
+        endWait = resolve
         host
           .spawn({
             command,
@@ -146,7 +157,10 @@ export function runTurn(request: TurnRequest): Turn {
           })
           .then((session) => {
             kill = () => session.kill()
-            if (stopped) session.kill()
+            if (stopped) {
+              session.kill()
+              resolve(null)
+            }
           })
           .catch(reject)
       })
@@ -167,7 +181,9 @@ export function runTurn(request: TurnRequest): Turn {
     result,
     stop: () => {
       stopped = true
-      kill?.()
+      if (!kill) return
+      kill()
+      endWait?.(null)
     },
   }
 }
