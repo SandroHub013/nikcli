@@ -143,7 +143,7 @@ describe("server request context", () => {
   it("pins concurrent session requests to their rows despite stale query and header directories", async () => {
     await withContextFixture(async ({ directory, session }) => {
       const other = { ...session, id: "ses_router_other", directory }
-      SessionRepo.upsert(other)
+      Effect.runSync(SessionRepo.upsert(other))
       const requests = [
         contextRequest(`/session/${session.id}/message`, directory),
         new Request(`http://nikcli.local/session/${session.id}`, {
@@ -186,7 +186,7 @@ describe("server request context", () => {
         type: "worktree",
         directory: path.join(directory, "workspace"),
       })
-      SessionRepo.upsert({ ...session, workspaceID: space.id })
+      Effect.runSync(SessionRepo.upsert({ ...session, workspaceID: space.id }))
       expect(await ServerRouter.context(contextRequest(`/session/${session.id}`, directory))).toEqual({
         directory: space.config.directory,
         workspaceID: space.id,
@@ -206,7 +206,7 @@ describe("server request context", () => {
         port: 4096,
         serverUrl: "http://127.0.0.1:4096",
       })
-      SessionRepo.upsert({ ...session, workspaceID: space.id })
+      Effect.runSync(SessionRepo.upsert({ ...session, workspaceID: space.id }))
       const resolved = await ServerRouter.context(contextRequest(`/session/${session.id}`, directory))
       expect(resolved.target?.type).toBe("remote")
       expect(resolved.workspaceID).toBe(space.id)

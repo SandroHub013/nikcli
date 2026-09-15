@@ -1,4 +1,5 @@
 import type { Session } from "@/session"
+import { Effect } from "effect"
 import { preserveTestEnv } from "../helpers/env"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
@@ -80,9 +81,9 @@ describe("encoded-route failure log", () => {
     await Instance.provide({
       directory,
       fn: async () => {
-        const info = SessionRepo.get(created.id)
+        const info = Effect.runSync(SessionRepo.get(created.id))
         if (!info) throw new Error(`session ${created.id} missing after create`)
-        SessionRepo.upsert({ ...info, workspaceID: null } as unknown as Session.Info)
+        Effect.runSync(SessionRepo.upsert({ ...info, workspaceID: null } as unknown as Session.Info))
       },
     })
 

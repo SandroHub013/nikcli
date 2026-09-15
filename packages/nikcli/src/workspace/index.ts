@@ -164,7 +164,7 @@ export namespace Workspace {
   ])
 
   async function listRootSessions(projectID: string, workspaceID: string) {
-    return SessionRepo.getByProject(projectID)
+    return Effect.runSync(SessionRepo.getByProject(projectID))
       .filter((session) => session.workspaceID === workspaceID && !session.parentID)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((session) => session.id)

@@ -460,7 +460,7 @@ export namespace Project {
     // Lazy: the session repo pulls the drizzle/database chain, which client
     // processes loading project.ts must not evaluate at module load.
     const { SessionRepo } = await import("../session/repo")
-    const globalSessions = SessionRepo.getByProject("global")
+    const globalSessions = Effect.runSync(SessionRepo.getByProject("global"))
     if (globalSessions.length === 0) return
 
     log.info("migrating sessions from global", {
@@ -477,7 +477,7 @@ export namespace Project {
           from: "global",
           to: newProjectID,
         })
-        SessionRepo.upsert({ ...session, projectID: newProjectID })
+        Effect.runSync(SessionRepo.upsert({ ...session, projectID: newProjectID }))
       }
     } catch (error) {
       log.error("failed to migrate sessions from global to project", {

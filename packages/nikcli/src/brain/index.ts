@@ -205,7 +205,7 @@ async function listProjectSessions(
   instance: InstanceContext,
   filter: (session: Session.Info) => boolean,
 ): Promise<string[]> {
-  return SessionRepo.getByProject(instance.project.id)
+  return Effect.runSync(SessionRepo.getByProject(instance.project.id))
     .filter(filter)
     .toSorted((a, b) => a.time.updated - b.time.updated)
     .map((session) => session.id)

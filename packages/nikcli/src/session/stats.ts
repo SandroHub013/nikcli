@@ -89,7 +89,7 @@ async function getAllSessions(): Promise<Session.Info[]> {
   const sessions: Session.Info[] = []
 
   for (const project of Effect.runSync(ProjectRepo.list())) {
-    sessions.push(...SessionRepo.getByProject(project.id))
+    sessions.push(...Effect.runSync(SessionRepo.getByProject(project.id)))
   }
 
   return sessions

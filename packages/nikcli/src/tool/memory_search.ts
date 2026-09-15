@@ -137,6 +137,6 @@ function makeSnippet(text: string, lower: string, terms: string[]) {
 
 async function collectSessions(project: Project.Info, sessionId: string | undefined, max: number) {
   if (sessionId) return [sessionId]
-  const ids = SessionRepo.getByProject(project.id).map((session) => session.id)
+  const ids = Effect.runSync(SessionRepo.getByProject(project.id)).map((session) => session.id)
   return ids.slice(0, max)
 }

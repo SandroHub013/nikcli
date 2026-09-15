@@ -540,7 +540,7 @@ export namespace SessionPrompt {
           Effect.sync(() => {
             const raced = existingAdmission(admitted.sessionID, messageID, promptData)
             if (raced) return raced
-            const current = SessionRepo.get(admitted.sessionID)
+            const current = Effect.runSync(SessionRepo.get(admitted.sessionID))
             if (!current)
               throw new Session.NotFoundError({
                 message: `Session not found: ${admitted.sessionID}`,
@@ -618,7 +618,7 @@ export namespace SessionPrompt {
     const rows = SessionPending.list(sessionID, delivery)
     if (rows.length === 0) return []
 
-    const current = SessionRepo.get(sessionID)
+    const current = Effect.runSync(SessionRepo.get(sessionID))
     if (!current) {
       Effect.runSync(
         Database.transaction((tx) =>
@@ -654,7 +654,7 @@ export namespace SessionPrompt {
           const active = prepared.filter((item) => available.has(item.row.id))
           if (active.length === 0) return { messages: [] as MessageV2.WithParts[], pendingIDs: [] as string[] }
 
-          const session = SessionRepo.get(sessionID)
+          const session = Effect.runSync(SessionRepo.get(sessionID))
           if (!session) {
             SessionPending.remove(
               active.map((item) => item.row.id),
@@ -1419,15 +1419,15 @@ export namespace SessionPrompt {
     sessionID: string,
     parentSessionID?: string,
   ): Promise<{ providerID: string; modelID: string }> {
-    const own = SessionRepo.get(sessionID)
+    const own = Effect.runSync(SessionRepo.get(sessionID))
     if (own?.lastModel) return own.lastModel
     const ownFromMessages = await lastModel(sessionID).catch(() => undefined)
     // `lastModel` already includes the global fallback, so distinguish "found
     // a real model" from "fell back to default" by re-reading the column: if
     // it's still empty the message stream had nothing usable either.
-    if (ownFromMessages && SessionRepo.get(sessionID)?.lastModel) return ownFromMessages
+    if (ownFromMessages && Effect.runSync(SessionRepo.get(sessionID))?.lastModel) return ownFromMessages
     if (parentSessionID && parentSessionID !== sessionID) {
-      const parent = SessionRepo.get(parentSessionID)
+      const parent = Effect.runSync(SessionRepo.get(parentSessionID))
       if (parent?.lastModel) return parent.lastModel
     }
     return providerDefaultModel()
@@ -1467,7 +1467,7 @@ export namespace SessionPrompt {
     // Persist the resolved model on the session so subsequent prompts and any
     // worker spawned from this session inherit it without re-resolving. Cheap
     // indexed column write, skipped when the value is unchanged.
-    SessionRepo.setLastModel(input.sessionID, model)
+    Effect.runSync(SessionRepo.setLastModel(input.sessionID, model))
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {

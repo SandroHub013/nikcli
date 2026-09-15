@@ -638,7 +638,7 @@ export async function searchPromptMemories(query: string) {
   }> = []
 
   // Search the authoritative SQL session index rather than scanning files.
-  const allSessions = SessionRepo.listAll()
+  const allSessions = Effect.runSync(SessionRepo.listAll())
   for (const session of allSessions) {
     const messages = await runSessionForSession(
       session,
@@ -693,7 +693,7 @@ export async function resolveMobilePromptDefaults(session: Session.Info) {
     // Sibling candidates come from the SQL store (SessionRepo), sorted
     // newest-updated first. We filter to the same project because prompt
     // defaults only make sense within the same context.
-    const sessions = SessionRepo.listAll()
+    const sessions = Effect.runSync(SessionRepo.listAll())
       .filter((c) => c.id !== session.id && c.projectID === session.projectID)
       .sort((a, b) => b.time.updated - a.time.updated)
 

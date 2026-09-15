@@ -151,18 +151,18 @@ export namespace SessionSync {
 
   export const projectors = [
     SyncEvent.project(Created, (tx, data) => {
-      SessionRepo.upsert(data.info, tx)
+      Effect.runSync(SessionRepo.upsert(data.info, tx))
     }),
 
     SyncEvent.project(Updated, (tx, data) => {
-      SessionRepo.upsert(data.info, tx)
+      Effect.runSync(SessionRepo.upsert(data.info, tx))
     }),
 
     SyncEvent.project(Deleted, (tx, data) => {
       SessionEntryProjection.sessionRemoved(tx, data.sessionID)
       SessionPending.removeSession(data.sessionID, tx)
       Effect.runSync(InstructionRepo.removeSession(data.sessionID, tx))
-      SessionRepo.remove(data.sessionID, tx)
+      Effect.runSync(SessionRepo.remove(data.sessionID, tx))
     }),
 
     // Entries first. v1 is derived from the entries just written;

@@ -343,7 +343,7 @@ export namespace Session {
   }
 
   async function getImpl(ctx: InstanceContext, id: string) {
-    const read = SessionRepo.get(id)
+    const read = Effect.runSync(SessionRepo.get(id))
     if (!read)
       throw new SessionError.NotFoundError({
         message: `Session not found: ${id}`,
@@ -364,7 +364,7 @@ export namespace Session {
   ) {
     // The event carries the whole session, and its projector performs the
     // write: the edit is applied here only to compute what the event says.
-    const existing = SessionRepo.get(id)
+    const existing = Effect.runSync(SessionRepo.get(id))
     if (!existing)
       throw new SessionError.NotFoundError({
         message: `Session not found: ${id}`,
@@ -529,7 +529,7 @@ export namespace Session {
 
   async function getAnyProjectImpl(ctx: InstanceContext, id: string) {
     // SessionRepo.get searches across all projects
-    const session = SessionRepo.get(id)
+    const session = Effect.runSync(SessionRepo.get(id))
     if (session) return session as Info
 
     throw new SessionError.NotFoundError({
@@ -561,7 +561,7 @@ export namespace Session {
 
   async function* listImpl(ctx: InstanceContext) {
     const activeWorkspaceID = WorkspaceContext.workspaceID
-    for (const session of SessionRepo.list(ctx.project.id)) {
+    for (const session of Effect.runSync(SessionRepo.list(ctx.project.id))) {
       if (activeWorkspaceID && session.workspaceID !== activeWorkspaceID) continue
       yield session
     }
@@ -578,19 +578,21 @@ export namespace Session {
    */
   function queryImpl(ctx: InstanceContext, input: QueryInput): Info[] {
     const activeWorkspaceID = WorkspaceContext.workspaceID
-    return SessionRepo.query({
-      projectId: ctx.project.id,
-      ...(activeWorkspaceID ? { workspaceId: activeWorkspaceID } : {}),
-      ...(input.directory !== undefined ? { directoryKey: Filesystem.comparisonKey(input.directory) } : {}),
-      ...(input.roots !== undefined ? { roots: input.roots } : {}),
-      ...(input.start !== undefined ? { start: input.start } : {}),
-      ...(input.search !== undefined ? { search: input.search } : {}),
-      ...(input.limit !== undefined ? { limit: input.limit } : {}),
-    })
+    return Effect.runSync(
+      SessionRepo.query({
+        projectId: ctx.project.id,
+        ...(activeWorkspaceID ? { workspaceId: activeWorkspaceID } : {}),
+        ...(input.directory !== undefined ? { directoryKey: Filesystem.comparisonKey(input.directory) } : {}),
+        ...(input.roots !== undefined ? { roots: input.roots } : {}),
+        ...(input.start !== undefined ? { start: input.start } : {}),
+        ...(input.search !== undefined ? { search: input.search } : {}),
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      }),
+    )
   }
 
   async function childrenImpl(ctx: InstanceContext, parentID: string) {
-    return SessionRepo.getChildren(parentID)
+    return Effect.runSync(SessionRepo.getChildren(parentID))
   }
 
   async function removeImpl(ctx: InstanceContext, sessionID: string) {
