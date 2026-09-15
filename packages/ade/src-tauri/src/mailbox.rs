@@ -650,7 +650,7 @@ case "$cmd" in
   help) if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
-  who-owns) [ -n "$head" ] || usage; text="$head"; show "\"kind\":\"whoowns\"" ;;
+  who-owns) [ -n "$head" ] || usage; text="$head${text:+ $text}"; show "\"kind\":\"whoowns\"" ;;
   stats) if [ -f "$box/stats.txt" ]; then cat "$box/stats.txt"; else echo "nessun dato di consumo ancora"; fi ;;
   kv)
     key="\"key\":\"$(esc "$second")\""
@@ -762,6 +762,13 @@ mod tests {
         let out = collector.join().expect("output");
         let _ = fs::remove_dir_all(&bin);
         assert!(out.contains("found-it"), "the child did not find the script: {out}");
+    }
+
+    #[test]
+    fn who_owns_takes_the_whole_path_in_both_scripts() {
+        // A path with a space, unquoted, arrives as two words: both must reach the lookup.
+        assert!(SH.contains("who-owns) [ -n \"$head\" ] || usage; text=\"$head${text:+ $text}\""));
+        assert!(PS1.contains("text = (@($pos) -join ' ')"));
     }
 
     #[test]
