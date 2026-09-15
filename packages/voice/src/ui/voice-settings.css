@@ -652,6 +652,12 @@
   padding-left: calc(20px + var(--ade-space-4));
 }
 
+[data-component="voice-settings-panel"] [data-slot="sub-choice-note"] {
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+  margin: var(--ade-space-2) 0 0;
+}
+
 [data-component="voice-settings-panel"] [data-slot="stack"] {
   display: flex;
   flex-direction: column;

@@ -280,10 +280,10 @@ function describeStatus(status: DialogStatus, running: boolean): StatusDescripto
  */
 /** The agent engines, as the panel offers them. */
 const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; title: string; desc: string }[] = [
-  { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code, Codex e nikcli" },
+  { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code e Codex" },
   { value: "claude", title: "Claude Code", desc: "Con il tuo abbonamento Anthropic" },
   { value: "codex", title: "Codex", desc: "Con il tuo abbonamento ChatGPT" },
-  { value: "nikcli", title: "nikcli", desc: "Con i provider configurati in nikcli" },
+  { value: "nikcli", title: "nikcli", desc: "Non risponde alla voce: non si può tenere in sola lettura" },
   { value: "off", title: "Solo comandi", desc: "Nessun agente: capisce solo le frasi note" },
 ]
 
@@ -1257,6 +1257,16 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   )}
                 </For>
               </div>
+              {/*
+                S13: the agent runs on the user's own subscription, so the
+                terms that come with it are said where the engine is chosen.
+              */}
+              <p data-slot="sub-choice-note">
+                L'agente usa il tuo account della CLI, per uso personale: ADE non legge le tue
+                credenziali, tiene pochi turni insieme e non riprova quando raggiungi il limite. Non
+                modifica file e non esegue comandi nel progetto: il lavoro lo affida alle sessioni.
+                Per un uso intensivo accedi alla CLI con una chiave API.
+              </p>
             </div>
           </Show>
 
