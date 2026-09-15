@@ -99,7 +99,23 @@ export interface Host {
     pane?: string
     /** Proves a message comes from `pane`: set as `ADE_PANE_TOKEN`, sent back by `ade-msg`. */
     paneToken?: string
+    /**
+     * API keys to put in the process's environment, by name. The host reads
+     * the values from the system keychain; they never pass through here.
+     */
+    secrets?: string[]
   }) => Promise<SpawnedSession>
+
+  // -- API keys (see `src-tauri/src/secrets.rs`) ----------------------------
+  /** Names, variables, agents and a masked tail; never a value. */
+  listSecrets?: () => Promise<KeyInfo[]>
+  /** Saves a key; `value` absent keeps the stored one. Rejects with the reason. */
+  saveSecret?: (draft: KeyDraft) => Promise<void>
+  deleteSecret?: (name: string) => Promise<void>
+  /** The keys assigned to the agent `command` starts, from the index only: names and variables. */
+  assignedSecrets?: (command: string) => Promise<{ name: string; env: string }[]>
+  /** Copies a key to the clipboard from the host; resolves to the seconds before it is cleared. */
+  copySecret?: (name: string) => Promise<number>
 
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
@@ -248,6 +264,7 @@ export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
+import type { KeyDraft, KeyInfo } from "../secrets/keys"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -337,7 +354,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -400,6 +417,7 @@ export async function getHost(): Promise<Host | undefined> {
           link: link ?? null,
           pane: pane ?? null,
           paneToken: paneToken ?? null,
+          secrets: secrets && secrets.length > 0 ? secrets : null,
         })
       } catch (error) {
         dead = true
@@ -424,6 +442,30 @@ export async function getHost(): Promise<Host | undefined> {
           void invoke("pty_resize", { id, cols: nextCols, rows: nextRows }).catch(() => undefined)
         },
       }
+    },
+
+    // -- API keys ------------------------------------------------------------
+
+    async listSecrets() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<KeyInfo[]>("secret_list")
+    },
+    async saveSecret(draft) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // Rejects with the keychain's or the validator's reason, in Italian.
+      await invoke("secret_save", { name: draft.name, env: draft.env, agents: [...draft.agents], value: draft.value ?? null })
+    },
+    async assignedSecrets(command) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ name: string; env: string }[]>("secret_assigned", { command })
+    },
+    async deleteSecret(name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("secret_delete", { name })
+    },
+    async copySecret(name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<number>("secret_copy", { name })
     },
 
     // -- Filesystem access (backed by dedicated Tauri commands) -------------

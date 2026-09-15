@@ -18,6 +18,7 @@ mod frontend;
 mod media;
 mod project_bytes;
 mod pty;
+mod secrets;
 mod serve;
 mod shots;
 mod mailbox;
@@ -996,6 +997,7 @@ pub fn run() {
         .manage(serve::Server::default())
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
+        .manage(secrets::SecretsLock::default())
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
@@ -1083,6 +1085,11 @@ pub fn run() {
             ade_window_toggle_maximize,
             ade_window_close,
             write_clipboard,
+            secrets::secret_list,
+            secrets::secret_save,
+            secrets::secret_delete,
+            secrets::secret_copy,
+            secrets::secret_assigned,
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
         ])
