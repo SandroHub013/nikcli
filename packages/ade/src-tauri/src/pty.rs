@@ -320,20 +320,35 @@ fn is_executable_extension(ext: &str) -> bool {
  * panes waited too although xterm answers. The window never sees the
  * question, so it never sends a second answer into the child's input.
  * Later queries (an agent asking for itself) pass through untouched.
+ *
+ * Only ConPTY asks these on its own. Elsewhere the same bytes come from the
+ * child itself (Codex, nvim asking where the cursor is), and a made-up answer
+ * would be a lie told to a program that then draws by it: off Windows
+ * nothing is answered. Level 61 with no extensions (`ESC[?61c`) is enough to
+ * release ConPTY; claiming sixel (`;4`) would invite an agent to send images
+ * the pane may not draw.
  */
 const STARTUP_QUERY_WINDOW: Duration = Duration::from_secs(5);
 const CURSOR_QUERY: &str = "\x1b[6n";
 const CURSOR_REPLY: &str = "\x1b[1;1R";
 const DEVICE_QUERY: &str = "\x1b[c";
-const DEVICE_REPLY: &str = "\x1b[?61;4c";
+const DEVICE_REPLY: &str = "\x1b[?61c";
 
-#[derive(Default)]
 struct StartupQueries {
     cursor_answered: bool,
     device_answered: bool,
 }
 
 impl StartupQueries {
+    /// `conpty`: whether the pty is ConPTY, whose questions these are. When not,
+    /// there is nothing to answer and everything passes through.
+    fn new(conpty: bool) -> Self {
+        Self {
+            cursor_answered: !conpty,
+            device_answered: !conpty,
+        }
+    }
+
     fn done(&self) -> bool {
         self.cursor_answered && self.device_answered
     }
@@ -675,7 +690,7 @@ pub async fn pty_spawn(
          * completes. Carrying the tail over keeps the split invisible.
          */
         let mut tail: Vec<u8> = Vec::new();
-        let mut queries = StartupQueries::default();
+        let mut queries = StartupQueries::new(cfg!(windows));
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
@@ -1398,18 +1413,27 @@ mod tests {
 
     #[test]
     fn conpty_startup_questions_are_answered_once_and_kept_from_the_window() {
-        let mut queries = StartupQueries::default();
+        let mut queries = StartupQueries::new(true);
         let (forward, reply) = queries.take("\x1b[1t\x1b[6n\x1b[c\x1b[?1004h");
         assert_eq!(forward, "\x1b[1t\x1b[?1004h");
-        assert_eq!(reply, "\x1b[1;1R\x1b[?61;4c");
+        assert_eq!(reply, "\x1b[1;1R\x1b[?61c");
         assert!(queries.done());
         // An agent asking later gets its question through, to the real terminal.
         let (forward, reply) = queries.take("\x1b[6n");
         assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n", ""));
         // A secondary device-attributes query is not the startup one.
-        let mut fresh = StartupQueries::default();
+        let mut fresh = StartupQueries::new(true);
         let (forward, reply) = fresh.take("\x1b[>c");
         assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[>c", ""));
+    }
+
+    #[test]
+    fn without_conpty_a_child_asking_for_the_cursor_gets_the_real_terminal() {
+        // On unix the question is Codex's or nvim's own, not the pty's.
+        let mut queries = StartupQueries::new(false);
+        assert!(queries.done());
+        let (forward, reply) = queries.take("\x1b[6n\x1b[c");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n\x1b[c", ""));
     }
 
     /// How long a process in a pty takes to print, answering the startup questions as
@@ -1447,7 +1471,7 @@ mod tests {
                     }
                 }
             });
-            let mut queries = StartupQueries::default();
+            let mut queries = StartupQueries::new(true);
             let mut seen = String::new();
             while let Ok(chunk) = rx.recv_timeout(Duration::from_secs(10)) {
                 let text = String::from_utf8_lossy(&chunk).into_owned();
