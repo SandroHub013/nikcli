@@ -204,6 +204,8 @@ async function start(): Promise<void> {
         ...(browserArgs ? { WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: browserArgs } : {}),
         ADE_TEST_LABEL: plan.label,
         VITE_ADE_TEST_LABEL: plan.name,
+        // Read only by a test build (mailbox.rs): its own mailbox, not the one all test builds share.
+        ADE_MAILBOX_ROOT: plan.mailboxDir,
       },
     },
   )

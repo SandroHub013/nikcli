@@ -35,6 +35,12 @@ export interface TestAppPlan {
   logPath: string
   recordPath: string
   configPath: string
+  /**
+   * This instance's `ade-msg` mailbox, passed as `ADE_MAILBOX_ROOT`. Every test
+   * build otherwise shares one under the test identity's data folder, and one
+   * instance rewrote the other's `ade-msg.ps1` mid-test (S25).
+   */
+  mailboxDir: string
 }
 
 /** What a started instance left behind, so `status` and `list` can describe it. */
@@ -191,6 +197,7 @@ export function planTestApp(input: { root: string; branch: string }): TestAppPla
     logPath: join(stateDir, "ade-test.log"),
     recordPath: join(stateDir, "record.json"),
     configPath: join(stateDir, "tauri.dev.json"),
+    mailboxDir: join(stateDir, "mailbox"),
   }
 }
 
