@@ -62,6 +62,7 @@ const ADE_COMMAND_LABELS: Record<string, string> = {
   "session.new": "Nuova sessione",
   "pane.close": "Chiudi pannello",
   "pane.expand": "Espandi pannello",
+  "pane.rename": "Rinomina pannello",
   "view.toggle": "Cambia vista",
   "theme.toggle": "Cambia tema",
 }
