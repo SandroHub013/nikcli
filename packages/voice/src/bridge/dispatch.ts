@@ -220,6 +220,14 @@ export async function dispatch(
       }
 
       case "theme.toggle": {
+        /*
+         * «tema chiaro» asks for the light theme, not for the other one: said
+         * on a light theme it used to turn the lights off.
+         */
+        if (slots.text === "light" || slots.text === "dark") {
+          await host.runCommand(`theme.set.${slots.text}`)
+          return { success: true, spoken: `Tema ${slots.text === "light" ? "chiaro" : "scuro"} impostato.` }
+        }
         await host.runCommand("theme.toggle")
         return { success: true, spoken: "Tema visivo aggiornato." }
       }

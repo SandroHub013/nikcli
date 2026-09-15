@@ -199,6 +199,9 @@ function extractSlotsFromUtterance(
     else if (word("alberi")) slots.text = "alberi"
     else if (word("diff") || word("differenze")) slots.text = "diff"
     else if (word("trascrizione")) slots.text = "transcript"
+    // «tema chiaro» names the theme it wants; without this it only flipped it.
+    else if (word("chiaro") || word("chiara") || word("light")) slots.text = "light"
+    else if (word("scuro") || word("scura") || word("dark")) slots.text = "dark"
     else if (/\b(scorri|scorrere|scrolla|sposta|risali|torna)\b/i.test(cleaned)) {
       // A direction only means a direction next to a verb of movement. Without
       // this guard "vai su Bastelli" arrives carrying a scroll instruction.

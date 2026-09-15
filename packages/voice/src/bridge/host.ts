@@ -87,7 +87,8 @@ export interface VoiceHost {
   /**
    * Run an existing ADE command by identifier:
    * "palette.open", "session.new", "project.open", "pane.close", "pane.expand",
-   * "view.toggle", "theme.toggle", "browser.new", "process.kill",
+   * "view.toggle", "theme.toggle", "theme.set.light", "theme.set.dark",
+   * "browser.new", "process.kill",
    * and "project.recent.<root>".
    */
   runCommand(id: string): Promise<void>

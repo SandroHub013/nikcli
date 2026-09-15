@@ -196,6 +196,22 @@ describe("dispatch", () => {
     })
   })
 
+  test("«tema chiaro» imposta il tema chiaro, «cambia tema» lo inverte", async () => {
+    const spec = VOCABULARY.find((v) => v.intent === "theme.toggle")!
+    const light = new MockVoiceHost()
+    const outcome = await dispatch(makeParseResult(spec, { text: "light" }), light)
+    expect(outcome.success).toBe(true)
+    expect(light.calls).toContainEqual({ method: "runCommand", args: ["theme.set.light"] })
+
+    const dark = new MockVoiceHost()
+    await dispatch(makeParseResult(spec, { text: "dark" }), dark)
+    expect(dark.calls).toContainEqual({ method: "runCommand", args: ["theme.set.dark"] })
+
+    const flip = new MockVoiceHost()
+    await dispatch(makeParseResult(spec, {}), flip)
+    expect(flip.calls).toContainEqual({ method: "runCommand", args: ["theme.toggle"] })
+  })
+
   describe("non dice fatto quando non ha fatto nulla", () => {
     const run = async (intent: string, slots: Record<string, any>, host = new MockVoiceHost()) => {
       const spec = VOCABULARY.find((v) => v.intent === intent)!
