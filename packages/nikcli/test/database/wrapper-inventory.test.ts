@@ -22,7 +22,7 @@ import { SRC, stripComments } from "../tui/tui-source"
  * call site. Before stripping, the removal of `effect` and `use` read as no
  * change at all.
  *
- * The total was raised from 85 to 125 deliberately. Groups 3 and 4 replace a
+ * The total was raised from 85 to 145 deliberately. Groups 3 and 4 replace a
  * synchronous call with an Effect-returning one, so a converted repository
  * trades a `syncDb` reference for a `query` reference and often gains a
  * `TxOrDb` parameter as well — the count goes up while the thing being
@@ -30,7 +30,7 @@ import { SRC, stripComments } from "../tui/tui-source"
  * gate below; the total stays only as a ceiling against unrelated growth.
  */
 const BASELINE = {
-  references: 125,
+  references: 145,
   files: 38,
   /** Group 1 removed both: the post-commit queue is handed to the transaction body. */
   effect: 0,
@@ -40,10 +40,10 @@ const BASELINE = {
   rawSql: 2,
   /**
    * Groups 3-4: the synchronous singleton, being retired one repository at a
-   * time. Was 32 before the first conversion; nine repositories have moved.
+   * time. Was 32 before the first conversion; twelve repositories have moved.
    * This may fall and may not rise.
    */
-  syncDb: 23,
+  syncDb: 20,
 } as const
 
 const API = /Database\.[A-Za-z]+/g

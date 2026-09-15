@@ -12,6 +12,7 @@
  */
 
 import { Log } from "@nikcli-ai/util/log"
+import { Effect } from "effect"
 import { RunSandbox } from "../worktree/sandbox"
 import { LoopRepo } from "./repo"
 import {
@@ -27,11 +28,11 @@ import {
 const log = Log.create({ service: "loop.manager" })
 
 export async function list(project: string): Promise<LoopDefinition[]> {
-  return LoopRepo.list(project)
+  return Effect.runSync(LoopRepo.list(project))
 }
 
 export async function get(project: string, id: string): Promise<LoopDefinition | undefined> {
-  return LoopRepo.get(project, id)
+  return Effect.runSync(LoopRepo.get(project, id))
 }
 
 export async function upsert(project: string, def: LoopDefinition): Promise<LoopDefinition> {
@@ -43,10 +44,10 @@ export async function upsert(project: string, def: LoopDefinition): Promise<Loop
   // sandbox and branch a fresh one on the next run — so it is sticky unless
   // the caller explicitly supplies one.
   if (!sanitized.worktree) {
-    const existing = LoopRepo.get(project, sanitized.id)
+    const existing = Effect.runSync(LoopRepo.get(project, sanitized.id))
     if (existing?.worktree) sanitized.worktree = existing.worktree
   }
-  LoopRepo.upsert(project, sanitized)
+  Effect.runSync(LoopRepo.upsert(project, sanitized))
   log.info("upsert", {
     id: sanitized.id,
     name: sanitized.name,
@@ -56,11 +57,11 @@ export async function upsert(project: string, def: LoopDefinition): Promise<Loop
 }
 
 export async function remove(project: string, directory: string, id: string): Promise<boolean> {
-  const existing = LoopRepo.get(project, id)
+  const existing = Effect.runSync(LoopRepo.get(project, id))
   if (!existing) return false
   // Cascade: the definition and every run it owns go in one transaction, so a
   // crash cannot leave runs pointing at a loop that no longer exists.
-  LoopRepo.remove(project, id)
+  Effect.runSync(LoopRepo.remove(project, id))
   // Best-effort sandbox cleanup. `release` keeps the worktree whenever it
   // still holds work, so deleting a loop never destroys an agent's output.
   if (existing.worktree) {
@@ -111,14 +112,16 @@ export async function orphanRun(
   endedAt: number = Date.now(),
 ): Promise<LoopRun | undefined> {
   try {
-    return LoopRepo.updateRun(project, loopID, runID, (draft) => {
-      if (draft.status === "running") {
-        draft.status = "orphaned"
-        draft.ok = false
-        draft.endedAt = endedAt
-        draft.error = draft.error ?? "Process exited before the run finished"
-      }
-    })
+    return Effect.runSync(
+      LoopRepo.updateRun(project, loopID, runID, (draft) => {
+        if (draft.status === "running") {
+          draft.status = "orphaned"
+          draft.ok = false
+          draft.endedAt = endedAt
+          draft.error = draft.error ?? "Process exited before the run finished"
+        }
+      }),
+    )
   } catch (error) {
     log.warn("orphanRun failed", { loopID, runID, error })
     return undefined
@@ -127,7 +130,7 @@ export async function orphanRun(
 
 /** Find every run across every loop that is still in `"running"` status. */
 export async function listRunningRuns(project: string): Promise<LoopRun[]> {
-  return LoopRepo.listRunsByStatus(project, "running")
+  return Effect.runSync(LoopRepo.listRunsByStatus(project, "running"))
 }
 
 // ── Run counter ───────────────────────────────────────────────────────────────
@@ -140,11 +143,11 @@ export async function listRunningRuns(project: string): Promise<LoopRun[]> {
  * pre-counter loops).
  */
 export async function countRuns(project: string, loopID: string): Promise<number> {
-  const counted = LoopRepo.startedRuns(project, loopID)
+  const counted = Effect.runSync(LoopRepo.startedRuns(project, loopID))
   if (counted !== undefined) return counted
-  const fromHistory = LoopRepo.countRunRecords(project, loopID)
+  const fromHistory = Effect.runSync(LoopRepo.countRunRecords(project, loopID))
   try {
-    LoopRepo.setStartedRuns(project, loopID, fromHistory)
+    Effect.runSync(LoopRepo.setStartedRuns(project, loopID, fromHistory))
   } catch (error) {
     log.warn("run counter seed failed", { loopID, error })
   }
@@ -154,7 +157,7 @@ export async function countRuns(project: string, loopID: string): Promise<number
 /** Overwrite the lifetime run counter. Used after manual run cap edits. */
 export async function resetRunCounter(project: string, loopID: string, startedRuns = 0): Promise<void> {
   try {
-    LoopRepo.setStartedRuns(project, loopID, startedRuns)
+    Effect.runSync(LoopRepo.setStartedRuns(project, loopID, startedRuns))
   } catch (error) {
     log.warn("resetRunCounter failed", { loopID, error })
   }
@@ -175,12 +178,17 @@ export async function startRun(project: string, loopID: string, sessionID?: stri
   // Assigned rather than spread so the key stays absent when there is no
   // session, without an empty-object spread hiding the shape.
   if (sessionID) run.sessionID = sessionID
-  LoopRepo.putRun(project, run)
+  Effect.runSync(LoopRepo.putRun(project, run))
   // Bump the lifetime counter; on first contact derive it from history (the
   // record above is already included in that count).
   try {
-    if (LoopRepo.incrementStartedRuns(project, loopID) === undefined) {
-      LoopRepo.setStartedRuns(project, loopID, LoopRepo.countRunRecords(project, loopID))
+    if (Effect.runSync(LoopRepo.incrementStartedRuns(project, loopID)) === undefined) {
+      Effect.runSync(
+        Effect.gen(function* () {
+          const total = yield* LoopRepo.countRunRecords(project, loopID)
+          yield* LoopRepo.setStartedRuns(project, loopID, total)
+        }),
+      )
     }
   } catch (error) {
     log.warn("run counter bump failed", { loopID, error })
@@ -191,10 +199,12 @@ export async function startRun(project: string, loopID: string, sessionID?: stri
 /** Renew the lease on a running run. No-op if the run already finished. */
 export async function touchRun(project: string, loopID: string, runID: string): Promise<void> {
   try {
-    LoopRepo.updateRun(project, loopID, runID, (draft) => {
-      if (draft.status !== "running") return
-      draft.heartbeatAt = Date.now()
-    })
+    Effect.runSync(
+      LoopRepo.updateRun(project, loopID, runID, (draft) => {
+        if (draft.status !== "running") return
+        draft.heartbeatAt = Date.now()
+      }),
+    )
   } catch (error) {
     log.warn("touchRun failed", { loopID, runID, error })
   }
@@ -208,9 +218,11 @@ export async function attachRunSession(
   sessionID: string,
 ): Promise<void> {
   try {
-    LoopRepo.updateRun(project, loopID, runID, (draft) => {
-      draft.sessionID = sessionID
-    })
+    Effect.runSync(
+      LoopRepo.updateRun(project, loopID, runID, (draft) => {
+        draft.sessionID = sessionID
+      }),
+    )
   } catch (error) {
     log.warn("attachRunSession failed", { loopID, runID, error })
   }
@@ -224,9 +236,11 @@ export async function attachRunPullRequest(
   pullRequest: LoopPullRequestRef,
 ): Promise<void> {
   try {
-    LoopRepo.updateRun(project, loopID, runID, (draft) => {
-      draft.pullRequest = pullRequest
-    })
+    Effect.runSync(
+      LoopRepo.updateRun(project, loopID, runID, (draft) => {
+        draft.pullRequest = pullRequest
+      }),
+    )
   } catch (error) {
     log.warn("attachRunPullRequest failed", { loopID, runID, error })
   }
@@ -245,15 +259,17 @@ export async function finishRun(
   },
 ): Promise<LoopRun | undefined> {
   try {
-    const next = LoopRepo.updateRun(project, loopID, runID, (draft) => {
-      draft.status = patch.status
-      draft.ok = patch.ok
-      draft.endedAt = patch.endedAt
-      if (patch.error !== undefined) draft.error = patch.error
-      if (patch.sessionID !== undefined) draft.sessionID = patch.sessionID
-    })
+    const next = Effect.runSync(
+      LoopRepo.updateRun(project, loopID, runID, (draft) => {
+        draft.status = patch.status
+        draft.ok = patch.ok
+        draft.endedAt = patch.endedAt
+        if (patch.error !== undefined) draft.error = patch.error
+        if (patch.sessionID !== undefined) draft.sessionID = patch.sessionID
+      }),
+    )
     if (next === undefined) return undefined
-    LoopRepo.trimRuns(project, loopID, HISTORY_LIMIT)
+    Effect.runSync(LoopRepo.trimRuns(project, loopID, HISTORY_LIMIT))
     return next
   } catch (error) {
     log.warn("finishRun failed", { loopID, runID, error })
@@ -262,9 +278,9 @@ export async function finishRun(
 }
 
 export async function listRuns(project: string, loopID: string, limit = HISTORY_LIMIT): Promise<LoopRun[]> {
-  return LoopRepo.listRuns(project, loopID, limit)
+  return Effect.runSync(LoopRepo.listRuns(project, loopID, limit))
 }
 
 export async function listAllRunsAcrossLoops(project: string, limit = 100): Promise<LoopRun[]> {
-  return LoopRepo.listRunsByProject(project, limit)
+  return Effect.runSync(LoopRepo.listRunsByProject(project, limit))
 }

@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
@@ -63,7 +64,7 @@ afterAll(async () => {
 
 /** Mutate a persisted run record in place (test fixture helper). */
 async function mutateRun(loopID: string, runID: string, fn: (draft: LoopRun) => void): Promise<void> {
-  LoopRepo.updateRun(Instance.project.id, loopID, runID, fn)
+  Effect.runSync(LoopRepo.updateRun(Instance.project.id, loopID, runID, fn))
 }
 
 function makeDef(overrides: Partial<LoopDefinition> = {}): LoopDefinition {

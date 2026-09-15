@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "./helpers/env"
+import { Effect } from "effect"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -295,11 +296,13 @@ describe("delegation flow", () => {
         source: "task",
       })
 
-      BackgroundRunRepo.update(Instance.project.id, record.id, (draft) => {
-        draft.ownerID = "stale-owner"
-        draft.heartbeatAt = Date.now() - BackgroundRun.LEASE_TIMEOUT_MS - 1_000
-        draft.updatedAt = Date.now() - BackgroundRun.LEASE_TIMEOUT_MS - 1_000
-      })
+      Effect.runSync(
+        BackgroundRunRepo.update(Instance.project.id, record.id, (draft) => {
+          draft.ownerID = "stale-owner"
+          draft.heartbeatAt = Date.now() - BackgroundRun.LEASE_TIMEOUT_MS - 1_000
+          draft.updatedAt = Date.now() - BackgroundRun.LEASE_TIMEOUT_MS - 1_000
+        }),
+      )
 
       await BackgroundRun.reconcileInterrupted()
 
