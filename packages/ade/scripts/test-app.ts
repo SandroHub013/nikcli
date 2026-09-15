@@ -18,14 +18,13 @@ import { createServer } from "node:net"
 import { join } from "node:path"
 import {
   TEST_APP_CDP_OFFSET,
-  appStarted,
   devConfig,
   instanceProcesses,
   instanceRunning,
-  killOrder,
   parseRecord,
   planTestApp,
-  startFailure,
+  stopInstance,
+  superviseStart,
   tauriDevArgs,
   type ProcessRow,
   type TestAppPlan,
@@ -216,91 +215,72 @@ async function start(): Promise<void> {
 
   console.log(`ADE Test in avvio (la prima compilazione Rust di una cartella nuova richiede minuti):\n${describe(record)}`)
 
-  /*
-   * Waited on the log rather than on the process: `tauri dev` stays up
-   * watching files after the app itself has failed, so its exit says nothing.
-   * The process table is only a backstop, read every 15 s, and an unreadable
-   * table never counts as "gone".
-   */
   // Overridable so the timeout's cleanup can be tried without waiting 20 minutes.
   const timeoutMs = Number(process.env.ADE_TEST_START_TIMEOUT_MS) || 20 * 60_000
-  const deadline = Date.now() + timeoutMs
-  let lastProgress = ""
-  let lastLiveness = Date.now()
-  while (Date.now() < deadline) {
-    // Cargo colours its output; the escapes sit between the words matched below.
-    const log = stripAnsi(readFileSync(plan.logPath, "utf8"))
-    const failure = startFailure(log)
-    if (failure) {
-      console.error(`\nADE Test non è partita: ${failure}`)
-      console.error(log.split(/\r?\n/).filter(Boolean).slice(-15).join("\n"))
-      stop(true)
-      process.exit(1)
-    }
-    if (appStarted(log)) {
+  // Cargo colours its output; the escapes sit between the words matched in the log.
+  const readLog = () => stripAnsi(readFileSync(plan.logPath, "utf8"))
+  const result = await superviseStart({
+    readLog,
+    running: () => state(plan, root, record),
+    stop: () => stop(true),
+    now: Date.now,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    timeoutMs,
+    onProgress: (progress) => console.log(`  compilazione ${progress}`),
+  })
+  switch (result.outcome) {
+    case "started":
       console.log("\nFinestra aperta. Per chiuderla: bun run test:app stop")
       return
+    case "failed":
+      console.error(`\nADE Test non è partita: ${result.failure}`)
+      console.error(result.log.split(/\r?\n/).filter(Boolean).slice(-15).join("\n"))
+      break
+    case "lost":
+      console.error(`\nADE Test si è chiusa durante l'avvio. Log: ${plan.logPath}`)
+      break
+    case "timeout": {
+      const limit = timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} minuti` : `${Math.round(timeoutMs / 1000)} secondi`
+      console.error(`\nADE Test non ha aperto la finestra entro ${limit}. Log: ${plan.logPath}`)
+      break
     }
-    if (Date.now() - lastLiveness > 15_000) {
-      lastLiveness = Date.now()
-      if (state(plan, root, record) === false) {
-        console.error(`\nADE Test si è chiusa durante l'avvio. Log: ${plan.logPath}`)
-        // What it left running (a Vite, a WebView2) and the record go with it.
-        stop(true)
-        process.exit(1)
-      }
-    }
-    const progress = log.match(/\d+\/\d+(?=: )/g)?.pop()
-    if (progress && progress !== lastProgress) {
-      lastProgress = progress
-      console.log(`  compilazione ${progress}`)
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000))
   }
-  console.error(`\nADE Test non ha aperto la finestra entro ${timeoutMs >= 60_000 ? `${Math.round(timeoutMs / 60_000)} minuti` : `${Math.round(timeoutMs / 1000)} secondi`}. Log: ${plan.logPath}`)
-  stop(true)
   process.exit(1)
 }
 
 function stop(quiet = false): void {
-  const record = readRecord(plan.recordPath)
   const rows = processTable()
   if (!rows) {
     console.error("ADE Test: non riesco a leggere l'elenco dei processi; non chiudo nulla.")
     process.exit(1)
   }
-  if (record?.startedAt === undefined) {
-    /*
-     * Arguments alone do not say who started a process, and the record that
-     * would is missing or predates `startedAt`: nothing is killed on a guess.
-     */
-    const found = instanceProcesses(rows, plan, root, record?.port)
-    if (found.length === 0) {
-      rmSync(plan.recordPath, { force: true })
-      if (!quiet) console.log("Nessuna ADE Test in esecuzione per questa cartella.")
-      return
-    }
+  const result = stopInstance({
+    rows,
+    record: readRecord(plan.recordPath),
+    plan,
+    root,
+    selfPid: process.pid,
+    kill: (pid) => {
+      if (isWindows) spawnSync("taskkill", ["/PID", String(pid), "/F"], { stdio: "ignore" })
+      else {
+        try {
+          process.kill(pid, "SIGTERM")
+        } catch {
+          // already gone
+        }
+      }
+    },
+    removeRecord: () => rmSync(plan.recordPath, { force: true }),
+  })
+  if (result.outcome === "refused") {
     console.error(
       "ADE Test: non c'è una registrazione di quando è partita, quindi non chiudo processi che non so di aver avviato.\n" +
-        `Chiudili a mano se sono tuoi (pid ${found.map((row) => row.pid).join(", ")}).`,
+        `Chiudili a mano se sono tuoi (pid ${result.pids.join(", ")}).`,
     )
     process.exit(1)
   }
-  const members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
-  for (const row of killOrder(members)) {
-    if (row.pid === process.pid) continue
-    if (isWindows) spawnSync("taskkill", ["/PID", String(row.pid), "/F"], { stdio: "ignore" })
-    else {
-      try {
-        process.kill(row.pid, "SIGTERM")
-      } catch {
-        // already gone
-      }
-    }
-  }
-  rmSync(plan.recordPath, { force: true })
   if (!quiet) {
-    console.log(members.length > 0 ? `ADE Test chiusa: ${plan.label}` : "Nessuna ADE Test in esecuzione per questa cartella.")
+    console.log(result.outcome === "stopped" ? `ADE Test chiusa: ${plan.label}` : "Nessuna ADE Test in esecuzione per questa cartella.")
   }
 }
 

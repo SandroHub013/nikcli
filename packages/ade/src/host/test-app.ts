@@ -273,3 +273,104 @@ export function startFailure(log: string): string | undefined {
   }
   return undefined
 }
+
+/* ── start and stop, with the machine passed in ─────────────────────────── */
+
+/** What `stop` did: killed what the start created, refused to guess, or found nothing. */
+export type StopOutcome =
+  | { outcome: "stopped"; killed: number[] }
+  | { outcome: "refused"; pids: number[] }
+  | { outcome: "nothing" }
+
+/**
+ * Stops one worktree's instance: every process its recorded start created,
+ * children first, then its record.
+ *
+ * Without a start time in the record nothing is killed: arguments alone do not
+ * say who started a process. The record is removed only when nothing of the
+ * instance is left to describe.
+ */
+export function stopInstance(input: {
+  rows: readonly ProcessRow[]
+  record: TestAppRecord | undefined
+  plan: TestAppPlan
+  root: string
+  selfPid: number
+  kill: (pid: number) => void
+  removeRecord: () => void
+}): StopOutcome {
+  const { rows, record, plan, root } = input
+  if (record?.startedAt === undefined) {
+    const found = instanceProcesses(rows, plan, root, record?.port)
+    if (found.length > 0) return { outcome: "refused", pids: found.map((row) => row.pid) }
+    input.removeRecord()
+    return { outcome: "nothing" }
+  }
+  const members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
+  const killed: number[] = []
+  for (const row of killOrder(members)) {
+    if (row.pid === input.selfPid) continue
+    input.kill(row.pid)
+    killed.push(row.pid)
+  }
+  input.removeRecord()
+  return killed.length > 0 ? { outcome: "stopped", killed } : { outcome: "nothing" }
+}
+
+/** How a start ended. Every outcome but `started` has already stopped what the start left. */
+export type StartOutcome =
+  | { outcome: "started" }
+  | { outcome: "failed"; failure: string; log: string }
+  | { outcome: "lost" }
+  | { outcome: "timeout" }
+
+/**
+ * Waits for the window after `tauri dev` was launched.
+ *
+ * Waited on the log rather than on the process: `tauri dev` stays up watching
+ * files after the app itself has failed, so its exit says nothing. The process
+ * table is only a backstop, read every `livenessEveryMs`, and an unreadable
+ * table (`undefined`) never counts as gone. A start that fails, loses its app
+ * or runs out of time calls `stop` before returning, so no Vite, WebView2 or
+ * record outlives it.
+ */
+export async function superviseStart(deps: {
+  readLog: () => string
+  /** Whether the instance is up; `undefined` when the process table could not be read. */
+  running: () => boolean | undefined
+  stop: () => void
+  now: () => number
+  sleep: (ms: number) => Promise<void>
+  timeoutMs: number
+  livenessEveryMs?: number
+  onProgress?: (progress: string) => void
+}): Promise<StartOutcome> {
+  const every = deps.livenessEveryMs ?? 15_000
+  const deadline = deps.now() + deps.timeoutMs
+  let lastProgress = ""
+  let lastLiveness = deps.now()
+  while (deps.now() < deadline) {
+    const log = deps.readLog()
+    const failure = startFailure(log)
+    if (failure) {
+      deps.stop()
+      return { outcome: "failed", failure, log }
+    }
+    if (appStarted(log)) return { outcome: "started" }
+    if (deps.now() - lastLiveness > every) {
+      lastLiveness = deps.now()
+      if (deps.running() === false) {
+        deps.stop()
+        return { outcome: "lost" }
+      }
+    }
+    const progress = log.match(/\d+\/\d+(?=: )/g)?.pop()
+    if (progress && progress !== lastProgress) {
+      lastProgress = progress
+      deps.onProgress?.(progress)
+    }
+    await deps.sleep(1000)
+  }
+  deps.stop()
+  return { outcome: "timeout" }
+}
