@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import z from "zod"
 import { Database } from "@/database/database"
 import { Identifier } from "@nikcli-ai/util/id"
@@ -140,10 +140,6 @@ export namespace SessionPending {
   type Executor = Database.TxOrDb
   type Row = typeof sessionPending.$inferSelect
 
-  function db() {
-    return Database.syncDb()
-  }
-
   function decode(row: Row): Info | undefined {
     try {
       return Info.parse({
@@ -159,30 +155,51 @@ export namespace SessionPending {
     }
   }
 
+  /** Pure: the canonical serialization used to compare two prompts. */
   export function canonical(input: PromptInput): string {
     return JSON.stringify(PromptInput.parse(input))
   }
 
-  export function getByMessage(sessionID: string, messageID: string, tx: Executor = db()): Info | undefined {
-    const row = tx
-      .select()
-      .from(sessionPending)
-      .where(and(eq(sessionPending.sessionId, sessionID), eq(sessionPending.messageId, messageID)))
-      .get()
-    return row ? decode(row) : undefined
+  export function getByMessage(sessionID: string, messageID: string, executor?: Executor) {
+    return Database.query(
+      "SessionPending.getByMessage",
+      (db) => {
+        const row = db
+          .select()
+          .from(sessionPending)
+          .where(and(eq(sessionPending.sessionId, sessionID), eq(sessionPending.messageId, messageID)))
+          .get()
+        return row ? decode(row) : undefined
+      },
+      executor,
+    )
   }
 
-  export function get(id: string, tx: Executor = db()): Info | undefined {
-    const row = tx.select().from(sessionPending).where(eq(sessionPending.id, id)).get()
-    return row ? decode(row) : undefined
+  export function get(id: string, executor?: Executor) {
+    return Database.query(
+      "SessionPending.get",
+      (db) => {
+        const row = db.select().from(sessionPending).where(eq(sessionPending.id, id)).get()
+        return row ? decode(row) : undefined
+      },
+      executor,
+    )
   }
 
-  export function steer(sessionID: string, id: string, tx: Executor = db()): Info | undefined {
-    tx.update(sessionPending)
-      .set({ delivery: "steer" })
-      .where(and(eq(sessionPending.id, id), eq(sessionPending.sessionId, sessionID)))
-      .run()
-    return get(id, tx)
+  export function steer(sessionID: string, id: string, executor?: Executor) {
+    return Effect.gen(function* () {
+      yield* Database.query(
+        "SessionPending.steer",
+        (db) => {
+          db.update(sessionPending)
+            .set({ delivery: "steer" })
+            .where(and(eq(sessionPending.id, id), eq(sessionPending.sessionId, sessionID)))
+            .run()
+        },
+        executor,
+      )
+      return yield* get(id, executor)
+    })
   }
 
   export function insert(
@@ -193,46 +210,70 @@ export namespace SessionPending {
       data: string
       createdAt?: number
     },
-    tx: Executor = db(),
-  ): Info {
-    const row = {
-      id: Identifier.ascending("pending"),
-      sessionId: input.sessionID,
-      delivery: input.delivery,
-      messageId: input.messageID,
-      data: input.data,
-      createdAt: input.createdAt ?? Date.now(),
-    } satisfies typeof sessionPending.$inferInsert
-    tx.insert(sessionPending).values(row).run()
-    const decoded = decode(row)
-    if (!decoded) throw new Error("Failed to decode inserted pending input")
-    return decoded
+    executor?: Executor,
+  ) {
+    return Database.query(
+      "SessionPending.insert",
+      (db) => {
+        const row = {
+          id: Identifier.ascending("pending"),
+          sessionId: input.sessionID,
+          delivery: input.delivery,
+          messageId: input.messageID,
+          data: input.data,
+          createdAt: input.createdAt ?? Date.now(),
+        } satisfies typeof sessionPending.$inferInsert
+        db.insert(sessionPending).values(row).run()
+        const decoded = decode(row)
+        if (!decoded) throw new Error("Failed to decode inserted pending input")
+        return decoded
+      },
+      executor,
+    )
   }
 
-  export function list(sessionID: string, delivery?: Delivery, tx: Executor = db()): Info[] {
-    const where = delivery
-      ? and(eq(sessionPending.sessionId, sessionID), eq(sessionPending.delivery, delivery))
-      : eq(sessionPending.sessionId, sessionID)
-    return tx
-      .select()
-      .from(sessionPending)
-      .where(where)
-      .orderBy(asc(sessionPending.createdAt), asc(sessionPending.id))
-      .all()
-      .flatMap((row) => {
-        const info = decode(row)
-        return info ? [info] : []
-      })
+  export function list(sessionID: string, delivery?: Delivery, executor?: Executor) {
+    return Database.query(
+      "SessionPending.list",
+      (db) => {
+        const where = delivery
+          ? and(eq(sessionPending.sessionId, sessionID), eq(sessionPending.delivery, delivery))
+          : eq(sessionPending.sessionId, sessionID)
+        return db
+          .select()
+          .from(sessionPending)
+          .where(where)
+          .orderBy(asc(sessionPending.createdAt), asc(sessionPending.id))
+          .all()
+          .flatMap((row) => {
+            const info = decode(row)
+            return info ? [info] : []
+          })
+      },
+      executor,
+    )
   }
 
-  export function remove(ids: string[], tx: Executor = db()): number {
-    if (ids.length === 0) return 0
-    const result = tx.delete(sessionPending).where(inArray(sessionPending.id, ids)).run()
-    return (result as unknown as { changes: number }).changes
+  export function remove(ids: string[], executor?: Executor) {
+    return Database.query(
+      "SessionPending.remove",
+      (db) => {
+        if (ids.length === 0) return 0
+        const result = db.delete(sessionPending).where(inArray(sessionPending.id, ids)).run()
+        return (result as unknown as { changes: number }).changes
+      },
+      executor,
+    )
   }
 
-  export function removeSession(sessionID: string, tx: Executor = db()): number {
-    const result = tx.delete(sessionPending).where(eq(sessionPending.sessionId, sessionID)).run()
-    return (result as unknown as { changes: number }).changes
+  export function removeSession(sessionID: string, executor?: Executor) {
+    return Database.query(
+      "SessionPending.removeSession",
+      (db) => {
+        const result = db.delete(sessionPending).where(eq(sessionPending.sessionId, sessionID)).run()
+        return (result as unknown as { changes: number }).changes
+      },
+      executor,
+    )
   }
 }

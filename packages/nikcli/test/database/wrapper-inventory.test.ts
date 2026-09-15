@@ -40,10 +40,10 @@ const BASELINE = {
   rawSql: 2,
   /**
    * Groups 3-4: the synchronous singleton, being retired one repository at a
-   * time. Was 32 before the first conversion; nineteen repositories have moved.
+   * time. Was 32 before the first conversion; twenty repositories have moved.
    * This may fall and may not rise.
    */
-  syncDb: 13,
+  syncDb: 12,
 } as const
 
 const API = /Database\.[A-Za-z]+/g

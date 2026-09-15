@@ -459,7 +459,7 @@ export namespace SessionPrompt {
       const messageID = admitted.messageID!
       const promptData = SessionPending.canonical(admitted)
 
-      const existingPending = SessionPending.getByMessage(admitted.sessionID, messageID)
+      const existingPending = Effect.runSync(SessionPending.getByMessage(admitted.sessionID, messageID))
       if (existingPending) {
         if (SessionPending.canonical(existingPending.data) !== promptData) {
           throw new SessionPending.ConflictError(admitted.sessionID, messageID)
@@ -494,7 +494,7 @@ export namespace SessionPrompt {
         const pending = Effect.runSync(
           Database.transaction((tx) =>
             Effect.sync(() => {
-              const raced = SessionPending.getByMessage(admitted.sessionID, messageID, tx)
+              const raced = Effect.runSync(SessionPending.getByMessage(admitted.sessionID, messageID, tx))
               if (raced) {
                 if (SessionPending.canonical(raced.data) !== promptData) {
                   throw new SessionPending.ConflictError(admitted.sessionID, messageID)
@@ -503,16 +503,18 @@ export namespace SessionPrompt {
               }
               const promoted = existingAdmission(admitted.sessionID, messageID, promptData)
               if (promoted) return undefined
-              return SessionPending.insert(
-                {
-                  sessionID: admitted.sessionID,
-                  messageID,
-                  // Omit delivery → queue. Queue absorbs at the next safe step
-                  // (the old steer path). Explicit steer aborts the turn first.
-                  delivery: admitted.delivery ?? "queue",
-                  data: promptData,
-                },
-                tx,
+              return Effect.runSync(
+                SessionPending.insert(
+                  {
+                    sessionID: admitted.sessionID,
+                    messageID,
+                    // Omit delivery → queue. Queue absorbs at the next safe step
+                    // (the old steer path). Explicit steer aborts the turn first.
+                    delivery: admitted.delivery ?? "queue",
+                    data: promptData,
+                  },
+                  tx,
+                ),
               )
             }),
           ),
@@ -594,7 +596,7 @@ export namespace SessionPrompt {
       await PromptState.waitUntilIdle(input.sessionID)
     }
     const pending = Effect.runSync(
-      Database.transaction((tx) => Effect.sync(() => SessionPending.steer(input.sessionID, input.pendingID, tx))),
+      Database.transaction((tx) => SessionPending.steer(input.sessionID, input.pendingID, tx)),
     )
     if (!pending) {
       throw new Session.NotFoundError({
@@ -615,7 +617,7 @@ export namespace SessionPrompt {
   })
 
   async function promote(sessionID: string, delivery: SessionPending.Delivery): Promise<MessageV2.WithParts[]> {
-    const rows = SessionPending.list(sessionID, delivery)
+    const rows = Effect.runSync(SessionPending.list(sessionID, delivery))
     if (rows.length === 0) return []
 
     const current = Effect.runSync(SessionRepo.get(sessionID))
@@ -623,9 +625,11 @@ export namespace SessionPrompt {
       Effect.runSync(
         Database.transaction((tx) =>
           Effect.sync(() =>
-            SessionPending.remove(
-              rows.map((row) => row.id),
-              tx,
+            Effect.runSync(
+              SessionPending.remove(
+                rows.map((row) => row.id),
+                tx,
+              ),
             ),
           ),
         ),
@@ -650,15 +654,19 @@ export namespace SessionPrompt {
     const promoted = Effect.runSync(
       Database.transaction((tx) =>
         Effect.sync(() => {
-          const available = new Map(SessionPending.list(sessionID, delivery, tx).map((row) => [row.id, row]))
+          const available = new Map(
+            Effect.runSync(SessionPending.list(sessionID, delivery, tx)).map((row) => [row.id, row]),
+          )
           const active = prepared.filter((item) => available.has(item.row.id))
           if (active.length === 0) return { messages: [] as MessageV2.WithParts[], pendingIDs: [] as string[] }
 
           const session = Effect.runSync(SessionRepo.get(sessionID))
           if (!session) {
-            SessionPending.remove(
-              active.map((item) => item.row.id),
-              tx,
+            Effect.runSync(
+              SessionPending.remove(
+                active.map((item) => item.row.id),
+                tx,
+              ),
             )
             return { messages: [] as MessageV2.WithParts[], pendingIDs: [] as string[] }
           }
@@ -677,9 +685,11 @@ export namespace SessionPrompt {
             session,
             active.map((item) => item.row.data),
           )
-          SessionPending.remove(
-            active.map((item) => item.row.id),
-            tx,
+          Effect.runSync(
+            SessionPending.remove(
+              active.map((item) => item.row.id),
+              tx,
+            ),
           )
           return {
             messages,

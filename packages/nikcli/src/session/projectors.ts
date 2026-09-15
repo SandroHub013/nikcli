@@ -160,7 +160,7 @@ export namespace SessionSync {
 
     SyncEvent.project(Deleted, (tx, data) => {
       SessionEntryProjection.sessionRemoved(tx, data.sessionID)
-      SessionPending.removeSession(data.sessionID, tx)
+      Effect.runSync(SessionPending.removeSession(data.sessionID, tx))
       Effect.runSync(InstructionRepo.removeSession(data.sessionID, tx))
       Effect.runSync(SessionRepo.remove(data.sessionID, tx))
     }),

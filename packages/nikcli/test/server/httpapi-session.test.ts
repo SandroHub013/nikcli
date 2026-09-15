@@ -294,15 +294,17 @@ describe("Session HttpApi bridge", () => {
     const inserted = await Instance.provide({
       directory,
       fn: async () =>
-        SessionPending.insert({
-          sessionID: created.id,
-          messageID: "msg_pending_test",
-          delivery: "queue",
-          data: JSON.stringify({
+        Effect.runSync(
+          SessionPending.insert({
             sessionID: created.id,
-            parts: [{ type: "text", text: "queued while busy" }],
+            messageID: "msg_pending_test",
+            delivery: "queue",
+            data: JSON.stringify({
+              sessionID: created.id,
+              parts: [{ type: "text", text: "queued while busy" }],
+            }),
           }),
-        }),
+        ),
     })
 
     const [entry] = (await request(`/session/${created.id}/pending`, directory)) as PendingEntryResponse[]

@@ -83,7 +83,7 @@ describe.serial("durable pending input", () => {
       expect(first.pending?.messageID).toBe(messageID)
       expect(first.pending?.delivery).toBe("queue")
       expect(Effect.runSync(MessageRepo.getMessageWithParts(sessionID, messageID))).toBeUndefined()
-      expect(SessionPending.list(sessionID)).toHaveLength(1)
+      expect(Effect.runSync(SessionPending.list(sessionID))).toHaveLength(1)
 
       const retry = await runPrompt(
         Effect.gen(function* () {
@@ -104,7 +104,7 @@ describe.serial("durable pending input", () => {
         }),
       )
       expect(steered.delivery).toBe("steer")
-      expect(SessionPending.list(sessionID)[0]?.delivery).toBe("steer")
+      expect(Effect.runSync(SessionPending.list(sessionID))[0]?.delivery).toBe("steer")
 
       await expect(
         runPrompt(
@@ -174,7 +174,7 @@ describe.serial("durable pending input", () => {
           yield* session.remove(sessionID)
         }),
       )
-      expect(SessionPending.list(sessionID)).toEqual([])
+      expect(Effect.runSync(SessionPending.list(sessionID))).toEqual([])
     })
   }, 20_000)
 
@@ -196,7 +196,7 @@ describe.serial("durable pending input", () => {
         }),
       )
       expect(first.message?.info.id).toBe(messageID)
-      expect(SessionPending.list(sessionID)).toEqual([])
+      expect(Effect.runSync(SessionPending.list(sessionID))).toEqual([])
       expect(Effect.runSync(MessageRepo.getMessageWithParts(sessionID, messageID))?.parts).toHaveLength(1)
       expect(Effect.runSync(MessageRepo.getPromptData(sessionID, messageID))).toBe(SessionPending.canonical(input))
 
@@ -238,8 +238,8 @@ describe.serial("durable pending input", () => {
       )
       expect(queued.pending?.delivery).toBe("queue")
       expect(Effect.runSync(MessageRepo.getMessageWithParts(sessionID, messageID))).toBeUndefined()
-      expect(SessionPending.list(sessionID, "queue")).toHaveLength(1)
-      expect(SessionPending.list(sessionID, "steer")).toHaveLength(0)
+      expect(Effect.runSync(SessionPending.list(sessionID, "queue"))).toHaveLength(1)
+      expect(Effect.runSync(SessionPending.list(sessionID, "steer"))).toHaveLength(0)
 
       await PromptState.finish(sessionID, controller!)
     })
@@ -291,7 +291,7 @@ describe.serial("durable pending input", () => {
       )
       expect(steered.message?.info.id).toBe(steerID)
       expect(Effect.runSync(MessageRepo.getMessageWithParts(sessionID, steerID))).toBeDefined()
-      expect(SessionPending.list(sessionID, "queue")).toHaveLength(1)
+      expect(Effect.runSync(SessionPending.list(sessionID, "queue"))).toHaveLength(1)
       expect(PromptState.owned(sessionID)).toBe(false)
     })
   }, 20_000)
