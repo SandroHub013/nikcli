@@ -1272,6 +1272,32 @@
   max-width: 22ch;
 }
 
+/* The tree's fidelity note, next to the branch: amber, because a tree that is
+   behind or has no dependencies is a condition, not a failure. */
+.hA .a-brn {
+  color: var(--ade-working);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.hA .a-br[data-fidelity="pending"] {
+  font-style: italic;
+}
+
+.hA .a-mode {
+  font: 10px var(--ade-mono);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* "quota n/d": no bar and no colour, so an absent reading never looks like a
+   low one. */
+.hA [data-lv="na"] .qv {
+  color: var(--ade-text-weak);
+  font-weight: 500;
+}
+
 .hA .acts {
   display: flex;
   gap: 2px;
@@ -1328,6 +1354,7 @@
 /* ── Container queries (ordine di collasso Proposal A) ── */
 @container (max-width: 720px) {
   .hA .tok,
+  .hA .a-mode,
   .hA .a-brt,
   .hA .qr {
     display: none;

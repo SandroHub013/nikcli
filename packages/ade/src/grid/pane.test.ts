@@ -6,9 +6,7 @@ import {
   type PaneState,
 } from "./pane-state"
 import {
-  formatCountdown,
   formatSessionQuota,
-  getProviderQuota,
   type ProviderQuota,
 } from "../session/quota"
 
@@ -44,7 +42,32 @@ describe("resolvePaneState (Proposal A 6-state resolution)", () => {
       windows: [],
       tooltip: "",
     }
-    expect(resolvePaneState({ status: "working", quota: quotaView })).toBe("limit")
+    expect(resolvePaneState({ status: "idle", quota: quotaView })).toBe("limit")
+    expect(resolvePaneState({ status: "done", quota: quotaView })).toBe("limit")
+  })
+
+  test("permission and work rank before the provider's limit", () => {
+    // The limit is the provider's; a prompt waiting for an answer and a turn
+    // in progress are this session's, and they are what the user acts on.
+    const quotaView = {
+      providerName: "OpenAI · Free",
+      isLimit: true,
+      remainingRatio: 0,
+      bindingKey: "720h",
+      displayValue: "0%",
+      level: "crit" as const,
+      windows: [],
+      tooltip: "",
+    }
+    expect(resolvePaneState({ status: "waiting", quota: quotaView, hasActions: true })).toBe("perm")
+    expect(resolvePaneState({ status: "waiting", quota: quotaView })).toBe("perm")
+    expect(resolvePaneState({ status: "working", quota: quotaView })).toBe("work")
+    expect(resolvePaneState({ status: "error", quota: quotaView })).toBe("err")
+  })
+
+  test("a quota that is n/d never makes a session read as limited", () => {
+    const missing = { unavailable: true as const, providerName: "Google", tooltip: "" }
+    expect(resolvePaneState({ status: "idle", quota: missing })).toBe("idle")
   })
 
   test("resolves 'idle' when prompt is ready", () => {
@@ -84,21 +107,11 @@ describe("Proposal A state vocabulary", () => {
   })
 })
 
-describe("Proposal A Quota Horizon data integration", () => {
+
+describe("Quota Horizon formatting", () => {
   const now = 1_000_000
 
-  test("Claude provider quota generates binding weekly window with countdown from live quota", () => {
-    const claude = getProviderQuota("claude-code", now)
-    expect(claude).toBeDefined()
-    expect(claude?.bindingKey).toBe("sett.")
-    expect(claude?.displayValue).toMatch(/^\d+%$/)
-    expect(claude?.level).toBe("ok")
-    expect(claude?.countdown).toBe("21/09")
-    expect(claude?.tooltip).toContain("sett.:")
-    expect(claude?.tooltip).toContain("reset il 21/09")
-  })
-
-  test("Claude provider quota generates binding 5h window when 5h has lower remaining", () => {
+  test("the 5h window binds when it has less left than the week", () => {
     const quota: ProviderQuota = {
       id: "claude",
       name: "Anthropic · Max",
@@ -114,7 +127,7 @@ describe("Proposal A Quota Horizon data integration", () => {
     expect(view.countdown).toBe("1h 40m")
   })
 
-  test("Rate limited Claude shows limit flag and countdown for urg styling", () => {
+  test("an exhausted window flags the limit and counts down to its reset", () => {
     const quota: ProviderQuota = {
       id: "claude",
       name: "Anthropic · Max",
@@ -130,14 +143,5 @@ describe("Proposal A Quota Horizon data integration", () => {
     expect(view.displayValue).toBe("0%")
     expect(view.level).toBe("crit")
     expect(view.countdown).toBe("1h 40m")
-  })
-
-  test("Gemini / agy provider highlights 2.5 Pro binding metric under 20% with critical level", () => {
-    const agy = getProviderQuota("agy", now)
-    expect(agy).toBeDefined()
-    expect(agy?.bindingKey).toBe("2.5 Pro")
-    expect(agy?.displayValue).toBe("12%")
-    expect(agy?.level).toBe("crit")
-    expect(agy?.countdown).toBe("6h 10m")
   })
 })

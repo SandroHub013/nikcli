@@ -516,29 +516,88 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
   }
 }
 
-// Registro dei provider per snapshot di quota in memoria
-const quotaRegistry = new Map<string, ProviderQuota>()
+// ---------------------------------------------------------------------------
+// quota-axi: la sola fonte reale per ora
+// ---------------------------------------------------------------------------
 
-export function setProviderQuota(quota: ProviderQuota): void {
-  quotaRegistry.set(quota.id, quota)
+/**
+ * Where quota-axi leaves its last report, relative to the user's home.
+ *
+ * ADE reads the file rather than running `quota-axi`: the host runs git and
+ * nothing else, on purpose (see `host/shell.ts`), and the report is refreshed
+ * by every `quota-axi` run the user or their status line already makes.
+ */
+export const QUOTA_AXI_FILE = [".cache", "quota-axi", "quotas.json"] as const
+
+/**
+ * The providers whose numbers ADE takes from quota-axi.
+ *
+ * quota-axi knows Claude and Codex. For agy and nikcli it has nothing, and
+ * until S30 chooses where their quota comes from the bar says so rather than
+ * showing a number from anywhere else.
+ */
+export const QUOTA_AXI_PROVIDERS: ReadonlySet<string> = new Set(["claude", "codex"])
+
+/**
+ * How old a report may be and still be shown as the quota.
+ *
+ * A five-hour window moves by whole percentage points in a few minutes of
+ * work, so a figure from this morning is not the quota, it is a guess about
+ * it. Past this age the bar says "n/d" and the tooltip says when the last
+ * reading was.
+ */
+export const QUOTA_STALE_MS = 30 * 60_000
+
+export interface QuotaSnapshot {
+  /** When quota-axi wrote the report, in epoch ms. */
+  readonly generatedAt?: number
+  readonly providers: Readonly<Record<string, ProviderQuota & { readonly stale?: boolean }>>
+}
+
+/** What the bar shows when there is no real figure to show. */
+export interface QuotaUnavailable {
+  readonly unavailable: true
+  readonly providerName: string
+  readonly tooltip: string
+}
+
+export type SessionQuota = SessionQuotaView | QuotaUnavailable
+
+export function isQuotaUnavailable(quota: SessionQuota | undefined): quota is QuotaUnavailable {
+  return quota !== undefined && "unavailable" in quota
+}
+
+const PLAN_NAMES: Record<string, string> = { max: "Max", pro: "Pro", plus: "Plus", free: "Free", team: "Team" }
+
+/** The plan as the provider names it, or nothing: never a plan the report did not state. */
+function planName(plan: string | undefined): string | undefined {
+  if (!plan) return undefined
+  return PLAN_NAMES[plan.toLowerCase()] ?? plan
 }
 
 /**
  * Parser per lo snapshot emesso da quota-axi (~/.cache/quota-axi/quotas.json).
  */
 export function parseQuotaAxiSnapshot(raw: unknown): ProviderQuota[] {
-  if (!raw || typeof raw !== "object") return []
-  const providersRaw = (raw as Record<string, unknown>).providers
-  if (!Array.isArray(providersRaw)) return []
+  return Object.values(readQuotaAxiSnapshot(raw).providers)
+}
 
-  const results: ProviderQuota[] = []
-  for (const item of providersRaw) {
+/** The report as a snapshot keyed by ADE's provider ids, with each provider's staleness. */
+export function readQuotaAxiSnapshot(raw: unknown): QuotaSnapshot {
+  if (!raw || typeof raw !== "object") return { providers: {} }
+  const record = raw as Record<string, unknown>
+  const generated = typeof record.generatedAt === "string" ? Date.parse(record.generatedAt) : Number.NaN
+  const stamp = Number.isFinite(generated) ? { generatedAt: generated } : {}
+  const providers: Record<string, ProviderQuota & { stale?: boolean }> = {}
+  if (!Array.isArray(record.providers)) return { providers, ...stamp }
+
+  for (const item of record.providers) {
     if (!item || typeof item !== "object") continue
     const p = item as Record<string, unknown>
     const providerId = typeof p.provider === "string" ? p.provider : ""
     if (!providerId) continue
 
-    const name = typeof p.label === "string" ? p.label : providerId
+    const label = typeof p.label === "string" ? p.label : providerId
     const plan = typeof p.plan === "string" ? p.plan : undefined
     const windowsRaw = Array.isArray(p.windows) ? p.windows : []
     const metrics: QuotaMetric[] = []
@@ -548,18 +607,20 @@ export function parseQuotaAxiSnapshot(raw: unknown): ProviderQuota[] {
       const win = w as Record<string, unknown>
       const id = typeof win.id === "string" ? win.id : ""
       const kind = typeof win.kind === "string" ? win.kind : ""
-      const label = typeof win.label === "string" ? win.label : id
+      const windowLabel = typeof win.label === "string" ? win.label : id
 
-      let shortLabel = label
+      let shortLabel = windowLabel
       if (id === "five_hour" || kind === "session") shortLabel = "5h"
       else if (id === "seven_day" || kind === "weekly") shortLabel = "sett."
       else if (id.startsWith("window:")) shortLabel = id.replace("window:", "")
-      else if (label.endsWith(" window")) shortLabel = label.replace(" window", "")
+      else if (windowLabel.endsWith(" window")) shortLabel = windowLabel.replace(" window", "")
 
-      const remaining = typeof win.percentRemaining === "number" ? Math.max(0, Math.min(100, Math.round(win.percentRemaining))) : undefined
+      const remaining =
+        typeof win.percentRemaining === "number" ? Math.max(0, Math.min(100, Math.round(win.percentRemaining))) : undefined
       const used = typeof win.percentUsed === "number" ? Math.round(win.percentUsed) : undefined
       const resetAt = typeof win.resetsAt === "string" ? win.resetsAt : undefined
-      const isRateLimited = remaining !== undefined && remaining <= 0
+      // A window with neither figure says nothing about the quota.
+      if (remaining === undefined && used === undefined) continue
 
       metrics.push({
         label: shortLabel,
@@ -568,100 +629,69 @@ export function parseQuotaAxiSnapshot(raw: unknown): ProviderQuota[] {
         limit: 100,
         unit: "percent",
         resetAt,
-        isRateLimited,
+        isRateLimited: remaining !== undefined && remaining <= 0,
       })
     }
 
-    const isExhausted = metrics.some((m) => m.isRateLimited)
+    const state = p.state && typeof p.state === "object" ? (p.state as Record<string, unknown>) : undefined
     const normalizedId = normalizeProviderId(providerId)
-    const displayName =
-      providerId === "claude"
-        ? `Anthropic · ${plan ? (plan.toLowerCase() === "max" ? "Max" : plan) : "Max"}`
-        : providerId === "codex"
-          ? `OpenAI · ChatGPT ${plan ? (plan.toLowerCase() === "free" ? "Plus" : plan) : "Plus"}`
-          : name
+    const vendor = providerId === "claude" ? "Anthropic" : providerId === "codex" ? "OpenAI" : label
+    const shownPlan = planName(plan)
 
-    results.push({
+    providers[normalizedId] = {
       id: normalizedId,
-      name: displayName,
-      status: isExhausted ? "rate_limited" : "ok",
+      name: shownPlan ? `${vendor} · ${shownPlan}` : vendor,
+      status: metrics.some((m) => m.isRateLimited) ? "rate_limited" : "ok",
       plan,
       metrics,
-      sourceUpdatedAt: typeof (raw as Record<string, unknown>).generatedAt === "string" ? ((raw as Record<string, unknown>).generatedAt as string) : undefined,
-    })
+      ...(Number.isFinite(generated) ? { sourceUpdatedAt: new Date(generated).toISOString() } : {}),
+      ...(state?.stale === true ? { stale: true } : {}),
+    }
   }
-  return results
+  return { providers, ...stamp }
+}
+
+const VENDOR_NAMES: Record<string, string> = { claude: "Anthropic", codex: "OpenAI", agy: "Google", nikcli: "nikcli" }
+
+function clock(epoch: number): string {
+  return new Date(epoch).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
 /**
- * Prova a leggere il file di cache di quota-axi sincrono (per ambiente Bun/Node).
+ * The quota the bar shows for a session's agent: a real reading, or "n/d".
+ *
+ * Every path that is not a fresh report from quota-axi for a provider it
+ * covers ends in `QuotaUnavailable`. There is deliberately no fallback figure:
+ * the bar exists so the user can decide whether to start more work on a
+ * provider, and a plausible invented number is worse than no number for that.
  */
-export function loadQuotaAxiFile(): boolean {
-  try {
-    if (typeof process !== "undefined" && process.env) {
-      const home = process.env.USERPROFILE || process.env.HOME
-      if (home) {
-        const sep = home.includes("\\") ? "\\" : "/"
-        const filePath = `${home}${sep}.cache${sep}quota-axi${sep}quotas.json`
-        const getReq = (import.meta as unknown as { require?: (mod: string) => unknown }).require
-          ?? (globalThis as unknown as { require?: (mod: string) => unknown }).require
-        if (typeof getReq === "function") {
-          const fs = getReq("node:fs") as { existsSync: (p: string) => boolean; readFileSync: (p: string, enc: string) => string }
-          if (fs && fs.existsSync(filePath)) {
-            const text = fs.readFileSync(filePath, "utf-8")
-            const parsed = JSON.parse(text)
-            const quotas = parseQuotaAxiSnapshot(parsed)
-            for (const q of quotas) {
-              setProviderQuota(q)
-            }
-            return true
-          }
-        }
-      }
-    }
-  } catch {}
-  return false
-}
-
-/**
- * Aggiorna i dati di quota in tempo reale dall'host Tauri (per ambiente WebView2).
- */
-export async function refreshQuotaFromHost(): Promise<boolean> {
-  try {
-    const { invoke } = await import("@tauri-apps/api/core")
-    const home = await invoke<string>("home_dir")
-    if (!home) return false
-    const sep = home.includes("\\") ? "\\" : "/"
-    const path = `${home}${sep}.cache${sep}quota-axi${sep}quotas.json`
-    const res = await invoke<{ text: string }>("read_text_file", { path, maxBytes: 1_000_000 })
-    if (res && res.text) {
-      const parsed = JSON.parse(res.text)
-      const quotas = parseQuotaAxiSnapshot(parsed)
-      for (const q of quotas) {
-        setProviderQuota(q)
-      }
-      return true
-    }
-  } catch {}
-  return false
-}
-
-// Inizializza immediatamente se in ambiente Bun/Node
-loadQuotaAxiFile()
-
-export function getProviderQuota(agentId?: string, now = Date.now()): SessionQuotaView | undefined {
+export function quotaForAgent(
+  agentId: string | undefined,
+  snapshot: QuotaSnapshot | undefined,
+  now: number,
+): SessionQuota | undefined {
   if (!agentId) return undefined
   const id = normalizeProviderId(agentId)
-  let q = quotaRegistry.get(id)
-  if (!q) {
-    loadQuotaAxiFile()
-    q = quotaRegistry.get(id)
+  const vendor = VENDOR_NAMES[id]
+  if (!vendor) return undefined
+  const unavailable = (why: string): QuotaUnavailable => ({
+    unavailable: true,
+    providerName: vendor,
+    tooltip: `Quota ${vendor}: n/d\n${why}`,
+  })
+
+  if (!QUOTA_AXI_PROVIDERS.has(id)) return unavailable("Nessuna fonte di quota per questo agente.")
+  if (!snapshot) return unavailable("Rapporto di quota-axi non trovato (~/.cache/quota-axi/quotas.json).")
+  const quota = snapshot.providers[id]
+  if (!quota || quota.metrics.length === 0) return unavailable("quota-axi non riporta finestre per questo provider.")
+  if (quota.stale) return unavailable("quota-axi segna il dato come non aggiornato.")
+  if (snapshot.generatedAt === undefined) return unavailable("Il rapporto di quota-axi non dice quando è stato scritto.")
+  if (now - snapshot.generatedAt > QUOTA_STALE_MS) {
+    return unavailable(`Ultima lettura ${clock(snapshot.generatedAt)}: troppo vecchia per essere la quota di adesso.`)
   }
-  if (!q) {
-    q = defaultProviderQuota(id, now)
-    if (q) quotaRegistry.set(id, q)
-  }
-  return q ? formatSessionQuota(q, now) : undefined
+
+  const view = formatSessionQuota(quota, now)
+  return { ...view, tooltip: `${view.tooltip}\nLetto da quota-axi alle ${clock(snapshot.generatedAt)}` }
 }
 
 function normalizeProviderId(agent: string): string {
@@ -672,62 +702,3 @@ function normalizeProviderId(agent: string): string {
   if (low.includes("nikcli") || low.includes("openrouter")) return "nikcli"
   return low
 }
-
-function defaultProviderQuota(providerId: string, now: number): ProviderQuota | undefined {
-  switch (providerId) {
-    case "claude":
-      return {
-        id: "claude",
-        name: "Anthropic · Max",
-        status: "ok",
-        plan: "Max",
-        metrics: [
-          { label: "5h", remaining: 79, resetAt: "2026-09-15T22:40:00.179326+00:00" },
-          { label: "sett.", remaining: 59, resetAt: "2026-09-21T13:00:00.179344+00:00" },
-        ],
-      }
-    case "codex": {
-      const resetTime = new Date("2026-10-13T13:12:12Z").getTime()
-      const isExhausted = now < resetTime
-      return {
-        id: "codex",
-        name: "OpenAI · ChatGPT Plus",
-        status: isExhausted ? "rate_limited" : "ok",
-        plan: "Plus",
-        message: isExhausted ? "You've hit your usage limit" : undefined,
-        metrics: [
-          {
-            label: "720h",
-            remaining: isExhausted ? 0 : 38,
-            resetAt: "2026-10-13T13:12:12.000Z",
-            isRateLimited: isExhausted,
-          },
-        ],
-      }
-    }
-    case "agy":
-      return {
-        id: "agy",
-        name: "Google · Gemini",
-        status: "ok",
-        plan: "Pro",
-        metrics: [
-          { label: "2.5 Pro", remaining: 12, resetAt: new Date(now + 22_200_000).toISOString() },
-          { label: "Flash", remaining: 90, resetAt: new Date(now + 22_200_000).toISOString() },
-        ],
-      }
-    case "nikcli":
-      return {
-        id: "nikcli",
-        name: "OpenRouter",
-        status: "ok",
-        plan: "Pay-as-you-go",
-        metrics: [
-          { label: "crediti", remaining: 84 },
-        ],
-      }
-    default:
-      return undefined
-  }
-}
-

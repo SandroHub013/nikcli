@@ -4,7 +4,8 @@ import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
-import { getProviderQuota, refreshQuotaFromHost, type SessionQuotaView } from "../session/quota"
+import { isQuotaUnavailable, quotaForAgent, type SessionQuota } from "../session/quota"
+import { useSharedQuota } from "../session/quota-store"
 
 /** The screenshot tray's own drag type. See the drop handler for why. */
 const SHOT_MIME = "application/x-ade-shot"
@@ -148,7 +149,7 @@ export interface SessionPaneProps {
   /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
   stateDetail?: string
   /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
-  quota?: SessionQuotaView
+  quota?: SessionQuota
   /** What the agent is doing, in the present tense. Empty when it is idle. */
   activity?: string
   elapsed?: string
@@ -426,14 +427,28 @@ export function SessionPane(props: SessionPaneProps) {
     if (refocus) focusPane(root)
   }
 
-  createEffect(() => {
-    void refreshQuotaFromHost()
-  })
+  /*
+   * The quota comes from the shared store, which re-reads quota-axi's report
+   * on a timer. Reading its signals here is what makes a pane mounted before
+   * the first report update when it arrives, and the countdown move.
+   */
+  const shared = useSharedQuota()
+  onCleanup(shared.release)
 
-  const quota = createMemo<SessionQuotaView | undefined>(() => {
-    if (props.quota) return props.quota
-    return getProviderQuota(props.agent ?? props.model)
-  })
+  const quota = createMemo<SessionQuota | undefined>(
+    () => props.quota ?? quotaForAgent(props.agent ?? props.model, shared.store.snapshot(), shared.store.now()),
+  )
+
+  /** The quota when it is a real reading; undefined when it is "n/d" or absent. */
+  const reading = () => {
+    const q = quota()
+    return q && !isQuotaUnavailable(q) ? q : undefined
+  }
+
+  const missing = () => {
+    const q = quota()
+    return isQuotaUnavailable(q) ? q : undefined
+  }
 
   const state = createMemo<PaneState>(() =>
     resolvePaneState({
@@ -449,7 +464,7 @@ export function SessionPane(props: SessionPaneProps) {
     if (props.stateDetail) return props.stateDetail
     if (props.activity) return props.activity
     const st = state()
-    if (st === "limit") return quota()?.countdown ? `finestra ${quota()?.bindingKey} esaurita` : "limite raggiunto"
+    if (st === "limit") return reading()?.countdown ? `finestra ${reading()?.bindingKey} esaurita` : "limite raggiunto"
     if (st === "work") return props.mode ?? "In esecuzione"
     if (st === "perm") return props.actions?.[0]?.label ?? "Permesso"
     if (st === "err") return "Bloccata"
@@ -566,7 +581,7 @@ export function SessionPane(props: SessionPaneProps) {
         <Show
           when={editing()}
           fallback={
-            <span
+            <h2
               class="nm"
               data-slot="pane-title"
               data-renamable={props.onRename ? "true" : undefined}
@@ -576,7 +591,7 @@ export function SessionPane(props: SessionPaneProps) {
               tabIndex={0}
             >
               {props.title}
-            </span>
+            </h2>
           }
         >
           <input
@@ -619,7 +634,16 @@ export function SessionPane(props: SessionPaneProps) {
 
         <span class="sp"></span>
 
-        <Show when={quota()}>
+        <Show when={missing()}>
+          {(none) => (
+            <span class="a-q" data-lv="na" tabIndex={0} title={none().tooltip} data-tip={none().tooltip}>
+              <span class="qk">quota</span>
+              <b class="qv">n/d</b>
+            </span>
+          )}
+        </Show>
+
+        <Show when={reading()}>
           {(q) => (
             <span
               class="a-q"
@@ -641,22 +665,55 @@ export function SessionPane(props: SessionPaneProps) {
           )}
         </Show>
 
-        <Show when={props.tree}>
+        <Show when={props.mode}>
+          <span class="a-mode" data-slot="pane-mode">{props.mode}</span>
+        </Show>
+
+        {/* While provisioning decides, the same slot holds a placeholder so the
+            handover to a real branch never reshapes the row. The fidelity note
+            stays on the row, not only in the title: a tree that is behind, or
+            has no dependencies, changes what the agent can do in it. */}
+        <Show
+          when={props.tree}
+          fallback={
+            <Show when={props.status === "provisioning"}>
+              <span class="a-br" data-slot="pane-tree" data-fidelity="pending">
+                <BranchGlyph />
+                <span class="a-brt trunc">preparazione albero…</span>
+              </span>
+            </Show>
+          }
+        >
           {(tree) => (
             <span
               class="a-br"
+              data-slot="pane-tree"
+              data-fidelity={tree().fidelity}
               tabIndex={0}
-              title={`Branch ${tree().branch}${tree().note ? `\n${tree().note}` : ""}`}
-              data-tip={`Branch ${tree().branch}${tree().note ? `\n${tree().note}` : ""}`}
+              title={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+              data-tip={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
             >
-              <BranchGlyph />
+              {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
               <span class="a-brt trunc">{tree().branch}</span>
+              <Show when={FIDELITY_LABEL[tree().fidelity]}>
+                {(label) => (
+                  <span class="a-brn" data-slot="pane-tree-note">
+                    {label()}
+                  </span>
+                )}
+              </Show>
             </span>
           )}
         </Show>
 
         <Show when={props.tokens}>
           <span class="tok">{props.tokens}</span>
+        </Show>
+
+        <Show when={props.cost}>
+          <span class="tok" data-slot="pane-cost">
+            {props.cost}
+          </span>
         </Show>
 
         <span class="acts" data-slot="pane-actions">

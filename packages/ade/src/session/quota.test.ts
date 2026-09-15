@@ -9,8 +9,11 @@ import {
   compareUsage,
   formatCountdown,
   formatSessionQuota,
-  getProviderQuota,
   parseQuotaAxiSnapshot,
+  quotaForAgent,
+  readQuotaAxiSnapshot,
+  isQuotaUnavailable,
+  QUOTA_STALE_MS,
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
@@ -341,7 +344,7 @@ describe("formatCountdown", () => {
   })
 })
 
-describe("formatSessionQuota and getProviderQuota", () => {
+describe("formatSessionQuota", () => {
   const now = 1_000_000
 
   test("formats provider quota with binding window, level and countdown", () => {
@@ -379,16 +382,6 @@ describe("formatSessionQuota and getProviderQuota", () => {
     expect(view.remainingRatio).toBe(0.12)
     expect(view.level).toBe("crit")
   })
-
-  test("getProviderQuota returns default formatted view for known agents", () => {
-    const claudeView = getProviderQuota("claude-code", now)
-    expect(claudeView).toBeDefined()
-    expect(claudeView?.providerName).toBe("Anthropic · Max")
-
-    const codexView = getProviderQuota("codex", now)
-    expect(codexView).toBeDefined()
-    expect(codexView?.providerName).toBe("OpenAI · ChatGPT Plus")
-  })
 })
 
 describe("parseQuotaAxiSnapshot", () => {
@@ -422,10 +415,12 @@ describe("parseQuotaAxiSnapshot", () => {
     const claude = parsed.find((p) => p.id === "claude")
     expect(claude).toBeDefined()
     expect(claude?.name).toBe("Anthropic · Max")
+    // The plan the report states, not an upgrade: "free" stays Free.
+    expect(parsed.find((p) => p.id === "codex")?.name).toBe("OpenAI · Free")
     expect(claude?.metrics.find((m) => m.label === "5h")?.remaining).toBe(79)
     expect(claude?.metrics.find((m) => m.label === "sett.")?.remaining).toBe(59)
 
-    const view = formatSessionQuota(claude!)
+    const view = formatSessionQuota(claude!, Date.parse("2026-09-15T19:00:00Z"))
     expect(view.bindingKey).toBe("sett.")
     expect(view.displayValue).toBe("59%")
     expect(view.countdown).toBe("21/09")
@@ -433,5 +428,67 @@ describe("parseQuotaAxiSnapshot", () => {
     const codex = parsed.find((p) => p.id === "codex")
     expect(codex).toBeDefined()
     expect(codex?.status).toBe("rate_limited")
+  })
+})
+
+describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
+  const written = Date.parse("2026-09-15T19:45:00Z")
+  const report = {
+    generatedAt: new Date(written).toISOString(),
+    providers: [
+      {
+        provider: "claude",
+        plan: "max",
+        windows: [
+          { id: "five_hour", kind: "session", percentRemaining: 64, resetsAt: "2026-09-15T22:40:00Z" },
+          { id: "seven_day", kind: "weekly", percentRemaining: 57, resetsAt: "2026-09-21T13:00:00Z" },
+        ],
+        state: { stale: false },
+      },
+      { provider: "codex", plan: "free", windows: [{ id: "window:720h", percentRemaining: 0, resetsAt: "2026-10-13T13:12:12Z" }] },
+      { provider: "cursor", windows: [{ id: "included_usage", percentRemaining: 97 }] },
+    ],
+  }
+  const snapshot = readQuotaAxiSnapshot(report)
+  const soon = written + 60_000
+
+  test("Claude and Codex show what quota-axi reported", () => {
+    const claude = quotaForAgent("claude-code", snapshot, soon)
+    expect(isQuotaUnavailable(claude)).toBe(false)
+    if (!claude || isQuotaUnavailable(claude)) throw new Error("unreachable")
+    expect(claude.bindingKey).toBe("sett.")
+    expect(claude.displayValue).toBe("57%")
+    expect(claude.tooltip).toContain("Letto da quota-axi")
+
+    const codex = quotaForAgent("codex", snapshot, soon)
+    if (!codex || isQuotaUnavailable(codex)) throw new Error("expected a reading")
+    expect(codex.isLimit).toBe(true)
+  })
+
+  test("agy and nikcli are n/d even when the report mentions other providers", () => {
+    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, soon))).toBe(true)
+    expect(isQuotaUnavailable(quotaForAgent("nikcli", snapshot, soon))).toBe(true)
+  })
+
+  test("no report, an old report, or a stale provider is n/d", () => {
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", undefined, soon))).toBe(true)
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", snapshot, written + QUOTA_STALE_MS + 1))).toBe(true)
+    const stale = readQuotaAxiSnapshot({
+      ...report,
+      providers: [{ ...report.providers[0], state: { stale: true } }],
+    })
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", stale, soon))).toBe(true)
+    const undated = readQuotaAxiSnapshot({ providers: report.providers })
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", undated, soon))).toBe(true)
+  })
+
+  test("a provider with no windows is n/d, not 100%", () => {
+    const empty = readQuotaAxiSnapshot({ generatedAt: report.generatedAt, providers: [{ provider: "claude", windows: [] }] })
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", empty, soon))).toBe(true)
+  })
+
+  test("an agent ADE has no quota notion for shows nothing", () => {
+    expect(quotaForAgent("terminal", snapshot, soon)).toBeUndefined()
+    expect(quotaForAgent(undefined, snapshot, soon)).toBeUndefined()
   })
 })

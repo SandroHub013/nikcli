@@ -1,4 +1,4 @@
-import type { SessionQuotaView } from "../session/quota"
+import type { SessionQuota } from "../session/quota"
 
 /*
  * `provisioning` comes before `working`: the worktree checkout runs for seconds
@@ -36,17 +36,22 @@ export const STATE_SHORT: Record<PaneState, string> = {
  * - err: agent process failed or exited with error
  * - limit: provider quota rate limited or exhausted
  * - idle: prompt ready, agent waiting for instruction
+ *
+ * Limit is checked after permission and work, not before. The quota is the
+ * provider's, shared by every session on it; a permission prompt or a running
+ * turn is this session's own, and it is what the user has to act on or wait
+ * for. Ranking Limit first made every Codex pane read "Limite" while it was
+ * asking to run a command.
  */
 export function resolvePaneState(props: {
   status?: PaneStatus
   state?: PaneState
   activity?: string
-  quota?: SessionQuotaView
+  quota?: SessionQuota
   hasActions?: boolean
 }): PaneState {
   if (props.state) return props.state
   if (props.status === "error") return "err"
-  if (props.quota?.isLimit) return "limit"
   if (props.hasActions) return "perm"
   if (props.status === "waiting") {
     if (props.activity && /ask|attende/i.test(props.activity)) return "ask"
@@ -56,5 +61,6 @@ export function resolvePaneState(props: {
     if (props.activity && /ade-msg\s+ask|attende/i.test(props.activity)) return "ask"
     return "work"
   }
+  if (props.quota && !("unavailable" in props.quota) && props.quota.isLimit) return "limit"
   return "idle"
 }
