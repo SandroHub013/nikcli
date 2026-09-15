@@ -9,7 +9,9 @@
 //! Piper is a separate program, not a library in the webview: its ~190 MB stay
 //! out of the renderer, which Parakeet once pushed to 4.2 GB. It is kept
 //! running between sentences because loading the voice is the slow part
-//! (0.8–1.6 s cold against 0.2–0.35 s per sentence warm).
+//! (0.8–1.6 s cold against 0.2–0.35 s per sentence warm). It needs no cleanup
+//! on exit: Piper reads sentences from its stdin and ends at end of file, which
+//! is what it gets when ADE exits or is killed (checked with a killed parent).
 //!
 //! Nothing is bundled. The runtime and the voice are downloaded on first use,
 //! from pinned URLs and checked against pinned SHA-256 digests, with the
