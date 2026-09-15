@@ -487,3 +487,37 @@ button[data-slot="decision-row"]:hover {
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+[data-slot="decisions-recipient"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+[data-slot="decisions-recipient"] label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="decisions-recipient"] select {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--ade-text);
+  background: var(--ade-surface, transparent);
+  border: 1px solid var(--ade-border, currentColor);
+  border-radius: 6px;
+}
+
+[data-slot="decisions-recipient-warning"],
+[data-slot="sheet-foot"] [data-tone="warn"] {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ade-warning, #b7791f);
+}

@@ -227,13 +227,16 @@ import {
   OUTBOX_KEY,
   parseOutbox,
   pendingFor,
-  pickRecipient,
+  chooseRecipient,
+  parseRecipients,
+  RECIPIENT_KEY,
+  resolveRecipient,
+  type RecipientChoice,
   pruneOutbox,
   type OutboxItem,
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
-import type { Decision } from "../decisions/state"
 import { decisionsPath } from "../decisions/store"
 import {
   createMicMeter,
@@ -630,12 +633,37 @@ export function Workbench() {
     } catch {}
   }
 
-  const decisionRecipient = (decision: Pick<Decision, "raisedBy">) =>
-    pickRecipient(
-      mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: running.has(pane.id) })),
-      decision,
-      project()?.name,
-    )
+  /*
+   * Who receives a project's answers is the user's choice, per register, by
+   * pane id. No session is picked by its title: with nobody chosen, answers
+   * wait in the outbox and the panel says so.
+   */
+  const [decisionsRecipients, setDecisionsRecipients] = createSignal<Record<string, RecipientChoice>>(
+    (() => {
+      try {
+        return parseRecipients(localStorage.getItem(RECIPIENT_KEY))
+      } catch {
+        return {}
+      }
+    })(),
+  )
+  const decisionCandidates = () =>
+    mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: isRunning(pane.id) }))
+  const decisionRecipient = () => {
+    const path = decisionsRegister.path()
+    return resolveRecipient(decisionCandidates(), path ? decisionsRecipients()[path] : undefined)
+  }
+  const chooseDecisionsRecipient = (id: string | undefined) => {
+    const path = decisionsRegister.path()
+    if (!path) return
+    const pane = id ? decisionCandidates().find((candidate) => candidate.id === id) : undefined
+    const next = chooseRecipient(decisionsRecipients(), path, pane ? { id: pane.id, title: pane.title } : undefined)
+    setDecisionsRecipients(next)
+    try {
+      localStorage.setItem(RECIPIENT_KEY, JSON.stringify(next))
+    } catch {}
+    void deliverDecisions()
+  }
 
   let deliveringDecisions = false
   const deliverDecisions = async () => {
@@ -646,14 +674,15 @@ export function Workbench() {
     if (kept.length !== decisionsOutbox().length) saveDecisionsOutbox(kept)
     const pending = pendingFor(kept, path)
     if (pending.length === 0) return
+    const target = decisionRecipient()
+    if (target.state !== "pronta") return
     const host = await getHost()
     if (!host) return
     deliveringDecisions = true
     try {
       for (const item of pending) {
         const decision = state.decisions.find((entry) => entry.k === item.k)
-        const target = decision && decisionRecipient(decision)
-        if (!decision || !target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        if (!decision || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
         if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
@@ -667,7 +696,9 @@ export function Workbench() {
 
   const decisionsHub = createDecisionsHub({
     register: decisionsRegister,
-    recipient: (decision) => decisionRecipient(decision)?.title,
+    recipient: decisionRecipient,
+    sessions: decisionCandidates,
+    choose: chooseDecisionsRecipient,
     delivery: (decision) => deliveryState(decisionsOutbox(), decisionsRegister.path() ?? "", decision),
     onAnswered: (decision, event) => {
       const path = decisionsRegister.path()

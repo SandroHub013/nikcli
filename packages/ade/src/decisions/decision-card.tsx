@@ -76,7 +76,7 @@ export function DecisionCard(props: {
         ref={(element) => props.noteRef?.(element)}
         data-slot="decision-note"
         rows={2}
-        placeholder={props.decision.options.length > 0 ? "Nota per Master (facoltativa)" : "La tua risposta"}
+        placeholder={props.decision.options.length > 0 ? "Nota (facoltativa)" : "La tua risposta"}
         value={props.note}
         onInput={(event) => props.onNote(event.currentTarget.value)}
         aria-label={props.decision.options.length > 0 ? "Nota" : "Risposta"}
