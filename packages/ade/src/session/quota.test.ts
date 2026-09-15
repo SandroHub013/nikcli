@@ -325,22 +325,18 @@ describe("compareUsage", () => {
 
 describe("formatCountdown", () => {
   test("formats hours and minutes", () => {
-    const ms = 1 * 3600_000 + 40 * 60_000 // 1h 40m
-    expect(formatCountdown(ms)).toBe("1h 40m")
+    expect(formatCountdown(1 * 3600_000 + 40 * 60_000)).toBe("1h 40m")
   })
 
-  test("formats minutes and seconds", () => {
-    const ms = 5 * 60_000 + 12_000 // 5m 12s
-    expect(formatCountdown(ms)).toBe("5m 12s")
+  test("under an hour, minutes only: the bar is redrawn every 30 s, so seconds would be wrong", () => {
+    expect(formatCountdown(5 * 60_000 + 12_000)).toBe("5m")
+    expect(formatCountdown(5 * 60_000 + 59_000)).toBe("5m")
   })
 
-  test("formats seconds only", () => {
-    expect(formatCountdown(45_000)).toBe("45s")
-  })
-
-  test("returns 0s for zero or negative values", () => {
-    expect(formatCountdown(0)).toBe("0s")
-    expect(formatCountdown(-5000)).toBe("0s")
+  test("the last minute reads <1m, and a reset already due reads 0m", () => {
+    expect(formatCountdown(45_000)).toBe("<1m")
+    expect(formatCountdown(0)).toBe("0m")
+    expect(formatCountdown(-5000)).toBe("0m")
   })
 })
 
@@ -490,5 +486,16 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
   test("an agent ADE has no quota notion for shows nothing", () => {
     expect(quotaForAgent("terminal", snapshot, soon)).toBeUndefined()
     expect(quotaForAgent(undefined, snapshot, soon)).toBeUndefined()
+  })
+})
+
+describe("which agents count as Codex", () => {
+  test("o1, o3 and o4 as model names do, as parts of other words they do not", () => {
+    for (const agent of ["o3", "o3-mini", "openai/o1", "o4-mini-high"]) {
+      expect(quotaForAgent(agent, undefined, 0)?.providerName).toBe("OpenAI")
+    }
+    for (const agent of ["pro1", "demo3", "video1", "photo3-bot"]) {
+      expect(quotaForAgent(agent, undefined, 0)).toBeUndefined()
+    }
   })
 })

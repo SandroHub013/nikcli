@@ -428,19 +428,21 @@ export interface SessionQuotaView {
   readonly tooltip: string
 }
 
+/**
+ * A reset countdown, to the minute.
+ *
+ * Never seconds: the bar is redrawn every 30 seconds (`QUOTA_REFRESH_MS`), so
+ * a seconds figure would be wrong for most of the time it is on screen and
+ * jump by thirty when it changed. The last minute reads "<1m".
+ */
 export function formatCountdown(ms: number): string {
-  if (ms <= 0) return "0s"
-  const totalSec = Math.floor(ms / 1000)
-  const hours = Math.floor(totalSec / 3600)
-  const minutes = Math.floor((totalSec % 3600) / 60)
-  const seconds = totalSec % 60
-  if (hours > 0) {
-    return `${hours}h ${minutes.toString().padStart(2, "0")}m`
-  }
-  if (minutes > 0) {
-    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`
-  }
-  return `${seconds}s`
+  if (ms <= 0) return "0m"
+  const totalMin = Math.floor(ms / 60_000)
+  const hours = Math.floor(totalMin / 60)
+  const minutes = totalMin % 60
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, "0")}m`
+  if (minutes > 0) return `${minutes}m`
+  return "<1m"
 }
 
 export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): SessionQuotaView {
@@ -696,8 +698,16 @@ export function quotaForAgent(
 
 function normalizeProviderId(agent: string): string {
   const low = agent.toLowerCase()
+  /*
+   * OpenAI's reasoning models are matched as whole words. As substrings, "o1"
+   * and "o3" are inside ordinary names — "pro1", "demo3", a session called
+   * "video1" — and each of those was reported as a Codex session with Codex's
+   * quota on it.
+   */
+  const words = low.split(/[^a-z0-9]+/)
+  const openAiModel = words.some((word) => /^o[134]$/.test(word))
   if (low.includes("claude") || low.includes("anthropic") || low.includes("sonnet") || low.includes("opus") || low.includes("haiku")) return "claude"
-  if (low.includes("codex") || low.includes("openai") || low.includes("gpt") || low.includes("o3") || low.includes("o1")) return "codex"
+  if (low.includes("codex") || low.includes("openai") || low.includes("gpt") || openAiModel) return "codex"
   if (low.includes("agy") || low.includes("gemini") || low.includes("google")) return "agy"
   if (low.includes("nikcli") || low.includes("openrouter")) return "nikcli"
   return low

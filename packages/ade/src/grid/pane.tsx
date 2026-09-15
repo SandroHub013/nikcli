@@ -677,7 +677,12 @@ export function SessionPane(props: SessionPaneProps) {
           when={props.tree}
           fallback={
             <Show when={props.status === "provisioning"}>
-              <span class="a-br" data-slot="pane-tree" data-fidelity="pending">
+              <span
+                class="a-br"
+                data-slot="pane-tree"
+                data-fidelity="pending"
+                title="Preparazione albero…"
+              >
                 <BranchGlyph />
                 <span class="a-brt trunc">preparazione albero…</span>
               </span>
@@ -731,9 +736,9 @@ export function SessionPane(props: SessionPaneProps) {
         <button
           type="button"
           class="act more"
-          aria-label="Azioni: ingrandisci, chiudi"
-          title="Azioni&#10;Ingrandisci · Chiudi"
-          data-tip="Azioni&#10;Ingrandisci · Chiudi"
+          aria-label="Ingrandisci"
+          title="Ingrandisci"
+          data-tip="Ingrandisci"
           onClick={() => props.onExpand?.()}
         >
           <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
