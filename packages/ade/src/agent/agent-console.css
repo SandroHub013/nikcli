@@ -388,6 +388,16 @@
   padding: var(--ade-space-6) var(--ade-space-7) var(--ade-space-7);
 }
 
+/*
+ * The voice HUD is fixed to the bottom of the window, which in this view is
+ * exactly where the composer is: the pill covered the box, and a click in the
+ * middle of it landed on the HUD. While the console is on screen the HUD sits
+ * above the composer instead — its padding, its input and a gap.
+ */
+body:has([data-component="agent-console"]) [data-component="voice-hud"] {
+  padding-bottom: calc(var(--ade-space-6) + 38px + var(--ade-space-7) + var(--ade-space-4));
+}
+
 [data-slot="agent-input"] {
   flex: 1 1 auto;
   min-width: 0;
