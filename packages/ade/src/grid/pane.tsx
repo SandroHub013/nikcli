@@ -11,13 +11,21 @@ const SHOT_MIME = "application/x-ade-shot"
 import "@xterm/xterm/css/xterm.css"
 import "./pane.css"
 
-export {
+import {
   type PaneStatus,
   type PaneState,
   STATE_FULL,
   STATE_SHORT,
   resolvePaneState,
 } from "./pane-state"
+
+export {
+  type PaneStatus,
+  type PaneState,
+  STATE_FULL,
+  STATE_SHORT,
+  resolvePaneState,
+}
 
 /*
  * How faithfully the tree a session runs in matches what the user asked for.

@@ -26,6 +26,7 @@ export interface QuotaMetric {
   readonly remaining?: number
   readonly unit?: "percent" | "requests" | "tokens"
   readonly resetAt?: string
+  readonly isRateLimited?: boolean
 }
 
 export interface ProviderQuota {
@@ -516,10 +517,10 @@ export function getProviderQuota(agentId?: string, now = Date.now()): SessionQuo
 
 function normalizeProviderId(agent: string): string {
   const low = agent.toLowerCase()
-  if (low.includes("claude")) return "claude"
-  if (low.includes("codex") || low.includes("openai")) return "codex"
-  if (low.includes("agy") || low.includes("gemini")) return "agy"
-  if (low.includes("nikcli")) return "nikcli"
+  if (low.includes("claude") || low.includes("anthropic") || low.includes("sonnet") || low.includes("opus") || low.includes("haiku")) return "claude"
+  if (low.includes("codex") || low.includes("openai") || low.includes("gpt") || low.includes("o3") || low.includes("o1")) return "codex"
+  if (low.includes("agy") || low.includes("gemini") || low.includes("google")) return "agy"
+  if (low.includes("nikcli") || low.includes("openrouter")) return "nikcli"
   return low
 }
 
@@ -536,17 +537,26 @@ function defaultProviderQuota(providerId: string, now: number): ProviderQuota | 
           { label: "sett.", remaining: 71, resetAt: new Date(now + 172_800_000).toISOString() },
         ],
       }
-    case "codex":
+    case "codex": {
+      const resetTime = new Date("2026-10-13T15:12:00Z").getTime()
+      const isExhausted = now < resetTime
       return {
         id: "codex",
         name: "OpenAI · ChatGPT Plus",
-        status: "ok",
+        status: isExhausted ? "rate_limited" : "ok",
         plan: "Plus",
+        message: isExhausted ? "You've hit your usage limit" : undefined,
         metrics: [
-          { label: "5h", remaining: 38, resetAt: new Date(now + 7_500_000).toISOString() },
+          {
+            label: "5h",
+            remaining: isExhausted ? 0 : 38,
+            resetAt: isExhausted ? "2026-10-13T15:12:00Z" : new Date(now + 7_500_000).toISOString(),
+            isRateLimited: isExhausted,
+          },
           { label: "sett.", remaining: 80, resetAt: new Date(now + 259_200_000).toISOString() },
         ],
       }
+    }
     case "agy":
       return {
         id: "agy",
