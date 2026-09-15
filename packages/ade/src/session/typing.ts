@@ -47,3 +47,23 @@ export function asOneLine(text: string): string {
 export function asSubmittedLine(text: string): string {
   return `${asOneLine(text)}\r`
 }
+
+/** How long a TUI must stay quiet after taking in a paste before Enter is a keystroke. */
+export const PASTE_QUIET_MS = 300
+/** Enter goes anyway after this long: a session drawing a spinner is never quiet. */
+export const PASTE_SETTLE_MAX_MS = 8000
+
+/**
+ * Whether a bracketed paste has been taken in, so the Enter after it submits.
+ *
+ * A fixed wait is wrong both ways. Under ConPTY, codex and agy take in a long
+ * paste slowly and say nothing until they have: 1,500 characters were still
+ * arriving after 600 ms, and the Enter folded into the paste, leaving the text
+ * in the input box. A short line is drawn at once. So the Enter waits for the
+ * program to redraw after the paste, then for that redraw to go quiet.
+ */
+export function pasteSettled(input: { typedAt: number; lastOutputAt?: number; now: number }): boolean {
+  const { typedAt, lastOutputAt, now } = input
+  if (now - typedAt >= PASTE_SETTLE_MAX_MS) return true
+  return lastOutputAt !== undefined && lastOutputAt > typedAt && now - lastOutputAt >= PASTE_QUIET_MS
+}

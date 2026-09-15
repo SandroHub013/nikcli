@@ -146,7 +146,7 @@ import {
   type PermissionAnswer,
 } from "../session/permission"
 import { readReportLine } from "../session/report"
-import { asOneLine, asSubmittedLine } from "../session/typing"
+import { asOneLine, asSubmittedLine, pasteSettled } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import {
   DEFAULT_MAX_SPAWNED,
@@ -593,14 +593,21 @@ export function Workbench() {
      * A paste, said as one, when the CLI has asked for that. Claude Code and
      * codex switch bracketed paste on, and then text between the markers is
      * a paste by declaration rather than by guesswork about timing, and the
-     * Enter after it is a keystroke at once. Otherwise: the text, and Enter
+     * Enter after it is a keystroke once the program has taken the paste in
+     * (`pasteSettled`: a fixed 120 ms lost the Enter of every long message to
+     * codex and agy). Otherwise: the text, and Enter
      * after a wait that grows with the line — a thousand characters with the
      * reply contract were still being taken in when a fixed 400 ms Enter came.
      */
     const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
     const typedAt = Date.now()
     session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
-    await new Promise((resolve) => setTimeout(resolve, bracketed ? 120 : Math.min(2500, SUBMIT_DELAY_MS + line.length)))
+    if (bracketed) {
+      while (!pasteSettled({ typedAt, lastOutputAt: lastOutputAt.get(paneId), now: Date.now() })) {
+        if (![...running.values()].includes(session)) return false
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+    } else await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)))
     if (![...running.values()].includes(session)) return false
     session.write("\r")
     if (paneId !== undefined) {

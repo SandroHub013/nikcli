@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { asOneLine, asSubmittedLine } from "./typing"
+import { PASTE_QUIET_MS, PASTE_SETTLE_MAX_MS, asOneLine, asSubmittedLine, pasteSettled } from "./typing"
 
 const CR = String.fromCharCode(13)
 const LF = String.fromCharCode(10)
@@ -48,5 +48,21 @@ describe("asSubmittedLine", () => {
     const sent = asSubmittedLine(`innocuo${CR}git push --force`)
     expect(sent.split(CR).length - 1).toBe(1)
     expect(sent).toBe(`innocuo git push --force${CR}`)
+  })
+})
+
+describe("the Enter after a paste", () => {
+  test("waits for the program to redraw after the paste, then for quiet", () => {
+    // Quiet since before the paste: a long paste is still being taken in.
+    expect(pasteSettled({ typedAt: 1000, lastOutputAt: 900, now: 1600 })).toBe(false)
+    expect(pasteSettled({ typedAt: 1000, now: 1600 })).toBe(false)
+    // Redrawn, still drawing.
+    expect(pasteSettled({ typedAt: 1000, lastOutputAt: 2400, now: 2500 })).toBe(false)
+    // Redrawn and quiet.
+    expect(pasteSettled({ typedAt: 1000, lastOutputAt: 2400, now: 2400 + PASTE_QUIET_MS })).toBe(true)
+  })
+
+  test("goes anyway when the program never stops drawing", () => {
+    expect(pasteSettled({ typedAt: 1000, lastOutputAt: 8990, now: 1000 + PASTE_SETTLE_MAX_MS })).toBe(true)
   })
 })
