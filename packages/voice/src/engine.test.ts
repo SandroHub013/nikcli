@@ -862,6 +862,18 @@ describe("engine/agent answers what the grammar does not know", () => {
     })
   })
 
+  test("a command that cannot be carried out is said once, without an error code", async () => {
+    const { engine } = setup("auto", { ok: true, text: "no" })
+    await engine.start()
+    await engine.submitText("annulla")
+    await new Promise((r) => setTimeout(r, 20))
+
+    const lines = engine.history().filter((entry) => entry.kind !== "user")
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ kind: "assistant", text: "Non c'è niente da annullare." })
+    await engine.stop()
+  })
+
   test("a known command never reaches the agent", async () => {
     const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
     await engine.start()

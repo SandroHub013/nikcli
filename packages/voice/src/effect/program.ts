@@ -423,7 +423,13 @@ export function makeVoiceProgram(
                  * nothing at all. Said, and so not logged a second time.
                  */
                 const answers = outcome.success && Boolean(outcome.spoken) && SPOKEN_RESULTS.has(effect.intent.intent)
-                options.onOutcome?.(answers ? { ...outcome, spoken: "" } : outcome)
+                /*
+                 * A failure is said by the dialogue just below, and a line for it
+                 * here as well printed the same sentence twice, the second time
+                 * with the internal error code under it.
+                 */
+                const saidBelow = answers || (!outcome.success && Boolean(outcome.spoken))
+                options.onOutcome?.(saidBelow ? { ...outcome, spoken: "", error: undefined } : outcome)
                 if (answers) yield* say(outcome.spoken)
                 if (outcome.success) {
                   yield* applyDialogEvent({
