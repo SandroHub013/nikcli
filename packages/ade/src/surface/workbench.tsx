@@ -27,6 +27,7 @@ import {
   worktreeArgs,
   worktreePlan,
   effortArgs,
+  modelIn,
   withoutEffort,
   dispatchChoice,
   isBaseRef,
@@ -1660,7 +1661,7 @@ export function Workbench() {
         spawnArgs.push(...chosen)
       }
       if (effort) {
-        const chosen = effortArgs(agent.id, effort)
+        const chosen = effortArgs(agent.id, effort, model ?? modelIn(spawnArgs))
         if ("error" in chosen) {
           await answer(`errore: ${chosen.error}`)
           return true
@@ -1813,7 +1814,7 @@ export function Workbench() {
         spawnArgs = [...withoutModel(spawnArgs), ...chosen]
       }
       if (message.effort) {
-        const chosen = effortArgs(agentId, message.effort)
+        const chosen = effortArgs(agentId, message.effort, message.model ?? modelIn(spawnArgs))
         if ("error" in chosen) {
           await answer(`errore: ${chosen.error}`)
           return true
