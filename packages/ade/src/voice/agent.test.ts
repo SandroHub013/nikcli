@@ -4,7 +4,7 @@ import { createWorkbench } from "../surface/state"
 import { createAdeVoiceHost } from "./host"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { limitNotice } from "../bots/terms"
-import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS } from "./agent"
+import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS, VOICE_AGENT_TIMEOUT_MS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
   ({ agent: { id, label: id, command: id }, availability }) as AgentStatus
@@ -29,6 +29,14 @@ describe("voice/agent", () => {
     await agent.ask({ text: "x", engine: "claude" })
     expect(runner.requests[0].disabledTools).toEqual(["edit", "write", "bash"])
     expect(runner.requests[0].disabledTools).toBe(VOICE_AGENT_DISABLED_TOOLS)
+  })
+
+  test("a voice turn gets 150 s: past the 110 s of a blocking ade-msg ask, well short of five minutes", async () => {
+    const runner = fakeRunner([{}])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    await agent.ask({ text: "x", engine: "claude" })
+    expect(runner.requests[0].timeoutMs).toBe(VOICE_AGENT_TIMEOUT_MS)
+    expect(VOICE_AGENT_TIMEOUT_MS).toBe(150_000)
   })
 
   test("a stopped turn that ends after the newer one does not take its conversation", async () => {

@@ -35,6 +35,15 @@ const CATALOGUE_ID: Record<RunnerId, string> = {
  */
 const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex"]
 
+/**
+ * How long a spoken request may take before the turn is stopped.
+ *
+ * Above the 110 s an `ade-msg ask` waits for its session, so a blocking ask
+ * can still come back with an answer; far below the five minutes a turn gets
+ * elsewhere, because nobody waits that long for a spoken reply.
+ */
+export const VOICE_AGENT_TIMEOUT_MS = 150_000
+
 /** What a voice turn may not do: edit, write, or run a command other than `ade-msg`. */
 export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash"]
 
@@ -135,6 +144,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         // No MCP servers or user settings: a spoken answer is worth more than
         // the user's connectors, and loading them tripled the wait.
         lean: true,
+        timeoutMs: VOICE_AGENT_TIMEOUT_MS,
       })
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
