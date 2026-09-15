@@ -7,6 +7,8 @@ import {
   EMAIL_CODE_BURST_WINDOW_SECONDS,
   EMAIL_CODE_HOURLY_LIMIT,
   EMAIL_CODE_HOURLY_WINDOW_SECONDS,
+  EMAIL_CODE_IP_LIMIT,
+  EMAIL_CODE_IP_WINDOW_SECONDS,
   EMAIL_CODE_MAX_ATTEMPTS,
   EMAIL_CODE_TTL_SECONDS,
   LOGIN_STATE_TTL_SECONDS,
@@ -432,26 +434,31 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
   }
   if (!EMAIL_PATTERN.test(email) || email.length > 254) return loginPage(c, loginState, "Enter a valid email address.")
 
-  const [burst, sustained] = await Promise.all([
+  // Two budgets bound what one address can be made to receive; the third bounds
+  // what one network can make the issuer send in total, across addresses.
+  const [burst, sustained, perIP] = await Promise.all([
     consumeRateLimit(c.env.STATE, "email", email, EMAIL_CODE_BURST_LIMIT, EMAIL_CODE_BURST_WINDOW_SECONDS),
     consumeRateLimit(c.env.STATE, "email-hour", email, EMAIL_CODE_HOURLY_LIMIT, EMAIL_CODE_HOURLY_WINDOW_SECONDS),
+    consumeRateLimit(c.env.STATE, "email-ip", requestIP(c.req.raw), EMAIL_CODE_IP_LIMIT, EMAIL_CODE_IP_WINDOW_SECONDS),
   ])
-  const limited = !burst.allowed ? burst : !sustained.allowed ? sustained : null
+  const addressLimited = !burst.allowed ? burst : !sustained.allowed ? sustained : null
+  const limited = addressLimited ?? (perIP.allowed ? null : perIP)
   if (limited) {
     c.header("Retry-After", String(limited.retryAfter))
+    logSignInFailure(c, "email-request", addressLimited ? "address-rate-limited" : "network-rate-limited", {
+      retryAfter: limited.retryAfter,
+    })
     // An already-delivered code stays usable while the sender is throttled, so
     // keep the user on the page where they can still enter it.
     const pending = await c.env.STATE.get<EmailChallenge>(emailKey(loginState), "json")
     const wait = formatDuration(limited.retryAfter)
+    // Whose budget ran out changes what the user can do about it: waiting helps
+    // for their own address, while a shared network says nothing about the code
+    // they may already be holding.
+    const reason = addressLimited ? "Too many codes were sent to this address." : "Too many sign-in codes were requested from this network."
     return pending
-      ? emailCodePage(
-          c,
-          loginState,
-          email,
-          `Too many codes were sent to this address. Enter the code you already received, or request another in ${wait}.`,
-          429,
-        )
-      : loginPage(c, loginState, `Too many codes were sent to this address. Try again in ${wait}.`, 429)
+      ? emailCodePage(c, loginState, email, `${reason} Enter the code you already received, or request another in ${wait}.`, 429)
+      : loginPage(c, loginState, `${reason} Try again in ${wait}.`, 429)
   }
 
   const code = randomDigits(6)

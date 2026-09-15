@@ -39,6 +39,24 @@ export const EMAIL_CODE_BURST_WINDOW_SECONDS = 5 * 60
 export const EMAIL_CODE_HOURLY_LIMIT = 10
 export const EMAIL_CODE_HOURLY_WINDOW_SECONDS = 60 * 60
 
+/**
+ * Sign-in codes one network may ask for, across every address.
+ *
+ * The two budgets above are keyed by the recipient, which bounds how much mail
+ * a single address can be made to receive and nothing else: a caller who varies
+ * the address was unlimited, and every other endpoint here — device start,
+ * token, device approval, passkey auth — already carries an IP bucket, so this
+ * was the one hole in the set. What comes out of it is mail from
+ * `auth@nikcli.store`, so the cost of leaving it open is charged to the
+ * issuer's own sending reputation and quota, not to an attacker.
+ *
+ * Sized for humans rather than for the limit: ten codes in ten minutes is more
+ * than a shared office address will ever legitimately need behind one NAT, and
+ * far less than a flood is worth.
+ */
+export const EMAIL_CODE_IP_LIMIT = 10
+export const EMAIL_CODE_IP_WINDOW_SECONDS = 10 * 60
+
 /** Wrong-code submissions allowed per emailed code before it is burned. */
 export const EMAIL_CODE_MAX_ATTEMPTS = 5
 
