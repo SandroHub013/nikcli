@@ -616,6 +616,10 @@ pub async fn pty_spawn(
         // EOF, so it can flush the last frame and report the exit.
     });
 
+    // For the waiter thread below; taken before `app` moves into the sender.
+    let waiter = app.clone();
+    let waited_id = id.clone();
+
     let emitter = app.clone();
     let stream_id = id.clone();
     std::thread::spawn(move || {
@@ -632,14 +636,22 @@ pub async fn pty_spawn(
             );
         });
 
-        let code = app
+        let taken = app
             .state::<Registry>()
             .0
             .lock()
             .ok()
-            .and_then(|mut sessions| sessions.remove(&stream_id))
-            .and_then(|mut session| session.child.wait().ok())
-            .map(|status| status.exit_code() as i32);
+            .and_then(|mut sessions| sessions.remove(&stream_id));
+
+        /*
+         * Nothing left to report: the waiter below already took the session
+         * and said the exit — that is what let this reader reach EOF at all —
+         * or `pty_kill` did. One exit per session, from whoever saw it first.
+         */
+        let Some(mut session) = taken else {
+            return;
+        };
+        let code = session.child.wait().ok().map(|status| status.exit_code() as i32);
 
         let _ = emitter.emit(
             "pty:exit",
@@ -648,6 +660,53 @@ pub async fn pty_spawn(
                 code,
             },
         );
+    });
+
+    /*
+     * A third thread: the one that notices the process is gone.
+     *
+     * On Windows the reader above does not see EOF when the child exits.
+     * ConPTY keeps its console host — OpenConsole.exe — alive until the pseudo
+     * console is closed, and the pseudo console is closed by dropping the
+     * master, which the registry holds until the exit is known: each wait
+     * depends on the other, and a `nikcli run` that printed its answer and
+     * exited left a pane that said "working" forever, with an OpenConsole
+     * process for every turn. So the child is asked directly, twice a second;
+     * once it has gone the session is dropped — which is what lets the
+     * reader finish — and the exit is reported from here with the real code.
+     * On unix this is merely redundant: EOF arrives first, the reader takes
+     * the session, and this thread finds nothing and stops.
+     */
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(500));
+        let code = {
+            let registry = waiter.state::<Registry>();
+            let Ok(mut sessions) = registry.0.lock() else {
+                break;
+            };
+            let Some(session) = sessions.get_mut(&waited_id) else {
+                break;
+            };
+            match session.child.try_wait() {
+                Ok(None) => continue,
+                Ok(Some(status)) => {
+                    sessions.remove(&waited_id);
+                    Some(status.exit_code() as i32)
+                }
+                Err(_) => {
+                    sessions.remove(&waited_id);
+                    None
+                }
+            }
+        };
+        let _ = waiter.emit(
+            "pty:exit",
+            Exit {
+                id: waited_id,
+                code,
+            },
+        );
+        break;
     });
 
     Ok(())
