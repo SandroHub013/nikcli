@@ -26,8 +26,17 @@ const CATALOGUE_ID: Record<RunnerId, string> = {
   nikcli: "nikcli",
 }
 
-/** `auto` tries these in order: the subscriptions most users have first. */
-const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex", "nikcli"]
+/**
+ * `auto` tries these in order: the subscriptions most users have first.
+ *
+ * nikcli is not among them. A voice turn must not change the project, and
+ * nikcli cannot be told so for one turn (`enforcesDisabledTools`): it would
+ * only have the instructions asking it not to.
+ */
+const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex"]
+
+/** What a voice turn may not do: edit, write, or run a command other than `ade-msg`. */
+export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash"]
 
 /**
  * The runner a request goes to, or why there is none.
@@ -42,6 +51,9 @@ export function resolveVoiceAgentRunner(
   engine: VoiceAgentEngine,
   statuses: readonly AgentStatus[] | undefined,
 ): { runner: RunnerId } | { problem: string } {
+  if (engine === "nikcli") {
+    return { problem: "nikcli non può rispondere alla voce in sola lettura: scegli Claude Code o Codex." }
+  }
   if (engine !== "auto") return { runner: engine }
   if (!statuses) return { runner: AUTO_ORDER[0] }
   const found = AUTO_ORDER.find(
@@ -49,7 +61,7 @@ export function resolveVoiceAgentRunner(
   )
   return found
     ? { runner: found }
-    : { problem: "Per rispondere mi serve Claude Code, Codex o nikcli, e non ne trovo nessuno installato." }
+    : { problem: "Per rispondere mi serve Claude Code o Codex, e non ne trovo nessuno installato." }
 }
 
 /**
@@ -95,12 +107,19 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
    * describe the wrong sessions.
    */
   let conversation: { runner: RunnerId; cwd: string | undefined; sessionId: string } | undefined
+  /*
+   * A new sentence stops the turn still running, and that turn can end after
+   * the new one started: only the newest turn may say which conversation
+   * comes next.
+   */
+  let latest = 0
 
   return {
     async ask({ text, engine, signal }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem }
 
+      const generation = ++latest
       const cwd = deps.cwd()
       const previous =
         conversation && conversation.runner === resolved.runner && conversation.cwd === cwd ? conversation.sessionId : undefined
@@ -111,6 +130,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         instructions: VOICE_AGENT_INSTRUCTIONS,
         ...(previous ? { sessionId: previous } : {}),
         ...(cwd ? { cwd } : {}),
+        disabledTools: VOICE_AGENT_DISABLED_TOOLS,
         mailbox: { id: "voce" },
         // No MCP servers or user settings: a spoken answer is worth more than
         // the user's connectors, and loading them tripled the wait.
@@ -120,7 +140,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
         const result = await turn.result
-        if (result.sessionId) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
+        if (result.sessionId && generation === latest) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
         if (result.status === "done") {
           return { ok: true, text: result.text || "Fatto." }
         }
@@ -132,6 +152,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
     },
 
     forget() {
+      latest++
       conversation = undefined
     },
   }

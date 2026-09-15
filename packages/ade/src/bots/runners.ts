@@ -120,6 +120,24 @@ export interface TurnSpec {
    * user's own Claude memory, where every other session then reads it.
    */
   readonly lean?: boolean
+  /**
+   * The folder `ade-msg` drops its messages in (`<mailbox>/outbox`), for a
+   * turn that may not write but must still talk to ADE. Codex's read-only
+   * sandbox refuses that write too, so such a turn runs in `workspace-write`
+   * with this folder as its workspace instead of the project: `ade-msg` works
+   * and the project stays out of reach.
+   */
+  readonly outbox?: string
+}
+
+/**
+ * Whether the runner itself refuses what `disabledTools` turns off, rather
+ * than only being asked to. nikcli takes its tools from the agent file, and a
+ * turn has no way to hand it others without an environment the pty does not
+ * pass, so a tool refused here would still run there.
+ */
+export function enforcesDisabledTools(id: RunnerId): boolean {
+  return id !== "nikcli"
 }
 
 /**
@@ -149,7 +167,10 @@ export function withInstructions(bot: AgentFile, message: string): string {
   return `Istruzioni del bot "${bot.identifier}":\n${bot.prompt.trim()}\n\n---\n\n${message}`
 }
 
-export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command: string; readonly args: string[] } {
+export function turnCommand(
+  runner: Runner,
+  spec: TurnSpec,
+): { readonly command: string; readonly args: string[]; readonly cwd?: string } {
   const { bot, message, sessionId } = spec
   switch (runner.id) {
     case "nikcli":
@@ -174,8 +195,18 @@ export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command:
       if (bot.effort) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
       if (sessionId) args.push("--resume", sessionId)
+      /*
+       * A lean turn without a shell keeps one: `ade-msg`, allowed by pattern.
+       * Refusing Bash outright would refuse that too, since a refusal beats
+       * any allow; left out of the allowed list instead, every other command
+       * is one `-p` cannot ask about, so it is refused. For that to hold, no
+       * settings file may pre-approve a command, the project's local one
+       * included.
+       */
+      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash")
       if (spec.lean) {
-        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "local")
+        const sources = adeMsgOnly || !canWrite(bot) ? "" : "local"
+        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", sources)
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
@@ -183,7 +214,9 @@ export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command:
         .filter(([tool]) => !bot.disabledTools.includes(tool))
         .flatMap(([, names]) => names)
       if (spec.lean) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
-      const disallowed = bot.disabledTools.flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+      const disallowed = bot.disabledTools
+        .filter((tool) => !(adeMsgOnly && tool === "bash"))
+        .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       args.push("--", message)
@@ -191,23 +224,23 @@ export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command:
     }
     case "codex": {
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
-      const config = [
-        "-c",
-        `sandbox_mode="${canWrite(bot) ? "workspace-write" : "read-only"}"`,
-        "-c",
-        'approval_policy="never"',
-      ]
+      const inOutbox = !canWrite(bot) && spec.outbox !== undefined
+      const sandbox = canWrite(bot) || inOutbox ? "workspace-write" : "read-only"
+      const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", 'approval_policy="never"']
       if (bot.effort) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model ? ["-m", bot.model] : []
+      const where = inOutbox ? { cwd: spec.outbox } : {}
       if (sessionId) {
         return {
           command: runner.command,
           args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, sessionId, message],
+          ...where,
         }
       }
       return {
         command: runner.command,
         args: ["exec", "--json", "--skip-git-repo-check", ...model, ...config, "--", withInstructions(bot, message)],
+        ...where,
       }
     }
   }

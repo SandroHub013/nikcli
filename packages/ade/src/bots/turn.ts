@@ -22,7 +22,7 @@ import { getHost } from "../host/shell"
 import { registerSender, unregisterSender } from "../session/senders"
 import { acquireTurn } from "./terms"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, finalText, runnerById, turnCommand, type RunnerId } from "./runners"
+import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RunnerId } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
 
 export interface TurnRequest {
@@ -106,12 +106,20 @@ export function runTurn(request: TurnRequest): Turn {
       ...(request.effort ? { effort: request.effort } : {}),
       runner: runner.id,
     }
-    const { command, args } = turnCommand(runner, {
+    if (bot.disabledTools.length > 0 && !enforcesDisabledTools(runner.id)) {
+      const problem = `${runner.label} non può rifiutare gli strumenti che questo turno esclude.`
+      update(applyProblem(talk, problem, Date.now()))
+      return finish("error", problem)
+    }
+    const outbox = request.mailbox ? await host.mailboxOutbox?.().catch(() => undefined) : undefined
+    const { command, args, cwd } = turnCommand(runner, {
       bot,
       message: request.message,
       ...(request.sessionId ? { sessionId: request.sessionId } : {}),
       ...(request.lean ? { lean: true } : {}),
+      ...(outbox ? { outbox } : {}),
     })
+    const spawnCwd = cwd ?? request.cwd
 
     const slot = acquireTurn(runner.id, runner.label)
     if ("problem" in slot) {
@@ -127,7 +135,7 @@ export function runTurn(request: TurnRequest): Turn {
           .spawn({
             command,
             args,
-            ...(request.cwd ? { cwd: request.cwd } : {}),
+            ...(spawnCwd ? { cwd: spawnCwd } : {}),
             cols: 400,
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),

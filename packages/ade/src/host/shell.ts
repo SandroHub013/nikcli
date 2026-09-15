@@ -122,6 +122,8 @@ export interface Host {
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
   mailboxResultReclaim?: (id: string, kind?: "result" | "update") => Promise<string | null>
+  /** The folder `ade-msg` drops messages in, `<app local data>/mailbox/outbox`, as `mailbox.rs` builds it. */
+  mailboxOutbox?: () => Promise<string>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -478,6 +480,11 @@ export async function getHost(): Promise<Host | undefined> {
     async systemStats() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<SystemStats>("system_stats")
+    },
+
+    async mailboxOutbox() {
+      const { appLocalDataDir, join } = await import("@tauri-apps/api/path")
+      return join(await appLocalDataDir(), "mailbox", "outbox")
     },
 
     async mailboxTake() {

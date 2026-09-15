@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
+import { applyRunnerLine, enforcesDisabledTools, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -76,6 +76,41 @@ describe("gli argomenti di un turno", () => {
   test("un bot che non può scrivere gira in sola lettura", () => {
     const { args } = turnCommand(runnerById("codex"), { bot: { ...bot, disabledTools: ["edit"] }, message: "x" })
     expect(args).toContain('sandbox_mode="read-only"')
+  })
+
+  test("un turno vocale non scrive e non esegue altro che ade-msg, su ogni motore che lo sa rifiutare", () => {
+    const voice = { ...bot, disabledTools: ["edit", "write", "bash"] }
+
+    const claude = turnCommand(runnerById("claude"), { bot: voice, message: "x", lean: true }).args
+    const allowed = claude[claude.indexOf("--allowedTools") + 1]!.split(",")
+    const disallowed = claude[claude.indexOf("--disallowedTools") + 1]!.split(",")
+    expect(claude[claude.indexOf("--permission-mode") + 1]).toBe("default")
+    // No settings file, the project's local one included, can pre-approve a command.
+    expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("")
+    expect(allowed).toContain("Bash(ade-msg *)")
+    expect(allowed).toContain("PowerShell(ade-msg *)")
+    for (const tool of ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit"]) expect(allowed).not.toContain(tool)
+    expect(disallowed).toEqual(expect.arrayContaining(["Edit", "Write", "NotebookEdit"]))
+    // A refusal beats an allow: refusing Bash would refuse ade-msg too.
+    expect(disallowed).not.toContain("Bash")
+
+    const outbox = "C:/Users/x/AppData/Local/ai.nikcli.ade/mailbox/outbox"
+    const codex = turnCommand(runnerById("codex"), { bot: voice, message: "x", outbox })
+    expect(codex.args).toContain('sandbox_mode="workspace-write"')
+    expect(codex.cwd).toBe(outbox)
+    const resumed = turnCommand(runnerById("codex"), { bot: voice, message: "x", sessionId: "t-1", outbox })
+    expect(resumed.cwd).toBe(outbox)
+    expect(resumed.args).toContain('sandbox_mode="workspace-write"')
+    // Without an outbox there is nothing to make writable: fully read-only, and the project's cwd.
+    const plain = turnCommand(runnerById("codex"), { bot: voice, message: "x" })
+    expect(plain.args).toContain('sandbox_mode="read-only"')
+    expect(plain.cwd).toBeUndefined()
+    // A bot that may write keeps its project as the workspace.
+    expect(turnCommand(runnerById("codex"), { bot, message: "x", outbox }).cwd).toBeUndefined()
+
+    expect(enforcesDisabledTools("claude")).toBe(true)
+    expect(enforcesDisabledTools("codex")).toBe(true)
+    expect(enforcesDisabledTools("nikcli")).toBe(false)
   })
 })
 

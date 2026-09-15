@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentStatus } from "../session-new/availability"
 import type { TurnRequest, TurnResult } from "../bots/turn"
-import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_INSTRUCTIONS } from "./agent"
+import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
   ({ agent: { id, label: id, command: id }, availability }) as AgentStatus
@@ -15,6 +15,42 @@ describe("voice/agent", () => {
     expect(resolveVoiceAgentRunner("codex", [status("codex", "assente")])).toEqual({ runner: "codex" })
     const none = resolveVoiceAgentRunner("auto", ["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")))
     expect("problem" in none && none.problem).toContain("Claude Code")
+    // nikcli cannot be held to read-only for one turn: never picked, and refused when named.
+    expect(resolveVoiceAgentRunner("auto", [status("claude-code", "assente"), status("codex", "assente"), status("nikcli", "presente")])).toHaveProperty("problem")
+    expect(resolveVoiceAgentRunner("nikcli", undefined)).toHaveProperty("problem")
+  })
+
+  test("a voice turn is read-only: no edits, no writes, no shell but ade-msg", async () => {
+    const runner = fakeRunner([{}])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    await agent.ask({ text: "x", engine: "claude" })
+    expect(runner.requests[0].disabledTools).toEqual(["edit", "write", "bash"])
+    expect(runner.requests[0].disabledTools).toBe(VOICE_AGENT_DISABLED_TOOLS)
+  })
+
+  test("a stopped turn that ends after the newer one does not take its conversation", async () => {
+    const pending: ((result: Partial<TurnResult>) => void)[] = []
+    const requests: TurnRequest[] = []
+    const runTurn = (request: TurnRequest) => {
+      requests.push(request)
+      return {
+        result: new Promise<TurnResult>((resolve) =>
+          pending.push((next) => resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult)),
+        ),
+        stop: () => {},
+      }
+    }
+    const agent = createVoiceAgent({ runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+
+    const first = agent.ask({ text: "uno", engine: "claude" })
+    const second = agent.ask({ text: "due", engine: "claude" })
+    pending[1]!({ text: "nuova", sessionId: "new" })
+    await second
+    pending[0]!({ status: "stopped", sessionId: "old" })
+    await first
+
+    void agent.ask({ text: "tre", engine: "claude" })
+    expect(requests[2]!.sessionId).toBe("new")
   })
 
   function fakeRunner(results: Partial<TurnResult>[]) {
