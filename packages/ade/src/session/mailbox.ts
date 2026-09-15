@@ -633,6 +633,16 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   }
 }
 
+/**
+ * The activity to keep after a read: what was read, or, when nothing could be
+ * read, a busy seen before. A read that fails mid-turn does not end the turn;
+ * the stale-busy rule of `isFree` still frees a session whose Stop never came.
+ * An old idle is dropped: it would let mail in mid-turn.
+ */
+export function keptActivity(previous: Activity | undefined, read: Activity | undefined): Activity | undefined {
+  return read ?? (previous?.state === "busy" ? previous : undefined)
+}
+
 /** How long a freshly spawned session has to come up before "not running" means closed. */
 export const SPAWN_GRACE_MS = 30_000
 

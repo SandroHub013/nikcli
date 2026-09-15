@@ -169,6 +169,7 @@ import {
   formatNudge,
   formatUpdate,
   parseActivity,
+  keptActivity,
   parseOpenRequests,
   shouldRering,
   type Activity,
@@ -959,7 +960,7 @@ export function Workbench() {
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+      activity = keptActivity(activity, parseActivity(await host.readAgentActivity(nonce), resumeId))
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
     }
@@ -1251,12 +1252,15 @@ export function Workbench() {
       const nonce = paneNonces.get(paneId)
       if (!nonce || !hooked(paneId)) continue
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const activity = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
-      if (!activity) {
-        // Gone or unreadable: an old idle kept here would let mail in mid-turn.
-        activityOf.delete(paneId)
+      const read = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
+      if (!read) {
+        // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
+        const kept = keptActivity(activityOf.get(paneId), read)
+        if (kept) activityOf.set(paneId, kept)
+        else activityOf.delete(paneId)
         continue
       }
+      const activity = read
       activityOf.set(paneId, activity)
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
       const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
