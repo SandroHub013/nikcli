@@ -108,7 +108,7 @@ export namespace Artifact {
     const active = UserSession.getSync()
     if (!active) return undefined
     try {
-      return UserDB.verifySession(active) ? active : undefined
+      return Effect.runSync(UserDB.verifySession(active)) ? active : undefined
     } catch (error) {
       log.warn("local session verification unavailable, sending token anyway", { error })
       return active
@@ -120,7 +120,7 @@ export namespace Artifact {
     try {
       const active = UserSession.getSync()
       if (!active) return undefined
-      const user = UserDB.verifySession(active)
+      const user = Effect.runSync(UserDB.verifySession(active))
       return user ? user.email : undefined
     } catch {
       return undefined
@@ -130,7 +130,7 @@ export namespace Artifact {
   /** Resolve the active CLI identity; kept as a command-friendly status check. */
   export async function login(): Promise<{ token: string; user: UserDB.PublicUser }> {
     const active = UserSession.getSync()
-    const user = active ? UserDB.verifySession(active) : null
+    const user = active ? Effect.runSync(UserDB.verifySession(active)) : null
     if (!active || !user) throw new NotLoggedInError()
     return { token: active, user }
   }

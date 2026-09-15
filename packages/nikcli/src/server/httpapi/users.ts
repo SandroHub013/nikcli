@@ -1,4 +1,5 @@
 import type { JsonValue } from "@/util/json"
+import { Effect } from "effect"
 import z from "zod"
 import { UserDB } from "@/user/users"
 import { Flag } from "@nikcli-ai/util/flag"
@@ -87,14 +88,14 @@ export namespace UsersHttp {
     const body = parsed.data
 
     // Only allow registration if: no users exist OR caller is admin.
-    if (UserDB.hasUsers()) {
+    if (Effect.runSync(UserDB.hasUsers())) {
       const session = await sessionFor(request)
       if (!session || session.user.role !== "admin") {
         return json({ error: "Only admins can create new users" }, 403)
       }
     }
 
-    if (UserDB.findByEmail(body.email)) return json({ error: "Email already in use" }, 409)
+    if (Effect.runSync(UserDB.findByEmail(body.email))) return json({ error: "Email already in use" }, 409)
 
     try {
       const user = await UserDB.create({
@@ -103,7 +104,7 @@ export namespace UsersHttp {
         password: body.password,
         displayName: body.displayName,
       })
-      const token = UserDB.createSession(user.id, 30)
+      const token = Effect.runSync(UserDB.createSession(user.id, 30))
       return json({ token, user }, 201)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -121,18 +122,18 @@ export namespace UsersHttp {
     if (!parsed.success) {
       return json({ error: parsed.error.issues[0]?.message ?? "Invalid login payload" }, 400)
     }
-    const user = UserDB.findByEmail(parsed.data.email)
+    const user = Effect.runSync(UserDB.findByEmail(parsed.data.email))
     if (!user) return json({ error: "Invalid credentials" }, 401)
     const valid = await UserDB.verifyPassword(user, parsed.data.password)
     if (!valid) return json({ error: "Invalid credentials" }, 401)
-    const token = UserDB.createSession(user.id, 30)
+    const token = Effect.runSync(UserDB.createSession(user.id, 30))
     return json({ token, user: UserDB.toPublic(user) })
   }
 
   async function logout(request: Request): Promise<Response> {
     const session = await sessionFor(request)
     if (!session) return json({ error: "Unauthorized" }, 401)
-    if (session.token.startsWith("nku_")) UserDB.revokeSession(session.token)
+    if (session.token.startsWith("nku_")) Effect.runSync(UserDB.revokeSession(session.token))
     return json({ ok: true })
   }
 
@@ -143,7 +144,7 @@ export namespace UsersHttp {
   }
 
   function status(): Response {
-    return json({ hasUsers: UserDB.hasUsers() })
+    return json({ hasUsers: Effect.runSync(UserDB.hasUsers()) })
   }
 
   /**
@@ -157,8 +158,8 @@ export namespace UsersHttp {
     const session = await sessionFor(request)
     if (!session) return json({ error: "Unauthorized" }, 401)
     return json({
-      contacts: UserDB.listContacts(session.user.id).length,
-      unread: UserDB.getTotalUnreadCount(session.user.id),
+      contacts: Effect.runSync(UserDB.listContacts(session.user.id)).length,
+      unread: Effect.runSync(UserDB.getTotalUnreadCount(session.user.id)),
     })
   }
 
@@ -180,7 +181,7 @@ export namespace UsersHttp {
       return json({ error: parsed.error.issues[0]?.message ?? "Invalid password payload" }, 400)
     }
 
-    const user = UserDB.findById(session.user.id)
+    const user = Effect.runSync(UserDB.findById(session.user.id))
     if (!user) return json({ error: "User not found" }, 404)
     if (!(await UserDB.verifyPassword(user, parsed.data.current))) {
       return json({ error: "Incorrect password" }, 403)
@@ -195,7 +196,7 @@ export namespace UsersHttp {
     const session = await sessionFor(request)
     if (!session) return json({ error: "Unauthorized" }, 401)
     if (session.user.role !== "admin") return json({ error: "Forbidden" }, 403)
-    return json(UserDB.listUsers())
+    return json(Effect.runSync(UserDB.listUsers()))
   }
 
   async function update(request: Request, id: string): Promise<Response> {
@@ -214,7 +215,7 @@ export namespace UsersHttp {
     if (body.role && !isAdmin) return json({ error: "Only admins can change roles" }, 403)
 
     if (body.role === "admin") {
-      const targetUser = UserDB.findById(id)
+      const targetUser = Effect.runSync(UserDB.findById(id))
       if (!targetUser) return json({ error: "User not found" }, 404)
       if (!UserDB.isAdminEmail(targetUser.email)) {
         return json(
@@ -242,7 +243,7 @@ export namespace UsersHttp {
     if (!session) return json({ error: "Unauthorized" }, 401)
     if (session.user.role !== "admin") return json({ error: "Forbidden" }, 403)
     if (id === session.user.id) return json({ error: "Cannot delete yourself" }, 400)
-    const deleted = UserDB.deleteUser(id)
+    const deleted = Effect.runSync(UserDB.deleteUser(id))
     if (!deleted) return json({ error: "User not found" }, 404)
     return json({ ok: true })
   }

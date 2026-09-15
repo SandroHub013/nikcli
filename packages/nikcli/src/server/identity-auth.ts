@@ -1,4 +1,5 @@
 import { verifyAccessToken, type VerifyAccessTokenOptions } from "@nikcli-ai/auth"
+import { Effect } from "effect"
 import { Flag } from "@nikcli-ai/util/flag"
 import { UserDB } from "@/user/users"
 
@@ -36,7 +37,7 @@ export async function externalSessionForToken(
   const auth = await verifyAccessToken(token, verifier)
   if (!auth.email) throw new Error("Identity token is missing the verified email claim")
   return {
-    user: UserDB.ensureExternalUser({ sub: auth.accountID, email: auth.email }),
+    user: Effect.runSync(UserDB.ensureExternalUser({ sub: auth.accountID, email: auth.email })),
     token,
   }
 }

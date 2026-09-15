@@ -1,4 +1,5 @@
 import { Option } from "effect"
+import { Effect } from "effect"
 import { Flag } from "@nikcli-ai/util/flag"
 import { MobileAuth } from "@/mobile/auth"
 import { UserDB } from "@/user/users"
@@ -194,7 +195,7 @@ export namespace Auth {
     const mobile = await MobileAuth.verify(bearer)
     if (mobile) return { type: "mobile", token: mobile }
     if (bearer.startsWith("nku_") && legacyUserTokenAllowed()) {
-      const user = UserDB.verifySession(bearer)
+      const user = Effect.runSync(UserDB.verifySession(bearer))
       if (user) return { type: "user", session: { user, token: bearer } }
     }
     return undefined
