@@ -32,6 +32,7 @@ import { matchesWakeWord } from "../settings/wake-word"
 import { replySpeech } from "../tts/reply"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
+import { triageWhileThinking } from "../dialog/while-thinking"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -566,9 +567,10 @@ export function makeVoiceProgram(
           activeProjectName: host.describeState?.().activeProject,
         }
 
-        const planned = yield* Effect.promise(() =>
-          planUtterance(utterance, context, complete, { signal: abort.signal }),
-        )
+        const planned = yield* Effect.promise((interrupted) => {
+          interrupted.addEventListener("abort", () => abort.abort(), { once: true })
+          return planUtterance(utterance, context, complete, { signal: abort.signal })
+        })
         // Stopped while the model thought: whoever stopped it speaks next.
         if (abort.signal.aborted) return true
 
@@ -647,7 +649,15 @@ export function makeVoiceProgram(
         options.onStateChange?.(currentState)
 
         const answer: { ok: boolean; text: string; ran?: boolean } = yield* Effect.tryPromise({
-          try: () => askAgent.call(host, { text: utterance, engine, signal: abort.signal }),
+          /*
+           * Interruption aborts the turn too. Without it, stopping the engine
+           * mid-turn waited for an answer that the stopped engine would never
+           * say, and `stop()` hung until the CLI finished on its own.
+           */
+          try: (interrupted) => {
+            interrupted.addEventListener("abort", () => abort.abort(), { once: true })
+            return askAgent.call(host, { text: utterance, engine, signal: abort.signal })
+          },
           catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
         }).pipe(
           Effect.catchAll((err) =>
@@ -703,7 +713,10 @@ export function makeVoiceProgram(
     let isWakeWordAwake = false
     let isPushToTalkPressed = false
 
-    function executeAgentUtterance(trimmed: string): Effect.Effect<void> {
+    function executeAgentUtterance(
+      trimmed: string,
+      heard: { typed: boolean; confidence?: number } = { typed: false },
+    ): Effect.Effect<void> {
       return Effect.gen(function* () {
         /*
          * Announced here, and only here, so the console sees what the agent
@@ -779,12 +792,18 @@ export function makeVoiceProgram(
          * a cancel, which only stops.
          */
         if (currentState.status === "executing" && agentAbort) {
+          const triage = triageWhileThinking(parsed, heard)
+          if (triage.action === "ignore") {
+            // On screen so a sentence that seems lost can be seen to have been heard and set aside.
+            options.onOutcome?.({ success: true, spoken: `Ignorato mentre penso (${triage.reason}): «${trimmed}».` })
+            return
+          }
           agentAbort.abort()
           agentAbort = null
           yield* speaker.cancel
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
-          if (parsed.outcome === "matched" && parsed.intent?.intent === "dialog.cancel") {
+          if (triage.action === "stop") {
             options.onSpoken?.("Ho fermato la richiesta precedente.")
             return
           }
@@ -867,8 +886,9 @@ export function makeVoiceProgram(
      * either would drop every sentence typed with push-to-talk or wake-word
      * activation, since nothing is held and nobody said the word.
      */
-    function processUtterance(rawText: string, fromAsr = false, typed = false): Effect.Effect<void> {
+    function processUtterance(rawText: string, fromAsr = false, typed = false, confidence?: number): Effect.Effect<void> {
       return Effect.gen(function* () {
+        const heard = { typed, confidence }
         const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
 
         /*
@@ -905,7 +925,7 @@ export function makeVoiceProgram(
         // Typed text is addressed to the assistant already; a leading wake word is only dropped.
         if (typed && currentSettings.activation === "wake-word") {
           const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
-          yield* executeAgentUtterance(match.matched && match.remainder.length > 0 ? match.remainder : trimmed)
+          yield* executeAgentUtterance(match.matched && match.remainder.length > 0 ? match.remainder : trimmed, { typed: true })
           return
         }
 
@@ -935,7 +955,7 @@ export function makeVoiceProgram(
             }
             if (match.remainder.length > 0) {
               // Spoke wake-word and command together in one breath
-              yield* executeAgentUtterance(match.remainder)
+              yield* executeAgentUtterance(match.remainder, heard)
               return
             } else {
               // Spoke only the wake-phrase
@@ -947,7 +967,7 @@ export function makeVoiceProgram(
             // Already awake: check if user repeated the wake-word
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
-            yield* executeAgentUtterance(commandText)
+            yield* executeAgentUtterance(commandText, heard)
             /*
              * Si torna a dormire solo se non è rimasta una domanda aperta.
              * Altrimenti la risposta dell'utente — che arriva un secondo
@@ -959,12 +979,14 @@ export function makeVoiceProgram(
         }
 
         // Standard agent mode (toggle)
-        yield* executeAgentUtterance(trimmed)
+        yield* executeAgentUtterance(trimmed, heard)
       })
     }
 
     /* Events taken off the stream whose handling has not finished; see `isIdle`. */
     let handling = 0
+    /* The heard sentence being handled, so the next one can wait its turn. */
+    let utteranceFiber: Fiber.RuntimeFiber<void, never> | null = null
 
     // Stream consumption loop for continuous speech recognition events
     const recognitionLoop = Stream.runForEach(transcriber.events, (ev) =>
@@ -997,7 +1019,25 @@ export function makeVoiceProgram(
               }
               break
             }
-            yield* processUtterance(ev.event.text, true)
+            /*
+             * Forked, so a turn does not hold the microphone hostage. Handled
+             * in line, a sentence said while the agent thought waited for the
+             * whole turn: «annulla» arrived after the answer, and whatever the
+             * television said in the meantime was run as the next request.
+             * Order is kept — the next sentence waits for the one before —
+             * except while that one is thinking, which is exactly when a
+             * sentence must be looked at straight away.
+             */
+            const previous = utteranceFiber
+            if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
+            handling++
+            utteranceFiber = yield* Effect.forkIn(
+              processUtterance(ev.event.text, true, false, ev.event.confidence).pipe(
+                Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
+                Effect.ensuring(Effect.sync(() => handling--)),
+              ),
+              programScope,
+            )
             break
           }
           case "error": {
@@ -1068,7 +1108,13 @@ export function makeVoiceProgram(
       }),
 
       isIdle: Effect.gen(function* () {
-        if (handling > 0) return false
+        /*
+         * An agent turn or a plan in progress is not words still on their way:
+         * a stop that waited for it held the microphone open for up to the
+         * whole drain limit, and then left the turn running. Closing the
+         * program's scope stops it instead.
+         */
+        if (handling > 0 && !(currentState.status === "executing" && agentAbort)) return false
         return transcriber.idle ? yield* transcriber.idle : true
       }),
     }

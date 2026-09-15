@@ -744,6 +744,77 @@ describe("engine/agent answers what the grammar does not know", () => {
     })
   })
 
+  describe("heard while the agent is thinking: only a stop or a real request ends the turn", () => {
+    async function thinking() {
+      const host = new MockVoiceHost()
+      const asked: string[] = []
+      let aborted = 0
+      ;(host as VoiceHost).askAgent = (request) =>
+        new Promise((resolve) => {
+          asked.push(request.text)
+          request.signal?.addEventListener("abort", () => {
+            aborted++
+            resolve({ ok: false, text: "" })
+          })
+        })
+      const transcriber = createFakeTranscriber()
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      await engine.start()
+      transcriber.emit("raccontami la storia di Roma in tre frasi", true)
+      await new Promise((r) => setTimeout(r, 20))
+      expect(engine.status()).toBe("executing")
+      const hear = async (text: string, confidence?: number) => {
+        transcriber.emit(text, true, confidence)
+        await new Promise((r) => setTimeout(r, 20))
+      }
+      return { host, asked, engine, hear, aborted: () => aborted }
+    }
+
+    test("«ok», «mh», a two-word fragment and a sentence the recogniser is unsure of are ignored, and shown as ignored", async () => {
+      const { asked, engine, hear, aborted } = await thinking()
+      await hear("ok")
+      await hear("mh")
+      await hear("sì")
+      await hear("e poi")
+      await hear("e adesso passiamo alle previsioni del tempo per domani", 0.3)
+
+      expect(aborted()).toBe(0)
+      expect(asked).toHaveLength(1)
+      expect(engine.status()).toBe("executing")
+      const ignored = engine.history().filter((entry) => entry.kind === "action" && entry.label.startsWith("Ignorato mentre penso"))
+      expect(ignored).toHaveLength(5)
+      await engine.stop()
+    })
+
+    test("closing the microphone mid-turn stops the turn instead of waiting for it", async () => {
+      const { engine, aborted } = await thinking()
+      const started = Date.now()
+      await engine.stop()
+      expect(aborted()).toBe(1)
+      expect(Date.now() - started).toBeLessThan(1000)
+    })
+
+    test("«annulla» said aloud stops the turn at once, not after the answer", async () => {
+      const { host, engine, hear, aborted } = await thinking()
+      await hear("annulla")
+
+      expect(aborted()).toBe(1)
+      expect(engine.status()).toBe("idle")
+      expect(engine.lastSpoken()).toBe("Ho fermato la richiesta precedente.")
+      expect(host.calls.filter((call) => call.method === "runCommand")).toHaveLength(0)
+      await engine.stop()
+    })
+
+    test("a real request stops the turn and is carried out", async () => {
+      const { host, engine, hear, aborted } = await thinking()
+      await hear("apri la tavolozza")
+
+      expect(aborted()).toBe(1)
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
+      await engine.stop()
+    })
+  })
+
   test("a known command never reaches the agent", async () => {
     const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
     await engine.start()
