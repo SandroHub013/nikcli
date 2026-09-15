@@ -336,6 +336,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           if (!session) return
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
+          // …and a turn of its own, after which a repeated `@ade` line is a new request.
+          if (data.includes("\r")) deps.panels.newTurn(current().id)
           if (data.includes("\r") && current().status === "idle") {
             deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
           }

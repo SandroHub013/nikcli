@@ -742,6 +742,8 @@ export function Workbench() {
   const handlePanelRequest = async (paneId: string, line: string) => {
     const handled = await panels.handle(line, paneId)
     if (!handled) return
+    // A skipped line is said in the transcript only: typed back, the TUI would redraw it.
+    if ("skipped" in handled) return appendLine(paneId, handled.skipped, "note")
     // Written to the transcript too, because what an agent did to a panel is
     // something the user has to be able to see afterwards.
     appendLine(paneId, handled.reply, "note")
@@ -815,7 +817,10 @@ export function Workbench() {
      */
     const bracketed = paneId !== undefined && bracketedPaste.get(paneId) === true
     // A message that quotes an `@ade` line must not run it when the TUI echoes it.
-    if (paneId !== undefined) panels.typed(paneId, line)
+    if (paneId !== undefined) {
+      panels.newTurn(paneId)
+      panels.typed(paneId, line)
+    }
     const typedAt = Date.now()
     session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
     if (bracketed) {
@@ -1190,6 +1195,7 @@ export function Workbench() {
       if (activity.cwd && pane) void followCwd(host, pane.id, activity.cwd)
       const next = pane ? statusFromActivity(pane.status, activity, workingSince.get(paneId)) : undefined
       if (next === "working") {
+        panels.newTurn(paneId, activity.at)
         workingSince.set(paneId, Date.now())
         setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
       } else if (next === "idle") {

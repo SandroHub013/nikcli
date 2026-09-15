@@ -11,7 +11,7 @@ const handler = (detail: string): PanelHandler => ({
 
 const ask = async (router: ReturnType<typeof createPanelRouter>) => {
   const handled = await router.handle("@ade model state")
-  return handled?.reply ?? ""
+  return handled && "reply" in handled ? handled.reply : ""
 }
 
 describe("panes of one kind behind one name", () => {

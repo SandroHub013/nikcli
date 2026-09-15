@@ -29,11 +29,20 @@ export interface PanelHandler {
   run(request: PanelRequest): Promise<PanelOutcome>
 }
 
-export interface HandledRequest {
-  readonly request: PanelRequest
-  /** The single line to type back into the session that asked. */
-  readonly reply: string
-}
+export type HandledRequest =
+  | {
+      readonly request: PanelRequest
+      /** The single line to type back into the session that asked. */
+      readonly reply: string
+    }
+  | {
+      readonly request: PanelRequest
+      /**
+       * The request was not run, and this says why, for the transcript only.
+       * Typing it back would make the TUI redraw, and the line come again.
+       */
+      readonly skipped: string
+    }
 
 export interface PanelRouter {
   register(panel: string, handler: PanelHandler): void
@@ -49,23 +58,38 @@ export interface PanelRouter {
    * Reads one line of agent output from session `from`.
    *
    * Resolves to `undefined` when the line was not a request at all, which is
-   * almost every line — the caller must not treat that as a failure. Also
-   * `undefined` for a line that is text ADE typed into that session coming
-   * back as echo, and for a request the session showed within
-   * `REPEAT_WINDOW_MS`: a TUI redraws its screen, and every redraw hands the
-   * same line to `onLine` again.
+   * almost every line — the caller must not treat that as a failure.
+   *
+   * Not run, and answered with `skipped` instead: text ADE typed into that
+   * session in the last `ECHO_WINDOW_MS` coming back as echo, and a request
+   * the session showed within `REPEAT_WINDOW_MS` of this turn — a TUI
+   * redraws its screen, and every redraw hands the same line to `onLine`
+   * again. Only the first skip of a run says so; the rest are `undefined`.
    */
   handle(line: string, from?: string, now?: number): Promise<HandledRequest | undefined>
   /** Records text ADE typed into session `from`, so its echo is not read as the agent's. */
   typed(from: string, text: string, now?: number): void
+  /**
+   * Session `from` started a turn of its own: the user or a message typed
+   * into it, or its hook said busy. A request it repeats from now on is a new
+   * one. Ignored within `ECHO_WINDOW_MS` of a panel reply, whose typing is
+   * what started that turn and whose redraw would bring the old line back.
+   */
+  newTurn(from: string, now?: number): void
   /** The lines that tell a session a panel exists. Empty when it does not. */
   greeting(panel: string): string[]
 }
 
 /** A request line seen again this soon after its last sighting is a redraw, not a new request. */
 export const REPEAT_WINDOW_MS = 30_000
-/** How long text ADE typed into a session can come back as its echo. */
-export const ECHO_WINDOW_MS = 10 * 60_000
+/**
+ * How long text ADE typed into a session can come back as its echo.
+ *
+ * Seconds, not minutes: a message that quoted `@ade model state` ten minutes
+ * ago must not swallow the agent writing it now. A TUI that keeps redrawing
+ * the echo past this is caught as a repeat, since the echo was seen.
+ */
+export const ECHO_WINDOW_MS = 5_000
 /** The most typed texts remembered per session. */
 const MAX_TYPED = 32
 
@@ -74,20 +98,45 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim()
 export function createPanelRouter(): PanelRouter {
   const handlers = new Map<string, PanelHandler>()
   const typedBy = new Map<string, { text: string; at: number }[]>()
-  const seenBy = new Map<string, Map<string, number>>()
+  /** Each request line a session showed this turn: when last, and whether its skip was already said. */
+  const seenBy = new Map<string, Map<string, { at: number; noted: boolean }>>()
+  const repliedAt = new Map<string, number>()
 
-  /** Whether `raw` is part of something ADE typed into `from`, echoed or redrawn by its TUI. */
+  /** Whether `raw` is part of something ADE just typed into `from`, echoed by its TUI. */
   const isEcho = (from: string, raw: string, now: number) =>
     (typedBy.get(from) ?? []).some((entry) => now - entry.at < ECHO_WINDOW_MS && entry.text.includes(raw))
 
-  /** Whether `raw` was already seen in `from` within the window; each sighting restarts it. */
-  const isRepeat = (from: string, raw: string, now: number) => {
+  const seenIn = (from: string, now: number) => {
     let seen = seenBy.get(from)
     if (!seen) seenBy.set(from, (seen = new Map()))
-    const last = seen.get(raw)
-    seen.set(raw, now)
-    if (seen.size > 64) for (const [key, at] of seen) if (now - at >= REPEAT_WINDOW_MS) seen.delete(key)
-    return last !== undefined && now - last < REPEAT_WINDOW_MS
+    if (seen.size > 64) for (const [key, entry] of seen) if (now - entry.at >= REPEAT_WINDOW_MS) seen.delete(key)
+    return seen
+  }
+
+  const answer = async (request: PanelRequest): Promise<string> => {
+    const handler = handlers.get(request.panel)
+    if (!handler) {
+      const open = [...handlers.keys()]
+      const detail =
+        open.length === 0
+          ? "nessun pannello aperto"
+          : `pannelli aperti: ${open.join(", ")}`
+      return formatReply(request, { ok: false, reason: `«${request.panel}» non è aperto; ${detail}` })
+    }
+
+    try {
+      return formatReply(request, await handler.run(request))
+    } catch (error) {
+      /*
+       * A handler that throws still gets an answer typed back.
+       *
+       * The agent is waiting on a line. Letting the exception escape would
+       * leave it waiting forever, which looks from the outside exactly like
+       * an agent that has stopped thinking.
+       */
+      const reason = error instanceof Error && error.message ? error.message : "non riuscito"
+      return formatReply(request, { ok: false, reason })
+    }
   }
 
   return {
@@ -110,35 +159,31 @@ export function createPanelRouter(): PanelRouter {
       typedBy.set(from, entries.slice(-MAX_TYPED))
     },
 
+    newTurn(from, now = Date.now()) {
+      if (now - (repliedAt.get(from) ?? -Infinity) < ECHO_WINDOW_MS) return
+      seenBy.delete(from)
+    },
+
     async handle(line, from = "", now = Date.now()) {
       const request = parseRequest(line)
       if (!request) return undefined
       const raw = normalize(request.raw)
-      if (isEcho(from, raw, now) || isRepeat(from, raw, now)) return undefined
-
-      const handler = handlers.get(request.panel)
-      if (!handler) {
-        const open = [...handlers.keys()]
-        const detail =
-          open.length === 0
-            ? "nessun pannello aperto"
-            : `pannelli aperti: ${open.join(", ")}`
-        return { request, reply: formatReply(request, { ok: false, reason: `«${request.panel}» non è aperto; ${detail}` }) }
+      const seen = seenIn(from, now)
+      const last = seen.get(raw)
+      const echo = isEcho(from, raw, now)
+      const repeat = last !== undefined && now - last.at < REPEAT_WINDOW_MS
+      if (echo || repeat) {
+        seen.set(raw, { at: now, noted: true })
+        if (repeat && last?.noted) return undefined
+        const why = echo
+          ? "è l'eco di un testo che ADE ha appena scritto nella sessione"
+          : `è uguale a una di meno di ${REPEAT_WINDOW_MS / 1000} s fa in questo turno, come nel ridisegno di una TUI`
+        return { request, skipped: `Riga non eseguita: ${raw} — ${why}` }
       }
-
-      try {
-        return { request, reply: formatReply(request, await handler.run(request)) }
-      } catch (error) {
-        /*
-         * A handler that throws still gets an answer typed back.
-         *
-         * The agent is waiting on a line. Letting the exception escape would
-         * leave it waiting forever, which looks from the outside exactly like
-         * an agent that has stopped thinking.
-         */
-        const reason = error instanceof Error && error.message ? error.message : "non riuscito"
-        return { request, reply: formatReply(request, { ok: false, reason }) }
-      }
+      seen.set(raw, { at: now, noted: false })
+      const reply = await answer(request)
+      repliedAt.set(from, now)
+      return { request, reply }
     },
 
     greeting(panel) {
