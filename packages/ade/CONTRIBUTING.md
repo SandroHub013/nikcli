@@ -89,7 +89,7 @@ all of these hold:
 2. the newest commit on `feat/ade` is at least 2 hours old, so a series being
    pushed is not caught halfway;
 3. `ade-checks` passes on that exact commit;
-4. no earlier ADE release is still a draft.
+4. no earlier ADE release is still building.
 
 It then tags `ade-vX.Y.Z` and runs `ade-release.yml`, which builds macOS,
 Windows and Linux and publishes only if every platform succeeds. Installed

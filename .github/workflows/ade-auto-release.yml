@@ -10,7 +10,7 @@ name: ade-auto-release
 #     `release:skip`, keeps it from causing one; `release:major` forces a major;
 #   - the newest commit must be at least `min_age_hours` old;
 #   - `ade-checks` must pass on that exact commit;
-#   - no other ADE release may still be a draft (one is building).
+#   - no `ade-release` run may still be building.
 #
 # The tag is pushed with GITHUB_TOKEN, and a tag pushed that way starts no
 # workflow, so `ade-release` is called here directly instead of relying on
@@ -42,6 +42,10 @@ jobs:
   plan:
     if: github.repository == 'SandroHub013/nikcli'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     outputs:
       release: ${{ steps.plan.outputs.release }}
       version: ${{ steps.plan.outputs.version }}
@@ -76,6 +80,8 @@ jobs:
             done
           done
 
+      # Runs, not drafts: a read-only token cannot see draft releases, and a
+      # draft left by a failed build must not block every release after it.
       - name: A release still building
         id: busy
         shell: bash
@@ -83,9 +89,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          DRAFTS="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName,isDraft \
-            --jq '[.[] | select(.isDraft and (.tagName | startswith("ade-v")))] | length')"
-          echo "drafts=$DRAFTS" >> "$GITHUB_OUTPUT"
+          BUSY=0
+          for status in queued in_progress waiting; do
+            N="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ade-release.yml --status "$status" \
+              --limit 20 --json databaseId --jq 'length')"
+            BUSY=$((BUSY + N))
+          done
+          echo "drafts=$BUSY" >> "$GITHUB_OUTPUT"
 
       - name: Plan
         id: plan
@@ -97,7 +107,7 @@ jobs:
           set -euo pipefail
           if [ "$DRAFTS" != "0" ]; then
             echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "an ADE release is still a draft; trying again next time" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "an ADE release is still building; trying again next time" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           bun packages/ade/script/release-plan.ts plan --min-age-hours "$MIN_AGE" \
