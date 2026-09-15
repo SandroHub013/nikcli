@@ -14,6 +14,8 @@ export const USER = "utente"
 export type SheetKey =
   | { readonly kind: "pick"; readonly index: number }
   | { readonly kind: "submit" }
+  /** Enter with nothing chosen: nothing is recorded, the window says what to do. */
+  | { readonly kind: "need-choice" }
   | { readonly kind: "close" }
   | { readonly kind: "next" }
   | { readonly kind: "previous" }
@@ -22,16 +24,22 @@ export type SheetKey =
  * A key pressed in the window. `inText` is true while the note has focus:
  * there digits and arrows are typing, Enter is a new line, and only
  * Ctrl/⌘+Enter submits.
+ *
+ * `picked` is whether the user chose an option in this window. A plain Enter
+ * records only then: a stray Enter on a freshly opened window must not answer
+ * a decision nobody looked at.
  */
 export function sheetKey(
   event: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean },
   optionCount: number,
   inText: boolean,
+  picked: boolean,
 ): SheetKey | undefined {
   if (event.key === "Escape") return { kind: "close" }
   if (event.key === "Enter") {
     if (event.ctrlKey || event.metaKey) return { kind: "submit" }
-    return inText ? undefined : { kind: "submit" }
+    if (inText) return undefined
+    return picked ? { kind: "submit" } : { kind: "need-choice" }
   }
   if (inText || event.ctrlKey || event.metaKey || event.altKey) return undefined
   if (/^[1-9]$/.test(event.key)) {

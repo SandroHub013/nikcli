@@ -7,19 +7,24 @@ import { foldDecisions } from "./state"
 const decision = { k: "D21", options: [{ label: "A · Rifinitura" }, { label: "B · Estensioni" }] }
 
 describe("the window's keys", () => {
-  test("digits pick, Enter records, Esc closes, arrows move", () => {
-    expect(sheetKey({ key: "2" }, 2, false)).toEqual({ kind: "pick", index: 1 })
-    expect(sheetKey({ key: "3" }, 2, false)).toBeUndefined()
-    expect(sheetKey({ key: "Enter" }, 2, false)).toEqual({ kind: "submit" })
-    expect(sheetKey({ key: "Escape" }, 2, true)).toEqual({ kind: "close" })
-    expect(sheetKey({ key: "ArrowRight" }, 2, false)).toEqual({ kind: "next" })
+  test("digits pick, Enter records a choice, Esc closes, arrows move", () => {
+    expect(sheetKey({ key: "2" }, 2, false, false)).toEqual({ kind: "pick", index: 1 })
+    expect(sheetKey({ key: "3" }, 2, false, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 2, false, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "Escape" }, 2, true, false)).toEqual({ kind: "close" })
+    expect(sheetKey({ key: "ArrowRight" }, 2, false, false)).toEqual({ kind: "next" })
+  })
+
+  test("a stray Enter with nothing chosen records nothing", () => {
+    expect(sheetKey({ key: "Enter" }, 2, false, false)).toEqual({ kind: "need-choice" })
+    expect(sheetKey({ key: "Enter" }, 0, false, false)).toEqual({ kind: "need-choice" })
   })
 
   test("in the note, keys are typing; only Ctrl+Enter records", () => {
-    expect(sheetKey({ key: "2" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "Enter" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "ArrowLeft" }, 2, true)).toBeUndefined()
-    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true)).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "2" }, 2, true, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 2, true, true)).toBeUndefined()
+    expect(sheetKey({ key: "ArrowLeft" }, 2, true, false)).toBeUndefined()
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true, false)).toEqual({ kind: "submit" })
   })
 })
 

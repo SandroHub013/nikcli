@@ -25,7 +25,26 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
   let surface: HTMLDivElement | undefined
   let note: HTMLTextAreaElement | undefined
 
-  onMount(() => surface?.focus())
+  /*
+   * Nothing chosen when the window opens, whatever a draft in the panel held:
+   * the choice has to be made here, so Enter never records one by accident.
+   * The note is kept.
+   */
+  const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
+  const [needChoice, setNeedChoice] = createSignal<string>()
+  const pick = (k: string, picked: number) => {
+    props.hub.setDraft(k, { ...props.hub.draft(k), picked })
+    setChosenHere((keys) => new Set(keys).add(k))
+    setNeedChoice(undefined)
+  }
+
+  onMount(() => {
+    for (const decision of open()) {
+      const draft = props.hub.draft(decision.k)
+      if (draft.picked !== undefined) props.hub.setDraft(decision.k, { ...draft, picked: undefined })
+    }
+    surface?.focus()
+  })
 
   const submit = async () => {
     const decision = current()
@@ -35,13 +54,15 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
 
   const onKeyDown = (event: KeyboardEvent) => {
     const decision = current()
-    const action = sheetKey(event, decision?.options.length ?? 0, event.target === note)
+    const picked = Boolean(decision && chosenHere().has(decision.k) && props.hub.draft(decision.k).picked !== undefined)
+    const action = sheetKey(event, decision?.options.length ?? 0, event.target === note, picked)
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
     if (action.kind === "close") props.onClose()
     else if (!decision) return
-    else if (action.kind === "pick") props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked: action.index })
+    else if (action.kind === "pick") pick(decision.k, action.index)
+    else if (action.kind === "need-choice") setNeedChoice(decision.k)
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
@@ -93,11 +114,18 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                 picked={props.hub.draft(decision.k).picked}
                 note={props.hub.draft(decision.k).note}
                 busy={props.hub.busy(decision.k)}
-                problem={props.hub.problem(decision.k)}
+                problem={
+                  props.hub.problem(decision.k) ??
+                  (needChoice() === decision.k
+                    ? decision.options.length > 0
+                      ? "Nessuna scelta: premi 1–9 o clicca un'opzione, poi Invio"
+                      : "Scrivi la risposta nella nota, poi Ctrl+Invio"
+                    : undefined)
+                }
                 submitLabel={open().length > 1 ? "Registra e avanti" : "Registra"}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={props.hub.register.now()}
-                onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
+                onPick={(picked) => pick(decision.k, picked)}
                 onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
                 onSubmit={() => void submit()}
                 onDefer={(until) => void props.hub.defer(decision, until).then((done) => done && surface?.focus())}
@@ -108,7 +136,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
         </div>
 
         <footer data-slot="sheet-foot">
-          <span>1–9 sceglie · Invio registra · ← → scorre · Esc chiude</span>
+          <span>1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude</span>
           <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
             <span data-tone="warn">
               {queued() === 1 ? "1 risposta" : `${queued()} risposte`} in coda:{" "}
