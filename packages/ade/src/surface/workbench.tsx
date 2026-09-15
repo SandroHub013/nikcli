@@ -163,6 +163,7 @@ import {
   shouldNudge,
   type OpenRequest,
   formatDelivery,
+  isFree,
   formatLateReply,
   formatRequest,
   parseMessage,
@@ -643,10 +644,31 @@ export function Workbench() {
     }
   }
 
-  /** Notes held for a busy recipient, whose sender has already been told. */
-  const heldNotes = new Set<string>()
-  /** The longest a note waits for its recipient's turn to end. */
-  const NOTE_HOLD_MS = 10 * 60_000
+  /** Messages held for a busy recipient, whose sender has already been told. */
+  const held = new Set<string>()
+  /** Late replies and updates for a caller that is busy: typed when its turn ends. */
+  const heldLines: { paneId: string; text: string }[] = []
+
+  /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
+  const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
+    const isHooked = hooked(paneId)
+    let activity = activityOf.get(paneId)
+    const nonce = paneNonces.get(paneId)
+    if (isHooked && nonce && host.readAgentActivity) {
+      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+      activity = parseActivity(await host.readAgentActivity(nonce), resumeId) ?? activity
+      if (activity) activityOf.set(paneId, activity)
+    }
+    return isFree(
+      {
+        hooked: isHooked,
+        permissionPending: Boolean(permissions()[paneId]),
+        ...(activity ? { activity } : {}),
+        ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
+      },
+      Date.now(),
+    )
+  }
 
   /** Messages taken from the outbox and not delivered yet, oldest first. */
   const mailQueue: { id: string; message: Message; at: number }[] = []
@@ -892,6 +914,15 @@ export function Workbench() {
       else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }
 
+    for (const item of [...heldLines]) {
+      const session = running.get(item.paneId)
+      if (!session) heldLines.splice(heldLines.indexOf(item), 1)
+      else if (await freeNow(host, item.paneId)) {
+        heldLines.splice(heldLines.indexOf(item), 1)
+        void typeLine(session, item.text)
+      }
+    }
+
     for (const item of [...mailQueue]) {
       const done = await deliverOne(host, item.id, item.message)
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
@@ -966,9 +997,8 @@ export function Workbench() {
       // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
-          const session = caller && running.get(caller.id)
-          if (text == null || !session || permissions()[caller.id]) return
-          void typeLine(session, formatLateReply(message.ref, text, sender))
+          // Held until the caller's turn ends, like every other message.
+          if (text != null && caller && running.has(caller.id)) heldLines.push({ paneId: caller.id, text: formatLateReply(message.ref, text, sender) })
         })
       }, CLAIM_WINDOW_MS)
       if (request?.autoClose) {
@@ -1003,9 +1033,7 @@ export function Workbench() {
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
-          const session = caller && running.get(caller.id)
-          if (text == null || !session || permissions()[caller.id]) return
-          void typeLine(session, text)
+          if (text != null && caller && running.has(caller.id)) heldLines.push({ paneId: caller.id, text })
         })
       }, CLAIM_WINDOW_MS)
       return true
@@ -1289,6 +1317,11 @@ export function Workbench() {
     }
     const session = running.get(target.pane.id)
     if (!session) {
+      // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
+      if (held.delete(id)) {
+        if (message.kind === "ask") await settle(host, id, `[ade-msg] errore: la sessione "${target.pane.title}" si è chiusa prima di ricevere la richiesta ${id}`)
+        return true
+      }
       await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
       return true
     }
@@ -1296,26 +1329,16 @@ export function Workbench() {
     if (permissions()[target.pane.id]) return false
 
     /*
-     * A note is not something anyone is blocked on, so it waits for the
-     * recipient's turn to end instead of landing in the middle of its work,
-     * where it costs a detour and a turn. Only where the turn hooks can say
-     * the session is busy, and never for longer than NOTE_HOLD_MS. The sender
-     * is told at once, so it has no reason to send again.
+     * In the background: a note or a request waits for the recipient's turn
+     * to end instead of landing in the middle of its work (see `isFree`). The
+     * sender is told at once, so it neither resends nor stops waiting.
      */
-    if (message.kind === "send" && host.readAgentActivity) {
-      const nonce = paneNonces.get(target.pane.id)
-      const queuedAt = mailQueue.find((item) => item.id === id)?.at ?? Date.now()
-      if (nonce && hooked(target.pane.id) && Date.now() - queuedAt < NOTE_HOLD_MS) {
-        const resumeId = wb().panes.find((pane) => pane.id === target.pane.id)?.resumeId
-        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
-        if (activity?.state === "busy") {
-          if (!heldNotes.has(id)) {
-            heldNotes.add(id)
-            await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
-          }
-          return false
-        }
+    if (!(await freeNow(host, target.pane.id))) {
+      if (!held.has(id)) {
+        held.add(id)
+        await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
       }
+      return false
     }
 
     const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
@@ -1347,8 +1370,8 @@ export function Workbench() {
     const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
     appendLine(target.pane.id, `${what} ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
     if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
-    // A held note's sender was answered when it was held, and has stopped listening since.
-    if (heldNotes.delete(id)) return true
+    // A held message's sender was answered when it was held, and has stopped listening since.
+    if (held.delete(id)) return true
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
     return true
   }

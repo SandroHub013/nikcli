@@ -4,6 +4,7 @@ import {
   formatDelivery,
   formatLateReply,
   formatRequest,
+  isFree,
   parseMessage,
   resolveAgent,
   resolveTarget,
@@ -107,6 +108,30 @@ test("resolveAgent accepts the id, the id without -code, and the label", () => {
   expect(resolveAgent(agents, "Claude Code")).toEqual({ id: "claude-code" })
   expect(resolveAgent(agents, "CODEX")).toEqual({ id: "codex" })
   expect("error" in resolveAgent(agents, "gemini")).toBe(true)
+})
+
+describe("when a session can be written to", () => {
+  const now = 10_000_000
+  test("a hooked session is free unless its turn is running", () => {
+    expect(isFree({ hooked: true, permissionPending: false }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 5 } }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 5 }, lastOutputAt: now - 90_000 }, now)).toBe(false)
+  })
+
+  test("a busy that never ended, in a silent session, stops holding messages", () => {
+    const busy = { state: "busy" as const, at: now - 31 * 60_000 }
+    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 120_000 }, now)).toBe(true)
+    expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 1000 }, now)).toBe(false)
+  })
+
+  test("without hooks, a few quiet seconds end the turn", () => {
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 500 }, now)).toBe(false)
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 5000 }, now)).toBe(true)
+  })
+
+  test("a permission prompt is never free", () => {
+    expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
+  })
 })
 
 describe("what lands in the terminal", () => {

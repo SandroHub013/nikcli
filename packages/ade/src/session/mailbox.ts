@@ -404,6 +404,35 @@ export interface Activity {
   at: number
 }
 
+/** A CLI without turn hooks counts as free once it has printed nothing for this long. */
+export const QUIET_FREE_MS = 4000
+/** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
+export const STALE_BUSY_MS = 30 * 60_000
+
+/**
+ * Whether text can be typed into a session without interrupting it.
+ *
+ * Messages between sessions travel in the background: whatever is typed into
+ * a session in the middle of a turn is read as the user speaking, pulls the
+ * agent off its task and costs a turn. So everything waits for the turn to
+ * end. With turn hooks the agent says so itself; without them (codex, agy) a
+ * working TUI keeps repainting its spinner, and a few quiet seconds are the
+ * end of the turn. A standing permission prompt would take the Enter as its
+ * answer, so it is never free.
+ */
+export function isFree(
+  target: { hooked: boolean; permissionPending: boolean; activity?: Activity; lastOutputAt?: number },
+  now: number,
+): boolean {
+  if (target.permissionPending) return false
+  const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
+  if (target.hooked) {
+    if (target.activity?.state !== "busy") return true
+    return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
+  }
+  return quietFor >= QUIET_FREE_MS
+}
+
 /**
  * The activity a hook wrote, if it is about this pane's conversation.
  *
