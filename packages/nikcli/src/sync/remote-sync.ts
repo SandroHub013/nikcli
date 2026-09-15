@@ -104,8 +104,11 @@ export namespace RemoteSync {
   }
 
   function loadEvent(eventId: string): SyncEventRecord | undefined {
-    const db = Database.syncDb()
-    const row = db.select().from(syncEvent).where(eq(syncEvent.id, eventId)).get()
+    const row = Effect.runSync(
+      Database.query("RemoteSync.loadEvent", (db) =>
+        db.select().from(syncEvent).where(eq(syncEvent.id, eventId)).get(),
+      ),
+    )
     if (!row) return undefined
     const record: SyncEventRecord = {
       id: row.id,

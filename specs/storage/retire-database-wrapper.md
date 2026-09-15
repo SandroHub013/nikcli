@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                                                                         |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Status  | **In progress** — group 1 landed 2026-09-11; groups 3-4 under way 2026-09-15                                                  |
+| Status  | **Groups 1-4 complete** — 2026-09-15: `Database.syncDb()` has no callers left in `src`                                        |
 | Scope   | `packages/nikcli/src/database/database.ts` and its 38 consumers                                                               |
 | Buys    | One database access shape, so a repository's failure mode is visible in its type                                              |
 | Depends | Nothing. The adapter dependency is void — see below.                                                                          |
@@ -36,10 +36,59 @@ stays synchronous, and the failure surfaces as `Database.QueryError` naming the 
   the total is only a ceiling, because a converted repository trades a `syncDb` reference for a
   `query` reference and often an executor parameter too.
 
-### Remaining
+### Complete — 2026-09-15
 
-`src/sync/*` (7 files), `src/session/{repo,message-repo,instruction-repo,pending,v2/entry-repo}.ts`,
-`src/{project,mobile,mission,loop,account,user,workspace}` and `src/server/httpapi/sync.ts`.
+`Database.syncDb()` has **no callers in `src`**. It was 32, across 28 modules. The function stays on
+the namespace for tests and tooling; `wrapper-inventory.test.ts` now gates `src` at zero, so a new
+module reaching for the process-global handle fails the suite.
+
+Every repository returns an Effect whose failure is `Database.QueryError`, and takes its executor as
+an optional parameter so it can join a transaction it was handed.
+
+Three shapes came out of it, and the distinction matters when reading the code:
+
+- **Repositories** are Effects end to end.
+- **Modules whose public surface is async** (`MobileAuth`, `Outbox`, `SyncStorage`, `UserDB`'s
+  `create`/`updateUser`) keep returning Promises and put the Effect boundary at the _statement_: a
+  small local `query` helper runs one synchronous query. `Outbox.drain` awaits a network push
+  between statements, so each of its five statements is its own query.
+- **Pure helpers stayed pure.** `SessionPending.canonical`, `UserDB.toPublic`, `isAdminEmail` and
+  `getAdminEmails` never touch the database; the mechanical pass wrapped some of them and that was
+  reverted. A pure function that grows a database executor is a regression.
+
+What did _not_ change: `bun:sqlite` is still the driver, the 28 migrations are untouched, and the
+transaction semantics in `transaction-semantics.test.ts` all still hold.
+
+### Measured
+
+The Effect boundary costs what the spec predicted: an identical call is `11.82µs` bare and
+`13.08µs` through `Database.query` + `runSync`, and `SessionRepo.get` lands at `13.75µs` against
+`13.64µs` for the drizzle call it wraps.
+
+The driver-level suite, best-of-three interleaved on the same machine, against the `0.41.0`
+baseline this work started from — this is the drizzle 1.0 bump, not the repository conversion, but
+it is the number that describes where the database layer now sits:
+
+|                       | before (0.41) |          now |          |
+| --------------------- | ------------: | -----------: | -------: |
+| get by pk             |       27.38µs |       7.66µs |     −72% |
+| list 20 ordered       |       55.63µs |      28.38µs |     −49% |
+| count(\*)             |        5.71µs |       2.44µs |     −57% |
+| inArray(10)           |       51.38µs |      24.90µs |     −52% |
+| two-column where      |       33.08µs |      16.52µs |     −50% |
+| messages of session   |       33.77µs |      17.64µs |     −48% |
+| insert one            |       25.64µs |      12.30µs |     −52% |
+| update by pk          |       10.89µs |       4.31µs |     −60% |
+| upsert (onConflict)   |       17.45µs |       6.85µs |     −61% |
+| transaction: 3 writes |       54.65µs |      23.53µs |     −57% |
+| **sum**               |  **315.58µs** | **144.53µs** | **−54%** |
+
+### The failure mode to know about
+
+An Effect that is built and never run is a silent no-op — no error, no write, and a test that only
+asserts a read will pass. This happened eight times during the conversion, twice in production code
+that the tests did not cover. A grep for repository calls that are neither `yield*`-ed nor passed to
+`runSync`/`runPromise` found all of them; keep it in reach when converting anything else.
 
 ## Goal
 

@@ -22,7 +22,7 @@ import { SRC, stripComments } from "../tui/tui-source"
  * call site. Before stripping, the removal of `effect` and `use` read as no
  * change at all.
  *
- * The total was raised from 85 to 250 deliberately. Groups 3 and 4 replace a
+ * The total was raised from 85 to 245 deliberately. Groups 3 and 4 replace a
  * synchronous call with an Effect-returning one, so a converted repository
  * trades a `syncDb` reference for a `query` reference and often gains a
  * `TxOrDb` parameter as well — the count goes up while the thing being
@@ -30,7 +30,7 @@ import { SRC, stripComments } from "../tui/tui-source"
  * gate below; the total stays only as a ceiling against unrelated growth.
  */
 const BASELINE = {
-  references: 250,
+  references: 245,
   files: 38,
   /** Group 1 removed both: the post-commit queue is handed to the transaction body. */
   effect: 0,
@@ -39,11 +39,11 @@ const BASELINE = {
   syncNative: 0,
   rawSql: 2,
   /**
-   * Groups 3-4: the synchronous singleton, being retired one repository at a
-   * time. Was 32 before the first conversion; twenty-four repositories have moved.
-   * This may fall and may not rise.
+   * Groups 3-4 are done: no production module reaches for the synchronous
+   * singleton. It was 32 call sites across 28 modules. `syncDb` itself stays
+   * on the namespace for tests and tooling; what is gated is `src`.
    */
-  syncDb: 8,
+  syncDb: 0,
 } as const
 
 const API = /Database\.[A-Za-z]+/g

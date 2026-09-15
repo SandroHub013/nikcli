@@ -263,8 +263,24 @@ export namespace Database {
   export function query<A>(operation: string, run: (db: TxOrDb) => A, executor?: TxOrDb): Effect.Effect<A, QueryError> {
     return Effect.try({
       try: () => run(executor ?? (syncDb() as TxOrDb)),
-      catch: (error) => new QueryError({ operation, message: errorMessage(error) }),
+      catch: (error) => new QueryError({ operation, message: describe(error) }),
     })
+  }
+
+  /**
+   * The message a reader needs, not the one the query builder throws.
+   *
+   * Drizzle wraps a failure in `DrizzleQueryError`, whose message is the SQL
+   * and its parameters — which says what was asked, never what went wrong. The
+   * SQLite error that actually explains it ("no such table", "database is
+   * locked", "UNIQUE constraint failed") is on `cause`, so it is folded in.
+   */
+  function describe(error: unknown): string {
+    const message = errorMessage(error)
+    const cause = error instanceof Error ? error.cause : undefined
+    if (!cause) return message
+    const reason = errorMessage(cause)
+    return reason && !message.includes(reason) ? `${reason} — ${message}` : message
   }
 
   /**

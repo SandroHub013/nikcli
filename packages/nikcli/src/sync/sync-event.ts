@@ -409,18 +409,22 @@ export namespace SyncEvent {
    */
   export function history(aggregateID: string, projectID?: string): HistoryEntry[] {
     const project = projectID ?? currentProject()
-    const rows = Database.syncDb()
-      .select({
-        id: syncEvent.id,
-        seq: syncEvent.seq,
-        type: syncEvent.type,
-        data: syncEvent.data,
-        timestamp: syncEvent.timestamp,
-      })
-      .from(syncEvent)
-      .where(and(eq(syncEvent.projectId, project), eq(syncEvent.aggregate, aggregateID)))
-      .orderBy(asc(syncEvent.seq))
-      .all()
+    const rows = Effect.runSync(
+      Database.query("SyncEvent.history", (db) =>
+        db
+          .select({
+            id: syncEvent.id,
+            seq: syncEvent.seq,
+            type: syncEvent.type,
+            data: syncEvent.data,
+            timestamp: syncEvent.timestamp,
+          })
+          .from(syncEvent)
+          .where(and(eq(syncEvent.projectId, project), eq(syncEvent.aggregate, aggregateID)))
+          .orderBy(asc(syncEvent.seq))
+          .all(),
+      ),
+    )
     return rows.map((row) => ({
       id: row.id,
       seq: row.seq,
