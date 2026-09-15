@@ -820,6 +820,41 @@ describe("engine/agent answers what the grammar does not know", () => {
       await engine.stop()
     })
 
+    test("a stopped turn that ends late does not send what was held for the turn that replaced it", async () => {
+      const host = new MockVoiceHost()
+      const asked: string[] = []
+      ;(host as VoiceHost).askAgent = (request) =>
+        new Promise((resolve) => {
+          asked.push(request.text)
+          // A real CLI takes a while to die: the stopped turn reports well after the stop.
+          request.signal?.addEventListener("abort", () => setTimeout(() => resolve({ ok: false, text: "", ran: true }), 80))
+        })
+      const transcriber = createFakeTranscriber()
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      await engine.start()
+      void engine.submitText("raccontami la storia di Roma")
+      await new Promise((r) => setTimeout(r, 20))
+      void engine.submitText("e invece dimmi quella di Atene")
+      await new Promise((r) => setTimeout(r, 20))
+      transcriber.emit(TV, true)
+      await new Promise((r) => setTimeout(r, 20))
+      transcriber.emit("invia questa", true)
+      await new Promise((r) => setTimeout(r, 150))
+
+      // Atene is still thinking: the held sentence waits for it, not for the stopped Roma.
+      expect(asked).toEqual(["raccontami la storia di Roma", "e invece dimmi quella di Atene"])
+      expect(engine.held()).toBe(TV)
+      await engine.stop()
+    })
+
+    test("«annulla la richiesta» said while thinking stops the turn", async () => {
+      const { engine, hear, aborted } = await thinking()
+      await hear("annulla la richiesta")
+      expect(aborted()).toBe(1)
+      expect(engine.status()).toBe("idle")
+      await engine.stop()
+    })
+
     test("another sentence drops the held one", async () => {
       const { asked, engine, hear, answer } = await thinking()
       await hear(TV)

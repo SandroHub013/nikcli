@@ -7,10 +7,14 @@ const typed = (text: string) => triageWhileThinking(parseUtterance(text), { type
 
 describe("dialog/while-thinking", () => {
   test("stop words stop, heard or typed", () => {
-    for (const text of ["annulla", "Stop.", "basta", "fermati", "lascia stare"]) {
+    for (const text of ["annulla", "Stop.", "basta", "fermati", "lascia stare", "annulla la richiesta", "ferma la domanda", "basta così nik", "interrompi pure", "lascia perdere la richiesta"]) {
       expect(heard(text)).toBe("stop")
       expect(typed(text)).toBe("stop")
     }
+  })
+
+  test("a stop word opening a longer sentence is not a stop", () => {
+    expect(heard("basta con le tasse sulla casa, dice il ministro")).toBe("hold")
   })
 
   test("a command the grammar knows is a request", () => {

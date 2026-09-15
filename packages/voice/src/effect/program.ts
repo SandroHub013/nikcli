@@ -445,8 +445,9 @@ export function makeVoiceProgram(
               } else {
                 const vError = outcomeResult.left
                 const msg = spokenMessage(vError)
-                options.onError?.(msg)
-                options.onOutcome?.({ success: false, spoken: msg, error: msg })
+                // Said once, by the dialogue below: an error line and an action
+                // line with the same sentence made three copies of it.
+                options.onOutcome?.({ success: false, spoken: "" })
                 yield* applyDialogEvent({
                   type: "command_failed",
                   error: msg,
@@ -534,6 +535,13 @@ export function makeVoiceProgram(
      * worst a misheard sentence can do is open sessions and cost tokens.
      * Closing and killing stay in the grammar, which still asks.
      */
+    /*
+     * What a turn came to: `false` not taken, `true` taken and finished,
+     * `"stopped"` ended by another sentence or a cancel — whose own handling
+     * owns what comes next, the held sentence included.
+     */
+    type Handled = boolean | "stopped"
+
     /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
     let agentAbort: AbortController | null = null
 
@@ -573,7 +581,7 @@ export function makeVoiceProgram(
       })
     }
 
-    function runPlan(utterance: string): Effect.Effect<boolean> {
+    function runPlan(utterance: string): Effect.Effect<Handled> {
       return Effect.gen(function* () {
         const complete = options.plan
         if (!complete) return false
@@ -620,7 +628,7 @@ export function makeVoiceProgram(
           return planUtterance(utterance, context, complete, { signal: abort.signal })
         })
         // Stopped while the model thought: whoever stopped it speaks next.
-        if (abort.signal.aborted) return true
+        if (abort.signal.aborted) return "stopped"
 
         /*
          * A failure to reach the model is not "non ho capito": one is the
@@ -682,7 +690,7 @@ export function makeVoiceProgram(
      * close it), with the subscription the user already pays for rather than
      * a key billed per request.
      */
-    function runAgent(utterance: string): Effect.Effect<boolean> {
+    function runAgent(utterance: string): Effect.Effect<Handled> {
       return Effect.gen(function* () {
         const askAgent = host.askAgent
         const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
@@ -719,7 +727,7 @@ export function makeVoiceProgram(
         if (agentAbort === abort) agentAbort = null
 
         // Cancelled while it worked: the user has moved on, so nothing is said.
-        if (abort.signal.aborted) return true
+        if (abort.signal.aborted) return "stopped"
 
         currentState = { ...currentState, status: "idle" }
         options.onStateChange?.(currentState)
@@ -916,7 +924,7 @@ export function makeVoiceProgram(
         if (parsed.outcome === "unknown" && openToModels) {
           const handled = yield* runAgent(trimmed)
           if (handled) {
-            yield* afterTurn()
+            if (handled !== "stopped") yield* afterTurn()
             return
           }
         }
@@ -924,7 +932,7 @@ export function makeVoiceProgram(
         if (parsed.outcome === "unknown" && openToModels && options.plan) {
           const handled = yield* runPlan(trimmed)
           if (handled) {
-            yield* afterTurn()
+            if (handled !== "stopped") yield* afterTurn()
             return
           }
         }

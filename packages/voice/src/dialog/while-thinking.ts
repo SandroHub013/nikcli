@@ -17,7 +17,13 @@ import type { ParseResult } from "../intent/parse"
 
 export type WhileThinking = { action: "stop" } | { action: "request" } | { action: "hold" } | { action: "ignore" }
 
-const STOP = /^(?:annulla(?: tutto)?|stop|basta|fermati|ferma(?: tutto)?|lascia (?:stare|perdere)|smetti)$/
+/*
+ * The stop word, and what people add to it: «annulla la richiesta», «fermati
+ * pure», «basta così nik». Only those additions — an open tail would make
+ * «basta con le tasse» from the television a stop.
+ */
+const STOP =
+  /^(?:annulla|stop|basta|fermati|ferma|smetti|interrompi|lascia (?:stare|perdere))(?: (?:(?:la|questa|quella|l) )?(?:richiesta|domanda|risposta|ricerca)| tutto| pure| cosi| subito| grazie| per favore| adesso| ora| nik| stop)*$/
 
 /* Sounds people make while listening; held, they would push a real sentence out. */
 const FILLER = /^(?:ok(?:ay)?|si|no|mh+|m+|eh+|ah+|uh+|ehm|boh|gia|vabb?e|va bene|grazie|certo|perfetto|bene|ciao)$/
