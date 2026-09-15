@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -32,14 +33,14 @@ describe("project SQL", () => {
       const { ProjectRepo } = await import("@/project/repo")
       Database.syncDb()
 
-      expect(ProjectRepo.get(info.id)?.name).toBe("sql project")
-      expect(ProjectRepo.list().map((row) => row.id)).toEqual([info.id])
-      expect(ProjectRepo.directories(info.id)).toEqual(directories)
+      expect(Effect.runSync(ProjectRepo.get(info.id))?.name).toBe("sql project")
+      expect(Effect.runSync(ProjectRepo.list()).map((row) => row.id)).toEqual([info.id])
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toEqual(directories)
 
       const projectSql = (await import("@/database/migration/20260814030000_project_sql")).default
       projectSql.up(Database.syncNative())
-      expect(ProjectRepo.list()).toHaveLength(1)
-      expect(ProjectRepo.directories(info.id)).toEqual(directories)
+      expect(Effect.runSync(ProjectRepo.list())).toHaveLength(1)
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toEqual(directories)
 
       expect(await fs.readFile(path.join(storage, "project", `${info.id}.json`), "utf8")).toContain(info.name)
       expect(await fs.readFile(path.join(storage, "project_directory", `${info.id}.json`), "utf8")).toContain(
@@ -55,14 +56,14 @@ describe("project SQL", () => {
       Database.syncDb()
 
       const info = projectInfo("proj_no_json")
-      ProjectRepo.upsert(info)
-      ProjectRepo.setDirectories(info.id, [{ directory: info.worktree }])
+      Effect.runSync(ProjectRepo.upsert(info))
+      Effect.runSync(ProjectRepo.setDirectories(info.id, [{ directory: info.worktree }]))
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(path.join(storage, "project"))).toBe(false)
       expect(existsSync(path.join(storage, "project_directory"))).toBe(false)
-      expect(ProjectRepo.get(info.id)?.name).toBe("sql project")
-      expect(ProjectRepo.directories(info.id)).toEqual([{ directory: info.worktree }])
+      expect(Effect.runSync(ProjectRepo.get(info.id))?.name).toBe("sql project")
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toEqual([{ directory: info.worktree }])
     })
   })
 
@@ -73,7 +74,7 @@ describe("project SQL", () => {
       Database.syncDb()
 
       const info = projectInfo("proj_trap")
-      ProjectRepo.upsert({ ...info, name: "sql-title" })
+      Effect.runSync(ProjectRepo.upsert({ ...info, name: "sql-title" }))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "project"), { recursive: true })
@@ -82,7 +83,7 @@ describe("project SQL", () => {
         JSON.stringify({ ...info, name: "json-title" }),
       )
 
-      expect(ProjectRepo.get(info.id)?.name).toBe("sql-title")
+      expect(Effect.runSync(ProjectRepo.get(info.id))?.name).toBe("sql-title")
     })
   })
 
@@ -93,15 +94,15 @@ describe("project SQL", () => {
       Database.syncDb()
 
       const info = projectInfo("proj_dirs")
-      ProjectRepo.upsert(info)
-      expect(ProjectRepo.directories(info.id)).toBeUndefined()
+      Effect.runSync(ProjectRepo.upsert(info))
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toBeUndefined()
 
-      ProjectRepo.setDirectories(info.id, [])
-      expect(ProjectRepo.directories(info.id)).toEqual([])
+      Effect.runSync(ProjectRepo.setDirectories(info.id, []))
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toEqual([])
 
-      ProjectRepo.upsert({ ...info, name: "renamed" })
-      expect(ProjectRepo.get(info.id)?.name).toBe("renamed")
-      expect(ProjectRepo.directories(info.id)).toEqual([])
+      Effect.runSync(ProjectRepo.upsert({ ...info, name: "renamed" }))
+      expect(Effect.runSync(ProjectRepo.get(info.id))?.name).toBe("renamed")
+      expect(Effect.runSync(ProjectRepo.directories(info.id))).toEqual([])
     })
   })
 })

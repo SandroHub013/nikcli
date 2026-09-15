@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { project } from "./project.sql"
 import type { Project } from "./project"
@@ -12,10 +13,6 @@ import type { Project } from "./project"
  * full-replace write of `Info` cannot clobber the directory list.
  */
 export namespace ProjectRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   type Executor = Database.TxOrDb
 
   function toRow(info: Project.Info) {
@@ -48,9 +45,15 @@ export namespace ProjectRepo {
     return values.filter((value): value is T => value !== undefined)
   }
 
-  export function get(id: string): Project.Info | undefined {
-    const row = db().select({ data: project.data }).from(project).where(eq(project.id, id)).get()
-    return row ? readInfo(row.data) : undefined
+  export function get(id: string, executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.get",
+      (db) => {
+        const row = db.select({ data: project.data }).from(project).where(eq(project.id, id)).get()
+        return row ? readInfo(row.data) : undefined
+      },
+      executor,
+    )
   }
 
   /**
@@ -61,66 +64,100 @@ export namespace ProjectRepo {
    * resolve, so a full-replace write must not carry the directory list
    * with it.
    */
-  export function upsert(info: Project.Info, executor: Executor = db()): void {
-    const row = toRow(info)
-    executor
-      .insert(project)
-      .values(row)
-      .onConflictDoUpdate({
-        target: project.id,
-        set: {
-          data: row.data,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-        },
-      })
-      .run()
+  export function upsert(info: Project.Info, executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.upsert",
+      (db) => {
+        const row = toRow(info)
+        db.insert(project)
+          .values(row)
+          .onConflictDoUpdate({
+            target: project.id,
+            set: {
+              data: row.data,
+              createdAt: row.createdAt,
+              updatedAt: row.updatedAt,
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
   /** Mutate-in-place, matching `Storage.update`. Throws when the row is missing. */
-  export function update(id: string, fn: (draft: Project.Info) => void): Project.Info {
-    const current = get(id)
-    if (!current) throw new Error(`Project not found: ${id}`)
-    const draft = structuredClone(current)
-    fn(draft)
-    upsert(draft)
-    return draft
+  export function update(
+    id: string,
+    fn: (draft: Project.Info) => void,
+    executor?: Executor,
+  ): Effect.Effect<Project.Info, Database.QueryError> {
+    return Effect.gen(function* () {
+      const current = yield* get(id, executor)
+      if (!current) throw new Error(`Project not found: ${id}`)
+      const draft = structuredClone(current)
+      fn(draft)
+      yield* upsert(draft, executor)
+      return draft
+    })
   }
 
   /** Id-ascending, matching the previous JSON key sort. */
-  export function list(): Project.Info[] {
-    const rows = db().select({ data: project.data }).from(project).orderBy(asc(project.id)).all()
-    return defined(rows.map((row) => readInfo(row.data)))
+  export function list(executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.list",
+      (db) => {
+        const rows = db.select({ data: project.data }).from(project).orderBy(asc(project.id)).all()
+        return defined(rows.map((row) => readInfo(row.data)))
+      },
+      executor,
+    )
   }
 
   /**
    * `undefined` means the column is still null (bootstrap). An empty array
    * is a stored empty list and must not re-bootstrap.
    */
-  export function directories(id: string): Project.Directory[] | undefined {
-    const row = db().select({ directories: project.directories }).from(project).where(eq(project.id, id)).get()
-    if (!row || row.directories == null) return undefined
-    try {
-      const parsed = JSON.parse(row.directories) as unknown
-      if (!Array.isArray(parsed)) return undefined
-      return parsed.filter((item): item is Project.Directory => {
-        return !!item && typeof item === "object" && typeof (item as Project.Directory).directory === "string"
-      })
-    } catch {
-      return undefined
-    }
+  export function directories(id: string, executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.directories",
+      (db) => {
+        const row = db.select({ directories: project.directories }).from(project).where(eq(project.id, id)).get()
+        if (!row || row.directories == null) return undefined
+        try {
+          const parsed = JSON.parse(row.directories) as unknown
+          if (!Array.isArray(parsed)) return undefined
+          return parsed.filter((item): item is Project.Directory => {
+            return !!item && typeof item === "object" && typeof (item as Project.Directory).directory === "string"
+          })
+        } catch {
+          return undefined
+        }
+      },
+      executor,
+    )
   }
 
-  export function setDirectories(id: string, items: Project.Directory[], executor: Executor = db()): void {
-    executor
-      .update(project)
-      .set({ directories: JSON.stringify(items) })
-      .where(eq(project.id, id))
-      .run()
+  export function setDirectories(id: string, items: Project.Directory[], executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.setDirectories",
+      (db) => {
+        db.update(project)
+          .set({ directories: JSON.stringify(items) })
+          .where(eq(project.id, id))
+          .run()
+      },
+      executor,
+    )
   }
 
   /** Test isolation: wipe every project row. Replaces a `["project"]` prefix delete. */
-  export function clear(): void {
-    db().delete(project).run()
+  export function clear(executor?: Executor) {
+    return Database.query(
+      "ProjectRepo.clear",
+      (db) => {
+        db.delete(project).run()
+      },
+      executor,
+    )
   }
 }

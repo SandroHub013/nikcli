@@ -522,7 +522,7 @@ export async function getAllSessions(): Promise<z.infer<typeof SessionSchema>[]>
   const sessions: z.infer<typeof SessionSchema>[] = []
 
   try {
-    for (const project of ProjectRepo.list()) {
+    for (const project of Effect.runSync(ProjectRepo.list())) {
       if (!project?.id) continue
 
       sessions.push(...SessionRepo.getByProject(project.id))

@@ -733,7 +733,7 @@ export namespace Account {
    */
   function useImpl(accountID: AccountID | null, orgID?: OrgID | null): void {
     // Clear the outgoing account's cache too
-    const config = AccountDB.getConfig()
+    const config = Effect.runSync(AccountDB.getConfig())
     const previousActiveId = config.active_account_id
     if (previousActiveId) {
       tokenCache.delete(previousActiveId)
@@ -776,7 +776,7 @@ export namespace Account {
     if (cached && now - cached.cachedAt < ACCOUNT_ROW_CACHE_TTL) {
       return cached.row
     }
-    const row = AccountDB.getAccount(accountID)
+    const row = Effect.runSync(AccountDB.getAccount(accountID))
     if (row) {
       accountRowCache.set(accountID, { row, cachedAt: now })
     }

@@ -88,7 +88,7 @@ export const StatsCommand = cmd({
 async function getAllSessions(): Promise<Session.Info[]> {
   const sessions: Session.Info[] = []
 
-  for (const project of ProjectRepo.list()) {
+  for (const project of Effect.runSync(ProjectRepo.list())) {
     sessions.push(...SessionRepo.getByProject(project.id))
   }
 
