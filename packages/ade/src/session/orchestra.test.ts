@@ -11,6 +11,8 @@ import {
   withoutModel,
   worktreeArgs,
   worktreePlan,
+  isBaseRef,
+  worktreeAddArgs,
 } from "./orchestra"
 
 describe("names", () => {
@@ -35,12 +37,24 @@ describe("names", () => {
   })
 })
 
-test("a worktree goes beside the project, on an ade/ branch", () => {
+test("a worktree goes beside the project, never inside a folder named like the user's own ADE worktree", () => {
   expect(worktreePlan("C:\\Users\\me\\Favorites\\nikcli\\", "revisore")).toEqual({
     branch: "ade/revisore",
-    path: "C:\\Users\\me\\Favorites\\nikcli-ade\\revisore",
+    path: "C:\\Users\\me\\Favorites\\nikcli-worktrees\\revisore",
+    container: "C:\\Users\\me\\Favorites\\nikcli-worktrees",
   })
-  expect(worktreePlan("/home/me/app", "x")).toEqual({ branch: "ade/x", path: "/home/me/app-ade/x" })
+  expect(worktreePlan("/home/me/app", "x").path).toBe("/home/me/app-worktrees/x")
+  expect(worktreePlan("C:\\Users\\me\\Favorites\\nikcli", "codex").path).not.toContain("nikcli-ade")
+})
+
+test("a worktree starts from the base asked for, and a base cannot be an option", () => {
+  const plan = { branch: "ade/codex", path: "/w/codex" }
+  expect(worktreeAddArgs(plan, "feat/ade")).toEqual(["worktree", "add", "-b", "ade/codex", "/w/codex", "feat/ade"])
+  expect(worktreeAddArgs(plan)).toEqual(["worktree", "add", "-b", "ade/codex", "/w/codex"])
+  expect(isBaseRef("feat/ade")).toBe(true)
+  expect(isBaseRef("3fdf4d7bb")).toBe(true)
+  expect(isBaseRef("--force")).toBe(false)
+  expect(isBaseRef("a..b")).toBe(false)
 })
 
 describe("the tree of sessions", () => {

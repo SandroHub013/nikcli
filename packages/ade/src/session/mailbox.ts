@@ -37,7 +37,7 @@ export type Message = { from: string; token?: string; text: string } & (
    * `model` picks the model where ADE knows the flag.
    */
   /** `fork`: starts from the sender's own conversation, so its prompt cache carries over. */
-  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; model?: string; fork: boolean }
+  | { kind: "spawn"; agent: string; autoClose: boolean; name?: string; worktree: boolean; base?: string; model?: string; fork: boolean }
   /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
   | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
   /** The project's shared memory file; `type` for `add`, `text` is the entry. */
@@ -131,6 +131,7 @@ export function parseMessage(body: string): Message | undefined {
     if (!agent) return undefined
     const name = str("name")
     const model = str("model")
+    const base = str("base")
     return {
       kind,
       from,
@@ -140,6 +141,7 @@ export function parseMessage(body: string): Message | undefined {
       worktree: record.worktree === true,
       fork: record.fork === true,
       ...(name ? { name } : {}),
+      ...(base ? { base } : {}),
       ...(model ? { model } : {}),
       text,
     }
@@ -810,6 +812,7 @@ export const USAGE =
   "  --name <nome>    spawn: nome della sessione, usabile poi come destinatario\n" +
   "  --worktree       spawn: lavora in una git worktree sul branch ade/<nome>, accanto al progetto\n" +
   "  --model <id>     spawn: modello (claude, codex, agy)\n" +
+  "  --base <branch>  spawn --worktree: branch o commit da cui parte (predefinito: il branch della sessione che chiama)\n" +
   "  --fork           spawn: parte dalla tua conversazione e ne riusa la cache (claude, codex;\n" +
   "                   stesso agente e modello, non con --worktree)\n" +
   "  --close          spawn: chiude la sessione dopo la risposta, se non ha lavoro da integrare\n" +

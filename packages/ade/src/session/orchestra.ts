@@ -50,17 +50,32 @@ export function slugify(name: string): string {
 
 /**
  * Where a `--worktree` session works: branch `ade/<slug>`, in a folder beside
- * the project named `<progetto>-ade/<slug>`.
+ * the project named `<progetto>-worktrees/<slug>`.
  *
  * Beside and not inside, because a checkout inside the project is a directory
  * every search, watcher and `git status` of the main tree walks into. Beside
  * and not in a temp directory, because on this machine the agents cannot write
  * outside the user's folders, and because the user has to be able to find it.
+ *
+ * Not `<progetto>-ade`: that is the name people give their own ADE worktree,
+ * and a spawn from `nikcli` put its checkout inside `nikcli-ade` (S24). The
+ * caller still checks the folder is not inside another repository.
  */
-export function worktreePlan(root: string, slug: string): { branch: string; path: string } {
+export function worktreePlan(root: string, slug: string): { branch: string; path: string; container: string } {
   const trimmed = root.replace(/[\\/]+$/, "")
   const sep = trimmed.includes("\\") ? "\\" : "/"
-  return { branch: `ade/${slug}`, path: `${trimmed}-ade${sep}${slug}` }
+  const container = `${trimmed}-worktrees`
+  return { branch: `ade/${slug}`, path: `${container}${sep}${slug}`, container }
+}
+
+/** A branch or commit a worktree may start from: a git ref, never an option. */
+export function isBaseRef(ref: string): boolean {
+  return /^[A-Za-z0-9._][A-Za-z0-9._/-]{0,199}$/.test(ref) && !ref.includes("..") && !ref.endsWith(".lock")
+}
+
+/** `git worktree add` for a plan, from `base` when given (otherwise the project's HEAD). */
+export function worktreeAddArgs(plan: { branch: string; path: string }, base?: string): string[] {
+  return ["worktree", "add", "-b", plan.branch, plan.path, ...(base ? [base] : [])]
 }
 
 /**

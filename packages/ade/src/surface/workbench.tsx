@@ -26,6 +26,8 @@ import {
   slugify,
   worktreeArgs,
   worktreePlan,
+  isBaseRef,
+  worktreeAddArgs,
 } from "../session/orchestra"
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
@@ -1366,18 +1368,45 @@ export function Workbench() {
       const ownerProject = message.from ? await projectOfPane(host, message.from) : project()
       const root = ownerProject?.root
       let worktree: { path: string; branch: string } | undefined
+      let worktreeBase = ""
       if (message.worktree) {
         if (!root || !host.run) {
           await answer("errore: nessun progetto in cui creare la worktree")
           return true
         }
         const plan = worktreePlan(root, slugify(name ?? `${agent.id}-${id.slice(-8)}`))
-        const added = await host.run("git", ["worktree", "add", "-b", plan.branch, plan.path], root)
+        /*
+         * From the base asked for, else from the branch the caller is working
+         * on: a spawn from a session in `feat/ade` works on `feat/ade`, not on
+         * whatever the project's main checkout happens to have out (S24).
+         */
+        const callerBranch = wb().panes.find((pane) => pane.id === message.from)?.tree?.branch
+        const base = message.base ?? (callerBranch && callerBranch !== "HEAD" ? callerBranch : undefined)
+        if (base !== undefined && !isBaseRef(base)) {
+          await answer(`errore: base non valida: ${base}`)
+          return true
+        }
+        // Never inside another checkout: its git would see the new worktree as untracked files.
+        // The folder itself when it exists, and the one holding it, which always does.
+        let outer = ""
+        for (const dir of [plan.container, plan.container.replace(/[\\/][^\\/]+$/, "")]) {
+          const found = await host.run("git", ["rev-parse", "--show-toplevel"], dir).catch(() => undefined)
+          if (found?.code === 0 && found.stdout.trim()) {
+            outer = found.stdout.trim()
+            break
+          }
+        }
+        if (outer) {
+          await answer(`errore: ${plan.container} è dentro il repository ${outer}: la worktree ci finirebbe dentro`)
+          return true
+        }
+        const added = await host.run("git", worktreeAddArgs(plan, base), root)
         if (added.code !== 0) {
           await answer(`errore: worktree non creata (${(added.stderr || added.stdout).trim().split(/\r?\n/)[0] || "git ha rifiutato"})`)
           return true
         }
-        worktree = plan
+        worktree = { path: plan.path, branch: plan.branch }
+        worktreeBase = base ?? "HEAD del progetto"
         spawnArgs.push(...worktreeArgs(agent.id, plan.path))
       }
       if (root) await excludeAdeResults(host, root)
@@ -1411,7 +1440,7 @@ export function Workbench() {
       if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
-          (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch}` : "") +
+          (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
           (fork ? " come fork della tua conversazione" : "") +
           (rerouted ? `; instradata ${rerouted}` : ""),
       )

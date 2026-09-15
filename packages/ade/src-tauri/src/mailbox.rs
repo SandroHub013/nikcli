@@ -286,6 +286,7 @@ $fork = $false
 $ttl = 0
 $name = $null
 $model = $null
+$base = $null
 $file = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
@@ -299,6 +300,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--name' -and $hasNext) { $name = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
+    elseif ($a -eq '--base' -and $hasNext) { $base = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -529,6 +531,7 @@ switch ($cmd) {
       $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
       if ($model) { $fields['model'] = $model }
+      if ($base) { $fields['base'] = $base }
       $fields['text'] = $text
     }
     $id = Post $fields
@@ -579,6 +582,7 @@ while [ $# -gt 0 ]; do
       --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
       --name) [ $# -ge 2 ] && { name="$2"; shift 2; continue; } ;;
       --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
+      --base) [ $# -ge 2 ] && { base="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -742,6 +746,7 @@ case "$cmd" in
       extra=""
       [ -n "$name" ] && extra="$extra,\"name\":\"$(esc "$name")\""
       [ -n "$model" ] && extra="$extra,\"model\":\"$(esc "$model")\""
+      [ -n "$base" ] && extra="$extra,\"base\":\"$(esc "$base")\""
       post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree,\"fork\":$fork$extra"
     fi
     if receipt; then
