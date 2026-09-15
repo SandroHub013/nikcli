@@ -36,8 +36,11 @@ const MAILBOX_SUBDIR: &str = "mailbox";
 /// Receipts and results nobody collected are removed after this long.
 const LEFTOVER_TTL: Duration = Duration::from_secs(60 * 60 * 24);
 
-/// A message larger than this is not a message; the file is dropped unread.
-const MAX_MESSAGE_BYTES: u64 = 64 * 1024;
+/// A message larger than this is not a message; the file is dropped unread and its sender told.
+///
+/// Room for the longest text the frontend accepts (40,000 characters) even
+/// when every one is four bytes of UTF-8, plus the JSON around it.
+const MAX_MESSAGE_BYTES: u64 = 256 * 1024;
 
 /// Set by `bun run test:app` to give each worktree's ADE Test its own mailbox.
 const MAILBOX_ROOT_ENV: &str = "ADE_MAILBOX_ROOT";
@@ -139,9 +142,17 @@ pub struct Outgoing {
 /// what makes a message delivered at most once.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
-    let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("outbox");
+    let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
+    take_outbox(&dir.join("outbox"), &dir.join("receipts"))
+}
+
+/// The outbox read, and a receipt for every message refused for its size.
+///
+/// A refused message used to vanish: the sender waited for a receipt that
+/// never came and printed "ADE non ha ancora confermato", as if it would.
+fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
-    let entries = fs::read_dir(&dir).map_err(|e| format!("casella non leggibile: {e}"))?;
+    let entries = fs::read_dir(outbox).map_err(|e| format!("casella non leggibile: {e}"))?;
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
@@ -150,11 +161,26 @@ pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String
         let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
             continue;
         };
-        let too_big = entry.metadata().map(|m| m.len() > MAX_MESSAGE_BYTES).unwrap_or(true);
+        let size = entry.metadata().map(|m| m.len()).ok();
+        let too_big = size.map_or(true, |len| len > MAX_MESSAGE_BYTES);
         let body = if too_big { None } else { fs::read_to_string(&path).ok() };
         let _ = fs::remove_file(&path);
-        if let (true, Some(body)) = (valid_id(&id), body) {
-            out.push(Outgoing { id, body });
+        if !valid_id(&id) {
+            continue;
+        }
+        match body {
+            Some(body) => out.push(Outgoing { id, body }),
+            None if too_big => {
+                let said = format!(
+                    "errore: messaggio troppo grande ({} KiB, massimo {} KiB): mandalo come file con --file o scrivilo in un file e manda il percorso",
+                    size.unwrap_or(0) / 1024,
+                    MAX_MESSAGE_BYTES / 1024
+                );
+                let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
+            }
+            None => {
+                let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
+            }
         }
     }
     Ok(out)
@@ -867,6 +893,29 @@ mod tests {
         // A path with a space, unquoted, arrives as two words: both must reach the lookup.
         assert!(SH.contains("who-owns) [ -n \"$head\" ] || usage; text=\"$head${text:+ $text}\""));
         assert!(PS1.contains("text = (@($pos) -join ' ')"));
+    }
+
+    #[test]
+    fn a_long_multibyte_message_passes_and_an_oversized_one_is_answered() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-test");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+
+        // 40,000 characters of four bytes each: the longest the frontend accepts, 160 KiB on disk.
+        let text: String = std::iter::repeat('\u{1F600}').take(40_000).collect();
+        fs::write(outbox.join("1757860000000-aaaa.json"), format!("{{\"kind\":\"send\",\"to\":\"1\",\"text\":\"{text}\"}}")).unwrap();
+        fs::write(outbox.join("1757860000000-bbbb.json"), "x".repeat(MAX_MESSAGE_BYTES as usize + 1)).unwrap();
+
+        let taken = take_outbox(&outbox, &receipts).unwrap();
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken[0].id, "1757860000000-aaaa");
+        assert!(taken[0].body.contains(&text));
+        let receipt = fs::read_to_string(receipts.join("1757860000000-bbbb.txt")).unwrap();
+        assert!(receipt.starts_with("errore: messaggio troppo grande"));
+        assert!(!receipts.join("1757860000000-aaaa.txt").exists());
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
