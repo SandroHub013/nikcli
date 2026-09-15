@@ -132,24 +132,40 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tagged: ${{ steps.tag.outputs.tagged }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.plan.outputs.sha }}
 
+      # GITHUB_TOKEN may not create a ref whose workflows differ from the
+      # default branch's, so a push to feat/ade that changed a workflow while
+      # the checks ran would get the tag refused. The checked commit is then no
+      # longer the newest anyway: leave it to the next run.
       - name: Tag
+        id: tag
         shell: bash
         env:
           TAG: ${{ needs.plan.outputs.tag }}
+          SHA: ${{ needs.plan.outputs.sha }}
         run: |
           set -euo pipefail
+          HEAD="$(git ls-remote origin refs/heads/feat/ade | cut -f1)"
+          if [ "$HEAD" != "$SHA" ]; then
+            echo "feat/ade moved from $SHA to $HEAD during the checks; releasing next time" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "ADE ${TAG#ade-v}"
           git push origin "$TAG"
+          echo "tagged=true" >> "$GITHUB_OUTPUT"
 
   release:
     needs: [plan, tag]
+    if: needs.tag.outputs.tagged == 'true'
     permissions:
       contents: write
     uses: ./.github/workflows/ade-release.yml
