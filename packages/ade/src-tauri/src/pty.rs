@@ -863,17 +863,53 @@ pub async fn pty_resize(
         .map_err(|e| format!("resize fallito: {e}"))
 }
 
+/// The command that kills `pid` and every process below it.
+///
+/// A CLI turn that runs past its time has children of its own — a shell, an
+/// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
+/// running, holding the turn's mailbox identity and its files. On unix the pty
+/// child leads its own session, so its process group is its tree.
+fn kill_tree_command(pid: u32) -> (&'static str, Vec<String>) {
+    if cfg!(windows) {
+        ("taskkill", vec!["/PID".into(), pid.to_string(), "/T".into(), "/F".into()])
+    } else {
+        ("kill", vec!["-KILL".into(), "--".into(), format!("-{pid}")])
+    }
+}
+
+fn kill_tree(pid: u32) {
+    let (program, args) = kill_tree_command(pid);
+    let mut command = std::process::Command::new(program);
+    command.args(&args).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = command.status();
+}
+
 /// Ends the session. Safe to call on one that already ended.
+///
+/// With `tree`, the processes the child started go too (see `kill_tree`).
+/// Panes do not ask for it: closing a pane has always ended the agent, not a
+/// dev server it left running on purpose.
 ///
 /// `async` because `wait()` below is exactly as blocking as the write is: a
 /// child that takes its time dying would otherwise take the window with it.
 #[tauri::command]
-pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String) -> Result<(), String> {
+pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Option<bool>) -> Result<(), String> {
     let mut session = {
         let mut sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
         sessions.remove(&id)
     };
     if let Some(session) = session.as_mut() {
+        if tree == Some(true) {
+            if let Some(pid) = session.child.process_id() {
+                kill_tree(pid);
+            }
+        }
         let _ = session.child.kill();
         /*
          * Reaped here rather than left to the reader thread, which cannot do it:
@@ -1140,6 +1176,18 @@ mod tests {
                     .any(|marker| leaked == *marker || leaked.starts_with(marker)),
                 "{leaked} should not reach a spawned agent"
             );
+        }
+    }
+
+    #[test]
+    fn a_tree_kill_names_the_whole_tree_and_nothing_else() {
+        let (program, args) = kill_tree_command(4242);
+        if cfg!(windows) {
+            assert_eq!(program, "taskkill");
+            assert_eq!(args, ["/PID", "4242", "/T", "/F"]);
+        } else {
+            assert_eq!(program, "kill");
+            assert_eq!(args, ["-KILL", "--", "-4242"]);
         }
     }
 
