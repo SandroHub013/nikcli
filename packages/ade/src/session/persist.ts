@@ -68,6 +68,17 @@ export interface PaneState {
   worktree?: string
   /** Arguments chosen at spawn, replayed on every start. */
   spawnArgs?: string[]
+  /**
+   * The cells the user resized the pane to. Absent means the default size
+   * of one cell.
+   *
+   * Added without a version bump, on purpose. The field is optional and every
+   * reader skips what it does not know, while a reader handed a version newer
+   * than its own refuses the whole store — and the autosave then writes an
+   * empty workbench over it. Bumping for this would make going back to an
+   * earlier build lose every open session to gain nothing.
+   */
+  span?: { columns: number; rows: number }
 }
 
 export interface WorkspaceState {
@@ -169,6 +180,7 @@ function sanitisePane(raw: unknown): PaneState {
   const model = asOptionalString(raw.model)
   const resumeId = asOptionalString(raw.resumeId)
   const lines = sanitiseLines(raw.lines)
+  const span = sanitiseSpan(raw.span)
   return {
     id: asString(raw.id, def.id),
     title: asString(raw.title, def.title),
@@ -186,7 +198,23 @@ function sanitisePane(raw: unknown): PaneState {
     ...(Array.isArray(raw.spawnArgs) && raw.spawnArgs.every((arg) => typeof arg === "string")
       ? { spawnArgs: raw.spawnArgs as string[] }
       : {}),
+    ...(span ? { span } : {}),
   }
+}
+
+/**
+ * A span is two small whole numbers or nothing.
+ *
+ * Nothing rather than a repaired value: a pane whose stored size cannot be
+ * read gets the default size, which is the size it had before it was resized.
+ */
+function sanitiseSpan(raw: unknown): { columns: number; rows: number } | undefined {
+  if (!isObject(raw)) return undefined
+  const columns = asOptionalNumber(raw.columns)
+  const rows = asOptionalNumber(raw.rows)
+  if (columns === undefined || rows === undefined) return undefined
+  const whole = (n: number) => Math.min(12, Math.max(1, Math.round(n)))
+  return { columns: whole(columns), rows: whole(rows) }
 }
 
 function sanitisePanes(raw: unknown): PaneState[] {

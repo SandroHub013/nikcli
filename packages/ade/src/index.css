@@ -334,9 +334,101 @@ body,
 }
 
 [data-slot="grid-cell"] {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+
+/*
+ * Arranging the grid: a pane is picked up by its header, shows where it will
+ * land on the tile under the pointer, and is resized from its corner.
+ *
+ * The header says it can be grabbed only while the grid holds two panes or
+ * more — with one there is nowhere to put it. While a drag or a resize is in
+ * progress nothing inside the panes may select text or take the pointer, or a
+ * terminal under the cursor swallows the move and the drop never arrives.
+ */
+[data-component="session-grid"]:has(> [data-slot="grid-cell"] + [data-slot="grid-cell"])
+  [data-slot="pane-header"] {
+  cursor: grab;
+}
+
+[data-component="session-grid"][data-arranging] {
+  user-select: none;
+  cursor: grabbing;
+}
+
+[data-component="session-grid"][data-arranging] [data-slot="grid-cell"] > [data-component] {
+  pointer-events: none;
+}
+
+[data-slot="grid-cell"][data-dragging] > [data-component] {
+  opacity: 0.45;
+}
+
+[data-slot="drop-zone"] {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--ade-accent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ade-accent) 18%, transparent);
+}
+
+/*
+ * Each overlay is the exact shape `dropZone` in grid/arrange.ts answers to:
+ * the middle 40% square swaps, and each edge owns the trapezoid between it,
+ * the two diagonals and that square. Half-pane rectangles were simpler and
+ * wrong near a corner, where the highlight showed one side and the drop used
+ * the other. The dashed border is dropped for the edges, because a border
+ * follows the box and not the clip.
+ */
+[data-slot="drop-zone"] { inset: 0; }
+[data-slot="drop-zone"][data-zone="swap"] { inset: 30%; border-radius: var(--ade-radius-lg); }
+[data-slot="drop-zone"]:not([data-zone="swap"]) { border: none; border-radius: 0; }
+[data-slot="drop-zone"][data-zone="before"] { clip-path: polygon(0 0, 30% 30%, 30% 70%, 0 100%); justify-content: flex-start; padding-left: 4%; }
+[data-slot="drop-zone"][data-zone="after"] { clip-path: polygon(100% 0, 70% 30%, 70% 70%, 100% 100%); justify-content: flex-end; padding-right: 4%; }
+[data-slot="drop-zone"][data-zone="above"] { clip-path: polygon(0 0, 100% 0, 70% 30%, 30% 30%); align-items: flex-start; padding-top: 6%; }
+[data-slot="drop-zone"][data-zone="below"] { clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%); align-items: flex-end; padding-bottom: 6%; }
+
+[data-slot="drop-zone-label"] {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ade-accent-fg);
+  background: var(--ade-accent);
+}
+
+/* A corner grip, visible when the tile is hovered or focused, so resting
+   panes show no extra chrome. */
+[data-slot="tile-resize"] {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 6;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  opacity: 0;
+  border-right: 2px solid var(--ade-text-weak);
+  border-bottom: 2px solid var(--ade-text-weak);
+  border-bottom-right-radius: 10px;
+  transition: opacity 120ms ease;
+}
+
+[data-slot="grid-cell"]:hover > [data-slot="tile-resize"],
+[data-slot="grid-cell"][data-focused] > [data-slot="tile-resize"],
+[data-component="session-grid"][data-arranging] [data-slot="tile-resize"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="tile-resize"] { transition: none; }
 }
 
 /* Pane rules live in grid/pane.css — the card owns its own stylesheet. */

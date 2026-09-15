@@ -119,6 +119,8 @@ import {
   isPanelPane,
   expandPane,
   setColumns,
+  reorderPanes,
+  resizePane,
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
@@ -4781,6 +4783,9 @@ export function Workbench() {
                   onFocus={(id) => setWb(w => ({ ...w, focusedId: id }))}
                   onClose={close}
                   columns={wb().pinnedColumns}
+                  tileOf={(id) => wb().panes.find((pane) => pane.id === id)}
+                  onMove={(order) => setWb((w) => reorderPanes(w, order))}
+                  onResize={(id, span) => setWb((w) => resizePane(w, id, span))}
                 />
               </Show>
             </Show>
