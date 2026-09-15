@@ -300,9 +300,9 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(thread).toContain('client.call("checkUpgrade"')
     expect(thread).toContain("upgrade check failed")
     expect(thread).not.toContain('setTimeout(() => {\n        client.call("checkUpgrade"')
-    expect(app.replace(/\s+/g, " ")).toContain(
-      "checkUpgradeWhenSubscriptionReady( sdk.subscriptionReady, props.checkUpgrade, )",
-    )
+    // Whitespace-insensitive: prettier rewraps this call whenever the arguments or the print
+    // width move, and the wiring is what matters, not where the line broke.
+    expect(app).toMatch(/checkUpgradeWhenSubscriptionReady\(\s*sdk\.subscriptionReady,\s*props\.checkUpgrade,?\s*\)/)
     // Both host paths must hand the result back rather than fire and forget:
     // that return value is the only thing the TUI's dialog is driven by.
     expect(thread.replace(/\s+/g, " ")).toContain('return client.call("checkUpgrade"')
