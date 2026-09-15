@@ -40,6 +40,8 @@ export interface TurnRequest {
   readonly disabledTools?: readonly string[]
   /** Give the turn an `ade-msg` identity. `id` must be unique while the turn runs. */
   readonly mailbox?: { readonly id: string }
+  /** Faster Claude Code turn: no MCP servers, no user settings files, ade-msg still allowed. See `TurnSpec.lean`. */
+  readonly lean?: boolean
   /** Every change to the turn as it happens: tool calls, partial text, a permission question. */
   readonly onUpdate?: (talk: Talk) => void
 }
@@ -107,6 +109,7 @@ export function runTurn(request: TurnRequest): Turn {
       bot,
       message: request.message,
       ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+      ...(request.lean ? { lean: true } : {}),
     })
 
     const token = request.mailbox ? crypto.randomUUID() : undefined

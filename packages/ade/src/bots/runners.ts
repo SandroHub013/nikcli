@@ -109,6 +109,14 @@ export interface TurnSpec {
   readonly bot: AgentFile
   readonly message: string
   readonly sessionId?: string
+  /**
+   * Claude Code without the user's MCP servers and settings files: a turn
+   * measured at 9.3 s drops to 3.4 s, and the answer loses the connector
+   * noise. The account still works, since the login is not a setting. Without
+   * user settings `ade-msg` is no longer allowed, so it is allowed here by
+   * pattern. Codex gains nothing measurable from the same, so it ignores it.
+   */
+  readonly lean?: boolean
 }
 
 /**
@@ -163,10 +171,12 @@ export function turnCommand(runner: Runner, spec: TurnSpec): { readonly command:
       if (bot.effort) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
       if (sessionId) args.push("--resume", sessionId)
+      if (spec.lean) args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "local")
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
         .filter(([tool]) => !bot.disabledTools.includes(tool))
         .flatMap(([, names]) => names)
+      if (spec.lean) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools.flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))

@@ -63,6 +63,15 @@ describe("gli argomenti di un turno", () => {
     expect(next.args.slice(-2)).toEqual(["t-1", "e poi?"])
   })
 
+  test("un turno leggero di Claude Code salta MCP e impostazioni utente, ma può usare ade-msg", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot, message: "x", lean: true })
+    expect(args).toContain("--strict-mcp-config")
+    expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(args[args.indexOf("--allowedTools") + 1]).toContain("PowerShell(ade-msg *)")
+    expect(turnCommand(runnerById("claude"), { bot, message: "x" }).args).not.toContain("--strict-mcp-config")
+  })
+
   test("un bot che non può scrivere gira in sola lettura", () => {
     const { args } = turnCommand(runnerById("codex"), { bot: { ...bot, disabledTools: ["edit"] }, message: "x" })
     expect(args).toContain('sandbox_mode="read-only"')
