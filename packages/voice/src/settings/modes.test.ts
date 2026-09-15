@@ -114,6 +114,15 @@ class TestVoiceHost implements VoiceHost {
   }
 }
 
+/**
+ * A sentence the microphone heard. Typed text (`submitText`) needs no wake word
+ * and no held key, so gating is tested through the transcriber.
+ */
+async function heard(transcriber: ReturnType<typeof createFakeTranscriber>, text: string): Promise<void> {
+  transcriber.emit(text, true)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+}
+
 describe("Voice Modes & Settings Interaction", () => {
   test("transcription mode vs agent mode: commands are never executed and route directly to insertText", async () => {
     const host = new TestVoiceHost()
@@ -207,11 +216,11 @@ describe("Voice Modes & Settings Interaction", () => {
     await engine.start()
 
     // 1. Spoken without wake word -> ignored completely
-    await engine.submitText("nuova sessione")
+    await heard(transcriber, "nuova sessione")
     expect(host.calls.filter((c) => c.method === "runCommand")).toHaveLength(0)
 
     // 2. Spoken with wake word (and ASR variation 'ehi nick') -> executes command immediately
-    await engine.submitText("ehi nick nuova sessione")
+    await heard(transcriber, "ehi nick nuova sessione")
     const newSessionCalls = host.calls.filter(
       (c) => c.method === "runCommand" && c.args[0] === "session.new"
     )
@@ -220,7 +229,7 @@ describe("Voice Modes & Settings Interaction", () => {
     await engine.stop()
   })
 
-  test("push to talk: no events are interpreted between releaseToTalk and the next pressToTalk", async () => {
+  test("push to talk: typed text runs whether or not the key is held", async () => {
     const host = new TestVoiceHost()
     const speaker = createFakeSpeaker()
     const transcriber = createFakeTranscriber()
@@ -235,8 +244,10 @@ describe("Voice Modes & Settings Interaction", () => {
         activation: "push-to-talk",
       },
     })
+    const palette = () =>
+      host.calls.filter((c) => c.method === "runCommand" && c.args[0] === "palette.open")
 
-    // Press to talk: event is accepted and interpreted
+    // Held: accepted
     await engine.pressToTalk()
     await engine.submitText("nuova sessione")
     expect(
@@ -245,24 +256,16 @@ describe("Voice Modes & Settings Interaction", () => {
       )
     ).toHaveLength(1)
 
-    // Release to talk: event is dropped
+    // Released: writing is its own deliberate act, and still runs
     holdChord()
     await engine.releaseToTalk()
     await engine.submitText("apri tavolozza")
-    expect(
-      host.calls.filter(
-        (c) => c.method === "runCommand" && c.args[0] === "palette.open"
-      )
-    ).toHaveLength(0)
+    expect(palette()).toHaveLength(1)
 
-    // Press to talk again: event accepted again
+    // Held again: accepted again
     await engine.pressToTalk()
     await engine.submitText("apri tavolozza")
-    expect(
-      host.calls.filter(
-        (c) => c.method === "runCommand" && c.args[0] === "palette.open"
-      )
-    ).toHaveLength(1)
+    expect(palette()).toHaveLength(2)
 
     await engine.stop()
   })

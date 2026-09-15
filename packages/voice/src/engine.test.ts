@@ -172,6 +172,43 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.history().filter((entry) => entry.kind === "user")).toHaveLength(2)
   })
 
+  describe("typed text with push-to-talk or a wake word", () => {
+    function withActivation(activation: "push-to-talk" | "wake-word") {
+      const host = new MockVoiceHost()
+      const engine = createVoiceEngine({
+        host,
+        transcriber: createFakeTranscriber(),
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation, mode: "agent" },
+      })
+      const opened = () => host.calls.filter((call) => call.method === "runCommand").length
+      return { engine, opened }
+    }
+
+    test("push-to-talk: nothing is held, and the typed sentence still runs", async () => {
+      const { engine, opened } = withActivation("push-to-talk")
+      await engine.submitText("apri la tavolozza")
+      expect(opened()).toBe(1)
+    })
+
+    test("wake word: the sentence runs without it, and a leading one is dropped", async () => {
+      const { engine, opened } = withActivation("wake-word")
+      await engine.submitText("apri la tavolozza")
+      await engine.submitText("hei nik apri la tavolozza")
+      expect(opened()).toBe(2)
+    })
+
+    test("once the microphone's session is up, typed text runs once, through it", async () => {
+      const { engine, opened } = withActivation("wake-word")
+      await engine.submitText("apri la tavolozza")
+      await engine.start()
+      await engine.submitText("apri la tavolozza")
+      expect(opened()).toBe(2)
+      await engine.stop()
+    })
+  })
+
   /*
    * Starting is not instant. With the local backend it means downloading and
    * initialising a model — minutes, not milliseconds — and `isRunning()` was

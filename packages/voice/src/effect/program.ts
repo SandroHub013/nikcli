@@ -772,7 +772,13 @@ export function makeVoiceProgram(
       })
     }
 
-    function processUtterance(rawText: string, fromAsr = false): Effect.Effect<void> {
+    /**
+     * `typed` is text the user wrote rather than said. Writing is its own
+     * deliberate act: it needs no held key and no wake word, and asking for
+     * either would drop every sentence typed with push-to-talk or wake-word
+     * activation, since nothing is held and nobody said the word.
+     */
+    function processUtterance(rawText: string, fromAsr = false, typed = false): Effect.Effect<void> {
       return Effect.gen(function* () {
         const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
 
@@ -788,7 +794,7 @@ export function makeVoiceProgram(
          * returns the text unchanged.
          */
         const trimmed = correctCustomWords(rawText, currentSettings.customWords).text.trim()
-        const isPtt = options.isPushToTalkActive !== undefined ? options.isPushToTalkActive() : isPushToTalkPressed
+        const isPtt = typed || (options.isPushToTalkActive !== undefined ? options.isPushToTalkActive() : isPushToTalkPressed)
 
         if (!trimmed) {
           if (currentSettings.activation === "push-to-talk" && !isPtt) {
@@ -804,6 +810,13 @@ export function makeVoiceProgram(
         // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
         if (currentSettings.mode === "transcription") {
           yield* handleTranscriptionUtterance(trimmed)
+          return
+        }
+
+        // Typed text is addressed to the assistant already; a leading wake word is only dropped.
+        if (typed && currentSettings.activation === "wake-word") {
+          const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
+          yield* executeAgentUtterance(match.matched && match.remainder.length > 0 ? match.remainder : trimmed)
           return
         }
 
@@ -928,7 +941,7 @@ export function makeVoiceProgram(
     yield* Effect.forkScoped(recognitionLoop)
 
     return {
-      submitText: (text: string) => processUtterance(text),
+      submitText: (text: string) => processUtterance(text, false, true),
 
       handlePermissionRequest: (paneId: string, what: string) =>
         applyDialogEvent({ type: "permission_requested", paneId, what }),

@@ -594,6 +594,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         Effect.provideService(VoiceHostService, host),
       ),
     )
+    await releaseTextProgram()
   }
 
   /** What the program says through: nothing in pure transcription mode. */
@@ -729,6 +730,15 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   }
 
   let textHandle: Promise<VoiceProgramHandle> | null = null
+  let textScope: Scope.CloseableScope | null = null
+
+  /** Once the microphone's program is up it takes typed text too, so the text-only one goes. */
+  const releaseTextProgram = async (): Promise<void> => {
+    const scope = textScope
+    textHandle = null
+    textScope = null
+    if (scope) await closeScope(scope, "programma testuale")
+  }
 
   /**
    * The program that answers typed text while the microphone is off.
@@ -742,6 +752,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const textProgram = (): Promise<VoiceProgramHandle> => {
     if (!textHandle) {
       const scope = Effect.runSync(Scope.make())
+      textScope = scope
       textHandle = Effect.runPromise(
         Scope.extend(makeVoiceProgram(programOptions()), scope).pipe(
           Effect.provideService(TranscriberTag, silentTranscriber),
@@ -751,6 +762,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       )
       textHandle.catch(() => {
         textHandle = null
+        textScope = null
         void closeScope(scope, "programma testuale")
       })
     }
