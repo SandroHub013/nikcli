@@ -21,10 +21,11 @@ export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
 /**
  * The voice replies are read in: a Piper voice ADE downloads on first use, or
- * `system` for the Web Speech voice. Ugo is the default: the male voice the
- * user asked for, and the best of the offline ones S15 measured.
+ * `system` for the Web Speech voice. The user's choice (D19): «ugo per
+ * maschile, e piper per femminile, selezionabile dalle impostazioni» — Ugo,
+ * the default, and Paola.
  */
-export const REPLY_VOICES = ["ugo", "giorgio", "paola", "system"] as const
+export const REPLY_VOICES = ["ugo", "paola", "system"] as const
 export type ReplyVoice = (typeof REPLY_VOICES)[number]
 
 export const CURRENT_SETTINGS_VERSION = 1

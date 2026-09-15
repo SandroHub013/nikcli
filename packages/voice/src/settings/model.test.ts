@@ -206,6 +206,9 @@ describe("settings/model replyVoice", () => {
     const absent = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: undefined } as never)
     expect(absent.settings.replyVoice).toBe("ugo")
     expect(absent.corrections).toEqual([])
+    // Giorgio was offered before D19 kept only Ugo and Paola.
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "giorgio" } as never).settings.replyVoice).toBe("ugo")
+    expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "paola" }).settings.replyVoice).toBe("paola")
     const unknown = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "kokoro" } as never)
     expect(unknown.settings.replyVoice).toBe("ugo")
     expect(unknown.corrections.join()).toContain("kokoro")

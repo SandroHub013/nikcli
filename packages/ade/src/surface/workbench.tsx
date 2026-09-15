@@ -4387,6 +4387,7 @@ export function Workbench() {
           settings={voiceSettings()}
           onChange={handleVoiceSettingsChange}
           onClose={() => setVoiceSettingsOpen(false)}
+          onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
           title="Impostazioni"
           subtitle="Voce, routine, bot, codice, MCP, plugin e competenze"

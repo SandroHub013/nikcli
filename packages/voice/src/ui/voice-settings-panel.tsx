@@ -15,6 +15,7 @@
  * - Strictly typed without type assertions or compiler suppression annotations.
  */
 
+import { REPLY_VOICE_CHOICES } from "../settings/reply-voices"
 import {
   createEffect,
   createMemo,
@@ -112,6 +113,8 @@ export interface VoiceSettingsPanelProps {
   onClose?: () => void
   /** Optional existing ADE keymap bindings to evaluate for shortcut collision. */
   existingBindings?: readonly Binding[]
+  /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
+  onOpenVoiceSource?: (voice: ReplyVoice) => void
   /** Optional Parakeet neural model download progress. */
   parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
@@ -280,14 +283,6 @@ function describeStatus(status: DialogStatus, running: boolean): StatusDescripto
  * group are excluded so the engine pills never steal the backend list's arrows.
  */
 /** The agent engines, as the panel offers them. */
-/** S15: Ugo first, the male voice the user chose; the Piper ones are downloaded on first use. */
-const REPLY_VOICE_CHOICES: readonly { value: ReplyVoice; title: string; desc: string }[] = [
-  { value: "ugo", title: "Ugo", desc: "Voce maschile naturale, offline" },
-  { value: "giorgio", title: "Giorgio", desc: "Voce maschile naturale, offline" },
-  { value: "paola", title: "Paola", desc: "Voce femminile naturale, offline" },
-  { value: "system", title: "Voce di sistema", desc: "Quella di Windows, senza scaricare nulla" },
-]
-
 const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; title: string; desc: string }[] = [
   { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code e Codex" },
   { value: "claude", title: "Claude Code", desc: "Con il tuo abbonamento Anthropic" },
@@ -1259,6 +1254,24 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       >
                         <span data-slot="sub-item-title">{choice.title}</span>
                         <span data-slot="sub-item-desc">{choice.desc}</span>
+                        <Show when={choice.licence}>
+                          <span data-slot="sub-item-licence">
+                            {choice.licence}{" "}
+                            <Show when={props.onOpenVoiceSource}>
+                              <button
+                                type="button"
+                                data-slot="link-button"
+                                onClick={(event) => {
+                                  // The link sits inside the radio: opening the source must not also pick the voice.
+                                  event.stopPropagation()
+                                  props.onOpenVoiceSource?.(choice.value)
+                                }}
+                              >
+                                Fonte
+                              </button>
+                            </Show>
+                          </span>
+                        </Show>
                       </div>
                     )}
                   </For>

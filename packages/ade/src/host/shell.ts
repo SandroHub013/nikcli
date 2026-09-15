@@ -129,6 +129,8 @@ export interface Host {
   ttsPiperInstall?: (voice: string) => Promise<void>
   /** One sentence as WAV bytes, from the resident Piper process. */
   ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+  /** Opens the model page of a known voice in the browser. */
+  ttsOpenVoiceSource?: (voice: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -495,6 +497,11 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsPiperInstall(voice) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("tts_piper_install", { voiceId: voice })
+    },
+
+    async ttsOpenVoiceSource(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_open_voice_source", { voiceId: voice })
     },
 
     async ttsPiperSpeak(voice, text) {

@@ -41,6 +41,8 @@ const RUNTIME: Download = Download {
 /// A voice ADE knows how to fetch: the model and its config, pinned to a revision.
 struct Voice {
     id: &'static str,
+    /// The model's own page, where its licence is stated; opened from the settings.
+    source: &'static str,
     model: Download,
     config: Download,
 }
@@ -48,6 +50,7 @@ struct Voice {
 const VOICES: &[Voice] = &[
     Voice {
         id: "ugo",
+        source: "https://huggingface.co/Einrich99/PiperTTS-UGO-Italian",
         model: Download {
             url: "https://huggingface.co/Einrich99/PiperTTS-UGO-Italian/resolve/3d165b2a45cb134e96eb3a30a85568b213848ad2/medium/it_IT-ugo-medium.onnx",
             sha256: "8be36a89f0f11f8a87751e7cf25ae5c07d1ff1c46c3ccb0fd3541102a1e9476d",
@@ -58,18 +61,8 @@ const VOICES: &[Voice] = &[
         },
     },
     Voice {
-        id: "giorgio",
-        model: Download {
-            url: "https://huggingface.co/kirys79/piper_italiano/resolve/37020d3892ae230be3b8da27cec260459ecb0594/Giorgio/giorgio-epoch%3D5028-step%3D1098436.onnx",
-            sha256: "6bfc837a53dd420a7d10e6d237eee2d7d276ee5cb3bf521bfa2b2446d0ff1dc9",
-        },
-        config: Download {
-            url: "https://huggingface.co/kirys79/piper_italiano/resolve/37020d3892ae230be3b8da27cec260459ecb0594/Giorgio/giorgio-epoch%3D5028-step%3D1098436.json",
-            sha256: "3cdc6f20d2bb287c3bcf33e5b88340810e53908ab507b54a78abecffff8e1aac",
-        },
-    },
-    Voice {
         id: "paola",
+        source: "https://huggingface.co/rhasspy/piper-voices/tree/main/it/it_IT/paola/medium",
         model: Download {
             url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/it/it_IT/paola/medium/it_IT-paola-medium.onnx",
             sha256: "6fc918b5a0ea6137382833dddfa567bffbe6a5060c02043c87192ee59c04210c",
@@ -214,6 +207,14 @@ pub async fn tts_piper_speak(
     Ok(tauri::ipc::Response::new(bytes?))
 }
 
+/// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
+#[tauri::command]
+pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> Result<(), String> {
+    let source = voice(&voice_id)?.source;
+    #[allow(deprecated)]
+    tauri_plugin_shell::ShellExt::shell(&app).open(source, None).map_err(|e| e.to_string())
+}
+
 /// Ends the resident process, freeing its memory until the next sentence.
 #[tauri::command]
 pub fn tts_piper_stop(state: tauri::State<'_, Piper>) {
@@ -334,8 +335,11 @@ mod tests {
     #[test]
     fn only_known_voices_and_pinned_urls() {
         assert!(voice("ugo").is_ok());
+        assert!(voice("paola").is_ok());
+        assert!(voice("giorgio").is_err());
         assert!(voice("../../evil").is_err());
         for v in VOICES {
+            assert!(v.source.starts_with("https://huggingface.co/"));
             for d in [&v.model, &v.config] {
                 assert!(d.url.starts_with("https://huggingface.co/"));
                 assert!(!d.url.contains("/resolve/main/"), "{} is not pinned to a revision", d.url);

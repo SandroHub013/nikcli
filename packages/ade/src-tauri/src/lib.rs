@@ -1048,6 +1048,7 @@ pub fn run() {
             tts::tts_piper_install,
             tts::tts_piper_speak,
             tts::tts_piper_stop,
+            tts::tts_open_voice_source,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
