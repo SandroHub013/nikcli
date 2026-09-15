@@ -1,4 +1,5 @@
 import z from "zod"
+import { Effect } from "effect"
 import { SyncEvent } from "@/sync/sync-event"
 import { MessageV2 } from "./message-v2"
 import { MessageRepo } from "./message-repo"
@@ -160,7 +161,7 @@ export namespace SessionSync {
     SyncEvent.project(Deleted, (tx, data) => {
       SessionEntryProjection.sessionRemoved(tx, data.sessionID)
       SessionPending.removeSession(data.sessionID, tx)
-      InstructionRepo.removeSession(data.sessionID, tx)
+      Effect.runSync(InstructionRepo.removeSession(data.sessionID, tx))
       SessionRepo.remove(data.sessionID, tx)
     }),
 
@@ -195,11 +196,16 @@ export namespace SessionSync {
     }),
 
     SyncEvent.project(InstructionsUpdated, (tx, data, event) => {
-      InstructionRepo.applyDelta(tx, {
-        sessionID: data.sessionID,
-        delta: data.delta,
-        seq: event.seq,
-      })
+      Effect.runSync(
+        InstructionRepo.applyDelta(
+          {
+            sessionID: data.sessionID,
+            delta: data.delta,
+            seq: event.seq,
+          },
+          tx,
+        ),
+      )
     }),
   ]
 

@@ -457,7 +457,7 @@ export namespace Session {
         })
       }
     }
-    InstructionRepo.inherit(original.id, session.id)
+    Effect.runSync(InstructionRepo.inherit(original.id, session.id))
     return session
   }
 

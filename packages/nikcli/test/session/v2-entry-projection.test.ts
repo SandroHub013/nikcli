@@ -316,7 +316,7 @@ describe("v2 entry projection", () => {
         expect(before.length).toBeGreaterThan(0)
 
         // simulate a session written before session_entry existed
-        SessionEntryRepo.clear(session.id)
+        Effect.runSync(SessionEntryRepo.clear(session.id))
         expect(SessionV2.entryCount(session.id)).toBe(0)
 
         const after = await SessionV2.entries(session.id)
@@ -659,7 +659,7 @@ describe("live and persisted projections agree", () => {
         )
 
         expect(MessageRepo.listParts(userID)).toEqual([])
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(user).toMatchObject({ type: "user", text: "from payload" })
         expect(SessionEntry.toV1WrittenPart(user!, part as any)).toMatchObject({
           id: part.id,
@@ -685,7 +685,7 @@ describe("live and persisted projections agree", () => {
         )
 
         expect(MessageRepo.listParts(userID).some((part) => part.id === partID)).toBe(true)
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(user).toMatchObject({ type: "user", text: "" })
       },
     })
@@ -732,7 +732,7 @@ describe("live and persisted projections agree", () => {
         const { session, userID, assistantID, assistant } = await conversation()
 
         const userInfo = MessageRepo.getMessage(session.id, userID)
-        const userEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        const userEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(userInfo).toEqual(JSON.parse(JSON.stringify(SessionEntry.toV1Message([userEntry!]))))
         expect(userInfo).toMatchObject({
           role: "user",
@@ -740,7 +740,7 @@ describe("live and persisted projections agree", () => {
           model: { providerID: "p", modelID: "m" },
         })
 
-        const start = SessionEntryRepo.list(session.id).find((entry) => entry.type === "start")
+        const start = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
         expect(MessageRepo.getMessage(session.id, assistantID)).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([start!]))),
         )
@@ -778,14 +778,16 @@ describe("live and persisted projections agree", () => {
           }),
         )
 
-        const storedStart = SessionEntryRepo.list(session.id).find((entry) => entry.type === "start")
-        const storedComplete = SessionEntryRepo.list(session.id).find((entry) => entry.type === "complete")
+        const storedStart = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
+        const storedComplete = Effect.runSync(SessionEntryRepo.list(session.id)).find(
+          (entry) => entry.type === "complete",
+        )
         expect(MessageRepo.getMessage(session.id, assistantID)).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([storedStart!, storedComplete!]))),
         )
 
-        const stepEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "step-start")
-        const patchEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "patch")
+        const stepEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "step-start")
+        const patchEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "patch")
         expect(MessageRepo.listParts(assistantID).find((part) => part.id === stepStart.id)).toEqual(
           SessionEntry.toV1Part(stepEntry!),
         )

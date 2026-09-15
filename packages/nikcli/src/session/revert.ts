@@ -256,7 +256,7 @@ export namespace SessionRevert {
         })
       }),
     )
-    InstructionRepo.removeSession(sessionID)
+    Effect.runSync(InstructionRepo.removeSession(sessionID))
   }
 
   const layer = Layer.succeed(

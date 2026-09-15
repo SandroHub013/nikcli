@@ -583,7 +583,7 @@ export namespace Workspace {
           })
         }),
       )
-      InstructionRepo.removeSession(sessionID)
+      Effect.runSync(InstructionRepo.removeSession(sessionID))
       const payload = await buildRestorePayload(instance.project.id, workspaceID)
       return {
         ...payload,
@@ -689,7 +689,7 @@ export namespace Workspace {
           })
         }),
       )
-      InstructionRepo.removeSession(sessionID)
+      Effect.runSync(InstructionRepo.removeSession(sessionID))
 
       if (workspaceID && target?.type === "remote") {
         try {

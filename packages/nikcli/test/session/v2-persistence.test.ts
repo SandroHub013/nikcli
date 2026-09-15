@@ -293,7 +293,9 @@ describe("SessionV2 write API", () => {
           projectID: Instance.project.id,
         })
 
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user") as SessionEntryTypes.User
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find(
+          (entry) => entry.type === "user",
+        ) as SessionEntryTypes.User
         expect(user.text).toBe("from persist")
         expect(MessageRepo.getMessage(session.id, messageID)).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([user]))),
@@ -350,7 +352,7 @@ describe("SessionV2 write API", () => {
             ),
           )
         }).toThrow("boom")
-        expect(SessionEntryRepo.list(session.id).some((entry) => entry.type === "user")).toBe(false)
+        expect(Effect.runSync(SessionEntryRepo.list(session.id)).some((entry) => entry.type === "user")).toBe(false)
         expect(MessageRepo.getMessage(session.id, messageID)).toBeUndefined()
       },
     })

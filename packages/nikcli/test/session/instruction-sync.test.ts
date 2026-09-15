@@ -85,14 +85,14 @@ describe("instruction sync", () => {
         [InstructionKey.env, InstructionKey.file("/tmp/AGENTS.md")].sort(),
       )
 
-      const state = InstructionRepo.get(sessionID)
+      const state = Effect.runSync(InstructionRepo.get(sessionID))
       expect(state?.epochSeq).toBe(state?.updatedSeq)
       expect(state?.epochSeq).toBeGreaterThan(0)
 
       const second = InstructionSync.commit(sessionID, projectID, reads)
       expect(second.blocked).toBe(false)
       expect(second.delta).toBeUndefined()
-      expect(InstructionRepo.get(sessionID)?.updatedSeq).toBe(state?.updatedSeq)
+      expect(Effect.runSync(InstructionRepo.get(sessionID))?.updatedSeq).toBe(state?.updatedSeq)
     })
   })
 
@@ -115,7 +115,9 @@ describe("instruction sync", () => {
       expect(removed.delta).toEqual({
         [InstructionKey.file("/tmp/AGENTS.md")]: "removed",
       })
-      expect(InstructionRepo.get(sessionID)?.data.values[InstructionKey.file("/tmp/AGENTS.md")]).toBeUndefined()
+      expect(
+        Effect.runSync(InstructionRepo.get(sessionID))?.data.values[InstructionKey.file("/tmp/AGENTS.md")],
+      ).toBeUndefined()
     })
   })
 
@@ -126,10 +128,10 @@ describe("instruction sync", () => {
       const url = InstructionKey.url("https://example.test/agents")
       const body = { kind: "url" as const, text: "remote rules" }
       InstructionSync.commit(sessionID, projectID, [{ key: url, status: "value", body }])
-      const stored = InstructionRepo.get(sessionID)?.data.values[url]
+      const stored = Effect.runSync(InstructionRepo.get(sessionID))?.data.values[url]
       const later = InstructionSync.commit(sessionID, projectID, [{ key: url, status: "unavailable" }])
       expect(later.delta).toBeUndefined()
-      expect(InstructionRepo.get(sessionID)?.data.values[url]).toBe(stored)
+      expect(Effect.runSync(InstructionRepo.get(sessionID))?.data.values[url]).toBe(stored)
     })
   })
 
@@ -143,7 +145,7 @@ describe("instruction sync", () => {
       ])
       expect(result.blocked).toBe(true)
       expect(result.delta).toBeUndefined()
-      expect(InstructionRepo.get(sessionID)).toBeUndefined()
+      expect(Effect.runSync(InstructionRepo.get(sessionID))).toBeUndefined()
       const live = InstructionSync.renderLive([fileRead("local")])
       expect(live.system[0]).toContain("local")
     })
@@ -161,7 +163,7 @@ describe("instruction sync", () => {
         Effect.runSync(
           Database.transaction((tx) =>
             Effect.sync(() => {
-              InstructionRepo.putBlobs([{ hash, body }], tx)
+              Effect.runSync(InstructionRepo.putBlobs([{ hash, body }], tx))
               SyncEvent.run(
                 SessionSync.InstructionsUpdated,
                 { delta: { [InstructionKey.file("/tmp/AGENTS.md")]: hash } } as any,
@@ -173,7 +175,7 @@ describe("instruction sync", () => {
           ),
         ),
       ).toThrow(/sessionID/)
-      expect(InstructionRepo.getBlob(hash)).toBeUndefined()
+      expect(Effect.runSync(InstructionRepo.getBlob(hash))).toBeUndefined()
     })
   })
 
@@ -187,7 +189,7 @@ describe("instruction sync", () => {
       const count = Database.syncDb().select().from(instructionBlob).all().length
       expect(count).toBe(1)
       const hash = hashInstructionBody({ kind: "file", text: "same" })
-      expect(InstructionRepo.getBlob(hash)).toBeDefined()
+      expect(Effect.runSync(InstructionRepo.getBlob(hash))).toBeDefined()
     })
   })
 
@@ -197,14 +199,14 @@ describe("instruction sync", () => {
       const { InstructionRepo } = await import("../../src/session/instruction-repo")
       const { SyncEvent } = await import("../../src/sync/sync-event")
       InstructionSync.commit(sessionID, projectID, [fileRead("one")])
-      const before = InstructionRepo.get(sessionID)!
+      const before = Effect.runSync(InstructionRepo.get(sessionID))!
       InstructionSync.commit(sessionID, projectID, [fileRead("two")])
-      const mid = InstructionRepo.get(sessionID)!
+      const mid = Effect.runSync(InstructionRepo.get(sessionID))!
       expect(mid.updatedSeq).toBeGreaterThan(before.updatedSeq)
       expect(mid.epochSeq).toBe(before.epochSeq)
 
-      InstructionRepo.advanceEpoch(sessionID, mid.updatedSeq)
-      const after = InstructionRepo.get(sessionID)!
+      Effect.runSync(InstructionRepo.advanceEpoch(sessionID, mid.updatedSeq))
+      const after = Effect.runSync(InstructionRepo.get(sessionID))!
       expect(after.epochSeq).toBe(mid.updatedSeq)
       expect(after.data.epoch_values).toEqual(after.data.values)
       const instructionEvents = SyncEvent.history(sessionID, projectID).filter((event) =>
@@ -224,10 +226,10 @@ describe("instruction sync", () => {
       const parentID = "ses_parent"
       const childID = "ses_child"
       InstructionSync.commit(parentID, projectID, [fileRead("parent-one")])
-      InstructionRepo.inherit(parentID, childID)
+      Effect.runSync(InstructionRepo.inherit(parentID, childID))
       InstructionSync.commit(parentID, projectID, [fileRead("parent-two")])
-      const child = InstructionRepo.get(childID)!
-      const parent = InstructionRepo.get(parentID)!
+      const child = Effect.runSync(InstructionRepo.get(childID))!
+      const parent = Effect.runSync(InstructionRepo.get(parentID))!
       expect(child.parentSessionID).toBe(parentID)
       expect(child.parentSeq).toBeLessThan(parent.updatedSeq)
       expect(child.data.epoch_values[InstructionKey.file("/tmp/AGENTS.md")]).toBe(
@@ -244,9 +246,9 @@ describe("instruction sync", () => {
       const { InstructionSync } = await import("../../src/session/instruction-sync")
       const { InstructionRepo } = await import("../../src/session/instruction-repo")
       InstructionSync.commit(sessionID, projectID, [fileRead("keep")])
-      expect(InstructionRepo.get(sessionID)).toBeDefined()
+      expect(Effect.runSync(InstructionRepo.get(sessionID))).toBeDefined()
       InstructionSync.clear(sessionID)
-      expect(InstructionRepo.get(sessionID)).toBeUndefined()
+      expect(Effect.runSync(InstructionRepo.get(sessionID))).toBeUndefined()
     })
   })
 

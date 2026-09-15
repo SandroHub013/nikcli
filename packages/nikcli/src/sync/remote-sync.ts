@@ -21,6 +21,7 @@
  * `createInMemoryRemoteTransport` + `createInMemoryScheduler`.
  */
 import type { JsonValue } from "@/util/json"
+import { Effect } from "effect"
 import { Log } from "@nikcli-ai/util/log"
 import { Database } from "@/database/database"
 import { eq } from "drizzle-orm"
@@ -122,7 +123,7 @@ export namespace RemoteSync {
     const delta = (record.data as { delta?: Record<string, string> } | null)?.delta
     if (!delta) return record
     const hashes = Object.values(delta).filter((value) => value !== "removed")
-    return { ...record, blobs: InstructionRepo.getBlobs(hashes) }
+    return { ...record, blobs: Effect.runSync(InstructionRepo.getBlobs(hashes)) }
   }
 
   async function ingestIncoming(event: SyncEventRecord): Promise<SyncEventRecord> {

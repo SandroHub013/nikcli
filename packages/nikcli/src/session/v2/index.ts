@@ -198,8 +198,8 @@ export namespace SessionV2 {
    * tail read `state()` / `pending()`.
    */
   export async function entries(sessionID: string): Promise<SessionEntry.Entry[]> {
-    const rows = SessionEntryRepo.list(sessionID)
-    if (SessionEntryRepo.messageCount(sessionID) >= MessageRepo.countMessages(sessionID)) return rows
+    const rows = Effect.runSync(SessionEntryRepo.list(sessionID))
+    if (Effect.runSync(SessionEntryRepo.messageCount(sessionID)) >= MessageRepo.countMessages(sessionID)) return rows
 
     const messages = await runSession(
       Effect.gen(function* () {
@@ -213,7 +213,7 @@ export namespace SessionV2 {
       Effect.runSync(
         Database.transaction((tx) => Effect.sync(() => SessionEntryProjection.backfill(tx, sessionID, messages))),
       )
-      return SessionEntryRepo.list(sessionID)
+      return Effect.runSync(SessionEntryRepo.list(sessionID))
     } catch (error) {
       // A backfill failure must not make history unreadable: fall back to
       // converting in memory, and let the next read try again.
@@ -224,7 +224,7 @@ export namespace SessionV2 {
 
   /** Number of persisted entries for a session, without materializing them. */
   export function entryCount(sessionID: string): number {
-    return SessionEntryRepo.count(sessionID)
+    return Effect.runSync(SessionEntryRepo.count(sessionID))
   }
 
   /** Force a rebuild of a session's entry projection from its v1 messages. */
@@ -238,7 +238,7 @@ export namespace SessionV2 {
     Effect.runSync(
       Database.transaction((tx) => Effect.sync(() => SessionEntryProjection.backfill(tx, sessionID, messages))),
     )
-    return SessionEntryRepo.list(sessionID)
+    return Effect.runSync(SessionEntryRepo.list(sessionID))
   }
 
   /**

@@ -43,12 +43,14 @@ export namespace SessionEntryProjection {
   function upsertMessage(tx: Executor, entry: SessionEntry.Entry, kind: SessionEntry.MessageKind) {
     const messageID = entry.messageID
     if (!messageID) return
-    SessionEntryRepo.upsert(
-      {
-        entry,
-        ref: messageRef(messageID, kind),
-      },
-      tx,
+    Effect.runSync(
+      SessionEntryRepo.upsert(
+        {
+          entry,
+          ref: messageRef(messageID, kind),
+        },
+        tx,
+      ),
     )
   }
 
@@ -108,12 +110,14 @@ export namespace SessionEntryProjection {
     })
     if (!entry) return
 
-    SessionEntryRepo.upsert(
-      {
-        entry,
-        ref: input.id,
-      },
-      tx,
+    Effect.runSync(
+      SessionEntryRepo.upsert(
+        {
+          entry,
+          ref: input.id,
+        },
+        tx,
+      ),
     )
     return entry
   }
@@ -123,15 +127,15 @@ export namespace SessionEntryProjection {
     if (info?.role === "user") {
       user(tx, info, undefined, partID)
     }
-    SessionEntryRepo.removeRef(sessionID, partID, tx)
+    Effect.runSync(SessionEntryRepo.removeRef(sessionID, partID, tx))
   }
 
   export function messageRemoved(tx: Executor, messageID: string): void {
-    SessionEntryRepo.removeMessage(messageID, tx)
+    Effect.runSync(SessionEntryRepo.removeMessage(messageID, tx))
   }
 
   export function sessionRemoved(tx: Executor, sessionID: string): void {
-    SessionEntryRepo.clear(sessionID, tx)
+    Effect.runSync(SessionEntryRepo.clear(sessionID, tx))
   }
 
   /**
@@ -142,7 +146,7 @@ export namespace SessionEntryProjection {
    * path if a projection is ever found to have drifted.
    */
   export function backfill(tx: Executor, sessionID: string, messages: MessageV2.WithParts[]): void {
-    SessionEntryRepo.clear(sessionID, tx)
+    Effect.runSync(SessionEntryRepo.clear(sessionID, tx))
     for (const msg of messages) {
       message(tx, msg.info)
       for (const item of msg.parts) {
