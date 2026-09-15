@@ -271,6 +271,31 @@ function stop(quiet = false): void {
       }
     },
     removeRecord: () => rmSync(plan.recordPath, { force: true }),
+    // Without /F taskkill sends the window a close, as its X button does.
+    close: (pid) => {
+      if (isWindows) spawnSync("taskkill", ["/PID", String(pid)], { stdio: "ignore" })
+      else {
+        try {
+          process.kill(pid, "SIGTERM")
+        } catch {
+          // already gone
+        }
+      }
+    },
+    waitExit: (pids, timeoutMs) => {
+      const alive = () => pids.filter((pid) => {
+        try {
+          process.kill(pid, 0)
+          return true
+        } catch {
+          return false
+        }
+      })
+      const deadline = Date.now() + timeoutMs
+      while (alive().length > 0 && Date.now() < deadline) Bun.sleepSync(200)
+      return alive()
+    },
+    reread: processTable,
   })
   if (result.outcome === "refused") {
     console.error(

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { instanceProcesses, planTestApp, stopInstance, superviseStart, type ProcessRow, type TestAppRecord } from "./test-app"
+import {
+  TEST_APP_CLOSE_TIMEOUT_MS,
+  instanceProcesses,
+  planTestApp,
+  stopInstance,
+  superviseStart,
+  type ProcessRow,
+  type TestAppRecord,
+} from "./test-app"
 
 /*
  * The reviewer's P2 on 7c3ebf379: a start that times out, or whose app goes
@@ -110,6 +118,69 @@ describe("host/test-app start and stop", () => {
     expect(await superviseStart(m.deps())).toEqual({ outcome: "started" })
     expect(m.killed).toEqual([])
     expect(m.record()).toBeDefined()
+  })
+
+  describe("orderly stop (S34: a kill lost the localStorage WebView2 had not written yet)", () => {
+    const appExe = `${root}\\packages\\ade\\src-tauri\\target\\debug\\ade-test.exe`
+    const table = (): ProcessRow[] => [
+      { pid: 10, ppid: 1, created: startedAt + 5, cmd: `bun.exe x tauri dev --config ${plan.configPath}` },
+      { pid: 15, ppid: 999, created: startedAt + 7, cmd: `node "${root}\\packages\\ade\\node_modules\\vite\\bin\\vite.js" --port 5270 --strictPort` },
+      { pid: 20, ppid: 10, created: startedAt + 60_000, exe: appExe, cmd: appExe },
+      { pid: 21, ppid: 20, created: startedAt + 61_000, cmd: `msedgewebview2.exe --user-data-dir=${plan.profileDir}` },
+    ]
+
+    function run(appCloses: boolean, tableReadable = true) {
+      let rows = table()
+      const calls: string[] = []
+      let waited = 0
+      const result = stopInstance({
+        rows,
+        record: { port: 5270, label: plan.label, root, startedAt },
+        plan,
+        root,
+        selfPid: 4242,
+        kill: (pid) => {
+          calls.push(`kill ${pid}`)
+          rows = rows.filter((row) => row.pid !== pid)
+        },
+        removeRecord: () => calls.push("record"),
+        close: (pid) => calls.push(`close ${pid}`),
+        waitExit: (pids, timeoutMs) => {
+          waited = timeoutMs
+          // The app closes its window; WebView2 goes with it.
+          if (appCloses) rows = rows.filter((row) => row.pid !== 20 && row.pid !== 21)
+          return pids.filter((pid) => rows.some((row) => row.pid === pid))
+        },
+        reread: () => (tableReadable ? rows : undefined),
+      })
+      return { result, calls, waited }
+    }
+
+    test("the app's window is closed and its exit awaited before anything is killed", () => {
+      const { result, calls, waited } = run(true)
+      expect(calls[0]).toBe("close 20")
+      expect(waited).toBe(TEST_APP_CLOSE_TIMEOUT_MS)
+      expect(calls).not.toContain("kill 20")
+      expect(calls).not.toContain("kill 21")
+      expect(result).toEqual({ outcome: "stopped", closed: [20], killed: expect.arrayContaining([10, 15]) })
+      expect(calls.at(-1)).toBe("record")
+    })
+
+    test("an app that does not exit in time is killed, after its children", () => {
+      const { result, calls } = run(false)
+      expect(calls[0]).toBe("close 20")
+      expect(calls.indexOf("kill 21")).toBeLessThan(calls.indexOf("kill 20"))
+      expect(calls.indexOf("kill 20")).toBeLessThan(calls.indexOf("kill 10"))
+      expect(result).toMatchObject({ outcome: "stopped", closed: [] })
+    })
+
+    test("with the table unreadable after the wait, the app's pids are not killed: they may be reused", () => {
+      const { calls } = run(false, false)
+      expect(calls).not.toContain("kill 20")
+      expect(calls).not.toContain("kill 21")
+      expect(calls).toContain("kill 10")
+      expect(calls).toContain("kill 15")
+    })
   })
 
   test("stop without a start time kills nothing and keeps the record, naming the pids", () => {

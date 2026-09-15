@@ -276,19 +276,34 @@ export function startFailure(log: string): string | undefined {
 
 /* ── start and stop, with the machine passed in ─────────────────────────── */
 
-/** What `stop` did: killed what the start created, refused to guess, or found nothing. */
+/** What `stop` did: closed and killed what the start created, refused to guess, or found nothing. */
 export type StopOutcome =
-  | { outcome: "stopped"; killed: number[] }
+  | { outcome: "stopped"; closed: number[]; killed: number[] }
   | { outcome: "refused"; pids: number[] }
   | { outcome: "nothing" }
 
+/** How long the app has to close its window and exit before it is killed. */
+export const TEST_APP_CLOSE_TIMEOUT_MS = 10_000
+
+/** Whether a process is the app itself: the binary built into this worktree's `target`. */
+export function isAppProcess(row: ProcessRow, root: string): boolean {
+  const norm = (text: string | undefined) => (text ?? "").replace(/\\/g, "/").toLowerCase()
+  return norm(row.exe).startsWith(`${norm(join(root, "packages", "ade", "src-tauri", "target"))}/`)
+}
+
 /**
  * Stops one worktree's instance: every process its recorded start created,
- * children first, then its record.
+ * then its record.
  *
- * Without a start time in the record nothing is killed: arguments alone do not
- * say who started a process. The record is removed only when nothing of the
- * instance is left to describe.
+ * The app first, in order: its window is asked to close and the app gets
+ * `closeTimeoutMs` to exit. WebView2 writes localStorage to disk late, and a
+ * kill lost what the page had stored in its last seconds (S34). What is left
+ * then — `tauri dev`, cargo, Vite, and an app that did not exit — is killed,
+ * children first, as read again from the process table.
+ *
+ * Without a start time in the record nothing is closed or killed: arguments
+ * alone do not say who started a process. The record is removed only when
+ * nothing of the instance is left to describe.
  */
 export function stopInstance(input: {
   rows: readonly ProcessRow[]
@@ -298,6 +313,13 @@ export function stopInstance(input: {
   selfPid: number
   kill: (pid: number) => void
   removeRecord: () => void
+  /** Asks a process to close its window; the orderly stop. Without it everything is killed. */
+  close?: (pid: number) => void
+  /** Waits up to `timeoutMs` for the pids to exit, and returns those still running. */
+  waitExit?: (pids: number[], timeoutMs: number) => number[]
+  /** The process table after the app has closed; `rows` again when it cannot be read. */
+  reread?: () => readonly ProcessRow[] | undefined
+  closeTimeoutMs?: number
 }): StopOutcome {
   const { rows, record, plan, root } = input
   if (record?.startedAt === undefined) {
@@ -306,7 +328,20 @@ export function stopInstance(input: {
     input.removeRecord()
     return { outcome: "nothing" }
   }
-  const members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
+  let members = instanceProcesses(rows, plan, root, record.port, record.startedAt)
+  const closed: number[] = []
+  const apps = members.filter((row) => isAppProcess(row, root) && row.pid !== input.selfPid).map((row) => row.pid)
+  if (input.close && input.waitExit && apps.length > 0) {
+    for (const pid of apps) input.close(pid)
+    const alive = new Set(input.waitExit(apps, input.closeTimeoutMs ?? TEST_APP_CLOSE_TIMEOUT_MS))
+    closed.push(...apps.filter((pid) => !alive.has(pid)))
+    // Read again, with the same start filter, so a pid reused meanwhile is not taken for ours.
+    // Unreadable: the app and its children are left alone, since after the wait nothing proves those pids are still theirs.
+    const fresh = input.reread?.()
+    members = fresh
+      ? instanceProcesses(fresh, plan, root, record.port, record.startedAt)
+      : members.filter((row) => !apps.includes(row.pid) && !apps.includes(row.ppid))
+  }
   const killed: number[] = []
   for (const row of killOrder(members)) {
     if (row.pid === input.selfPid) continue
@@ -314,7 +349,7 @@ export function stopInstance(input: {
     killed.push(row.pid)
   }
   input.removeRecord()
-  return killed.length > 0 ? { outcome: "stopped", killed } : { outcome: "nothing" }
+  return closed.length > 0 || killed.length > 0 ? { outcome: "stopped", closed, killed } : { outcome: "nothing" }
 }
 
 /** How a start ended. Every outcome but `started` has already stopped what the start left. */
