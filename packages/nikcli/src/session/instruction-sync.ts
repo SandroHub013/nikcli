@@ -92,10 +92,14 @@ export namespace InstructionSync {
     if (blocked) return { blocked: true }
     if (Object.keys(delta).length === 0) return { blocked: false }
 
-    Database.transaction((tx) => {
-      InstructionRepo.putBlobs(blobs, tx)
-      SyncEvent.run(SessionSync.InstructionsUpdated, { sessionID, delta }, { projectID })
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          InstructionRepo.putBlobs(blobs, tx)
+          SyncEvent.run(SessionSync.InstructionsUpdated, { sessionID, delta }, { projectID })
+        }),
+      ),
+    )
     return { delta, blocked: false }
   }
 

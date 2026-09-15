@@ -1,32 +1,33 @@
-import { useKeyboard } from "@opentui/solid"
-import { TextAttributes } from "@opentui/core"
-import { Clipboard } from "@tui/util/clipboard"
-import { createMemo, createResource, For, onMount, Show } from "solid-js"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { useDialog, type DialogContext } from "@tui/ui/dialog"
-import { DialogPrompt } from "@tui/ui/dialog-prompt"
-import { useToast } from "@tui/ui/toast"
-import { DialogProvider } from "./dialog-provider"
-import { useSDK } from "@tui/context/sdk"
-import { UserApi } from "@tui/util/user-api"
-import { UserSession } from "@nikcli-ai/util/user-session"
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
-import { useTheme } from "@tui/context/theme"
+import { useKeyboard } from "@opentui/solid";
+import { TextAttributes } from "@opentui/core";
+import { Clipboard } from "@tui/util/clipboard";
+import { createMemo, createResource, For, onMount, Show } from "solid-js";
+import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select";
+import { useDialog, type DialogContext } from "@tui/ui/dialog";
+import { DialogPrompt } from "@tui/ui/dialog-prompt";
+import { useToast } from "@tui/ui/toast";
+import { DialogProvider } from "./dialog-provider";
+import { useSDK } from "@tui/context/sdk";
+import { UserApi } from "@tui/util/user-api";
+import { UserSession } from "@nikcli-ai/util/user-session";
+import type { UserSchema } from "@nikcli-ai/util/user-schema";
+import { useTheme } from "@tui/context/theme";
+import { DialogLogin } from "@tui/component/dialog-login";
 
 type ProfileNotice = {
-  message: string
-  tone: "info" | "success" | "warning"
-}
+  message: string;
+  tone: "info" | "success" | "warning";
+};
 
 export function DialogAuthManage() {
-  const dialog = useDialog()
-  const sdk = useSDK()
+  const dialog = useDialog();
+  const sdk = useSDK();
 
   // The session used to be verified in-process against the user tables. It is
   // now `GET /user/me`, which means the answer arrives a frame late — and the
   // wrong branch rendered meanwhile would offer "Sign in" to someone already
   // signed in. Hold the menu until it lands; over worker RPC that is one frame.
-  const [account] = createResource(() => UserApi.me(sdk))
+  const [account] = createResource(() => UserApi.me(sdk));
 
   const options = createMemo<DialogSelectOption[]>(() => {
     if (account.loading) {
@@ -37,20 +38,22 @@ export function DialogAuthManage() {
           category: "Account",
           disabled: true,
         },
-      ]
+      ];
     }
 
-    const user = account()
-    const items: DialogSelectOption[] = []
+    const user = account();
+    const items: DialogSelectOption[] = [];
 
     if (user) {
-      const displayName = user.display_name?.trim()
+      const displayName = user.display_name?.trim();
       items.push(
         {
           title: "View Profile",
           value: "profile",
           category: "Account",
-          description: displayName ? `${displayName} · ${user.email}` : user.email,
+          description: displayName
+            ? `${displayName} · ${user.email}`
+            : user.email,
           footer: getRoleLabel(user.role),
           onSelect: () => showProfile(dialog, user),
         },
@@ -58,10 +61,12 @@ export function DialogAuthManage() {
           title: "Change Display Name",
           value: "update_name",
           category: "Account",
-          description: displayName ? `Current: ${displayName}` : "Set the name shown in chat and account views",
+          description: displayName
+            ? `Current: ${displayName}`
+            : "Set the name shown in chat and account views",
           onSelect: async () => {
-            await updateDisplayName(dialog, sdk, user.id, user.display_name)
-            dialog.replace(() => <DialogAuthManage />)
+            await updateDisplayName(dialog, sdk, user.id, user.display_name);
+            dialog.replace(() => <DialogAuthManage />);
           },
         },
         {
@@ -70,8 +75,8 @@ export function DialogAuthManage() {
           category: "Account",
           description: "Update the password stored for this local account",
           onSelect: async () => {
-            await updatePassword(dialog, sdk)
-            dialog.replace(() => <DialogAuthManage />)
+            await updatePassword(dialog, sdk);
+            dialog.replace(() => <DialogAuthManage />);
           },
         },
         {
@@ -80,11 +85,11 @@ export function DialogAuthManage() {
           category: "Account",
           description: `Signed in as ${user.username}`,
           onSelect: async () => {
-            await logout(sdk)
-            dialog.replace(() => <DialogAuthManage />)
+            await logout(sdk);
+            dialog.replace(() => <DialogAuthManage />);
           },
         },
-      )
+      );
     } else {
       items.push({
         title: "Sign in",
@@ -92,11 +97,10 @@ export function DialogAuthManage() {
         category: "Account",
         description: "Continue with nikcli (browser) or use a local password",
         onSelect: async () => {
-          const { DialogLogin } = await import("@tui/component/dialog-login")
-          await DialogLogin.run(dialog, sdk)
-          dialog.replace(() => <DialogAuthManage />)
+          await DialogLogin.run(dialog, sdk);
+          dialog.replace(() => <DialogAuthManage />);
         },
-      })
+      });
     }
 
     items.push({
@@ -105,44 +109,61 @@ export function DialogAuthManage() {
       category: "System",
       description: "Manage model provider credentials and connection state",
       onSelect: () => dialog.replace(() => <DialogProvider />),
-    })
+    });
 
-    return items
-  })
+    return items;
+  });
 
-  return <DialogSelect title="Account" options={options()} />
+  return <DialogSelect title="Account" options={options()} />;
 }
 
-function showProfile(dialog: DialogContext, user: UserSchema.PublicUser, notice?: ProfileNotice) {
-  dialog.replace(() => <DialogProfile user={user} notice={notice} />)
+function showProfile(
+  dialog: DialogContext,
+  user: UserSchema.PublicUser,
+  notice?: ProfileNotice,
+) {
+  dialog.replace(() => <DialogProfile user={user} notice={notice} />);
 }
 
-function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNotice }) {
-  const dialog = useDialog()
-  const toast = useToast()
-  const sdk = useSDK()
-  const { theme } = useTheme()
+function DialogProfile(props: {
+  user: UserSchema.PublicUser;
+  notice?: ProfileNotice;
+}) {
+  const dialog = useDialog();
+  const toast = useToast();
+  const sdk = useSDK();
+  const { theme } = useTheme();
 
-  onMount(() => dialog.setSize("large"))
+  onMount(() => dialog.setSize("large"));
 
-  const displayName = createMemo(() => props.user.display_name?.trim() || props.user.username)
+  const displayName = createMemo(
+    () => props.user.display_name?.trim() || props.user.username,
+  );
   const subtitle = createMemo(() => {
-    if (props.user.display_name?.trim()) return `@${props.user.username} · local profile`
-    return `@${props.user.username} · add a display name for a friendlier handle`
-  })
+    if (props.user.display_name?.trim())
+      return `@${props.user.username} · local profile`;
+    return `@${props.user.username} · add a display name for a friendlier handle`;
+  });
   // Counters come from the caller's own session (`GET /user/me/stats`), so they
   // arrive after the first paint. `—` is the honest placeholder: `0` would read
   // as "no contacts" before anything has been counted.
-  const [counters] = createResource(() => UserApi.stats(sdk))
+  const [counters] = createResource(() => UserApi.stats(sdk));
   const counter = (pick: (value: UserSchema.Stats) => number) => {
-    const value = counters()
-    return value ? String(pick(value)) : "—"
-  }
-  const memberFor = createMemo(() => formatRelativeAge(props.user.created_at))
+    const value = counters();
+    return value ? String(pick(value)) : "—";
+  };
+  const memberFor = createMemo(() => formatRelativeAge(props.user.created_at));
 
-  const restoreProfile = async (notice?: ProfileNotice, nextUser?: UserSchema.PublicUser | null) => {
-    showProfile(dialog, nextUser ?? (await UserApi.me(sdk)) ?? props.user, notice)
-  }
+  const restoreProfile = async (
+    notice?: ProfileNotice,
+    nextUser?: UserSchema.PublicUser | null,
+  ) => {
+    showProfile(
+      dialog,
+      nextUser ?? (await UserApi.me(sdk)) ?? props.user,
+      notice,
+    );
+  };
 
   const copyValue = async (value: string, label: string) => {
     await Clipboard.copy(value)
@@ -152,40 +173,51 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
           variant: "info",
         }),
       )
-      .catch(toast.error)
-  }
+      .catch(toast.error);
+  };
 
   const handleDisplayName = async () => {
-    const updated = await updateDisplayName(dialog, sdk, props.user.id, props.user.display_name)
+    const updated = await updateDisplayName(
+      dialog,
+      sdk,
+      props.user.id,
+      props.user.display_name,
+    );
     await restoreProfile(
       updated
         ? {
             tone: "success",
-            message: updated.display_name ? "Display name updated." : "Display name cleared.",
+            message: updated.display_name
+              ? "Display name updated."
+              : "Display name cleared.",
           }
         : undefined,
       updated,
-    )
-  }
+    );
+  };
 
   const handlePassword = async () => {
-    const changed = await updatePassword(dialog, sdk)
-    await restoreProfile(changed ? { tone: "success", message: "Password updated." } : undefined)
-  }
+    const changed = await updatePassword(dialog, sdk);
+    await restoreProfile(
+      changed ? { tone: "success", message: "Password updated." } : undefined,
+    );
+  };
 
   const handleLogout = async () => {
-    await logout(sdk)
-    dialog.replace(() => <DialogAuthManage />)
-  }
+    await logout(sdk);
+    dialog.replace(() => <DialogAuthManage />);
+  };
 
   const actions = createMemo(() => [
     {
       shortcut: "n",
       title: "Edit display name",
-      description: props.user.display_name?.trim() || "Add a public-facing label for chat and account views",
+      description:
+        props.user.display_name?.trim() ||
+        "Add a public-facing label for chat and account views",
       tone: "accent" as const,
       onSelect: () => {
-        void handleDisplayName()
+        void handleDisplayName();
       },
     },
     {
@@ -194,7 +226,7 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
       description: "Rotate the password stored for this local account",
       tone: "warning" as const,
       onSelect: () => {
-        void handlePassword()
+        void handlePassword();
       },
     },
     {
@@ -203,7 +235,7 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
       description: props.user.email,
       tone: "info" as const,
       onSelect: () => {
-        void copyValue(props.user.email, "Email")
+        void copyValue(props.user.email, "Email");
       },
     },
     {
@@ -212,7 +244,7 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
       description: props.user.username,
       tone: "default" as const,
       onSelect: () => {
-        void copyValue(props.user.username, "Username")
+        void copyValue(props.user.username, "Username");
       },
     },
     {
@@ -221,25 +253,25 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
       description: "Sign out of this device and return to the account menu",
       tone: "error" as const,
       onSelect: () => {
-        void handleLogout()
+        void handleLogout();
       },
     },
-  ])
+  ]);
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      dialog.replace(() => <DialogAuthManage />)
-      return
+      evt.preventDefault();
+      evt.stopPropagation();
+      dialog.replace(() => <DialogAuthManage />);
+      return;
     }
 
-    const action = actions().find((item) => item.shortcut === evt.name)
-    if (!action) return
-    evt.preventDefault()
-    evt.stopPropagation()
-    action.onSelect()
-  })
+    const action = actions().find((item) => item.shortcut === evt.name);
+    if (!action) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    action.onSelect();
+  });
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -260,13 +292,27 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
       >
         <box flexDirection="row" justifyContent="space-between" gap={2}>
           <box gap={0}>
-            <text fg={theme.foreground.default} attributes={TextAttributes.BOLD}>
+            <text
+              fg={theme.foreground.default}
+              attributes={TextAttributes.BOLD}
+            >
               {displayName()}
             </text>
             <text fg={theme.foreground.muted}>{subtitle()}</text>
           </box>
-          <box backgroundColor={theme.surface.panel} paddingLeft={1} paddingRight={1} alignSelf="flex-start">
-            <text fg={props.user.role === "admin" ? theme.status.warning.fg : theme.accent.alt}>
+          <box
+            backgroundColor={theme.surface.panel}
+            paddingLeft={1}
+            paddingRight={1}
+            alignSelf="flex-start"
+          >
+            <text
+              fg={
+                props.user.role === "admin"
+                  ? theme.status.warning.fg
+                  : theme.accent.alt
+              }
+            >
               {getRoleLabel(props.user.role)}
             </text>
           </box>
@@ -276,20 +322,28 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
           when={props.user.display_name?.trim()}
           fallback={
             <text fg={theme.foreground.muted}>
-              Set a display name to make your local identity easier to recognize in chat.
+              Set a display name to make your local identity easier to recognize
+              in chat.
             </text>
           }
         >
           <text fg={theme.foreground.muted}>
-            Your display name is already configured and shown wherever this profile appears.
+            Your display name is already configured and shown wherever this
+            profile appears.
           </text>
         </Show>
       </box>
 
-      <Show when={props.notice}>{(notice) => <ProfileNoticeBox notice={notice()} />}</Show>
+      <Show when={props.notice}>
+        {(notice) => <ProfileNoticeBox notice={notice()} />}
+      </Show>
 
       <box flexDirection="row" gap={1}>
-        <ProfileStat label="Contacts" value={counter((value) => value.contacts)} tone="accent" />
+        <ProfileStat
+          label="Contacts"
+          value={counter((value) => value.contacts)}
+          tone="accent"
+        />
         <ProfileStat
           label="Unread"
           value={counter((value) => value.unread)}
@@ -311,11 +365,20 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
           gap={1}
         >
           <ProfileField label="Username" value={props.user.username} />
-          <ProfileField label="Display" value={props.user.display_name?.trim() || "Not set"} />
+          <ProfileField
+            label="Display"
+            value={props.user.display_name?.trim() || "Not set"}
+          />
           <ProfileField label="Email" value={props.user.email} />
           <ProfileField label="Role" value={getRoleLabel(props.user.role)} />
-          <ProfileField label="Joined" value={formatDate(props.user.created_at)} />
-          <ProfileField label="Updated" value={formatDate(props.user.updated_at)} />
+          <ProfileField
+            label="Joined"
+            value={formatDate(props.user.created_at)}
+          />
+          <ProfileField
+            label="Updated"
+            value={formatDate(props.user.updated_at)}
+          />
         </box>
       </box>
 
@@ -324,43 +387,55 @@ function DialogProfile(props: { user: UserSchema.PublicUser; notice?: ProfileNot
           Quick Actions
         </text>
         <box gap={1}>
-          <For each={actions()}>{(action) => <ProfileActionRow {...action} />}</For>
+          <For each={actions()}>
+            {(action) => <ProfileActionRow {...action} />}
+          </For>
         </box>
       </box>
 
       <text fg={theme.foreground.muted}>
-        <span style={{ fg: theme.accent.fg }}>enter</span> back to account menu ·{" "}
-        <span style={{ fg: theme.accent.fg }}>esc</span> close
+        <span style={{ fg: theme.accent.fg }}>enter</span> back to account menu
+        · <span style={{ fg: theme.accent.fg }}>esc</span> close
       </text>
     </box>
-  )
+  );
 }
 
 function ProfileNoticeBox(props: { notice: ProfileNotice }) {
-  const { theme } = useTheme()
+  const { theme } = useTheme();
 
   const color = createMemo(() => {
-    if (props.notice.tone === "success") return theme.status.success.fg
-    if (props.notice.tone === "warning") return theme.status.warning.fg
-    return theme.status.info.fg
-  })
+    if (props.notice.tone === "success") return theme.status.success.fg;
+    if (props.notice.tone === "warning") return theme.status.warning.fg;
+    return theme.status.info.fg;
+  });
 
   return (
-    <box backgroundColor={theme.surface.offset} paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
+    <box
+      backgroundColor={theme.surface.offset}
+      paddingLeft={1}
+      paddingRight={1}
+      paddingTop={1}
+      paddingBottom={1}
+    >
       <text fg={color()}>{props.notice.message}</text>
     </box>
-  )
+  );
 }
 
-function ProfileStat(props: { label: string; value: string; tone: "default" | "accent" | "warning" | "success" }) {
-  const { theme } = useTheme()
+function ProfileStat(props: {
+  label: string;
+  value: string;
+  tone: "default" | "accent" | "warning" | "success";
+}) {
+  const { theme } = useTheme();
 
   const color = createMemo(() => {
-    if (props.tone === "accent") return theme.accent.alt
-    if (props.tone === "warning") return theme.status.warning.fg
-    if (props.tone === "success") return theme.status.success.fg
-    return theme.foreground.default
-  })
+    if (props.tone === "accent") return theme.accent.alt;
+    if (props.tone === "warning") return theme.status.warning.fg;
+    if (props.tone === "success") return theme.status.success.fg;
+    return theme.foreground.default;
+  });
 
   return (
     <box
@@ -378,11 +453,11 @@ function ProfileStat(props: { label: string; value: string; tone: "default" | "a
         </text>
       </box>
     </box>
-  )
+  );
 }
 
 function ProfileField(props: { label: string; value: string }) {
-  const { theme } = useTheme()
+  const { theme } = useTheme();
 
   return (
     <box flexDirection="row" gap={2}>
@@ -393,25 +468,25 @@ function ProfileField(props: { label: string; value: string }) {
         {props.value}
       </text>
     </box>
-  )
+  );
 }
 
 function ProfileActionRow(props: {
-  shortcut: string
-  title: string
-  description: string
-  tone: "default" | "accent" | "info" | "warning" | "error"
-  onSelect: () => void
+  shortcut: string;
+  title: string;
+  description: string;
+  tone: "default" | "accent" | "info" | "warning" | "error";
+  onSelect: () => void;
 }) {
-  const { theme } = useTheme()
+  const { theme } = useTheme();
 
   const color = createMemo(() => {
-    if (props.tone === "accent") return theme.accent.alt
-    if (props.tone === "info") return theme.status.info.fg
-    if (props.tone === "warning") return theme.status.warning.fg
-    if (props.tone === "error") return theme.status.error.fg
-    return theme.foreground.default
-  })
+    if (props.tone === "accent") return theme.accent.alt;
+    if (props.tone === "info") return theme.status.info.fg;
+    if (props.tone === "warning") return theme.status.warning.fg;
+    if (props.tone === "error") return theme.status.error.fg;
+    return theme.foreground.default;
+  });
 
   return (
     <box
@@ -424,82 +499,105 @@ function ProfileActionRow(props: {
     >
       <box gap={0}>
         <text fg={theme.foreground.default}>
-          <span style={{ fg: color(), attributes: TextAttributes.BOLD }}>{props.shortcut}</span> {props.title}
+          <span style={{ fg: color(), attributes: TextAttributes.BOLD }}>
+            {props.shortcut}
+          </span>{" "}
+          {props.title}
         </text>
         <text fg={theme.foreground.muted} wrapMode="word">
           {props.description}
         </text>
       </box>
     </box>
-  )
+  );
 }
 
-async function updateDisplayName(dialog: DialogContext, sdk: UserApi.Sdk, userId: string, currentName: string | null) {
+async function updateDisplayName(
+  dialog: DialogContext,
+  sdk: UserApi.Sdk,
+  userId: string,
+  currentName: string | null,
+) {
   const value = await DialogPrompt.show(dialog, "Change Display Name", {
     placeholder: "Enter display name (leave empty to remove)",
     value: currentName ?? "",
     allowEmpty: true,
-  })
-  if (value === null) return
+  });
+  if (value === null) return;
 
-  const updated = await UserApi.update(sdk, userId, { displayName: value })
-  return updated.ok ? updated.data : null
+  const updated = await UserApi.update(sdk, userId, { displayName: value });
+  return updated.ok ? updated.data : null;
 }
 
-async function updatePassword(dialog: DialogContext, sdk: UserApi.Sdk): Promise<boolean> {
+async function updatePassword(
+  dialog: DialogContext,
+  sdk: UserApi.Sdk,
+): Promise<boolean> {
   const current = await DialogPrompt.show(dialog, "Change Password — Current", {
     placeholder: "Enter current password",
-  })
-  if (current === null) return false
+  });
+  if (current === null) return false;
 
   const newPass = await DialogPrompt.show(dialog, "Change Password — New", {
     placeholder: "Enter new password (min 8 chars)",
-  })
-  if (newPass === null) return false
+  });
+  if (newPass === null) return false;
 
   if (newPass.length < 8) {
-    const retry = await DialogPrompt.show(dialog, "Password too short. Press Enter to retry.", {
-      placeholder: "Press Enter",
-    })
-    if (retry === null) return false
-    return updatePassword(dialog, sdk)
+    const retry = await DialogPrompt.show(
+      dialog,
+      "Password too short. Press Enter to retry.",
+      {
+        placeholder: "Press Enter",
+      },
+    );
+    if (retry === null) return false;
+    return updatePassword(dialog, sdk);
   }
 
   const confirm = await DialogPrompt.show(dialog, "Change Password — Confirm", {
     placeholder: "Confirm new password",
-  })
-  if (confirm === null) return false
+  });
+  if (confirm === null) return false;
 
   if (newPass !== confirm) {
-    const retry = await DialogPrompt.show(dialog, "Passwords do not match. Press Enter to retry.", {
-      placeholder: "Press Enter",
-    })
-    if (retry === null) return false
-    return updatePassword(dialog, sdk)
+    const retry = await DialogPrompt.show(
+      dialog,
+      "Passwords do not match. Press Enter to retry.",
+      {
+        placeholder: "Press Enter",
+      },
+    );
+    if (retry === null) return false;
+    return updatePassword(dialog, sdk);
   }
 
   // The current password is checked where the hash lives, not here: a wrong one
   // comes back as the route's own message rather than a local guess.
-  const changed = await UserApi.changePassword(sdk, { current, next: newPass })
+  const changed = await UserApi.changePassword(sdk, { current, next: newPass });
   if (!changed.ok) {
-    const retry = await DialogPrompt.show(dialog, `${changed.error}. Press Enter to retry.`, {
-      placeholder: "Press Enter",
-    })
-    if (retry === null) return false
-    return updatePassword(dialog, sdk)
+    const retry = await DialogPrompt.show(
+      dialog,
+      `${changed.error}. Press Enter to retry.`,
+      {
+        placeholder: "Press Enter",
+      },
+    );
+    if (retry === null) return false;
+    return updatePassword(dialog, sdk);
   }
-  return true
+  return true;
 }
 
 async function logout(sdk: UserApi.Sdk) {
   // Revoke server-side first; the local token is dropped either way, so a failed
   // round trip still signs this machine out rather than leaving it half-signed-in.
-  await UserApi.logout(sdk)
-  await UserSession.clear()
+  await UserApi.logout(sdk);
+  await UserSession.clear();
 }
 
 function getRoleLabel(role: UserSchema.Role) {
-  return role === "admin" ? "Administrator" : "User"
+  return role === "admin" ? "Administrator" : "User";
 }
 
 function formatDate(value: number) {
@@ -507,18 +605,18 @@ function formatDate(value: number) {
     year: "numeric",
     month: "short",
     day: "numeric",
-  })
+  });
 }
 
 function formatRelativeAge(value: number) {
-  const diff = Math.max(0, Date.now() - value)
-  const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+  const diff = Math.max(0, Date.now() - value);
+  const days = Math.floor(diff / (24 * 60 * 60 * 1000));
 
-  if (days <= 0) return "Today"
-  if (days < 30) return `${days}d`
+  if (days <= 0) return "Today";
+  if (days < 30) return `${days}d`;
 
-  const months = Math.floor(days / 30)
-  if (months < 12) return `${months}mo`
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
 
-  return `${Math.floor(days / 365)}y`
+  return `${Math.floor(days / 365)}y`;
 }

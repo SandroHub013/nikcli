@@ -3,9 +3,107 @@
 | Field   | Value                                                                                                                                                                                         |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status  | **Blocked** by the roadmap (see below); nothing in this document is implemented                                                                                                               |
-| Scope   | New `packages/effect-drizzle-sqlite`, then `packages/nikcli/src/database/database.ts`                                                                                                         |
+| Scope   | ~~New `packages/effect-drizzle-sqlite`~~ — see "Upstream Shipped It"; then `packages/nikcli/src/database/database.ts`                                                                         |
 | Buys    | Yieldable Drizzle queries inside `Effect.gen`, without hand-rolling the adapter per call site                                                                                                 |
 | Blocker | ROADMAP non-negotiable 3 ("an alternate database layer") and Deferred Choices ("Effect SQL"). Needs a measured bottleneck, a compatibility case, and a recorded decision before the first PR. |
+
+## Upstream Shipped It — 2026-09-15
+
+The premise below ("vendor the adapter … before upstream Drizzle ships it") is **no longer true**.
+`drizzle-orm@1.0.0-rc.5` publishes `drizzle-orm/effect-sqlite-bun`, an Effect SQLite driver over
+`@effect/sql-sqlite-bun`'s `SqliteClient`. Do not build `packages/effect-drizzle-sqlite`.
+
+Verified on the published packages, not from the changelog:
+
+- The stack runs on `effect@4.0.0-rc.112`, the pin this repo already carries — drizzle 1.0-rc.5 asks
+  for `>= 4.0.0-beta.105`, so adopting it needs no repo-wide `effect` bump.
+- Pragmas stay reachable through the client as ordinary SQL, including `mmap_size = 0` and
+  `wal_checkpoint(TRUNCATE)`, so the footprint and WAL defences above survive the move.
+- Transactions are `(tx) => Effect<A, E, R>`, so a body that returns a promise is not expressible.
+  That is the same guarantee the synchronous driver now spells out as a type error, arrived at
+  structurally rather than by a guard.
+- The official config omits only `cache` and `logger`, so `schema` stays supported — unlike
+  opencode's vendored copy, which also drops it.
+
+opencode v2 vendors ~2,770 lines of this under `packages/core/src/database/drizzle/` because it runs
+the same code on workerd, node and bun over a generic `SqlClient`. nikcli is Bun-only and takes the
+published package instead. Whatever else this spec says about _authoring_ an adapter is dead; what it
+says about **the two semantics to preserve** is not, and still governs any port.
+
+The roadmap blocker below is unchanged. Upstream shipping the adapter supplies the _compatibility
+case_, not the measured bottleneck. Measurement so far argues the other way: on identical data the
+Effect path costs roughly 8µs per query more than the synchronous driver of the same version
+(16.4µs vs 7.9µs on a primary-key read). The case for moving is that a repository's failure mode
+becomes visible in its type, not that it is faster — a recorded decision must say so.
+
+### What Landed Instead — 2026-09-15
+
+The version bump alone, with the synchronous driver kept:
+
+- `drizzle-orm` `0.41.0` → `1.0.0-rc.5-ab785fc` in `packages/nikcli`. `packages/console/core` stays
+  on `0.41.0`; it is MySQL over PlanetScale and shares none of this.
+- `drizzle(native, { schema })` → `drizzle({ client })`; the positional form is gone in 1.0, and
+  `DrizzleSQLiteConfig` drops `schema` in favour of `relations`. Free here: nothing in `src` uses the
+  relational query API.
+- A bounded statement cache in front of the Drizzle connection — see `database.ts`. 1.0 compiles
+  through `Database.query`, whose cache never evicts.
+- Measured on the repo's own schema: primary-key read `29.1µs → 12.5µs`, twenty-row list
+  `64.7µs → 41.0µs`.
+
+`drizzle-kit` stays at `0.31.10`. The RC kit resolves `drizzle-orm` from the hoisted root, which is
+`console/core`'s `0.41.0`, and dies on `./_relations`. It has no npm script pointing at it, so this
+costs nothing today; it is a prerequisite for anything that wants generated migrations.
+
+## The Cheaper Way To Get The Same Thing — 2026-09-15
+
+There are two ways to reach yieldable queries, and they do not cost the same. Measured best-of-three,
+same schema, same 2000 rows, same process:
+
+|                                             | get by pk | list 20 |
+| ------------------------------------------- | --------: | ------: |
+| synchronous driver, called directly (today) |    7.75µs | 30.67µs |
+| synchronous driver, wrapped in `Effect.try` |    8.29µs | 31.52µs |
+| `drizzle-orm/effect-sqlite-bun`             |   17.03µs | 44.83µs |
+
+Taking Effect at the **repository boundary** — `Effect.try` around the same synchronous call, with a
+tagged error in `catch` — costs half a microsecond. Taking it by **swapping the driver** costs nine.
+Both deliver what the roadmap blocker is actually about: a repository's failure mode in its type, an
+executor passed in rather than a process-global reached for mid-function, and a body that composes
+in `Effect.gen`. The driver swap additionally requires rewriting all 28 migrations to `up(tx) =>
+Effect`; the boundary approach requires none of that, because the driver does not change.
+
+Transactions are the part that has to be proven rather than asserted, since a synchronous
+`db.transaction` cannot contain an Effect. A combinator that evaluates the body with
+`runSyncExit`, throws a marker on a failed Exit so `bun:sqlite` rolls back, and then returns that
+Exit — which is already an Effect — was validated against all five behaviours that matter:
+
+- a successful body commits;
+- a typed domain failure rolls back **and surfaces as itself**, not flattened into a database error;
+- a SQL failure (duplicate primary key) rolls back and surfaces as the database error;
+- an asynchronous body is rejected instead of committing at its first suspension;
+- a nested call joins the outer transaction and rolls back with it.
+
+This does not unblock anything on its own. The real cost is not in `database.ts`: turning
+`get(id): State | undefined` into `get(id): Effect<…>` changes every caller of every repository,
+which is most of the codebase, and that is what [retire-database-wrapper.md](./retire-database-wrapper.md)
+stages into groups. But when that decision is recorded, this is the shape it should take, and the
+`effect-sqlite-bun` driver is not needed to get there.
+
+## Measured And Rejected: Collapsing The Bootstrap
+
+opencode generates a `schema.gen.ts` so an empty database gets its schema in one pass instead of
+replaying the migration history. Ported here, it **fails**, and the existing tests catch it.
+
+Thirteen of nikcli's migrations import legacy JSON or an older database. They are not dead weight on
+an empty database — an upgrading user has that JSON on disk and no `nikcli.db` yet, which is exactly
+the empty-database case a bootstrap would skip. `test/database/workspace-json.test.ts` and eight
+others fail immediately on a bootstrap that seeds the journal with every migration id.
+
+The premise that those migrations are no-ops on a fresh install is simply wrong, and the numbers do
+not justify working around it: replay costs `15.2ms → 7.0ms` on a file database, once per database
+ever created. Every safe variant requires hand-labelling which of the 28 migrations carry data, with
+silent data loss on upgrade as the failure mode for getting a label wrong. Not worth it. If it is
+ever revisited, the labelling has to be derived and checked, never written by hand.
 
 ## Blocked By The Roadmap
 
@@ -39,7 +137,7 @@ in it. `packages/nikcli` consumes it; the package does not know nikcli exists.
 layer bolted on the side:
 
 ```ts
-export function syncDb(): Client // drizzle(native, { schema })
+export function syncDb(): Client // drizzle({ client: boundedStatements(native) })
 export function transaction<T>(fn: (tx: TxOrDb) => T, opts?): T
 export function effect(fn: () => void): void
 export function use<T>(fn: (db: Client) => T): T

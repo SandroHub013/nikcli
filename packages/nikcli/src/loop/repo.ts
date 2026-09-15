@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { loop, loopRun } from "./loop.sql"
 import { sanitizeDefinition, sanitizeRun, type LoopDefinition, type LoopRun } from "./schema"
@@ -119,14 +120,18 @@ export namespace LoopRepo {
 
   /** Delete a definition and every run it owns. */
   export function remove(projectId: string, id: string): void {
-    Database.transaction((tx) => {
-      tx.delete(loopRun)
-        .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, id)))
-        .run()
-      tx.delete(loop)
-        .where(and(eq(loop.projectId, projectId), eq(loop.id, id)))
-        .run()
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          tx.delete(loopRun)
+            .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, id)))
+            .run()
+          tx.delete(loop)
+            .where(and(eq(loop.projectId, projectId), eq(loop.id, id)))
+            .run()
+        }),
+      ),
+    )
   }
 
   // ── Run counter ───────────────────────────────────────────────────────────
@@ -200,27 +205,31 @@ export namespace LoopRepo {
     runId: string,
     mutate: (draft: LoopRun) => void,
   ): LoopRun | undefined {
-    return Database.transaction((tx) => {
-      const row = tx
-        .select({ data: loopRun.data })
-        .from(loopRun)
-        .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, loopId), eq(loopRun.id, runId)))
-        .get()
-      if (!row) return undefined
-      const current = readRun(row.data)
-      if (!current) return undefined
-      // The draft is written as-is, matching the `Storage.update` contract
-      // this replaces: sanitization is a read-side guard, and re-running it
-      // here would silently discard a caller's write instead of surfacing it.
-      const draft = structuredClone(current)
-      mutate(draft)
-      const updated = toRunRow(projectId, draft)
-      tx.update(loopRun)
-        .set({ status: updated.status, startedAt: updated.startedAt, endedAt: updated.endedAt, data: updated.data })
-        .where(eq(loopRun.id, runId))
-        .run()
-      return draft
-    })
+    return Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          const row = tx
+            .select({ data: loopRun.data })
+            .from(loopRun)
+            .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, loopId), eq(loopRun.id, runId)))
+            .get()
+          if (!row) return undefined
+          const current = readRun(row.data)
+          if (!current) return undefined
+          // The draft is written as-is, matching the `Storage.update` contract
+          // this replaces: sanitization is a read-side guard, and re-running it
+          // here would silently discard a caller's write instead of surfacing it.
+          const draft = structuredClone(current)
+          mutate(draft)
+          const updated = toRunRow(projectId, draft)
+          tx.update(loopRun)
+            .set({ status: updated.status, startedAt: updated.startedAt, endedAt: updated.endedAt, data: updated.data })
+            .where(eq(loopRun.id, runId))
+            .run()
+          return draft
+        }),
+      ),
+    )
   }
 
   /** Newest first. */
@@ -273,16 +282,20 @@ export namespace LoopRepo {
    * statement over an index.
    */
   export function trimRuns(projectId: string, loopId: string, limit: number): void {
-    Database.transaction((tx) => {
-      const ids = tx
-        .select({ id: loopRun.id })
-        .from(loopRun)
-        .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, loopId)))
-        .orderBy(desc(loopRun.startedAt), asc(loopRun.id))
-        .all()
-      const victims = ids.slice(limit).map((row) => row.id)
-      if (victims.length === 0) return
-      tx.delete(loopRun).where(inArray(loopRun.id, victims)).run()
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          const ids = tx
+            .select({ id: loopRun.id })
+            .from(loopRun)
+            .where(and(eq(loopRun.projectId, projectId), eq(loopRun.loopId, loopId)))
+            .orderBy(desc(loopRun.startedAt), asc(loopRun.id))
+            .all()
+          const victims = ids.slice(limit).map((row) => row.id)
+          if (victims.length === 0) return
+          tx.delete(loopRun).where(inArray(loopRun.id, victims)).run()
+        }),
+      ),
+    )
   }
 }

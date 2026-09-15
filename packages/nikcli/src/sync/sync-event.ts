@@ -2,6 +2,7 @@ import type { JsonValue } from "@/util/json"
 import z from "zod"
 import type { ZodObject } from "zod"
 import { and, asc, eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Database } from "@/database/database"
@@ -325,25 +326,29 @@ export namespace SyncEvent {
 
     // BEGIN IMMEDIATE: the sequence read and the append have to be atomic
     // even across processes sharing nikcli.db.
-    return Database.transaction((tx, ctx) => {
-      const row = def.log
-        ? tx
-            .select({ seq: syncSequence.seq })
-            .from(syncSequence)
-            .where(and(eq(syncSequence.projectId, projectID), eq(syncSequence.aggregate, aggregateID)))
-            .get()
-        : undefined
+    return Effect.runSync(
+      Database.transaction((tx, ctx) =>
+        Effect.sync(() => {
+          const row = def.log
+            ? tx
+                .select({ seq: syncSequence.seq })
+                .from(syncSequence)
+                .where(and(eq(syncSequence.projectId, projectID), eq(syncSequence.aggregate, aggregateID)))
+                .get()
+            : undefined
 
-      const event: Event<Def> = {
-        id: Identifier.ascending("sync"),
-        seq: (row?.seq ?? 0) + 1,
-        aggregateID,
-        projectID,
-        data,
-      }
-      process(def, event as Event, tx, ctx, { publish })
-      return event
-    })
+          const event: Event<Def> = {
+            id: Identifier.ascending("sync"),
+            seq: (row?.seq ?? 0) + 1,
+            aggregateID,
+            projectID,
+            data,
+          }
+          process(def, event as Event, tx, ctx, { publish })
+          return event
+        }),
+      ),
+    )
   }
 
   /**
@@ -359,25 +364,29 @@ export namespace SyncEvent {
       throw new Error(`Unknown event type: ${event.type}`)
     }
 
-    return Database.transaction((tx, ctx) => {
-      const row = tx
-        .select({ seq: syncSequence.seq })
-        .from(syncSequence)
-        .where(and(eq(syncSequence.projectId, event.projectID), eq(syncSequence.aggregate, event.aggregateID)))
-        .get()
+    return Effect.runSync(
+      Database.transaction((tx, ctx) =>
+        Effect.sync(() => {
+          const row = tx
+            .select({ seq: syncSequence.seq })
+            .from(syncSequence)
+            .where(and(eq(syncSequence.projectId, event.projectID), eq(syncSequence.aggregate, event.aggregateID)))
+            .get()
 
-      const latest = row?.seq ?? 0
-      if (event.seq <= latest) return
+          const latest = row?.seq ?? 0
+          if (event.seq <= latest) return
 
-      const expected = latest + 1
-      if (event.seq !== expected) {
-        throw new Error(
-          `Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`,
-        )
-      }
+          const expected = latest + 1
+          if (event.seq !== expected) {
+            throw new Error(
+              `Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`,
+            )
+          }
 
-      process(def, event, tx, ctx, { publish: options?.publish ?? false })
-    })
+          process(def, event, tx, ctx, { publish: options?.publish ?? false })
+        }),
+      ),
+    )
   }
 
   /** One durable row of the log, as served to clients. */
@@ -432,14 +441,18 @@ export namespace SyncEvent {
   /** Drop the log and sequence for an aggregate. */
   export function remove(aggregateID: string, projectID?: string) {
     const project = projectID ?? currentProject()
-    Database.transaction((tx) => {
-      tx.delete(syncEvent)
-        .where(and(eq(syncEvent.projectId, project), eq(syncEvent.aggregate, aggregateID)))
-        .run()
-      tx.delete(syncSequence)
-        .where(and(eq(syncSequence.projectId, project), eq(syncSequence.aggregate, aggregateID)))
-        .run()
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          tx.delete(syncEvent)
+            .where(and(eq(syncEvent.projectId, project), eq(syncEvent.aggregate, aggregateID)))
+            .run()
+          tx.delete(syncSequence)
+            .where(and(eq(syncSequence.projectId, project), eq(syncSequence.aggregate, aggregateID)))
+            .run()
+        }),
+      ),
+    )
   }
 
   /**

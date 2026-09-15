@@ -342,22 +342,26 @@ export namespace ShareNext {
       url: `${normalizeBaseURL(baseUrl)}/share/${encodeURIComponent(id)}`,
     }
     const data = await payload(sessionID)
-    Database.transaction((tx) => {
-      ShareRepo.put(sessionID, share, tx)
-      ShareRepo.putLocal(
-        {
-          id,
-          sessionID,
-          url: share.url,
-          time: {
-            created: Date.now(),
-            updated: Date.now(),
-          },
-          items: toItemMap(data),
-        },
-        tx,
-      )
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          ShareRepo.put(sessionID, share, tx)
+          ShareRepo.putLocal(
+            {
+              id,
+              sessionID,
+              url: share.url,
+              time: {
+                created: Date.now(),
+                updated: Date.now(),
+              },
+              items: toItemMap(data),
+            },
+            tx,
+          )
+        }),
+      ),
+    )
     return share
   }
 
@@ -449,10 +453,14 @@ export namespace ShareNext {
     if (!share) return
 
     if (share.mode === "local") {
-      Database.transaction((tx) => {
-        if (share.id) ShareRepo.removeLocal(share.id, tx)
-        ShareRepo.remove(sessionID, tx)
-      })
+      Effect.runSync(
+        Database.transaction((tx) =>
+          Effect.sync(() => {
+            if (share.id) ShareRepo.removeLocal(share.id, tx)
+            ShareRepo.remove(sessionID, tx)
+          }),
+        ),
+      )
       return
     }
 

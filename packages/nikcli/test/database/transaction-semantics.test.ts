@@ -4,6 +4,7 @@ import path from "path"
 import { Database as BunDatabase } from "bun:sqlite"
 import { afterAll, describe, expect, it } from "bun:test"
 import { eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { preserveTestEnv } from "../helpers/env"
 import { account } from "@/database/schema"
@@ -70,10 +71,14 @@ describe("Database.transaction — nesting", () => {
   })
 
   it("commits a nested write with the outer transaction", () => {
-    Database.transaction((tx) => {
-      insert(tx, "tx_outer_ok")
-      Database.transaction((inner) => insert(inner, "tx_inner_ok"))
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          insert(tx, "tx_outer_ok")
+          Effect.runSync(Database.transaction((inner) => Effect.sync(() => insert(inner, "tx_inner_ok"))))
+        }),
+      ),
+    )
 
     expect(exists("tx_outer_ok")).toBe(true)
     expect(exists("tx_inner_ok")).toBe(true)
@@ -81,11 +86,15 @@ describe("Database.transaction — nesting", () => {
 
   it("rolls a nested write back when the outer transaction throws", () => {
     expect(() =>
-      Database.transaction((tx) => {
-        insert(tx, "tx_outer_rollback")
-        Database.transaction((inner) => insert(inner, "tx_inner_rollback"))
-        throw new Error("outer fails after the inner block returned")
-      }),
+      Effect.runSync(
+        Database.transaction((tx) =>
+          Effect.sync(() => {
+            insert(tx, "tx_outer_rollback")
+            Effect.runSync(Database.transaction((inner) => Effect.sync(() => insert(inner, "tx_inner_rollback"))))
+            throw new Error("outer fails after the inner block returned")
+          }),
+        ),
+      ),
     ).toThrow("outer fails after the inner block returned")
 
     // The inner block returned normally. A real nested transaction would have
@@ -98,25 +107,29 @@ describe("Database.transaction — nesting", () => {
   it("takes the write lock up front so a concurrent writer cannot interleave", () => {
     let concurrent: string | undefined
 
-    Database.transaction((tx) => {
-      insert(tx, "tx_lock_holder")
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          insert(tx, "tx_lock_holder")
 
-      // A second connection to the same file, with no busy timeout so the
-      // attempt fails immediately instead of waiting out the default 5s.
-      // `behavior: "immediate"` is what makes this deterministic: under
-      // SQLite's "deferred" default the outer transaction would not yet hold
-      // the write lock and this BEGIN IMMEDIATE would succeed.
-      const other = new BunDatabase(dbPath)
-      try {
-        other.exec("PRAGMA busy_timeout = 0")
-        other.exec("BEGIN IMMEDIATE")
-        other.exec("ROLLBACK")
-      } catch (error) {
-        concurrent = error instanceof Error ? error.message : String(error)
-      } finally {
-        other.close()
-      }
-    })
+          // A second connection to the same file, with no busy timeout so the
+          // attempt fails immediately instead of waiting out the default 5s.
+          // `behavior: "immediate"` is what makes this deterministic: under
+          // SQLite's "deferred" default the outer transaction would not yet hold
+          // the write lock and this BEGIN IMMEDIATE would succeed.
+          const other = new BunDatabase(dbPath)
+          try {
+            other.exec("PRAGMA busy_timeout = 0")
+            other.exec("BEGIN IMMEDIATE")
+            other.exec("ROLLBACK")
+          } catch (error) {
+            concurrent = error instanceof Error ? error.message : String(error)
+          } finally {
+            other.close()
+          }
+        }),
+      ),
+    )
 
     expect(concurrent).toBeDefined()
     expect(exists("tx_lock_holder")).toBe(true)
@@ -127,11 +140,15 @@ describe("TransactionContext.afterCommit — post-commit drain", () => {
   it("runs after the commit, not during the transaction", () => {
     const order: string[] = []
 
-    Database.transaction((tx, ctx) => {
-      ctx.afterCommit(() => order.push("effect"))
-      insert(tx, "tx_effect_order")
-      order.push("write")
-    })
+    Effect.runSync(
+      Database.transaction((tx, ctx) =>
+        Effect.sync(() => {
+          ctx.afterCommit(() => order.push("effect"))
+          insert(tx, "tx_effect_order")
+          order.push("write")
+        }),
+      ),
+    )
     order.push("returned")
 
     // Queued first, run last: the effect waits for the commit. It drains
@@ -143,13 +160,17 @@ describe("TransactionContext.afterCommit — post-commit drain", () => {
     let ran = false
 
     expect(() =>
-      Database.transaction((tx, ctx) => {
-        ctx.afterCommit(() => {
-          ran = true
-        })
-        insert(tx, "tx_effect_rollback")
-        throw new Error("rollback")
-      }),
+      Effect.runSync(
+        Database.transaction((tx, ctx) =>
+          Effect.sync(() => {
+            ctx.afterCommit(() => {
+              ran = true
+            })
+            insert(tx, "tx_effect_rollback")
+            throw new Error("rollback")
+          }),
+        ),
+      ),
     ).toThrow("rollback")
 
     expect(ran).toBe(false)
@@ -159,14 +180,22 @@ describe("TransactionContext.afterCommit — post-commit drain", () => {
   it("drains an effect queued in a nested block with the outermost commit", () => {
     const order: string[] = []
 
-    Database.transaction((tx) => {
-      Database.transaction((inner, innerCtx) => {
-        innerCtx.afterCommit(() => order.push("inner-effect"))
-        insert(inner, "tx_effect_nested")
-      })
-      order.push("inner-returned")
-      insert(tx, "tx_effect_nested_outer")
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          Effect.runSync(
+            Database.transaction((inner, innerCtx) =>
+              Effect.sync(() => {
+                innerCtx.afterCommit(() => order.push("inner-effect"))
+                insert(inner, "tx_effect_nested")
+              }),
+            ),
+          )
+          order.push("inner-returned")
+          insert(tx, "tx_effect_nested_outer")
+        }),
+      ),
+    )
 
     // The effect did not fire when the inner block returned. The nested call
     // receives a context over the *outer* queue, so "inner-effect" lands after
@@ -177,14 +206,18 @@ describe("TransactionContext.afterCommit — post-commit drain", () => {
   it("keeps draining after one effect throws", () => {
     const ran: string[] = []
 
-    Database.transaction((tx, ctx) => {
-      ctx.afterCommit(() => {
-        ran.push("first")
-        throw new Error("post-commit failure is logged, not propagated")
-      })
-      ctx.afterCommit(() => ran.push("second"))
-      insert(tx, "tx_effect_throws")
-    })
+    Effect.runSync(
+      Database.transaction((tx, ctx) =>
+        Effect.sync(() => {
+          ctx.afterCommit(() => {
+            ran.push("first")
+            throw new Error("post-commit failure is logged, not propagated")
+          })
+          ctx.afterCommit(() => ran.push("second"))
+          insert(tx, "tx_effect_throws")
+        }),
+      ),
+    )
 
     expect(ran).toEqual(["first", "second"])
     // The write is already committed; a failing side effect must not undo it.

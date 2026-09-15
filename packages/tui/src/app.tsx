@@ -1,9 +1,9 @@
-import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createCliRenderer, type CliRendererConfig } from "@opentui/core"
-import { Clipboard } from "@tui/util/clipboard"
-import * as Sound from "@tui/util/sound"
-import { UserApi } from "@tui/util/user-api"
-import { RouteProvider, useRoute } from "@tui/context/route"
+import { render, useRenderer, useTerminalDimensions } from "@opentui/solid";
+import { createCliRenderer, type CliRendererConfig } from "@opentui/core";
+import { Clipboard } from "@tui/util/clipboard";
+import * as Sound from "@tui/util/sound";
+import { UserApi } from "@tui/util/user-api";
+import { RouteProvider, useRoute } from "@tui/context/route";
 import {
   Switch,
   Match,
@@ -16,83 +16,107 @@ import {
   onCleanup,
   batch,
   on,
-} from "solid-js"
-import { InstallationEventName, VERSION, type InstallMethod } from "@nikcli-ai/util/version"
-import { Flag } from "@nikcli-ai/util/flag"
-import { DialogProvider, useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
-import { checkUpgradeWhenSubscriptionReady, SDKProvider, useSDK } from "@tui/context/sdk"
-import { ProjectProvider } from "@tui/context/project"
-import { ServerProvider } from "@tui/context/server"
-import { SyncProvider, useSync } from "@tui/context/sync"
-import { RemoteSyncProvider, useRemoteSync } from "@tui/context/remote-sync"
-import { AnalyticsProvider } from "@tui/context/analytics"
-import { TelemetryProvider } from "@tui/context/telemetry"
-import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel, useConnected } from "@tui/component/dialog-model"
-import { DialogStatus } from "@tui/component/dialog-status"
-import { DialogSync } from "@tui/component/dialog-sync"
-import { DialogUsage } from "@tui/component/dialog-usage"
-import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogSettings } from "@tui/component/dialog-settings"
-import { DialogHelp } from "./ui/dialog-help"
-import { DialogTour } from "@tui/component/dialog-tour"
-import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport, openExternal } from "@tui/component/dialog-support"
-import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
-import { DialogPermissionMode } from "@tui/component/dialog-permission-mode"
-import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model"
-import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogSessionWarp } from "@tui/component/dialog-session-warp"
-import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
-import { DialogVariant } from "@tui/component/dialog-variant"
-import { KeybindProvider, useKeybind } from "@tui/context/keybind"
-import { ThemeProvider, useTheme } from "@tui/context/theme"
-import { Home } from "@tui/routes/home"
-import { Session } from "@tui/routes/session"
-import { Workspace } from "@tui/routes/workspace"
-import { PromptHistoryProvider } from "./component/prompt/history"
-import { FrecencyProvider } from "./component/prompt/frecency"
-import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { DialogConfirm } from "./ui/dialog-confirm"
-import { UpgradeProvider, useUpgrade } from "./context/upgrade"
-import { AttentionProvider, useAttention } from "./context/attention"
-import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
-import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
-import { Usage } from "./util/usage"
-import { SessionPrimitives } from "@nikcli-ai/util/session-primitives"
-import { TuiEventName } from "@nikcli-ai/util/tui-event-schema"
-import { KVProvider, useKV } from "./context/kv"
-import { LanguageProvider } from "./context/language"
-import { parseModel } from "@nikcli-ai/util/model"
-import { ArgsProvider, useArgs, type Args } from "./context/args"
-import open from "open"
-import { writeHeapSnapshot } from "v8"
-import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { EditorContextProvider } from "./context/editor"
-import type { TuiConfig } from "@nikcli-ai/sdk/httpapi"
-import { TuiPluginRuntime, createTuiApi, type RouteMap } from "./plugin"
-import { setPluginHost, type TuiPluginHost } from "./plugin/host"
-import { dbg as dbgApp } from "./feature-plugins/background/__debug"
-import { BackgroundImage } from "./feature-plugins/background/view"
-import { DevToolsBar } from "./feature-plugins/devtools/bar"
-import { ErrorComponent } from "./component/error-component"
-import { PluginRouteMissing } from "./component/plugin-route-missing"
-import { PluginRouteBoundary } from "./component/plugin-route-boundary"
-import { Reconnecting } from "./component/reconnecting"
-import { StartupLoading } from "./component/startup-loading"
-import { SessionTabs } from "./component/session-tabs"
-import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants"
-import { DialogWebPreview } from "@tui/component/dialog-web-preview"
-import { SupportSessionProvider } from "@tui/context/support-session"
-import type { StartServerOptions } from "@tui/context/server"
+} from "solid-js";
+import {
+  InstallationEventName,
+  VERSION,
+  type InstallMethod,
+} from "@nikcli-ai/util/version";
+import { Flag } from "@nikcli-ai/util/flag";
+import { DialogProvider, useDialog } from "@tui/ui/dialog";
+import {
+  DialogProvider as DialogProviderList,
+  DialogProviderDisconnect,
+} from "@tui/component/dialog-provider";
+import {
+  checkUpgradeWhenSubscriptionReady,
+  SDKProvider,
+  useSDK,
+} from "@tui/context/sdk";
+import { ProjectProvider } from "@tui/context/project";
+import { ServerProvider } from "@tui/context/server";
+import { SyncProvider, useSync } from "@tui/context/sync";
+import { RemoteSyncProvider, useRemoteSync } from "@tui/context/remote-sync";
+import { AnalyticsProvider } from "@tui/context/analytics";
+import { TelemetryProvider } from "@tui/context/telemetry";
+import { LocalProvider, useLocal } from "@tui/context/local";
+import { DialogModel, useConnected } from "@tui/component/dialog-model";
+import { DialogStatus } from "@tui/component/dialog-status";
+import { DialogSync } from "@tui/component/dialog-sync";
+import { DialogUsage } from "@tui/component/dialog-usage";
+import { DialogThemeList } from "@tui/component/dialog-theme-list";
+import { DialogSettings } from "@tui/component/dialog-settings";
+import { DialogHelp } from "./ui/dialog-help";
+import { DialogTour } from "@tui/component/dialog-tour";
+import {
+  DialogQuickstartInfo,
+  DialogDoctorInfo,
+  DialogSupport,
+  openExternal,
+} from "@tui/component/dialog-support";
+import {
+  CommandProvider,
+  useCommandDialog,
+} from "@tui/component/dialog-command";
+import { DialogPermissionMode } from "@tui/component/dialog-permission-mode";
+import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model";
+import { DialogSessionList } from "@tui/component/dialog-session-list";
+import { DialogSessionWarp } from "@tui/component/dialog-session-warp";
+import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list";
+import { DialogVariant } from "@tui/component/dialog-variant";
+import { KeybindProvider, useKeybind } from "@tui/context/keybind";
+import { ThemeProvider, useTheme } from "@tui/context/theme";
+import { Home } from "@tui/routes/home";
+import { Session } from "@tui/routes/session";
+import { Workspace } from "@tui/routes/workspace";
+import { PromptHistoryProvider } from "./component/prompt/history";
+import { FrecencyProvider } from "./component/prompt/frecency";
+import { PromptStashProvider } from "./component/prompt/stash";
+import { DialogAlert } from "./ui/dialog-alert";
+import { DialogConfirm } from "./ui/dialog-confirm";
+import { UpgradeProvider, useUpgrade } from "./context/upgrade";
+import { AttentionProvider, useAttention } from "./context/attention";
+import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs";
+import { ToastProvider, useToast } from "./ui/toast";
+import { ExitProvider, useExit } from "./context/exit";
+import { Usage } from "./util/usage";
+import { SessionPrimitives } from "@nikcli-ai/util/session-primitives";
+import { TuiEventName } from "@nikcli-ai/util/tui-event-schema";
+import { KVProvider, useKV } from "./context/kv";
+import { LanguageProvider } from "./context/language";
+import { parseModel } from "@nikcli-ai/util/model";
+import { ArgsProvider, useArgs, type Args } from "./context/args";
+import open from "open";
+import { writeHeapSnapshot } from "v8";
+import { PromptRefProvider, usePromptRef } from "./context/prompt";
+import { EditorContextProvider } from "./context/editor";
+import type { TuiConfig } from "@nikcli-ai/sdk/httpapi";
+import { TuiPluginRuntime, createTuiApi, type RouteMap } from "./plugin";
+import { setPluginHost, type TuiPluginHost } from "./plugin/host";
+import { dbg as dbgApp } from "./feature-plugins/background/__debug";
+import { BackgroundImage } from "./feature-plugins/background/view";
+import { DevToolsBar } from "./feature-plugins/devtools/bar";
+import { ErrorComponent } from "./component/error-component";
+import { PluginRouteMissing } from "./component/plugin-route-missing";
+import { PluginRouteBoundary } from "./component/plugin-route-boundary";
+import { Reconnecting } from "./component/reconnecting";
+import { StartupLoading } from "./component/startup-loading";
+import { SessionTabs } from "./component/session-tabs";
+import { DialogOnboarding } from "@tui/component/dialog-onboarding";
+import { DialogLogin } from "@tui/component/dialog-login";
+import { DialogAccountLogin } from "@tui/component/dialog-account-login";
+import { DialogProfile } from "@tui/component/dialog-profile";
+import { DialogAuthManage } from "@tui/component/dialog-auth-manage";
+import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants";
+import { DialogWebPreview } from "@tui/component/dialog-web-preview";
+import { SupportSessionProvider } from "@tui/context/support-session";
+import type { StartServerOptions } from "@tui/context/server";
 import {
   shouldUseRendererThread,
   win32DisableProcessedInput,
   win32InstallCtrlCGuard,
   restoreTerminalState,
-} from "@nikcli-ai/util/win32"
+} from "@nikcli-ai/util/win32";
 
 function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
   return {
@@ -109,31 +133,33 @@ function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
         Clipboard.copy(text).catch((error) => {
-          console.error(`Failed to copy console selection to clipboard: ${error}`)
-        })
+          console.error(
+            `Failed to copy console selection to clipboard: ${error}`,
+          );
+        });
       },
     },
-  }
+  };
 }
 
-import type { EventSource } from "./context/sdk"
-import { Log } from "@nikcli-ai/util/log"
-import { classifyConfigFailure } from "@tui/util/config-failure"
-import { ensureOnboarded } from "@tui/util/onboarding"
+import type { EventSource } from "./context/sdk";
+import { Log } from "@nikcli-ai/util/log";
+import { classifyConfigFailure } from "@tui/util/config-failure";
+import { ensureOnboarded } from "@tui/util/onboarding";
 
-const log = Log.create({ service: "tui.app" })
+const log = Log.create({ service: "tui.app" });
 
 export function tui(input: {
-  url: string
-  args: Args
-  directory?: string
-  fetch?: typeof fetch
-  events?: EventSource
-  onExit?: () => Promise<void>
-  onRestart?: () => Promise<void>
-  checkUpgrade?: () => Promise<void>
-  upgradeNow?: (method: string, version: string) => Promise<void>
-  startServer?: (options?: StartServerOptions) => Promise<string>
+  url: string;
+  args: Args;
+  directory?: string;
+  fetch?: typeof fetch;
+  events?: EventSource;
+  onExit?: () => Promise<void>;
+  onRestart?: () => Promise<void>;
+  checkUpgrade?: () => Promise<void>;
+  upgradeNow?: (method: string, version: string) => Promise<void>;
+  startServer?: (options?: StartServerOptions) => Promise<string>;
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
    *
@@ -141,7 +167,7 @@ export function tui(input: {
    * cannot watch the config surface or install a plugin, and every entry point
    * that starts a TUI is a host file that can supply it.
    */
-  pluginHost: TuiPluginHost
+  pluginHost: TuiPluginHost;
   /**
    * The merged TUI config, already read.
    *
@@ -152,14 +178,14 @@ export function tui(input: {
    * `Rpc.call` posts and waits with no timeout. The host reads it locally and
    * hands it over. Everything after the first frame uses `sdk.client.tui.config()`.
    */
-  tuiConfig?: TuiConfig
+  tuiConfig?: TuiConfig;
 }) {
   // promise to prevent immediate exit
   return new Promise<void>((resolve, reject) => {
     void (async () => {
       try {
-        const unguard = win32InstallCtrlCGuard()
-        win32DisableProcessedInput()
+        const unguard = win32InstallCtrlCGuard();
+        win32DisableProcessedInput();
         // Read locally, and only here.
         //
         // This is the one config read that cannot go over the wire: it feeds `rendererConfig`,
@@ -169,11 +195,12 @@ export function tui(input: {
         // or, over worker RPC, never settles at all: `Rpc.call` posts and waits forever.
         // Everything after the first frame uses `sdk.client.tui.config()`.
         // Installed before anything can reach the plugin runtime.
-        setPluginHost(input.pluginHost)
+        setPluginHost(input.pluginHost);
 
-        const tuiCfg = input.tuiConfig ?? ({} as TuiConfig)
-        const drive = Boolean(process.env.NIKCLI_DRIVE)
-        const headless = drive && process.env.NIKCLI_DRIVE_RENDERER === "headless"
+        const tuiCfg = input.tuiConfig ?? ({} as TuiConfig);
+        const drive = Boolean(process.env.NIKCLI_DRIVE);
+        const headless =
+          drive && process.env.NIKCLI_DRIVE_RENDERER === "headless";
         // In drive mode the renderer must still be built from *this* package's
         // `@opentui/core`, so hand the simulation package our constructors: the
         // renderer's class identity is what `render(node, renderer)` below checks
@@ -183,28 +210,39 @@ export function tui(input: {
               await import("@nikcli-ai/simulation/frontend")
             ).Drive.create(rendererConfig(tuiCfg), {
               createCliRenderer,
-              createTestRenderer: (await import("@opentui/core/testing")).createTestRenderer,
+              createTestRenderer: (await import("@opentui/core/testing"))
+                .createTestRenderer,
             })
-          : await createCliRenderer(rendererConfig(tuiCfg))
+          : await createCliRenderer(rendererConfig(tuiCfg));
         // Dozens of components subscribe to renderer events (`useTerminalDimensions`
         // alone is used in 32 files) and to key events (`useKeyboard`), all of which
         // unsubscribe on cleanup. That is well past EventEmitter's default cap of 10,
         // so without this bun prints a MaxListenersExceededWarning straight over the
         // first frame — once for the renderer, once for its key handler.
-        renderer.setMaxListeners(200)
-        renderer.keyInput.setMaxListeners(200)
-        if (!headless) void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = headless ? "dark" : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark")
+        renderer.setMaxListeners(200);
+        renderer.keyInput.setMaxListeners(200);
+        if (!headless)
+          void renderer.getPalette({ size: 16 }).catch(() => undefined);
+        const mode = headless
+          ? "dark"
+          : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark");
         const onExit = async () => {
-          unguard?.()
-          await input.onExit?.()
-          resolve()
-        }
+          unguard?.();
+          await input.onExit?.();
+          resolve();
+        };
 
         await render(() => {
           return (
             <ErrorBoundary
-              fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+              fallback={(error, reset) => (
+                <ErrorComponent
+                  error={error}
+                  reset={reset}
+                  onExit={onExit}
+                  mode={mode}
+                />
+              )}
             >
               <ArgsProvider {...input.args}>
                 <ExitProvider
@@ -239,10 +277,22 @@ export function tui(input: {
                                                         <FrecencyProvider>
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
-                                                              <UpgradeProvider upgradeNow={input.upgradeNow}>
-                                                                <AttentionProvider renderer={renderer}>
+                                                              <UpgradeProvider
+                                                                upgradeNow={
+                                                                  input.upgradeNow
+                                                                }
+                                                              >
+                                                                <AttentionProvider
+                                                                  renderer={
+                                                                    renderer
+                                                                  }
+                                                                >
                                                                   <SessionTabsProvider>
-                                                                    <App checkUpgrade={input.checkUpgrade} />
+                                                                    <App
+                                                                      checkUpgrade={
+                                                                        input.checkUpgrade
+                                                                      }
+                                                                    />
                                                                   </SessionTabsProvider>
                                                                 </AttentionProvider>
                                                               </UpgradeProvider>
@@ -271,77 +321,77 @@ export function tui(input: {
                 </ExitProvider>
               </ArgsProvider>
             </ErrorBoundary>
-          )
-        }, renderer)
+          );
+        }, renderer);
       } catch (err) {
-        reject(err)
+        reject(err);
       }
-    })()
-  })
+    })();
+  });
 }
 
 function LegacyRedirect(props: {
-  tab: "tree" | "changes" | "graph" | "github"
-  sessionID?: string
-  workspaceID?: string
+  tab: "tree" | "changes" | "graph" | "github";
+  sessionID?: string;
+  workspaceID?: string;
 }) {
-  const route = useRoute()
+  const route = useRoute();
   onMount(() => {
     route.navigate({
       type: "workspace",
       tab: props.tab,
       sessionID: props.sessionID,
       workspaceID: props.workspaceID,
-    })
-  })
-  return null
+    });
+  });
+  return null;
 }
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-})
+});
 
 function formatDuration(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-  if (hours > 0) return `${hours}h ${minutes}m`
-  if (minutes > 0) return `${minutes}m ${seconds}s`
-  return `${seconds}s`
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
-  return "sessionID" in route ? route.sessionID : undefined
+  return "sessionID" in route ? route.sessionID : undefined;
 }
 
 function App(props: { checkUpgrade?: () => Promise<void> }) {
-  const route = useRoute()
-  const dimensions = useTerminalDimensions()
-  const renderer = useRenderer()
-  renderer.externalOutputMode = "passthrough"
-  const dialog = useDialog()
-  const local = useLocal()
-  const kv = useKV()
-  const command = useCommandDialog()
-  const sdk = useSDK()
-  const toast = useToast()
-  const themeCtx = useTheme()
-  const upgradeCtx = useUpgrade()
-  const { theme, mode, setMode } = themeCtx
-  const sync = useSync()
-  const tabs = useSessionTabs()
-  const { exit, setSummary } = useExit()
-  const promptRef = usePromptRef()
-  const attention = useAttention()
-  const keybind = useKeybind()
+  const route = useRoute();
+  const dimensions = useTerminalDimensions();
+  const renderer = useRenderer();
+  renderer.externalOutputMode = "passthrough";
+  const dialog = useDialog();
+  const local = useLocal();
+  const kv = useKV();
+  const command = useCommandDialog();
+  const sdk = useSDK();
+  const toast = useToast();
+  const themeCtx = useTheme();
+  const upgradeCtx = useUpgrade();
+  const { theme, mode, setMode } = themeCtx;
+  const sync = useSync();
+  const tabs = useSessionTabs();
+  const { exit, setSummary } = useExit();
+  const promptRef = usePromptRef();
+  const attention = useAttention();
+  const keybind = useKeybind();
 
   // Plugin routes — mutable map + reactive stamp for re-renders
-  const routes: RouteMap = new Map()
-  const [pluginRouteKey, setPluginRouteKey] = createSignal(0)
-  const bump = () => setPluginRouteKey((k) => k + 1)
-  const [pluginsReady, setPluginsReady] = createSignal(false)
+  const routes: RouteMap = new Map();
+  const [pluginRouteKey, setPluginRouteKey] = createSignal(0);
+  const bump = () => setPluginRouteKey((k) => k + 1);
+  const [pluginsReady, setPluginsReady] = createSignal(false);
   /**
    * Launched to look at a component, not to work.
    *
@@ -350,19 +400,19 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
    * would only put a signup in front of a fixture. Same exemption `NIKCLI_DRIVE` already has, and
    * named once so both gates state the same reason.
    */
-  const STORYBOOK_LAUNCH = Boolean(process.env.NIKCLI_STORY)
+  const STORYBOOK_LAUNCH = Boolean(process.env.NIKCLI_STORY);
 
-  const [onboardingActive, setOnboardingActive] = createSignal(false)
+  const [onboardingActive, setOnboardingActive] = createSignal(false);
 
   setSummary(() => {
-    const sessionID = sessionIDFromRoute(route.data)
-    if (!sessionID) return
-    const session = sync.session.get(sessionID)
-    const messages = sync.data.message[sessionID] ?? []
-    const usage = Usage.fromMessages(messages, sync.data.provider)
+    const sessionID = sessionIDFromRoute(route.data);
+    if (!sessionID) return;
+    const session = sync.session.get(sessionID);
+    const messages = sync.data.message[sessionID] ?? [];
+    const usage = Usage.fromMessages(messages, sync.data.provider);
     const totals = messages.reduce(
       (acc, message) => {
-        if (message.role !== "assistant") return acc
+        if (message.role !== "assistant") return acc;
         const tokens =
           message.tokens.total && message.tokens.total > 0
             ? message.tokens.total
@@ -370,24 +420,30 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
               message.tokens.output +
               message.tokens.reasoning +
               message.tokens.cache.read +
-              message.tokens.cache.write
-        acc.tokens += tokens
-        acc.input += message.tokens.input
-        acc.output += message.tokens.output
-        acc.reasoning += message.tokens.reasoning
-        acc.cost += message.cost
-        return acc
+              message.tokens.cache.write;
+        acc.tokens += tokens;
+        acc.input += message.tokens.input;
+        acc.output += message.tokens.output;
+        acc.reasoning += message.tokens.reasoning;
+        acc.cost += message.cost;
+        return acc;
       },
       { tokens: 0, input: 0, output: 0, reasoning: 0, cost: 0 },
-    )
+    );
     const title =
-      session?.title && !SessionPrimitives.isDefaultTitle(session.title) ? session.title : "Untitled session"
-    const duration = session ? formatDuration(Date.now() - session.time.created) : undefined
+      session?.title && !SessionPrimitives.isDefaultTitle(session.title)
+        ? session.title
+        : "Untitled session";
+    const duration = session
+      ? formatDuration(Date.now() - session.time.created)
+      : undefined;
     const context = usage.model?.contextLimit
       ? `${Usage.formatTokens(usage.tokens)} / ${Usage.formatTokens(usage.model.contextLimit)} (${Usage.formatPct(usage.tokens, usage.model.contextLimit)})`
-      : Usage.formatTokens(usage.tokens)
-    const model = usage.model ? `${usage.model.providerID}/${usage.model.modelID}` : "—"
-    const resume = `nikcli --session ${sessionID}`
+      : Usage.formatTokens(usage.tokens);
+    const model = usage.model
+      ? `${usage.model.providerID}/${usage.model.modelID}`
+      : "—";
+    const resume = `nikcli --session ${sessionID}`;
 
     const asciiLogo = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
@@ -395,7 +451,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
 ██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║
 ██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║
 ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
-╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝`
+╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝`;
 
     return [
       `${asciiLogo}`,
@@ -412,42 +468,45 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       "\n",
     ]
       .filter(Boolean)
-      .join("\n")
-  })
+      .join("\n");
+  });
 
   onMount(() => {
     void (async () => {
       // Drive instances use an injected local provider and must not depend on
       // interactive account/onboarding state from the host machine.
       if (!process.env.NIKCLI_DRIVE && !STORYBOOK_LAUNCH) {
-        // Lazy: the onboarding dialog pulls the speak/provider chain, which may
-        // not be evaluated during TUI module load. Account state comes from
-        // `/user/*` — the transport is up by now, as the `sdk.client.tui.config`
-        // call a few lines below has always relied on.
-        const { DialogOnboarding } = await import("@tui/component/dialog-onboarding")
+        // Account state comes from `/user/*` — the transport is up by now, as
+        // the `sdk.client.tui.config` call a few lines below has always relied on.
 
         // `null` means the question could not be asked. Treating that as "no
         // users" would restart onboarding for someone who already has an
         // account, so only an explicit `false` counts as first run.
-        const isFirstRun = (await UserApi.hasUsers(sdk)) === false
+        const isFirstRun = (await UserApi.hasUsers(sdk)) === false;
 
-        const validUser = await UserApi.me(sdk)
+        const validUser = await UserApi.me(sdk);
 
         if (isFirstRun && !kv.get("onboarding_complete", false)) {
           // First-time user: unified onboarding handles account creation + provider setup
-          setOnboardingActive(true)
+          setOnboardingActive(true);
           const outcome = await ensureOnboarded({
             runOnboarding: () => DialogOnboarding.run(dialog),
             currentUser: () => UserApi.me(sdk),
             onAttemptFailed: (attempt) =>
-              log.warn("onboarding closed without an account", { attempt, service: "tui.onboarding" }),
-          })
-          setOnboardingActive(false)
+              log.warn("onboarding closed without an account", {
+                attempt,
+                service: "tui.onboarding",
+              }),
+          });
+          setOnboardingActive(false);
           if (outcome.status === "complete") {
-            kv.set("onboarding_complete", true)
-            const needsProvider = untrack(() => sync.status === "complete" && sync.data.provider.length === 0)
+            kv.set("onboarding_complete", true);
+            const needsProvider = untrack(
+              () =>
+                sync.status === "complete" && sync.data.provider.length === 0,
+            );
             if (needsProvider && dialog.stack.length === 0) {
-              dialog.replace(() => <DialogProviderList />)
+              dialog.replace(() => <DialogProviderList />);
             }
           } else {
             // Not signed in, and startup must not pretend otherwise: the flag
@@ -455,31 +514,36 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             // here — the config load and renderer wiring below never ran while
             // this loop spun, which left the user with a frozen screen and no
             // reason for it. Say what happened and let startup finish.
-            log.error("onboarding did not produce an account", { attempts: outcome.attempts })
+            log.error("onboarding did not produce an account", {
+              attempts: outcome.attempts,
+            });
             toast.show({
-              message: "Account setup didn't complete — run /signin to finish signing in.",
+              message:
+                "Account setup didn't complete — run /signin to finish signing in.",
               variant: "error",
-            })
+            });
           }
         } else if (!validUser) {
           // Returning user with no active session: standard login
-          const { DialogLogin } = await import("@tui/component/dialog-login")
-          await DialogLogin.run(dialog, sdk)
+          await DialogLogin.run(dialog, sdk);
         }
       }
 
       // The renderer already owns the terminal here, so a config failure must
       // not take the TUI down the way it does in the standalone host. It must
       // still not pass for an empty config: say which of the three it was.
-      const configResult = await sdk.client.tui.config().catch((error: unknown) => ({ data: undefined, error }))
+      const configResult = await sdk.client.tui
+        .config()
+        .catch((error: unknown) => ({ data: undefined, error }));
       if (configResult.error !== undefined) {
-        const status = (configResult as { response?: { status: number } }).response?.status
+        const status = (configResult as { response?: { status: number } })
+          .response?.status;
         log.error("tui config unavailable; starting on defaults", {
           reason: classifyConfigFailure(configResult.error, status),
           status,
-        })
+        });
       }
-      const tuiConfig = (configResult.data ?? {}) as TuiConfig
+      const tuiConfig = (configResult.data ?? {}) as TuiConfig;
       const api = createTuiApi({
         command,
         tuiConfig,
@@ -496,10 +560,10 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         tabs,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         renderer: renderer as any,
-      })
-      dbgApp("before init")
-      await TuiPluginRuntime.init(api)
-      dbgApp("after init")
+      });
+      dbgApp("before init");
+      await TuiPluginRuntime.init(api);
+      dbgApp("after init");
       // Register the global sync dialog keybind (default: <leader>y).
       // Uses the same command-dialog plumbing as the slash command
       // /sync so a single source of truth drives both entry points.
@@ -510,36 +574,40 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             title: "Sync status",
             namespace: "System",
             run() {
-              dialog.replace(() => <DialogSync />)
+              dialog.replace(() => <DialogSync />);
             },
           },
         ],
         bindings: [{ key: "sync_view", cmd: "sync.open" }],
-      })
-      setPluginsReady(true)
+      });
+      setPluginsReady(true);
     })().catch((error) => {
-      dbgApp("init chain error", String(error))
-      setOnboardingActive(false)
-      setPluginsReady(true)
-      toast.error(error)
-    })
-  })
+      dbgApp("init chain error", String(error));
+      setOnboardingActive(false);
+      setPluginsReady(true);
+      toast.error(error);
+    });
+  });
 
   onCleanup(() => {
-    void TuiPluginRuntime.dispose()
-    restoreTerminalState()
-  })
+    void TuiPluginRuntime.dispose();
+    restoreTerminalState();
+  });
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
-    if (!text || text.length === 0) return
+    if (!text || text.length === 0) return;
 
     await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-      .catch(toast.error)
-    renderer.clearSelection()
-  }
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+      .then(() =>
+        toast.show({ message: "Copied to clipboard", variant: "info" }),
+      )
+      .catch(toast.error);
+    renderer.clearSelection();
+  };
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(
+    kv.get("terminal_title_enabled", true),
+  );
 
   // Update terminal window title based on current route and session
   createEffect(
@@ -548,114 +616,122 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         enabled: terminalTitleEnabled(),
         type: route.data.type,
         sessionID:
-          route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+          route.data.type === "session" ||
+          route.data.type === "changes" ||
+          route.data.type === "tree"
             ? ((route.data as any).sessionID ?? null)
             : null,
         title:
           route.data.type === "github"
             ? "GitHub"
-            : route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+            : route.data.type === "session" ||
+                route.data.type === "changes" ||
+                route.data.type === "tree"
               ? (route.data as any).sessionID
-                ? (sync.session.get((route.data as any).sessionID)?.title ?? null)
+                ? (sync.session.get((route.data as any).sessionID)?.title ??
+                  null)
                 : null
               : null,
       }),
       (state) => {
         if (!state.enabled || Flag.NIKCLI_DISABLE_TERMINAL_TITLE) {
-          renderer.setTerminalTitle("")
-          return
+          renderer.setTerminalTitle("");
+          return;
         }
 
         if (state.type === "home") {
-          renderer.setTerminalTitle("Nikcli")
-          return
+          renderer.setTerminalTitle("Nikcli");
+          return;
         }
 
         if (state.type === "session" && state.sessionID) {
           if (!state.title || SessionPrimitives.isDefaultTitle(state.title)) {
-            renderer.setTerminalTitle("Nikcli")
-            return
+            renderer.setTerminalTitle("Nikcli");
+            return;
           }
-          const title = state.title.length > 40 ? state.title.slice(0, 37) + "..." : state.title
-          renderer.setTerminalTitle(`Nikcli | ${title}`)
-          return
+          const title =
+            state.title.length > 40
+              ? state.title.slice(0, 37) + "..."
+              : state.title;
+          renderer.setTerminalTitle(`Nikcli | ${title}`);
+          return;
         }
 
         if (state.type === "git-graph" || state.type === "github") {
-          renderer.setTerminalTitle("Nikcli | GitHub")
-          return
+          renderer.setTerminalTitle("Nikcli | GitHub");
+          return;
         }
 
         if (state.type === "workspace") {
-          renderer.setTerminalTitle("Nikcli | Workspace")
-          return
+          renderer.setTerminalTitle("Nikcli | Workspace");
+          return;
         }
       },
       { defer: true },
     ),
-  )
+  );
 
-  const args = useArgs()
+  const args = useArgs();
   onMount(() => {
     batch(() => {
-      if (args.agent) local.agent.set(args.agent)
+      if (args.agent) local.agent.set(args.agent);
       if (args.model) {
-        const { providerID, modelID } = parseModel(args.model)
+        const { providerID, modelID } = parseModel(args.model);
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
+          });
+        local.model.set({ providerID, modelID }, { recent: true });
       }
       if (args.sessionID) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
           workspaceID: sync.session.get(args.sessionID)?.workspaceID,
-        })
+        });
       }
-    })
-  })
+    });
+  });
 
-  let continued = false
+  let continued = false;
   createEffect(
     on(
       () => [continued, sync.status, args.continue],
       () => {
-        if (continued || sync.status === "loading" || !args.continue) return
+        if (continued || sync.status === "loading" || !args.continue) return;
         const match = sync.data.session
           .toSorted((a, b) => b.time.updated - a.time.updated)
-          .find((x) => x.parentID === undefined)?.id
+          .find((x) => x.parentID === undefined)?.id;
         if (match) {
-          continued = true
+          continued = true;
           route.navigate({
             type: "session",
             sessionID: match,
             workspaceID: sync.session.get(match)?.workspaceID,
-          })
+          });
         }
       },
       { defer: true },
     ),
-  )
+  );
 
   createEffect(
     on(
       () => sync.status === "complete" && sync.data.provider.length === 0,
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
-        if (onboardingActive()) return
+        if (!isEmpty || wasEmpty) return;
+        if (onboardingActive()) return;
         // A storybook launch has no provider by construction and does not need one.
-        if (STORYBOOK_LAUNCH) return
-        dialog.replace(() => <DialogProviderList />)
+        if (STORYBOOK_LAUNCH) return;
+        dialog.replace(() => <DialogProviderList />);
       },
     ),
-  )
+  );
 
-  const connected = useConnected()
+  const connected = useConnected();
   command.register(() => [
     {
       title: "Take the 6-step tour",
@@ -664,7 +740,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       suggested: sync.data.session.length < 3,
       slash: { name: "tour" },
       onSelect: () => {
-        dialog.replace(() => <DialogTour />)
+        dialog.replace(() => <DialogTour />);
       },
     },
     {
@@ -673,7 +749,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Support",
       slash: { name: "help" },
       onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
+        dialog.replace(() => <DialogHelp />);
       },
     },
     {
@@ -682,7 +758,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Support",
       slash: { name: "quickstart", aliases: ["get-started"] },
       onSelect: () => {
-        dialog.replace(() => <DialogQuickstartInfo />)
+        dialog.replace(() => <DialogQuickstartInfo />);
       },
     },
     {
@@ -691,7 +767,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Support",
       slash: { name: "doctor" },
       onSelect: () => {
-        dialog.replace(() => <DialogDoctorInfo />)
+        dialog.replace(() => <DialogDoctorInfo />);
       },
     },
     {
@@ -700,7 +776,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Support",
       slash: { name: "docs" },
       onSelect: () => {
-        openExternal("https://nikcli.store/docs")
+        openExternal("https://nikcli.store/docs");
       },
     },
     {
@@ -711,7 +787,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       keybind: "app_support",
       slash: { name: "support", aliases: ["ask", "help-me"] },
       onSelect: () => {
-        dialog.replace(() => <DialogSupport />)
+        dialog.replace(() => <DialogSupport />);
       },
     },
     {
@@ -725,7 +801,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["resume", "continue"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogSessionList />)
+        dialog.replace(() => <DialogSessionList />);
       },
     },
     {
@@ -737,22 +813,24 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "workspaces",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogWorkspaceList />)
+        dialog.replace(() => <DialogWorkspaceList />);
       },
     },
     {
       title: "Warp session",
       value: "workspace.warp",
       category: "Workspace",
-      enabled: route.data.type === "session" && Flag.NIKCLI_EXPERIMENTAL_WORKSPACES_TUI,
+      enabled:
+        route.data.type === "session" &&
+        Flag.NIKCLI_EXPERIMENTAL_WORKSPACES_TUI,
       slash: {
         name: "warp",
       },
       onSelect: () => {
-        const data = route.data
-        if (data.type !== "session") return
-        const sessionID = data.sessionID
-        dialog.replace(() => <DialogSessionWarp sessionID={sessionID} />)
+        const data = route.data;
+        if (data.type !== "session") return;
+        const sessionID = data.sessionID;
+        dialog.replace(() => <DialogSessionWarp sessionID={sessionID} />);
       },
     },
     {
@@ -766,19 +844,22 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["clear"],
       },
       onSelect: () => {
-        const current = promptRef.current
+        const current = promptRef.current;
         // Don't require focus - if there's any text, preserve it
-        const currentPrompt = current?.current?.input ? current.current : undefined
+        const currentPrompt = current?.current?.input
+          ? current.current
+          : undefined;
         const workspaceID =
           route.data.type === "session"
-            ? (route.data.workspaceID ?? sync.session.get(route.data.sessionID)?.workspaceID)
-            : route.data.workspaceID
+            ? (route.data.workspaceID ??
+              sync.session.get(route.data.sessionID)?.workspaceID)
+            : route.data.workspaceID;
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
           workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -791,17 +872,21 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["ws", "panel"],
       },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
-        const hasDiff = route.data.type === "session" && (sync.data.session_diff[route.data.sessionID]?.length ?? 0) > 0
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
+        const hasDiff =
+          route.data.type === "session" &&
+          (sync.data.session_diff[route.data.sessionID]?.length ?? 0) > 0;
         route.navigate({
           type: "workspace",
           tab: hasDiff ? "changes" : "tree",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     // Hidden helpers so existing /changes /tree /graph /github slash commands still work
@@ -813,16 +898,18 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       hidden: true,
       slash: { name: "changes" },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "changes",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -832,16 +919,18 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       hidden: true,
       slash: { name: "tree" },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "tree",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -851,16 +940,18 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       hidden: true,
       slash: { name: "graph", aliases: ["gitgraph", "commits"] },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "graph",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -870,16 +961,18 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       hidden: true,
       slash: { name: "github", aliases: ["gh"] },
       onSelect: () => {
-        const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+        const sessionID =
+          route.data.type === "session" ? route.data.sessionID : undefined;
         route.navigate({
           type: "workspace",
           tab: "github",
           sessionID,
           workspaceID: sessionID
-            ? (route.data.workspaceID ?? sync.session.get(sessionID)?.workspaceID)
+            ? (route.data.workspaceID ??
+              sync.session.get(sessionID)?.workspaceID)
             : route.data.workspaceID,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -892,7 +985,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "models",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogModel />);
       },
     },
     {
@@ -902,7 +995,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycle(1)
+        local.model.cycle(1);
       },
     },
     {
@@ -912,7 +1005,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycle(-1)
+        local.model.cycle(-1);
       },
     },
     {
@@ -922,7 +1015,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycleFavorite(1)
+        local.model.cycleFavorite(1);
       },
     },
     {
@@ -932,7 +1025,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.cycleFavorite(-1)
+        local.model.cycleFavorite(-1);
       },
     },
     {
@@ -948,8 +1041,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-agent").then(({ DialogAgent }) => {
-          dialog.replace(() => <DialogAgent />)
-        })
+          dialog.replace(() => <DialogAgent />);
+        });
       },
     },
     {
@@ -962,7 +1055,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["permission"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogPermissionMode />)
+        dialog.replace(() => <DialogPermissionMode />);
       },
     },
     {
@@ -973,9 +1066,9 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "advisor",
       },
       onSelect: () => {
-        const name = local.agent.current()?.name
-        if (!name) return
-        dialog.replace(() => <DialogAdvisorModel agentName={name} />)
+        const name = local.agent.current()?.name;
+        if (!name) return;
+        dialog.replace(() => <DialogAdvisorModel agentName={name} />);
       },
     },
     {
@@ -986,7 +1079,9 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "skills",
       },
       onSelect: () => {
-        void import("@tui/component/dialog-skills").then(({ DialogSkills }) => dialog.replace(() => <DialogSkills />))
+        void import("@tui/component/dialog-skills").then(({ DialogSkills }) =>
+          dialog.replace(() => <DialogSkills />),
+        );
       },
     },
     {
@@ -1001,8 +1096,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-mcp").then(({ DialogMcp }) => {
-          dialog.replace(() => <DialogMcp />)
-        })
+          dialog.replace(() => <DialogMcp />);
+        });
       },
     },
     {
@@ -1017,9 +1112,11 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // Lazy: managing routines is not on the path to the first frame, and this
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
-        void import("@tui/component/dialog-routine").then(({ DialogRoutine }) => {
-          dialog.replace(() => <DialogRoutine />)
-        })
+        void import("@tui/component/dialog-routine").then(
+          ({ DialogRoutine }) => {
+            dialog.replace(() => <DialogRoutine />);
+          },
+        );
       },
     },
     {
@@ -1029,7 +1126,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(1)
+        local.agent.move(1);
       },
     },
     {
@@ -1039,7 +1136,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.model.variant.cycle()
+        local.model.variant.cycle();
       },
     },
     {
@@ -1047,7 +1144,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       value: "variant.select",
       category: "Agent",
       onSelect: () => {
-        dialog.replace(() => <DialogVariant />)
+        dialog.replace(() => <DialogVariant />);
       },
     },
     {
@@ -1057,7 +1154,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
-        local.agent.move(-1)
+        local.agent.move(-1);
       },
     },
     {
@@ -1068,7 +1165,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "connect",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
+        dialog.replace(() => <DialogProviderList />);
       },
       category: "Provider",
     },
@@ -1081,7 +1178,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "disconnect",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogProviderDisconnect />)
+        dialog.replace(() => <DialogProviderDisconnect />);
       },
       category: "Provider",
     },
@@ -1094,9 +1191,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["account-login"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-account-login").then(({ DialogAccountLogin }) =>
-          dialog.replace(() => <DialogAccountLogin />),
-        )
+        dialog.replace(() => <DialogAccountLogin />);
       },
     },
     {
@@ -1108,9 +1203,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["me", "personalize"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-profile").then(({ DialogProfile }) =>
-          dialog.replace(() => <DialogProfile />),
-        )
+        dialog.replace(() => <DialogProfile />);
       },
     },
     {
@@ -1122,9 +1215,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["account"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-auth-manage").then(({ DialogAuthManage }) =>
-          dialog.replace(() => <DialogAuthManage />),
-        )
+        dialog.replace(() => <DialogAuthManage />);
       },
     },
     {
@@ -1132,7 +1223,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       value: "settings.open",
       slash: { name: "settings" },
       onSelect: () => {
-        dialog.replace(() => <DialogSettings />)
+        dialog.replace(() => <DialogSettings />);
       },
       category: "System",
     },
@@ -1145,8 +1236,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // dialog is among the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
         void import("@tui/component/dialog-config").then(({ DialogConfig }) => {
-          dialog.replace(() => <DialogConfig />)
-        })
+          dialog.replace(() => <DialogConfig />);
+        });
       },
       category: "System",
     },
@@ -1159,7 +1250,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["browse", "web"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogWebPreview />)
+        dialog.replace(() => <DialogWebPreview />);
       },
     },
     {
@@ -1170,7 +1261,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "status",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogStatus />)
+        dialog.replace(() => <DialogStatus />);
       },
       category: "System",
     },
@@ -1187,10 +1278,12 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // Lazy: pairing a phone is not on the path to the first frame, and this
         // dialog's chain is the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
-        const sessionID = sessionIDFromRoute(route.data)
-        void import("@tui/component/dialog-mobile-connect").then(({ DialogMobileConnect }) => {
-          dialog.replace(() => <DialogMobileConnect sessionID={sessionID} />)
-        })
+        const sessionID = sessionIDFromRoute(route.data);
+        void import("@tui/component/dialog-mobile-connect").then(
+          ({ DialogMobileConnect }) => {
+            dialog.replace(() => <DialogMobileConnect sessionID={sessionID} />);
+          },
+        );
       },
     },
     {
@@ -1202,7 +1295,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["hub", "remote"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogSync />)
+        dialog.replace(() => <DialogSync />);
       },
       category: "System",
     },
@@ -1214,7 +1307,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["context"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogUsage />)
+        dialog.replace(() => <DialogUsage />);
       },
       category: "Session",
     },
@@ -1226,9 +1319,27 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["stats"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-analytics").then(({ DialogAnalytics }) =>
-          dialog.replace(() => <DialogAnalytics onClose={() => dialog.clear()} />),
-        )
+        void import("@tui/component/dialog-analytics").then(
+          ({ DialogAnalytics }) =>
+            dialog.replace(() => (
+              <DialogAnalytics onClose={() => dialog.clear()} />
+            )),
+        );
+      },
+      category: "Session",
+    },
+    {
+      title: "Command center",
+      value: "nikcli.dashboard",
+      slash: {
+        name: "dashboard",
+        aliases: ["ops", "command-center"],
+      },
+      onSelect: () => {
+        void import("@tui/component/dialog-command-center").then(
+          ({ DialogCommandCenter }) =>
+            dialog.replace(() => <DialogCommandCenter />),
+        );
       },
       category: "Session",
     },
@@ -1240,7 +1351,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "themes",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogThemeList />)
+        dialog.replace(() => <DialogThemeList />);
       },
       category: "System",
     },
@@ -1248,8 +1359,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       title: "Toggle appearance",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
-        setMode(mode() === "dark" ? "light" : "dark")
-        dialog.clear()
+        setMode(mode() === "dark" ? "light" : "dark");
+        dialog.clear();
       },
       category: "System",
     },
@@ -1260,7 +1371,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         name: "help",
       },
       onSelect: () => {
-        dialog.replace(() => <DialogHelp />)
+        dialog.replace(() => <DialogHelp />);
       },
       category: "System",
     },
@@ -1268,8 +1379,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://nikcli.store/docs").catch(() => {})
-        dialog.clear()
+        open("https://nikcli.store/docs").catch(() => {});
+        dialog.clear();
       },
       category: "System",
     },
@@ -1277,8 +1388,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
+        open(sdk.url).catch(() => {});
+        dialog.clear();
       },
       category: "System",
     },
@@ -1297,8 +1408,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "System",
       value: "app.debug",
       onSelect: (dialog) => {
-        renderer.toggleDebugOverlay()
-        dialog.clear()
+        renderer.toggleDebugOverlay();
+        dialog.clear();
       },
     },
     {
@@ -1306,8 +1417,8 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "System",
       value: "app.console",
       onSelect: (dialog) => {
-        renderer.console.toggle()
-        dialog.clear()
+        renderer.console.toggle();
+        dialog.clear();
       },
     },
     {
@@ -1315,13 +1426,13 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       category: "System",
       value: "app.heap_snapshot",
       onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+        const path = writeHeapSnapshot();
         toast.show({
           variant: "info",
           message: `Heap snapshot written to ${path}`,
           duration: 5000,
-        })
-        dialog.clear()
+        });
+        dialog.clear();
       },
     },
     {
@@ -1332,61 +1443,66 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       hidden: true,
       onSelect: () => {
         const handler = () => {
-          renderer.resume()
-        }
-        process.once("SIGCONT", handler)
+          renderer.resume();
+        };
+        process.once("SIGCONT", handler);
 
-        renderer.suspend()
-        process.kill(0, "SIGTSTP")
+        renderer.suspend();
+        process.kill(0, "SIGTSTP");
       },
     },
     {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      title: terminalTitleEnabled()
+        ? "Disable terminal title"
+        : "Enable terminal title",
       value: "terminal.title.toggle",
       keybind: "terminal_title_toggle",
       category: "System",
       onSelect: (dialog) => {
         setTerminalTitleEnabled((prev) => {
-          const next = !prev
-          kv.set("terminal_title_enabled", next)
-          if (!next) renderer.setTerminalTitle("")
-          return next
-        })
-        dialog.clear()
+          const next = !prev;
+          kv.set("terminal_title_enabled", next);
+          if (!next) renderer.setTerminalTitle("");
+          return next;
+        });
+        dialog.clear();
       },
     },
-  ])
+  ]);
 
   createEffect(
     on(
       () => local.model.current(),
       (currentModel) => {
-        if (!currentModel) return
-        if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+        if (!currentModel) return;
+        if (
+          currentModel.providerID === "openrouter" &&
+          !kv.get("openrouter_warning", false)
+        ) {
           untrack(() => {
             DialogAlert.show(
               dialog,
               "Warning",
               "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Nikcli Zen\nhttps://nikcli.ai/zen",
-            ).then(() => kv.set("openrouter_warning", true))
-          })
+            ).then(() => kv.set("openrouter_warning", true));
+          });
         }
       },
       { defer: true },
     ),
-  )
+  );
 
   onMount(() => {
     const refocusPrompt = () => {
-      if (route.data.type !== "session" && route.data.type !== "home") return
-      const ref = promptRef.current
-      if (ref && !ref.focused) ref.focus()
-    }
-    renderer.on("focus", refocusPrompt)
+      if (route.data.type !== "session" && route.data.type !== "home") return;
+      const ref = promptRef.current;
+      if (ref && !ref.focused) ref.focus();
+    };
+    renderer.on("focus", refocusPrompt);
 
     const unsubs = [
       sdk.event.on(TuiEventName.commandExecute, (evt) => {
-        command.trigger(evt.properties.command)
+        command.trigger(evt.properties.command);
       }),
       sdk.event.on(TuiEventName.toastShow, (evt) => {
         toast.show({
@@ -1394,91 +1510,108 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
           message: evt.properties.message,
           variant: evt.properties.variant,
           duration: evt.properties.duration,
-        })
+        });
       }),
       sdk.event.on("monitor.completed", (evt) => {
         const variant =
-          evt.properties.status === "complete" ? "success" : evt.properties.status === "cancelled" ? "info" : "error"
-        const exit = evt.properties.exitCode
-        const suffix = exit === null ? "" : ` (exit ${exit})`
+          evt.properties.status === "complete"
+            ? "success"
+            : evt.properties.status === "cancelled"
+              ? "info"
+              : "error";
+        const exit = evt.properties.exitCode;
+        const suffix = exit === null ? "" : ` (exit ${exit})`;
         toast.show({
           message: `${evt.properties.title} ${evt.properties.status}${suffix}`,
           variant,
           duration: evt.properties.status === "complete" ? 3500 : 5000,
-        })
+        });
       }),
       sdk.event.on(TuiEventName.sessionSelect, (evt) => {
         route.navigate({
           type: "session",
           sessionID: evt.properties.sessionID,
           workspaceID: sync.session.get(evt.properties.sessionID)?.workspaceID,
-        })
+        });
       }),
       sdk.event.on(SessionPrimitives.EventName.deleted, (evt) => {
-        const deletedSessionID = evt.properties.info.id
+        const deletedSessionID = evt.properties.info.id;
         const currentSessionID =
-          route.data.type === "session" || route.data.type === "changes" || route.data.type === "tree"
+          route.data.type === "session" ||
+          route.data.type === "changes" ||
+          route.data.type === "tree"
             ? route.data.sessionID
-            : undefined
+            : undefined;
         if (currentSessionID === deletedSessionID) {
           route.navigate({
             type: "home",
             workspaceID: evt.properties.info.workspaceID,
-          })
+          });
           toast.show({
             variant: "info",
             message: "The current session was deleted",
-          })
+          });
         }
       }),
       sdk.event.on(SessionPrimitives.EventName.error, (evt) => {
-        const error = evt.properties.error
-        if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-        const sessionID = evt.properties.sessionID
-        const currentSession = route.data.type === "session" ? route.data.sessionID : undefined
-        const session = sessionID ? sync.session.get(sessionID) : undefined
-        if (session?.title === BRAIN_SESSION_TITLE && currentSession !== sessionID) return
+        const error = evt.properties.error;
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "MessageAbortedError"
+        )
+          return;
+        const sessionID = evt.properties.sessionID;
+        const currentSession =
+          route.data.type === "session" ? route.data.sessionID : undefined;
+        const session = sessionID ? sync.session.get(sessionID) : undefined;
+        if (
+          session?.title === BRAIN_SESSION_TITLE &&
+          currentSession !== sessionID
+        )
+          return;
         const message = (() => {
-          if (!error) return "An error occurred"
+          if (!error) return "An error occurred";
 
           if (typeof error === "object") {
-            const data = error.data
+            const data = error.data;
             if ("message" in data && typeof data.message === "string") {
-              return data.message
+              return data.message;
             }
           }
-          return String(error)
-        })()
+          return String(error);
+        })();
 
         toast.show({
           variant: "error",
           message,
           duration: 5000,
-        })
+        });
       }),
       sdk.event.on(InstallationEventName.updateAvailable, async (evt) => {
-        const version = evt.properties.version
-        const method = (evt.properties as { method?: InstallMethod }).method
-        const currentVersion = (evt.properties as { current?: string }).current ?? VERSION
+        const version = evt.properties.version;
+        const method = (evt.properties as { method?: InstallMethod }).method;
+        const currentVersion =
+          (evt.properties as { current?: string }).current ?? VERSION;
 
         // Skip version already dismissed by the user
-        const skipped = kv.get("skipped_version")
-        if (skipped && version === skipped) return
+        const skipped = kv.get("skipped_version");
+        if (skipped && version === skipped) return;
 
-        const hint = method ? ` via ${method}` : ""
+        const hint = method ? ` via ${method}` : "";
         const choice = await DialogConfirm.show(
           dialog,
           `Update Available`,
           `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
           "confirm",
-        )
+        );
 
         if (choice === false) {
-          kv.set("skipped_version", version)
-          return
+          kv.set("skipped_version", version);
+          return;
         }
 
-        if (!choice) return
+        if (!choice) return;
 
         // No detected installation method (e.g. running from source / unknown
         // package manager). The TUI still shows the dialog so the user is
@@ -1488,18 +1621,18 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             dialog,
             "Update Available",
             `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
-          )
-          return
+          );
+          return;
         }
 
         toast.show({
           variant: "info",
           message: `Updating to v${version}...`,
           duration: 30_000,
-        })
+        });
 
         try {
-          await upgradeCtx.upgradeNow?.(method, version)
+          await upgradeCtx.upgradeNow?.(method, version);
         } catch (error) {
           // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
           // is what made this toast show a blank body for every failed update.
@@ -1507,52 +1640,60 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
           // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
           // comes back over RPC as a plain `Error`, so the class check was always false and this
           // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
-          const stderr = (error as { stderr?: unknown }).stderr
+          const stderr = (error as { stderr?: unknown }).stderr;
           const message =
-            error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
+            error instanceof Error &&
+            error.name === "UpgradeFailedError" &&
+            typeof stderr === "string"
               ? stderr
               : error instanceof Error
-                ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
-                : "Update failed"
+                ? error.message ||
+                  (error.cause instanceof Error
+                    ? error.cause.message
+                    : "Update failed")
+                : "Update failed";
           toast.show({
             variant: "error",
             title: "Update Failed",
             message,
             duration: 10_000,
-          })
-          return
+          });
+          return;
         }
 
         await DialogAlert.show(
           dialog,
           "Update Complete",
           `Successfully updated to v${version}. Please restart the application.`,
-        )
+        );
 
-        await exit()
+        await exit();
       }),
       sdk.event.on("permission.asked", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(1.3)
+        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined;
+        if (tuiCfg?.sound === false) return;
+        if (attention.focus() === "focused") return;
+        Sound.pulse(1.3);
       }),
       sdk.event.on("session.idle", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(0.8)
+        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined;
+        if (tuiCfg?.sound === false) return;
+        if (attention.focus() === "focused") return;
+        Sound.pulse(0.8);
       }),
-    ]
+    ];
 
-    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade).catch(() => undefined)
+    void checkUpgradeWhenSubscriptionReady(
+      sdk.subscriptionReady,
+      props.checkUpgrade,
+    ).catch(() => undefined);
 
     onCleanup(() => {
-      renderer.off("focus", refocusPrompt)
-      unsubs.forEach((fn) => fn())
-      Sound.dispose()
-    })
-  })
+      renderer.off("focus", refocusPrompt);
+      unsubs.forEach((fn) => fn());
+      Sound.dispose();
+    });
+  });
 
   return (
     <box
@@ -1562,15 +1703,17 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       backgroundColor={theme.surface.base}
       onMouseUp={async () => {
         if (Flag.NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
-          return
+          renderer.clearSelection();
+          return;
         }
-        const text = renderer.getSelection()?.getSelectedText()
+        const text = renderer.getSelection()?.getSelectedText();
         if (text && text.length > 0) {
           await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
+            .then(() =>
+              toast.show({ message: "Copied to clipboard", variant: "info" }),
+            )
+            .catch(toast.error);
+          renderer.clearSelection();
         }
       }}
     >
@@ -1592,16 +1735,40 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             <Session />
           </Match>
           <Match when={route.data.type === "changes" && route.data}>
-            {(data) => <LegacyRedirect tab="changes" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="changes"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "tree" && route.data}>
-            {(data) => <LegacyRedirect tab="tree" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="tree"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "git-graph" && route.data}>
-            {(data) => <LegacyRedirect tab="graph" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="graph"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "github" && route.data}>
-            {(data) => <LegacyRedirect tab="github" sessionID={data().sessionID} workspaceID={data().workspaceID} />}
+            {(data) => (
+              <LegacyRedirect
+                tab="github"
+                sessionID={data().sessionID}
+                workspaceID={data().workspaceID}
+              />
+            )}
           </Match>
           <Match when={route.data.type === "workspace"}>
             <Workspace />
@@ -1611,16 +1778,22 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
               // Keyed so navigating to another plugin route, or a hot reload of
               // the plugin, recreates the boundary; otherwise one crash would
               // latch every future plugin route into the fallback.
-              <Show keyed when={{ id: data().id, generation: pluginRouteKey() }}>
+              <Show
+                keyed
+                when={{ id: data().id, generation: pluginRouteKey() }}
+              >
                 {(current) => (
                   <PluginRouteBoundary id={current.id}>
                     {(() => {
-                      const last = routes.get(current.id)?.at(-1)
+                      const last = routes.get(current.id)?.at(-1);
                       return last ? (
                         last.render({ params: data().data })
                       ) : (
-                        <PluginRouteMissing id={current.id} onHome={() => route.navigate({ type: "home" })} />
-                      )
+                        <PluginRouteMissing
+                          id={current.id}
+                          onHome={() => route.navigate({ type: "home" })}
+                        />
+                      );
                     })()}
                   </PluginRouteBoundary>
                 )}
@@ -1642,8 +1815,11 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       <TuiPluginRuntime.Slot name="app" />
       <StartupLoading ready={pluginsReady} />
       <Show when={sdk.connection.status() === "reconnecting"}>
-        <Reconnecting attempt={sdk.connection.attempt()} error={sdk.connection.error()} />
+        <Reconnecting
+          attempt={sdk.connection.attempt()}
+          error={sdk.connection.error()}
+        />
       </Show>
     </box>
-  )
+  );
 }

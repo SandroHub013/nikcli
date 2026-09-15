@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { mission, missionExec } from "./mission.sql"
 import { sanitizeDefinition, sanitizeExec, type MissionDefinition, type MissionExec } from "./schema"
@@ -103,14 +104,18 @@ export namespace MissionRepo {
 
   /** Delete a definition and every exec it owns. */
   export function remove(projectId: string, id: string): void {
-    Database.transaction((tx) => {
-      tx.delete(missionExec)
-        .where(and(eq(missionExec.projectId, projectId), eq(missionExec.missionId, id)))
-        .run()
-      tx.delete(mission)
-        .where(and(eq(mission.projectId, projectId), eq(mission.id, id)))
-        .run()
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          tx.delete(missionExec)
+            .where(and(eq(missionExec.projectId, projectId), eq(missionExec.missionId, id)))
+            .run()
+          tx.delete(mission)
+            .where(and(eq(mission.projectId, projectId), eq(mission.id, id)))
+            .run()
+        }),
+      ),
+    )
   }
 
   // ── Execs ─────────────────────────────────────────────────────────────────
@@ -144,31 +149,39 @@ export namespace MissionRepo {
     execId: string,
     mutate: (draft: MissionExec) => void,
   ): MissionExec | undefined {
-    return Database.transaction((tx) => {
-      const row = tx
-        .select({ data: missionExec.data })
-        .from(missionExec)
-        .where(
-          and(eq(missionExec.projectId, projectId), eq(missionExec.missionId, missionId), eq(missionExec.id, execId)),
-        )
-        .get()
-      if (!row) return undefined
-      const current = readExec(row.data)
-      if (!current) return undefined
-      const draft = structuredClone(current)
-      mutate(draft)
-      const updated = toExecRow(projectId, draft)
-      tx.update(missionExec)
-        .set({
-          status: updated.status,
-          startedAt: updated.startedAt,
-          endedAt: updated.endedAt,
-          data: updated.data,
-        })
-        .where(eq(missionExec.id, execId))
-        .run()
-      return draft
-    })
+    return Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          const row = tx
+            .select({ data: missionExec.data })
+            .from(missionExec)
+            .where(
+              and(
+                eq(missionExec.projectId, projectId),
+                eq(missionExec.missionId, missionId),
+                eq(missionExec.id, execId),
+              ),
+            )
+            .get()
+          if (!row) return undefined
+          const current = readExec(row.data)
+          if (!current) return undefined
+          const draft = structuredClone(current)
+          mutate(draft)
+          const updated = toExecRow(projectId, draft)
+          tx.update(missionExec)
+            .set({
+              status: updated.status,
+              startedAt: updated.startedAt,
+              endedAt: updated.endedAt,
+              data: updated.data,
+            })
+            .where(eq(missionExec.id, execId))
+            .run()
+          return draft
+        }),
+      ),
+    )
   }
 
   /** Newest first. */
@@ -196,17 +209,21 @@ export namespace MissionRepo {
    * Keep the newest `limit` execs of a mission and delete the rest.
    */
   export function trimExecs(projectId: string, missionId: string, limit: number): void {
-    Database.transaction((tx) => {
-      const ids = tx
-        .select({ id: missionExec.id })
-        .from(missionExec)
-        .where(and(eq(missionExec.projectId, projectId), eq(missionExec.missionId, missionId)))
-        .orderBy(desc(missionExec.startedAt), asc(missionExec.id))
-        .all()
-      const victims = ids.slice(limit).map((row) => row.id)
-      if (victims.length === 0) return
-      tx.delete(missionExec).where(inArray(missionExec.id, victims)).run()
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          const ids = tx
+            .select({ id: missionExec.id })
+            .from(missionExec)
+            .where(and(eq(missionExec.projectId, projectId), eq(missionExec.missionId, missionId)))
+            .orderBy(desc(missionExec.startedAt), asc(missionExec.id))
+            .all()
+          const victims = ids.slice(limit).map((row) => row.id)
+          if (victims.length === 0) return
+          tx.delete(missionExec).where(inArray(missionExec.id, victims)).run()
+        }),
+      ),
+    )
   }
 
   export function countExecRecords(projectId: string, missionId: string): number {

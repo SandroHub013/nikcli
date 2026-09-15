@@ -1,4 +1,5 @@
 import { Database } from "@/database/database"
+import { Effect } from "effect"
 import { MessageRepo } from "../message-repo"
 import { MessageV2 } from "../message-v2"
 import { SessionEntry } from "./entry"
@@ -161,6 +162,6 @@ export namespace SessionEntryProjection {
    * already-committed parts.
    */
   export function rebuild(sessionID: string, messages: MessageV2.WithParts[]): void {
-    Database.transaction((tx) => backfill(tx, sessionID, messages))
+    Effect.runSync(Database.transaction((tx) => Effect.sync(() => backfill(tx, sessionID, messages))))
   }
 }

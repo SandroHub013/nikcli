@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import { describe, expect, it } from "bun:test"
 import { withIsolatedDatabase } from "../helpers/sqlite"
 import {
@@ -157,16 +158,20 @@ describe("instruction sync", () => {
       const hash = hashInstructionBody({ kind: "file", text: "rollback" })
       const body = canonicalJson({ kind: "file", text: "rollback" })
       expect(() =>
-        Database.transaction((tx) => {
-          InstructionRepo.putBlobs([{ hash, body }], tx)
-          SyncEvent.run(
-            SessionSync.InstructionsUpdated,
-            { delta: { [InstructionKey.file("/tmp/AGENTS.md")]: hash } } as any,
-            {
-              projectID,
-            },
-          )
-        }),
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => {
+              InstructionRepo.putBlobs([{ hash, body }], tx)
+              SyncEvent.run(
+                SessionSync.InstructionsUpdated,
+                { delta: { [InstructionKey.file("/tmp/AGENTS.md")]: hash } } as any,
+                {
+                  projectID,
+                },
+              )
+            }),
+          ),
+        ),
       ).toThrow(/sessionID/)
       expect(InstructionRepo.getBlob(hash)).toBeUndefined()
     })

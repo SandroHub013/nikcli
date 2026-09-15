@@ -648,11 +648,15 @@ describe("live and persisted projections agree", () => {
           text: "from payload",
         }
 
-        Database.transaction((tx) => {
-          SessionEntryProjection.message(tx, info as any)
-          MessageRepo.upsertMessage(info as any, tx)
-          SessionEntryProjection.part(tx, part as any)
-        })
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => {
+              SessionEntryProjection.message(tx, info as any)
+              MessageRepo.upsertMessage(info as any, tx)
+              SessionEntryProjection.part(tx, part as any)
+            }),
+          ),
+        )
 
         expect(MessageRepo.listParts(userID)).toEqual([])
         const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
@@ -674,9 +678,11 @@ describe("live and persisted projections agree", () => {
         expect(parts.length).toBeGreaterThan(0)
         const partID = parts[0]!.id
 
-        Database.transaction((tx) => {
-          SessionEntryProjection.partRemoved(tx, session.id, userID, partID)
-        })
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => SessionEntryProjection.partRemoved(tx, session.id, userID, partID)),
+          ),
+        )
 
         expect(MessageRepo.listParts(userID).some((part) => part.id === partID)).toBe(true)
         const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")

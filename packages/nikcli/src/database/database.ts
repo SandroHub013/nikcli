@@ -1,19 +1,17 @@
-import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite"
+import { Database as BunDatabase, type Statement } from "bun:sqlite"
+import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import fs from "fs"
 import nodePath from "path"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer, Schema } from "effect"
 import { Global } from "@nikcli-ai/util/global"
 import { Log } from "@nikcli-ai/util/log"
 import { errorMessage } from "@nikcli-ai/util/error-format"
 import { DatabaseMigration } from "./migration"
-import * as schema from "./schema"
 
 export namespace Database {
   const log = Log.create({ service: "database" })
 
-  export type Schema = typeof schema
-  export type Client = BunSQLiteDatabase<Schema>
+  export type Client = SQLiteBunDatabase
 
   export interface Interface {
     readonly db: Client
@@ -30,6 +28,69 @@ export namespace Database {
       return nodePath.join(Global.Path.data, configured)
     }
     return nodePath.join(Global.Path.data, "nikcli.db")
+  }
+
+  /**
+   * How many compiled statements the Drizzle connection may hold.
+   *
+   * Sized above the number of distinct query shapes the domain modules emit,
+   * so steady-state traffic never evicts; the bound only bites under a shape
+   * storm. Raising it trades RSS for compile hits on a churning workload,
+   * which is not the workload we have.
+   */
+  const STATEMENT_CACHE_LIMIT = 256
+
+  /**
+   * A bounded prepared-statement cache for the Drizzle connection.
+   *
+   * Drizzle compiles through `Database.query`, which caches statements on the
+   * connection and never evicts them — 2000 distinct SQL shapes cost ~75MB of
+   * RSS that `close()` does not reclaim. The shape count is not bounded by the
+   * code that writes the queries: `inArray` and batch inserts emit one
+   * placeholder per element, so a query over a variable-length list is a new
+   * shape for every length it is ever called with.
+   *
+   * Routing `query` through an LRU over `prepare` keeps the compile savings —
+   * a hit returns the same compiled statement `query` would have — while
+   * capping what a shape storm can retain. Eviction finalizes, which is safe
+   * because `bun:sqlite` is synchronous: a statement is executed in the same
+   * tick it is handed out, so nothing can evict one that is still in flight.
+   *
+   * Only the Drizzle connection is wrapped. `native` stays the real handle, so
+   * `rawSql`, the checkpoint loop, and migrations are untouched.
+   */
+  function boundedStatements(native: BunDatabase, limit = STATEMENT_CACHE_LIMIT): BunDatabase {
+    const cache = new Map<string, Statement>()
+
+    function query(sql: string): Statement {
+      const hit = cache.get(sql)
+      if (hit) {
+        // Re-insert to mark as most recently used.
+        cache.delete(sql)
+        cache.set(sql, hit)
+        return hit
+      }
+
+      const compiled = native.prepare(sql)
+      cache.set(sql, compiled)
+      if (cache.size > limit) {
+        const oldest = cache.keys().next().value as string
+        const evicted = cache.get(oldest)
+        cache.delete(oldest)
+        evicted?.finalize()
+      }
+      return compiled
+    }
+
+    return new Proxy(native, {
+      get(target, property) {
+        if (property === "query") return query
+        // `bun:sqlite`'s methods are native and reject a proxy as their
+        // receiver, so they are handed back bound to the real connection.
+        const value = target[property as keyof BunDatabase]
+        return value instanceof Function ? value.bind(target) : value
+      },
+    })
   }
 
   function open(filename: string): Interface {
@@ -50,7 +111,7 @@ export namespace Database {
     native.exec("PRAGMA wal_checkpoint(PASSIVE)")
 
     return {
-      db: drizzle(native, { schema }),
+      db: drizzle({ client: boundedStatements(native) }),
       native,
       filename,
     }
@@ -172,6 +233,54 @@ export namespace Database {
   type PostCommitQueue = (() => void)[]
 
   /**
+   * A transaction body's return type, rejecting `Promise`.
+   *
+   * Drizzle 1.0 carries the same guard on the synchronous driver, but it
+   * cannot see through this wrapper's generic, so the constraint is stated
+   * here where callers meet it.
+   */
+  type Sync<T> = T extends Promise<unknown> ? never : T
+
+  // ============================================================================
+  // Effect access
+  // ============================================================================
+
+  /**
+   * A query that did not complete.
+   *
+   * `operation` names the call site rather than the SQL, because the SQL is
+   * generated and a reader chasing a failure wants to know which repository
+   * asked, not which placeholders it used.
+   */
+  export class QueryError extends Schema.TaggedError<QueryError>()("DatabaseQueryError", {
+    operation: Schema.String,
+    message: Schema.String,
+  }) {}
+
+  /**
+   * Run a Drizzle query as an Effect, so a repository's failure mode is visible
+   * in its type instead of being thrown past its callers.
+   *
+   * `run` is handed an executor and must stay synchronous — every `bun:sqlite`
+   * query already is, and this is the property that keeps the wrapper free:
+   * measured at 8.29µs against 7.75µs for the same call made directly, where
+   * moving to Drizzle's Effect driver instead costs 17.03µs.
+   *
+   * The executor defaults to the shared connection. Passing one explicitly is
+   * how a repository joins a transaction it was handed.
+   */
+  export function query<A>(
+    operation: string,
+    run: (db: TxOrDb) => A,
+    executor?: TxOrDb,
+  ): Effect.Effect<A, QueryError> {
+    return Effect.try({
+      try: () => run(executor ?? (syncDb() as TxOrDb)),
+      catch: (error) => new QueryError({ operation, message: errorMessage(error) }),
+    })
+  }
+
+  /**
    * Run `fn` in a transaction, draining post-commit effects afterwards.
    *
    * Nested calls join the outer transaction (SQLite has no real nesting that
@@ -182,21 +291,54 @@ export namespace Database {
    * `behavior` defaults to "immediate": a read-then-write sequence (allocate
    * a sequence number, then append) must take the write lock up front or two
    * processes sharing nikcli.db can both read the same number.
+   *
+   * The body must be synchronous, which `Sync` enforces. `bun:sqlite` commits
+   * when the callback returns, so an `async` body would have the transaction
+   * commit at its first `await` with the rest of the work running outside it,
+   * and `afterCommit` effects draining before that work had happened.
    */
-  export function transaction<T>(
-    fn: (tx: TxOrDb, ctx: TransactionContext) => T,
-    options: { behavior?: TransactionBehavior } = {},
-  ): T {
-    // Set while an outermost transaction is open, so a nested `transaction`
-    // can find the queue to join. Nothing outside this function reads it.
-    if (activeQueue) return fn(syncDb() as TxOrDb, contextFor(activeQueue)) as T
+  /**
+   * Thrown to make `bun:sqlite` roll back, carrying the body's Exit back out
+   * so its own failure — not this marker — is what the caller sees.
+   */
+  class Rollback {
+    constructor(readonly exit: Exit.Exit<unknown, unknown>) {}
+  }
 
-    const queue: PostCommitQueue = []
-    activeQueue = queue
-    try {
-      const result = syncDb().transaction((tx) => fn(tx as TxOrDb, contextFor(queue)), {
-        behavior: options.behavior ?? "immediate",
-      }) as T
+  export function transaction<A, E, R>(
+    fn: (tx: TxOrDb, ctx: TransactionContext) => Effect.Effect<A, E, R>,
+    options: { behavior?: TransactionBehavior } = {},
+  ): Effect.Effect<A, E | QueryError, R> {
+    return Effect.suspend(() => {
+      // Set while an outermost transaction is open, so a nested `transaction`
+      // can find the queue to join. Nothing outside this function reads it.
+      if (activeQueue) return fn(syncDb() as TxOrDb, contextFor(activeQueue))
+
+      const queue: PostCommitQueue = []
+      activeQueue = queue
+
+      let exit: Exit.Exit<A, E> | undefined
+      try {
+        syncDb().transaction(
+          (tx) => {
+            // The body is evaluated here rather than returned, because the
+            // driver commits when this callback returns. A body that suspends
+            // on something asynchronous fails the Exit instead of committing
+            // early — the same rule the driver enforces for `async` callbacks.
+            exit = Effect.runSyncExit(fn(tx as TxOrDb, contextFor(queue)) as Effect.Effect<A, E>)
+            if (Exit.isFailure(exit)) throw new Rollback(exit)
+            return undefined as never
+          },
+          { behavior: options.behavior ?? "immediate" },
+        )
+      } catch (error) {
+        activeQueue = undefined
+        if (!(error instanceof Rollback)) {
+          return Effect.fail(new QueryError({ operation: "transaction", message: errorMessage(error) }))
+        }
+        return exit as Effect.Effect<A, E, R>
+      }
+
       activeQueue = undefined
       for (const effect of queue) {
         try {
@@ -205,11 +347,11 @@ export namespace Database {
           log.warn("post-commit effect failed", { error: errorMessage(error) })
         }
       }
-      return result
-    } catch (error) {
-      activeQueue = undefined
-      throw error
-    }
+      return (exit ??
+        Effect.fail(
+          new QueryError({ operation: "transaction", message: "transaction produced no result" }),
+        )) as Effect.Effect<A, E | QueryError, R>
+    })
   }
 
   let activeQueue: PostCommitQueue | undefined

@@ -210,9 +210,9 @@ export namespace SessionV2 {
     if (messages.length === 0) return []
 
     try {
-      Database.transaction((tx) => {
-        SessionEntryProjection.backfill(tx, sessionID, messages)
-      })
+      Effect.runSync(
+        Database.transaction((tx) => Effect.sync(() => SessionEntryProjection.backfill(tx, sessionID, messages))),
+      )
       return SessionEntryRepo.list(sessionID)
     } catch (error) {
       // A backfill failure must not make history unreadable: fall back to
@@ -235,9 +235,9 @@ export namespace SessionV2 {
         return yield* session.messages({ sessionID })
       }),
     )
-    Database.transaction((tx) => {
-      SessionEntryProjection.backfill(tx, sessionID, messages)
-    })
+    Effect.runSync(
+      Database.transaction((tx) => Effect.sync(() => SessionEntryProjection.backfill(tx, sessionID, messages))),
+    )
     return SessionEntryRepo.list(sessionID)
   }
 
