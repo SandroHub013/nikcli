@@ -100,6 +100,8 @@ export interface CheckResult {
 export interface ReleaseFeedResult {
   readonly releases?: readonly GithubRelease[]
   readonly notModified: boolean
+  /** The tag this answer carried, to be stored with the verdict drawn from it. */
+  readonly etag?: string
 }
 
 export interface ReleaseFeed {
@@ -123,10 +125,25 @@ export class ReleaseFeedError extends Error {
   }
 }
 
-/** Where the ETag is kept, so a restart does not spend a call to learn nothing. */
-export interface EtagStore {
-  read(): string | undefined
-  write(etag: string): void
+/**
+ * What is kept between runs: the tag, and the verdict that tag stands for.
+ *
+ * The two only make sense together. A tag stored alone is a promise that the
+ * next answer may be a bare `304`, and a `304` carries no releases: ADE would
+ * come back from a restart holding a token that means "nothing changed since
+ * the answer you no longer have", and would tell the user they are up to date
+ * while the release it announced yesterday sits unread. Whoever writes one
+ * writes both.
+ */
+export interface UpdateMemory {
+  readonly etag?: string
+  /** The release found the last time a list was read; absent when there was none. */
+  readonly update?: AvailableUpdate
+}
+
+export interface UpdateMemoryStore {
+  read(): UpdateMemory | undefined
+  write(memory: UpdateMemory): void
 }
 
 export interface UpdateWatchOptions {
@@ -139,6 +156,13 @@ export interface UpdateWatchOptions {
   readonly now?: () => number
   /** Subscribes to "the window came back"; returns the unsubscribe. */
   readonly onForeground?: (run: () => void) => () => void
+  /**
+   * Where the tag and its verdict are kept between runs.
+   *
+   * Absent: every launch reads the whole list once, which is correct and
+   * costs one call.
+   */
+  readonly memory?: UpdateMemoryStore
 }
 
 /**
@@ -149,10 +173,10 @@ export interface UpdateWatchOptions {
  * published last, which is usually not ADE's. The filtering is in
  * `newerRelease`, so the list has to be the one that contains `ade-v*`.
  */
-export function githubReleaseFeed(doFetch: typeof fetch = fetch, store?: EtagStore): ReleaseFeed {
-  // Read once: the tag survives a restart, so the first check after launch
-  // usually costs a 304 instead of the whole list.
-  let etag: string | undefined = store?.read()
+export function githubReleaseFeed(doFetch: typeof fetch = fetch, initialEtag?: string): ReleaseFeed {
+  // Given by the caller, which is also what stores it alongside the verdict:
+  // see `UpdateMemory`.
+  let etag: string | undefined = initialEtag
   return {
     async read(): Promise<ReleaseFeedResult> {
       const response = await doFetch(`https://api.github.com/repos/${RELEASE_REPO}/releases?per_page=30`, {
@@ -165,11 +189,12 @@ export function githubReleaseFeed(doFetch: typeof fetch = fetch, store?: EtagSto
       if (response.status === 304) return { notModified: true }
       if (!response.ok) throw new ReleaseFeedError(`GitHub ${response.status}`, retryAfter(response, Date.now()))
       const tag = response.headers.get("etag")
-      if (tag) {
-        etag = tag
-        store?.write(tag)
+      if (tag) etag = tag
+      return {
+        releases: (await response.json()) as GithubRelease[],
+        notModified: false,
+        ...(tag ? { etag: tag } : {}),
       }
-      return { releases: (await response.json()) as GithubRelease[], notModified: false }
     },
   }
 }
@@ -215,6 +240,17 @@ export interface UpdateWatch {
   check(options?: { force?: boolean }): Promise<CheckResult>
 }
 
+/**
+ * A remembered update as a release row again.
+ *
+ * Only the two fields `newerRelease` reads are kept, because they are the only
+ * two a notice needs; the row is rebuilt around them so the comparison after a
+ * `304` is the same code as the one after a list.
+ */
+function releaseRow(update: AvailableUpdate): GithubRelease {
+  return { tag_name: `ade-v${update.version}`, html_url: update.url, draft: false, prerelease: false }
+}
+
 /** A build with no released version behind it: `tauri dev` and anything unreleased. */
 function devBuild(version: string): boolean {
   const parsed = parseVersion(version)
@@ -234,7 +270,8 @@ function pickUpdate(
 
 export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
   const now = options.now ?? Date.now
-  const feed = options.feed ?? githubReleaseFeed()
+  const remembered = options.memory?.read()
+  const feed = options.feed ?? githubReleaseFeed(fetch, remembered?.etag)
   const visible = options.isVisible ?? (() => true)
   const announced = new Set<string>()
   /** When each charged call was made, over the last hour. */
@@ -246,7 +283,10 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
    * Kept because a `304` carries no list: without it the answer to "is there
    * an update?" would be "no" for as long as GitHub keeps saying "unchanged".
    */
-  let lastUpdate: { update: AvailableUpdate; release: GithubRelease } | undefined
+  let lastUpdate: { update: AvailableUpdate; release: GithubRelease } | undefined = remembered?.update
+    ? { update: remembered.update, release: releaseRow(remembered.update) }
+    : undefined
+  let etag = remembered?.etag
   /** Set when a request was refused; nothing is asked before it. */
   let waitUntil: number | undefined
   /** Consecutive failures, for the wait that grows. */
@@ -258,6 +298,20 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
   const budgetLeft = (at: number): boolean => {
     while (charged.length > 0 && at - charged[0]! >= 60 * 60_000) charged.shift()
     return charged.length < MAX_CALLS_PER_HOUR
+  }
+
+  /** Says it once per run, whether it was read from GitHub or from the last one. */
+  const announce = (update: AvailableUpdate): AvailableUpdate => {
+    if (!announced.has(update.version)) {
+      announced.add(update.version)
+      options.onUpdate(update)
+    }
+    return update
+  }
+
+  /** The tag and the verdict, stored as one so neither can outlive the other. */
+  const remember = (update: AvailableUpdate | undefined) => {
+    options.memory?.write({ ...(etag ? { etag } : {}), ...(update ? { update } : {}) })
   }
 
   const check = async (opts: { force?: boolean } = {}): Promise<CheckResult> => {
@@ -292,22 +346,29 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
        */
       if (result.notModified) {
         if (lastUpdate && newerRelease(currentVersion, [lastUpdate.release])) {
-          return { status: "update", at, currentVersion, update: lastUpdate.update, cached: true }
+          /*
+           * A release remembered from a previous run has never been announced
+           * in this window: the bell starts each launch empty, and this is the
+           * only chance to say it, since the list will keep answering `304`
+           * until somebody publishes something else.
+           */
+          return { status: "update", at, currentVersion, update: announce(lastUpdate.update), cached: true }
         }
         return { status: devBuild(currentVersion) ? "dev" : "current", at, currentVersion, cached: true }
       }
       charged.push(at)
+      if (result.etag) etag = result.etag
       if (devBuild(currentVersion)) {
         lastUpdate = undefined
+        remember(undefined)
         return { status: "dev", at, currentVersion }
       }
       const found = pickUpdate(currentVersion, result.releases ?? [])
       lastUpdate = found
+      // The verdict and the tag that stands for it, written together.
+      remember(found?.update)
       if (!found) return { status: "current", at, currentVersion }
-      if (announced.has(found.update.version)) return { status: "update", at, currentVersion, update: found.update }
-      announced.add(found.update.version)
-      options.onUpdate(found.update)
-      return { status: "update", at, currentVersion, update: found.update }
+      return { status: "update", at, currentVersion, update: announce(found.update) }
     } catch (error) {
       // A charged call all the same: GitHub counted the request that failed.
       charged.push(at)

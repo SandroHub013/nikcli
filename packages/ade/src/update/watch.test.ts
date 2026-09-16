@@ -286,26 +286,96 @@ describe("githubReleaseFeed", () => {
     expect(githubReleaseFeed(doFetch).read()).rejects.toThrow("GitHub 403")
   })
 
-  test("the tag survives a restart, so the first check after launch costs nothing", async () => {
-    const box: { etag?: string } = {}
-    const store = {
-      read: () => box.etag,
-      write: (etag: string) => {
-        box.etag = etag
-      },
-    }
+  test("the answer carries its tag, and a feed given one asks with it", async () => {
     const seen: (HeadersInit | undefined)[] = []
     const doFetch = (async (_url: string, init?: RequestInit) => {
       seen.push(init?.headers)
       return new Response(JSON.stringify(RELEASES), { status: 200, headers: { etag: 'W/"abc"' } })
     }) as unknown as typeof fetch
 
-    await githubReleaseFeed(doFetch, store).read()
-    expect(box.etag).toBe('W/"abc"')
-
-    // A new window, the tag already on disk.
-    await githubReleaseFeed(doFetch, store).read()
+    expect((await githubReleaseFeed(doFetch).read()).etag).toBe('W/"abc"')
+    await githubReleaseFeed(doFetch, 'W/"abc"').read()
     expect((seen[1] as Record<string, string>)["If-None-Match"]).toBe('W/"abc"')
+  })
+})
+
+/*
+ * What a restart remembers. The tag alone is a trap: it buys a `304`, and a
+ * `304` carries no releases, so the window would come back knowing only that
+ * nothing had changed since an answer it no longer had.
+ */
+describe("memory across restarts", () => {
+  function store() {
+    let saved: { etag?: string; update?: { version: string; url: string } } | undefined
+    return {
+      read: () => saved,
+      write: (memory: { etag?: string; update?: { version: string; url: string } }) => {
+        saved = memory
+      },
+      saved: () => saved,
+    }
+  }
+
+  test("a release found in one run is still announced in the next, on a 304 alone", async () => {
+    const memory = store()
+    const announcedFirst: string[] = []
+    const first = createUpdateWatch({
+      currentVersion: async () => "1.0.0",
+      onUpdate: (update) => announcedFirst.push(update.version),
+      feed: { read: async () => ({ releases: RELEASES, notModified: false, etag: 'W/"abc"' }) },
+      now: () => 1_000_000,
+      memory,
+    })
+    expect((await first.check({ force: true })).update?.version).toBe("1.1.0")
+    expect(announcedFirst).toEqual(["1.1.0"])
+    expect(memory.saved()?.etag).toBe('W/"abc"')
+    expect(memory.saved()?.update?.version).toBe("1.1.0")
+
+    // ADE reopens: GitHub has nothing new to say, and the list never arrives.
+    const announcedAgain: string[] = []
+    const second = createUpdateWatch({
+      currentVersion: async () => "1.0.0",
+      onUpdate: (update) => announcedAgain.push(update.version),
+      feed: { read: async () => ({ notModified: true }) },
+      now: () => 2_000_000,
+      memory,
+    })
+    const result = await second.check({ force: true })
+    expect(result.status).toBe("update")
+    expect(result.update?.version).toBe("1.1.0")
+    expect(checkMessage(result).text).toBe("ADE 1.1.0 è disponibile")
+    // The bell of the new window is empty, so this release is announced there too.
+    expect(announcedAgain).toEqual(["1.1.0"])
+  })
+
+  test("a build that has caught up with the remembered release is not told to update", async () => {
+    const memory = store()
+    memory.write({ etag: 'W/"abc"', update: { version: "1.1.0", url: RELEASES[0]!.html_url } })
+    const watch = createUpdateWatch({
+      currentVersion: async () => "1.1.0",
+      onUpdate: () => {
+        throw new Error("non deve annunciare")
+      },
+      feed: { read: async () => ({ notModified: true }) },
+      now: () => 1_000_000,
+      memory,
+    })
+    expect((await watch.check({ force: true })).status).toBe("current")
+  })
+
+  test("a run that finds no release clears what was remembered", async () => {
+    const memory = store()
+    memory.write({ etag: 'W/"abc"', update: { version: "1.1.0", url: RELEASES[0]!.html_url } })
+    const watch = createUpdateWatch({
+      currentVersion: async () => "1.0.0",
+      onUpdate: () => {},
+      // The release was unpublished; the list arrives without it.
+      feed: { read: async () => ({ releases: [], notModified: false, etag: 'W/"def"' }) },
+      now: () => 1_000_000,
+      memory,
+    })
+    expect((await watch.check({ force: true })).status).toBe("current")
+    expect(memory.saved()).toEqual({ etag: 'W/"def"' })
   })
 })
 

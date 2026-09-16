@@ -292,7 +292,7 @@ import {
   type Notice,
   type NoticeKind,
 } from "./notifications"
-import { checkMessage, createUpdateWatch, githubReleaseFeed, type UpdateWatch } from "../update/watch"
+import { checkMessage, createUpdateWatch, type UpdateMemory, type UpdateWatch } from "../update/watch"
 import { isReleasePage } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
@@ -2079,26 +2079,32 @@ export function Workbench() {
           }),
         ),
       /*
-       * The tag GitHub last answered with, kept across restarts: the first
-       * check after launch then usually costs a 304, which is not charged to
-       * the hourly limit.
+       * The tag GitHub last answered with and the release it stood for, kept
+       * together across restarts: the first check after launch then usually
+       * costs a 304, which is not charged to the hourly limit, and still knows
+       * which release that 304 means.
        */
-      feed: githubReleaseFeed(fetch, {
+      memory: {
         read: () => {
           try {
-            return localStorage.getItem("ade.update.etag") ?? undefined
+            const saved = localStorage.getItem("ade.update.memory")
+            if (!saved) return undefined
+            const parsed = JSON.parse(saved) as UpdateMemory
+            // A release URL from storage opens a page: same rule as a notice.
+            if (parsed.update && !isReleasePage(parsed.update.url)) return { ...parsed, update: undefined }
+            return parsed
           } catch {
             return undefined
           }
         },
-        write: (etag) => {
+        write: (memory) => {
           try {
-            localStorage.setItem("ade.update.etag", etag)
+            localStorage.setItem("ade.update.memory", JSON.stringify(memory))
           } catch {
             /* A profile without storage still checks; it just pays for the list. */
           }
         },
-      }),
+      },
       // A window nobody is looking at does not poll: see `watch.ts`.
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
       /*
@@ -2141,9 +2147,17 @@ export function Workbench() {
     setCheckingUpdate(true)
     try {
       const result = await updateWatch.check({ force: true })
-      // The watch has just posted this release's own notice; the same line
-      // twice is not an answer, and the first one is already the better one.
-      if (result.status === "update" && result.update && notices().some((notice) => notice.href === result.update?.url)) return
+      /*
+       * The release already has its line in the bell. Repeating it would be
+       * two identical rows; saying nothing would look like the command did
+       * nothing. So it says which one it found.
+       */
+      if (result.status === "update" && result.update && notices().some((notice) => notice.href === result.update?.url)) {
+        setNotices((list) =>
+          addNotice(list, { kind: "info", text: `Già segnalato: ADE ${result.update?.version} è disponibile.`, at: Date.now() }),
+        )
+        return
+      }
       const message = checkMessage(result)
       setNotices((list) =>
         addNotice(list, { kind: message.kind, text: message.text, ...(message.href ? { href: message.href } : {}), at: Date.now() }),
