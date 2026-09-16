@@ -1173,6 +1173,13 @@
   cursor: inherit;
 }
 
+/* The chip takes focus so its state can be read out, and a keyboard user has
+   to see where the focus is even though there is nothing to press. */
+.hA .chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
 .hA .lbl {
   color: var(--st);
   flex: 0 0 auto;

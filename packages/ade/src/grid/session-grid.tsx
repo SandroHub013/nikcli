@@ -52,7 +52,7 @@ const ARROWS: Record<string, Direction> = {
 /** How far the pointer must travel before a press on a header becomes a drag. */
 const DRAG_THRESHOLD = 6
 
-/** A press on these inside the header is theirs, not the start of a drag. */
+/** The word the overlay shows for the zone the pointer is over. */
 const ZONE_LABELS: Record<DropZone, string> = {
   before: "Prima",
   after: "Dopo",

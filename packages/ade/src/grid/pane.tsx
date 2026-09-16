@@ -623,11 +623,12 @@ export function SessionPane(props: SessionPaneProps) {
           action that did not exist, and — because every button is excluded
           from the grid's drag handles — it took the middle of the header,
           where the chip sits, out of the area the pane can be dragged by.
-          Focusable still, so the state and its detail can be read out.
+          Focusable still, so the state and its detail can be read out — but
+          not a live region: the state changes with every tool call, and a
+          screen reader would read a chip nobody asked about over and over.
         */}
         <span
           class="chip a-state"
-          role="status"
           tabIndex={0}
           title={tipState()}
           data-tip={tipState()}
