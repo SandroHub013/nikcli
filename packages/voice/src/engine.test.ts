@@ -1824,3 +1824,91 @@ describe("a conversation: after an answer the name is not needed for a few secon
     await engine.stop()
   })
 })
+
+describe("interrupted while it talks", () => {
+  function talkingSlowly() {
+    const host = new MockVoiceHost()
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Una risposta lunga che non finisce mai.", ran: true }
+    }
+    const events: string[] = []
+    let release: (() => void) | undefined
+    const speaker = {
+      speak: (text: string) => {
+        events.push(`speak:${text}`)
+        return new Promise<void>((r) => (release = r))
+      },
+      cancel: () => {
+        events.push("cancel")
+        release?.()
+      },
+    }
+    const transcriber = createFakeTranscriber()
+    let gate: any
+    const engine = createVoiceEngine({
+      host,
+      speaker,
+      now: () => 10_000,
+      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return transcriber
+      },
+    })
+    const hear = async (text: string) => {
+      transcriber.emit(text, true)
+      await new Promise((r) => setTimeout(r, 30))
+    }
+    return { host, asked, events, engine, hear, gate: () => gate, finish: () => release?.() }
+  }
+  const ran = (host: MockVoiceHost) => host.calls.filter((call) => call.method === "runCommand")
+
+  test("its name over its voice stops the voice and the sentence is carried out", async () => {
+    const { host, events, engine, hear } = talkingSlowly()
+    await engine.start("agent", { waitForName: true })
+    await hear("nik raccontami una storia")
+    expect(events.at(-1)).toBe("speak:Una risposta lunga che non finisce mai.")
+    await hear("nik apri la tavolozza")
+    expect(events.slice(-1)).toEqual(["cancel"])
+    expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
+    await engine.stop()
+  })
+
+  test("the name heard at the start of a long sentence stops the voice before the rest is back", async () => {
+    const { events, engine, gate } = talkingSlowly()
+    await engine.start("agent", { waitForName: true })
+    const before = events.length
+    gate().onAccepted()
+    expect(events.slice(before)).toEqual(["cancel"])
+    await engine.stop()
+  })
+
+  test("a sentence from the room over its voice changes nothing", async () => {
+    const { events, engine, hear, finish } = talkingSlowly()
+    await engine.start("agent", { waitForName: true })
+    await hear("nik raccontami una storia")
+    const before = events.length
+    await hear("il telegiornale di stasera")
+    expect(events.slice(before)).toEqual([])
+    finish()
+    await engine.stop()
+  })
+
+  test("a tap stops the voice and the next sentence needs no name", async () => {
+    for (const tap of ["toggle", "interrupt"] as const) {
+      const { host, events, engine, hear } = talkingSlowly()
+      await engine.start("agent", { waitForName: true })
+      await hear("nik raccontami una storia")
+      await engine[tap]()
+      expect(events).toContain("cancel")
+      expect(engine.isRunning()).toBe(true)
+      await hear("apri la tavolozza")
+      expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
+      // Cut short, it says nothing about it.
+      expect(events.filter((e) => e.startsWith("speak:"))).not.toContain("speak:Nessuna operazione da annullare.")
+      await engine.stop()
+    }
+  })
+})

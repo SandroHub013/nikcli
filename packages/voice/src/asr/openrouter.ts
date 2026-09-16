@@ -214,6 +214,8 @@ export interface NameGate {
   accepts(text: string): boolean
   /** The start of a sentence that did not call it, for the console to show. */
   onRejected?(text: string): void
+  /** The start of a sentence called it: sent whole now, and the voice can stop at once. */
+  onAccepted?(): void
   /** Each request sent while the gate was active, so the caller can count them. */
   onRequest?(): void
   /** A long sentence that could not be cut, and so was not sent at all. */
@@ -575,6 +577,7 @@ export function createOpenRouterTranscriber(
           options.nameGate!.onRejected?.(heard)
           return
         }
+        options.nameGate!.onAccepted?.()
         options.nameGate!.onRequest?.()
       }
       await transcribeSegment(segment, deliver)

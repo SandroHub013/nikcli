@@ -204,7 +204,7 @@ export function AgentOrb(props: AgentOrbProps) {
           type="button"
           data-slot="agent-orb-sphere"
           aria-label={shown() === "speak" ? t("vui.agentOrb.speaking") : t("vui.agentOrb.working")}
-          onClick={() => void props.engine.cancel()}
+          onClick={() => void props.engine.interrupt()}
         >
           <Sphere phase={shown} level={() => props.meter.level()} reduced={reduced} />
         </button>

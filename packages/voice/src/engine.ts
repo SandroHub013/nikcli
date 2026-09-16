@@ -196,6 +196,11 @@ export interface VoiceEngine {
   submitText(text: string): Promise<void>
   handlePermissionRequest(paneId: string, what: string): Promise<void>
   cancel(): Promise<void>
+  /**
+   * A tap while the assistant talks or works: it stops, and the next sentence
+   * needs no name. Listening that is not always on is only cancelled.
+   */
+  interrupt(): Promise<void>
   pressToTalk(mode?: VoiceMode): Promise<void>
   releaseToTalk(): Promise<void>
   updateSettings(next: Partial<VoiceSettings>): Promise<void>
@@ -659,6 +664,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
           onRequest: countListenRequest,
+          onAccepted: () => cancelSpeech(),
           onUncut: () =>
             record({
               kind: "action",
@@ -1105,10 +1111,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        */
       if (
         currentSettings().alwaysListen &&
+        currentSettings().activation === "wake-word" &&
         (mode === undefined || mode === "agent") &&
         activeMode() === "agent" &&
-        programHandle?.waitingForName()
+        programHandle
       ) {
+        // Over its voice too: it stops talking and takes the next sentence.
+        cancelSpeech()
         await Effect.runPromise(programHandle.wake)
         return
       }
@@ -1158,6 +1167,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       cancelSpeech()
       if (programHandle) {
         await Effect.runPromise(programHandle.cancel)
+      }
+    },
+
+    async interrupt(): Promise<void> {
+      await this.cancel()
+      const s = currentSettings()
+      if (isRunning() && programHandle && activeMode() === "agent" && s.alwaysListen && s.activation === "wake-word") {
+        await Effect.runPromise(programHandle.wake)
       }
     },
 

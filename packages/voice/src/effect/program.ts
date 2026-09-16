@@ -907,6 +907,7 @@ export function makeVoiceProgram(
       closeFollowUp()
       isWakeWordAwake = true
       wakeUntil = clockMs() + WAKE_WINDOW_MS
+      options.onCue?.("listening")
     }
 
     /* A spoken request was handled: once its answer has been said, the next sentence needs no name. */
@@ -1254,6 +1255,8 @@ export function makeVoiceProgram(
               })
               return
             }
+            // Called over its own voice: it stops talking and listens.
+            yield* speaker.cancel
             if (match.remainder.length > 0) {
               // Spoke wake-word and command together in one breath
               yield* executeAgentUtterance(match.remainder, heard)
@@ -1270,6 +1273,7 @@ export function makeVoiceProgram(
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
             closeFollowUp()
+            if (match.matched && !thinking) yield* speaker.cancel
             /* While a turn runs the name is not required to be heard, but a
                command is only carried out when it was addressed: see the
                `named` note in `while-thinking.ts`. */
@@ -1343,6 +1347,19 @@ export function makeVoiceProgram(
              * sentence must be looked at straight away.
              */
             const previous = utteranceFiber
+            /*
+             * The one before may only be talking. Called by name over its
+             * voice, the voice stops, rather than the sentence waiting for
+             * the end of an answer nobody is listening to any more.
+             */
+            if (
+              previous &&
+              currentSettings.mode === "agent" &&
+              currentSettings.activation === "wake-word" &&
+              matchesWakeWord(text, currentSettings.wakeWord).matched
+            ) {
+              yield* speaker.cancel
+            }
             if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
             handling++
             utteranceFiber = yield* Effect.forkIn(
@@ -1414,6 +1431,9 @@ export function makeVoiceProgram(
         closeFollowUp()
         options.onPartialTranscript?.("")
         yield* speaker.cancel
+        /* A press that only cut the voice is not an operation to cancel: said
+           «nessuna operazione da annullare» over the silence it asked for. */
+        if (currentState.status === "idle" || currentState.status === "listening") return
         yield* applyDialogEvent({ type: "cancel" })
       }),
 
