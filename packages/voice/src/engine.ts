@@ -748,14 +748,16 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           at: now(),
         })
       }
-      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+      // The assistant closes at the end of the turn, after its voice: see `onTurnEnd`.
+      if (activeMode() !== "agent" && currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
         if (dialogState().status !== "confirming") {
           void stop()
         }
-      } else if (currentSettings().activation === "push-to-talk" && !chordHeld && activeMode() === "agent") {
-        closeAfterTurn()
       }
+    },
+    onTurnEnd: () => {
+      if (currentSettings().activation === "push-to-talk" && activeMode() === "agent") closeAfterTurn()
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
     onHeld: (text) => setHeld(text),
@@ -804,7 +806,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
               : undefined)
       noteError(err, message)
       if (message) record({ kind: "error", text: message, at: now() })
-      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+      if (activeMode() !== "agent" && currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
         void stop()
       }

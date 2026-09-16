@@ -168,6 +168,13 @@ export interface VoiceProgramOptions {
    */
   onTranscribed?: (text: string) => void
   /**
+   * Nothing heard is still being handled: the last sentence has been dealt
+   * with, whatever the outcome, and whatever it said has been said — the
+   * reply read from a session included. Where a microphone opened for one
+   * turn is closed; closing it earlier cuts the voice off.
+   */
+  onTurnEnd?: () => void
+  /**
    * The language model that plans what the grammar could not match.
    *
    * Optional, and its absence is a working configuration: without it an
@@ -329,6 +336,15 @@ export function makeVoiceProgram(
      */
     let replyWatchFiber: Fiber.RuntimeFiber<void, never> | null = null
     let replyWatchAbort: AbortController | null = null
+
+    /* Reported once nothing is left: no sentence in hand, no reply being read. */
+    const turnEnded: Effect.Effect<void> = Effect.gen(function* () {
+      if (handling > 0) return
+      const watching = replyWatchFiber
+      if (watching) yield* Fiber.await(watching)
+      if (handling > 0 || (replyWatchFiber !== null && replyWatchFiber !== watching)) return
+      options.onTurnEnd?.()
+    })
 
     function watchForReply(paneId: string): Effect.Effect<void> {
       return Effect.gen(function* () {
@@ -1195,7 +1211,12 @@ export function makeVoiceProgram(
             utteranceFiber = yield* Effect.forkIn(
               processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt).pipe(
                 Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
-                Effect.ensuring(Effect.sync(() => handling--)),
+                Effect.ensuring(
+                  Effect.gen(function* () {
+                    handling--
+                    yield* turnEnded
+                  }),
+                ),
               ),
               programScope,
             )
@@ -1223,7 +1244,16 @@ export function makeVoiceProgram(
             options.onError?.(spokenMessage(err))
           }),
         ),
-        Effect.ensuring(Effect.sync(() => handling--)),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            handling--
+            /* Whichever finishes last reports it: a quick sentence can be
+               done before this loop lets go of its event. Forked, so a reply
+               being read does not hold up the next event. A partial is
+               speech still going on. */
+            if (ev._tag !== "partial") yield* Effect.forkIn(turnEnded, programScope)
+          }),
+        ),
       ),
     )
 
@@ -1231,7 +1261,7 @@ export function makeVoiceProgram(
     yield* Effect.forkScoped(recognitionLoop)
 
     return {
-      submitText: (text: string) => processUtterance(text, false, true),
+      submitText: (text: string) => processUtterance(text, false, true).pipe(Effect.ensuring(turnEnded)),
 
       handlePermissionRequest: (paneId: string, what: string) =>
         applyDialogEvent({ type: "permission_requested", paneId, what }),

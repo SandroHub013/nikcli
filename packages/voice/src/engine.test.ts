@@ -1405,6 +1405,104 @@ describe("0.7.0: only the shortcut starts the assistant", () => {
     expect(engine.isRunning()).toBe(false)
   })
 
+  function slowVoice(ms: number) {
+    const said: string[] = []
+    let speaking = 0
+    return {
+      said,
+      get speaking() {
+        return speaking
+      },
+      speak(text: string) {
+        said.push(text)
+        speaking++
+        return new Promise<void>((resolve) => setTimeout(() => (speaking--, resolve()), ms))
+      },
+      cancel() {},
+    }
+  }
+
+  function withAgent(voice = slowVoice(0)) {
+    let clock = 0
+    const host = new MockVoiceHost()
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      await new Promise((r) => setTimeout(r, 30))
+      return { ok: true, text: "Ecco la storia di Roma in breve.", ran: true }
+    }
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({ host, transcriber, speaker: voice, now: () => clock, settings: { agentEngine: "auto" } })
+    const tap = async () => {
+      await engine.pressToTalk("agent")
+      clock += 10
+      await engine.releaseToTalk()
+    }
+    return { host, asked, transcriber, engine, tap, voice }
+  }
+
+  test("a tap, then a question for the agent: open while it thinks and speaks, closed after, the room is not heard", async () => {
+    const { asked, transcriber, engine, tap, voice } = withAgent(slowVoice(120))
+    await tap()
+    transcriber.emit("raccontami la storia di Roma", true)
+    await new Promise((r) => setTimeout(r, 60))
+    expect(asked).toHaveLength(1)
+    expect(engine.isRunning()).toBe(true)
+    await new Promise((r) => setTimeout(r, 400))
+    expect(voice.said.some((line) => line.includes("storia di Roma"))).toBe(true)
+    expect(engine.isRunning()).toBe(false)
+    // The room after the answer: nothing listens, nothing runs.
+    transcriber.emit("raccontami un'altra cosa", true)
+    await settle()
+    expect(asked).toHaveLength(1)
+  })
+
+  test("a tap, then a command answered aloud by a slow voice: closed only once the voice is done", async () => {
+    const voice = slowVoice(300)
+    const { transcriber, engine, tap } = withAgent(voice)
+    await tap()
+    transcriber.emit("quanti pannelli ci sono", true)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(voice.speaking).toBe(1)
+    expect(engine.isRunning()).toBe(true)
+    await new Promise((r) => setTimeout(r, 400))
+    expect(voice.speaking).toBe(0)
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("the button, then a question for the agent: closed after the answer", async () => {
+    const { asked, transcriber, engine } = withAgent(slowVoice(50))
+    await engine.toggle()
+    transcriber.emit("raccontami la storia di Roma", true)
+    await new Promise((r) => setTimeout(r, 400))
+    expect(asked).toHaveLength(1)
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a sentence it does not understand, or a failure, also ends the turn", async () => {
+    const { transcriber, engine, tap } = shortcut()
+    await tap()
+    transcriber.emit("blablabla zorp", true)
+    await settle()
+    await settle()
+    expect(engine.isRunning()).toBe(false)
+
+    await tap()
+    transcriber.emitError(new Error("rete giù"))
+    await settle()
+    await settle()
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a typed request with the microphone open closes it when done", async () => {
+    const { host, engine, tap } = shortcut()
+    await tap()
+    await engine.submitText("apri la tavolozza")
+    await settle()
+    expect(ran(host)).toHaveLength(1)
+    expect(engine.isRunning()).toBe(false)
+  })
+
   test("a question keeps it open for the answer, and the answer closes it", async () => {
     const { host, transcriber, engine, tap } = shortcut()
     await tap()
