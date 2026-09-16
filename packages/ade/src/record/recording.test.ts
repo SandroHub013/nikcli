@@ -86,8 +86,15 @@ describe("record/quality", () => {
   })
 })
 
-test("the bitrate is the size promised beside the level, not a separate guess", () => {
-  // 66 MB a minute is 8,8 Mbit/s: the first live take asked 20 and wrote 150.
-  expect(bitrateFor(qualityLevel("alta"))).toBe(8_800_000)
-  expect(bitrateFor(qualityLevel("leggera"))).toBe(2_866_667)
+test("the bitrate is pinned per level, because a free one wrote 150-165 MB a minute", () => {
+  expect(bitrateFor(qualityLevel("alta"))).toBe(8_000_000)
+  expect(bitrateFor(qualityLevel("media"))).toBe(5_000_000)
+  expect(bitrateFor(qualityLevel("leggera"))).toBe(2_500_000)
+  // The label and the rate must not drift apart: 8 Mbit/s is about 60 MB a
+  // minute of video, and the measured 66 includes the container around it.
+  for (const level of QUALITY_LEVELS) {
+    const fromBitrate = (level.bitrate * 60) / 8 / 1_000_000
+    expect(level.megabytesPerMinute).toBeGreaterThanOrEqual(fromBitrate)
+    expect(level.megabytesPerMinute).toBeLessThan(fromBitrate * 1.2)
+  }
 })

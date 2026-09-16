@@ -148,25 +148,42 @@ export interface QualityLevel {
   readonly width?: number
   readonly height?: number
   readonly fps: number
-  /** Megabytes a minute, measured, for the line beside the choice. */
+  /**
+   * Bits a second, fixed rather than left to the encoder.
+   *
+   * Left free, the hardware encoder on this machine wrote 165 MB a minute —
+   * two and a half times the label. Pinned, software and hardware produce the
+   * same size, and the only difference is the CPU it costs.
+   */
+  readonly bitrate: number
+  /** Megabytes a minute, measured at that rate, for the line beside the choice. */
   readonly megabytesPerMinute: number
 }
 
 export const QUALITY_LEVELS: readonly QualityLevel[] = [
-  { id: "alta", label: "Alta — schermo intero, 60 fps", fps: 60, megabytesPerMinute: 66 },
-  { id: "media", label: "Media — schermo intero, 30 fps", fps: 30, megabytesPerMinute: 49 },
-  { id: "leggera", label: "Leggera — 1280×800, 30 fps", width: 1280, height: 800, fps: 30, megabytesPerMinute: 21.5 },
+  { id: "alta", label: "Alta — schermo intero, 60 fps", fps: 60, bitrate: 8_000_000, megabytesPerMinute: 66 },
+  { id: "media", label: "Media — schermo intero, 30 fps", fps: 30, bitrate: 5_000_000, megabytesPerMinute: 43 },
+  {
+    id: "leggera",
+    label: "Leggera — 1280×800, 30 fps",
+    width: 1280,
+    height: 800,
+    fps: 30,
+    bitrate: 2_500_000,
+    megabytesPerMinute: 21.5,
+  },
 ]
 
 /**
- * The bitrate that produces the size promised beside a level.
+ * The rate the encoder is given for a level.
  *
- * The first live take asked for 20 Mbit/s against a label saying 66 MB a
- * minute and wrote 150: the number the user reads has to be the number the
- * encoder is given, so it is derived here rather than written twice.
+ * The first live take left it at 20 Mbit/s against a label saying 66 MB a
+ * minute and wrote 150; measured again with the hardware encoder at its own
+ * choosing, 165. These three rates are the measured ones, so what the user
+ * reads is what the file weighs, whichever encoder Windows picks.
  */
 export function bitrateFor(level: QualityLevel): number {
-  return Math.round((level.megabytesPerMinute * 1_000_000 * 8) / 60)
+  return level.bitrate
 }
 
 export const DEFAULT_QUALITY: RecordQuality = "alta"

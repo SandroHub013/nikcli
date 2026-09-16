@@ -34,9 +34,15 @@ fn frame_interval(fps: u32) -> Duration {
     Duration::from_nanos(1_000_000_000 / u64::from(fps.max(1)))
 }
 
-/// What the heaviest level costs when the frontend sends no rate: the measured
-/// 66 MB a minute (`results/agy-S36-misure.md`).
-const BITRATE: u32 = 8_800_000;
+/// What the heaviest level costs when the frontend sends no rate: 8 Mbit/s,
+/// the measured 66 MB a minute (`results/agy-S36-misure.md`).
+///
+/// Always pinned, never left to the encoder: asked to choose, the hardware
+/// encoder on this machine wrote 165 MB a minute. Which encoder actually runs
+/// is Media Foundation's choice — it uses the GPU when there is one and falls
+/// back to software by itself — and at a fixed rate the file is the same size
+/// either way, so the take never fails for want of a GPU.
+const BITRATE: u32 = 8_000_000;
 
 struct Take {
     encoder: Option<VideoEncoder>,
