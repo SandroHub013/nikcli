@@ -134,6 +134,28 @@ jobs:
       tag: ${{ needs.publish.outputs.tag }}
     secrets: inherit
 
+  # iOS rides the same tag, but nothing about it is signed: without an Apple
+  # Developer Program membership the only installable output is an unsigned
+  # .ipa that the end user re-signs with their own free Apple ID. It runs
+  # alongside Android rather than after it, and a failure here does not hold
+  # back the Android artifacts. Note this burns macOS runner minutes on every
+  # release — drop the job if that becomes the constraint.
+  mobile-ios:
+    needs: [publish, desktop]
+    if: >-
+      needs.desktop.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/live-main' &&
+      github.repository == 'nikomatt69/nikcli' &&
+      needs.publish.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/mobile-ios.yml
+    with:
+      artifact: both
+      tag: ${{ needs.publish.outputs.tag }}
+    secrets: inherit
+
   railway-deploy:
     needs: publish
     if: >-

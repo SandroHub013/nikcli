@@ -1,0 +1,323 @@
+name: mobile-ios
+
+# Builds the iOS app for `packages/mobile` without an Apple Developer Program
+# membership.
+#
+# iOS has no equivalent of an APK: a build that anyone can download and install
+# does not exist on the platform. What this workflow can produce is an
+# *unsigned* .ipa, which the end user re-signs with their own free Apple ID via
+# Sideloadly or AltStore (7-day certificate, 3 apps per Apple ID), or installs
+# directly on a TrollStore/jailbroken device. It also emits a simulator build,
+# which needs no signing at all and is the fastest way for anyone with a Mac to
+# try the app.
+#
+# Two consequences of the free-Apple-ID path are baked in below:
+#   * All code signing is disabled and CODE_SIGN_ENTITLEMENTS is cleared, so the
+#     app carries no entitlements the re-signer would have to satisfy. The
+#     `group.ai.nikcli.mobile` App Group is not grantable to a free Apple ID.
+#   * App extensions are stripped by default (`strip_extensions`). The widget /
+#     live-activity target needs both the App Group and a second app ID, so
+#     leaving it in makes the sideload fail rather than degrade.
+#
+# Unlike mobile-android.yml there are no secrets: nothing here is signed. The
+# `ios/` directory is regenerated with `expo prebuild` because it drifts from
+# app.json and the widget target only exists after a prebuild.
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact:
+        description: "Artifacts to build"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - ipa
+          - simulator
+      strip_extensions:
+        description: "Remove app extensions (widgets) — required for free Apple ID sideloading"
+        required: false
+        default: true
+        type: boolean
+      version_name:
+        description: "MARKETING_VERSION (default: expo.version from app.json)"
+        required: false
+        type: string
+        default: ""
+      build_number:
+        description: "CURRENT_PROJECT_VERSION (default: this run's number)"
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Release tag to build from and attach the artifacts to (optional)"
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      artifact:
+        description: "Artifacts to build: both, ipa or simulator"
+        required: false
+        type: string
+        default: "both"
+      strip_extensions:
+        required: false
+        type: boolean
+        default: true
+      version_name:
+        required: false
+        type: string
+        default: ""
+      build_number:
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Release tag to build from and attach the artifacts to"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: mobile-ios-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.repository == 'nikomatt69/nikcli'
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || '' }}
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # The Expo config plugins and the "Bundle React Native code and images"
+      # build phase shell out to node.
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION_NAME="${INPUT_VERSION_NAME:-}"
+          if [ -z "$VERSION_NAME" ] && [ -n "${INPUT_TAG:-}" ]; then
+            VERSION_NAME="${INPUT_TAG#refs/tags/}"
+            VERSION_NAME="${VERSION_NAME#v}"
+          fi
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="$(node -p "require('./packages/mobile/app.json').expo.version")"
+          fi
+          BUILD_NUMBER="${INPUT_BUILD_NUMBER:-}"
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          fi
+          case "$BUILD_NUMBER" in
+            ''|*[!0-9]*)
+              echo "::error::build_number must be a positive integer, got '$BUILD_NUMBER'."
+              exit 1
+              ;;
+          esac
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Building nikcli mobile $VERSION_NAME ($BUILD_NUMBER)"
+
+      # `--no-install` keeps prebuild from running its own package-manager
+      # install, which would fight the bun workspace resolution done above.
+      # Pods are installed explicitly in the next step instead.
+      - name: Prebuild iOS project
+        working-directory: packages/mobile
+        env:
+          EXPO_NO_TELEMETRY: "1"
+          CI: "1"
+        run: |
+          set -euo pipefail
+          bunx expo prebuild --platform ios --clean --no-install
+
+      - name: Install pods
+        working-directory: packages/mobile/ios
+        env:
+          EXPO_NO_TELEMETRY: "1"
+        run: |
+          set -euo pipefail
+          pod --version
+          pod install
+
+      - name: Build unsigned device app
+        if: inputs.artifact != 'simulator'
+        working-directory: packages/mobile
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.name }}
+          CURRENT_PROJECT_VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          # `archive` + `exportArchive` cannot produce an .ipa without a signing
+          # identity, so this builds the .app and packages Payload/ by hand.
+          xcodebuild \
+            -workspace ios/nikcli.xcworkspace \
+            -scheme nikcli \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd-device" \
+            -quiet \
+            ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Build simulator app
+        if: inputs.artifact != 'ipa'
+        working-directory: packages/mobile
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.name }}
+          CURRENT_PROJECT_VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace ios/nikcli.xcworkspace \
+            -scheme nikcli \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-sim" \
+            -quiet \
+            ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      # The Android job verifies the signing certificate; the equivalent risk
+      # here is a build that silently shipped without the JS bundle (the
+      # "Bundle React Native code and images" phase is a no-op in some
+      # configurations), which installs fine and then shows a white screen.
+      - name: Package and verify
+        id: package
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          BUILD_NUMBER: ${{ steps.version.outputs.number }}
+          STRIP_EXTENSIONS: ${{ inputs.strip_extensions }}
+        run: |
+          set -euo pipefail
+          STAGE="$GITHUB_WORKSPACE/dist-ios"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          assert_has_bundle() {
+            local app="$1"
+            local bundle="$app/main.jsbundle"
+            if [ ! -f "$bundle" ]; then
+              echo "::error::$app contains no main.jsbundle — the release build did not bundle the JS."
+              exit 1
+            fi
+            local size
+            size="$(wc -c < "$bundle")"
+            if [ "$size" -lt 102400 ]; then
+              echo "::error::$bundle is only $size bytes — the JS bundle is truncated."
+              exit 1
+            fi
+            echo "$app: main.jsbundle $size bytes"
+          }
+
+          DEVICE_APP="$RUNNER_TEMP/dd-device/Build/Products/Release-iphoneos/nikcli.app"
+          if [ -d "$DEVICE_APP" ]; then
+            assert_has_bundle "$DEVICE_APP"
+            WORK="$RUNNER_TEMP/payload"
+            rm -rf "$WORK"
+            mkdir -p "$WORK/Payload"
+            cp -R "$DEVICE_APP" "$WORK/Payload/nikcli.app"
+            if [ "$STRIP_EXTENSIONS" = "true" ]; then
+              rm -rf "$WORK/Payload/nikcli.app/PlugIns" "$WORK/Payload/nikcli.app/Watch"
+              echo "Stripped app extensions for free-Apple-ID sideloading."
+            fi
+            # A leftover signature would make the re-signer choke; there should
+            # be none, so this is an assertion rather than a cleanup.
+            if codesign -dv "$WORK/Payload/nikcli.app" 2>/dev/null; then
+              echo "::error::The app is code signed — this build is meant to be unsigned."
+              exit 1
+            fi
+            (cd "$WORK" && zip -qry "$STAGE/nikcli-${VERSION_NAME}-${BUILD_NUMBER}-unsigned.ipa" Payload)
+          fi
+
+          SIM_APP="$RUNNER_TEMP/dd-sim/Build/Products/Release-iphonesimulator/nikcli.app"
+          if [ -d "$SIM_APP" ]; then
+            assert_has_bundle "$SIM_APP"
+            (cd "$(dirname "$SIM_APP")" && zip -qry "$STAGE/nikcli-${VERSION_NAME}-${BUILD_NUMBER}-simulator.app.zip" nikcli.app)
+          fi
+
+          if [ -z "$(ls -A "$STAGE")" ]; then
+            echo "::error::xcodebuild produced no artifacts."
+            exit 1
+          fi
+          # Named per-platform: the release attachment below uploads with
+          # --clobber, and mobile-android.yml already publishes a plain
+          # checksums.txt that this would otherwise overwrite.
+          (cd "$STAGE" && shasum -a 256 nikcli-* > checksums-ios.txt)
+          {
+            echo "### nikcli mobile ${VERSION_NAME} (${BUILD_NUMBER}) — iOS"
+            echo
+            echo '```'
+            cat "$STAGE/checksums-ios.txt"
+            echo '```'
+            echo
+            echo "The .ipa is **unsigned**. It cannot be installed by downloading it on the device."
+            echo
+            echo "- **iPhone/iPad**: re-sign it with your own free Apple ID using [Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io). The app then works for 7 days and must be refreshed; an Apple ID can hold 3 sideloaded apps at a time."
+            echo "- **TrollStore / jailbroken device**: install the .ipa directly, no refresh needed."
+            echo "- **Mac**: unzip the simulator build and run \`xcrun simctl install booted nikcli.app\`."
+            echo
+            echo "\`packages/mobile/scripts/sideload.sh\` automates the download and verification; see [packages/mobile/README.md](https://github.com/nikomatt69/nikcli/blob/live-main/packages/mobile/README.md)."
+            if [ "$STRIP_EXTENSIONS" = "true" ]; then
+              echo
+              echo "Widgets and live activities are **not** included: they need the \`group.ai.nikcli.mobile\` App Group, which Apple does not grant to free Apple IDs."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: nikcli-ios-${{ steps.version.outputs.name }}-${{ steps.version.outputs.number }}
+          path: ${{ steps.package.outputs.stage }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to release
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN || github.token }}
+          STAGE: ${{ steps.package.outputs.stage }}
+        run: |
+          set -euo pipefail
+          find "$STAGE" -maxdepth 1 -type f \
+            -exec gh release upload "${{ inputs.tag }}" --clobber --repo nikomatt69/nikcli {} +
