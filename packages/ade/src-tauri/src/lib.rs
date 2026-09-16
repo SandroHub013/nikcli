@@ -18,6 +18,7 @@ mod frontend;
 mod media;
 mod project_bytes;
 mod pty;
+mod record;
 mod secrets;
 mod serve;
 mod shots;
@@ -1089,6 +1090,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
+        .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
         .manage(shots::Watch::default())
@@ -1130,6 +1132,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
             update::ade_update_install,
+            record::record_start,
+            record::record_stop,
+            record::record_state,
             allow_write_root,
             git_run,
             bot_delete,

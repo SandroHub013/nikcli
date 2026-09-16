@@ -66,6 +66,10 @@ junction = "1"
 # grant ADE's own page the microphone without the browser-style prompt.
 webview2-com = "0.38"
 windows-core = "0.61"
+# Windows.Graphics.Capture for S36: captures a window's composed pixels, which
+# includes the WebView2 content that a GDI grab misses, and brings its own
+# hardware H.264 encoder. MIT.
+windows-capture = "2"
 
 [profile.release]
 # A desktop binary is built once and started many times, so the slower link
