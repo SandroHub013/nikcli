@@ -33,6 +33,7 @@ import {
   wakeWordEnabled,
   shortcutActivationEnabled,
   type AgentEngine,
+  type AgentSpeed,
   type ReplyVoice,
   type ParakeetExecutionBackend,
   type TranscriptionSendMode,
@@ -300,6 +301,11 @@ const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; readonly title: strin
   { value: "codex", title: "Codex", get desc() { return t("vui.engine.codex.desc") } },
   { value: "nikcli", title: "nikcli", get desc() { return t("vui.engine.nikcli.desc") } },
   { value: "off", get title() { return t("vui.engine.off") }, get desc() { return t("vui.engine.off.desc") } },
+]
+
+const AGENT_SPEED_CHOICES: readonly { value: AgentSpeed; readonly title: string; readonly desc: string }[] = [
+  { value: "fast", get title() { return t("vui.speed.fast") }, get desc() { return t("vui.speed.fast.desc") } },
+  { value: "cli", get title() { return t("vui.speed.cli") }, get desc() { return t("vui.speed.cli.desc") } },
 ]
 
 function radioGroupKeys(apply: (value: string) => void) {
@@ -906,6 +912,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
   const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
+  const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
   const activationKeys = radioGroupKeys((value) =>
     selectActivation(value as VoiceActivation),
   )
@@ -1318,6 +1325,37 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 {t("vui.engine.note")}
               </p>
             </div>
+
+            {/* How the agent thinks: see `VoiceSettings.agentSpeed`. */}
+            <Show when={props.settings.agentEngine !== "off"}>
+              <div data-slot="sub-choice-box">
+                <span id="agent-speed-label" data-slot="sub-choice-label">
+                  {t("vui.speed.title")}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="agent-speed-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={speedKeys}
+                >
+                  <For each={AGENT_SPEED_CHOICES}>
+                    {(choice) => (
+                      <div
+                        role="radio"
+                        data-value={choice.value}
+                        aria-checked={props.settings.agentSpeed === choice.value}
+                        tabIndex={props.settings.agentSpeed === choice.value ? 0 : -1}
+                        data-slot="sub-choice-item"
+                        onClick={() => updateSettings({ agentSpeed: choice.value })}
+                      >
+                        <span data-slot="sub-item-title">{choice.title}</span>
+                        <span data-slot="sub-item-desc">{choice.desc}</span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
           </Show>
 
           {/* Sub-choice under transcription */}

@@ -21,6 +21,14 @@ export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as con
 export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
 /**
+ * How the agent is asked to think. `fast`: Sonnet 5 with little effort on
+ * Claude Code, little effort on Codex, which is what a spoken answer needs.
+ * `cli`: whatever the CLI is set to, for someone who wants its own model.
+ */
+export const AGENT_SPEEDS = ["fast", "cli"] as const
+export type AgentSpeed = (typeof AGENT_SPEEDS)[number]
+
+/**
  * The voice replies are read in: a Piper voice ADE downloads on first use, or
  * `system` for the Web Speech voice. The user's choice (D19): «ugo per
  * maschile, e piper per femminile, selezionabile dalle impostazioni» — Ugo,
@@ -161,6 +169,8 @@ export interface VoiceSettings {
    * key is set).
    */
   readonly agentEngine: AgentEngine
+  /** See `AGENT_SPEEDS`. */
+  readonly agentSpeed: AgentSpeed
   /**
    * Which microphone to listen on. Absent means the system default.
    *
@@ -218,6 +228,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   speakReplies: true,
   replyVoice: "ugo",
   agentEngine: "auto",
+  agentSpeed: "fast",
 })
 
 export interface NormalizedVoiceSettings extends VoiceSettings {
@@ -556,6 +567,14 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)))
   }
 
+  // 16. The agent's speed: absent in older profiles, which get the fast one.
+  let agentSpeed = DEFAULT_VOICE_SETTINGS.agentSpeed
+  if (AGENT_SPEEDS.includes(candidate.agentSpeed as AgentSpeed)) {
+    agentSpeed = candidate.agentSpeed as AgentSpeed
+  } else if (candidate.agentSpeed !== undefined) {
+    corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)))
+  }
+
   const cleanSettings: VoiceSettings = {
     version: Number(version),
     mode,
@@ -573,6 +592,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     speakReplies,
     replyVoice,
     agentEngine,
+    agentSpeed,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),
   }

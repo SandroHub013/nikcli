@@ -104,7 +104,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Chiudo il pannello",
-    confirmPrompt: "Vuoi davvero chiudere il pannello?",
+    confirmPrompt: "Chiudo il pannello, va bene?",
   },
   {
     intent: "pane.expand",
@@ -321,7 +321,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Termino il processo attivo",
-    confirmPrompt: "Vuoi davvero terminare il processo?",
+    confirmPrompt: "Fermo il processo, va bene?",
   },
 
   // 5. Files, search, prompt, transcript scroll
@@ -411,7 +411,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Permesso negato",
-    confirmPrompt: "Vuoi davvero negare il permesso all'agente?",
+    confirmPrompt: "Nego il permesso all'agente, va bene?",
   },
 
   // 7. System state and assistance

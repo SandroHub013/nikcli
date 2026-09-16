@@ -90,10 +90,10 @@ describe("the name has to open the sentence", () => {
     for (const heard of ["ei nik", "hei nik", "hey nick", "ehi, Nick", "Nick,"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     }
-    for (const heard of ["e nik", "eh nik", "ok nik", "ehnik"]) {
+    for (const heard of ["e nik,", "eh nik.", "E Nick,"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     }
-    for (const heard of ["ciao nik", "senti nik", "scusa nik"]) {
+    for (const heard of ["ok nik", "ciao nik", "senti nik", "scusa nik"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik").matched).toBe(false)
     }
     expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)
@@ -127,5 +127,30 @@ describe("only the name itself", () => {
     for (const heard of ["nì", "ni", "Nike", "niko", "nico", "mik", "nike apri il browser", "niko apri il browser", "ni apri il browser"]) {
       expect(matchesWakeWord(heard, "nik").matched).toBe(false)
     }
+  })
+})
+
+describe("«e nik» and «eh nik» from a television", () => {
+  test("without a pause after the name, it is not a call, whatever follows", () => {
+    for (const heard of [
+      "E Nick ha detto che domani piove",
+      "E Nick apre la porta",
+      "eh Nik non c'era",
+      "e nik apri il browser",
+      "ehnik apri il browser",
+    ]) {
+      expect(matchesWakeWord(heard, "nik").matched).toBe(false)
+    }
+  })
+
+  test("with a pause, or the name alone, it calls; «nik» and «ei nik» are unchanged", () => {
+    expect(matchesWakeWord("e nik, che ore sono", "nik")).toEqual({ matched: true, remainder: "che ore sono" })
+    expect(matchesWakeWord("E Nick. Apri il browser", "nik").matched).toBe(true)
+    expect(matchesWakeWord("eh nik", "nik")).toEqual({ matched: true, remainder: "" })
+    expect(matchesWakeWord("ehnik, apri il browser", "nik").matched).toBe(true)
+    expect(matchesWakeWord("e nick", "nik")).toEqual({ matched: true, remainder: "" })
+    expect(matchesWakeWord("ei nik ha finito la sessione 2?", "nik").matched).toBe(true)
+    expect(matchesWakeWord("hey nick apre la porta", "nik").matched).toBe(true)
+    expect(matchesWakeWord("nik che ore sono", "nik").matched).toBe(true)
   })
 })

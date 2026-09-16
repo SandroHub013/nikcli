@@ -254,7 +254,7 @@ describe("asr/openrouter", () => {
 
     expect(errors).toHaveLength(1)
     const err401 = errors[0].message
-    expect(err401).toContain("non valida o revocata")
+    expect(err401).toContain("chiave OpenRouter non funziona")
 
     // Test 402
     currentStatus = 402
@@ -266,7 +266,7 @@ describe("asr/openrouter", () => {
 
     expect(errors).toHaveLength(2)
     const err402 = errors[1].message
-    expect(err402).toContain("Credito OpenRouter esaurito")
+    expect(err402).toContain("credito OpenRouter è finito")
 
     // Must be completely distinct messages
     expect(err401).not.toBe(err402)
@@ -311,7 +311,7 @@ describe("asr/openrouter", () => {
     })
 
     expect(errors).toHaveLength(1)
-    expect(errors[0].message).toContain("scaduta per timeout")
+    expect(errors[0].message).toContain("non ha risposto")
 
     // Transcriber should not be locked; stop() can be called cleanly
     transcriber.stop()

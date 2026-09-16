@@ -46,3 +46,17 @@ describe("with the wake word switched off", () => {
     expect(listeningState({ settings: on, running: false, mode: "agent", paused: true }).kind).toBe("hidden")
   })
 })
+
+describe("after an answer", () => {
+  test("the pill says it is listening without the name", () => {
+    const state = listeningState({
+      settings: { alwaysListen: true, activation: "wake-word", wakeWord: "nik" },
+      running: true,
+      mode: "agent",
+      paused: false,
+      followUp: true,
+    })
+    expect(state.kind).toBe("follow-up")
+    expect(state.kind !== "hidden" && state.title).toContain("«nik»")
+  })
+})

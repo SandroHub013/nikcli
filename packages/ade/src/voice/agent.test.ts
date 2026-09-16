@@ -78,6 +78,42 @@ describe("voice/agent", () => {
     return { runTurn, requests, stops: () => stops }
   }
 
+  test("the fast setting asks Claude Code for Sonnet 5 with little effort, and cli leaves the CLI alone", async () => {
+    const runner = fakeRunner([{ text: "a" }, { text: "b" }, { text: "c" }])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    await agent.ask({ text: "ciao", engine: "claude", speed: "fast" })
+    await agent.ask({ text: "ciao", engine: "codex", speed: "fast" })
+    await agent.ask({ text: "ciao", engine: "claude", speed: "cli" })
+    expect(runner.requests[0]).toMatchObject({ model: "claude-sonnet-5", effort: "low" })
+    expect(runner.requests[1]!.model).toBeUndefined()
+    expect(runner.requests[1]!.effort).toBe("low")
+    expect(runner.requests[2]!.model).toBeUndefined()
+    expect(runner.requests[2]!.effort).toBeUndefined()
+  })
+
+  test("the answer is passed on as it is written, only when it grows", async () => {
+    const requests: TurnRequest[] = []
+    const talk = (streaming: string) => ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never
+    const runTurn = (request: TurnRequest) => {
+      requests.push(request)
+      request.onUpdate?.(talk("Ci sono"))
+      request.onUpdate?.(talk("Ci sono"))
+      request.onUpdate?.(talk("Ci sono due sessioni."))
+      return {
+        result: Promise.resolve({ status: "done", text: "Ci sono due sessioni.", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+        stop: () => {},
+      }
+    }
+    const agent = createVoiceAgent({ runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    const heard: string[] = []
+    await agent.ask({ text: "quante sessioni?", engine: "claude", onText: (soFar) => heard.push(soFar) })
+    expect(requests[0]!.partial).toBe(true)
+    expect(heard).toEqual(["Ci sono", "Ci sono due sessioni."])
+    // Without a listener, the turn is not asked for pieces.
+    await agent.ask({ text: "quante sessioni?", engine: "claude" })
+    expect(requests[1]!.partial).toBeUndefined()
+  })
+
   test("a turn carries the instructions, the project and an ade-msg identity, and continues the conversation", async () => {
     const runner = fakeRunner([
       { text: "Ci sono due sessioni.", sessionId: "s1" },
@@ -153,5 +189,13 @@ describe("voice/agent", () => {
       text: "Nessun host: un turno si esegue solo nell'app desktop.",
       ran: true,
     })
+  })
+})
+
+describe("who answers", () => {
+  test("nik, on first-name terms, saying first what takes time", () => {
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("Sei nik")
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("dai del tu")
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("prima una frase brevissima")
   })
 })

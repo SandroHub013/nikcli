@@ -23,6 +23,7 @@ import { createInitialDialogState, type DialogState, type DialogStatus } from ".
 import type { ParseContext, ParseResult } from "./intent/parse"
 import type { Transcriber } from "./asr/transcriber"
 import type { Speaker } from "./tts/speaker"
+import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
 import {
@@ -67,6 +68,8 @@ export interface VoiceEngineOptions {
   backendOptions?: SelectTranscriberOptions
   /** Text-to-speech speaker implementation. */
   speaker: Speaker
+  /** Plays a short sound; Web Audio unless a test replaces it. */
+  cue?: (kind: CueKind) => void
   /** Injected time provider (epoch ms). Mandatory for deterministic execution. */
   now: () => number
   /** Optional audio level meter for microphone activity rings. */
@@ -159,6 +162,8 @@ export interface VoiceEngine {
    * and waiting to be opened again. Cleared by any start or stop.
    */
   readonly listenPaused: () => boolean
+  /** Until when the next sentence needs no name, after an answer; undefined otherwise. */
+  readonly followUp: () => number | undefined
   /**
    * Set when always-on listening has sent more than `LISTEN_REQUESTS_PER_HOUR`
    * sentences to the cloud in the last hour: said on screen, and listening
@@ -191,6 +196,11 @@ export interface VoiceEngine {
   submitText(text: string): Promise<void>
   handlePermissionRequest(paneId: string, what: string): Promise<void>
   cancel(): Promise<void>
+  /**
+   * A tap while the assistant talks or works: it stops, and the next sentence
+   * needs no name. Listening that is not always on is only cancelled.
+   */
+  interrupt(): Promise<void>
   pressToTalk(mode?: VoiceMode): Promise<void>
   releaseToTalk(): Promise<void>
   updateSettings(next: Partial<VoiceSettings>): Promise<void>
@@ -316,6 +326,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [history, setHistory] = createSignal<AgentEntry[]>([])
   const [held, setHeld] = createSignal<string | null>(null)
   const [listenPaused, setListenPaused] = createSignal(false)
+  const [followUp, setFollowUp] = createSignal<number | undefined>(undefined)
   const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
@@ -573,6 +584,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     heldDictation = false
 
     setIsRunning(false)
+    setFollowUp(undefined)
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
@@ -593,7 +605,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       micMeter.stop()
     }
 
-    speaker.cancel()
+    cancelSpeech()
 
     await releaseSession()
 
@@ -652,6 +664,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
           onRequest: countListenRequest,
+          onAccepted: () => cancelSpeech(),
           onUncut: () =>
             record({
               kind: "action",
@@ -739,6 +752,26 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     await releaseTextProgram()
   }
 
+  /*
+   * A reply read in pieces: each piece waits for the one before it, and a
+   * cancel drops whatever is still queued.
+   */
+  let speechGeneration = 0
+  let speechTail: Promise<void> = Promise.resolve()
+  function cancelSpeech(): void {
+    speechGeneration++
+    speechTail = Promise.resolve()
+    speaker.cancel()
+  }
+  function appendSpeech(text: string): Promise<void> {
+    if (!text.trim()) return speechTail
+    const mine = speechGeneration
+    speaker.prefetch?.(text)
+    const turn = speechTail.then(() => (mine === speechGeneration ? speaker.speak(text) : undefined))
+    speechTail = turn.catch(() => {})
+    return turn
+  }
+
   /** What the program says through: nothing in pure transcription mode. */
   const speakerService: SpeakerService = {
       speak: (text: string) => {
@@ -747,7 +780,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           return Effect.void
         }
         return Effect.tryPromise({
-          try: () => Promise.resolve(speaker.speak(text)),
+          try: () => {
+            // A whole reply replaces whatever was queued.
+            speechGeneration++
+            speechTail = Promise.resolve()
+            return Promise.resolve(speaker.speak(text))
+          },
           catch: (err) =>
             new HostActionFailed({
               action: "speak",
@@ -756,7 +794,19 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             }),
         })
       },
-      cancel: Effect.sync(() => speaker.cancel()),
+      cancel: Effect.sync(() => cancelSpeech()),
+      append: (text: string) => {
+        if (activeMode() === "transcription") return Effect.void
+        return Effect.tryPromise({
+          try: () => appendSpeech(text),
+          catch: (err) =>
+            new HostActionFailed({
+              action: "speak",
+              cause: err,
+              message: "Errore durante la sintesi vocale.",
+            }),
+        })
+      },
   }
 
   const programOptions = (): Parameters<typeof makeVoiceProgram>[0] => ({
@@ -768,6 +818,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     isPushToTalkActive: () => chordHeld || openedWithoutChord,
     onStateChange: (state) => setDialogState(state),
     onPartialTranscript: (text) => setPartialTranscript(text),
+    onSpeaking: (text) => {
+      if (activeMode() !== "transcription") setLastSpoken(text)
+    },
+    onFollowUp: (until) => setFollowUp(until),
+    onCue: (kind) => {
+      if (activeMode() !== "transcription") (options.cue ?? playCue)(kind)
+    },
     onSpoken: (text) => {
       if (activeMode() === "transcription") return
       setLastSpoken(text)
@@ -935,6 +992,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     held,
     listenPaused,
     listenWarning,
+    followUp,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
       /* A session still delivering its last sentence owns the scopes this
@@ -942,7 +1000,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (stopping) await stopping
       if (mode !== undefined) setSessionMode(mode)
       if (activeMode() === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
       if (isRunning()) return
       /*
@@ -1019,9 +1077,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
               : spokenMessage(err) ||
                 (err && typeof err === "object" && err instanceof Error
                   ? err.message
-                  : "Errore durante l'avvio dell'ascolto vocale.")
+                  : "Non sono riuscito ad aprire il microfono: riprova.")
           noteError(err, message)
           await stop()
+          /* Said as well as written, when someone asked for the microphone:
+             whoever is not looking would otherwise hear nothing at all. */
+          if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
+            void Promise.resolve(speaker.speak(message)).catch(() => {})
+          }
         }
       }
 
@@ -1053,10 +1116,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        */
       if (
         currentSettings().alwaysListen &&
+        currentSettings().activation === "wake-word" &&
         (mode === undefined || mode === "agent") &&
         activeMode() === "agent" &&
-        programHandle?.waitingForName()
+        programHandle
       ) {
+        // Over its voice too: it stops talking and takes the next sentence.
+        cancelSpeech()
         await Effect.runPromise(programHandle.wake)
         return
       }
@@ -1085,7 +1151,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
       setSessionMode(mode)
       if (mode === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
     },
 
@@ -1103,9 +1169,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async cancel(): Promise<void> {
       setPartialTranscript("")
-      speaker.cancel()
+      cancelSpeech()
       if (programHandle) {
         await Effect.runPromise(programHandle.cancel)
+      }
+    },
+
+    async interrupt(): Promise<void> {
+      await this.cancel()
+      const s = currentSettings()
+      if (isRunning() && programHandle && activeMode() === "agent" && s.alwaysListen && s.activation === "wake-word") {
+        await Effect.runPromise(programHandle.wake)
       }
     },
 
@@ -1119,7 +1193,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (latched && isRunning()) {
         if (mode !== undefined && mode !== activeMode()) {
           setSessionMode(mode)
-          if (mode === "transcription") speaker.cancel()
+          if (mode === "transcription") cancelSpeech()
           pressEndsLatch = true
           return
         }
@@ -1142,7 +1216,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          same way pressing the other button does. */
       if (mode !== undefined) setSessionMode(mode)
       if (activeMode() === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
       if (!isRunning()) {
         await this.start(mode)

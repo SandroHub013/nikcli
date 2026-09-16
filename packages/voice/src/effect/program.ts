@@ -30,6 +30,7 @@ import { VOCABULARY } from "../intent/vocabulary"
 import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "../settings/model"
 import { matchesWakeWord } from "../settings/wake-word"
 import { replySpeech } from "../tts/reply"
+import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
@@ -140,6 +141,15 @@ export interface VoiceProgramOptions {
   onPartialTranscript?: (text: string) => void
   /** Notification hook fired when speech is synthesized. */
   onSpoken?: (text: string) => void
+  /**
+   * What is being said so far of a reply read in pieces, for the widget.
+   * `onSpoken` still comes once, with the whole reply, when it is complete.
+   */
+  onSpeaking?: (text: string) => void
+  /** A short sound: see `audio/cue.ts`. */
+  onCue?: (kind: CueKind) => void
+  /** Until when a sentence needs no name after an answer, or undefined once that is over. */
+  onFollowUp?: (until: number | undefined) => void
   /** Notification hook fired when an ADE action finishes dispatching. */
   onOutcome?: (outcome: DispatchOutcome) => void
   /** Notification hook fired when an error occurs. */
@@ -247,15 +257,53 @@ export type ExternalCommand =
 export const WAKE_WINDOW_MS = 10_000
 
 /**
+ * How long, after the assistant has finished speaking, the next sentence is
+ * taken without the name: a conversation, not a series of calls. Only what
+ * starts inside it goes whole to the cloud; outside it the 1.5 s name check
+ * applies as before.
+ */
+export const FOLLOW_UP_MS = 8_000
+
+/**
  * Creates and forks the resilient voice interaction loop inside the environment's Scope.
  * Returns a handle allowing external events (text submission, permissions, cancellations).
  */
+/** How long an agent may work before a sound says the request was taken. */
+export const AGENT_CUE_MS = 1_500
+
+/**
+ * Where the finished sentences of a reply still being written end.
+ *
+ * A sentence is finished when its stop is followed by a space, so "3.5" and a
+ * stop that may still become "..." are not; a blank line ends one too.
+ */
+export function finishedUpTo(text: string): number {
+  let end = 0
+  for (const match of text.matchAll(/[.!?;…]["»”’')\]]*(?=\s)|\n\s*\n/g)) {
+    end = (match.index ?? 0) + match[0].length
+  }
+  return end
+}
+
+const squash = (text: string) => text.replace(/\s+/g, " ").trim()
+
 export function makeVoiceProgram(
   options: VoiceProgramOptions = {},
 ): Effect.Effect<VoiceProgramHandle, VoiceError, TranscriberService | SpeakerService | VoiceHost | Scope.Scope> {
   return Effect.gen(function* () {
     const transcriber = yield* Transcriber
-    const speaker = yield* Speaker
+    const speakerService = yield* Speaker
+    /* How many times speech was cut, so a reply still arriving knows it was. */
+    let hushed = 0
+    const speaker: typeof speakerService = {
+      ...speakerService,
+      cancel: Effect.zipRight(
+        Effect.sync(() => {
+          hushed++
+        }),
+        speakerService.cancel,
+      ),
+    }
     const host = yield* VoiceHostService
     const programScope = yield* Effect.scope
 
@@ -343,6 +391,10 @@ export function makeVoiceProgram(
       const watching = replyWatchFiber
       if (watching) yield* Fiber.await(watching)
       if (handling > 0 || (replyWatchFiber !== null && replyWatchFiber !== watching)) return
+      if (followUpDue) {
+        followUpDue = false
+        openFollowUp()
+      }
       options.onTurnEnd?.()
     })
 
@@ -734,6 +786,37 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
 
+        /*
+         * The answer is read as it is written: each finished sentence goes to
+         * the voice at once, and the rest follows it. Waiting for the whole
+         * turn kept the user in silence for the length of the answer.
+         */
+        const hushedAtStart = hushed
+        const quiet = () => abort.signal.aborted || hushed !== hushedAtStart
+        const append = speaker.append
+        let soFar = ""
+        let saidUpTo = 0
+        let streamed = false
+        const cue = setTimeout(() => {
+          if (!streamed && !quiet()) options.onCue?.("thinking")
+        }, AGENT_CUE_MS)
+        const onText = append
+          ? (text: string) => {
+              if (quiet()) return
+              soFar = text
+              const end = finishedUpTo(text)
+              if (end <= saidUpTo) return
+              const piece = text.slice(saidUpTo, end).trim()
+              saidUpTo = end
+              if (!piece) return
+              streamed = true
+              options.onSpeaking?.(text.slice(0, end).trim())
+              Effect.runFork(
+                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err))))),
+              )
+            }
+          : undefined
+
         const answer: { ok: boolean; text: string; ran?: boolean } = yield* Effect.tryPromise({
           /*
            * Interruption aborts the turn too. Without it, stopping the engine
@@ -742,7 +825,13 @@ export function makeVoiceProgram(
            */
           try: (interrupted) => {
             interrupted.addEventListener("abort", () => abort.abort(), { once: true })
-            return askAgent.call(host, { text: utterance, engine, signal: abort.signal })
+            return askAgent.call(host, {
+              text: utterance,
+              engine,
+              speed: settings.agentSpeed,
+              signal: abort.signal,
+              ...(onText ? { onText } : {}),
+            })
           },
           catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
         }).pipe(
@@ -755,6 +844,7 @@ export function makeVoiceProgram(
           ),
         )
         if (agentAbort === abort) agentAbort = null
+        clearTimeout(cue)
 
         // Cancelled while it worked: the user has moved on, so nothing is said.
         if (abort.signal.aborted) return "stopped"
@@ -775,6 +865,17 @@ export function makeVoiceProgram(
           // sessions before its error or timeout, and the planner would open them again.
           if (options.plan && answer.ran === false) return false
         }
+        if (streamed && append) {
+          const said = squash(soFar.slice(0, saidUpTo))
+          const whole = squash(answer.text)
+          // What is left after what was already said; the whole of it if the two disagree.
+          const rest = !answer.ok ? whole : whole.startsWith(said) ? whole.slice(said.length).trim() : whole
+          options.onSpoken?.(answer.ok ? whole : `${said} ${whole}`)
+          yield* append(quiet() ? "" : rest).pipe(
+            Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
+          )
+          return true
+        }
         yield* say(answer.text)
         return true
       })
@@ -782,7 +883,10 @@ export function makeVoiceProgram(
 
     yield* Scope.addFinalizer(
       programScope,
-      Effect.sync(() => agentAbort?.abort()),
+      Effect.sync(() => {
+        agentAbort?.abort()
+        closeFollowUp()
+      }),
     )
 
     /** Speak, and never let the synthesiser's failure become the program's. */
@@ -806,8 +910,50 @@ export function makeVoiceProgram(
     const clockMs = () => (options.now ? options.now() : Date.now())
     const awakeAt = (at: number) => isWakeWordAwake && (wakeUntil === undefined || at <= wakeUntil)
     const wakeFor = () => {
+      closeFollowUp()
+      inFollowUp = false
       isWakeWordAwake = true
       wakeUntil = clockMs() + WAKE_WINDOW_MS
+      options.onCue?.("listening")
+    }
+
+    /* A spoken request was handled: once its answer has been said, the next sentence needs no name. */
+    let followUpDue = false
+    /*
+     * Whether the assistant is awake only because of a window. A sentence
+     * taken that way does not open another: one follow-up, then the name.
+     * Otherwise a television talking on kept the window open for ever.
+     */
+    let inFollowUp = false
+    let followUpTimer: ReturnType<typeof setTimeout> | undefined
+    function openFollowUp(): void {
+      const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+      if (settings.mode !== "agent" || settings.activation !== "wake-word" || !settings.alwaysListen) return
+      if (currentState.status === "asleep") return
+      closeFollowUp()
+      const until = clockMs() + FOLLOW_UP_MS
+      isWakeWordAwake = true
+      wakeUntil = until
+      inFollowUp = true
+      options.onFollowUp?.(until)
+      options.onCue?.("listening")
+      followUpTimer = setTimeout(() => {
+        followUpTimer = undefined
+        if (wakeUntil !== until) return
+        isWakeWordAwake = false
+        wakeUntil = undefined
+        options.onFollowUp?.(undefined)
+        options.onCue?.("closed")
+      }, FOLLOW_UP_MS)
+    }
+    /* Ends the window without a sound: used up by a sentence, or dropped by a stop. */
+    function closeFollowUp(): void {
+      if (followUpTimer === undefined) return
+      clearTimeout(followUpTimer)
+      followUpTimer = undefined
+      isWakeWordAwake = false
+      wakeUntil = undefined
+      options.onFollowUp?.(undefined)
     }
     let isPushToTalkPressed = false
 
@@ -1075,6 +1221,8 @@ export function makeVoiceProgram(
 
         // Typed text is addressed to the assistant already; a leading wake word is only dropped.
         if (typed && currentSettings.activation === "wake-word") {
+          // Typing is not the conversation the window was left open for.
+          closeFollowUp()
           const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
           yield* executeAgentUtterance(match.matched && match.remainder.length > 0 ? match.remainder : trimmed, { typed: true })
           return
@@ -1121,9 +1269,12 @@ export function makeVoiceProgram(
               })
               return
             }
+            // Called over its own voice: it stops talking and listens.
+            yield* speaker.cancel
             if (match.remainder.length > 0) {
               // Spoke wake-word and command together in one breath
               yield* executeAgentUtterance(match.remainder, heard)
+              followUpDue = !typed
               return
             } else {
               // Spoke only the wake-phrase
@@ -1135,6 +1286,10 @@ export function makeVoiceProgram(
             // Awake, answering, or already at work on the last sentence.
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
+            const followingUp = inFollowUp && !match.matched
+            inFollowUp = false
+            closeFollowUp()
+            if (match.matched && !thinking) yield* speaker.cancel
             /* While a turn runs the name is not required to be heard, but a
                command is only carried out when it was addressed: see the
                `named` note in `while-thinking.ts`. */
@@ -1151,6 +1306,8 @@ export function makeVoiceProgram(
              */
             isWakeWordAwake = false
             wakeUntil = undefined
+            // A conversation goes on: the answer to this one opens the next window.
+            followUpDue = !typed && !thinking && !followingUp
             return
           }
         }
@@ -1206,6 +1363,19 @@ export function makeVoiceProgram(
              * sentence must be looked at straight away.
              */
             const previous = utteranceFiber
+            /*
+             * The one before may only be talking. Called by name over its
+             * voice, the voice stops, rather than the sentence waiting for
+             * the end of an answer nobody is listening to any more.
+             */
+            if (
+              previous &&
+              currentSettings.mode === "agent" &&
+              currentSettings.activation === "wake-word" &&
+              matchesWakeWord(text, currentSettings.wakeWord).matched
+            ) {
+              yield* speaker.cancel
+            }
             if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
             handling++
             utteranceFiber = yield* Effect.forkIn(
@@ -1225,7 +1395,8 @@ export function makeVoiceProgram(
           case "error": {
             // Critical requirement: recognition error must NOT terminate listening loop.
             options.onPartialTranscript?.("")
-            const rawMsg = ev.error.message ?? spokenMessage(ev.error)
+            // Written as it is said: the browser's own words mean nothing to the user.
+            const rawMsg = spokenMessage(ev.error)
             options.onError?.(rawMsg)
             if (currentState.status === "executing") {
               currentState = { ...currentState, status: "idle" }
@@ -1273,8 +1444,13 @@ export function makeVoiceProgram(
         agentAbort = null
         pendingDisambiguation = null
         isWakeWordAwake = false
+        followUpDue = false
+        closeFollowUp()
         options.onPartialTranscript?.("")
         yield* speaker.cancel
+        /* A press that only cut the voice is not an operation to cancel: said
+           «nessuna operazione da annullare» over the silence it asked for. */
+        if (currentState.status === "idle" || currentState.status === "listening") return
         yield* applyDialogEvent({ type: "cancel" })
       }),
 
@@ -1285,6 +1461,8 @@ export function makeVoiceProgram(
 
       listenForName: Effect.sync(() => {
         isWakeWordAwake = false
+        followUpDue = false
+        closeFollowUp()
         if (currentState.status === "asleep") {
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
@@ -1293,6 +1471,8 @@ export function makeVoiceProgram(
 
       sleep: Effect.gen(function* () {
         isWakeWordAwake = false
+        followUpDue = false
+        closeFollowUp()
         yield* applyDialogEvent({ type: "sleep" })
       }),
 

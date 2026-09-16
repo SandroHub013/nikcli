@@ -67,7 +67,7 @@ describe("dialog state machine", () => {
       // readback, which is a statement and reads as broken Italian in a prompt.
       expect(
         effects.some(
-          (e) => e.type === "speak" && e.text.includes("terminare il processo") && e.text.includes("?")
+          (e) => e.type === "speak" && e.text.includes("Fermo il processo") && e.text.includes("?")
         )
       ).toBe(true)
     })
@@ -137,7 +137,7 @@ describe("dialog state machine", () => {
       expect(s2.status).toBe("idle")
       expect(s2.pendingAction).toBeUndefined()
       expect(e2.some((e) => e.type === "execute_intent")).toBe(false)
-      expect(e2.some((e) => e.type === "speak" && e.text.includes("scaduto"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("lascio stare"))).toBe(true)
     })
   })
 

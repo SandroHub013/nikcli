@@ -10,6 +10,7 @@ function setup(answers: string[], gate: Partial<NameGate> & { active?: () => boo
   const sent: number[] = []
   const finals: string[] = []
   const rejected: string[] = []
+  const accepted: boolean[] = []
   const fetch = async (_url: unknown, init: any) => {
     const body = JSON.parse(init.body)
     sent.push(Buffer.from(body.input_audio.data, "base64").length - 44)
@@ -29,13 +30,14 @@ function setup(answers: string[], gate: Partial<NameGate> & { active?: () => boo
       active: gate.active ?? (() => true),
       accepts: (text) => matchesWakeWord(text, "ei nik").matched,
       onRejected: (text) => rejected.push(text),
+      onAccepted: () => accepted.push(true),
     },
   })
   const hear = async (ms: number) => {
     await transcriber.start()
     await segmentCb({ blob: wavOf(ms), format: "wav", mimeType: "audio/wav", durationMs: ms })
   }
-  return { sent, finals, rejected, hear }
+  return { sent, finals, rejected, hear, accepted }
 }
 
 const bytesFor = (ms: number) => Math.floor((16000 * ms) / 1000) * 2
@@ -50,8 +52,10 @@ describe("while it waits for the name, only the start of a sentence goes to the 
   })
 
   test("a long sentence that calls it is then sent whole", async () => {
-    const { sent, finals, hear } = setup(["ehi nik raccontami", "ehi nik raccontami la storia di Roma"])
+    const { sent, finals, hear, accepted } = setup(["ehi nik raccontami", "ehi nik raccontami la storia di Roma"])
     await hear(6_000)
+    // Said as soon as the start is heard, before the rest comes back.
+    expect(accepted).toEqual([true])
     expect(sent).toEqual([bytesFor(NAME_PROBE_MS), bytesFor(6_000)])
     expect(finals).toEqual(["ehi nik raccontami la storia di Roma"])
   })

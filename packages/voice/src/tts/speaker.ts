@@ -12,6 +12,9 @@ export interface Speaker {
 
   /** Immediately cancels any active or queued speech synthesis. */
   cancel(): void
+
+  /** Starts preparing text that will be said shortly, so it starts sooner. */
+  prefetch?(text: string): void
 }
 
 // ---------------------------------------------------------------------------

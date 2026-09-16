@@ -14,7 +14,8 @@
  */
 
 import type { AgentStatus } from "../session-new/availability"
-import type { RunnerId } from "../bots/runners"
+import { answerSoFar, type RunnerId } from "../bots/runners"
+import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
@@ -43,6 +44,16 @@ const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex"]
  * elsewhere, because nobody waits that long for a spoken reply.
  */
 export const VOICE_AGENT_TIMEOUT_MS = 150_000
+
+/**
+ * The fast setting, per runner: what a spoken answer needs is a short reply
+ * soon, and the CLI's default model thinks longer than that.
+ */
+export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; readonly effort?: string }> = {
+  claude: { model: "claude-sonnet-5", effort: "low" },
+  codex: { effort: "low" },
+  nikcli: {},
+}
 
 /** What a voice turn may not do: edit, write, or run a command other than `ade-msg`. */
 export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash"]
@@ -83,8 +94,12 @@ export function resolveVoiceAgentRunner(
  * itself would be doing, unseen, the work the sessions exist to do in view.
  */
 export const VOICE_AGENT_INSTRUCTIONS = [
-  "Sei l'assistente vocale di ADE, un ambiente in cui più sessioni di agenti di programmazione lavorano in pannelli affiancati.",
-  "Quello che scrivi viene letto ad alta voce: rispondi in italiano, in una o due frasi brevi, senza markdown, elenchi, codice o percorsi lunghi.",
+  "Sei nik, l'assistente vocale di ADE, un ambiente in cui più sessioni di agenti di programmazione lavorano in pannelli affiancati.",
+  "Parli con l'utente come un collega: gli dai del tu e parli in prima persona («Chiedo a Prova-voce.», «Ho aperto la sessione.»).",
+  "Quello che scrivi viene letto ad alta voce mentre lo scrivi: rispondi in italiano, in una o due frasi brevi, senza markdown, elenchi, codice o percorsi lunghi.",
+  "Se ti serve tempo, per esempio per chiedere a una sessione o cercare sul web, scrivi prima una frase brevissima su cosa stai facendo, chiusa da un punto; poi il risultato.",
+  "Quando riferisci il lavoro di un'altra sessione, di' il suo nome e il risultato. Chiudi con una domanda solo quando ti serve una decisione.",
+  "Se qualcosa non riesce, dillo in parole semplici, senza codici di errore, e di' cosa può fare l'utente.",
   "Per gestire le sessioni usa il comando ade-msg dalla shell:",
   "- ade-msg list: le sessioni aperte;",
   "- ade-msg ask SESSIONE \"RICHIESTA\": chiede e aspetta la risposta; usalo sempre così, bloccante, perché non hai un terminale che riceva risposte dopo;",
@@ -104,9 +119,28 @@ export interface VoiceAgentDeps {
 
 export interface VoiceAgent {
   /** `ran` is false only when no turn started: see `VoiceHost.askAgent`. */
-  ask(request: { text: string; engine: VoiceAgentEngine; signal?: AbortSignal }): Promise<{ ok: boolean; text: string; ran: boolean }>
+  ask(request: {
+    text: string
+    engine: VoiceAgentEngine
+    /** `fast` uses `VOICE_AGENT_FAST`; absent or `cli` leaves the CLI's own model. */
+    speed?: "fast" | "cli"
+    signal?: AbortSignal
+    /** The answer so far, each time it grows, so it can be read before it is finished. */
+    onText?: (soFar: string) => void
+  }): Promise<{ ok: boolean; text: string; ran: boolean }>
   /** Starts the next sentence in a new conversation. */
   forget(): void
+}
+
+/** Calls `onText` only when the answer so far has changed. */
+function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
+  let last = ""
+  return (talk) => {
+    const soFar = answerSoFar(talk)
+    if (!soFar || soFar === last) return
+    last = soFar
+    onText(soFar)
+  }
 }
 
 export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
@@ -126,7 +160,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   let latest = 0
 
   return {
-    async ask({ text, engine, signal }) {
+    async ask({ text, engine, speed, signal, onText }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
@@ -147,6 +181,8 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         // the user's connectors, and loading them tripled the wait.
         lean: true,
         timeoutMs: VOICE_AGENT_TIMEOUT_MS,
+        ...(speed === "fast" ? VOICE_AGENT_FAST[resolved.runner] : {}),
+        ...(onText ? { partial: true, onUpdate: textFollower(onText) } : {}),
       })
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
@@ -157,7 +193,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
           return { ok: true, text: result.text || "Fatto.", ran: true }
         }
         if (result.status === "stopped") return { ok: false, text: "", ran: true }
-        return { ok: false, text: result.problem || "L'agente non ha risposto.", ran: true }
+        return { ok: false, text: result.problem || "Non sono riuscito a risponderti: l'agente non ha detto niente.", ran: true }
       } finally {
         signal?.removeEventListener("abort", onAbort)
       }

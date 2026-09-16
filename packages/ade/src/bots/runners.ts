@@ -128,6 +128,8 @@ export interface TurnSpec {
    * and the project stays out of reach.
    */
   readonly outbox?: string
+  /** Claude Code sends the answer as it is written (`stream_event`), not only when each message is complete. */
+  readonly partial?: boolean
 }
 
 /**
@@ -191,6 +193,7 @@ export function turnCommand(
        * write, and anything else refused and reported in the result.
        */
       const args = ["-p", "--output-format", "stream-json", "--verbose"]
+      if (spec.partial) args.push("--include-partial-messages")
       if (bot.model) args.push("--model", bot.model)
       if (bot.effort) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
@@ -309,7 +312,17 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
   let next = withSession(talk, event["session_id"])
   const message = rec(event["message"])
   switch (event["type"]) {
+    case "stream_event": {
+      // A subagent's text is not the answer.
+      if (event["parent_tool_use_id"]) return next
+      const inner = rec(event["event"])
+      if (inner?.["type"] === "content_block_start") return { ...next, streaming: "" }
+      const delta = rec(inner?.["delta"])
+      if (inner?.["type"] !== "content_block_delta" || delta?.["type"] !== "text_delta") return next
+      return { ...next, streaming: (next.streaming ?? "") + (str(delta["text"]) ?? "") }
+    }
     case "assistant": {
+      if (!event["parent_tool_use_id"]) next = { ...next, streaming: undefined }
       for (const raw of list(message?.["content"])) {
         const part = rec(raw)
         if (!part) continue
@@ -455,6 +468,17 @@ export function finalText(talk: Talk): string {
     .map((message) => message.text.trim())
     .filter(Boolean)
     .join("\n\n")
+}
+
+/**
+ * The answer so far, while it is being written: `finalText` and the message
+ * still arriving. Each call extends the last one, until a message is complete.
+ */
+export function answerSoFar(talk: Talk): string {
+  const done = finalText(talk)
+  const writing = talk.streaming?.trim() ? talk.streaming.trimStart() : ""
+  if (!writing) return done
+  return done ? `${done}\n\n${writing}` : writing
 }
 
 /* ── signed in or not ───────────────────────────────────────────────────── */

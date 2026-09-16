@@ -435,3 +435,16 @@ describe("dispatch", () => {
     })
   })
 })
+
+describe("a command that threw", () => {
+  test("is said in plain words, never with the raw error", async () => {
+    const { plainFailure } = await import("./dispatch")
+    expect(plainFailure("TypeError: Cannot read properties of undefined (reading 'id')")).toBe(
+      "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.",
+    )
+    expect(plainFailure("Failed to fetch")).toBe("Non sono riuscito a farlo. Non ho rete in questo momento: ti sento appena torna.")
+    expect(plainFailure(undefined)).not.toContain("undefined")
+    expect(plainFailure("ENOENT: no such file, open 'C:/x'")).toBe("Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.")
+    expect(plainFailure("non c'è nessun progetto aperto")).toBe("Non sono riuscito a farlo: non c'è nessun progetto aperto")
+  })
+})

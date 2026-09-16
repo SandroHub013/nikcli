@@ -52,7 +52,22 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
  * Only these may come first: the name has to open the sentence, otherwise the
  * television saying "nick" halfway through a line would be an address.
  */
-const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "eh", "e", "ok"])
+const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "eh", "e"])
+
+/*
+ * «e» and «eh» are how the recogniser often writes «ei», and also how a
+ * sentence about someone called Nick begins: «E Nick ha detto che…» from the
+ * television. With these in front, the name counts only on its own or with a
+ * pause after it, which the recogniser writes as punctuation. No guessing
+ * from the words that follow: that went wrong both ways.
+ */
+const WEAK_OPENERS: ReadonlySet<string> = new Set(["e", "eh"])
+
+/** Whether «e nik …» has no pause after the name, and so may be about Nick. */
+function noPauseAfterName(utterance: string): boolean {
+  // «ehnik,»: the recogniser may glue the greeting to the name.
+  return !/(?:\b|(?<=\beh?))ni(?:c?k|c)\s*[,.;:!?…]/iu.test(utterance)
+}
 
 /*
  * «ei nik» written as one word, which the recogniser does when it is said
@@ -114,6 +129,9 @@ export function matchesWakeWord(
 
     if (allMatched) {
       const remainder = uTokens.slice(i + wTokens.length).join(" ").trim()
+      if (i > 0 && WEAK_OPENERS.has(uTokens[i - 1]!) && remainder && noPauseAfterName(utterance)) {
+        return { matched: false, remainder: "" }
+      }
       return {
         matched: true,
         remainder,

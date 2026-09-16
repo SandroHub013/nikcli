@@ -201,32 +201,35 @@ export function spokenMessage(error: unknown): string {
       /* The sentence says where the fix is, because for these two there is
          one and it is not in this window. */
       case "MicPermissionDenied":
-        return "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop)."
+        return "Non ho il permesso di usare il microfono: consentilo in Impostazioni di Windows, Privacy e sicurezza, Microfono, per le app desktop."
       case "MicUnavailable":
-        return "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova."
+        return "Non trovo un microfono: collegane uno e riprova."
       case "AudioFormatUnsupported":
-        return "Nessun formato audio supportato per la registrazione."
+        return "Su questo computer non riesco a registrare l'audio."
       case "SpeechRecognitionUnavailable":
-        return "Riconoscimento vocale non supportato da questo browser."
+        return "Qui non riesco a riconoscere la voce."
       case "ModelLoadFailed":
-        return "Impossibile caricare il modello di riconoscimento vocale locale."
+        return "Non riesco a caricare il riconoscimento vocale sul computer."
       case "TranscriptionFailed":
-        return "Errore durante la trascrizione dell'audio."
+        return plainProblem(messageOf(tagged)) ?? "Non sono riuscito a capire l'audio: riprova."
       case "ApiKeyMissing":
-        return "Chiave API OpenRouter mancante. Specificare una chiave valida."
+        return "Mi manca la chiave OpenRouter: aggiungila nelle impostazioni della voce."
       case "ApiKeyInvalid":
-        return "Autenticazione OpenRouter fallita: chiave API non valida o revocata."
+        return "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce."
       case "QuotaExhausted":
-        return "Credito OpenRouter esaurito: ricarica il conto sul tuo account."
+        return "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo."
       case "RequestTimeout":
-        return "Richiesta di trascrizione scaduta per timeout."
+        return "Il servizio che trascrive la voce non risponde: riprova tra poco."
       case "HostActionFailed":
-        return "Errore durante l'esecuzione dell'azione sull'ambiente ADE."
+        // Its message can carry anything, a key included: never said.
+        return "Non sono riuscito a farlo in ADE."
     }
   }
 
   if (error instanceof Error && error.message) {
     const msg = error.message.trim()
+    const plain = plainProblem(msg)
+    if (plain) return plain
     const lower = msg.toLowerCase()
     if (
       lower.includes("chiave api") ||
@@ -240,8 +243,34 @@ export function spokenMessage(error: unknown): string {
     ) {
       return msg
     }
-    return "Si è verificato un errore durante l'operazione vocale."
+    return "Qualcosa non ha funzionato: riprova."
   }
 
-  return "Si è verificato un errore imprevisto durante l'ascolto vocale."
+  return "Qualcosa non ha funzionato mentre ti ascoltavo: riprova."
+}
+
+/* Only read through `plainProblem`, which answers with fixed sentences. */
+function messageOf(error: object): string | undefined {
+  const message = (error as { message?: unknown }).message
+  return typeof message === "string" && message.trim() ? message.trim() : undefined
+}
+
+/**
+ * The problems people meet most, in their words, with what to do about them.
+ * The browser's and the service's own text ("Could not start audio source",
+ * "Failed to fetch") says nothing to someone who only wanted to talk.
+ */
+export function plainProblem(message: string | undefined): string | undefined {
+  if (!message) return undefined
+  const lower = message.toLowerCase()
+  if (/could not start audio source|notreadable|device in use|in uso|occupato/.test(lower)) {
+    return "Il microfono è usato da un'altra app: chiudila e riprova."
+  }
+  if (/failed to fetch|networkerror|network error|errore di rete|err_internet|offline/.test(lower)) {
+    return "Non ho rete in questo momento: ti sento appena torna."
+  }
+  if (/\(429\)|troppe richieste/.test(lower)) {
+    return "Il servizio che trascrive la voce è occupato: riprova tra qualche secondo."
+  }
+  return undefined
 }

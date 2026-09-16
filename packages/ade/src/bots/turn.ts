@@ -43,6 +43,8 @@ export interface TurnRequest {
   readonly mailbox?: { readonly id: string }
   /** Faster Claude Code turn: no MCP servers, no user settings files, ade-msg still allowed. See `TurnSpec.lean`. */
   readonly lean?: boolean
+  /** Claude Code only: the answer as it is written, through `onUpdate` (`Talk.streaming`). */
+  readonly partial?: boolean
   /** Every change to the turn as it happens: tool calls, partial text, a permission question. */
   readonly onUpdate?: (talk: Talk) => void
   /** How long the turn may run before it is stopped with its child processes; `TURN_TIMEOUT_MS` when absent. */
@@ -164,6 +166,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       message: request.message,
       ...(request.sessionId ? { sessionId: request.sessionId } : {}),
       ...(request.lean ? { lean: true } : {}),
+      ...(request.partial ? { partial: true } : {}),
       ...(outbox ? { outbox } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
