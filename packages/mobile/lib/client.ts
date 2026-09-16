@@ -8,6 +8,9 @@ import type {
   FilePart,
   FileDiff,
   GitHubBranch,
+  Workflow,
+  WorkflowJob,
+  WorkflowRunList,
   GitHubDeviceAuthPollResult,
   GitHubDeviceAuthStart,
   GitHubPublishResult,
@@ -609,6 +612,54 @@ export class MobileClient {
   listGithubBranches(owner: string, repo: string) {
     return this.request<GitHubBranch[]>(
       `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`,
+    )
+  }
+
+  listGithubWorkflows(owner: string, repo: string) {
+    return this.request<Workflow[]>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows`,
+    )
+  }
+
+  listGithubWorkflowRuns(owner: string, repo: string, options?: { branch?: string; limit?: number }) {
+    const params = new URLSearchParams()
+    if (options?.branch) params.set("branch", options.branch)
+    if (options?.limit) params.set("limit", String(options.limit))
+    const query = params.toString()
+    return this.request<WorkflowRunList>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs${query ? `?${query}` : ""}`,
+    )
+  }
+
+  listGithubWorkflowRunJobs(owner: string, repo: string, runID: number) {
+    return this.request<WorkflowJob[]>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runID}/jobs`,
+    )
+  }
+
+  rerunGithubWorkflowRun(owner: string, repo: string, runID: number, options?: { failedOnly?: boolean }) {
+    return this.request<{ success: true }>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runID}/rerun`,
+      { method: "POST", body: JSON.stringify({ failedOnly: options?.failedOnly ?? false }) },
+    )
+  }
+
+  cancelGithubWorkflowRun(owner: string, repo: string, runID: number) {
+    return this.request<{ success: true }>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runID}/cancel`,
+      { method: "POST" },
+    )
+  }
+
+  dispatchGithubWorkflow(
+    owner: string,
+    repo: string,
+    workflowID: string,
+    input: { ref: string; inputs?: Record<string, string> },
+  ) {
+    return this.request<{ success: true }>(
+      `/mobile/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/workflows/${encodeURIComponent(workflowID)}/dispatch`,
+      { method: "POST", body: JSON.stringify(input) },
     )
   }
 

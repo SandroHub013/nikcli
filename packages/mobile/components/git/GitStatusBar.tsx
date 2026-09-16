@@ -1,4 +1,4 @@
-import { Animated, Easing, Pressable, Text, View, useWindowDimensions } from "react-native"
+import { Animated, Easing, Pressable, Text, View } from "react-native"
 import { useEffect, useMemo, useRef } from "react"
 import { GitBranch, RefreshCw } from "lucide-react-native"
 import { SPRING_CONFIG, usePrefersReducedMotion } from "@/lib/animation"

@@ -290,6 +290,90 @@ export const MobileGithubBranch = z
   })
   .meta({ ref: "MobileGithubBranch" })
 
+/**
+ * Normalized GitHub Actions shapes.
+ *
+ * `status` / `conclusion` stay `z.string()` on purpose: GitHub keeps adding members
+ * ("waiting", "pending", "stale", …) and a literal union here would turn a new one into a
+ * 400 on the whole list. The client maps unknown values to a neutral appearance instead.
+ */
+export const MobileGithubWorkflowRun = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    workflowID: z.number().optional(),
+    runNumber: z.number(),
+    attempt: z.number().optional(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    event: z.string(),
+    branch: z.string(),
+    sha: z.string(),
+    title: z.string(),
+    actor: z.object({ login: z.string(), avatarUrl: z.string().optional() }).optional(),
+    htmlUrl: z.string(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    startedAt: z.number().optional(),
+    durationMs: z.number().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowRun" })
+
+export const MobileGithubWorkflowStep = z
+  .object({
+    name: z.string(),
+    number: z.number(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    startedAt: z.number().optional(),
+    completedAt: z.number().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowStep" })
+
+export const MobileGithubWorkflowJob = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    htmlUrl: z.string().optional(),
+    startedAt: z.number().optional(),
+    completedAt: z.number().optional(),
+    durationMs: z.number().optional(),
+    steps: MobileGithubWorkflowStep.array(),
+  })
+  .meta({ ref: "MobileGithubWorkflowJob" })
+
+export const MobileGithubWorkflow = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    path: z.string(),
+    state: z.string(),
+    htmlUrl: z.string().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflow" })
+
+export const MobileGithubWorkflowRunList = z
+  .object({
+    runs: MobileGithubWorkflowRun.array(),
+    totalCount: z.number(),
+    /** False when the repository has no workflow files at all — a different empty state. */
+    configured: z.boolean(),
+  })
+  .meta({ ref: "MobileGithubWorkflowRunList" })
+
+export const MobileGithubWorkflowDispatchInput = z
+  .object({
+    ref: z.string().min(1),
+    inputs: z.record(z.string(), z.string()).optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowDispatchInput" })
+
+export const MobileGithubRerunInput = z
+  .object({ failedOnly: z.boolean().default(false) })
+  .meta({ ref: "MobileGithubRerunInput" })
+
 export const MobileGithubImport = MobileGithubRepo.Import.meta({ ref: "MobileGithubImport" })
 
 export const MobileGithubSessionCreateInput = z

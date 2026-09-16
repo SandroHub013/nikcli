@@ -1,9 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from "react"
-import { useEffect } from "react"
-import { Animated, Dimensions, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native"
 import * as Clipboard from "expo-clipboard"
-import { ChevronDown, ChevronUp, Copy, Expand } from "lucide-react-native"
-import type { DiffHunk, DiffLine, ParsedFileDiff } from "@/lib/types"
+import { Copy } from "lucide-react-native"
+import type { ParsedFileDiff } from "@/lib/types"
 import { hexToRgba, useAppTheme } from "@/lib/theme"
 import { triggerHaptic } from "@/lib/haptics"
 import { useCopiedFeedback } from "@/hooks/use-copied-feedback"
@@ -133,7 +132,6 @@ export function GitLineDiffEditor({
   const flatListRef = useRef<FlatList>(null)
   const [selectedFileIndex, setSelectedFileIndex] = useState(activeFileIndex ?? 0)
   const [copied, markCopied] = useCopiedFeedback(2000)
-  const [hunkExpanded, setHunkExpanded] = useState<Record<string, boolean>>({})
 
   const currentDiff = diffs[selectedFileIndex]
 
