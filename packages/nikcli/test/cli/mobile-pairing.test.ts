@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { generateQR, generateQRMatrix, shouldRenderCompactTerminalQR } from "@nikcli-ai/remote"
 import { shouldUseAsciiQR } from "@nikcli-ai/util/win32"
 import { buildMobilePairingDeepLink } from "@/cli/handlers/mobile/shared"
+import { rankLocalAddress } from "@nikcli-ai/util/mobile-pairing"
 import { normalizeMobileServerUrl, shouldShowPairingLink } from "@tui/component/dialog-mobile-connect"
 import {
   asciiQRRuns,
@@ -17,6 +18,19 @@ import {
 } from "@tui/component/qr"
 
 describe("mobile pairing", () => {
+  test("ranks a real LAN address above a virtual adapter", () => {
+    const entries = [
+      { name: "vEthernet (WSL)", address: "172.28.0.1" },
+      { name: "Wi-Fi", address: "192.168.1.14" },
+      { name: "Tailscale", address: "100.86.3.2" },
+    ]
+
+    const ordered = [...entries].sort((a, b) => rankLocalAddress(a) - rankLocalAddress(b)).map((e) => e.address)
+
+    expect(ordered[0]).toBe("192.168.1.14")
+    expect(ordered.at(-1)).toBe("100.86.3.2")
+  })
+
   test("builds the deep link consumed by the mobile app", () => {
     const value = buildMobilePairingDeepLink({
       serverUrl: "http://192.168.1.4:4096",

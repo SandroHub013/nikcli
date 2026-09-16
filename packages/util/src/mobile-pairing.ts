@@ -14,15 +14,51 @@ export function normalizePublicUrl(input?: string) {
   return url.toString().replace(/\/$/, "")
 }
 
+/**
+ * An address the phone can never reach, reported exactly like a real one.
+ *
+ * Windows gives a 169.254.x.x APIPA address to every adapter without a DHCP lease — an unplugged
+ * Ethernet port, the Hyper-V/WSL switch, a VPN that is down — and `networkInterfaces()` lists it
+ * alongside the Wi-Fi address with nothing to tell them apart. When one came first it won the
+ * pairing QR, and the app failed with `ConnectException: Failed to connect to /169.254.x.x`.
+ */
+function isLinkLocal(address: string) {
+  return address.startsWith("169.254.")
+}
+
+function isPrivateLAN(address: string) {
+  if (address.startsWith("10.") || address.startsWith("192.168.")) return true
+  const second = Number(address.split(".")[1])
+  return address.startsWith("172.") && second >= 16 && second <= 31
+}
+
+/**
+ * Adapters that hold a routable address which is almost never the one the phone sits on: VM
+ * switches, container bridges and VPN tunnels. They stay in the list — `tab` in the pairing dialog
+ * cycles through it — but they never go first.
+ */
+const VIRTUAL_INTERFACE =
+  /^(vEthernet|Hyper-V|VirtualBox|VMware|docker|veth|virbr|br-|utun|tun\d|tap\d|ZeroTier|zt|Tailscale|tailscale)/i
+
+/**
+ * Pairing candidates, best first: a real LAN address beats a routable one on a virtual adapter,
+ * and enumeration order breaks ties (`sort` is stable).
+ */
+export function rankLocalAddress(input: { name: string; address: string }): number {
+  return (isPrivateLAN(input.address) ? 0 : 1) + (VIRTUAL_INTERFACE.test(input.name) ? 2 : 0)
+}
+
 export function getLocalIPs(): string[] {
-  const ips: string[] = []
-  for (const iface of Object.values(networkInterfaces())) {
+  const candidates: { name: string; address: string }[] = []
+  for (const [name, iface] of Object.entries(networkInterfaces())) {
     if (!iface) continue
     for (const addr of iface) {
-      if (addr.family === "IPv4" && !addr.internal) ips.push(addr.address)
+      if (addr.family !== "IPv4" || addr.internal) continue
+      if (isLinkLocal(addr.address)) continue
+      candidates.push({ name, address: addr.address })
     }
   }
-  return ips
+  return candidates.sort((a, b) => rankLocalAddress(a) - rankLocalAddress(b)).map((entry) => entry.address)
 }
 
 export function isLoopbackHostname(hostname: string) {
