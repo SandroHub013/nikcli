@@ -911,6 +911,7 @@ export function makeVoiceProgram(
     const awakeAt = (at: number) => isWakeWordAwake && (wakeUntil === undefined || at <= wakeUntil)
     const wakeFor = () => {
       closeFollowUp()
+      inFollowUp = false
       isWakeWordAwake = true
       wakeUntil = clockMs() + WAKE_WINDOW_MS
       options.onCue?.("listening")
@@ -918,6 +919,12 @@ export function makeVoiceProgram(
 
     /* A spoken request was handled: once its answer has been said, the next sentence needs no name. */
     let followUpDue = false
+    /*
+     * Whether the assistant is awake only because of a window. A sentence
+     * taken that way does not open another: one follow-up, then the name.
+     * Otherwise a television talking on kept the window open for ever.
+     */
+    let inFollowUp = false
     let followUpTimer: ReturnType<typeof setTimeout> | undefined
     function openFollowUp(): void {
       const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
@@ -927,6 +934,7 @@ export function makeVoiceProgram(
       const until = clockMs() + FOLLOW_UP_MS
       isWakeWordAwake = true
       wakeUntil = until
+      inFollowUp = true
       options.onFollowUp?.(until)
       options.onCue?.("listening")
       followUpTimer = setTimeout(() => {
@@ -1278,6 +1286,8 @@ export function makeVoiceProgram(
             // Awake, answering, or already at work on the last sentence.
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
+            const followingUp = inFollowUp && !match.matched
+            inFollowUp = false
             closeFollowUp()
             if (match.matched && !thinking) yield* speaker.cancel
             /* While a turn runs the name is not required to be heard, but a
@@ -1297,7 +1307,7 @@ export function makeVoiceProgram(
             isWakeWordAwake = false
             wakeUntil = undefined
             // A conversation goes on: the answer to this one opens the next window.
-            followUpDue = !typed && !thinking
+            followUpDue = !typed && !thinking && !followingUp
             return
           }
         }

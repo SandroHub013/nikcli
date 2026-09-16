@@ -8,6 +8,7 @@
  * - Italian speech readback for all dispatched operations
  */
 
+import { plainProblem } from "../effect/errors"
 import { fuzzyMatch } from "@nikcli-ai/ade/command/match"
 import type { ParseResult } from "../intent/parse"
 import type { AdeView, PaneSummary, VoiceHost } from "./host"
@@ -520,8 +521,26 @@ export async function dispatch(
   } catch (err: any) {
     return {
       success: false,
-      spoken: `Non sono riuscito a farlo: ${err?.message ?? "non so perché"}`,
+      // Said in plain words; the error itself stays written in `error`.
+      spoken: plainFailure(err?.message),
       error: String(err),
     }
   }
+}
+
+/** What to say when a command threw: the cause in plain words, never the raw message. */
+export function plainFailure(message: string | undefined): string {
+  const plain = plainProblem(message)
+  if (plain) return `Non sono riuscito a farlo. ${plain}`
+  // A host that threw a sentence meant for the user («non c'è nessun progetto aperto») is read as it is.
+  if (message && writtenForPeople(message)) return `Non sono riuscito a farlo: ${message.trim()}`
+  return "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console."
+}
+
+/* Short, and nothing of a program's own vocabulary in it. */
+function writtenForPeople(message: string): boolean {
+  if (message.length > 160) return false
+  if (/[{}<>[\]_\\/=]/.test(message)) return false
+  if (/\b(?:E[A-Z]{3,}|[A-Z]\w*Error)\b/.test(message)) return false
+  return !/\b(?:error|cannot|undefined|null|failed|exception|is not|not found|reading)\b/i.test(message)
 }

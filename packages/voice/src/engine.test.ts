@@ -1786,9 +1786,8 @@ describe("a conversation: after an answer the name is not needed for a few secon
     advance(3_000)
     await hear("e quella della Spagna")
     expect(asked).toHaveLength(2)
-    // Its answer opens the window again.
-    expect(engine.followUp()).toBe(13_000 + FOLLOW_UP_MS)
-    advance(FOLLOW_UP_MS + 1)
+    // One follow-up only: its answer does not open another window.
+    expect(engine.followUp()).toBeUndefined()
     await hear("il telegiornale di stasera")
     expect(asked).toHaveLength(2)
     await engine.stop()
@@ -1912,5 +1911,74 @@ describe("interrupted while it talks", () => {
       expect(events.filter((e) => e.startsWith("speak:"))).not.toContain("speak:Non c'è niente da fermare.")
       await engine.stop()
     }
+  })
+})
+
+describe("a television talking on does not keep the window open", () => {
+  test("five sentences in a row after one call: only the first reaches the agent", async () => {
+    const host = new MockVoiceHost()
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Fatto.", ran: true }
+    }
+    const transcriber = createFakeTranscriber()
+    let gate: any
+    let clock = 10_000
+    const engine = createVoiceEngine({
+      host,
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return transcriber
+      },
+    })
+    const hear = async (text: string) => {
+      clock += 1_000
+      transcriber.emit(text, true)
+      await new Promise((r) => setTimeout(r, 30))
+    }
+    await engine.start("agent", { waitForName: true })
+    await hear("nik qual è la capitale della Francia")
+    const room = ["il governo ha approvato", "e domani pioggia al nord", "la partita finisce due a uno", "in borsa oggi", "e adesso la pubblicità"]
+    const wholeToCloud: boolean[] = []
+    for (const sentence of room) {
+      wholeToCloud.push(!gate.active(clock + 1_000))
+      await hear(sentence)
+    }
+    // The first sentence after the answer is the follow-up; the rest need the name again.
+    expect(asked).toHaveLength(2)
+    expect(wholeToCloud).toEqual([true, false, false, false, false])
+    expect(engine.followUp()).toBeUndefined()
+    await engine.stop()
+  })
+
+  test("the name, or the button, opens a new one", async () => {
+    const host = new MockVoiceHost()
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Fatto.", ran: true }
+    }
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+    const hear = async (text: string) => {
+      transcriber.emit(text, true)
+      await new Promise((r) => setTimeout(r, 30))
+    }
+    await engine.start("agent", { waitForName: true })
+    await hear("nik qual è la capitale della Francia")
+    await hear("e quella della Spagna")
+    expect(engine.followUp()).toBeUndefined()
+    await hear("nik e quella del Portogallo")
+    expect(engine.followUp()).toBeDefined()
+    await hear("e della Grecia")
+    await engine.toggle()
+    await hear("e di Malta")
+    expect(engine.followUp()).toBeDefined()
+    expect(asked).toHaveLength(5)
+    await engine.stop()
   })
 })
