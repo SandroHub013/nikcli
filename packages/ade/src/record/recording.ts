@@ -1,4 +1,4 @@
-import { t } from "../i18n"
+import { locale, translate, type Locale } from "../i18n"
 /**
  * Recording a video of ADE in use (S36).
  *
@@ -143,10 +143,10 @@ export function createEventLog(startedAt: number) {
   }
 }
 
-/** What the user is told when a take cannot start. */
-export function startProblem(state: RecordState): string | undefined {
-  if (state.status === "recording") return t("record.busy")
-  if (state.status === "stopping") return t("record.closingPrevious")
+/** What the user is told when a take cannot start; an agent asking gets it in `language`. */
+export function startProblem(state: RecordState, language: Locale = locale()): string | undefined {
+  if (state.status === "recording") return translate(language, "record.busy")
+  if (state.status === "stopping") return translate(language, "record.closingPrevious")
   return undefined
 }
 

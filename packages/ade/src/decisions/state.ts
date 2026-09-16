@@ -124,7 +124,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         break
       case "rimandata":
         if (status !== "aperta") {
-          reject(event, t("decisions.rule.deferOpen", event.k, status))
+          reject(event, t("decisions.rule.deferOpen", event.k, t(`decisions.status.${status}`)))
           continue
         }
         current.status = "rimandata"

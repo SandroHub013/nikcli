@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n"
 import { parseDecisionLog, serializeDecisionEvent, toEvent, type DecisionEvent } from "./log"
 import { bucketDecisions, describeProblems, foldDecisions, nextDecisionKey, resolvedMessage } from "./state"
 import { appendDecisionEvent, decisionsPath, loadDecisions, type DecisionsIo } from "./store"
@@ -133,7 +134,14 @@ describe("folding events into decisions", () => {
 
   test("only an open decision can be deferred", () => {
     const { rejected } = foldDecisions([opened("D1"), answered("D1", "A"), { type: "rimandata", k: "D1", at: at(7), by: "utente", until: "2026-10-01" }])
-    expect(rejected[0]!.reason).toBe("si rimanda solo una decisione aperta (D1 è risposta)")
+    expect(rejected[0]!.reason).toBe("si rimanda solo una decisione aperta (D1 è con risposta)")
+    resetLocaleForTests("en")
+    try {
+      const english = foldDecisions([opened("D1"), answered("D1", "A"), { type: "rimandata", k: "D1", at: at(7), by: "utente", until: "2026-10-01" }])
+      expect(english.rejected[0]!.reason).toBe("only an open decision can be deferred (D1 is answered)")
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 })
 

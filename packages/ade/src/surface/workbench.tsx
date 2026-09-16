@@ -41,7 +41,7 @@ import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
-import { refreshSystemLocale, syncDocumentLanguage, t } from "../i18n"
+import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
 import { exitedActivity } from "../grid/activity"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
@@ -145,7 +145,7 @@ import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
-import { createRecorder, eventsPathFor, micPathFor, voicePathFor } from "../record/recorder"
+import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
@@ -697,8 +697,8 @@ export function Workbench() {
    * The folder is not made a write root: Rust writes and serves only the
    * files of the takes it started (`record_write`, `ade-media`).
    */
-  const startRecording = async (target: Parameters<typeof recorder.start>[0], options: { mic: boolean }) => {
-    if (!recordDir() && !(await pickRecordDir())) return t("record.noFolder")
+  const startRecording = async (target: Parameters<typeof recorder.start>[0], options: StartOptions) => {
+    if (!recordDir() && !(await pickRecordDir())) return translate(options.language ?? locale(), "record.noFolder")
     return recorder.start(target, options)
   }
 
@@ -817,8 +817,8 @@ export function Workbench() {
     run: (request) =>
       runRecordRequest(request, {
         confirm: confirmRecording,
-        start: (target, options) => startRecording(target, { mic: options.mic === true }),
-        stop: () => recorder.stop(),
+        start: (target, options) => startRecording(target, { mic: options.mic === true, language: options.language }),
+        stop: (language) => recorder.stop(language),
         paneRect: (name) => {
           const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
           if (!pane) return undefined
@@ -2600,7 +2600,7 @@ export function Workbench() {
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
     migratedToWakeWord || migratedToAlwaysListen
-      ? t("voice.alwaysListening", initialVoice.settings.wakeWord)
+      ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
       : undefined,
   )
 

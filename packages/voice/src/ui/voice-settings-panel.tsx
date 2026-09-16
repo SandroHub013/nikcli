@@ -377,7 +377,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   /*
    * The modifiers held down so far, while the chord is still incomplete.
    *
-   * Without this the recorder said "Premi tasti…" and then nothing at all
+   * Without this the recorder showed its "press keys" prompt and then nothing at all
    * until a full chord landed, so holding Ctrl+Shift and hesitating looked
    * exactly like a recorder that had stopped listening.
    */
@@ -1096,7 +1096,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           )}
         </For>
 
-        {/* ── 1. Modalità ────────────────────────────────────────────── */}
+        {/* ── 1. Mode ────────────────────────────────────────────────── */}
         <section
           id="voice-sec-mode"
           data-slot="section"
@@ -1358,7 +1358,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           </Show>
         </section>
 
-        {/* ── 2. Come si attiva ──────────────────────────────────────── */}
+        {/* ── 2. Activation ──────────────────────────────────────────── */}
         <section
           id="voice-sec-activation"
           data-slot="section"
@@ -1530,7 +1530,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           </div>
         </section>
 
-        {/* ── 3. Scorciatoie ─────────────────────────────────────────── */}
+        {/* ── 3. Shortcuts ───────────────────────────────────────────── */}
         <section
           id="voice-sec-shortcuts"
           data-slot="section"
@@ -1668,7 +1668,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           </div>
         </section>
 
-        {/* ── 4. Lingua ──────────────────────────────────────────────── */}
+        {/* ── 4. Language ───────────────────────────────────────────── */}
         <section
           id="voice-sec-language"
           data-slot="section"
@@ -1933,7 +1933,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           </div>
         </section>
 
-        {/* ── 6. Motore di riconoscimento ────────────────────────────── */}
+        {/* ── 6. Speech engine ───────────────────────────────────────── */}
         <section
           id="voice-sec-backend"
           data-slot="section"
@@ -2279,7 +2279,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           </div>
         </section>
 
-        {/* ── 6. Comandi vocali ──────────────────────────────────────── */}
+        {/* ── 7. Voice commands ──────────────────────────────────────── */}
         <section
           id="voice-sec-commands"
           data-slot="section"

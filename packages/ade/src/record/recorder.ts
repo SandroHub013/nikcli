@@ -30,7 +30,7 @@ import {
   type RecordTarget,
 } from "./recording"
 import { buildVoiceTrack, type VoiceClip } from "./wav"
-import { t } from "../i18n"
+import { locale, translate, type Locale } from "../i18n"
 
 /** A microphone being recorded; `stop` hands back the file's bytes. */
 export interface MicTake {
@@ -69,11 +69,16 @@ export interface StartOptions {
    * agent started must not also be a recording of the room.
    */
   readonly mic?: boolean
+  /**
+   * The language of the reasons returned. An agent reads them, so its
+   * requests fix one like every other text for agents; the UI omits it.
+   */
+  readonly language?: Locale
 }
 
 export interface Recorder {
   start(target: RecordTarget, options?: StartOptions): Promise<string | undefined>
-  stop(): Promise<string | undefined>
+  stop(language?: Locale): Promise<string | undefined>
   /** Notes something worth keeping: ignored when nothing is being recorded. */
   note(event: RecordEvent): void
   /** Keeps a sentence the assistant is about to say, for the voice track. */
@@ -126,10 +131,11 @@ export function createRecorder(deps: RecorderDeps): Recorder {
 
   return {
     async start(target, options = {}) {
-      const problem = startProblem(state)
+      const language = options.language ?? locale()
+      const problem = startProblem(state, language)
       if (problem) return problem
       const dir = deps.dir()
-      if (!dir) return t("record.chooseFolder")
+      if (!dir) return translate(language, "record.chooseFolder")
 
       const startedAt = deps.now()
       const name = recordingName(startedAt)
@@ -157,7 +163,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       }
     },
 
-    async stop() {
+    async stop(language = locale()) {
       if (state.status !== "recording") return undefined
       const { recording } = state
       const events = log?.text() ?? ""
@@ -171,7 +177,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         const stopped = await deps.stop()
         const problems = await writeTracks(stopped.path ?? recording.path, recording.startedAt, events, clips, micTake)
         settle({ status: "idle" })
-        return problems.length > 0 ? t("record.partial", problems.join("; ")) : undefined
+        return problems.length > 0 ? translate(language, "record.partial", problems.join("; ")) : undefined
       } catch (error) {
         // The video may still be on disk: what was collected goes next to it anyway.
         await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})

@@ -13,6 +13,7 @@ function deps(overrides: Partial<RecordPanelDeps> = {}) {
   const targets: RecordTarget[] = []
   const mics: boolean[] = []
   const asked: RecordTarget[] = []
+  const languages: unknown[] = []
   const base: RecordPanelDeps = {
     confirm: async (target) => {
       asked.push(target)
@@ -21,14 +22,18 @@ function deps(overrides: Partial<RecordPanelDeps> = {}) {
     start: async (target, options) => {
       targets.push(target)
       mics.push(options.mic === true)
+      languages.push(options.language)
       return undefined
     },
-    stop: async () => undefined,
+    stop: async (language) => {
+      languages.push(language)
+      return undefined
+    },
     paneRect: (name) => (name === "3" ? { x: 100, y: 50, width: 800, height: 600 } : undefined),
     state: () => ({ recording: false }),
     ...overrides,
   }
-  return { deps: base, targets, mics, asked }
+  return { deps: base, targets, mics, asked, languages }
 }
 
 describe("record/record-panel", () => {
@@ -108,6 +113,13 @@ describe("record/record-panel", () => {
     const outcome = await runRecordRequest(ask("@ade record start"), d)
     expect(outcome.ok).toBe(false)
     expect(!outcome.ok && outcome.reason).toContain("cartella")
+  })
+
+  test("the reasons an agent gets back are asked for in Italian, whatever the interface language", async () => {
+    const { deps: d, languages } = deps({ state: () => ({ recording: false, path: "C:/video/ADE.mp4" }) })
+    await runRecordRequest(ask("@ade record start"), d)
+    await runRecordRequest(ask("@ade record stop"), { ...d, state: () => ({ recording: true }) })
+    expect(languages).toEqual(["it", "it"])
   })
 
   test("state answers whether a take is running", async () => {

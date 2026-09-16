@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n"
 import {
   bitrateFor,
   DEFAULT_QUALITY,
@@ -65,6 +66,13 @@ describe("record/recording", () => {
     expect(startProblem({ status: "idle" })).toBeUndefined()
     expect(startProblem({ status: "recording", recording })).toContain("già in corso")
     expect(startProblem({ status: "stopping", recording })).toContain("riprova")
+    resetLocaleForTests("en")
+    try {
+      expect(startProblem({ status: "recording", recording })).toBe("A recording is already in progress.")
+      expect(startProblem({ status: "recording", recording }, "it")).toContain("già in corso")
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 })
 
