@@ -228,6 +228,30 @@
   font-size: var(--ade-font-sm);
 }
 
+/* An action at the top of a menu, above what the menu lists. */
+[data-slot="ade-menu-action"] {
+  display: block;
+  width: 100%;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 0;
+  border-bottom: 1px solid var(--ade-border);
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="ade-menu-action"]:hover:not(:disabled) {
+  background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+[data-slot="ade-menu-action"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
 /* ── the voice orb ────────────────────────────────────────────────────────── */
 
 /*

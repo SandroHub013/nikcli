@@ -292,7 +292,7 @@ import {
   type Notice,
   type NoticeKind,
 } from "./notifications"
-import { startUpdateWatch } from "../update/watch"
+import { checkMessage, createUpdateWatch, type UpdateMemory, type UpdateWatch } from "../update/watch"
 import { isReleasePage } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
@@ -2058,9 +2058,16 @@ export function Workbench() {
    * on the fork is announced once, with a button that installs it. Desktop only,
    * since a browser tab of the dev server has no installed version to be behind.
    */
+  /*
+   * Kept so "Controlla aggiornamenti" asks the same watch the timer uses:
+   * one place counts the calls, so a person pressing the command cannot
+   * push the window past GitHub's hourly limit.
+   */
+  let updateWatch: UpdateWatch | undefined
+
   onMount(() => {
     if (!isTauriDesktop()) return
-    const stop = startUpdateWatch({
+    const watch = createUpdateWatch({
       currentVersion: async () => (await import("@tauri-apps/api/app")).getVersion(),
       onUpdate: (update) =>
         setNotices((list) =>
@@ -2071,9 +2078,94 @@ export function Workbench() {
             at: Date.now(),
           }),
         ),
+      /*
+       * The tag GitHub last answered with and the release it stood for, kept
+       * together across restarts: the first check after launch then usually
+       * costs a 304, which is not charged to the hourly limit, and still knows
+       * which release that 304 means.
+       */
+      memory: {
+        read: () => {
+          try {
+            const saved = localStorage.getItem("ade.update.memory")
+            if (!saved) return undefined
+            const parsed = JSON.parse(saved) as UpdateMemory
+            // A release URL from storage opens a page: same rule as a notice.
+            if (parsed.update && !isReleasePage(parsed.update.url)) return { ...parsed, update: undefined }
+            return parsed
+          } catch {
+            return undefined
+          }
+        },
+        write: (memory) => {
+          try {
+            localStorage.setItem("ade.update.memory", JSON.stringify(memory))
+          } catch {
+            /* A profile without storage still checks; it just pays for the list. */
+          }
+        },
+      },
+      // A window nobody is looking at does not poll: see `watch.ts`.
+      isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
+      /*
+       * Coming back to ADE is the moment to look: the release may have been
+       * published while the window sat behind something else. `focus` and
+       * `visibilitychange` both fire here — the check's own spacing decides
+       * whether either of them costs a call.
+       */
+      onForeground: (run) => {
+        const onVisible = () => {
+          if (document.visibilityState === "visible") run()
+        }
+        window.addEventListener("focus", run)
+        document.addEventListener("visibilitychange", onVisible)
+        return () => {
+          window.removeEventListener("focus", run)
+          document.removeEventListener("visibilitychange", onVisible)
+        }
+      },
     })
-    onCleanup(stop)
+    updateWatch = watch
+    watch.start()
+    onCleanup(() => {
+      watch.stop()
+      updateWatch = undefined
+    })
   })
+
+  const [checkingUpdate, setCheckingUpdate] = createSignal(false)
+
+  /** "Controlla aggiornamenti": the bell answers even when there is nothing new. */
+  const checkForUpdates = async () => {
+    if (checkingUpdate()) return
+    if (!updateWatch) {
+      setNotices((list) =>
+        addNotice(list, { kind: "info", text: "Gli aggiornamenti si controllano dall'app desktop.", at: Date.now() }),
+      )
+      return
+    }
+    setCheckingUpdate(true)
+    try {
+      const result = await updateWatch.check({ force: true })
+      /*
+       * The release already has its line in the bell. Repeating it would be
+       * two identical rows; saying nothing would look like the command did
+       * nothing. So it says which one it found.
+       */
+      if (result.status === "update" && result.update && notices().some((notice) => notice.href === result.update?.url)) {
+        setNotices((list) =>
+          addNotice(list, { kind: "info", text: `Già segnalato: ADE ${result.update?.version} è disponibile.`, at: Date.now() }),
+        )
+        return
+      }
+      const message = checkMessage(result)
+      setNotices((list) =>
+        addNotice(list, { kind: message.kind, text: message.text, ...(message.href ? { href: message.href } : {}), at: Date.now() }),
+      )
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
 
   const openNoticeLink = async (href: string) => {
     if (!isReleasePage(href)) return
@@ -2995,6 +3087,8 @@ export function Workbench() {
         workspaceId: project()?.name ?? "workspace",
         lines: []
       }))
+    } else if (id === "update.check") {
+      void checkForUpdates()
     } else if (id === "decisions.open") {
       setDecisionsOpen(true)
     } else if (id === "decisions.pane") {
@@ -4748,6 +4842,18 @@ export function Workbench() {
 
                 <Show when={noticesOpen()}>
                   <div data-slot="ade-menu" data-wide="true" role="menu" aria-label="Notifiche">
+                    {/* The bell is where a release shows up, so it is also where
+                        asking for one belongs: the answer lands in this list,
+                        "nothing new" included. */}
+                    <button
+                      type="button"
+                      data-slot="ade-menu-action"
+                      data-action="update.check"
+                      disabled={checkingUpdate()}
+                      onClick={() => void checkForUpdates()}
+                    >
+                      {checkingUpdate() ? "Controllo…" : "Controlla aggiornamenti"}
+                    </button>
                     <Show
                       when={notices().length > 0}
                       fallback={<p data-slot="ade-menu-empty">Nessuna notifica.</p>}

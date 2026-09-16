@@ -213,6 +213,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["decisioni", "registro", "risposte", "rimandate", "chiuse", "bearings"],
     },
     {
+      id: "update.check",
+      title: "Controlla aggiornamenti",
+      group: "ADE",
+      keywords: ["aggiornamento", "versione", "release", "novità", "installa"],
+      enabled: hasHost,
+      disabledReason: desktopOnly,
+    },
+    {
       id: "process.kill",
       title: "Uccidi processo",
       group: "Processo",
