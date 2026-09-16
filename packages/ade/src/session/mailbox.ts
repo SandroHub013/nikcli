@@ -988,9 +988,14 @@ export const ANSWER_HOLD_MS = STALE_BUSY_MS
  * read from the terminal going quiet for a couple of seconds — which a long
  * tool call, a wait on the network or a model thinking also look like. For
  * work the user started that is a harmless flicker; for work another session
- * asked for it is not, because the mailbox delivers in the gaps between
- * turns, so a session wrongly reported free is written to mid-turn and loses
- * the thread of what it was doing.
+ * asked for it it is a wrong answer to a question somebody is acting on: the
+ * sidebar, the header bar and `ade-msg list` all say the session is free while
+ * it is still working, so the caller stops waiting and asks someone else.
+ *
+ * This is about what the state *says*. Delivery is decided separately, by
+ * `isFree`, which for a session without hooks still goes by the quiet
+ * terminal alone: holding the state here does not keep the mailbox from
+ * typing into it.
  *
  * The turn ends when the answer goes out — the request is no longer open —
  * or when the hold expires, so a session that dies without answering does not
@@ -1006,4 +1011,25 @@ export function holdsForAnswer(
     const reached = request.deliveredAt ?? request.at
     return now - reached < ANSWER_HOLD_MS
   })
+}
+
+/** What a couple of seconds of silence mean for a pane marked working. */
+export type QuietOutcome =
+  /** The turn is over: the pane goes back to available. */
+  | "settle"
+  /** The turn is not over, and something else — a hook's Stop — will end it. */
+  | "wait"
+  /**
+   * The turn is not over, and nothing else will end it: ask again after the
+   * next quiet spell. Without this the pane is left held with no timer and no
+   * output coming, so an expired hold is never noticed and the session stays
+   * "at work" for good.
+   */
+  | "recheck"
+
+export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer: boolean }): QuietOutcome {
+  // With turn hooks silence is not the end of a turn (a long tool call is
+  // silent): the hook says when, and its `idle` settles the pane on its own.
+  if (pane.hooked) return pane.busy ? "wait" : "settle"
+  return pane.owesAnswer ? "recheck" : "settle"
 }

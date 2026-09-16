@@ -7,6 +7,7 @@ import {
   isFree,
   statusFromActivity,
   holdsForAnswer,
+  quietOutcome,
   ANSWER_HOLD_MS,
   WEDGE_MS,
   formatWedged,
@@ -529,5 +530,35 @@ describe("holdsForAnswer: a session without hooks is working until it answers", 
   test("any of several requests holds it", () => {
     const old = { to: "p1", at: 0, deliveredAt: 0 }
     expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("quietOutcome: what silence means for a pane marked working", () => {
+  test("without hooks and owing nothing, silence ends the turn", () => {
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("with hooks the turn ends when the hook says so, not when the terminal goes quiet", () => {
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false })).toBe("wait")
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("a session with hooks is not held by a request: its own turn says when", () => {
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: true })).toBe("settle")
+  })
+
+  test("while it owes an answer the check is asked again, never dropped", () => {
+    // Dropping it here was the bug: the pane was left held with no timer and no
+    // output coming, so the end of the hold was never noticed and the session
+    // stayed at work for good.
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: true })).toBe("recheck")
+  })
+
+  test("the recheck is what makes the hold expire: after it, silence settles the pane", () => {
+    const given = [{ to: "p1", at: 1_000, deliveredAt: 1_000 }]
+    const owesAnswer = (now: number) => holdsForAnswer(given, "p1", now)
+    const asked = (now: number) => quietOutcome({ hooked: false, busy: false, owesAnswer: owesAnswer(now) })
+    expect(asked(1_000 + ANSWER_HOLD_MS - 1)).toBe("recheck")
+    expect(asked(1_000 + ANSWER_HOLD_MS)).toBe("settle")
   })
 })
