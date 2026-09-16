@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 /**
  * Installing ADE's reporting hook into a CLI's own configuration.
  *
@@ -332,7 +333,7 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
       broken: false,
       configPath: "",
       scriptPath: "",
-      error: "non disponibile in questa build",
+      error: t("hooks.unavailable"),
     }
   }
   try {

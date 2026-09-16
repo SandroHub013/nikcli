@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js"
 import { HOOK_TARGETS, type HookStatus, type HookHost, setHook } from "./agent-hooks"
+import { t } from "../i18n"
 
 /**
  * The settings section for "let the CLI tell ADE which conversation it opened".
@@ -49,19 +50,15 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Ripresa delle sessioni
+          {t("hooks.title")}
         </h3>
         <p data-slot="section-desc">
-          Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione
-          aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex
-          fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione
-          di quella CLI perché all'avvio di ogni sessione lo comunichi.
+          {t("hooks.desc")}
         </p>
       </div>
 
       <p data-slot="section-desc">
-        Sono file che non appartengono ad ADE: vengono mostrati per intero qui sotto, le altre voci
-        già presenti restano intatte, e «Rimuovi» rimette la configurazione com'era.
+        {t("hooks.files")}
       </p>
 
       <ul data-slot="hook-list">
@@ -79,19 +76,18 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     data-broken={state()?.broken ? "true" : undefined}
                   >
                     {state()?.error
-                      ? "non disponibile"
+                      ? t("hooks.state.unavailable")
                       : state()?.installed
-                        ? "attivo"
+                        ? t("hooks.state.on")
                         : state()?.broken
-                          ? "da reinstallare"
-                          : "non attivo"}
+                          ? t("hooks.state.broken")
+                          : t("hooks.state.off")}
                   </span>
                 </div>
 
                 <Show when={state()?.broken}>
                   <p data-slot="hook-note">
-                    C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul
-                    disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.
+                    {t("hooks.broken")}
                   </p>
                 </Show>
 
@@ -113,7 +109,7 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     disabled={working() || Boolean(state()?.error)}
                     onClick={() => void apply(target.id, true)}
                   >
-                    {state()?.installed ? "Reinstalla" : "Installa"}
+                    {state()?.installed ? t("hooks.reinstall") : t("hooks.install")}
                   </button>
                   <Show when={state()?.installed || state()?.broken}>
                     <button
@@ -122,7 +118,7 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                       disabled={working()}
                       onClick={() => void apply(target.id, false)}
                     >
-                      Rimuovi
+                      {t("hooks.remove")}
                     </button>
                   </Show>
                 </div>
@@ -137,8 +133,7 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
       </Show>
 
       <p data-slot="section-desc">
-        Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova,
-        quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.
+        {t("hooks.outside")}
       </p>
     </>
   )

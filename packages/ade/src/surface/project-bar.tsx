@@ -1,5 +1,6 @@
 import { Show } from "solid-js"
 import type { Project } from "../host/project"
+import { t } from "../i18n"
 
 export interface ProjectBarProps {
   project?: Project
@@ -37,9 +38,9 @@ export function ProjectBar(props: ProjectBarProps) {
           <Show when={!project().git}>
             <span
               data-slot="ade-project-warning"
-              title="Non è un repository git: gli agenti modificano direttamente i file del progetto."
+              title={t("projectBar.noGit")}
             >
-              senza isolamento
+              {t("projectBar.noGit.short")}
             </span>
           </Show>
         </div>

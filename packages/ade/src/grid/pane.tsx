@@ -19,6 +19,7 @@ import {
   STATE_SHORT,
   resolvePaneState,
 } from "./pane-state"
+import { t } from "../i18n"
 
 export {
   type PaneStatus,
@@ -52,14 +53,14 @@ export interface PaneTree {
 
 /*
  * Degradation is status, not error: the words name exactly what is missing and
- * stay Italian like the rest of the chrome. `full` has no word on purpose — the
+ * follow the interface language like the rest of the chrome. `full` has no word on purpose — the
  * good case is the quiet one, so that across six panes the absence of a mark
  * reads as the all-clear.
  */
-const FIDELITY_LABEL: Record<PaneTreeFidelity, string | undefined> = {
+const FIDELITY_LABEL: Readonly<Record<PaneTreeFidelity, string | undefined>> = {
   full: undefined,
-  stale: "solo l'ultimo commit",
-  "no-deps": "senza dipendenze",
+  get stale() { return t("pane.tree.stale.short") },
+  get "no-deps"() { return t("pane.tree.noDeps.short") },
   /*
    * Quiet too: sessions run in the project on purpose now (see `startProcess`),
    * so marking every pane as a failure was an alarm with nothing to act on.
@@ -69,11 +70,11 @@ const FIDELITY_LABEL: Record<PaneTreeFidelity, string | undefined> = {
 }
 
 /** Spoken/inspected form of each fidelity, used when no provisioning note arrives. */
-const FIDELITY_TITLE: Record<PaneTreeFidelity, string> = {
-  full: "Albero isolato che contiene il lavoro corrente",
-  stale: "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
-  "no-deps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
-  project: "Nessun albero isolato: l'agente lavora direttamente nel progetto",
+const FIDELITY_TITLE: Readonly<Record<PaneTreeFidelity, string>> = {
+  get full() { return t("pane.tree.full") },
+  get stale() { return t("pane.tree.stale") },
+  get "no-deps"() { return t("pane.tree.noDeps") },
+  get project() { return t("pane.tree.project") },
 }
 
 /* Icons are stroke-based marks on a 16px grid, never emoji: they must survive
@@ -480,7 +481,7 @@ export function SessionPane(props: SessionPaneProps) {
     const quotaLines = q ? `\n${q.tooltip}` : ""
     const branchLine = props.tree ? `\nBranch ${props.tree.branch}` : ""
     const tokLine = props.tokens ? `\n${props.tokens}` : ""
-    return `${props.title}\n${props.agent ?? props.model ?? "Sessione"} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`
+    return `${props.title}\n${props.agent ?? props.model ?? t("pane.session")} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`
   })
 
   const tipState = createMemo(() => {
@@ -585,8 +586,8 @@ export function SessionPane(props: SessionPaneProps) {
               class="nm"
               data-slot="pane-title"
               data-renamable={props.onRename ? "true" : undefined}
-              title={props.onRename ? `${tipAll()}\nDoppio clic per rinominare` : tipAll()}
-              data-tip={props.onRename ? `${tipAll()}\nDoppio clic per rinominare` : tipAll()}
+              title={props.onRename ? `${tipAll()}\n${t("pane.renameTip")}` : tipAll()}
+              data-tip={props.onRename ? `${tipAll()}\n${t("pane.renameTip")}` : tipAll()}
               onDblClick={beginRename}
               tabIndex={0}
             >
@@ -598,7 +599,7 @@ export function SessionPane(props: SessionPaneProps) {
             ref={titleField}
             type="text"
             data-slot="pane-title-input"
-            aria-label="Nome della sessione"
+            aria-label={t("pane.name")}
             value={props.title}
             spellcheck={false}
             onKeyDown={(event) => {
@@ -647,8 +648,8 @@ export function SessionPane(props: SessionPaneProps) {
         <Show when={missing()}>
           {(none) => (
             <span class="a-q" data-lv="na" tabIndex={0} title={none().tooltip} data-tip={none().tooltip}>
-              <span class="qk">quota</span>
-              <b class="qv">n/d</b>
+              <span class="qk">{t("pane.quota")}</span>
+              <b class="qv">{t("pane.quota.na")}</b>
             </span>
           )}
         </Show>
@@ -691,10 +692,10 @@ export function SessionPane(props: SessionPaneProps) {
                 class="a-br"
                 data-slot="pane-tree"
                 data-fidelity="pending"
-                title="Preparazione albero…"
+                title={t("pane.tree.preparing")}
               >
                 <BranchGlyph />
-                <span class="a-brt trunc">preparazione albero…</span>
+                <span class="a-brt trunc">{t("pane.tree.preparing.short")}</span>
               </span>
             </Show>
           }
@@ -732,12 +733,12 @@ export function SessionPane(props: SessionPaneProps) {
         </Show>
 
         <span class="acts" data-slot="pane-actions">
-          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Ingrandisci" title="Ingrandisci">
+          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")} title={t("pane.expand")}>
             <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi" title="Chiudi">
+          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")} title={t("pane.close")}>
             <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -746,9 +747,9 @@ export function SessionPane(props: SessionPaneProps) {
         <button
           type="button"
           class="act more"
-          aria-label="Ingrandisci"
-          title="Ingrandisci"
-          data-tip="Ingrandisci"
+          aria-label={t("pane.expand")}
+          title={t("pane.expand")}
+          data-tip={t("pane.expand")}
           onClick={() => props.onExpand?.()}
         >
           <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
@@ -823,7 +824,7 @@ export function SessionPane(props: SessionPaneProps) {
 
         <Show when={!following()}>
           <button type="button" data-slot="pane-tail" onClick={toBottom}>
-            torna in fondo
+            {t("pane.toBottom")}
           </button>
         </Show>
       </div>
@@ -853,7 +854,7 @@ export function SessionPane(props: SessionPaneProps) {
                   ref={(element) => (field = element)}
                   rows={1}
                   data-slot="pane-input"
-                  placeholder={props.onSubmit ? "Scrivi all'agente…" : "nessun processo in ascolto"}
+                  placeholder={props.onSubmit ? t("pane.input") : t("pane.input.none")}
                   disabled={!props.onSubmit}
                   spellcheck={false}
                   onInput={grow}

@@ -20,6 +20,7 @@ import { createEffect, createSignal, on, For, Show, onCleanup } from "solid-js"
 import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@nikcli-ai/voice"
 import { presenceLabel, presenceOf } from "./status"
 import "./agent-console.css"
+import { t } from "../i18n"
 
 export interface AgentConsoleProps {
   history: AgentEntry[]
@@ -106,10 +107,10 @@ export function AgentConsole(props: AgentConsoleProps) {
             data-primary={props.running ? undefined : "true"}
             onClick={() => props.onToggleMic()}
           >
-            {props.running ? "Ferma il microfono" : "Avvia il microfono"}
+            {props.running ? t("agent.mic.stop") : t("agent.mic.start")}
           </button>
           <button type="button" data-slot="agent-action" onClick={() => props.onOpenSettings()}>
-            Impostazioni
+            {t("agent.settings")}
           </button>
         </div>
       </header>
@@ -119,8 +120,7 @@ export function AgentConsole(props: AgentConsoleProps) {
           it just cannot plan. That is a setup fact, not an error. */}
       <Show when={!props.canPlan}>
         <p data-slot="agent-notice">
-          Senza una chiave OpenRouter nelle impostazioni vocali l'assistente riconosce solo i comandi della grammatica:
-          frasi come «avvia quattro sessioni claude» non possono essere pianificate.
+          {t("agent.noPlanner")}
         </p>
       </Show>
 
@@ -129,12 +129,11 @@ export function AgentConsole(props: AgentConsoleProps) {
           when={turns().length > 0 || props.partial}
           fallback={
             <div data-slot="agent-empty">
-              <p data-slot="agent-empty-title">Niente da mostrare, ancora.</p>
+              <p data-slot="agent-empty-title">{t("agent.empty.title")}</p>
               <p data-slot="agent-empty-body">
-                Parla all'assistente o scrivigli qui sotto. Quello che gli chiedi e ogni azione che esegue per te
-                compaiono qui.
+                {t("agent.empty.body")}
               </p>
-              <ul data-slot="agent-examples">
+              <ul data-slot="agent-examples" lang="it">
                 <li>«avvia quattro sessioni claude su questo progetto»</li>
                 <li>«apri il pannello due»</li>
                 <li>«cosa sta succedendo»</li>
@@ -162,9 +161,9 @@ export function AgentConsole(props: AgentConsoleProps) {
       <Show when={props.held}>
         {(text) => (
           <div data-slot="agent-held" role="status">
-            <span data-slot="agent-held-text">Sentito mentre pensavo: «{text()}»</span>
+            <span data-slot="agent-held-text">{t("agent.held", text())}</span>
             <button type="button" data-slot="agent-action" onClick={() => props.onSubmit("invia questa")}>
-              Invia questa
+              {t("agent.sendHeld")}
             </button>
           </div>
         )}
@@ -175,13 +174,13 @@ export function AgentConsole(props: AgentConsoleProps) {
           ref={(el) => (composer = el)}
           data-slot="agent-input"
           rows="1"
-          placeholder="Scrivi all'assistente…"
+          placeholder={t("agent.input")}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={onKeyDown}
         />
         <button type="button" data-slot="agent-send" disabled={!draft().trim()} onClick={submit}>
-          Invia
+          {t("agent.send")}
         </button>
       </div>
     </section>
@@ -216,9 +215,9 @@ function Reply(props: { entry: Exclude<AgentEntry, { kind: "user" }> }) {
     return (
       <div data-slot="agent-plan">
         <div data-slot="agent-plan-head">
-          Piano eseguito
+          {t("agent.plan")}
           <span data-slot="agent-plan-count">
-            {entry.ok} su {entry.ok + entry.failed}
+            {t("agent.plan.count", entry.ok, entry.ok + entry.failed)}
           </span>
         </div>
         <ol data-slot="agent-plan-steps">

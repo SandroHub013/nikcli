@@ -15,6 +15,7 @@ import {
 import { isDragHandle } from "./drag-handle"
 import { focusAfterClose, moveFocus } from "./focus"
 import { GRID_GAP, MIN_PANE_HEIGHT, gridColumns } from "./layout"
+import { t } from "../i18n"
 
 export interface GridPane {
   id: string
@@ -342,8 +343,8 @@ export function SessionGrid(props: SessionGridProps) {
                 <div
                   data-slot="tile-resize"
                   role="separator"
-                  aria-label="Ridimensiona il pannello"
-                  title="Trascina per ridimensionare · doppio clic per la dimensione predefinita"
+                  aria-label={t("grid.resize")}
+                  title={t("grid.resize.tip")}
                   onPointerDown={(event) => startResize(pane.id, event)}
                   onDblClick={(event) => {
                     event.stopPropagation()

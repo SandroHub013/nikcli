@@ -29,6 +29,7 @@
  *     and sees no new release spends almost nothing.
  */
 import { newerRelease, parseVersion, RELEASE_REPO, type AvailableUpdate, type GithubRelease } from "./release"
+import { t } from "../i18n"
 
 /** After launch, once the window has drawn. */
 export const FIRST_CHECK_MS = 15_000
@@ -317,13 +318,13 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
   const check = async (opts: { force?: boolean } = {}): Promise<CheckResult> => {
     const at = now()
     if (!opts.force && !visible()) {
-      return { status: "skipped", at, problem: "La finestra non è in primo piano." }
+      return { status: "skipped", at, problem: t("update.skip.hidden") }
     }
     if (!opts.force && lastCallAt !== undefined && at - lastCallAt < MIN_CHECK_GAP_MS) {
-      return { status: "skipped", at, problem: "Controllato da poco." }
+      return { status: "skipped", at, problem: t("update.skip.recent") }
     }
     if (!budgetLeft(at)) {
-      return { status: "skipped", at, problem: "Troppi controlli in un'ora: riprovo più tardi." }
+      return { status: "skipped", at, problem: t("update.skip.budget") }
     }
     /*
      * GitHub said to come back later, and asking sooner earns another refusal.
@@ -427,25 +428,25 @@ export function checkMessage(result: CheckResult): { kind: "info" | "error"; tex
     case "update":
       return {
         kind: "info",
-        text: `ADE ${result.update?.version} è disponibile`,
+        text: t("update.available", result.update?.version ?? ""),
         ...(result.update ? { href: result.update.url } : {}),
       }
     case "current":
       return {
         kind: "info",
         text: result.currentVersion
-          ? `Nessun aggiornamento: ADE ${result.currentVersion} è l'ultima versione.`
-          : "Nessun aggiornamento disponibile.",
+          ? t("update.current", result.currentVersion)
+          : t("update.none"),
       }
     case "dev":
       return {
         kind: "info",
-        text: "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
+        text: t("update.dev"),
       }
     case "skipped":
-      return { kind: "info", text: result.problem ?? "Controllo saltato." }
+      return { kind: "info", text: result.problem ?? t("update.skip.other") }
     case "error":
-      return { kind: "error", text: `Non sono riuscito a controllare gli aggiornamenti: ${result.problem}` }
+      return { kind: "error", text: t("update.failed", result.problem ?? "") }
   }
 }
 

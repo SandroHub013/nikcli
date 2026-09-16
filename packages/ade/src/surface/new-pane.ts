@@ -12,6 +12,7 @@
  */
 
 import type { AdeView } from "./state"
+import { t } from "../i18n"
 
 export interface NewPaneItem {
   /** The command `runCommand` will be given. */
@@ -35,39 +36,39 @@ export interface NewPaneItem {
 export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
   {
     commandId: "session.new",
-    label: "Sessione",
-    hint: "un agente in un terminale",
+    get label() { return t("newPane.session") },
+    get hint() { return t("newPane.session.hint") },
     glyph: "session",
     primary: true,
   },
   {
     commandId: "browser.new",
     label: "Browser",
-    hint: "la pagina che stai costruendo",
+    get hint() { return t("newPane.browser.hint") },
     glyph: "browser",
   },
   {
     commandId: "video.new",
     label: "Video",
-    hint: "guarda un file del progetto, e falla guardare all'agente",
+    get hint() { return t("newPane.video.hint") },
     glyph: "video",
   },
   {
     commandId: "model.new",
-    label: "Modello 3D",
-    hint: "glTF, OBJ, STL o FBX, ricaricato quando il file cambia",
+    get label() { return t("newPane.model") },
+    get hint() { return t("newPane.model.hint") },
     glyph: "model",
   },
   {
     commandId: "app.new",
-    label: "Simulatore app",
-    hint: "l'app del dev server in un telefono o in una finestra",
+    get label() { return t("newPane.app") },
+    get hint() { return t("newPane.app.hint") },
     glyph: "app",
   },
   {
     commandId: "decisions.pane",
-    label: "Decisioni",
-    hint: "tutto il registro: aperte, risposte, rimandate, chiuse",
+    get label() { return t("newPane.decisions") },
+    get hint() { return t("newPane.decisions.hint") },
     glyph: "decisions",
   },
 ]

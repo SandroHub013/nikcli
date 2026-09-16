@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
+import { resetLocaleForTests } from "../i18n"
 import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
@@ -291,5 +292,23 @@ describe("surface commands", () => {
     expect(settingsCmd?.group).toBe("Vista")
     expect(settingsCmd?.keywords).toContain("impostazioni")
     expect(settingsCmd?.keywords).toContain("voce")
+  })
+})
+
+describe("the palette in English (S41)", () => {
+  test("titles, groups and reasons follow the language, and Italian keywords still match", () => {
+    resetLocaleForTests("en")
+    try {
+      const cmds = buildCommands(context({ workbench: createWorkbench() }))
+      const close = cmds.find((c) => c.id === "pane.close")
+      expect(close?.title).toBe("Close panel")
+      expect(close?.group).toBe("Panel")
+      expect(close?.disabledReason).toBe("No panel is focused")
+      const theme = cmds.find((c) => c.id === "theme.toggle")
+      expect(theme?.keywords).toContain("scuro")
+      expect(theme?.keywords).toContain("dark")
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 })

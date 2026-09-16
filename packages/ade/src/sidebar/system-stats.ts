@@ -10,6 +10,7 @@
  */
 
 import type { SystemStats } from "../host/shell"
+import { t } from "../i18n"
 
 const GB = 1024 ** 3
 const MB = 1024 ** 2
@@ -52,22 +53,22 @@ export interface StatView {
 export function describeStats(stats: SystemStats): StatView {
   const cpu = Math.max(0, Math.min(100, stats.cpu))
   const share = stats.ramTotal > 0 ? (stats.appMem / stats.ramTotal) * 100 : 0
-  const who = `ADE e i suoi ${stats.processes} processi (webview e agenti)`
+  const who = t("stats.who", stats.processes)
   return {
     cpu: {
       text: percentShort(cpu),
       load: loadOf(cpu),
-      title: `CPU usata da ${who}: ${cpu.toFixed(1)}%`,
+      title: t("stats.cpu", who, cpu.toFixed(1)),
     },
     ram: {
       text: formatBytesShort(stats.appMem),
       load: loadOf(share),
-      title: `RAM occupata da ${who}: ${formatBytes(stats.appMem)}`,
+      title: t("stats.ram", who, formatBytes(stats.appMem)),
     },
     mem: {
       text: percentShort(share),
       load: loadOf(share),
-      title: `Quota della memoria del computer (${formatBytes(stats.ramTotal)}) usata da ADE`,
+      title: t("stats.mem", formatBytes(stats.ramTotal)),
     },
   }
 }

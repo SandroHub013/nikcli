@@ -10,7 +10,7 @@ import { it } from "./it"
  */
 
 /** Texts that are the same word in both languages, or are names. */
-const SAME_IN_BOTH = new Set<string>(["settings.language.it", "settings.language.en"])
+const SAME_IN_BOTH = new Set<string>(["settings.language.it", "settings.language.en", "preset.solo", "sidebar.spaces", "pane.quota", "settings.grid.auto"])
 
 type Key = keyof typeof it
 

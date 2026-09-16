@@ -47,7 +47,7 @@ export function NotBuiltYet(props: { title: string; what: string; instead?: stri
         <p data-slot="section-desc">{props.what}</p>
       </div>
       <p data-slot="settings-empty">
-        Non c'è ancora niente da configurare qui: la sezione esiste, la funzione no.
+        {t("settings.notBuilt")}
         <Show when={props.instead}>{(instead) => <> {instead()}</>}</Show>
       </p>
     </>
@@ -58,9 +58,9 @@ export function NotBuiltYet(props: { title: string; what: string; instead?: stri
 export function RoutineSection() {
   return (
     <NotBuiltYet
-      title="Routine"
-      what="Cose che ADE fa da sé: a un orario, all'apertura di un progetto, o quando una sessione finisce."
-      instead="Per ora una sessione si avvia a mano, dalla schermata di lancio."
+      title={t("settings.routine")}
+      what={t("settings.routine.desc")}
+      instead={t("settings.routine.instead")}
     />
   )
 }
@@ -271,16 +271,14 @@ export function GridSection(props: GridSectionProps) {
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Griglia
+          {t("settings.grid.title")}
         </h3>
         <p data-slot="section-desc">
-          Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie
-          dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno
-          scenda sotto la larghezza minima leggibile.
+          {t("settings.grid.desc")}
         </p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label="Colonne della griglia">
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.grid.columns")}>
         <For each={GRID_COLUMN_CHOICES}>
           {(value) => (
             <button
@@ -290,7 +288,7 @@ export function GridSection(props: GridSectionProps) {
               aria-pressed={props.columns === value}
               onClick={() => props.onChange(value)}
             >
-              {value === undefined ? "Auto" : value}
+              {value === undefined ? t("settings.grid.auto") : value}
             </button>
           )}
         </For>
@@ -400,8 +398,8 @@ export function McpSection() {
   return (
     <NotBuiltYet
       title="MCP"
-      what="I server a cui ADE si collega col Model Context Protocol, e quali strumenti espongono."
-      instead="Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale."
+      what={t("settings.mcp.desc")}
+      instead={t("settings.mcp.instead")}
     />
   )
 }

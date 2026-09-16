@@ -6,6 +6,7 @@ import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/trans
 import { cleanTranscript } from "../session/transcript-line"
 import type { TranscriptLine, PaneTree } from "../grid/pane"
 import type { Workspace, SidebarSession } from "../sidebar"
+import { t, translate } from "../i18n"
 
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
@@ -91,6 +92,11 @@ export function reachableView(view: AdeView, views: readonly AdeView[] = VISIBLE
 export function nextView(current: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): AdeView {
   const index = views.indexOf(current)
   return views[(index + 1) % views.length] ?? "code"
+}
+
+/** The note every restore appends, in either language: the last launch may have used the other one. */
+function isRestoreNote(text: string): boolean {
+  return text.startsWith(translate("it", "restore.note")) || text.startsWith(translate("en", "restore.note"))
 }
 
 /**
@@ -501,7 +507,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         (p.lines ?? [])
           // The note below is appended on every launch; the previous launches'
           // copies say nothing the new one does not.
-          .filter((line) => !(line.kind === "note" && line.text.startsWith("Sessione ripristinata.")))
+          .filter((line) => !(line.kind === "note" && isRestoreNote(line.text)))
           .map((line): TranscriptLine => ({
           // Narrowed here as well as in the store's sanitiser: the kind reaches
           // the DOM as a class name, and the type that says so should not rest
@@ -516,7 +522,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         id: p.id,
         title: p.title,
         status: restoredStatus(p.status),
-        activity: p.wasRunning ? "Da riprendere" : "Ripristinato",
+        activity: p.wasRunning ? t("restore.activity.resume") : t("restore.activity.restored"),
         model: p.model ?? p.agent,
         mode: "auto",
         agent: p.agent,
@@ -534,10 +540,10 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
              * user unable to tell which one they got.
              */
             text: !p.agent
-              ? "Sessione ripristinata. Il processo non è più attivo."
+              ? `${t("restore.note")} ${t("restore.note.gone")}`
               : p.resumeId
-                ? "Sessione ripristinata. Riapro la conversazione dell'agente dov'era rimasta."
-                : "Sessione ripristinata. Il processo non è sopravvissuto alla chiusura: riprendo il compito.",
+                ? `${t("restore.note")} ${t("restore.note.reopen")}`
+                : `${t("restore.note")} ${t("restore.note.rerun")}`,
           },
         ],
         workspaceId: p.project || owner,

@@ -7,6 +7,8 @@
  * transitions to "Personalizzata" (custom).
  */
 
+import { t } from "../i18n"
+
 export type PresetId = "solo" | "pair" | "workbench" | "swarm"
 
 export interface Preset {
@@ -18,32 +20,32 @@ export interface Preset {
 
 /**
  * Available session presets in display order.
- * Labels and descriptions are in Italian as per ADE package UI conventions.
+ * Labels and descriptions are getters, read in the current language (S41).
  */
 export const PRESETS: Preset[] = [
   {
     id: "solo",
-    label: "Solo",
+    get label() { return t("preset.solo") },
     sessions: 1,
-    description: "Un agente in un terminale.",
+    get description() { return t("preset.solo.desc") },
   },
   {
     id: "pair",
-    label: "Coppia",
+    get label() { return t("preset.pair") },
     sessions: 2,
-    description: "Uno sviluppa, uno revisiona lo stesso albero.",
+    get description() { return t("preset.pair.desc") },
   },
   {
     id: "workbench",
-    label: "Banco di lavoro",
+    get label() { return t("preset.workbench") },
     sessions: 2,
-    description: "Un agente più una shell per git e test.",
+    get description() { return t("preset.workbench.desc") },
   },
   {
     id: "swarm",
-    label: "Sciame",
+    get label() { return t("preset.swarm") },
     sessions: 4,
-    description: "Quattro agenti si distribuiscono su task paralleli.",
+    get description() { return t("preset.swarm.desc") },
   },
 ]
 

@@ -444,7 +444,7 @@ export function Workbench() {
    * genuinely still finding things, and telling the user *which* thing is
    * the difference between a wait and a hang.
    */
-  const [booting, setBooting] = createSignal<string | undefined>("cerco l'host")
+  const [booting, setBooting] = createSignal<string | undefined>(t("boot.host"))
   let skipSplashResolver: (() => void) | undefined
   const dismissSplash = () => {
     if (skipSplashResolver) {
@@ -638,7 +638,7 @@ export function Workbench() {
   const recorder = createRecorder({
     start: async (target, dir, name, quality) => {
       const host = await getHost()
-      if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
+      if (!host?.recordStart) throw new Error(t("record.desktopOnly"))
       // Covered before the first frame exists, uncovered only once the take is over:
       // two frames, so the covered page is painted before the capture starts.
       coverSecrets(true)
@@ -652,7 +652,7 @@ export function Workbench() {
     },
     stop: async () => {
       const host = await getHost()
-      if (!host?.recordStop) throw new Error("La registrazione funziona solo nell'app desktop.")
+      if (!host?.recordStop) throw new Error(t("record.desktopOnly"))
       return host.recordStop()
     },
     writeText: async (path, text) => {
@@ -697,7 +697,7 @@ export function Workbench() {
    * files of the takes it started (`record_write`, `ade-media`).
    */
   const startRecording = async (target: Parameters<typeof recorder.start>[0], options: { mic: boolean }) => {
-    if (!recordDir() && !(await pickRecordDir())) return "Nessuna cartella scelta: registrazione annullata."
+    if (!recordDir() && !(await pickRecordDir())) return t("record.noFolder")
     return recorder.start(target, options)
   }
 
@@ -717,7 +717,7 @@ export function Workbench() {
         .then(async (now) => {
           if (!now?.minimized || recordState().status !== "recording") return
           const problem = await recorder.stop()
-          report(problem ?? "Registrazione fermata: la finestra di ADE è stata ridotta a icona.", "info")
+          report(problem ?? t("record.minimized"), "info")
         })
         .catch(() => {})
     }, 1000)
@@ -758,12 +758,12 @@ export function Workbench() {
   /** Writes `<nome>.promo.mp4` beside the take: zoom, click rings, pointer, both tracks. */
   const exportLastTake = async () => {
     const video = lastTake()
-    if (!video) return report("Nessuna registrazione da esportare in questa sessione.", "info")
-    if (exporting()) return report("Un'esportazione è già in corso.", "info")
+    if (!video) return report(t("record.nothingToExport"), "info")
+    if (exporting()) return report(t("record.export.busy"), "info")
     const host = await getHost()
-    if (!host?.readTextFile || !host.recordWrite) return report("L'esportazione funziona solo nell'app desktop.")
+    if (!host?.readTextFile || !host.recordWrite) return report(t("record.export.desktopOnly"))
     setExporting(true)
-    report("Esporto il video con zoom e clic: dura quanto la registrazione.", "info")
+    report(t("record.exporting"), "info")
     try {
       const events = await host.readTextFile(eventsPathFor(video)).then((file) => file.text).catch(() => "")
       const exists = async (path: string) => ((await host.exists?.(path).catch(() => false)) ? path : undefined)
@@ -780,9 +780,9 @@ export function Workbench() {
       })
       const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
       await host.recordWrite(out, result.bytes)
-      report(`Video pronto: ${out}`, "info")
+      report(t("record.export.done", out), "info")
     } catch (failure) {
-      report(`Esportazione non riuscita: ${failure instanceof Error ? failure.message : String(failure)}`)
+      report(t("record.export.failed", failure instanceof Error ? failure.message : String(failure)))
     } finally {
       setExporting(false)
     }
@@ -851,8 +851,8 @@ export function Workbench() {
   const pickVideo = async () => {
     const host = await getHost()
     return host?.pickFile?.({
-      title: "Scegli un video",
-      filters: [{ name: "Video", extensions: [...PLAYABLE_EXTENSIONS] }],
+      title: t("picker.video"),
+      filters: [{ name: t("picker.video.filter"), extensions: [...PLAYABLE_EXTENSIONS] }],
     })
   }
 
@@ -860,8 +860,8 @@ export function Workbench() {
   const pickModel = async () => {
     const host = await getHost()
     return host?.pickFile?.({
-      title: "Scegli un modello 3D",
-      filters: [{ name: "Modelli 3D", extensions: [...MODEL_EXTENSIONS] }],
+      title: t("picker.model"),
+      filters: [{ name: t("picker.model.filter"), extensions: [...MODEL_EXTENSIONS] }],
     })
   }
 
@@ -1001,7 +1001,7 @@ export function Workbench() {
         if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
-        appendLine(target.id, `Decisione ${decision.k} consegnata dal pannello Decisioni`, "note")
+        appendLine(target.id, t("decisions.delivered", decision.k), "note")
       }
     } finally {
       deliveringDecisions = false
@@ -1723,7 +1723,7 @@ export function Workbench() {
         if (request.from && running.has(request.from)) {
           heldLines.push({ paneId: request.from, text: formatWedged(request, panes.find((pane) => pane.id === request.to), now) })
         }
-        appendLine(request.to, `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request.id})`, "note")
+        appendLine(request.to, t("pane.maybeStuck", request.id), "note")
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
@@ -2412,7 +2412,7 @@ export function Workbench() {
     if (checkingUpdate()) return
     if (!updateWatch) {
       setNotices((list) =>
-        addNotice(list, { kind: "info", text: "Gli aggiornamenti si controllano dall'app desktop.", at: Date.now() }),
+        addNotice(list, { kind: "info", text: t("update.desktopOnly"), at: Date.now() }),
       )
       return
     }
@@ -2426,7 +2426,7 @@ export function Workbench() {
        */
       if (result.status === "update" && result.update && notices().some((notice) => notice.href === result.update?.url)) {
         setNotices((list) =>
-          addNotice(list, { kind: "info", text: `Già segnalato: ADE ${result.update?.version} è disponibile.`, at: Date.now() }),
+          addNotice(list, { kind: "info", text: t("update.alreadyShown", result.update?.version ?? ""), at: Date.now() }),
         )
         return
       }
@@ -2445,7 +2445,7 @@ export function Workbench() {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("ade_open_release", { url: href })
     } catch (error) {
-      report(`Impossibile aprire la pagina: ${String(error)}`)
+      report(t("update.openFailed", String(error)))
     }
   }
 
@@ -2470,8 +2470,8 @@ export function Workbench() {
     if (running > 0) {
       const { ask } = await import("@tauri-apps/plugin-dialog")
       const go = await ask(
-        `ADE si riavvia per aggiornarsi: ${running === 1 ? "la sessione in corso viene interrotta e ripresa" : `le ${running} sessioni in corso vengono interrotte e riprese`} alla riapertura.`,
-        { title: "Aggiorna ADE", kind: "warning", okLabel: "Aggiorna e riavvia", cancelLabel: "Più tardi" },
+        t("update.restart", running),
+        { title: t("update.restart.title"), kind: "warning", okLabel: t("update.restart.ok"), cancelLabel: t("update.restart.later") },
       )
       if (!go) return
     }
@@ -2484,7 +2484,7 @@ export function Workbench() {
       await invoke("ade_update_install")
     } catch (error) {
       setUpdating(false)
-      report(`Aggiornamento non riuscito (${String(error)}): apro la pagina della release.`)
+      report(t("update.installFailed", String(error)))
       await openNoticeLink(href)
     }
   }
@@ -2659,7 +2659,7 @@ export function Workbench() {
    */
   const noMicrophone = {
     start: async () => {
-      throw new Error("Nessun microfono disponibile in questo ambiente.")
+      throw new Error(t("voice.noMic"))
     },
     stop: async () => {},
     onPartial: () => {},
@@ -2701,12 +2701,12 @@ export function Workbench() {
     },
     install: async (voice) => {
       const host = await getHost()
-      if (!host?.ttsPiperInstall) throw new Error("Nessun host per scaricare la voce.")
+      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
       await host.ttsPiperInstall(voice)
     },
     synthesize: async (voice, text) => {
       const host = await getHost()
-      if (!host?.ttsPiperSpeak) throw new Error("Nessun host per la voce.")
+      if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
       return host.ttsPiperSpeak(voice, text)
     },
     play: (wav, signal) => {
@@ -2907,10 +2907,10 @@ export function Workbench() {
       if (hasConsent(stored, root, plugins)) return true
       const { ask } = await import("@tauri-apps/plugin-dialog")
       const allowed = await ask(consentQuestion(root, plugins), {
-        title: "Plugin del progetto",
+        title: t("plugins.consent.title"),
         kind: "warning",
-        okLabel: "Esegui",
-        cancelLabel: "Non ora",
+        okLabel: t("plugins.consent.run"),
+        cancelLabel: t("plugins.consent.later"),
       })
       if (allowed) {
         try {
@@ -3004,7 +3004,7 @@ export function Workbench() {
     }
 
     themeState.restore()
-    setBooting("ripristino le sessioni")
+    setBooting(t("boot.restore"))
 
     // Load workspace
     const savedWs = localStorage.getItem("ade.workspace")
@@ -3019,7 +3019,7 @@ export function Workbench() {
 
     // Discover project
     if (host) {
-      setBooting("apro il progetto")
+      setBooting(t("boot.project"))
       const path = restored?.projectPath || (host.currentDir ? await host.currentDir() : "")
       const p = await discoverProject(host, path)
       setProject(p)
@@ -3503,7 +3503,7 @@ export function Workbench() {
       } catch {
         // Kept for this session only.
       }
-      report(next ? "Le tue registrazioni includeranno il microfono." : "Le tue registrazioni saranno senza microfono.", "info")
+      report(next ? t("record.mic.on") : t("record.mic.off"), "info")
     } else if (id === "record.quality") {
       /*
        * Cycled rather than a submenu: three levels, and the palette row
@@ -3518,7 +3518,7 @@ export function Workbench() {
         // Kept for this session only.
       }
       const level = qualityLevel(next)
-      report(`Qualità del video: ${level.label} — ${sizePerMinute(level)}.`, "info")
+      report(t("record.quality.set", level.label, sizePerMinute(level)), "info")
     } else if (id === "record.export") {
       void exportLastTake()
     } else if (id === "record.folder") {
@@ -3747,7 +3747,7 @@ export function Workbench() {
     const buffer = buffers()[id]
     if (buffer?.dirty) {
       const discard = confirm(
-        `${buffer.path}\n\nCi sono modifiche non salvate. Chiudendo, vengono perse.\n\nChiudere comunque?`,
+        t("editor.closeDirty", buffer.path),
       )
       if (!discard) return
     }
@@ -3914,18 +3914,18 @@ export function Workbench() {
 
       if (unreadable !== undefined) {
         const anyway = confirm(
-          `${buffer.path}\n\nNon riesco a rileggere il file per controllare se è cambiato (${unreadable}).\n\nSalvare comunque, sostituendo quello che c'è sul disco?`,
+          t("editor.saveUnreadable", buffer.path, String(unreadable)),
         )
         if (!anyway) {
-          report(`Salvataggio annullato: non ho potuto rileggere il file (${unreadable}).`, "warning")
+          report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
       } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
         const overwrite = confirm(
-          `${buffer.path}\n\nIl file è cambiato su disco da quando l'hai aperto. Salvando, quelle modifiche vengono sostituite dalle tue.\n\nProcedere?`,
+          t("editor.saveChanged", buffer.path),
         )
         if (!overwrite) {
-          report("Salvataggio annullato: il file è cambiato su disco.", "warning")
+          report(t("editor.saveCancelled.changed"), "warning")
           return
         }
       }
@@ -4272,7 +4272,7 @@ export function Workbench() {
           secretNames = assigned.map((key) => key.name)
           if (assigned.length > 0) appendLine(paneId, `Chiavi API passate: ${assigned.map((key) => key.env).join(", ")}`, "note")
         } catch (failure) {
-          appendLine(paneId, `Chiavi API non lette, la sessione parte senza: ${failure instanceof Error ? failure.message : String(failure)}`, "note")
+          appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note")
         }
       }
 
@@ -4473,9 +4473,9 @@ export function Workbench() {
           }))
           noteInTerminal(
             paneId,
-            "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
+            t("task.notSent"),
           )
-          appendLine(paneId, "Compito iniziale non inviato: sessione non pronta.", "note")
+          appendLine(paneId, t("task.notSent.short"), "note")
         }, 100)
         openingPolls.add(poll)
       }
@@ -4570,7 +4570,7 @@ export function Workbench() {
         if (decision === "wait") return
         if (decision === "abandon") {
           stopOpeningPoll(poll)
-          noteInTerminal(paneId, `ADE non ha scritto «${steps[index]}»: la connessione non si è stabilizzata. Scrivilo tu.`)
+          noteInTerminal(paneId, t("task.stepNotSent", String(steps[index])))
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
           return
         }
@@ -4665,7 +4665,7 @@ export function Workbench() {
       agent: entry.agentId,
       mode: input.preset ?? "custom",
       task,
-      lines: [{ kind: "note", text: task || "Nessun task iniziale" }],
+      lines: [{ kind: "note", text: task || t("task.none") }],
       workspaceId: input.workspaceId || currentProj?.name || "workspace",
       cwd: input.worktree?.path ?? currentProj?.root,
       tree: input.worktree
@@ -4883,14 +4883,14 @@ export function Workbench() {
             </span>
           </Show>
           <ProjectBar project={project()} />
-          <span data-slot="ade-count">{wb().panes.filter(p => !isPanelPane(p)).length} sessioni</span>
+          <span data-slot="ade-count">{t("bar.sessions", wb().panes.filter(p => !isPanelPane(p)).length)}</span>
         </div>
 
         <div data-slot="ade-bar-center">
         {/* A segmented control rather than loose chips: with four sections
             the set is the navigation, and it has to read as one object with
             one selection — not as four independent toggles. */}
-        <div data-slot="ade-views" role="tablist" aria-label="Sezioni">
+        <div data-slot="ade-views" role="tablist" aria-label={t("bar.sections")}>
           <For each={VISIBLE_VIEWS}>
             {(view) => (
               <button
@@ -4916,8 +4916,8 @@ export function Workbench() {
           data-slot="ade-icon"
           data-action="palette"
           onClick={() => setPaletteOpen(true)}
-          aria-label="Cerca o esegui"
-          title={`Cerca o esegui  ${paletteChord()}`}
+          aria-label={t("bar.palette")}
+          title={`${t("bar.palette")}  ${paletteChord()}`}
         >
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
             <circle cx="7" cy="7" r="4.2" />
@@ -4930,7 +4930,7 @@ export function Workbench() {
             type="button"
             data-slot="decisions-badge"
             onClick={() => setDecisionsOpen(true)}
-            title="Decisioni che aspettano te"
+            title={t("decisions.waiting")}
           >
             {countLabel(decisionsWaiting())}
           </button>
@@ -4966,7 +4966,7 @@ export function Workbench() {
         <div
           data-slot="ade-voice-controls"
           data-voice-mode={voiceEngine.isRunning() ? voiceEngine.activeMode() : undefined}
-          title={voiceAvailable ? undefined : "Riconoscimento vocale non supportato da questo browser"}
+          title={voiceAvailable ? undefined : t("palette.voice.unsupported")}
         >
           <VoiceOrb engine={voiceEngine} class={voiceAvailable ? undefined : "disabled"} />
           <Show when={voiceAvailable}>
@@ -4988,8 +4988,8 @@ export function Workbench() {
               aria-haspopup="menu"
               aria-expanded={newPaneOpen()}
               onClick={() => setNewPaneOpen((open) => !open)}
-              aria-label="Nuovo pannello"
-              title="Nuovo pannello"
+              aria-label={t("bar.newPane")}
+              title={t("bar.newPane")}
             >
               {/* Four frames: the grid this button adds to. */}
               <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -5001,7 +5001,7 @@ export function Workbench() {
             </button>
 
             <Show when={newPaneOpen()}>
-              <div data-slot="ade-menu" role="menu" aria-label="Nuovo pannello">
+              <div data-slot="ade-menu" role="menu" aria-label={t("bar.newPane")}>
                 <For each={NEW_PANE_ITEMS}>
                   {(item) => (
                     <button
@@ -5037,7 +5037,7 @@ export function Workbench() {
         </Show>
 
         <Show when={isTauriDesktop() && !isMacOS()}>
-          <div data-slot="ade-window-controls" aria-label="Controlli finestra">
+          <div data-slot="ade-window-controls" aria-label={t("bar.windowControls")}>
             <button
               type="button"
               data-slot="ade-win-btn"
@@ -5047,8 +5047,8 @@ export function Workbench() {
                 e.stopPropagation()
                 void adeWindowMinimize()
               }}
-              title="Riduci a icona"
-              aria-label="Riduci a icona"
+              title={t("window.minimize")}
+              aria-label={t("window.minimize")}
             >
               <svg viewBox="0 0 10 1" width="10" height="1" style={{ "pointer-events": "none" }}>
                 <rect width="10" height="1" fill="currentColor" />
@@ -5063,8 +5063,8 @@ export function Workbench() {
                 e.stopPropagation()
                 void adeWindowToggleMaximize()
               }}
-              title="Ingrandisci / Ripristina"
-              aria-label="Ingrandisci o ripristina"
+              title={t("window.maximize")}
+              aria-label={t("window.maximize")}
             >
               <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1" style={{ "pointer-events": "none" }}>
                 <rect x="0.5" y="0.5" width="9" height="9" rx="1" />
@@ -5079,8 +5079,8 @@ export function Workbench() {
                 e.stopPropagation()
                 void adeWindowClose()
               }}
-              title="Chiudi"
-              aria-label="Chiudi"
+              title={t("window.close")}
+              aria-label={t("window.close")}
             >
               <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.2" style={{ "pointer-events": "none" }}>
                 <path d="M1 1L9 9M9 1L1 9" />
@@ -5120,7 +5120,7 @@ export function Workbench() {
               padding: "0 var(--ade-space-2)",
             }}
             onClick={() => setVoiceNotice(undefined)}
-            aria-label="Chiudi avviso"
+            aria-label={t("bar.dismissNotice")}
           >
             ✕
           </button>
@@ -5213,7 +5213,7 @@ export function Workbench() {
                       ? `Notifiche, ${unreadCount(notices())} da leggere`
                       : "Notifiche"
                   }
-                  title="Notifiche"
+                  title={t("bell.title")}
                 >
                   <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
                     <path d="M8 2.2a3.8 3.8 0 0 1 3.8 3.8v2.2l1 2H3.2l1-2V6A3.8 3.8 0 0 1 8 2.2z" stroke-linejoin="round" />
@@ -5225,7 +5225,7 @@ export function Workbench() {
                 </button>
 
                 <Show when={noticesOpen()}>
-                  <div data-slot="ade-menu" data-wide="true" role="menu" aria-label="Notifiche">
+                  <div data-slot="ade-menu" data-wide="true" role="menu" aria-label={t("bell.title")}>
                     {/* The bell is where a release shows up, so it is also where
                         asking for one belongs: the answer lands in this list,
                         "nothing new" included. */}
@@ -5236,11 +5236,11 @@ export function Workbench() {
                       disabled={checkingUpdate()}
                       onClick={() => void checkForUpdates()}
                     >
-                      {checkingUpdate() ? "Controllo…" : "Controlla aggiornamenti"}
+                      {checkingUpdate() ? t("update.checking") : t("palette.update.check")}
                     </button>
                     <Show
                       when={notices().length > 0}
-                      fallback={<p data-slot="ade-menu-empty">Nessuna notifica.</p>}
+                      fallback={<p data-slot="ade-menu-empty">{t("bell.empty")}</p>}
                     >
                       <For each={notices()}>
                         {(notice) => (
@@ -5262,7 +5262,7 @@ export function Workbench() {
                               type="button"
                               data-slot="ade-notice-dismiss"
                               onClick={() => setNotices((list) => dismissNotice(list, notice.id))}
-                              aria-label="Scarta"
+                              aria-label={t("bell.dismiss")}
                             >
                               ×
                             </button>
@@ -5292,10 +5292,10 @@ export function Workbench() {
             data-mic={recordMicOn() ? "" : undefined}
             title={
               recordState().status === "recording"
-                ? `Registrazione in corso${recordMicOn() ? " con il microfono" : ", senza microfono"} — ${recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : ""}`
-                : "Chiusura del file"
+                ? t(recordMicOn() ? "record.active.mic" : "record.active.noMic", recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : "")
+                : t("record.closing")
             }
-            aria-label="Ferma la registrazione"
+            aria-label={t("palette.record.stop")}
             onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
           >
             <span data-slot="ade-rec-dot" aria-hidden="true" />
@@ -5317,7 +5317,7 @@ export function Workbench() {
                   type="button"
                   data-slot="ade-notice-close"
                   onClick={() => setNotice(undefined)}
-                  aria-label="Chiudi l'avviso"
+                  aria-label={t("bar.dismissNotice")}
                 >
                   ✕
                 </button>
@@ -5432,7 +5432,7 @@ export function Workbench() {
         onRun={runCommand}
         onClose={() => setPaletteOpen(false)}
         platform={platform}
-        emptyLabel="Nessun comando trovato."
+        emptyLabel={t("palette.empty")}
       />
 
       {/*
@@ -5452,14 +5452,14 @@ export function Workbench() {
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
           settingsNotice={voiceSettingsNotice()}
-          title="Impostazioni"
-          subtitle="Voce, routine, bot, codice, MCP, plugin e competenze"
+          title={t("settings.title")}
+          subtitle={t("settings.subtitle")}
           /*
            * Two headings, because the rail is now two lists.
            * Six voice screens followed by six of ADE's own, unbroken, gave
            * no clue where the microphone stopped and the application began.
            */
-          builtInGroup="Voce"
+          builtInGroup={t("settings.group.voice")}
           extraGroup="ADE"
           extraSections={[
             {
@@ -5470,7 +5470,7 @@ export function Workbench() {
             },
             {
               id: "set-sec-routine",
-              label: "Routine",
+              label: t("settings.routine"),
               glyph: "↻",
               render: () => <RoutineSection />,
             },
@@ -5490,7 +5490,7 @@ export function Workbench() {
                * the panes are what the `code` view is.
                */
               id: "set-sec-code",
-              label: "Codice",
+              label: t("settings.code"),
               glyph: "⌗",
               value: String(Object.values(hookStates()).filter((state) => state.installed).length),
               render: () => (
@@ -5515,7 +5515,7 @@ export function Workbench() {
             },
             {
               id: "set-sec-keys",
-              label: "Chiavi API",
+              label: t("settings.keys"),
               glyph: "⚷",
               render: () => <KeysSection host={keysHost()} agents={AGENTS} />,
             },
@@ -5527,7 +5527,7 @@ export function Workbench() {
                * the agents?" — asked in two places, one of them empty.
                */
               id: "set-sec-extensions",
-              label: "Estensioni",
+              label: t("settings.extensions"),
               glyph: "⊞",
               value: String(pluginRuntime.registry.sections().length),
               render: () => (
@@ -5539,7 +5539,7 @@ export function Workbench() {
                   plugins={() => (
                     <Show
                       when={pluginRuntime.registry.sections().length > 0}
-                      fallback={<p data-slot="section-desc">Nessun plugin caricato.</p>}
+                      fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
                     >
                       <For each={pluginRuntime.registry.sections()}>
                         {(section) => (
@@ -5553,7 +5553,7 @@ export function Workbench() {
             },
             {
               id: "set-sec-skills",
-              label: "Strumenti",
+              label: t("settings.tools"),
               glyph: "✦",
               render: () => <SkillsSection {...(project()?.root ? { projectRoot: project()!.root } : {})} />,
             },

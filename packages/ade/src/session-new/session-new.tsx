@@ -18,6 +18,7 @@ import {
   clampSessions,
   type PresetId,
 } from "./preset"
+import { t } from "../i18n"
 
 export interface SessionNewProps {
   workspace: string
@@ -26,8 +27,8 @@ export interface SessionNewProps {
   onClose?: () => void
 }
 
-const ROLE_SUFFIX: Record<string, string> = {
-  reviewer: "revisiona",
+const ROLE_SUFFIX: Readonly<Record<string, string>> = {
+  get reviewer() { return t("new.role.reviewer") },
   shell: "shell",
 }
 
@@ -65,7 +66,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
       <div data-slot="new-column">
         <header data-slot="new-bar">
           <div data-slot="new-heading">
-            <h1 data-slot="new-title">Nuova sessione</h1>
+            <h1 data-slot="new-title">{t("new.title")}</h1>
             <span data-slot="new-where">
               <span data-slot="new-workspace">{props.workspace}</span>
               <Show when={props.path}>{(path) => <span data-slot="new-path">{path()}</span>}</Show>
@@ -75,17 +76,17 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
           <div data-slot="new-actions">
             <Show when={props.onClose}>
               <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
-                Annulla
+                {t("new.cancel")}
               </button>
             </Show>
             <button type="button" data-slot="new-launch-btn" onClick={launch}>
-              {count() === 1 ? "Avvia 1 sessione" : `Avvia ${count()} sessioni`}
+              {t("new.launch", count())}
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
               </span>
             </button>
             <Show when={props.onClose}>
-              <button type="button" data-slot="new-close" onClick={() => props.onClose?.()} aria-label="Chiudi">
+              <button type="button" data-slot="new-close" onClick={() => props.onClose?.()} aria-label={t("new.close")}>
                 ✕
               </button>
             </Show>
@@ -94,7 +95,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
 
         <div data-slot="new-body">
           <fieldset data-slot="new-section">
-            <legend data-slot="new-legend">Agente</legend>
+            <legend data-slot="new-legend">{t("new.agent")}</legend>
           <div data-slot="new-agents">
             <For each={agents() ?? []}>
               {(status: AgentStatus) => {
@@ -109,7 +110,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                     data-active={isSelected() ? "true" : undefined}
                     data-availability={status.availability}
                     disabled={isAbsent()}
-                    title={status.path ?? (isAbsent() ? "non installato" : undefined)}
+                    title={status.path ?? (isAbsent() ? t("new.notInstalled") : undefined)}
                     onClick={() => setAgentId(status.agent.id)}
                   >
                     <span data-slot="new-agent-glyph" aria-hidden="true">
@@ -131,7 +132,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                           </span>
                         }
                       >
-                        <span data-slot="new-agent-missing">assente</span>
+                        <span data-slot="new-agent-missing">{t("new.missing")}</span>
                       </Show>
                     </div>
                   </button>
@@ -142,7 +143,7 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
         </fieldset>
 
         <fieldset data-slot="new-section">
-          <legend data-slot="new-legend">Quante</legend>
+          <legend data-slot="new-legend">{t("new.count")}</legend>
           <div data-slot="new-counts">
             <For each={Array.from({ length: MAX_SESSIONS - MIN_SESSIONS + 1 }, (_, i) => MIN_SESSIONS + i)}>
               {(value) => (
@@ -156,12 +157,12 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                 </button>
               )}
             </For>
-            <span data-slot="new-counts-label">sessioni parallele</span>
+            <span data-slot="new-counts-label">{t("new.count.label")}</span>
           </div>
         </fieldset>
 
         <fieldset data-slot="new-section">
-          <legend data-slot="new-legend">Partirà</legend>
+          <legend data-slot="new-legend">{t("new.preview")}</legend>
           <div data-slot="new-launch">
             <For each={entries()}>
               {(entry) => (
@@ -182,16 +183,16 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
 
           <footer data-slot="new-foot">
             <span data-slot="new-summary">
-              {count()} {count() === 1 ? "sessione" : "sessioni"} con {agentLabel(agentId())} in {props.workspace}
+              {t("new.summary", count(), agentLabel(agentId()), props.workspace)}
             </span>
             <div data-slot="new-spacer" />
             <Show when={props.onClose}>
               <button type="button" data-slot="new-cancel" onClick={() => props.onClose?.()}>
-                Annulla
+                {t("new.cancel")}
               </button>
             </Show>
             <button type="button" data-slot="new-launch-btn" onClick={launch}>
-              {count() === 1 ? "Avvia 1 sessione" : `Avvia ${count()} sessioni`}
+              {t("new.launch", count())}
               <span data-slot="new-launch-hint" aria-hidden="true">
                 ⏎
               </span>

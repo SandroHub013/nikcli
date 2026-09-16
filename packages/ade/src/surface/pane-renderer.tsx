@@ -28,6 +28,7 @@ import type { DecisionsHub } from "../decisions/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+import { t } from "../i18n"
 
 /**
  * What each tile in the grid actually draws.
@@ -370,7 +371,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           }
           deps.appendLine(
             current().id,
-            `Nessun processo in ascolto: ${text} non è stato consegnato.`,
+            t("pane.notDelivered", text),
             "note",
           )
         }}
@@ -441,7 +442,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         render={() => {
           const definition = pluginRuntime.registry.definitionFor(current().id)
           if (!definition) {
-            return <div data-slot="pane-plugin-error">Il plugin non è più caricato.</div>
+            return <div data-slot="pane-plugin-error">{t("pane.pluginGone")}</div>
           }
           const tile = pluginRuntime.registry.open().find((item) => item.id === current().id)
           return definition.render({ data: tile?.data })

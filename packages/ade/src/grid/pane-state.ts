@@ -1,4 +1,5 @@
 import type { SessionQuota } from "../session/quota"
+import { t } from "../i18n"
 
 /*
  * `provisioning` comes before `working`: the worktree checkout runs for seconds
@@ -10,22 +11,23 @@ export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done
 /** The 6 distinct canonical session states for Proposal A header. */
 export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle"
 
-export const STATE_FULL: Record<PaneState, string> = {
-  work: "Al lavoro",
-  perm: "In attesa di permesso",
-  ask: "Attende un'altra sessione",
-  err: "Bloccata",
-  limit: "Limite raggiunto",
-  idle: "Pronta",
+/* Getters, so each read is in the language of that moment (S41). */
+export const STATE_FULL: Readonly<Record<PaneState, string>> = {
+  get work() { return t("paneState.work") },
+  get perm() { return t("paneState.perm") },
+  get ask() { return t("paneState.ask") },
+  get err() { return t("paneState.err") },
+  get limit() { return t("paneState.limit") },
+  get idle() { return t("paneState.idle") },
 }
 
-export const STATE_SHORT: Record<PaneState, string> = {
-  work: "Al lavoro",
-  perm: "Permesso",
-  ask: "Attende",
-  err: "Bloccata",
-  limit: "Limite",
-  idle: "Pronta",
+export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
+  get work() { return t("paneState.work") },
+  get perm() { return t("paneState.short.perm") },
+  get ask() { return t("paneState.short.ask") },
+  get err() { return t("paneState.err") },
+  get limit() { return t("paneState.short.limit") },
+  get idle() { return t("paneState.idle") },
 }
 
 /**
