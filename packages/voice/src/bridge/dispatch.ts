@@ -520,7 +520,7 @@ export async function dispatch(
   } catch (err: any) {
     return {
       success: false,
-      spoken: `Si è verificato un errore durante l'esecuzione del comando: ${err?.message ?? "errore sconosciuto"}`,
+      spoken: `Non sono riuscito a farlo: ${err?.message ?? "non so perché"}`,
       error: String(err),
     }
   }

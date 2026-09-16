@@ -191,3 +191,11 @@ describe("voice/agent", () => {
     })
   })
 })
+
+describe("who answers", () => {
+  test("nik, on first-name terms, saying first what takes time", () => {
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("Sei nik")
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("dai del tu")
+    expect(VOICE_AGENT_INSTRUCTIONS).toContain("prima una frase brevissima")
+  })
+})

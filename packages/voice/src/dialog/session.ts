@@ -254,7 +254,7 @@ export function transition(
           pendingAction: undefined,
           timeoutAt: undefined,
         },
-        "Tempo scaduto. Operazione annullata."
+        "Non ho sentito risposta: lascio stare."
       )
     }
 
@@ -267,7 +267,7 @@ export function transition(
           pendingAction: undefined,
           timeoutAt: undefined,
         },
-        "Operazione annullata."
+        "Va bene, lascio stare."
       )
     }
 
@@ -349,7 +349,7 @@ export function transition(
               pendingAction: undefined,
               timeoutAt: undefined,
             },
-            "Operazione annullata."
+            "Va bene, lascio stare."
           )
         }
       }
@@ -357,7 +357,7 @@ export function transition(
       // Unrecognized confirmation answer
       return withSpoken(
         state,
-        "Per favore rispondi 'sì' per confermare oppure 'no' per annullare."
+        "Sì o no?"
       )
     }
 
@@ -389,7 +389,7 @@ export function transition(
     }
 
     if (event.type === "cancel") {
-      return withSpoken(state, "Nessuna operazione da annullare.")
+      return withSpoken(state, "Non c'è niente da fermare.")
     }
 
     if (event.type === "utterance") {
@@ -449,8 +449,8 @@ export function transition(
         // The intent carries its own question. The fallback stays generic on
         // purpose: a wrong-sounding sentence at a destructive prompt is worse
         // than a plain one, and the readback is not a question.
-        const question = intent.confirmPrompt ?? "Vuoi davvero eseguire questo comando?"
-        const prompt = `${question} Di' sì o no.`
+        const question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+        const prompt = `${question} Dimmi sì o no.`
 
         return withSpoken(
           {

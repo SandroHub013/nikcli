@@ -1385,7 +1385,8 @@ export function makeVoiceProgram(
           case "error": {
             // Critical requirement: recognition error must NOT terminate listening loop.
             options.onPartialTranscript?.("")
-            const rawMsg = ev.error.message ?? spokenMessage(ev.error)
+            // Written as it is said: the browser's own words mean nothing to the user.
+            const rawMsg = spokenMessage(ev.error)
             options.onError?.(rawMsg)
             if (currentState.status === "executing") {
               currentState = { ...currentState, status: "idle" }

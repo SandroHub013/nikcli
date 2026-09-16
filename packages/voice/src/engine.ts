@@ -1077,9 +1077,14 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
               : spokenMessage(err) ||
                 (err && typeof err === "object" && err instanceof Error
                   ? err.message
-                  : "Errore durante l'avvio dell'ascolto vocale.")
+                  : "Non sono riuscito ad aprire il microfono: riprova.")
           noteError(err, message)
           await stop()
+          /* Said as well as written, when someone asked for the microphone:
+             whoever is not looking would otherwise hear nothing at all. */
+          if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
+            void Promise.resolve(speaker.speak(message)).catch(() => {})
+          }
         }
       }
 

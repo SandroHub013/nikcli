@@ -220,8 +220,8 @@ describe("Effect-TS Voice Backend", () => {
     expect(spokenMessage(failure)).toBe(expected)
 
     // And an untagged failure still gets the generic rather than a crash
-    expect(spokenMessage(new Error("qualcosa"))).toContain("errore")
-    expect(spokenMessage(undefined)).toContain("errore")
+    expect(spokenMessage(new Error("qualcosa"))).toContain("non ha funzionato")
+    expect(spokenMessage(undefined)).toContain("non ha funzionato")
   })
 
   test("Layers compose cleanly: Transcriber + Speaker + VoiceHostService execute full roundtrip", async () => {
@@ -317,9 +317,8 @@ describe("Effect-TS Voice Backend", () => {
       // Verify speaker spoke the translated error
       expect(fakeSpeaker.spoken.length).toBeGreaterThan(0)
       const lastSpoken = fakeSpeaker.spoken[fakeSpeaker.spoken.length - 1]
-      expect(lastSpoken).toBe(
-        spokenMessage(new TranscriptionFailed({ cause: "dummy" }))
-      )
+      // Said in plain words: a network problem is called that.
+      expect(lastSpoken).toBe("Non ho rete in questo momento: ti sento appena torna.")
 
       // 2. Transcriber emits another spoken phrase after the error
       fakeTranscriber.emit("nuova sessione", true)
@@ -371,7 +370,7 @@ describe("Effect-TS Voice Backend", () => {
       // Destructive command was never executed
       expect(mockHost.calls).toHaveLength(0)
       // Expiration announcement spoken
-      expect(fakeSpeaker.spoken).toContain("Tempo scaduto. Operazione annullata.")
+      expect(fakeSpeaker.spoken).toContain("Non ho sentito risposta: lascio stare.")
     })
 
     await Effect.runPromise(
@@ -386,5 +385,16 @@ describe("Effect-TS Voice Backend", () => {
     const elapsedTime = Date.now() - startTime
     // Verified: zero real waiting (15s simulated in < 150ms)
     expect(elapsedTime).toBeLessThan(1000)
+  })
+})
+
+describe("problems said in plain words", () => {
+  test("the browser's and the service's own words become a sentence with the remedy", async () => {
+    const { plainProblem } = await import("./errors")
+    expect(spokenMessage(new TranscriptionFailed({ cause: "x", message: "Could not start audio source" }))).toBe(
+      "Il microfono è usato da un'altra app: chiudila e riprova.",
+    )
+    expect(plainProblem("TypeError: Failed to fetch")).toBe("Non ho rete in questo momento: ti sento appena torna.")
+    expect(plainProblem("qualcosa di nuovo")).toBeUndefined()
   })
 })

@@ -304,7 +304,7 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.status()).toBe("confirming")
     // The prompt must read as a question about this specific action, and must
     // say how to answer. Asserting the behaviour, not one exact sentence.
-    expect(speaker.lastSpoken).toContain("chiudere il pannello")
+    expect(speaker.lastSpoken).toContain("Chiudo il pannello")
     expect(speaker.lastSpoken).toContain("?")
     expect(speaker.lastSpoken!.toLowerCase()).toContain("sì o no")
 
@@ -357,7 +357,7 @@ describe("engine/createVoiceEngine", () => {
 
     // Must still NOT have executed
     expect(host.calls.filter((c) => c.method === "runCommand")).toHaveLength(0)
-    expect(speaker.lastSpoken).toBe("Operazione annullata.")
+    expect(speaker.lastSpoken).toBe("Va bene, lascio stare.")
     expect(engine.status()).toBe("idle")
   })
 
@@ -1907,7 +1907,7 @@ describe("interrupted while it talks", () => {
       await hear("apri la tavolozza")
       expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
       // Cut short, it says nothing about it.
-      expect(events.filter((e) => e.startsWith("speak:"))).not.toContain("speak:Nessuna operazione da annullare.")
+      expect(events.filter((e) => e.startsWith("speak:"))).not.toContain("speak:Non c'è niente da fermare.")
       await engine.stop()
     }
   })

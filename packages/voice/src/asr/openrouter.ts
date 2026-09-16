@@ -13,6 +13,7 @@
  * - Tracks and exposes usage (cost and seconds) per transcription request.
  */
 
+import { plainProblem } from "../effect/errors"
 import type {
   FinalTranscriptCallback,
   PartialTranscriptCallback,
@@ -437,7 +438,7 @@ export function createOpenRouterTranscriber(
         errorCb(
           new RequestTimeout({
             timeoutMs,
-            message: `Richiesta di trascrizione OpenRouter scaduta per timeout (dopo ${Math.round(timeoutMs / 1000)} secondi).`,
+            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
           }) as unknown as Error
         )
         return
@@ -449,7 +450,7 @@ export function createOpenRouterTranscriber(
       )
       errorCb(
         new Error(
-          `Errore di rete durante la connessione a OpenRouter: ${safeNetMessage}.`
+          `Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`
         )
       )
       return
@@ -460,7 +461,7 @@ export function createOpenRouterTranscriber(
         errorCb(
           new ApiKeyInvalid({
             message:
-              "Autenticazione OpenRouter fallita: chiave API non valida o revocata.",
+              "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
           }) as unknown as Error
         )
         return
@@ -470,7 +471,7 @@ export function createOpenRouterTranscriber(
         errorCb(
           new QuotaExhausted({
             message:
-              "Credito OpenRouter esaurito: ricarica il conto sul tuo account OpenRouter.",
+              "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
           }) as unknown as Error
         )
         return
@@ -479,7 +480,7 @@ export function createOpenRouterTranscriber(
       if (response.status === 429) {
         errorCb(
           new Error(
-            "OpenRouter ha rifiutato la trascrizione per troppe richieste (429), anche con il modello di riserva: riprova tra qualche secondo."
+            "Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."
           )
         )
         return
@@ -501,7 +502,7 @@ export function createOpenRouterTranscriber(
       const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
       errorCb(
         new Error(
-          `Errore servizio OpenRouter (${response.status})${detailSuffix}.`
+          `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`
         )
       )
       return
@@ -527,7 +528,7 @@ export function createOpenRouterTranscriber(
         errorCb(
           new RequestTimeout({
             timeoutMs,
-            message: `Richiesta di trascrizione OpenRouter scaduta per timeout (dopo ${Math.round(timeoutMs / 1000)} secondi).`,
+            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
           }) as unknown as Error
         )
         return
@@ -583,7 +584,7 @@ export function createOpenRouterTranscriber(
       await transcribeSegment(segment, deliver)
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
-      errorCb(new Error(`Errore imprevisto trascrizione OpenRouter: ${safeMsg}`))
+      errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`))
     } finally {
       inFlightRequests--
     }
@@ -667,7 +668,7 @@ export function createOpenRouterTranscriber(
         }
         const failure = new TranscriptionFailed({
           cause: err,
-          message: `Errore avvio microfono per OpenRouter: ${err?.message ?? "sconosciuto"}`,
+          message: plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
         })
         errorCb(failure as unknown as Error)
         throw failure
