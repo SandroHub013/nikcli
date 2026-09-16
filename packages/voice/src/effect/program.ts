@@ -1006,6 +1006,17 @@ export function makeVoiceProgram(
           return
         }
 
+        /*
+         * Typed text is addressed to the assistant, asleep or not. Closing the
+         * microphone puts the dialogue to sleep, and the text-only program
+         * starts from there, so everything typed afterwards reached a dialogue
+         * that ignores utterances while asleep: no answer, no error, nothing.
+         */
+        if (typed && currentState.status === "asleep") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
+
         // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
         if (currentSettings.mode === "transcription") {
           yield* handleTranscriptionUtterance(trimmed)

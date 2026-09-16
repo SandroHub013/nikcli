@@ -48,6 +48,8 @@ export interface ThemeState {
   preference: Accessor<Theme>
   /** Reads the preference back from storage. Safe before the DOM exists. */
   restore(): void
+  /** Sets the theme the user named, and writes the choice down. */
+  set(next: ResolvedTheme): void
   /** Flips dark to light and back, and writes the choice down. */
   toggle(): void
 }
@@ -95,6 +97,10 @@ export function createThemeState(options: ThemeStateOptions = {}): ThemeState {
     preference,
     restore() {
       setPreference(parseTheme(storage?.getItem(THEME_STORAGE_KEY) ?? null))
+    },
+    set(next: ResolvedTheme) {
+      setPreference(next)
+      storage?.setItem(THEME_STORAGE_KEY, serializeTheme(next))
     },
     toggle() {
       /*

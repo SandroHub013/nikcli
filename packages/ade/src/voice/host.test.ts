@@ -354,6 +354,31 @@ describe("createAdeVoiceHost", () => {
     })
   })
 
+  test("describeState counts sessions, not panels: video, 3D, simulator, file, browser and plugin tiles do not count", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", status: "working" }),
+        // An empty player: no path yet, so only its mode says what it is.
+        makePane({ id: "p2", status: "done", mode: "video", videoPath: "" }),
+        makePane({ id: "p3", status: "done", modelPath: "/m.glb" }),
+        makePane({ id: "p4", status: "done", appUrl: "http://localhost:5173" }),
+        makePane({ id: "p5", status: "done", filePath: "/src/index.ts" }),
+        makePane({ id: "p6", status: "done", browserUrl: "http://localhost:3000" }),
+        makePane({ id: "p7", status: "done", plugin: { pluginId: "x", name: "Tile" } }),
+        // A panel is known by its mode as well: Decisioni has no path at all,
+        // and its status is the session's «working» until it is answered.
+        makePane({ id: "p8", status: "working", mode: "decisions" }),
+        makePane({ id: "p9", status: "working", mode: "app" }),
+      ],
+    }))
+    const state = createAdeVoiceHost(deps).describeState()
+    expect(state.totalSessions).toBe(1)
+    expect(state.workingSessions).toBe(1)
+    expect(state.spokenSummary.toLowerCase()).toContain("una sessione")
+  })
+
   test("describeState produces correct Italian grammatical number for 0, 1 and 3 sessions", () => {
     // 0 sessions
     const { deps: deps0 } = createMockDeps()

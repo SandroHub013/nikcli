@@ -9,6 +9,7 @@ import { asOneLine, asSubmittedLine } from "../session/typing"
 import { findByName } from "../search/find"
 import { walkProject } from "../search/walk"
 import {
+  isPanelPane,
   setColumns as updateColumns,
   updatePane,
   type AdeView,
@@ -418,7 +419,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
     describeState(): VoiceStateSnapshot {
       const panes = this.listPanes()
-      const sessionPanes = panes.filter((p) => !p.isBrowser)
+      /*
+       * A session is an agent's terminal. The browser, a file, the video, 3D,
+       * simulator and decisions panels and a plugin's tile are all panes, and
+       * counting them said «ci sono tre sessioni» to someone with one session
+       * and two panels open. `isPanelPane` is the same question the sidebar
+       * and the restore ask, and it knows about the panel modes as well.
+       */
+      const sessionIds = new Set(
+        deps
+          .wb()
+          .panes.filter((pane) => !isPanelPane(pane))
+          .map((pane) => pane.id),
+      )
+      const sessionPanes = panes.filter((p) => sessionIds.has(p.id))
       const totalSessions = sessionPanes.length
       const workingSessions = sessionPanes.filter(
         (p) => p.status === "working" || p.status === "provisioning",

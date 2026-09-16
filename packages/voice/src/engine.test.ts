@@ -909,6 +909,23 @@ describe("engine/agent answers what the grammar does not know", () => {
     await engine.stop()
   })
 
+  test("with the microphone closed, typed text is still answered: a command and a question", async () => {
+    const { asked, engine } = setup("auto", { ok: true, text: "3 per 3 fa 9." })
+    await engine.start()
+    await engine.stop()
+    expect(engine.status()).toBe("asleep")
+
+    await engine.submitText("elenca pannelli")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(engine.lastSpoken()).toContain("pannell")
+    expect(asked).toHaveLength(0)
+
+    await engine.submitText("quanto fa 3 per 3?")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(asked.map((request) => request.text)).toEqual(["quanto fa 3 per 3?"])
+    expect(engine.lastSpoken()).toBe("3 per 3 fa 9.")
+  })
+
   test("a known command never reaches the agent", async () => {
     const { host, asked, engine } = setup("auto", { ok: true, text: "no" })
     await engine.start()

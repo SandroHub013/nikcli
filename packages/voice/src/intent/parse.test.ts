@@ -65,6 +65,12 @@ describe("parseUtterance", () => {
   })
 
   describe("slot extraction", () => {
+    test("«tema chiaro» and «tema scuro» name the theme they want", () => {
+      expect(parseUtterance("tema chiaro").slots.text).toBe("light")
+      expect(parseUtterance("modalità scura").slots.text).toBe("dark")
+      expect(parseUtterance("cambia tema").slots.text).toBeUndefined()
+    })
+
     test("«cerca file X» searches for X instead of losing it to a file path", () => {
       const search = parseUtterance("cerca file parser")
       expect(search.intent?.intent).toBe("project.search")
