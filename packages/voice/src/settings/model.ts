@@ -40,8 +40,29 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * 3: the assistant listens all the time and answers to one fixed phrase,
  * «ei nik». The name is no longer a setting, so every profile is moved to it,
  * and a profile on the wake word is told once that listening is now always on.
+ *
+ * 4: the user's decision for 0.7.0 — the assistant is started only by its
+ * shortcut, or the button that does the same. With `WAKE_WORD_ENABLED` off, a
+ * profile on the wake word is moved to push-to-talk once, and told.
  */
-export const CURRENT_SETTINGS_VERSION = 3
+export const CURRENT_SETTINGS_VERSION = 4
+
+/**
+ * Whether the wake word and always-on listening exist at all. The one switch
+ * for both, like Chat and Bot's: off, they cannot be chosen, nothing opens the
+ * microphone by itself, and a stored choice of them becomes the shortcut. The
+ * code and its tests stay; turning this on brings every way in back.
+ */
+export const WAKE_WORD_ENABLED = false
+
+let wakeWordSwitch = WAKE_WORD_ENABLED
+/** The switch as it reads now. Only tests move it, to keep the dormant path checked. */
+export function wakeWordEnabled(): boolean {
+  return wakeWordSwitch
+}
+export function setWakeWordEnabledForTests(on: boolean): void {
+  wakeWordSwitch = on
+}
 
 /**
  * The phrase that calls the assistant. Fixed, by the user's decision: one
@@ -143,11 +164,11 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   version: CURRENT_SETTINGS_VERSION,
   mode: "agent",
-  activation: "wake-word",
+  activation: WAKE_WORD_ENABLED ? "wake-word" : "push-to-talk",
   transcriptionSend: "manual",
   language: "it",
   wakeWord: WAKE_PHRASE,
-  alwaysListen: true,
+  alwaysListen: WAKE_WORD_ENABLED,
   agentChord: "mod+shift+k",
   transcriptionChord: "mod+shift+j",
   /*
@@ -195,8 +216,9 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
 /**
  * `wake-word`: a profile that answered everything now waits to be called.
  * `always-listen`: a profile on the wake word now listens without being opened.
+ * `shortcut-only`: a profile on the wake word is back on the shortcut.
  */
-export type VoiceMigration = "wake-word" | "always-listen"
+export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only"
 
 /**
  * Why a stored chord cannot be used, in Italian, or undefined when it can.
@@ -257,7 +279,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      * push-to-talk already has a key holding the microphone open, and a
      * profile already on the wake word is left alone.
      */
-    if (version < 2 && candidate.activation === "toggle") {
+    if (wakeWordEnabled() && version < 2 && candidate.activation === "toggle") {
       candidate = { ...candidate, activation: "wake-word" }
       migrations.push("wake-word")
       corrections.push(
@@ -268,7 +290,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      * Version 3: listening is always on for whoever waits for the name. Told
      * once, where the switch that turns it off is.
      */
-    if (version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
+    if (wakeWordEnabled() && version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
       migrations.push("always-listen")
     }
     version = CURRENT_SETTINGS_VERSION
@@ -283,6 +305,15 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       t("vui.fix.mode", String(candidate.mode), DEFAULT_VOICE_SETTINGS.mode),
     )
     mode = DEFAULT_VOICE_SETTINGS.mode
+  }
+
+  /*
+   * Version 4, and any profile that still names the wake word while it is
+   * switched off: back to the shortcut, quietly — nothing went wrong.
+   */
+  if (!wakeWordEnabled() && candidate.activation === "wake-word") {
+    candidate = { ...candidate, activation: "push-to-talk" }
+    if (!migrations.includes("shortcut-only")) migrations.push("shortcut-only")
   }
 
   // 3. Activation

@@ -6,7 +6,7 @@
  * the switch — the orb beside it calls the assistant instead of closing it.
  */
 
-import type { VoiceMode, VoiceSettings } from "../settings/model"
+import { wakeWordEnabled, type VoiceMode, type VoiceSettings } from "../settings/model"
 import { t } from "@nikcli-ai/ade/i18n"
 
 export type ListeningState =
@@ -21,7 +21,7 @@ export function listeningState(input: {
   paused: boolean
 }): ListeningState {
   const { settings } = input
-  if (!settings.alwaysListen || settings.activation !== "wake-word") return { kind: "hidden" }
+  if (!wakeWordEnabled() || !settings.alwaysListen || settings.activation !== "wake-word") return { kind: "hidden" }
   if (input.running && input.mode === "agent") {
     return {
       kind: "listening",

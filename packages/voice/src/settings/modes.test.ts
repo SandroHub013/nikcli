@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { setWakeWordEnabledForTests } from "./model"
 import { createVoiceEngine } from "../engine"
 import { createFakeTranscriber, type FakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"
@@ -197,6 +198,7 @@ describe("Voice Modes & Settings Interaction", () => {
   })
 
   test("agent mode with wake-word: stays deaf until wake word is heard, then parses single-shot command", async () => {
+    setWakeWordEnabledForTests(true)
     const host = new TestVoiceHost()
     const speaker = createFakeSpeaker()
     const transcriber = createFakeTranscriber()
@@ -227,6 +229,7 @@ describe("Voice Modes & Settings Interaction", () => {
     expect(newSessionCalls).toHaveLength(1)
 
     await engine.stop()
+    setWakeWordEnabledForTests(false)
   })
 
   test("push to talk: typed text runs whether or not the key is held", async () => {

@@ -30,6 +30,7 @@ import type { VoiceEngine } from "../engine"
 import type { DialogStatus } from "../dialog/session"
 import {
   DEFAULT_VOICE_SETTINGS,
+  wakeWordEnabled,
   type AgentEngine,
   type ReplyVoice,
   type ParakeetExecutionBackend,
@@ -615,7 +616,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   }
 
   const selectActivation = (activation: VoiceActivation) => {
-    if (activation === "wake-word" && props.settings.mode !== "agent") return
+    if (activation === "wake-word" && (!wakeWordEnabled() || props.settings.mode !== "agent")) return
     updateSettings({ activation })
   }
 
@@ -1426,16 +1427,17 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               </kbd>
             </div>
 
-            {/* Wake Word */}
+            <Show when={props.settingsNotice}>
+              {(text) => (
+                // Informational, not a failure: nothing went wrong, a default changed.
+                <div data-slot="reason-box" data-tone="muted" role="status">
+                  {text()}
+                </div>
+              )}
+            </Show>
+            {/* Wake Word: behind WAKE_WORD_ENABLED, off in 0.7.0 */}
+            <Show when={wakeWordEnabled()}>
             <div data-slot="activation-group">
-              <Show when={props.settingsNotice}>
-                {(text) => (
-                  // Informational, not a failure: nothing went wrong, a default changed.
-                  <div data-slot="reason-box" data-tone="muted" role="status">
-                    {text()}
-                  </div>
-                )}
-              </Show>
               <div
                 role="radio"
                 data-value="wake-word"
@@ -1527,6 +1529,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 </div>
               </Show>
             </div>
+            </Show>
           </div>
         </section>
 

@@ -293,6 +293,8 @@ import {
   VoiceOrb,
   ListeningIndicator,
   VoiceSettingsPanel,
+  wakeWordEnabled,
+  describeShortcut,
   type VoiceEngine,
   type VoiceSettings,
 } from "@nikcli-ai/voice"
@@ -2618,10 +2620,13 @@ export function Workbench() {
    */
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
+  const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    migratedToWakeWord || migratedToAlwaysListen
-      ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
-      : undefined,
+    movedToShortcut
+      ? t("voice.shortcutOnly", describeShortcut(initialVoice.settings.agentChord, platform))
+      : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+        ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
+        : undefined,
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -2817,6 +2822,7 @@ export function Workbench() {
    * engine would greet every launch with an error nobody asked for.
    */
   const listensByItself = (s: VoiceSettings) =>
+    wakeWordEnabled() &&
     voiceAvailable &&
     s.alwaysListen &&
     s.activation === "wake-word" &&

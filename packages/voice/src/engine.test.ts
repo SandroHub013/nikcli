@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { setWakeWordEnabledForTests } from "./settings/model"
 import { createVoiceEngine } from "./engine"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
@@ -927,6 +928,8 @@ describe("engine/agent answers what the grammar does not know", () => {
   })
 
   describe("at rest the assistant answers only when it is called by name", () => {
+    beforeAll(() => setWakeWordEnabledForTests(true))
+    afterAll(() => setWakeWordEnabledForTests(false))
     function calling() {
       const host = new MockVoiceHost()
       const asked: string[] = []
@@ -936,7 +939,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       }
       const transcriber = createFakeTranscriber()
       // No `activation` here: this is the default a new installation gets.
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
       const hear = async (text: string) => {
         transcriber.emit(text, true)
         await new Promise((r) => setTimeout(r, 20))
@@ -990,7 +993,7 @@ describe("engine/agent answers what the grammar does not know", () => {
           request.signal?.addEventListener("abort", () => resolve({ ok: false, text: "", ran: true }))
         })
       const transcriber = createFakeTranscriber()
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
       await engine.start()
       transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
@@ -1020,7 +1023,7 @@ describe("engine/agent answers what the grammar does not know", () => {
           })
         })
       const transcriber = createFakeTranscriber()
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
       await engine.start()
       transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
@@ -1091,6 +1094,8 @@ describe("engine/agent answers what the grammar does not know", () => {
 })
 
 describe("always-on listening", () => {
+  beforeAll(() => setWakeWordEnabledForTests(true))
+  afterAll(() => setWakeWordEnabledForTests(false))
   const settle = () => new Promise((r) => setTimeout(r, 20))
 
   function listening(settings: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
@@ -1102,7 +1107,7 @@ describe("always-on listening", () => {
       transcriber,
       speaker,
       now: () => 10_000,
-      settings: { agentEngine: "off", ...settings },
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, ...settings },
       ...extra,
     })
     const hear = async (text: string) => {
@@ -1174,7 +1179,7 @@ describe("always-on listening", () => {
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,
-      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1212,7 +1217,7 @@ describe("always-on listening", () => {
       host,
       speaker: createFakeSpeaker(),
       now: () => 10_000,
-      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1286,7 +1291,7 @@ describe("always-on listening", () => {
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => clock,
-      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       listenRequestsPerHour: 3,
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
@@ -1319,7 +1324,7 @@ describe("always-on listening", () => {
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => 10_000,
-      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1337,5 +1342,80 @@ describe("always-on listening", () => {
     await engine.toggle()
     expect(gate.active()).toBe(false)
     await engine.stop()
+  })
+})
+
+describe("0.7.0: only the shortcut starts the assistant", () => {
+  const settle = () => new Promise((r) => setTimeout(r, 30))
+
+  function shortcut() {
+    let clock = 0
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      // What a new installation, or a profile moved off the wake word, has.
+      settings: { agentEngine: "off" },
+    })
+    const tap = async () => {
+      await engine.pressToTalk("agent")
+      clock += 10
+      await engine.releaseToTalk()
+    }
+    return { host, transcriber, engine, tap }
+  }
+  const ran = (host: MockVoiceHost) => host.calls.filter((call) => call.method === "runCommand")
+
+  test("nothing opens the microphone by itself", () => {
+    const { engine } = shortcut()
+    expect(engine.settings().activation).toBe("push-to-talk")
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a tap opens it for one request, without a name, and it closes when the answer is done", async () => {
+    const { host, transcriber, engine, tap } = shortcut()
+    await tap()
+    expect(engine.isRunning()).toBe(true)
+    transcriber.emit("apri la tavolozza", true)
+    await settle()
+    expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
+    await settle()
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a second tap closes it before anything is said", async () => {
+    const { engine, tap } = shortcut()
+    await tap()
+    await tap()
+    await settle()
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("the button at the top does the same", async () => {
+    const { host, transcriber, engine } = shortcut()
+    await engine.toggle()
+    expect(engine.isRunning()).toBe(true)
+    transcriber.emit("apri la tavolozza", true)
+    await settle()
+    await settle()
+    expect(ran(host)).toHaveLength(1)
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a question keeps it open for the answer, and the answer closes it", async () => {
+    const { host, transcriber, engine, tap } = shortcut()
+    await tap()
+    transcriber.emit("chiudi pannello 1", true)
+    await settle()
+    expect(engine.status()).toBe("confirming")
+    expect(engine.isRunning()).toBe(true)
+    transcriber.emit("sì", true)
+    await settle()
+    await settle()
+    expect(ran(host).length).toBeGreaterThan(0)
+    expect(engine.isRunning()).toBe(false)
   })
 })

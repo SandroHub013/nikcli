@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import {
   VOICE_API_KEY_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
@@ -8,7 +8,7 @@ import {
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./storage"
-import { DEFAULT_VOICE_SETTINGS } from "./model"
+import { DEFAULT_VOICE_SETTINGS, setWakeWordEnabledForTests } from "./model"
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>()
@@ -213,6 +213,9 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
 })
 
 describe("the migration to the wake word happens once", () => {
+  // The wake word is switched off in 0.7.0; its behaviour is still checked with the switch on.
+  beforeAll(() => setWakeWordEnabledForTests(true))
+  afterAll(() => setWakeWordEnabledForTests(false))
   test("a profile is written back with the new version, so the notice is not shown at every start", () => {
     const store = new MemoryStorage()
     store.setItem("voice.settings", JSON.stringify({ version: 1, activation: "toggle", mode: "agent" }))
@@ -232,6 +235,18 @@ describe("the migration to the wake word happens once", () => {
 
     expect(loadVoiceSettings(store).settings.wakeWord).toBe("ei nik")
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("ei nik")
+    expect(loadVoiceSettings(store).migrations).toEqual([])
+  })
+})
+
+describe("0.7.0: a profile saved on the wake word", () => {
+  test("is written back on the shortcut, and told only the first time", () => {
+    const store = new MemoryStorage()
+    store.setItem("voice.settings", JSON.stringify({ version: 3, activation: "wake-word", alwaysListen: true, mode: "agent" }))
+    const first = loadVoiceSettings(store)
+    expect(first.settings.activation).toBe("push-to-talk")
+    expect(first.migrations).toEqual(["shortcut-only"])
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("push-to-talk")
     expect(loadVoiceSettings(store).migrations).toEqual([])
   })
 })

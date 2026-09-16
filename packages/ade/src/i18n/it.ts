@@ -646,6 +646,8 @@ export const it = {
   "note.messageFrom": (from: string, text: string) => `Messaggio ricevuto da ${from}: ${text}`,
   "note.askTo": (to: string, text: string) => `Richiesta inviata a ${to}: ${text}`,
   "note.messageTo": (to: string, text: string) => `Messaggio inviato a ${to}: ${text}`,
+  "voice.shortcutOnly": (shortcut: string) =>
+    `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: niente più ascolto sempre attivo né «ei nik».`,
   "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) => `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "editor.saveFailed": (problem: string) => `Salvataggio fallito: ${problem}`,
   "keys.passed": (names: string) => `Chiavi API passate: ${names}`,

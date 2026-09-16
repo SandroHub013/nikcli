@@ -1,12 +1,17 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import {
   CURRENT_SETTINGS_VERSION,
   DEFAULT_VOICE_SETTINGS,
   WAKE_PHRASE,
+  WAKE_WORD_ENABLED,
   normalizeSettings,
+  setWakeWordEnabledForTests,
 } from "./model"
 
 describe("settings/model - normalizeSettings", () => {
+  // The wake word is switched off in 0.7.0; its behaviour is still checked with the switch on.
+  beforeAll(() => setWakeWordEnabledForTests(true))
+  afterAll(() => setWakeWordEnabledForTests(false))
   test("handles null, undefined, primitive, and empty inputs without throwing", () => {
     const inputs = [null, undefined, 42, "string", true, [], {}]
 
@@ -16,7 +21,7 @@ describe("settings/model - normalizeSettings", () => {
 
       expect(res.version).toBe(CURRENT_SETTINGS_VERSION)
       expect(res.mode).toBe("agent")
-      expect(res.activation).toBe("wake-word")
+      expect(res.activation).toBe("push-to-talk")
       expect(res.transcriptionSend).toBe("manual")
       expect(res.language).toBe("it")
       expect(res.wakeWord).toBe("ei nik")
@@ -48,7 +53,7 @@ describe("settings/model - normalizeSettings", () => {
     const res = normalizeSettings(corrupted)
 
     expect(res.mode).toBe("agent")
-    expect(res.activation).toBe("wake-word")
+    expect(res.activation).toBe("push-to-talk")
     expect(res.transcriptionSend).toBe("manual")
     expect(res.backend).toBe("openrouter")
     expect(res.parakeetBackend).toBe("auto")
@@ -119,8 +124,8 @@ describe("settings/model - normalizeSettings", () => {
   })
 
   test("always-on listening is the default, and a profile on the wake word is told once", () => {
-    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(true)
-    const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const })
+    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(WAKE_WORD_ENABLED)
+    const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const, alwaysListen: true })
     expect(moved.alwaysListen).toBe(true)
     expect(moved.migrations).toEqual(["always-listen"])
     // Written back at version 3, it is not told again, and a choice of off is kept.
@@ -130,7 +135,7 @@ describe("settings/model - normalizeSettings", () => {
     expect(normalizeSettings({ version: 2, activation: "push-to-talk" }).migrations).toEqual([])
     expect(normalizeSettings({ version: 2, mode: "transcription", activation: "wake-word" }).migrations).toEqual([])
     // Not a boolean: the default.
-    expect(normalizeSettings({ version: 3, alwaysListen: "si" }).alwaysListen).toBe(true)
+    expect(normalizeSettings({ version: 3, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
   })
 
   test("preserves valid configuration with zero corrections", () => {
@@ -270,5 +275,33 @@ describe("repairs and warnings follow the language", () => {
     } finally {
       resetLocaleForTests("it")
     }
+  })
+})
+
+describe("0.7.0: the assistant starts only from its shortcut", () => {
+  test("switched off by default, and a new profile uses the shortcut and does not listen by itself", () => {
+    expect(WAKE_WORD_ENABLED).toBe(false)
+    const fresh = normalizeSettings({})
+    expect(fresh.activation).toBe("push-to-talk")
+    expect(fresh.alwaysListen).toBe(false)
+  })
+
+  test("a saved wake word, always-on or not, goes back to the shortcut once, told and without an error", () => {
+    const saved = { version: 3, mode: "agent", activation: "wake-word", alwaysListen: true, wakeWord: "ei nik" }
+    const moved = normalizeSettings(saved)
+    expect(moved.activation).toBe("push-to-talk")
+    expect(moved.migrations).toEqual(["shortcut-only"])
+    expect(moved.corrections.some((line) => /non riconosciuta|not recognised|not recognized/i.test(line))).toBe(false)
+    // Written back, it is not told again.
+    expect(normalizeSettings(moved.settings).migrations).toEqual([])
+    // Other choices are left as they were.
+    expect(normalizeSettings({ version: 3, activation: "toggle" }).activation).toBe("toggle")
+    expect(normalizeSettings({ version: 3, activation: "push-to-talk" }).migrations).toEqual([])
+  })
+
+  test("an old toggle profile is not moved to the wake word any more", () => {
+    const old = normalizeSettings({ version: 1, activation: "toggle" })
+    expect(old.activation).toBe("toggle")
+    expect(old.migrations).toEqual([])
   })
 })

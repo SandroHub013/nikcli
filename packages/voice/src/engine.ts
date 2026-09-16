@@ -471,6 +471,24 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * sentence.
    */
   let stopping: Promise<void> | null = null
+
+  /*
+   * The assistant opened by a tap of its shortcut, or by the button, closes
+   * when its turn is over, as a held one does on release. Looked at once the
+   * outcome has settled: a line said while it still thinks, or a question it
+   * is waiting on, is not the end of the turn.
+   */
+  function closeAfterTurn(): void {
+    const generation = sessionGeneration
+    setTimeout(() => {
+      if (generation !== sessionGeneration || !isRunning() || chordHeld) return
+      if (currentSettings().activation !== "push-to-talk" || activeMode() !== "agent") return
+      const status = dialogState().status
+      if (status === "executing" || status === "confirming" || status === "dictating") return
+      clearPttTimers()
+      void stop()
+    }, 0)
+  }
   /* Dictation took the microphone from always-on listening, which it gives back on close. */
   let dictationInterruptedListening = false
 
@@ -735,6 +753,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         if (dialogState().status !== "confirming") {
           void stop()
         }
+      } else if (currentSettings().activation === "push-to-talk" && !chordHeld && activeMode() === "agent") {
+        closeAfterTurn()
       }
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),

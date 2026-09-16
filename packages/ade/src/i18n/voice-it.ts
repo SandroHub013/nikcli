@@ -137,7 +137,7 @@ export const voiceIt = {
   "vui.activation.title": "Come si attiva",
   "vui.activation.desc": "Scegli come abilitare l'ascolto del microfono durante il lavoro",
   "vui.activation.push": "Premi e parla (push to talk)",
-  "vui.activation.push.desc": "Si ascolta finché tieni premuto",
+  "vui.activation.push.desc": "Tieni premuta la scorciatoia mentre parli, oppure toccala: si chiude a fine risposta o con un altro tocco",
   "vui.activation.toggle": "Acceso e spento (click continuo)",
   "vui.activation.toggle.desc": "Un comando accende, uno spegne",
   "vui.activation.wake": "Risponde solo se lo chiami per nome",

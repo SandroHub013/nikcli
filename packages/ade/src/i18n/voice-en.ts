@@ -136,7 +136,7 @@ export const voiceEn: VoiceMessages = {
   "vui.activation.title": "How it turns on",
   "vui.activation.desc": "Choose how the microphone listens while you work",
   "vui.activation.push": "Push to talk",
-  "vui.activation.push.desc": "Listens while you hold the key",
+  "vui.activation.push.desc": "Hold the shortcut while you speak, or tap it: it closes when the answer is done or with another tap",
   "vui.activation.toggle": "On and off (toggle)",
   "vui.activation.toggle.desc": "One command turns it on, one turns it off",
   "vui.activation.wake": "Answers only when called by name",
