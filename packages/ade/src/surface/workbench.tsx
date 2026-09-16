@@ -142,6 +142,9 @@ import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
+import { createRecorder } from "../record/recorder"
+import { RECORD_VERBS, runRecordRequest } from "../record/record-panel"
+import type { RecordState } from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
 import { importPluginModule } from "../plugin/loader"
@@ -576,6 +579,115 @@ export function Workbench() {
         (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
       )
     },
+  })
+
+  /*
+   * Recording a video of ADE in use (S36).
+   *
+   * The folder is remembered rather than asked every time: a promo take is
+   * started in the middle of doing something, and a dialog in the first second
+   * is in the video. `record.folder` changes it.
+   */
+  const [recordState, setRecordState] = createSignal<RecordState>({ status: "idle" })
+  const [recordDir, setRecordDir] = createSignal<string | undefined>(
+    (() => {
+      try {
+        return localStorage.getItem("ade.record.dir") ?? undefined
+      } catch {
+        return undefined
+      }
+    })(),
+  )
+  const recorder = createRecorder({
+    start: async (target, dir, name) => {
+      const host = await getHost()
+      if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
+      return host.recordStart(target, dir, name)
+    },
+    stop: async () => {
+      const host = await getHost()
+      if (!host?.recordStop) throw new Error("La registrazione funziona solo nell'app desktop.")
+      return host.recordStop()
+    },
+    writeText: async (path, text) => {
+      const host = await getHost()
+      await host?.writeTextFile?.(path, text)
+    },
+    dir: () => recordDir(),
+    now: () => Date.now(),
+    onState: setRecordState,
+  })
+
+  /** Asks for the folder once, and keeps it for the next takes. */
+  const pickRecordDir = async () => {
+    const host = await getHost()
+    const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
+    if (!chosen) return undefined
+    setRecordDir(chosen)
+    try {
+      localStorage.setItem("ade.record.dir", chosen)
+    } catch {
+      // A take still records; only the choice is forgotten next launch.
+    }
+    return chosen
+  }
+
+  const startRecording = async (target: Parameters<typeof recorder.start>[0]) => {
+    if (!recordDir() && !(await pickRecordDir())) return "Nessuna cartella scelta: registrazione annullata."
+    return recorder.start(target)
+  }
+
+  /*
+   * What the pointer did, at about a frame's pace, and every click.
+   *
+   * On the window rather than on each pane: a take follows the user wherever
+   * they go, and a listener per pane would miss the space between them.
+   */
+  const noteMove = (event: PointerEvent) =>
+    recorder.note({ kind: "pointer", at: Date.now(), x: Math.round(event.clientX), y: Math.round(event.clientY) })
+  const noteClick = (event: PointerEvent) =>
+    recorder.note({
+      kind: "click",
+      at: Date.now(),
+      x: Math.round(event.clientX),
+      y: Math.round(event.clientY),
+      button: event.button === 2 ? "right" : event.button === 1 ? "middle" : "left",
+    })
+  window.addEventListener("pointermove", noteMove, { passive: true })
+  window.addEventListener("pointerdown", noteClick, { passive: true })
+  onCleanup(() => {
+    window.removeEventListener("pointermove", noteMove)
+    window.removeEventListener("pointerdown", noteClick)
+  })
+
+  panels.register("record", {
+    verbs: RECORD_VERBS,
+    run: (request) =>
+      runRecordRequest(request, {
+        start: (target) => startRecording(target),
+        stop: () => recorder.stop(),
+        paneRect: (name) => {
+          const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
+          if (!pane) return undefined
+          const node = document.querySelector(`[data-pane-id="${pane.id}"]`)
+          const rect = node?.getBoundingClientRect()
+          if (!rect || rect.width < 2 || rect.height < 2) return undefined
+          const scale = window.devicePixelRatio || 1
+          return {
+            x: Math.round(rect.left * scale),
+            y: Math.round(rect.top * scale),
+            width: Math.round(rect.width * scale),
+            height: Math.round(rect.height * scale),
+          }
+        },
+        state: () => {
+          const now = recordState()
+          return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
+        },
+      }).catch((failure: unknown) => ({
+        ok: false as const,
+        reason: failure instanceof Error ? failure.message : String(failure),
+      })),
   })
 
   /** Announces a newly opened panel to every session currently running. */
@@ -3025,6 +3137,12 @@ export function Workbench() {
       }
     } else if (id === "voice.toggle") {
       void voiceEngine.toggle()
+    } else if (id === "record.toggle") {
+      const problem =
+        recordState().status === "recording" ? await recorder.stop() : await startRecording({ kind: "window" })
+      if (problem) report(problem)
+    } else if (id === "record.folder") {
+      await pickRecordDir()
     } else if (id === "voice.settings") {
       setVoiceSettingsOpen(true)
     } else if (id.startsWith("project.recent.")) {
@@ -3058,6 +3176,7 @@ export function Workbench() {
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
+      recording: recordState().status === "recording",
       // Read through the registry signal, so a plugin loading or being torn
       // down changes the palette without anything having to refresh it.
       pluginCommands: pluginRuntime.registry.commands().map((command) => ({
@@ -4752,6 +4871,27 @@ export function Workbench() {
             </>
           }
         />
+
+        {/* The user must never be unsure whether ADE is filming: the badge
+            stays on top of everything, says where the file is going, and
+            stops the take when clicked. */}
+        <Show when={recordState().status !== "idle"}>
+          <button
+            type="button"
+            data-slot="ade-rec"
+            data-stopping={recordState().status === "stopping" ? "" : undefined}
+            title={
+              recordState().status === "recording"
+                ? `Registrazione in corso — ${recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : ""}`
+                : "Chiusura del file"
+            }
+            aria-label="Ferma la registrazione"
+            onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
+          >
+            <span data-slot="ade-rec-dot" aria-hidden="true" />
+            {recordState().status === "recording" ? "REC" : "…"}
+          </button>
+        </Show>
 
         <main data-slot="ade-main">
           {/* Above the section rather than over it: these messages are about

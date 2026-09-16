@@ -200,6 +200,20 @@ describe("surface commands", () => {
     expect(recent?.description).toBe("/path")
   })
 
+  test("offers recording, says stop while it films, and only in the desktop app", () => {
+    const idle = buildCommands(context({ workbench: createWorkbench() }))
+    expect(idle.find((c) => c.id === "record.toggle")?.title).toBe("Registra la finestra")
+    expect(idle.find((c) => c.id === "record.folder")?.enabled).toBe(true)
+
+    const filming = buildCommands(context({ workbench: createWorkbench(), recording: true }))
+    expect(filming.find((c) => c.id === "record.toggle")?.title).toBe("Ferma la registrazione")
+
+    const browser = buildCommands(context({ workbench: createWorkbench(), hasHost: false }))
+    const offered = browser.find((c) => c.id === "record.toggle")
+    expect(offered?.enabled).toBe(false)
+    expect(offered?.disabledReason).toContain("desktop")
+  })
+
   test("offers voice.toggle, toggling title and disabling when voice unavailable", () => {
     const defaultCmds = buildCommands(context({ workbench: createWorkbench(), voiceAvailable: true }))
     const voiceCmd = defaultCmds.find((c) => c.id === "voice.toggle")

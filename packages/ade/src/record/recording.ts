@@ -13,8 +13,22 @@
  * pixels.
  */
 
-/** What the capture covers. A pane is a rectangle inside the same window. */
-export type RecordTarget = { readonly kind: "window" } | { readonly kind: "pane"; readonly paneId: string }
+/**
+ * What the capture covers. A pane is a rectangle inside the same window.
+ *
+ * The rectangle travels with the target because only ADE knows where a pane
+ * is: the capture is given a window and a crop, never a second capture.
+ */
+export type RecordTarget =
+  | { readonly kind: "window" }
+  | {
+      readonly kind: "pane"
+      readonly paneId: string
+      readonly x: number
+      readonly y: number
+      readonly width: number
+      readonly height: number
+    }
 
 export type RecordEvent =
   /** Where the pointer was, in window coordinates. */

@@ -37,6 +37,8 @@ export interface CommandContext {
   voiceAvailable?: boolean
   voiceActive?: boolean
   voiceChord?: string
+  /** True while a take is being recorded (S36), so the palette offers to stop it. */
+  recording?: boolean
   /** Commands contributed by loaded plugins. Empty when none are loaded. */
   pluginCommands?: PluginCommandEntry[]
 }
@@ -169,6 +171,22 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: ctx.voiceAvailable !== false,
       disabledReason: ctx.voiceAvailable !== false ? undefined : "Riconoscimento vocale non supportato da questo browser",
       shortcut: shortcutFor("voice.toggle", platform, ctx.voiceChord),
+    },
+    {
+      id: "record.toggle",
+      title: ctx.recording ? "Ferma la registrazione" : "Registra la finestra",
+      group: "Vista",
+      keywords: ["video", "registra", "schermo", "cattura", "demo", "pubblicità"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
+    },
+    {
+      id: "record.folder",
+      title: "Cartella dei video registrati",
+      group: "Vista",
+      keywords: ["video", "registra", "cartella", "salva"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
     },
     {
       id: "voice.settings",

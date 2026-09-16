@@ -870,3 +870,45 @@ body,
   font-family: var(--ade-sans);
 }
 
+
+/* Registrazione in corso (S36): sopra ogni cosa, perché nessuno deve filmare
+   senza saperlo. Il punto pulsa solo mentre si registra davvero. */
+[data-slot="ade-rec"] {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklab, red 45%, var(--ade-border));
+  border-radius: 999px;
+  background: color-mix(in oklab, red 12%, var(--ade-surface));
+  color: var(--ade-text);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+[data-slot="ade-rec-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: red;
+  animation: ade-rec-pulse 1.4s ease-in-out infinite;
+}
+
+[data-slot="ade-rec"][data-stopping] [data-slot="ade-rec-dot"] {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes ade-rec-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="ade-rec-dot"] { animation: none; }
+}
