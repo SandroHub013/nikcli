@@ -1,5 +1,11 @@
 import { describe, test, expect } from "bun:test"
 import {
+  ADE_VIEWS,
+  CHAT_AND_BOT_ENABLED,
+  VISIBLE_VIEWS,
+  isViewVisible,
+  nextView,
+  reachableView,
   createWorkbench,
   addPane,
   closePane,
@@ -116,5 +122,26 @@ describe("panes of several projects, and spawned worktrees, survive a restart", 
     expect(back.panes[1]?.worktree).toBe("C:/p/api-ade/revisore")
     expect(back.panes[1]?.spawnArgs).toEqual(["--model", "gemini-3.1-pro-high"])
     expect(back.panes[1]?.tree?.fidelity).toBe("full")
+  })
+})
+describe("the Chat and Bot switch (S40)", () => {
+  test("the visible sections follow the switch, and agent and code are always there", () => {
+    expect(VISIBLE_VIEWS).toContain("agent")
+    expect(VISIBLE_VIEWS).toContain("code")
+    expect(VISIBLE_VIEWS.includes("chat")).toBe(CHAT_AND_BOT_ENABLED)
+    expect(VISIBLE_VIEWS.includes("bot")).toBe(CHAT_AND_BOT_ENABLED)
+  })
+
+  test("a hidden section is never where the cycle or an outside request lands", () => {
+    let view = nextView("code")
+    for (let i = 0; i < ADE_VIEWS.length * 2; i++) {
+      expect(isViewVisible(view)).toBe(true)
+      view = nextView(view)
+    }
+    for (const asked of ADE_VIEWS) expect(isViewVisible(reachableView(asked))).toBe(true)
+    if (!CHAT_AND_BOT_ENABLED) {
+      expect(reachableView("chat")).toBe("code")
+      expect(reachableView("bot")).toBe("code")
+    }
   })
 })

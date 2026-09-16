@@ -47,10 +47,43 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
   bot: "Bot",
 }
 
-/** Cycles forward through the sections, wrapping at the end. */
+/**
+ * Whether Chat and Bot can be reached. The one switch for both (S40).
+ *
+ * They are hidden for now, not removed: the code, the tests and the stored
+ * conversations all stay, and turning this back on brings back every way in —
+ * the section bar, the palette, the section shortcut, the voice command and a
+ * workbench restored into one of them. Nothing else in the app needs to change,
+ * because everything that lists or opens a section asks `VISIBLE_VIEWS` or
+ * `reachableView` rather than `ADE_VIEWS`.
+ */
+export const CHAT_AND_BOT_ENABLED = false
+
+/** The sections a person can get to: what the bar shows and the palette offers. */
+export const VISIBLE_VIEWS: readonly AdeView[] = ADE_VIEWS.filter(
+  (view) => CHAT_AND_BOT_ENABLED || (view !== "chat" && view !== "bot"),
+)
+
+export function isViewVisible(view: AdeView): boolean {
+  return VISIBLE_VIEWS.includes(view)
+}
+
+/**
+ * The section to actually show for `view`.
+ *
+ * A hidden one lands on `code`, the grid, which is where every other "no such
+ * section" already goes. Applied where a view is set from outside the bar —
+ * a restored workbench, the voice command — so a stored `"chat"` does not
+ * open a section with no way back to it in the bar.
+ */
+export function reachableView(view: AdeView): AdeView {
+  return isViewVisible(view) ? view : "code"
+}
+
+/** Cycles forward through the sections a person can reach, wrapping at the end. */
 export function nextView(current: AdeView): AdeView {
-  const index = ADE_VIEWS.indexOf(current)
-  return ADE_VIEWS[(index + 1) % ADE_VIEWS.length]
+  const index = VISIBLE_VIEWS.indexOf(current)
+  return VISIBLE_VIEWS[(index + 1) % VISIBLE_VIEWS.length] ?? "code"
 }
 
 /**
@@ -67,7 +100,7 @@ export function nextView(current: AdeView): AdeView {
  */
 export function restoreView(raw: unknown): AdeView {
   if (raw === "plancia" || raw === "alberi") return "code"
-  return ADE_VIEWS.find((view) => view === raw) ?? "code"
+  return reachableView(ADE_VIEWS.find((view) => view === raw) ?? "code")
 }
 
 export interface Pane {

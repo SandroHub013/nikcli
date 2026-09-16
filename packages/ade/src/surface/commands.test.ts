@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
-import { createWorkbench, type Pane, type Workbench } from "./state"
+import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, type Pane, type Workbench } from "./state"
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
   return {
@@ -32,14 +32,26 @@ describe("section commands", () => {
     const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
     expect(ids).toContain("view.agent")
     expect(ids).toContain("view.code")
-    expect(ids).toContain("view.chat")
+    for (const view of VISIBLE_VIEWS) expect(ids).toContain(`view.${view}`)
+  })
+
+  /*
+   * S40: Chat and Bot are hidden behind one switch. Hidden means no way in
+   * from here either — a palette entry for a section the bar does not show is
+   * a door into a room with no door out.
+   */
+  test("a hidden section has no palette entry, and the switch brings both back", () => {
+    const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
+    for (const view of ["chat", "bot"] as const) {
+      expect(ids.includes(`view.${view}`)).toBe(CHAT_AND_BOT_ENABLED)
+    }
   })
 
   test("the section you are already in is offered as disabled, not hidden", () => {
     // A list that changes length as you move around it is a list you cannot
     // build muscle memory for.
-    const cmds = buildCommands(context({ workbench: { ...createWorkbench(), view: "chat" } }))
-    const here = cmds.find((c) => c.id === "view.chat")
+    const cmds = buildCommands(context({ workbench: { ...createWorkbench(), view: "agent" } }))
+    const here = cmds.find((c) => c.id === "view.agent")
     expect(here?.enabled).toBe(false)
     expect(here?.disabledReason).toBe("Sei già qui")
     expect(cmds.find((c) => c.id === "view.code")?.enabled).toBe(true)
@@ -50,9 +62,14 @@ describe("section commands", () => {
       buildCommands(context({ workbench: { ...createWorkbench(), view } })).find((c) => c.id === "view.toggle")?.title
 
     expect(at("agent")).toBe("Sezione successiva (Code)")
-    expect(at("chat")).toBe("Sezione successiva (Bot)")
-    // The wrap is the point of the test, and `bot` is now the last section.
-    expect(at("bot")).toBe("Sezione successiva (Agent)")
+    if (CHAT_AND_BOT_ENABLED) {
+      expect(at("chat")).toBe("Sezione successiva (Bot)")
+      // The wrap is the point of the test, and `bot` is the last section.
+      expect(at("bot")).toBe("Sezione successiva (Agent)")
+    } else {
+      // With Chat and Bot hidden the cycle is two long, and never stops on either.
+      expect(at("code")).toBe("Sezione successiva (Agent)")
+    }
   })
 })
 
