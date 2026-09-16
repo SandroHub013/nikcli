@@ -156,7 +156,7 @@ export {
 } from "./plan/schema"
 
 // Voice orchestration engine
-export { createVoiceEngine, type VoiceEngine, type VoiceEngineOptions } from "./engine"
+export { createVoiceEngine, holdsToTalk, type VoiceEngine, type VoiceEngineOptions } from "./engine"
 
 // Solid UI components
 export { VoiceButton, type VoiceButtonProps } from "./ui/voice-button"
@@ -318,6 +318,9 @@ export {
   WAKE_WORD_ENABLED,
   wakeWordEnabled,
   setWakeWordEnabledForTests,
+  SHORTCUT_ACTIVATION_ENABLED,
+  shortcutActivationEnabled,
+  setShortcutActivationEnabledForTests,
   type AgentEngine,
   normalizeSettings,
   type NormalizedVoiceSettings,

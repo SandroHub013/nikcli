@@ -227,6 +227,17 @@ const HOUR_MS = 60 * 60_000
  * said a word in it.
  */
 export const PTT_TAP_MS = 350
+
+/**
+ * Whether this shortcut is held while speaking, rather than pressed once.
+ *
+ * The assistant's shortcut follows the activation. Dictation is always held:
+ * with the name as the way in, a pressed-once dictation stayed open with no
+ * filter after the key came up, and sent whatever the room said to the pane.
+ */
+export function holdsToTalk(settings: Pick<VoiceSettings, "activation">, mode: VoiceMode): boolean {
+  return settings.activation === "push-to-talk" || mode === "transcription"
+}
 const DRAIN_POLL_MS = 25
 
 export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
@@ -343,6 +354,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let latched = false
   /* The press that ended a latch; its release must not start anything. */
   let pressEndsLatch = false
+  /* Dictation held on its key while the assistant is called by name. */
+  let heldDictation = false
+  /* Whether the key being held is the thing that ends this session. */
+  const pressHolds = (): boolean => currentSettings().activation === "push-to-talk" || heldDictation
 
   let pttGraceTimer: ReturnType<typeof setTimeout> | undefined
   let pttWatchdogTimer: ReturnType<typeof setTimeout> | undefined
@@ -480,11 +495,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * outcome has settled: a line said while it still thinks, or a question it
    * is waiting on, is not the end of the turn.
    */
+  /*
+   * Which sessions last one turn: the shortcut's, and a microphone opened by
+   * hand when the assistant is not meant to listen by itself. Always-on
+   * listening stays open and goes back to waiting for the name.
+   */
+  function closesAfterTurn(): boolean {
+    const s = currentSettings()
+    return s.activation === "push-to-talk" || (s.activation === "wake-word" && !s.alwaysListen)
+  }
+
   function closeAfterTurn(): void {
     const generation = sessionGeneration
     setTimeout(() => {
       if (generation !== sessionGeneration || !isRunning() || chordHeld) return
-      if (currentSettings().activation !== "push-to-talk" || activeMode() !== "agent") return
+      if (!closesAfterTurn() || activeMode() !== "agent") return
       const status = dialogState().status
       if (status === "executing" || status === "confirming" || status === "dictating") return
       clearPttTimers()
@@ -524,6 +549,20 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     return stopping
   }
 
+  /*
+   * The end of a held press. A dictation held over always-on listening gives
+   * the microphone back to it, waiting for the name again.
+   */
+  const endPress = async (): Promise<void> => {
+    const back = heldDictation && dictationInterruptedListening
+    await stop()
+    const s = currentSettings()
+    if (back && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
+      await startListening("agent", { waitForName: true })
+    }
+  }
+  let startListening: (mode: VoiceMode, o: { waitForName: boolean }) => Promise<void> = async () => {}
+
   const stopNow = async (): Promise<void> => {
     /* Before anything else: a start still in flight must find its number
        stale and free what it has built rather than install it. */
@@ -531,6 +570,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     clearPttTimers()
     setListenPaused(false)
     dictationInterruptedListening = false
+    heldDictation = false
 
     setIsRunning(false)
 
@@ -751,15 +791,15 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         })
       }
       // The assistant closes at the end of the turn, after its voice: see `onTurnEnd`.
-      if (activeMode() !== "agent" && currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+      if (activeMode() !== "agent" && pressHolds() && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
         if (dialogState().status !== "confirming") {
-          void stop()
+          void endPress()
         }
       }
     },
     onTurnEnd: () => {
-      if (currentSettings().activation === "push-to-talk" && activeMode() === "agent") closeAfterTurn()
+      if (closesAfterTurn() && activeMode() === "agent") closeAfterTurn()
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
     onHeld: (text) => setHeld(text),
@@ -779,9 +819,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text).catch(() => {})
       }
-      if (currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+      if (pressHolds() && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
-        void stop()
+        void endPress()
       }
     },
     onPlan: (result) => {
@@ -808,9 +848,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
               : undefined)
       noteError(err, message)
       if (message) record({ kind: "error", text: message, at: now() })
-      if (activeMode() !== "agent" && currentSettings().activation === "push-to-talk" && !chordHeld && !openedWithoutChord) {
+      if (activeMode() !== "agent" && pressHolds() && !chordHeld && !openedWithoutChord) {
         clearPttTimers()
-        void stop()
+        void endPress()
       }
     },
     onParseResult: (res) => setLastParseResult(res),
@@ -876,7 +916,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     return textHandle
   }
 
-  return {
+  const engine: VoiceEngine = {
     status: () => dialogState().status,
     partialTranscript,
     lastSpoken,
@@ -965,6 +1005,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             if (programHandle) {
               await Effect.runPromise(programHandle.wake)
             }
+          } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
+            /* Opened by hand is called: the first sentence needs no name,
+               the first time as much as after a stop. */
+            await Effect.runPromise(programHandle.wake)
           } else {
             setDialogState((prev) => ({ ...prev, status: "idle" }))
           }
@@ -1087,6 +1131,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       clearPttTimers()
       chordHeld = true
       pressedAt = now()
+      if (currentSettings().activation !== "push-to-talk" && mode === "transcription") {
+        /* Taken from always-on listening, it is given back on release. */
+        if (isRunning() && activeMode() === "agent" && currentSettings().alwaysListen) {
+          dictationInterruptedListening = true
+        }
+        heldDictation = true
+      }
       /* Holding the other chord hands the microphone over mid-session, the
          same way pressing the other button does. */
       if (mode !== undefined) setSessionMode(mode)
@@ -1119,7 +1170,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         await Effect.runPromise(programHandle.releaseToTalk)
       }
 
-      if (currentSettings().activation === "push-to-talk" && !openedWithoutChord) {
+      if (pressHolds() && !openedWithoutChord) {
         clearPttTimers()
 
         /*
@@ -1135,6 +1186,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          */
         const held = pressedAt === undefined ? Number.POSITIVE_INFINITY : now() - pressedAt
         pressedAt = undefined
+        if (held < PTT_TAP_MS && heldDictation) {
+          /* A held dictation never stays open by itself: a tap is nothing said. */
+          activeTranscriber?.cancelSegment?.()
+          void endPress()
+          return
+        }
         if (held < PTT_TAP_MS) {
           latched = true
           openedWithoutChord = true
@@ -1152,7 +1209,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             const hasInFlight = activeTranscriber?.hasInFlight ?? false
             const isExecuting = dialogState().status === "executing"
             if (!committed && !hasInFlight && !isExecuting) {
-              void stop()
+              void endPress()
             }
           }
         }, 250)
@@ -1164,7 +1221,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           if (!chordHeld && !openedWithoutChord && isRunning()) {
             const isExecuting = dialogState().status === "executing"
             if (!isExecuting) {
-              void stop()
+              void endPress()
             }
           }
         }, 12_000)
@@ -1257,4 +1314,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
     },
   }
+  startListening = (mode, o) => engine.start(mode, o)
+  return engine
 }

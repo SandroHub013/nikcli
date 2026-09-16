@@ -31,6 +31,7 @@ import type { DialogStatus } from "../dialog/session"
 import {
   DEFAULT_VOICE_SETTINGS,
   wakeWordEnabled,
+  shortcutActivationEnabled,
   type AgentEngine,
   type ReplyVoice,
   type ParakeetExecutionBackend,
@@ -616,6 +617,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   }
 
   const selectActivation = (activation: VoiceActivation) => {
+    if (activation !== "wake-word" && !shortcutActivationEnabled()) return
     if (activation !== "push-to-talk" && !wakeWordEnabled()) return
     if (activation === "wake-word" && (!wakeWordEnabled() || props.settings.mode !== "agent")) return
     updateSettings({ activation })
@@ -1382,7 +1384,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             data-slot="activation-list"
             onKeyDown={activationKeys}
           >
-            {/* Push to talk */}
+            {/* Push to talk: behind SHORTCUT_ACTIVATION_ENABLED, off: the name is the only way */}
+            <Show when={shortcutActivationEnabled()}>
             <div
               role="radio"
               data-value="push-to-talk"
@@ -1404,9 +1407,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 )}
               </kbd>
             </div>
+            </Show>
 
-            {/* Toggle continuous: behind the same switch, off in 0.7.0 */}
-            <Show when={wakeWordEnabled()}>
+            {/* Toggle continuous: behind both switches, off */}
+            <Show when={wakeWordEnabled() && shortcutActivationEnabled()}>
             <div
               role="radio"
               data-value="toggle"

@@ -288,7 +288,9 @@ import {
   ListeningIndicator,
   VoiceSettingsPanel,
   wakeWordEnabled,
+  shortcutActivationEnabled,
   describeShortcut,
+  holdsToTalk,
   type VoiceEngine,
   type VoiceSettings,
 } from "@nikcli-ai/voice"
@@ -2615,12 +2617,16 @@ export function Workbench() {
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
+  const movedToName = initialVoice.migrations.some((m) => m === "name-only" || m === "wake-word" || m === "always-listen")
+  const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    movedToShortcut
-      ? t("voice.shortcutOnly", describeShortcut(initialVoice.settings.agentChord, platform))
-      : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-        ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
-        : undefined,
+    wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+      ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+      : movedToShortcut
+        ? t("voice.shortcutOnly", agentShortcut)
+        : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+          ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
+          : undefined,
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -3161,7 +3167,7 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
-        if (voiceSettings().activation === "push-to-talk") {
+        if (holdsToTalk(voiceSettings(), mode)) {
           const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
           void pttHandler.onKeyDown(parseChord(chord, platform), e, mode)
         } else {
@@ -3325,17 +3331,18 @@ export function Workbench() {
               return
             }
 
-            if (voiceSettings().activation === "push-to-talk") {
-              if (action.kind === "press") {
-                const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
-                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
-              } else {
-                // No key to compare: the native side already said the chord let go.
-                void pttHandler.onKeyUp()
-              }
+            if (action.kind === "release") {
+              // No key to compare: the native side already said the chord let go.
+              // Nothing held, nothing released.
+              void pttHandler.onKeyUp()
               return
             }
-            if (action.kind === "press") void voiceEngine.toggle(action.mode)
+            if (holdsToTalk(voiceSettings(), action.mode)) {
+              const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
+              void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
+              return
+            }
+            void voiceEngine.toggle(action.mode)
           })
 
           releaseGlobal = () => {

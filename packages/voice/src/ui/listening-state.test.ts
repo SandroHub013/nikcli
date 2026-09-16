@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { setWakeWordEnabledForTests } from "../settings/model"
+import { setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "../settings/model"
 import { listeningState } from "./listening-state"
 
 const on = { alwaysListen: true, activation: "wake-word" as const, wakeWord: "ei nik" }
 
 describe("the always-on indicator", () => {
-  // The wake word is switched off in 0.7.0; its behaviour is still checked with the switch on.
+  // The wake word, on by default; set here so the block does not depend on the order it runs in.
   beforeAll(() => setWakeWordEnabledForTests(true))
-  afterAll(() => setWakeWordEnabledForTests(false))
+  afterAll(() => setWakeWordEnabledForTests(true))
   test("shown for as long as the microphone listens by itself, naming the phrase", () => {
     const state = listeningState({ settings: on, running: true, mode: "agent", paused: false })
     expect(state.kind).toBe("listening")
@@ -32,6 +32,15 @@ describe("the always-on indicator", () => {
 })
 
 describe("with the wake word switched off", () => {
+  // The 0.7.0 world, kept behind the switches: the wake word off, the shortcut the way in.
+  beforeAll(() => {
+    setWakeWordEnabledForTests(false)
+    setShortcutActivationEnabledForTests(true)
+  })
+  afterAll(() => {
+    setWakeWordEnabledForTests(true)
+    setShortcutActivationEnabledForTests(false)
+  })
   test("the indicator never shows, whatever was saved", () => {
     expect(listeningState({ settings: on, running: true, mode: "agent", paused: false }).kind).toBe("hidden")
     expect(listeningState({ settings: on, running: false, mode: "agent", paused: true }).kind).toBe("hidden")

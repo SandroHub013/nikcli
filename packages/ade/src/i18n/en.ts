@@ -648,6 +648,8 @@ export const en: Messages = {
   "note.messageFrom": (from, text) => `Message from ${from}: ${text}`,
   "note.askTo": (to, text) => `Request sent to ${to}: ${text}`,
   "note.messageTo": (to, text) => `Message sent to ${to}: ${text}`,
+  "voice.nameOnly": (shortcut, manual) =>
+    `Starting with this version the assistant starts by voice: begin the sentence with “ei nik” or “nik”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
   "voice.shortcutOnly": (shortcut) =>
     `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
   "voice.alwaysListening": (wakeWord, manual, toggle) => `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,

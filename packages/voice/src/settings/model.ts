@@ -47,17 +47,35 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  *
  * 5: the same for "toggle": a microphone left open hears the television and
  * the room. One press, one turn.
+ *
+ * 6: the user's decision after 0.7.0 — the assistant is started only by
+ * voice, a sentence that begins with «ei nik» or «nik». A profile on the
+ * shortcut or on toggle is moved to always-on listening for the name once,
+ * and told. The shortcut and the button stay, as a manual way to call it.
  */
-export const CURRENT_SETTINGS_VERSION = 5
+export const CURRENT_SETTINGS_VERSION = 6
 
 /**
- * Whether any way of keeping the microphone open exists: the wake word,
- * always-on listening and "toggle". The one switch for all three, like Chat
+ * Whether the wake word and always-on listening exist. The switch, like Chat
  * and Bot's: off, they cannot be chosen, nothing opens the microphone by
- * itself, and a stored choice of them becomes the shortcut. The code and its
- * tests stay; turning this on brings every way in back.
+ * itself, and a stored choice of them becomes the shortcut. On since 0.7.1.
  */
-export const WAKE_WORD_ENABLED = false
+export const WAKE_WORD_ENABLED = true
+
+/**
+ * Whether push-to-talk and toggle can be chosen as the way the assistant is
+ * started. Off: the name is the only way, and a stored choice of either moves
+ * to it. The code and its tests stay behind this switch.
+ */
+export const SHORTCUT_ACTIVATION_ENABLED = false
+
+let shortcutActivationSwitch = SHORTCUT_ACTIVATION_ENABLED
+export function shortcutActivationEnabled(): boolean {
+  return shortcutActivationSwitch
+}
+export function setShortcutActivationEnabledForTests(on: boolean): void {
+  shortcutActivationSwitch = on
+}
 
 let wakeWordSwitch = WAKE_WORD_ENABLED
 /** The switch as it reads now. Only tests move it, to keep the dormant path checked. */
@@ -69,12 +87,12 @@ export function setWakeWordEnabledForTests(on: boolean): void {
 }
 
 /**
- * The phrase that calls the assistant. Fixed, by the user's decision: one
- * phrase everybody in the house learns, rather than a field to get wrong.
- * What the recogniser makes of it — «ehi nik», «hey nick» — is accepted by
- * `settings/wake-word.ts`.
+ * The name that calls the assistant. Fixed, by the user's decision: «nik» or
+ * «ei nik» at the start of the sentence. The greeting is accepted in front of
+ * the name, and what the recogniser makes of either — «ehi nik», «hey nick» —
+ * by `settings/wake-word.ts`.
  */
-export const WAKE_PHRASE = "ei nik"
+export const WAKE_PHRASE = "nik"
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
@@ -168,7 +186,7 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   version: CURRENT_SETTINGS_VERSION,
   mode: "agent",
-  activation: WAKE_WORD_ENABLED ? "wake-word" : "push-to-talk",
+  activation: WAKE_WORD_ENABLED && !SHORTCUT_ACTIVATION_ENABLED ? "wake-word" : "push-to-talk",
   transcriptionSend: "manual",
   language: "it",
   wakeWord: WAKE_PHRASE,
@@ -221,8 +239,21 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * `wake-word`: a profile that answered everything now waits to be called.
  * `always-listen`: a profile on the wake word now listens without being opened.
  * `shortcut-only`: a profile on the wake word is back on the shortcut.
+ * `name-only`: a profile on the shortcut or toggle now listens for the name.
  */
-export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only"
+export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only"
+
+/**
+ * A profile on the shortcut or toggle, moved to listening for the name: the
+ * assistant's default, always on. Its default mode becomes the agent's, since
+ * the name only calls the agent; dictation keeps its own shortcut.
+ */
+function toName(candidate: Record<string, unknown>, migrations: VoiceMigration[]): Record<string, unknown> {
+  if (!wakeWordEnabled() || shortcutActivationEnabled()) return candidate
+  if (candidate.activation !== "push-to-talk" && candidate.activation !== "toggle") return candidate
+  migrations.push("name-only")
+  return { ...candidate, activation: "wake-word", alwaysListen: true, mode: "agent" }
+}
 
 /**
  * Why a stored chord cannot be used, in Italian, or undefined when it can.
@@ -280,6 +311,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       candidate = { ...candidate, activation: "push-to-talk" }
       migrations.push("shortcut-only")
     }
+    candidate = toName(candidate, migrations)
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -309,6 +341,8 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       candidate = { ...candidate, activation: "push-to-talk" }
       migrations.push("shortcut-only")
     }
+    /* Version 6: the name is the only way to start it. */
+    if (version < 6) candidate = toName(candidate, migrations)
     version = CURRENT_SETTINGS_VERSION
   }
 

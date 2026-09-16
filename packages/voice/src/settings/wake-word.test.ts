@@ -84,10 +84,18 @@ describe("the name has to open the sentence", () => {
     expect(matchesWakeWord("secondo nick il mercato è in crescita", "nik").matched).toBe(false)
   })
 
-  test("a greeting may come first, nothing else", () => {
+  test("«ei» and its spellings may come first, nothing else", () => {
     expect(matchesWakeWord("nik apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     expect(matchesWakeWord("ehi nik apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
-    expect(matchesWakeWord("ok nick apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    for (const heard of ["ei nik", "hei nik", "hey nick", "ehi, Nick", "Nick,"]) {
+      expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    }
+    for (const heard of ["e nik", "eh nik", "ok nik", "ehnik"]) {
+      expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    }
+    for (const heard of ["ciao nik", "senti nik", "scusa nik"]) {
+      expect(matchesWakeWord(`${heard} apri il browser`, "nik").matched).toBe(false)
+    }
     expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)
   })
 })
@@ -111,5 +119,13 @@ describe("the fixed phrase, «ei nik», as the recogniser writes it", () => {
     expect(matchesWakeWord("ehi apri il browser", phrase).matched).toBe(false)
     expect(matchesWakeWord("il telegiornale ehi nik", phrase).matched).toBe(false)
     expect(matchesWakeWord("einikolaus", phrase).matched).toBe(false)
+  })
+})
+
+describe("only the name itself", () => {
+  test("words one letter away from it are not the name", () => {
+    for (const heard of ["nì", "ni", "Nike", "niko", "nico", "mik", "nike apri il browser", "niko apri il browser", "ni apri il browser"]) {
+      expect(matchesWakeWord(heard, "nik").matched).toBe(false)
+    }
   })
 })

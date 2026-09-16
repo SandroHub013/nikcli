@@ -151,6 +151,7 @@ export {
 // Voice orchestration engine
 export {
   createVoiceEngine,
+  holdsToTalk,
   type VoiceEngine,
   type VoiceEngineOptions,
 } from "./engine"
@@ -304,6 +305,9 @@ export {
   WAKE_WORD_ENABLED,
   wakeWordEnabled,
   setWakeWordEnabledForTests,
+  SHORTCUT_ACTIVATION_ENABLED,
+  shortcutActivationEnabled,
+  setShortcutActivationEnabledForTests,
   type AgentEngine,
   normalizeSettings,
   type NormalizedVoiceSettings,
