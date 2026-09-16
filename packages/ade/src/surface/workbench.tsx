@@ -2215,6 +2215,16 @@ export function Workbench() {
     bindings,
     platform
   )
+  /*
+   * The migration to the wake word, kept for the settings panel.
+   *
+   * The strip above is dismissed and gone; this is the same sentence where the
+   * switch that undoes it lives, and it stays until the user turns the rule
+   * off or on themselves.
+   */
+  const migratedToWakeWord = initialVoice.corrections.find((line) => line.includes("per nome"))
+  const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(migratedToWakeWord)
+
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
     [
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
@@ -2399,6 +2409,8 @@ export function Workbench() {
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
+    // Once they have decided for themselves, the note about the change is spent.
+    if (next.activation !== voiceSettings().activation) setVoiceSettingsNotice(undefined)
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
     await voiceEngine.updateSettings(saved.settings)
@@ -4901,6 +4913,7 @@ export function Workbench() {
           onClose={() => setVoiceSettingsOpen(false)}
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
+          settingsNotice={voiceSettingsNotice()}
           title="Impostazioni"
           subtitle="Voce, routine, bot, codice, MCP, plugin e competenze"
           /*

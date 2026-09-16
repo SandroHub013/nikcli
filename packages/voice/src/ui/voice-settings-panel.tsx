@@ -111,6 +111,14 @@ export interface VoiceSettingsPanelProps {
   onChange: (next: VoiceSettings) => void
   /** Optional callback fired when the panel requests closing. */
   onClose?: () => void
+  /**
+   * What changed under the user in this profile, shown where they can undo it.
+   *
+   * The startup strip says it once and is dismissed; a rule that changed how
+   * the microphone answers has to be readable next to the switch that turns
+   * it back, or the only way to find out is to wonder why nothing replies.
+   */
+  settingsNotice?: string
   /** Optional existing ADE keymap bindings to evaluate for shortcut collision. */
   existingBindings?: readonly Binding[]
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
@@ -1439,6 +1447,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
             {/* Wake Word */}
             <div data-slot="activation-group">
+              <Show when={props.settingsNotice}>
+                {(text) => (
+                  <div data-slot="reason-box" role="status">
+                    {text()}
+                  </div>
+                )}
+              </Show>
               <div
                 role="radio"
                 data-value="wake-word"
