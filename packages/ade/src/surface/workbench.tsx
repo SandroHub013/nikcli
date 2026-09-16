@@ -2460,12 +2460,15 @@ export function Workbench() {
     const guard = createListenGuard({
       now: () => Date.now(),
       isLocked: async () => {
+        // Set from a test driving the page: a lock cannot be staged on the user's PC.
+        const staged = (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+        if (typeof staged === "boolean") return staged
         if (!isTauriDesktop()) return false
         const { invoke } = await import("@tauri-apps/api/core")
         return (await invoke("session_locked")) === true
       },
       shouldListen: () => listensByItself(voiceSettings()),
-      isListening: () => voiceEngine.isRunning() && voiceEngine.activeMode() === "agent",
+      isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
       pause: () => voiceEngine.pauseListening(),
       resume: () => voiceEngine.start("agent", { waitForName: true }),

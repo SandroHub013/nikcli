@@ -471,6 +471,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * sentence.
    */
   let stopping: Promise<void> | null = null
+  /* Dictation took the microphone from always-on listening, which it gives back on close. */
+  let dictationInterruptedListening = false
 
   /*
    * Requests sent while waiting for the name, over the last hour, and when
@@ -508,6 +510,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     sessionGeneration++
     clearPttTimers()
     setListenPaused(false)
+    dictationInterruptedListening = false
 
     setIsRunning(false)
 
@@ -584,10 +587,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       // backends asked for Italian whatever the picker said.
       language: s.language,
       openRouterOptions: {
+        now,
         nameGate: {
-          active: () => programHandle?.waitingForName() ?? false,
+          active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
           onRequest: countListenRequest,
+          onUncut: () =>
+            record({
+              kind: "action",
+              label: "Ignorata una frase lunga: non se ne poteva mandare solo l'inizio.",
+              ok: true,
+              at: now(),
+            }),
           onRejected: (text: string) =>
             record({
               kind: "action",
@@ -990,17 +1001,20 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        * sentence goes.
        */
       if (mode === undefined || mode === activeMode()) {
-        const dictating = activeMode() === "transcription"
+        const backToListening = dictationInterruptedListening && activeMode() === "transcription"
         await stop()
         /* Closing dictation is not closing the house's microphone: once what
            was dictated has been delivered, it goes back to waiting for the
-           phrase. */
+           phrase — if that is what dictation took over, and not a
+           microphone the user had closed. */
         const s = currentSettings()
-        if (dictating && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
+        if (backToListening && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
           await this.start("agent", { waitForName: true })
         }
         return
       }
+      dictationInterruptedListening =
+        mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
       setSessionMode(mode)
       if (mode === "transcription") {
         speaker.cancel()

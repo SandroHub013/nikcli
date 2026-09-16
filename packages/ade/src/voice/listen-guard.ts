@@ -15,10 +15,11 @@ export const SLEEP_GAP_MS = 30_000
 
 export interface ListenGuardDeps {
   now(): number
-  /** Whether the session is locked; false where it cannot be known. */
+  /** Whether the session is locked; a check that fails counts as locked. */
   isLocked(): Promise<boolean>
   /** Whether ADE should be listening by itself, from the settings. */
   shouldListen(): boolean
+  /** Whether any microphone is open, dictation included. */
   isListening(): boolean
   isPaused(): boolean
   pause(): Promise<void>
@@ -33,12 +34,16 @@ export function createListenGuard(deps: ListenGuardDeps) {
       const at = deps.now()
       const slept = at - last > SLEEP_GAP_MS
       last = at
-      if (!deps.shouldListen()) return
-      const locked = await deps.isLocked().catch(() => false)
+      /* Nobody can be talking to a locked PC: whatever is open closes, the
+         dictation too, whether or not it listens by itself. A check that
+         cannot answer is taken as a lock — an open microphone is the costly
+         mistake. */
+      const locked = await deps.isLocked().catch(() => true)
       if (locked) {
         if (deps.isListening()) await deps.pause()
         return
       }
+      if (!deps.shouldListen()) return
       if (slept && deps.isListening()) {
         await deps.restart()
         return

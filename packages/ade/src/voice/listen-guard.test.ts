@@ -76,22 +76,30 @@ describe("always-on listening and the state of the PC", () => {
     expect(state.calls).toEqual([])
   })
 
-  test("a lock check that fails is read as unlocked", async () => {
-    const { state, tick } = world()
-    state.paused = true
-    state.listening = false
+  test("a lock check that fails is read as locked", async () => {
+    const calls: string[] = []
     const guard = createListenGuard({
       now: () => 0,
-      isLocked: () => Promise.reject(new Error("no native shell")),
+      isLocked: () => Promise.reject(new Error("no answer")),
       shouldListen: () => true,
-      isListening: () => false,
-      isPaused: () => true,
-      pause: async () => {},
-      resume: async () => void state.calls.push("resume"),
+      isListening: () => true,
+      isPaused: () => false,
+      pause: async () => void calls.push("pause"),
+      resume: async () => void calls.push("resume"),
       restart: async () => {},
     })
     await guard.tick()
-    expect(state.calls).toEqual(["resume"])
-    void tick
+    expect(calls).toEqual(["pause"])
+  })
+
+  test("at the lock any open microphone closes, dictation or listening switched off included; nothing reopens it", async () => {
+    const { state, tick } = world()
+    state.wanted = false
+    state.locked = true
+    await tick()
+    expect(state.calls).toEqual(["pause"])
+    state.locked = false
+    await tick()
+    expect(state.calls).toEqual(["pause"])
   })
 })

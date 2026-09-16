@@ -1157,6 +1157,79 @@ describe("always-on listening", () => {
     await engine.stop()
   })
 
+  test("dictation opened with the microphone closed does not reopen listening when it ends", async () => {
+    const { engine } = listening()
+    await engine.toggle("transcription")
+    expect(engine.activeMode()).toBe("transcription")
+    await engine.toggle("transcription")
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("the name alone, or the button, holds for ten seconds, judged when the sentence began", async () => {
+    let clock = 0
+    let gate: any
+    const transcriber = createFakeTranscriber()
+    const host = new MockVoiceHost()
+    const engine = createVoiceEngine({
+      host,
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return transcriber
+      },
+    })
+    const hear = async (text: string) => {
+      transcriber.emit(text, true)
+      await settle()
+    }
+    await engine.start("agent", { waitForName: true })
+    await engine.toggle()
+    // Within the window the next sentence needs no name, and goes whole.
+    expect(gate.active(clock + 9_000)).toBe(false)
+    // A sentence begun after it is filtered again: a television minutes later is not the request.
+    expect(gate.active(clock + 11_000)).toBe(true)
+    clock += 60_000
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(0)
+
+    await hear("ei nik")
+    expect(gate.active(clock + 5_000)).toBe(false)
+    clock += 30_000
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("while a turn is at work, sentences still have to call it", async () => {
+    let gate: any
+    const host = new MockVoiceHost()
+    ;(host as VoiceHost).askAgent = (request) =>
+      new Promise((resolve) => request.signal?.addEventListener("abort", () => resolve({ ok: false, text: "", ran: true })))
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host,
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return transcriber
+      },
+    })
+    await engine.start("agent", { waitForName: true })
+    transcriber.emit("ei nik raccontami la storia di Roma", true)
+    await settle()
+    expect(engine.status()).toBe("executing")
+    expect(gate.active(10_000)).toBe(true)
+    // A short «annulla» goes whole anyway, and stops it.
+    transcriber.emit("annulla", true)
+    await settle()
+    expect(engine.status()).not.toBe("executing")
+    await engine.stop()
+  })
+
   test("switched off, the button closes the microphone as before", async () => {
     const { engine } = listening({ alwaysListen: false })
     await engine.start()

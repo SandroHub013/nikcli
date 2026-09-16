@@ -205,14 +205,19 @@ export const NAME_PROBE_MS = 1_500
 export const NAME_PROBE_WHOLE_UNDER_MS = 2_000
 
 export interface NameGate {
-  /** Whether a sentence has to call the assistant now; false while it is awake or waiting for an answer. */
-  active(): boolean
+  /**
+   * Whether a sentence begun at `spokenAt` had to call the assistant; false
+   * while it was awake or waiting for an answer.
+   */
+  active(spokenAt: number): boolean
   /** Whether the transcribed start of a sentence calls the assistant. */
   accepts(text: string): boolean
   /** The start of a sentence that did not call it, for the console to show. */
   onRejected?(text: string): void
   /** Each request sent while the gate was active, so the caller can count them. */
   onRequest?(): void
+  /** A long sentence that could not be cut, and so was not sent at all. */
+  onUncut?(): void
   probeMs?: number
   wholeUnderMs?: number
 }
@@ -274,9 +279,9 @@ export function createOpenRouterTranscriber(
   const micCapture: MicCapture =
     options.capture ?? createMicCapture({ preferredFormat: "wav", ...options.captureOptions })
 
-  const emitFinal = (text: string) => finalCb({ text, isFinal: true, confidence: 1.0 })
+  const now = options.now ?? Date.now
 
-  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void = emitFinal): Promise<void> {
+  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void): Promise<void> {
     if (!segment.blob || segment.blob.size === 0) return
 
     inFlightRequests++
@@ -541,7 +546,6 @@ export function createOpenRouterTranscriber(
   async function probeFor(segment: CapturedSegment): Promise<Blob | undefined> {
     const gate = options.nameGate
     if (!gate || segment.format !== "wav") return undefined
-    if (segment.durationMs <= (gate.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)) return undefined
     return wavHead(segment.blob, gate.probeMs ?? NAME_PROBE_MS)
   }
 
@@ -550,9 +554,19 @@ export function createOpenRouterTranscriber(
     // flight, and a stop that looked then would drop the sentence.
     inFlightRequests++
     try {
-      const gated = options.nameGate?.active() === true
-      const head = gated ? await probeFor(segment) : undefined
-      if (gated) options.nameGate!.onRequest?.()
+      const spokenAt = now() - segment.durationMs
+      const deliver = (text: string) => finalCb({ text, isFinal: true, confidence: 1.0, spokenAt })
+      const gate = options.nameGate
+      const gated = gate?.active(spokenAt) === true
+      const long = segment.durationMs > (gate?.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)
+      const head = gated && long ? await probeFor(segment) : undefined
+      /* Waiting for the name, a long sentence goes whole only once its start
+         has called; one that cannot be cut is not sent at all. */
+      if (gated && long && !head) {
+        gate!.onUncut?.()
+        return
+      }
+      if (gated) gate!.onRequest?.()
       if (head) {
         let heard = ""
         await transcribeSegment({ ...segment, blob: head }, (text) => (heard = text))
@@ -563,7 +577,7 @@ export function createOpenRouterTranscriber(
         }
         options.nameGate!.onRequest?.()
       }
-      await transcribeSegment(segment)
+      await transcribeSegment(segment, deliver)
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
       errorCb(new Error(`Errore imprevisto trascrizione OpenRouter: ${safeMsg}`))

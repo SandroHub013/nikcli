@@ -123,3 +123,53 @@ describe("what the gate counts", () => {
     expect(counted).toBe(4)
   })
 })
+
+describe("what cannot be cut, and when the sentence was said", () => {
+  test("a long sentence that cannot be cut is not sent while it waits for the name", async () => {
+    let uncut = 0
+    let requests = 0
+    let segmentCb: any = null
+    const capture = createMicCapture({ mediaStream: { getTracks: () => [] } as any, isTypeSupported: () => true })
+    capture.onSegment = (cb: any) => {
+      segmentCb = cb
+    }
+    const transcriber = createOpenRouterTranscriber({
+      apiKey: "k",
+      capture,
+      fetch: (async () => {
+        requests++
+        return new Response(JSON.stringify({ text: "x" }), { status: 200 })
+      }) as any,
+      nameGate: { active: () => true, accepts: () => true, onUncut: () => uncut++ },
+    })
+    await transcriber.start()
+    await segmentCb({ blob: new Blob(["webm bytes"]), format: "webm", mimeType: "audio/webm", durationMs: 5_000 })
+    expect(requests).toBe(0)
+    expect(uncut).toBe(1)
+    // Short, it goes whole whatever it is.
+    await segmentCb({ blob: new Blob(["webm bytes"]), format: "webm", mimeType: "audio/webm", durationMs: 1_000 })
+    expect(requests).toBe(1)
+  })
+
+  test("the gate is asked about the moment the sentence began, and the event carries it", async () => {
+    const asked: number[] = []
+    const events: any[] = []
+    let segmentCb: any = null
+    const capture = createMicCapture({ mediaStream: { getTracks: () => [] } as any, isTypeSupported: () => true })
+    capture.onSegment = (cb: any) => {
+      segmentCb = cb
+    }
+    const transcriber = createOpenRouterTranscriber({
+      apiKey: "k",
+      capture,
+      now: () => 100_000,
+      onFinal: (event) => events.push(event),
+      fetch: (async () => new Response(JSON.stringify({ text: "annulla" }), { status: 200 })) as any,
+      nameGate: { active: (at) => (asked.push(at), false), accepts: () => true },
+    })
+    await transcriber.start()
+    await segmentCb({ blob: wavOf(6_000), format: "wav", mimeType: "audio/wav", durationMs: 6_000 })
+    expect(asked).toEqual([94_000])
+    expect(events[0]).toMatchObject({ text: "annulla", spokenAt: 94_000 })
+  })
+})
