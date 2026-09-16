@@ -872,12 +872,14 @@ body,
 
 
 /* Registrazione in corso (S36): sopra ogni cosa, perché nessuno deve filmare
-   senza saperlo. Il punto pulsa solo mentre si registra davvero. */
+   senza saperlo. Il punto pulsa solo mentre si registra davvero. Sta nella
+   barra, prima dei pulsanti della finestra: fisso nell'angolo li copriva.
+   La barra non crea un contesto di impilamento, quindi lo z-index vale per
+   tutta la finestra. */
 [data-slot="ade-rec"] {
-  position: fixed;
-  top: 12px;
-  right: 16px;
+  position: relative;
   z-index: 60;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;

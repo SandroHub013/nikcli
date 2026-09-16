@@ -71,6 +71,13 @@ windows-core = "0.61"
 # hardware H.264 encoder. MIT.
 windows-capture = "2"
 
+# windows-capture 2.0.1 with one change: the encoder can be told to use
+# software. Upstream always asks for a hardware MFT, and once the webview's
+# own H.264 encoding (the promo export) has been through this process, every
+# new take failed with 0xC00D6D60 until ADE restarted. MIT, see its LICENCE.
+[patch.crates-io]
+windows-capture = { path = "vendor/windows-capture" }
+
 [profile.release]
 # A desktop binary is built once and started many times, so the slower link
 # buys a smaller, faster executable for every launch after it.
