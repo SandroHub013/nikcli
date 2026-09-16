@@ -239,8 +239,17 @@ fn describe(error: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Both tests set `SOFTWARE_ONLY`, a process-wide static, and cargo runs
+    /// tests in parallel: one at a time, or each reads the other's state.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn a_refused_hardware_encoder_falls_back_to_software_and_stays_there() {
+        let _serial = serial();
         SOFTWARE_ONLY.store(false, Ordering::Relaxed);
         let mut calls = 0;
         let made: Result<u8, String> = with_fallback(|| {
@@ -264,6 +273,7 @@ mod tests {
 
     #[test]
     fn a_software_failure_is_the_error_the_user_sees() {
+        let _serial = serial();
         SOFTWARE_ONLY.store(true, Ordering::Relaxed);
         let made: Result<u8, String> = with_fallback(|| Err("nessun encoder".to_string()));
         assert_eq!(made, Err("nessun encoder".to_string()));
