@@ -580,7 +580,13 @@ function ScopeToggle({ scope, branch, onChange }: { scope: Scope; branch: string
 
   return (
     <View
-      style={{ flexDirection: "row", borderRadius: 999, padding: 3, backgroundColor: hexToRgba(palette.ink, 0.06) }}
+      style={{
+        flexDirection: "row",
+        gap: 2,
+        borderRadius: 999,
+        padding: 3,
+        backgroundColor: hexToRgba(palette.ink, 0.09),
+      }}
     >
       {(["branch", "all"] as const).map((value) => {
         const selected = scope === value
@@ -600,7 +606,10 @@ function ScopeToggle({ scope, branch, onChange }: { scope: Scope; branch: string
               justifyContent: "center",
               paddingHorizontal: 12,
               borderRadius: 999,
-              backgroundColor: selected ? palette.surfaceRaised : "transparent",
+              // `surfaceRaised` is the card this sits on, so a selected pill in it is
+              // invisible — the two labels read as one word. The ground goes darker and the
+              // selected pill lighter, in opposite directions from the card.
+              backgroundColor: selected ? palette.background : "transparent",
               opacity: pressed && !selected ? 0.6 : 1,
             })}
           >
