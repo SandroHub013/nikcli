@@ -109,3 +109,5 @@ repo more than once — check them before changing anything in that file:
   reusable publish workflow `prevalidated: true` only after its `validate` job
   succeeds. Snapshot and manual publishes run `ci-validate.ts` themselves. A
   missing `RAILWAY_TOKEN` is a failed required deploy, not a successful skip.
+
+- bunx expo run:ios --device Nikoemme --configuration Release --no-bundler : is the command to build mobile ios app for nikoemme
