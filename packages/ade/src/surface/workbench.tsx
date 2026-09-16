@@ -47,13 +47,7 @@ import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
 import type { PresetId } from "../session-new/preset"
-
-/** What a slot is called in a pane title, when the task does not name it. */
-const ROLE_LABEL: Record<LaunchEntry["role"], string> = {
-  agent: "Sessione",
-  reviewer: "Revisione",
-  shell: "Terminale",
-}
+import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
@@ -4683,7 +4677,7 @@ export function Workbench() {
     // for the agent beside it, not for a prompt nothing will read.
     const task = entry.role === "shell" ? "" : input.task
     const hasInitialTask = Boolean(task.trim())
-    const title = input.title || task || `${ROLE_LABEL[entry.role]} ${entry.index} — ${agentLabel(entry.agentId)}`
+    const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
     const currentProj = input.workspaceId && input.workspaceId !== open?.name ? undefined : open
