@@ -18,7 +18,12 @@
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-surface);
-  /* The header's container queries drop what does not fit, as on a session. */
+  /*
+   * The header's container queries drop what does not fit, as on a session.
+   * A size container no longer takes its width from its content, so the pane
+   * has to grow into its cell (`flex: 1`), or it collapses to nothing.
+   */
+  flex: 1;
   container-type: inline-size;
 }
 

@@ -104,6 +104,7 @@ export const en: Messages = {
   "newPane.session.hint": "an agent in a terminal",
   "newPane.browser.hint": "the page you're building",
   "newPane.video.hint": "watch a project file, and show it to the agent",
+  "pane.video.title": "Video",
   "newPane.model": "3D model",
   "newPane.model.hint": "glTF, OBJ, STL or FBX, reloaded when the file changes",
   "newPane.app": "App simulator",

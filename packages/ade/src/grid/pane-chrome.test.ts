@@ -83,6 +83,22 @@ describe("pane chrome", () => {
     }
   })
 
+  test("a pane that is a size container grows into its cell", () => {
+    // A size container stops taking its width from its content: without
+    // `flex: 1` the video pane was 1.6px wide in ADE Test.
+    const collapsed: string[] = []
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const file = entry.replace(/\\/g, "/")
+      const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+      for (const rule of css.split("}")) {
+        const selector = rule.slice(0, rule.indexOf("{")).trim().split("\n").pop() ?? ""
+        if (!/^\[data-component="[\w-]+-pane"\]$/.test(selector)) continue
+        if (/container-type:\s*(inline-)?size/.test(rule) && !/\bflex:\s*1\b/.test(rule)) collapsed.push(`${file}: ${selector}`)
+      }
+    }
+    expect(collapsed).toEqual([])
+  })
+
   test("no stylesheet hides the shared actions again", () => {
     const hidden: string[] = []
     for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {

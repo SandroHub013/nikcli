@@ -8,6 +8,7 @@
  * panel that refuses it.
  */
 
+import { pathEquals } from "../host/path"
 import { isModel } from "../model3d/model"
 import { isPlayable } from "../video/video"
 
@@ -17,4 +18,22 @@ export function routeForFile(path: string): FileRoute {
   if (isModel(path)) return "model"
   if (isPlayable(path)) return "video"
   return "editor"
+}
+
+/**
+ * The pane already showing `path` in the panel `route` names, if any.
+ *
+ * Compared as paths, not strings: the tree and the search can spell the same
+ * file with different case or separators on Windows, and a second click must
+ * focus the pane it opened rather than open another.
+ */
+export function paneShowing<P extends { id: string; mode?: string; videoPath?: string; modelPath?: string }>(
+  panes: readonly P[],
+  route: "video" | "model",
+  path: string,
+): P | undefined {
+  return panes.find((pane) => {
+    const shown = route === "video" ? pane.videoPath : pane.modelPath
+    return pane.mode === route && !!shown && pathEquals(shown, path)
+  })
 }

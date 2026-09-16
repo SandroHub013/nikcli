@@ -254,7 +254,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { routeForFile } from "./open-route"
+import { paneShowing, routeForFile } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
@@ -869,14 +869,14 @@ export function Workbench() {
 
   /** Opens a 3D panel on `path`, or focuses the one already showing it. */
   const openModel = (path: string) => {
-    const existing = wb().panes.find((pane) => pane.mode === "model" && pane.modelPath === path)
+    const existing = paneShowing(wb().panes, "model", path)
     if (existing) {
       setWb((w) => ({ ...w, focusedId: existing.id }))
       return
     }
     setWb((w) => addPane(w, {
       id: `m${Date.now()}`,
-      title: path ? (path.split(/[\\/]/).pop() ?? "Modello 3D") : "Modello 3D",
+      title: path ? (path.split(/[\\/]/).pop() ?? t("newPane.model")) : t("newPane.model"),
       status: "working",
       model: "—",
       mode: "model",
@@ -888,14 +888,14 @@ export function Workbench() {
 
   /** A video panel on `path`, or the one already playing it. */
   const openVideo = (path: string) => {
-    const existing = wb().panes.find((pane) => pane.mode === "video" && pane.videoPath === path)
+    const existing = paneShowing(wb().panes, "video", path)
     if (existing) {
       setWb((w) => ({ ...w, focusedId: existing.id }))
       return
     }
     setWb((w) => addPane(w, {
       id: `v${Date.now()}`,
-      title: path.split(/[\\/]/).pop() ?? "Video",
+      title: path.split(/[\\/]/).pop() ?? t("pane.video.title"),
       status: "working",
       model: "—",
       mode: "video",
@@ -3444,7 +3444,7 @@ export function Workbench() {
        */
       setWb(w => addPane(w, {
         id: `v${Date.now()}`,
-        title: "Video",
+        title: t("pane.video.title"),
         status: "working",
         model: "—",
         mode: "video",

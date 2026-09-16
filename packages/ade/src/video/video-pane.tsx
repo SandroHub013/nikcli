@@ -244,7 +244,8 @@ export function VideoPane(props: VideoPaneProps) {
         </h2>
         <span data-slot="video-header-gap" />
         <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
-          <Show when={props.onPick}>
+          {/* Only once a video is open: an empty pane already offers the choice in the middle. */}
+          <Show when={props.onPick && props.path}>
             <button type="button" class="act" data-slot="pane-action" onClick={() => void pick()} aria-label={t("media.pick")} title={t("media.pick")}>
               <FolderGlyph />
             </button>

@@ -110,6 +110,7 @@ export const it = {
   "newPane.browser.hint": "la pagina che stai costruendo",
   "newPane.video.hint": "guarda un file del progetto, e falla guardare all'agente",
   "newPane.model": "Modello 3D",
+  "pane.video.title": "Video",
   "newPane.model.hint": "glTF, OBJ, STL o FBX, ricaricato quando il file cambia",
   "newPane.app": "Simulatore app",
   "newPane.app.hint": "l'app del dev server in un telefono o in una finestra",
