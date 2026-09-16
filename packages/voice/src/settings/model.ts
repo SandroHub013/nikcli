@@ -44,14 +44,18 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * 4: the user's decision for 0.7.0 — the assistant is started only by its
  * shortcut, or the button that does the same. With `WAKE_WORD_ENABLED` off, a
  * profile on the wake word is moved to push-to-talk once, and told.
+ *
+ * 5: the same for "toggle": a microphone left open hears the television and
+ * the room. One press, one turn.
  */
-export const CURRENT_SETTINGS_VERSION = 4
+export const CURRENT_SETTINGS_VERSION = 5
 
 /**
- * Whether the wake word and always-on listening exist at all. The one switch
- * for both, like Chat and Bot's: off, they cannot be chosen, nothing opens the
- * microphone by itself, and a stored choice of them becomes the shortcut. The
- * code and its tests stay; turning this on brings every way in back.
+ * Whether any way of keeping the microphone open exists: the wake word,
+ * always-on listening and "toggle". The one switch for all three, like Chat
+ * and Bot's: off, they cannot be chosen, nothing opens the microphone by
+ * itself, and a stored choice of them becomes the shortcut. The code and its
+ * tests stay; turning this on brings every way in back.
  */
 export const WAKE_WORD_ENABLED = false
 
@@ -272,7 +276,8 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.noVersion"))
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
-    corrections.push(t("vui.fix.migrated", String(version), String(CURRENT_SETTINGS_VERSION)))
+    // Not a repair: a newer version is not something that went wrong, and
+    // a correction is shown at startup in the warning strip.
     /*
      * The one migration this version carries: an assistant that answered
      * everything it heard now waits to be called. Only "toggle" is moved —
@@ -292,6 +297,14 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      */
     if (wakeWordEnabled() && version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
       migrations.push("always-listen")
+    }
+    /*
+     * Version 5: a stored "toggle" goes back to the shortcut too. Only a
+     * stored profile — one without a version is a caller's explicit choice.
+     */
+    if (!wakeWordEnabled() && version < 5 && candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "push-to-talk" }
+      migrations.push("shortcut-only")
     }
     version = CURRENT_SETTINGS_VERSION
   }

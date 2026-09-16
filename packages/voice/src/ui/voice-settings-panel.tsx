@@ -616,6 +616,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   }
 
   const selectActivation = (activation: VoiceActivation) => {
+    if (activation !== "push-to-talk" && !wakeWordEnabled()) return
     if (activation === "wake-word" && (!wakeWordEnabled() || props.settings.mode !== "agent")) return
     updateSettings({ activation })
   }
@@ -1404,7 +1405,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               </kbd>
             </div>
 
-            {/* Toggle continuous */}
+            {/* Toggle continuous: behind the same switch, off in 0.7.0 */}
+            <Show when={wakeWordEnabled()}>
             <div
               role="radio"
               data-value="toggle"
@@ -1426,6 +1428,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 )}
               </kbd>
             </div>
+            </Show>
 
             <Show when={props.settingsNotice}>
               {(text) => (

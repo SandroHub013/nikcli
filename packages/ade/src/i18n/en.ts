@@ -642,7 +642,7 @@ export const en: Messages = {
   "note.askTo": (to, text) => `Request sent to ${to}: ${text}`,
   "note.messageTo": (to, text) => `Message sent to ${to}: ${text}`,
   "voice.shortcutOnly": (shortcut) =>
-    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: no more always-on listening or “ei nik”.`,
+    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
   "voice.alwaysListening": (wakeWord, manual, toggle) => `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "editor.saveFailed": (problem) => `Save failed: ${problem}`,
   "keys.passed": (names) => `API keys passed: ${names}`,

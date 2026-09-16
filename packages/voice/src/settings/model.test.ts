@@ -95,7 +95,8 @@ describe("settings/model - normalizeSettings", () => {
     // back to the default, which is now the cloud engine.
     expect(res.backend).toBe("parakeet")
     expect(res.parakeetBackend).toBe("webgpu")
-    expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(true)
+    // Moving to a newer version is not reported as a repair.
+    expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(false)
   })
 
   test("a profile written before the name was asked for is moved to it, once and only from toggle", () => {
@@ -287,21 +288,25 @@ describe("0.7.0: the assistant starts only from its shortcut", () => {
   })
 
   test("a saved wake word, always-on or not, goes back to the shortcut once, told and without an error", () => {
-    const saved = { version: 3, mode: "agent", activation: "wake-word", alwaysListen: true, wakeWord: "ei nik" }
+    // A whole profile, as the app writes it.
+    const saved = { ...DEFAULT_VOICE_SETTINGS, version: 3, mode: "agent", activation: "wake-word", alwaysListen: true, wakeWord: "ei nik" }
     const moved = normalizeSettings(saved)
     expect(moved.activation).toBe("push-to-talk")
     expect(moved.migrations).toEqual(["shortcut-only"])
-    expect(moved.corrections.some((line) => /non riconosciuta|not recognised|not recognized/i.test(line))).toBe(false)
+    // Nothing to warn about at startup.
+    expect(moved.corrections).toEqual([])
     // Written back, it is not told again.
     expect(normalizeSettings(moved.settings).migrations).toEqual([])
-    // Other choices are left as they were.
-    expect(normalizeSettings({ version: 3, activation: "toggle" }).activation).toBe("toggle")
+    // The shortcut is left as it was.
     expect(normalizeSettings({ version: 3, activation: "push-to-talk" }).migrations).toEqual([])
   })
 
-  test("an old toggle profile is not moved to the wake word any more", () => {
-    const old = normalizeSettings({ version: 1, activation: "toggle" })
-    expect(old.activation).toBe("toggle")
-    expect(old.migrations).toEqual([])
+  test("a saved toggle goes back to the shortcut too, never to the wake word", () => {
+    for (const version of [1, 2, 3, 4]) {
+      const moved = normalizeSettings({ version, activation: "toggle" })
+      expect(moved.activation).toBe("push-to-talk")
+      expect(moved.migrations).toEqual(["shortcut-only"])
+      expect(normalizeSettings(moved.settings).migrations).toEqual([])
+    }
   })
 })
