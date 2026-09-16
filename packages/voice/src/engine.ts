@@ -480,11 +480,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * outcome has settled: a line said while it still thinks, or a question it
    * is waiting on, is not the end of the turn.
    */
+  /*
+   * Which sessions last one turn: the shortcut's, and a microphone opened by
+   * hand when the assistant is not meant to listen by itself. Always-on
+   * listening stays open and goes back to waiting for the name.
+   */
+  function closesAfterTurn(): boolean {
+    const s = currentSettings()
+    return s.activation === "push-to-talk" || (s.activation === "wake-word" && !s.alwaysListen)
+  }
+
   function closeAfterTurn(): void {
     const generation = sessionGeneration
     setTimeout(() => {
       if (generation !== sessionGeneration || !isRunning() || chordHeld) return
-      if (currentSettings().activation !== "push-to-talk" || activeMode() !== "agent") return
+      if (!closesAfterTurn() || activeMode() !== "agent") return
       const status = dialogState().status
       if (status === "executing" || status === "confirming" || status === "dictating") return
       clearPttTimers()
@@ -759,7 +769,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
     },
     onTurnEnd: () => {
-      if (currentSettings().activation === "push-to-talk" && activeMode() === "agent") closeAfterTurn()
+      if (closesAfterTurn() && activeMode() === "agent") closeAfterTurn()
     },
     onUtterance: (text) => record({ kind: "user", text, at: now() }),
     onHeld: (text) => setHeld(text),
@@ -965,6 +975,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             if (programHandle) {
               await Effect.runPromise(programHandle.wake)
             }
+          } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
+            /* Opened by hand is called: the first sentence needs no name,
+               the first time as much as after a stop. */
+            await Effect.runPromise(programHandle.wake)
           } else {
             setDialogState((prev) => ({ ...prev, status: "idle" }))
           }

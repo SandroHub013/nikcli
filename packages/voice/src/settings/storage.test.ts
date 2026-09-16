@@ -8,7 +8,7 @@ import {
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./storage"
-import { DEFAULT_VOICE_SETTINGS, setWakeWordEnabledForTests } from "./model"
+import { DEFAULT_VOICE_SETTINGS, setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./model"
 
 class MemoryStorage implements Storage {
   private data = new Map<string, string>()
@@ -213,9 +213,9 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
 })
 
 describe("the migration to the wake word happens once", () => {
-  // The wake word is switched off in 0.7.0; its behaviour is still checked with the switch on.
+  // The wake word, on by default; set here so the block does not depend on the order it runs in.
   beforeAll(() => setWakeWordEnabledForTests(true))
-  afterAll(() => setWakeWordEnabledForTests(false))
+  afterAll(() => setWakeWordEnabledForTests(true))
   test("a profile is written back with the new version, so the notice is not shown at every start", () => {
     const store = new MemoryStorage()
     store.setItem("voice.settings", JSON.stringify({ version: 1, activation: "toggle", mode: "agent" }))
@@ -233,13 +233,22 @@ describe("the migration to the wake word happens once", () => {
     const store = new MemoryStorage()
     store.setItem("voice.settings", JSON.stringify({ version: 2, activation: "wake-word", wakeWord: "hei nik" }))
 
-    expect(loadVoiceSettings(store).settings.wakeWord).toBe("ei nik")
-    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("ei nik")
+    expect(loadVoiceSettings(store).settings.wakeWord).toBe("nik")
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("nik")
     expect(loadVoiceSettings(store).migrations).toEqual([])
   })
 })
 
 describe("0.7.0: a profile saved on the wake word", () => {
+  // The 0.7.0 world, kept behind the switches: the wake word off, the shortcut the way in.
+  beforeAll(() => {
+    setWakeWordEnabledForTests(false)
+    setShortcutActivationEnabledForTests(true)
+  })
+  afterAll(() => {
+    setWakeWordEnabledForTests(true)
+    setShortcutActivationEnabledForTests(false)
+  })
   test("is written back on the shortcut, and told only the first time", () => {
     const store = new MemoryStorage()
     store.setItem("voice.settings", JSON.stringify({ version: 3, activation: "wake-word", alwaysListen: true, mode: "agent" }))
@@ -247,6 +256,19 @@ describe("0.7.0: a profile saved on the wake word", () => {
     expect(first.settings.activation).toBe("push-to-talk")
     expect(first.migrations).toEqual(["shortcut-only"])
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("push-to-talk")
+    expect(loadVoiceSettings(store).migrations).toEqual([])
+  })
+})
+
+describe("after 0.7.0: a profile saved on the shortcut", () => {
+  test("is written back listening for the name, and told only the first time", () => {
+    const store = new MemoryStorage()
+    store.setItem("voice.settings", JSON.stringify({ version: 5, activation: "push-to-talk", alwaysListen: false, mode: "agent" }))
+    const first = loadVoiceSettings(store)
+    expect(first.settings.activation).toBe("wake-word")
+    expect(first.settings.alwaysListen).toBe(true)
+    expect(first.migrations).toEqual(["name-only"])
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("wake-word")
     expect(loadVoiceSettings(store).migrations).toEqual([])
   })
 })

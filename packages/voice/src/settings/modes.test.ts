@@ -215,7 +215,8 @@ describe("Voice Modes & Settings Interaction", () => {
       },
     })
 
-    await engine.start()
+    // Opened the way ADE opens it: listening, waiting to be called.
+    await engine.start("agent", { waitForName: true })
 
     // 1. Spoken without wake word -> ignored completely
     await heard(transcriber, "nuova sessione")
@@ -229,7 +230,7 @@ describe("Voice Modes & Settings Interaction", () => {
     expect(newSessionCalls).toHaveLength(1)
 
     await engine.stop()
-    setWakeWordEnabledForTests(false)
+    setWakeWordEnabledForTests(true)
   })
 
   test("push to talk: typed text runs whether or not the key is held", async () => {
