@@ -12,6 +12,7 @@ import {
   type SimulatorState,
 } from "./simulator"
 import "./simulator-pane.css"
+import { t } from "../i18n"
 
 /**
  * An app under development, running inside a device frame in the grid.
@@ -230,12 +231,12 @@ export function SimulatorPane(props: SimulatorPaneProps) {
           {props.url ? `${props.title} · ${hostName()}` : props.title}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -249,8 +250,8 @@ export function SimulatorPane(props: SimulatorPaneProps) {
           data-slot="sim-button"
           disabled={!props.url}
           onClick={() => void controller.reload()}
-          aria-label="Ricarica l'app"
-          title="Ricarica l'app"
+          aria-label={t("sim.reload")}
+          title={t("sim.reload")}
         >
           <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
             <path d="M10 6a4 4 0 1 1-1.2-2.8M10 1.5v2.2H7.8" />
@@ -260,19 +261,19 @@ export function SimulatorPane(props: SimulatorPaneProps) {
           data-slot="sim-url"
           type="text"
           spellcheck={false}
-          placeholder="porta o URL del dev server, es. 5173"
+          placeholder={t("sim.address.placeholder")}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") submit(event.currentTarget.value)
           }}
-          aria-label="Indirizzo dell'app"
+          aria-label={t("sim.address")}
         />
         <select
           data-slot="sim-device"
           value={device().id}
           onChange={(event) => controller.setDevice(event.currentTarget.value)}
-          aria-label="Dispositivo"
+          aria-label={t("sim.device")}
         >
           <For each={DEVICES}>{(item) => <option value={item.id}>{item.label}</option>}</For>
         </select>
@@ -282,8 +283,8 @@ export function SimulatorPane(props: SimulatorPaneProps) {
             data-slot="sim-button"
             data-active={props.landscape ? "true" : undefined}
             onClick={() => controller.rotate()}
-            aria-label="Ruota"
-            title="Ruota"
+            aria-label={t("browser.rotate")}
+            title={t("browser.rotate")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
               <rect x="1.5" y="4" width="7" height="6.5" rx="1" />
@@ -302,7 +303,7 @@ export function SimulatorPane(props: SimulatorPaneProps) {
           when={props.url}
           fallback={
             <div data-slot="sim-empty">
-              <p data-slot="sim-empty-text">Avvia il dev server della tua app e aprilo qui.</p>
+              <p data-slot="sim-empty-text">{t("sim.empty")}</p>
               <Show when={guesses().length > 0}>
                 <ul data-slot="sim-guesses">
                   <For each={guesses()}>
@@ -407,8 +408,8 @@ export function SimulatorPane(props: SimulatorPaneProps) {
                 <span
                   data-slot="sim-resize"
                   onPointerDown={startResize}
-                  aria-label="Ridimensiona la finestra"
-                  title="Trascina per ridimensionare"
+                  aria-label={t("sim.resize")}
+                  title={t("sim.resize.tip")}
                 />
               </Show>
             </div>
@@ -416,11 +417,11 @@ export function SimulatorPane(props: SimulatorPaneProps) {
 
           <Show when={reachable() === false}>
             <div data-slot="sim-overlay" role="alert">
-              <strong>Nessun server risponde su {props.url}</strong>
-              <span>Avvia il dev server (per esempio bun run dev) e premi Ricarica.</span>
+              <strong>{t("sim.unreachable", props.url ?? "")}</strong>
+              <span>{t("sim.unreachable.hint")}</span>
               <Show when={guesses().some((guess) => guess.url !== props.url)}>
                 <span data-slot="sim-overlay-guesses">
-                  Oppure:{" "}
+                  {t("sim.or")}{" "}
                   <For each={guesses().filter((guess) => guess.url !== props.url)}>
                     {(guess) => (
                       <button type="button" data-slot="sim-link" onClick={() => submit(guess.url)}>

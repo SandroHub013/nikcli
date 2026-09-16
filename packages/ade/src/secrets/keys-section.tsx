@@ -12,6 +12,7 @@ import {
   type KeyInfo,
 } from "./keys"
 import "./keys.css"
+import { t } from "../i18n"
 
 /** What the section and the request dialog need from the host. */
 export interface KeysHost {
@@ -55,18 +56,15 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Chiavi API
+          {t("settings.keys")}
         </h3>
         <p data-slot="section-desc">
-          Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema
-          (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e
-          lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della
-          sessione.
+          {t("keys.desc")}
         </p>
       </div>
 
       <Show when={!props.host}>
-        <p data-slot="section-desc">Questa versione di ADE non ha accesso al portachiavi.</p>
+        <p data-slot="section-desc">{t("keys.noKeychain")}</p>
       </Show>
       <Show when={loadProblem()}>
         <p data-slot="keys-problem" role="alert">{loadProblem()}</p>
@@ -76,7 +74,7 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
       </Show>
 
       <Show when={props.host}>
-        <Show when={keys().length > 0} fallback={<p data-slot="settings-meta">Nessuna chiave salvata.</p>}>
+        <Show when={keys().length > 0} fallback={<p data-slot="settings-meta">{t("keys.none")}</p>}>
           <ul data-slot="settings-list">
             <For each={keys()}>
               {(key) => (
@@ -88,15 +86,15 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
                         <div data-slot="keys-head">
                           <span data-slot="settings-name">{key.name}</span>
                           <code data-slot="keys-env">{key.env}</code>
-                          <span data-slot="keys-masked" aria-label="valore nascosto">
-                            {key.masked ?? "valore mancante nel portachiavi"}
+                          <span data-slot="keys-masked" aria-label={t("keys.hidden")}>
+                            {key.masked ?? t("keys.missingValue")}
                           </span>
                         </div>
                         <div data-slot="keys-meta">
                           <span>
                             {key.agents.length > 0
-                              ? `a ${key.agents.map(agentLabel).join(", ")}`
-                              : "a nessun agente: non viene passata"}
+                              ? t("keys.agents", key.agents.map(agentLabel).join(", "))
+                              : t("keys.agents.none")}
                           </span>
                           <span>{addedLabel(key.createdMs, Date.now())}</span>
                         </div>
@@ -114,21 +112,21 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
                             disabled={!key.masked}
                             onClick={() =>
                               void props.host!.copy(key.name).then(
-                                (seconds) => setNotice(`«${key.name}» copiata: gli appunti si svuotano fra ${seconds} secondi`),
+                                (seconds) => setNotice(t("keys.copied", key.name, seconds)),
                                 (failure) => setNotice(message(failure)),
                               )
                             }
                           >
-                            Copia
+                            {t("keys.copy")}
                           </button>
                           <button type="button" data-slot="settings-choice" onClick={() => setEditing(key.name)}>
-                            Modifica
+                            {t("keys.edit")}
                           </button>
                           <Show
                             when={confirming() === key.name}
                             fallback={
                               <button type="button" data-slot="settings-choice" onClick={() => setConfirming(key.name)}>
-                                Elimina
+                                {t("keys.delete")}
                               </button>
                             }
                           >
@@ -140,17 +138,17 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
                                 void props.host!.remove(key.name).then(
                                   () => {
                                     setConfirming(undefined)
-                                    setNotice(`«${key.name}» eliminata dal portachiavi`)
+                                    setNotice(t("keys.deleted", key.name))
                                     void refresh()
                                   },
                                   (failure) => setNotice(message(failure)),
                                 )
                               }
                             >
-                              Elimina davvero
+                              {t("keys.delete.confirm")}
                             </button>
                             <button type="button" data-slot="settings-choice" onClick={() => setConfirming(undefined)}>
-                              Annulla
+                              {t("new.cancel")}
                             </button>
                           </Show>
                         </div>
@@ -165,7 +163,7 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
                       onDone={(saved) => {
                         setEditing(undefined)
                         if (saved) {
-                          setNotice(`«${saved}» aggiornata`)
+                          setNotice(t("keys.updated", saved))
                           void refresh()
                         }
                       }}
@@ -182,7 +180,7 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
           fallback={
             <div data-slot="settings-choices">
               <button type="button" data-slot="settings-choice" onClick={() => setEditing("new")}>
-                Aggiungi chiave
+                {t("keys.add")}
               </button>
             </div>
           }
@@ -195,7 +193,7 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
               onDone={(saved) => {
                 setEditing(undefined)
                 if (saved) {
-                  setNotice(`«${saved}» salvata nel portachiavi`)
+                  setNotice(t("keys.saved", saved))
                   void refresh()
                 }
               }}
@@ -270,19 +268,19 @@ export function KeyForm(props: {
   return (
     <form data-slot="keys-form" onSubmit={(event) => void submit(event)} autocomplete="off">
       <label data-slot="keys-field">
-        <span>Nome</span>
+        <span>{t("keys.field.name")}</span>
         <input
           ref={nameField}
           type="text"
           value={name()}
           disabled={Boolean(props.existing)}
-          placeholder="es. OpenAI"
+          placeholder={t("keys.field.name.example")}
           spellcheck={false}
           onInput={(event) => setName(event.currentTarget.value)}
         />
       </label>
       <label data-slot="keys-field">
-        <span>Variabile d'ambiente</span>
+        <span>{t("keys.field.env")}</span>
         <input
           type="text"
           value={effectiveEnv()}
@@ -295,17 +293,17 @@ export function KeyForm(props: {
         />
       </label>
       <label data-slot="keys-field">
-        <span>{props.existing ? "Nuovo valore (vuoto: resta quello salvato)" : "Valore"}</span>
+        <span>{props.existing ? t("keys.field.newValue") : t("keys.field.value")}</span>
         <input
           ref={valueField}
           type="password"
-          placeholder={props.existing ? props.existing.masked ?? "" : "incolla la chiave"}
+          placeholder={props.existing ? props.existing.masked ?? "" : t("keys.field.paste")}
           spellcheck={false}
           autocomplete="new-password"
         />
       </label>
       <fieldset data-slot="keys-agents">
-        <legend>Passala a questi agenti all'avvio</legend>
+        <legend>{t("keys.field.agents")}</legend>
         <For each={props.agents}>
           {(agent) => (
             <label data-slot="keys-agent">
@@ -321,10 +319,10 @@ export function KeyForm(props: {
       </Show>
       <div data-slot="keys-actions">
         <button type="submit" data-slot="settings-choice" data-active="true" disabled={busy()}>
-          {busy() ? "Salvo…" : "Salva nel portachiavi"}
+          {busy() ? t("keys.saving") : t("keys.save")}
         </button>
         <button type="button" data-slot="settings-choice" disabled={busy()} onClick={() => props.onDone(undefined)}>
-          Annulla
+          {t("new.cancel")}
         </button>
       </div>
     </form>
@@ -353,18 +351,18 @@ export function KeyRequestDialog(props: {
         size="md"
         role="dialog"
         aria-modal="true"
-        aria-label="Chiave richiesta"
+        aria-label={t("keys.request")}
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key === "Escape") props.onClose(undefined)
         }}
       >
         <header data-slot="keys-dialog-head">
-          <strong>Una sessione chiede la chiave {props.env}</strong>
+          <strong>{t("keys.request.title", props.env)}</strong>
           <Show when={props.reason}>
             <span>«{props.reason}»</span>
           </Show>
           <span>
-            Resta nel portachiavi del sistema; la sessione la riceve al prossimo avvio. Puoi anche ignorare la richiesta.
+            {t("keys.request.hint")}
           </span>
         </header>
         <div data-slot="keys-dialog-body">

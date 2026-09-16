@@ -8,6 +8,7 @@
  */
 import type { RegisteredCommand, RegisteredPane, RegisteredSection } from "../registry"
 import type { PluginStatus } from "../runtime"
+import { t } from "../../i18n"
 
 export interface ManagerRow {
   readonly id: string
@@ -57,21 +58,20 @@ export function managerRows(input: ManagerInput): ManagerRow[] {
   return [...rows.filter((row) => !row.active), ...rows.filter((row) => row.active)]
 }
 
-/** The one-line summary above the list. Italian, like everything user-facing. */
+/** The one-line summary above the list, in the interface language. */
 export function managerSummary(rows: readonly ManagerRow[]): string {
-  if (rows.length === 0) return "Nessun plugin caricato."
+  if (rows.length === 0) return t("settings.noPlugins")
   const failed = rows.filter((row) => !row.active).length
   const active = rows.length - failed
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-  if (failed === 0) return `${plural(active, "plugin attivo", "plugin attivi")}.`
-  return `${plural(active, "plugin attivo", "plugin attivi")}, ${plural(failed, "non caricato", "non caricati")}.`
+  if (failed === 0) return t("plugins.summary", active)
+  return t("plugins.summary.failed", active, failed)
 }
 
 /** What a row contributes, as a phrase, or `undefined` when it contributes nothing. */
 export function contributionLabel(row: ManagerRow): string | undefined {
   const parts: string[] = []
-  if (row.commands) parts.push(`${row.commands} ${row.commands === 1 ? "comando" : "comandi"}`)
-  if (row.panes) parts.push(`${row.panes} ${row.panes === 1 ? "pannello" : "pannelli"}`)
-  if (row.sections) parts.push(`${row.sections} ${row.sections === 1 ? "sezione" : "sezioni"}`)
+  if (row.commands) parts.push(t("plugins.commands", row.commands))
+  if (row.panes) parts.push(t("plugins.panes", row.panes))
+  if (row.sections) parts.push(t("plugins.sections", row.sections))
   return parts.length ? parts.join(" · ") : undefined
 }

@@ -32,6 +32,7 @@ import {
 import { escapeAttribute, withLoadToken } from "./frame-url"
 import { normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
+import { t } from "../i18n"
 
 export interface BrowserPaneProps {
   id?: string
@@ -223,7 +224,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       if (!isCurrent()) return
       handshake({ type: "load-error", error: "Server non raggiungibile" })
       setLoadState("unreachable")
-      setLoadError("Server non raggiungibile")
+      setLoadError(t("browser.unreachable"))
     }
   }
 
@@ -387,20 +388,20 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const fidelityLabel = () => {
     switch (fidelity()) {
       case "native":
-        return "Nativo (Bridge attivo)"
+        return t("browser.fidelity.native")
       case "mirror":
-        return "Mirror (Copia isolata)"
+        return t("browser.fidelity.mirror")
       case "none":
-        return "Sola lettura"
+        return t("browser.fidelity.none")
       case "pending":
       default:
-        return "Connessione..."
+        return t("browser.fidelity.pending")
     }
   }
 
   const dimensionsLabel = () => {
     const fit = viewportFit()
-    if (fit.isResponsive) return "Fluido"
+    if (fit.isResponsive) return t("browser.fluid")
     const pct = Math.round(fit.scale * 100)
     return `${fit.viewportWidth}×${fit.viewportHeight} (${pct}%)`
   }
@@ -419,7 +420,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         {/* Picked up by the grid (`grid/session-grid.tsx`); the toolbar is
             full of controls, so the pane offers one place that is only a
             handle. */}
-        <span data-slot="pane-grip" title="Trascina per spostare il pannello" aria-hidden="true">
+        <span data-slot="pane-grip" title={t("browser.grip")} aria-hidden="true">
           <svg viewBox="0 0 8 12" width="8" height="12">
             <circle cx="2" cy="2" r="1" />
             <circle cx="6" cy="2" r="1" />
@@ -434,8 +435,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-nav-btn"
             onClick={() => iframeRef?.contentWindow?.history.back()}
-            aria-label="Indietro"
-            title="Indietro"
+            aria-label={t("browser.back")}
+            title={t("browser.back")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -445,8 +446,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-nav-btn"
             onClick={() => iframeRef?.contentWindow?.history.forward()}
-            aria-label="Avanti"
-            title="Avanti"
+            aria-label={t("browser.forward")}
+            title={t("browser.forward")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -456,8 +457,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-nav-btn"
             onClick={() => load(url())}
-            aria-label="Ricarica"
-            title="Ricarica"
+            aria-label={t("browser.reload")}
+            title={t("browser.reload")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2 6a4 4 0 1 1 1.2 2.8M2 9V6h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -481,7 +482,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                 navigateTo(inputUrl())
               }
             }}
-            placeholder="localhost:3000 o porta :5173"
+            placeholder={t("browser.address.placeholder")}
             spellcheck={false}
           />
         </div>
@@ -492,18 +493,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             data-slot="browser-mode-btn"
             data-active={mode() === "browse" ? "true" : undefined}
             onClick={() => setMode("browse")}
-            title="Modalità Navigazione"
+            title={t("browser.mode.browse.tip")}
           >
-            Naviga
+            {t("browser.mode.browse")}
           </button>
           <button
             type="button"
             data-slot="browser-mode-btn"
             data-active={mode() === "edit" ? "true" : undefined}
             onClick={() => setMode("edit")}
-            title="Modalità Ispezione ed Editing"
+            title={t("browser.mode.edit.tip")}
           >
-            Ispeziona
+            {t("browser.mode.edit")}
           </button>
         </div>
 
@@ -528,8 +529,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               data-slot="browser-rotate-btn"
               data-active={landscape() ? "true" : undefined}
               onClick={() => setLandscape((v) => !v)}
-              title="Ruota orientamento"
-              aria-label="Ruota orientamento"
+              title={t("browser.rotate")}
+              aria-label={t("browser.rotate")}
             >
               <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.5 1.83L14 5.33" />
@@ -545,7 +546,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               type="button"
               data-slot="browser-action"
               onClick={() => props.onExpand?.()}
-              aria-label="Espandi pannello"
+              aria-label={t("palette.pane.expand")}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                 <path
@@ -563,7 +564,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               type="button"
               data-slot="browser-action"
               onClick={() => props.onClose?.()}
-              aria-label="Chiudi pannello"
+              aria-label={t("palette.pane.close")}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                 <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -654,7 +655,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
               sandbox="allow-scripts allow-forms allow-popups allow-modals"
-              title={props.title || "Browser preview"}
+              title={props.title || t("browser.preview")}
             />
           </div>
           </div>
@@ -668,16 +669,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   <path d="M3.5 3.5l9 9" />
                 </svg>
               </span>
-              <span data-slot="browser-error-title">Impossibile caricare l'URL</span>
+              <span data-slot="browser-error-title">{t("browser.error.title")}</span>
               <span data-slot="browser-error-msg">
-                {loadError() || "Verifica che il server sia avviato e raggiungibile."}
+                {loadError() || t("browser.error.hint")}
               </span>
               <button
                 type="button"
                 data-slot="browser-retry-btn"
                 onClick={() => load(url())}
               >
-                Riprova
+                {t("browser.retry")}
               </button>
             </div>
           </Show>
@@ -686,7 +687,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             <div data-slot="browser-prompt-popover">
               <Show when={selection().length > 0}>
                 <div data-slot="browser-selection-list">
-                  <span data-slot="browser-selection-label">Contesto catturato:</span>
+                  <span data-slot="browser-selection-label">{t("browser.context")}</span>
                   <div data-slot="browser-context-blocks">
                     <For each={selection()}>
                       {(el) => (
@@ -719,7 +720,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                     data-slot="browser-clear-selection"
                     onClick={clearSelection}
                   >
-                    Deseleziona tutto
+                    {t("browser.clearSelection")}
                   </button>
                 </div>
               </Show>
@@ -746,8 +747,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   }}
                   placeholder={
                     selection().length > 0
-                      ? "Descrivi cosa modificare..."
-                      : "Punta un elemento nella pagina o scrivi un'istruzione..."
+                      ? t("browser.prompt.selected")
+                      : t("browser.prompt.empty")
                   }
                   spellcheck={false}
                 />
@@ -757,7 +758,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   onClick={sendPromptWithContext}
                   disabled={!promptText().trim() && selection().length === 0}
                 >
-                  Invia
+                  {t("agent.send")}
                 </button>
               </div>
             </div>
@@ -770,10 +771,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
         <span data-slot="browser-selection-count">
           {selection().length === 0
-            ? "Nessun elemento selezionato"
-            : selection().length === 1
-              ? "1 elemento selezionato"
-              : `${selection().length} elementi selezionati`}
+            ? t("browser.selection.none")
+            : t("browser.selection.count", selection().length)}
         </span>
       </footer>
     </article>

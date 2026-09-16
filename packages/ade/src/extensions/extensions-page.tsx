@@ -13,6 +13,8 @@ import {
 import { MCP_CATALOG, type McpCatalogEntry } from "./mcp-catalog"
 import { addMcpServerToProject, MCP_CONFIG_FILENAME, readProjectMcpConfig, removeMcpServerFromProject, type McpConfigIO } from "./mcp-config"
 import "./extensions.css"
+import { t } from "../i18n"
+import { catalogText } from "./catalog-en"
 
 /*
  * Logos are files in this folder, bundled at build time: Simple Icons (CC0,
@@ -125,35 +127,34 @@ export function ExtensionsPage(props: {
     run(
       entry.id,
       () => addMcpServerToProject(props.projectRoot!, entry.installation.config, props.io!),
-      `${entry.name} aggiunto a ${MCP_CONFIG_FILENAME}. ${afterInstallHint(entry)} Vale per le sessioni avviate da ora.`,
+      t("extensions.added", entry.name, MCP_CONFIG_FILENAME, afterInstallHint(entry)),
     )
 
   const remove = (server: InstalledServer) =>
     run(
       `rm:${server.name}`,
       () => removeMcpServerFromProject(props.projectRoot!, server.name, props.io!),
-      `${server.name} tolto da ${MCP_CONFIG_FILENAME}.`,
+      t("extensions.removed", server.name, MCP_CONFIG_FILENAME),
     )
 
   const tabs: { id: ExtensionsTab; label: () => string }[] = [
-    { id: "installati", label: () => `Installati · ${installed().servers.length + props.pluginCount}` },
-    { id: "catalogo", label: () => `Catalogo MCP · ${MCP_CATALOG.length}` },
-    { id: "plugin", label: () => `Plugin · ${props.pluginCount}` },
+    { id: "installati", label: () => t("extensions.tab.installed", installed().servers.length + props.pluginCount) },
+    { id: "catalogo", label: () => t("extensions.tab.catalog", MCP_CATALOG.length) },
+    { id: "plugin", label: () => t("extensions.tab.plugins", props.pluginCount) },
   ]
 
   return (
     <div data-component="extensions-page">
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Estensioni
+          {t("settings.extensions")}
         </h3>
         <p data-slot="section-desc">
-          Server MCP e plugin. "Aggiungi al progetto" scrive solo il {MCP_CONFIG_FILENAME} del progetto aperto, che le CLI
-          agente leggono all'avvio della sessione; le credenziali restano fuori dal file.
+          {t("extensions.desc", MCP_CONFIG_FILENAME)}
         </p>
       </div>
 
-      <div data-slot="ext-tabs" role="tablist" aria-label="Estensioni">
+      <div data-slot="ext-tabs" role="tablist" aria-label={t("settings.extensions")}>
         <For each={tabs}>
           {(item) => (
             <button
@@ -178,7 +179,7 @@ export function ExtensionsPage(props: {
         )}
       </Show>
       <Show when={!props.projectRoot}>
-        <p data-slot="ext-notice" data-tone="error">Apri un progetto per aggiungere server MCP: si installano nel suo {MCP_CONFIG_FILENAME}.</p>
+        <p data-slot="ext-notice" data-tone="error">{t("extensions.noProject", MCP_CONFIG_FILENAME)}</p>
       </Show>
 
       <Show when={tab() === "catalogo"}>
@@ -186,12 +187,12 @@ export function ExtensionsPage(props: {
           <input
             type="search"
             data-slot="ext-search"
-            placeholder="Cerca un server: Stripe, calendario, database…"
+            placeholder={t("extensions.search")}
             value={query()}
             onInput={(event) => setQuery(event.currentTarget.value)}
-            aria-label="Cerca nel catalogo"
+            aria-label={t("extensions.search.label")}
           />
-          <div data-slot="ext-filters" role="group" aria-label="Filtro">
+          <div data-slot="ext-filters" role="group" aria-label={t("extensions.filter")}>
             <For each={CATALOG_FILTERS}>
               {(item) => (
                 <button
@@ -208,7 +209,7 @@ export function ExtensionsPage(props: {
           </div>
         </div>
 
-        <Show when={cards().length > 0} fallback={<p data-slot="settings-meta">Nessun server corrisponde.</p>}>
+        <Show when={cards().length > 0} fallback={<p data-slot="settings-meta">{t("extensions.noMatch")}</p>}>
           <ul data-slot="ext-grid">
             <For each={cards()}>
               {(entry) => {
@@ -224,20 +225,20 @@ export function ExtensionsPage(props: {
                         </Show>
                       </div>
                       <span data-slot="ext-badge" data-origin={entry.origin}>
-                        {entry.origin === "official" ? "ufficiale" : "community"}
+                        {entry.origin === "official" ? t("extensions.badge.official") : "community"}
                       </span>
                     </div>
-                    <p data-slot="ext-card-desc">{entry.description}</p>
+                    <p data-slot="ext-card-desc">{catalogText(entry).description}</p>
                     <div data-slot="ext-card-meta">
                       <span>{transportLabel(entry.transport)}</span>
-                      <span>{entry.authentication.label}</span>
+                      <span>{catalogText(entry).authentication}</span>
                     </div>
                     <Show when={entry.warning}>
-                      <p data-slot="ext-warning">{entry.warning}</p>
+                      <p data-slot="ext-warning">{catalogText(entry).warning}</p>
                     </Show>
                     <div data-slot="ext-card-actions">
                       <Show when={action().kind === "installed"}>
-                        <span data-slot="ext-installed">✓ Nel progetto</span>
+                        <span data-slot="ext-installed">{t("extensions.installed")}</span>
                         <Show when={installed().servers.find((server) => server.entry?.id === entry.id)?.note}>
                           {(note) => <span data-slot="settings-meta">{note()}</span>}
                         </Show>
@@ -250,12 +251,12 @@ export function ExtensionsPage(props: {
                           disabled={!props.projectRoot || !props.io || busy() !== undefined}
                           onClick={() => void add(entry)}
                         >
-                          {busy() === entry.id ? "Aggiungo…" : "Aggiungi al progetto"}
+                          {busy() === entry.id ? t("extensions.adding") : t("extensions.add")}
                         </button>
                       </Show>
                       <Show when={action().kind === "name-taken"}>
                         <span data-slot="ext-warning">
-                          «{entry.installation.config.name}» è già usato in {MCP_CONFIG_FILENAME} da un altro server
+                          {t("extensions.nameTaken", entry.installation.config.name, MCP_CONFIG_FILENAME)}
                         </span>
                       </Show>
                       <Show when={action().kind === "guide"}>
@@ -263,13 +264,13 @@ export function ExtensionsPage(props: {
                           type="button"
                           data-slot="settings-choice"
                           onClick={() => props.onOpenGuide(entry.installation.guideUrl)}
-                          title="Non installabile con un clic: si apre la guida ufficiale"
+                          title={t("extensions.guide.tip")}
                         >
-                          Guida alla configurazione
+                          {t("extensions.guide")}
                         </button>
                       </Show>
                       <button type="button" data-slot="ext-link" onClick={() => props.onOpenGuide(entry.sourceUrl)}>
-                        Fonte
+                        {t("extensions.source")}
                       </button>
                     </div>
                   </li>
@@ -281,13 +282,13 @@ export function ExtensionsPage(props: {
       </Show>
 
       <Show when={tab() === "installati"}>
-        <h4 data-slot="ext-group">Server MCP del progetto</h4>
+        <h4 data-slot="ext-group">{t("extensions.group.servers")}</h4>
         <Show when={installed().error}>
           <p data-slot="ext-notice" data-tone="error">{installed().error}</p>
         </Show>
         <Show
           when={installed().servers.length > 0}
-          fallback={<p data-slot="settings-meta">Nessun server in {MCP_CONFIG_FILENAME}. Aggiungine uno dal catalogo.</p>}
+          fallback={<p data-slot="settings-meta">{t("extensions.noServers", MCP_CONFIG_FILENAME)}</p>}
         >
           <ul data-slot="ext-installed-list">
             <For each={installed().servers}>
@@ -296,12 +297,12 @@ export function ExtensionsPage(props: {
                   <Logo entry={server.entry} name={server.name} />
                   <div data-slot="ext-row-text">
                     <b>{server.entry?.name ?? server.name}</b>
-                    <code>{server.detail || "definizione incompleta"}</code>
+                    <code>{server.detail || t("extensions.incomplete")}</code>
                     <Show when={server.note}>
                       <span data-slot="settings-meta">{server.note}</span>
                     </Show>
                     <Show when={server.variables.length > 0}>
-                      <span data-slot="settings-meta">variabili: {server.variables.join(", ")}</span>
+                      <span data-slot="settings-meta">{t("extensions.variables", server.variables.join(", "))}</span>
                     </Show>
                   </div>
                   <button
@@ -310,14 +311,14 @@ export function ExtensionsPage(props: {
                     disabled={busy() !== undefined}
                     onClick={() => void remove(server)}
                   >
-                    {busy() === `rm:${server.name}` ? "Tolgo…" : "Rimuovi"}
+                    {busy() === `rm:${server.name}` ? t("extensions.removing") : t("hooks.remove")}
                   </button>
                 </li>
               )}
             </For>
           </ul>
         </Show>
-        <h4 data-slot="ext-group">Plugin di ADE</h4>
+        <h4 data-slot="ext-group">{t("extensions.group.plugins")}</h4>
         {props.plugins()}
       </Show>
 

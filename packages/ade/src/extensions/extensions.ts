@@ -10,6 +10,8 @@
 
 import { MCP_CATALOG, type McpCatalogEntry, type McpServerConfig } from "./mcp-catalog"
 import { parseMcpConfig } from "./mcp-config"
+import { t } from "../i18n"
+import { CATALOG_EN } from "./catalog-en"
 
 export interface InstalledServer {
   /** The key under `mcpServers`. */
@@ -33,7 +35,9 @@ export interface InstalledServer {
  * A remote server without `type`. Cursor, VS Code and other clients accept
  * it; Claude Code skips it. Said plainly, not as an error.
  */
-export const MISSING_TYPE_NOTE = 'senza type "http": Claude Code non lo carica, altri client sì'
+export function missingTypeNote(): string {
+  return t("extensions.missingType")
+}
 
 
 const REFERENCE = /\$\{([A-Z_][A-Z0-9_]*)\}/g
@@ -82,18 +86,18 @@ export function installedServers(raw: string | undefined, catalog: readonly McpC
       transport: config.url ? "remote" : config.command ? "stdio" : "sconosciuto",
       variables: [...variables].sort(),
       ...(entry ? { entry } : {}),
-      ...(config.url && config.type !== "http" && config.type !== "sse" ? { note: MISSING_TYPE_NOTE } : {}),
+      ...(config.url && config.type !== "http" && config.type !== "sse" ? { note: missingTypeNote() } : {}),
     }
   })
 }
 
 export type CatalogFilter = "tutti" | "un-clic" | "guida" | "ufficiali" | "community"
 
-export const CATALOG_FILTERS: readonly { id: CatalogFilter; label: string }[] = [
-  { id: "tutti", label: "Tutti" },
-  { id: "un-clic", label: "Con un clic" },
-  { id: "guida", label: "Con guida" },
-  { id: "ufficiali", label: "Ufficiali" },
+export const CATALOG_FILTERS: readonly { id: CatalogFilter; readonly label: string }[] = [
+  { id: "tutti", get label() { return t("extensions.filter.all") } },
+  { id: "un-clic", get label() { return t("extensions.filter.oneClick") } },
+  { id: "guida", get label() { return t("extensions.filter.guide") } },
+  { id: "ufficiali", get label() { return t("extensions.filter.official") } },
   { id: "community", label: "Community" },
 ]
 
@@ -113,7 +117,7 @@ export function filterCatalog(
     if (filter === "guida" && entry.installation.mode !== "guide") return false
     if (filter === "ufficiali" && entry.origin !== "official") return false
     if (filter === "community" && entry.origin !== "community") return false
-    const haystack = fold([entry.name, entry.publisher, entry.description, entry.id].join(" "))
+    const haystack = fold([entry.name, entry.publisher, entry.description, CATALOG_EN[entry.id]?.description ?? "", entry.id].join(" "))
     return words.every((word) => haystack.includes(word))
   })
 }
@@ -135,7 +139,7 @@ export function cardAction(entry: McpCatalogEntry, installed: readonly Installed
 }
 
 export function transportLabel(transport: readonly ("remote" | "stdio")[]): string {
-  const labels = transport.map((item) => (item === "remote" ? "remoto" : "locale (stdio)"))
+  const labels = transport.map((item) => (item === "remote" ? t("extensions.transport.remote") : t("extensions.transport.stdio")))
   return labels.join(" · ")
 }
 
@@ -150,11 +154,11 @@ export function afterInstallHint(entry: McpCatalogEntry): string {
   referencesIn(variables, needed)
   const names = [...needed].sort()
   const oauth = /oauth/.test(entry.authentication.kind)
-  if (names.length === 0) return oauth ? "L'agente chiede l'accesso (OAuth) al primo uso." : "Nessuna credenziale richiesta."
+  if (names.length === 0) return oauth ? t("extensions.after.oauth") : t("extensions.after.none")
   const list = names.join(", ")
   return oauth
-    ? `Accesso OAuth al primo uso, oppure imposta ${list} nell'ambiente dell'agente.`
-    : `Imposta ${list} nell'ambiente dell'agente: in .mcp.json resta solo il riferimento.`
+    ? t("extensions.after.oauthOrEnv", list)
+    : t("extensions.after.env", list)
 }
 
 /** Two letters for a card without a verified logo. */

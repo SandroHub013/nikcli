@@ -1,5 +1,6 @@
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
 import "./tray.css"
+import { t } from "../i18n"
 
 /**
  * The screenshots you just took, waiting to be handed to an agent.
@@ -143,8 +144,8 @@ export function ShotTray(props: ShotTrayProps) {
                       event.stopPropagation()
                       props.onDismiss(shot.path)
                     }}
-                    aria-label={`Togli ${shot.name}`}
-                    title="Togli dal vassoio"
+                    aria-label={t("shots.dismiss.named", shot.name)}
+                    title={t("shots.dismiss")}
                   >
                     <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                       <path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
@@ -171,7 +172,7 @@ export function ShotTray(props: ShotTrayProps) {
               <Thumb shot={shot()} load={props.load} />
               <figcaption data-slot="shot-viewer-caption">
                 <span data-slot="shot-viewer-name">{shot().name}</span>
-                <span data-slot="shot-viewer-hint">trascinala su una sessione per darla all'agente</span>
+                <span data-slot="shot-viewer-hint">{t("shots.hint")}</span>
                 {/* Deleting is offered here and not on the thumbnail: the × in
                     the tray puts a screenshot away, and a click that throws the
                     file off the disk must not sit a few pixels from one that
@@ -186,11 +187,11 @@ export function ShotTray(props: ShotTrayProps) {
                       setOpened(undefined)
                     }}
                   >
-                    elimina
+                    {t("shots.delete")}
                   </button>
                 </Show>
                 <button type="button" data-slot="shot-viewer-close" onClick={() => setOpened(undefined)}>
-                  chiudi
+                  {t("shots.close")}
                 </button>
               </figcaption>
             </figure>

@@ -7,6 +7,7 @@
  */
 
 import type { TokenUsage } from "./shared"
+import { t } from "../i18n"
 
 // ---------------------------------------------------------------------------
 // Tipi fondamentali
@@ -679,17 +680,17 @@ export function quotaForAgent(
   const unavailable = (why: string): QuotaUnavailable => ({
     unavailable: true,
     providerName: vendor,
-    tooltip: `Quota ${vendor}: n/d\n${why}`,
+    tooltip: t("quota.na.tooltip", vendor, why),
   })
 
-  if (!QUOTA_AXI_PROVIDERS.has(id)) return unavailable("Nessuna fonte di quota per questo agente.")
-  if (!snapshot) return unavailable("Rapporto di quota-axi non trovato (~/.cache/quota-axi/quotas.json).")
+  if (!QUOTA_AXI_PROVIDERS.has(id)) return unavailable(t("quota.na.noSource"))
+  if (!snapshot) return unavailable(t("quota.na.noReport"))
   const quota = snapshot.providers[id]
-  if (!quota || quota.metrics.length === 0) return unavailable("quota-axi non riporta finestre per questo provider.")
-  if (quota.stale) return unavailable("quota-axi segna il dato come non aggiornato.")
-  if (snapshot.generatedAt === undefined) return unavailable("Il rapporto di quota-axi non dice quando è stato scritto.")
+  if (!quota || quota.metrics.length === 0) return unavailable(t("quota.na.noWindows"))
+  if (quota.stale) return unavailable(t("quota.na.stale"))
+  if (snapshot.generatedAt === undefined) return unavailable(t("quota.na.noTime"))
   if (now - snapshot.generatedAt > QUOTA_STALE_MS) {
-    return unavailable(`Ultima lettura ${clock(snapshot.generatedAt)}: troppo vecchia per essere la quota di adesso.`)
+    return unavailable(t("quota.na.old", clock(snapshot.generatedAt)))
   }
 
   const view = formatSessionQuota(quota, now)

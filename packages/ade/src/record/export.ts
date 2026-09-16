@@ -15,6 +15,7 @@ import { mediaUrl } from "../video/video"
 import { parseEventLine, type RecordEvent } from "./recording"
 import { writeWav } from "./wav"
 import { cameraAt, mappingFor, planShots, pointerAt, ringsAt } from "./zoom"
+import { t } from "../i18n"
 
 export interface ExportInput {
   readonly video: string
@@ -65,7 +66,7 @@ const loaded = (element: HTMLMediaElement) =>
   new Promise<void>((resolve, reject) => {
     if (element.readyState >= 1) return resolve()
     element.addEventListener("loadedmetadata", () => resolve(), { once: true })
-    element.addEventListener("error", () => reject(new Error(`Non riesco ad aprire ${element.src}`)), { once: true })
+    element.addEventListener("error", () => reject(new Error(t("record.export.cantOpen", element.src))), { once: true })
   })
 
 export async function exportPromo(input: ExportInput): Promise<ExportResult> {
@@ -88,7 +89,7 @@ export async function exportPromo(input: ExportInput): Promise<ExportResult> {
   canvas.width = width
   canvas.height = height
   const context = canvas.getContext("2d")
-  if (!context) throw new Error("Il webview non offre un canvas 2D.")
+  if (!context) throw new Error(t("record.export.noCanvas"))
 
   // The two audio tracks, mixed only here, into the clip.
   const audio = new AudioContext()
@@ -176,7 +177,7 @@ export async function exportPromo(input: ExportInput): Promise<ExportResult> {
       },
       { once: true },
     )
-    video.addEventListener("error", () => reject(new Error("Il video si è interrotto durante l'esportazione.")), {
+    video.addEventListener("error", () => reject(new Error(t("record.export.interrupted"))), {
       once: true,
     })
     requestAnimationFrame(tick)

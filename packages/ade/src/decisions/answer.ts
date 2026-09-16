@@ -7,6 +7,7 @@
 
 import type { AnsweredEvent, DeferredEvent, ReopenedEvent } from "./log"
 import type { Decision } from "./state"
+import { locale, t } from "../i18n"
 
 /** Who answers from ADE: the user, in the register's own word for them. */
 export const USER = "utente"
@@ -66,7 +67,7 @@ export function answerEvent(
 ): AnsweredEvent | string {
   const choice = picked === undefined ? undefined : decision.options[picked]?.label
   const trimmed = note.trim()
-  if (!choice && !trimmed) return "scegli un'opzione o scrivi la risposta"
+  if (!choice && !trimmed) return t("decisions.needAnswer")
   const words = [choice, trimmed].filter(Boolean).join(" — ")
   return {
     type: "risposta",
@@ -105,9 +106,9 @@ export function deferPresets(now: Date): { label: string; until: string }[] {
   }
   const toMonday = ((8 - now.getDay()) % 7) || 7
   return [
-    { label: "domani", until: day(1) },
-    { label: "fra 3 giorni", until: day(3) },
-    { label: "lunedì", until: day(toMonday) },
+    { label: t("date.tomorrow"), until: day(1) },
+    { label: t("date.inDays", 3), until: day(3) },
+    { label: t("date.monday"), until: day(toMonday) },
   ]
 }
 
@@ -119,7 +120,9 @@ export function deferFromInput(value: string, now: Date): string | undefined {
   return date.getTime() > now.getTime() ? date.toISOString() : undefined
 }
 
-const MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
+const MONTHS_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
+const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const month = (index: number) => (locale() === "en" ? MONTHS_EN : MONTHS_IT)[index]
 
 /** "20 set", "20 set 2027" when not this year; "oggi"/"domani" when close. */
 export function formatDay(iso: string, now: Date): string {
@@ -130,9 +133,9 @@ export function formatDay(iso: string, now: Date): string {
       new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
       86_400_000,
   )
-  if (days === 0) return "oggi"
-  if (days === 1) return "domani"
-  const base = `${date.getDate()} ${MONTHS[date.getMonth()]}`
+  if (days === 0) return t("date.today")
+  if (days === 1) return t("date.tomorrow")
+  const base = `${date.getDate()} ${month(date.getMonth())}`
   return date.getFullYear() === now.getFullYear() ? base : `${base} ${date.getFullYear()}`
 }
 
@@ -141,10 +144,10 @@ export function formatMoment(ms: number, now: Date): string {
   const date = new Date(ms)
   const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
   const sameDay = localDay(date) === localDay(now)
-  return sameDay ? time : `${date.getDate()} ${MONTHS[date.getMonth()]} ${time}`
+  return sameDay ? time : `${date.getDate()} ${month(date.getMonth())} ${time}`
 }
 
 /** The badge's words. */
 export function countLabel(count: number): string {
-  return count === 1 ? "1 decisione" : `${count} decisioni`
+  return t("decisions.count", count)
 }

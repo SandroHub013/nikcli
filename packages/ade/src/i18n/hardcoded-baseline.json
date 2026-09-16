@@ -1,25 +1,8 @@
 {
   "agent/agent-console.tsx": 3,
   "bots/bots.tsx": 70,
-  "browser/browser-pane.tsx": 23,
   "chat/chat.tsx": 11,
-  "decisions/decision-card.tsx": 7,
-  "decisions/decisions-pane.tsx": 21,
-  "decisions/decisions-sheet.tsx": 10,
-  "editor/editor.tsx": 8,
-  "editor/file-pane.tsx": 3,
-  "extensions/extensions-page.tsx": 20,
-  "model3d/model-pane.tsx": 9,
-  "plugin/built-in/manager.tsx": 1,
-  "plugin/pane.tsx": 4,
-  "record/consent-dialog.tsx": 7,
-  "remote/remote-dialog.tsx": 8,
-  "review/diff-view.tsx": 11,
-  "secrets/keys-section.tsx": 20,
   "settings/sections.tsx": 11,
-  "shots/tray.tsx": 4,
-  "simulator/simulator-pane.tsx": 16,
   "splash/splash.tsx": 1,
-  "surface/nik-chrome-logo.tsx": 2,
-  "video/video-pane.tsx": 8
+  "surface/nik-chrome-logo.tsx": 2
 }

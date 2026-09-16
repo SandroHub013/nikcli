@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { afterInstallHint, cardAction, filterCatalog, installedServers, matchCatalog, MISSING_TYPE_NOTE, monogram } from "./extensions"
+import { afterInstallHint, cardAction, filterCatalog, installedServers, matchCatalog, missingTypeNote, monogram } from "./extensions"
 import { findMcpServer, MCP_CATALOG } from "./mcp-catalog"
 import { addMcpServer } from "./mcp-config"
 
@@ -34,8 +34,8 @@ describe("installed servers", () => {
     const [bare, sse] = installedServers(raw)
     expect(bare!.entry?.id).toBe("github")
     // A note, not an error: other clients read the file as it is.
-    expect(bare!.note).toBe(MISSING_TYPE_NOTE)
-    expect(MISSING_TYPE_NOTE).not.toMatch(/errore|rimuov/i)
+    expect(bare!.note).toBe(missingTypeNote())
+    expect(missingTypeNote()).not.toMatch(/errore|rimuov/i)
     expect(sse!.note).toBeUndefined()
     expect(installedServers(addMcpServer(undefined, github.installation.config))[0]!.note).toBeUndefined()
   })

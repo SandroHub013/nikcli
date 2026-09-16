@@ -6,6 +6,7 @@ import { recipientChange, recipientOptions, type RecipientStatus } from "./deliv
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
+import { t } from "../i18n"
 
 /**
  * The whole register in a grid pane: who receives the answers, what waits for
@@ -40,7 +41,7 @@ export function DecisionsPane(props: {
       note={props.hub.draft(decision.k).note}
       busy={props.hub.busy(decision.k)}
       problem={props.hub.problem(decision.k)}
-      submitLabel="Registra"
+      submitLabel={t("decisions.submit")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
@@ -62,15 +63,15 @@ export function DecisionsPane(props: {
           <DecisionsGlyph />
         </span>
         <h2 data-slot="pane-title" title={props.hub.register.path()}>
-          Decisioni{buckets().forYou.length > 0 ? ` · ${buckets().forYou.length} ${buckets().forYou.length === 1 ? "aperta" : "aperte"}` : ""}
+          {t("decisions.title")}{buckets().forYou.length > 0 ? ` · ${t("decisions.openCount", buckets().forYou.length)}` : ""}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -81,16 +82,16 @@ export function DecisionsPane(props: {
       <div data-slot="decisions-body">
         <Show when={!props.hub.register.path()}>
           <div data-slot="sheet-empty">
-            <b>Nessun progetto aperto.</b>
-            <span>Il registro delle decisioni sta in .ade/decisions.jsonl del progetto.</span>
+            <b>{t("decisions.noProject")}</b>
+            <span>{t("decisions.noProject.hint")}</span>
           </div>
         </Show>
         <Show when={props.hub.register.error()}>
-          <div data-slot="decision-problem" role="alert">Registro non leggibile: {props.hub.register.error()}</div>
+          <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
         </Show>
         <Show when={problems().length > 0}>
           <details data-slot="decisions-problems">
-            <summary>{problems().length === 1 ? "1 riga ignorata" : `${problems().length} righe ignorate`} nel registro</summary>
+            <summary>{t("decisions.ignored", problems().length)}</summary>
             <ul>
               <For each={problems()}>{(line) => <li>{line}</li>}</For>
             </ul>
@@ -99,8 +100,8 @@ export function DecisionsPane(props: {
 
         <Show when={props.hub.register.path()}>
           <RecipientPicker hub={props.hub} queued={buckets().answered.filter((decision) => props.hub.delivery(decision).state === "in coda").length} />
-          <h4 data-slot="decisions-section">Da decidere, in ordine</h4>
-          <Show when={buckets().forYou.length > 0} fallback={<p data-slot="decisions-none">Nessuna decisione aperta.</p>}>
+          <h4 data-slot="decisions-section">{t("decisions.section.open")}</h4>
+          <Show when={buckets().forYou.length > 0} fallback={<p data-slot="decisions-none">{t("decisions.none")}</p>}>
             <div data-slot="decisions-list">
               <For each={buckets().forYou}>
                 {(decision) => (
@@ -110,7 +111,7 @@ export function DecisionsPane(props: {
                       <button type="button" data-slot="decision-row" onClick={() => setExpanded(decision.k)}>
                         <span data-slot="decision-key">{decision.k}</span>
                         <span data-slot="decision-row-title">{decision.title}</span>
-                        <span data-slot="decision-pill">aperta</span>
+                        <span data-slot="decision-pill">{t("decisions.pill.open")}</span>
                       </button>
                     }
                   >
@@ -122,7 +123,7 @@ export function DecisionsPane(props: {
           </Show>
 
           <Show when={buckets().answered.length > 0}>
-            <h4 data-slot="decisions-section">Risposte, in attesa di esecuzione</h4>
+            <h4 data-slot="decisions-section">{t("decisions.section.answered")}</h4>
             <div data-slot="decisions-list">
               <For each={buckets().answered}>
                 {(decision) => (
@@ -130,7 +131,7 @@ export function DecisionsPane(props: {
                     <header data-slot="decision-head">
                       <span data-slot="decision-key">{decision.k}</span>
                       <h3 data-slot="decision-title">{decision.title}</h3>
-                      <span data-slot="decision-pill" data-tone="done">risposta</span>
+                      <span data-slot="decision-pill" data-tone="done">{t("decisions.pill.answered")}</span>
                     </header>
                     <div data-slot="decision-answer">
                       <b>{decision.answer?.choice ?? decision.answer?.words}</b>
@@ -147,7 +148,7 @@ export function DecisionsPane(props: {
                         disabled={props.hub.busy(decision.k)}
                         onClick={() => void props.hub.reopen(decision).then((done) => done && setExpanded(decision.k))}
                       >
-                        Cambia risposta
+                        {t("decisions.change")}
                       </button>
                     </div>
                   </section>
@@ -157,7 +158,7 @@ export function DecisionsPane(props: {
           </Show>
 
           <Show when={buckets().later.length > 0}>
-            <h4 data-slot="decisions-section">Prossimo</h4>
+            <h4 data-slot="decisions-section">{t("decisions.section.later")}</h4>
             <div data-slot="decisions-list">
               <For each={buckets().later}>
                 {(decision) => (
@@ -165,7 +166,7 @@ export function DecisionsPane(props: {
                     <span data-slot="decision-key">{decision.k}</span>
                     <span data-slot="decision-row-title">{decision.title}</span>
                     <span data-slot="decision-pill" data-tone="later">
-                      rimandata · {formatDay(decision.deferredUntil ?? "", now())}
+                      {t("decisions.pill.deferred", formatDay(decision.deferredUntil ?? "", now()))}
                     </span>
                     <button
                       type="button"
@@ -173,7 +174,7 @@ export function DecisionsPane(props: {
                       disabled={props.hub.busy(decision.k)}
                       onClick={() => void props.hub.reopen(decision).then((done) => done && setExpanded(decision.k))}
                     >
-                      Riapri ora
+                      {t("decisions.reopen")}
                     </button>
                   </div>
                 )}
@@ -189,7 +190,7 @@ export function DecisionsPane(props: {
               aria-expanded={showClosed()}
               onClick={() => setShowClosed(!showClosed())}
             >
-              Chiuse · {buckets().closed.length}
+              {t("decisions.section.closed", buckets().closed.length)}
             </button>
             <Show when={showClosed()}>
               <div data-slot="decisions-list">
@@ -202,7 +203,7 @@ export function DecisionsPane(props: {
                         <Show when={decision.answer}> — {decision.answer?.choice ?? decision.answer?.words}</Show>
                       </span>
                       <span data-slot="decision-pill" data-tone="closed">
-                        {decision.evidence ?? `chiusa ${formatDay(decision.closedAt ?? "", now())}`}
+                        {decision.evidence ?? t("decisions.pill.closed", formatDay(decision.closedAt ?? "", now()))}
                       </span>
                     </div>
                   )}
@@ -218,15 +219,15 @@ export function DecisionsPane(props: {
 
 function deliveryText(hub: DecisionsHub, decision: Decision, now: Date): string {
   const delivery = hub.delivery(decision)
-  if (delivery.state === "consegnata") return `✓ consegnata a ${delivery.to} · ${formatMoment(delivery.at, now)} · chi la esegue la chiude`
+  if (delivery.state === "consegnata") return t("decisions.delivery.done", delivery.to, formatMoment(delivery.at, now))
   if (delivery.state === "in coda") return queuedText(hub.recipient())
-  return `risposta di ${decision.answer?.by ?? "?"} · ${formatDay(decision.answer?.at ?? "", now)}`
+  return t("decisions.delivery.by", decision.answer?.by ?? "?", formatDay(decision.answer?.at ?? "", now))
 }
 
 export function queuedText(recipient: RecipientStatus): string {
-  if (recipient.state === "pronta") return `in coda: parte appena «${recipient.title}» è libera`
-  if (recipient.state === "non attiva") return `in coda: parte quando «${recipient.title}» è in esecuzione`
-  return "in coda: nessuna sessione scelta per le risposte"
+  if (recipient.state === "pronta") return t("decisions.queued.ready", recipient.title)
+  if (recipient.state === "non attiva") return t("decisions.queued.idle", recipient.title)
+  return t("decisions.queued.none")
 }
 
 /**
@@ -258,7 +259,7 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
   return (
     <div data-slot="decisions-recipient" data-state={status().state}>
       <label>
-        <span>Risposte a</span>
+        <span>{t("decisions.recipient")}</span>
         <select ref={selectEl} onChange={(event) => select(event.currentTarget.value)}>
           <For each={options()}>
             {(option) => (
@@ -272,7 +273,7 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
       <Show when={pending()}>
         <div data-slot="decisions-recipient-confirm" role="alert">
           <span>
-            Consegnare {props.queued === 1 ? "la risposta in coda" : `le ${props.queued} risposte in coda`} a «{pendingTitle()}»?
+            {t("decisions.recipient.confirm", props.queued, String(pendingTitle() ?? ""))}
           </span>
           <button
             type="button"
@@ -283,19 +284,19 @@ function RecipientPicker(props: { hub: DecisionsHub; queued: number }) {
               setPending(undefined)
             }}
           >
-            Consegna
+            {t("decisions.recipient.deliver")}
           </button>
           <button type="button" data-slot="decision-ghost" onClick={() => setPending(undefined)}>
-            Annulla
+            {t("new.cancel")}
           </button>
         </div>
       </Show>
       <Show when={!pending() && status().state !== "pronta"}>
         <p data-slot="decisions-recipient-warning" role="status">
           {status().state === "non scelta"
-            ? "Nessuna sessione riceve le risposte: restano in coda finché non ne scegli una."
-            : `«${(status() as { title: string }).title}» non è in esecuzione: le risposte restano in coda.`}
-          {props.queued > 0 ? ` ${props.queued === 1 ? "1 in attesa" : `${props.queued} in attesa`}.` : ""}
+            ? t("decisions.recipient.none")
+            : t("decisions.recipient.idle", (status() as { title: string }).title)}
+          {props.queued > 0 ? ` ${t("decisions.recipient.waiting", props.queued)}` : ""}
         </p>
       </Show>
     </div>

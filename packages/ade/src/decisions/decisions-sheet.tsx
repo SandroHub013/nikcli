@@ -6,6 +6,7 @@ import type { RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
 import { bucketDecisions } from "./state"
 import "./decisions.css"
+import { t } from "../i18n"
 
 /**
  * The open decisions, one at a time, in the order they matter.
@@ -75,19 +76,19 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
         size="md"
         role="dialog"
         aria-modal="true"
-        aria-label="Decisioni per te"
+        aria-label={t("palette.decisions.open")}
         tabIndex={-1}
         onKeyDown={onKeyDown}
       >
         <header data-slot="sheet-head">
-          <strong>Decisioni per te</strong>
+          <strong>{t("palette.decisions.open")}</strong>
           <Show when={open().length > 0}>
-            <span data-slot="sheet-count">{at() + 1} di {open().length}</span>
+            <span data-slot="sheet-count">{t("decisions.sheet.position", at() + 1, open().length)}</span>
             <span data-slot="sheet-steps" aria-hidden="true">
               <For each={open()}>{(_, i) => <i data-on={i() === at() ? "true" : undefined} />}</For>
             </span>
           </Show>
-          <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label="Chiudi">
+          <button type="button" data-slot="sheet-close" onClick={() => props.onClose()} aria-label={t("new.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -96,15 +97,15 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
 
         <div data-slot="sheet-body">
           <Show when={props.hub.register.error()}>
-            <div data-slot="decision-problem" role="alert">Registro non leggibile: {props.hub.register.error()}</div>
+            <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
           </Show>
           <Show
             when={current()}
             keyed
             fallback={
               <div data-slot="sheet-empty">
-                <b>Nessuna decisione aperta.</b>
-                <span>Quando una sessione ne apre una, il badge in alto la mostra.</span>
+                <b>{t("decisions.none")}</b>
+                <span>{t("decisions.sheet.empty")}</span>
               </div>
             }
           >
@@ -118,11 +119,11 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                   props.hub.problem(decision.k) ??
                   (needChoice() === decision.k
                     ? decision.options.length > 0
-                      ? "Nessuna scelta: premi 1–9 o clicca un'opzione, poi Invio"
-                      : "Scrivi la risposta nella nota, poi Ctrl+Invio"
+                      ? t("decisions.sheet.needChoice")
+                      : t("decisions.sheet.needText")
                     : undefined)
                 }
-                submitLabel={open().length > 1 ? "Registra e avanti" : "Registra"}
+                submitLabel={open().length > 1 ? t("decisions.submitNext") : t("decisions.submit")}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={props.hub.register.now()}
                 onPick={(picked) => pick(decision.k, picked)}
@@ -136,15 +137,14 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
         </div>
 
         <footer data-slot="sheet-foot">
-          <span>1–9 sceglie · Invio registra la scelta · ← → scorre · Esc chiude</span>
+          <span>{t("decisions.sheet.keys")}</span>
           <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
             <span data-tone="warn">
-              {queued() === 1 ? "1 risposta" : `${queued()} risposte`} in coda:{" "}
-              {props.hub.recipient().state === "non scelta" ? "nessuna sessione le riceve" : "la sessione scelta non è in esecuzione"}
+              {t(props.hub.recipient().state === "non scelta" ? "decisions.sheet.queued.none" : "decisions.sheet.queued.idle", queued())}
             </span>
           </Show>
           <button type="button" data-slot="decision-ghost" onClick={() => props.onOpenPanel()}>
-            Vista completa
+            {t("decisions.sheet.full")}
           </button>
         </footer>
       </Surface>
@@ -153,7 +153,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
 }
 
 export function recipientHint(recipient: RecipientStatus): string {
-  if (recipient.state === "pronta") return `→ ${recipient.title}, come messaggio`
-  if (recipient.state === "non attiva") return `→ in coda: «${recipient.title}» non è in esecuzione`
-  return "→ in coda: scegli chi riceve le risposte nella vista completa"
+  if (recipient.state === "pronta") return t("decisions.hint.ready", recipient.title)
+  if (recipient.state === "non attiva") return t("decisions.hint.idle", recipient.title)
+  return t("decisions.hint.none")
 }

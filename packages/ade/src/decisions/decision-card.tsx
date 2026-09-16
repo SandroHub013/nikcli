@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js"
 import { deferFromInput, deferPresets, formatDay, localDay } from "./answer"
 import type { Decision } from "./state"
+import { t } from "../i18n"
 
 /**
  * One open decision, answerable: context, the options as numbered choices, a
@@ -38,17 +39,17 @@ export function DecisionCard(props: {
         <h3 data-slot="decision-title">{props.decision.title}</h3>
       </header>
       <div data-slot="decision-meta">
-        {[props.decision.spec, `da ${props.decision.raisedBy}`, formatDay(props.decision.openedAt, props.now)].filter(Boolean).join(" · ")}
+        {[props.decision.spec, t("decisions.from", props.decision.raisedBy), formatDay(props.decision.openedAt, props.now)].filter(Boolean).join(" · ")}
       </div>
       <Show when={props.decision.context}>
         <p data-slot="decision-context">{props.decision.context}</p>
       </Show>
       <Show when={props.decision.unlocks}>
-        <div data-slot="decision-unlocks">sblocca: {props.decision.unlocks}</div>
+        <div data-slot="decision-unlocks">{t("decisions.unlocks", props.decision.unlocks ?? "")}</div>
       </Show>
 
       <Show when={props.decision.options.length > 0}>
-        <div data-slot="decision-options" role="radiogroup" aria-label="Opzioni">
+        <div data-slot="decision-options" role="radiogroup" aria-label={t("decisions.options")}>
           <For each={props.decision.options}>
             {(option, index) => (
               <button
@@ -76,10 +77,10 @@ export function DecisionCard(props: {
         ref={(element) => props.noteRef?.(element)}
         data-slot="decision-note"
         rows={2}
-        placeholder={props.decision.options.length > 0 ? "Nota (facoltativa)" : "La tua risposta"}
+        placeholder={props.decision.options.length > 0 ? t("decisions.note.optional") : t("decisions.answer.yours")}
         value={props.note}
         onInput={(event) => props.onNote(event.currentTarget.value)}
-        aria-label={props.decision.options.length > 0 ? "Nota" : "Risposta"}
+        aria-label={props.decision.options.length > 0 ? t("decisions.note") : t("decisions.answer")}
       />
 
       <Show when={props.problem}>
@@ -97,14 +98,14 @@ export function DecisionCard(props: {
           aria-expanded={deferring()}
           onClick={() => setDeferring(!deferring())}
         >
-          Rimanda…
+          {t("decisions.defer.open")}
         </button>
         <span data-slot="decision-hint">{props.recipientHint}</span>
       </div>
 
       <Show when={deferring()}>
-        <div data-slot="decision-defer" role="group" aria-label="Rimanda fino a">
-          <span data-slot="decision-hint">Torna qui:</span>
+        <div data-slot="decision-defer" role="group" aria-label={t("decisions.defer.until")}>
+          <span data-slot="decision-hint">{t("decisions.defer.back")}</span>
           <For each={deferPresets(props.now)}>
             {(preset) => (
               <button type="button" data-slot="decision-chip" disabled={props.busy} onClick={() => props.onDefer(preset.until)}>
@@ -118,7 +119,7 @@ export function DecisionCard(props: {
             min={tomorrow()}
             value={customDay()}
             onInput={(event) => setCustomDay(event.currentTarget.value)}
-            aria-label="Data"
+            aria-label={t("decisions.defer.date")}
           />
           <button
             type="button"
@@ -129,7 +130,7 @@ export function DecisionCard(props: {
               if (until) props.onDefer(until)
             }}
           >
-            Rimanda
+            {t("decisions.defer")}
           </button>
         </div>
       </Show>

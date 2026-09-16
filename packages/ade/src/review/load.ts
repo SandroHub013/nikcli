@@ -1,5 +1,6 @@
 import { type Host } from "../host/shell"
 import { parseUnifiedDiff, type FileDiff } from "./diff"
+import { t } from "../i18n"
 
 export interface SessionDiff {
   files: FileDiff[]
@@ -30,7 +31,7 @@ export async function loadSessionDiff(input: {
       added: 0,
       removed: 0,
       truncated: false,
-      error: "Questa cartella non è un repository git.",
+      error: t("review.error.noGit"),
     }
   }
   const env = { GIT_INDEX_FILE: indexPath.stdout.trim() }
@@ -38,12 +39,12 @@ export async function loadSessionDiff(input: {
   // The session's own checkout must never be staged into its own review.
   const addResult = await host.run("git", ["add", "-A", "--", ":!.ade-trees"], cwd, env)
   if (addResult.code !== 0) {
-    return { files: [], added: 0, removed: 0, truncated: false, error: "Impossibile leggere lo stato del repository." }
+    return { files: [], added: 0, removed: 0, truncated: false, error: t("review.error.status") }
   }
 
   const statResult = await host.run("git", ["diff", "--cached", "--shortstat", baseRef], cwd, env)
   if (statResult.code !== 0) {
-    return { files: [], added: 0, removed: 0, truncated: false, error: "Impossibile calcolare le statistiche delle modifiche." }
+    return { files: [], added: 0, removed: 0, truncated: false, error: t("review.error.stats") }
   }
 
   let added = 0
@@ -65,7 +66,7 @@ export async function loadSessionDiff(input: {
     if (nameStatusResult.code === 0) {
       files = parseNameStatus(nameStatusResult.stdout)
     } else {
-      return { files: [], added: 0, removed: 0, truncated: false, error: "Impossibile calcolare l'elenco dei file modificati." }
+      return { files: [], added: 0, removed: 0, truncated: false, error: t("review.error.files") }
     }
   } else {
     const diffResult = await host.run("git", ["diff", "--cached", baseRef], cwd, env)

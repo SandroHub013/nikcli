@@ -2,6 +2,7 @@ import { createSignal } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import type { RecordConsent } from "./record-panel"
 import type { RecordTarget } from "./recording"
+import { t } from "../i18n"
 
 /**
  * The question ADE asks before an agent films it (S36).
@@ -14,7 +15,7 @@ import type { RecordTarget } from "./recording"
 export function RecordConsentDialog(props: { target: RecordTarget; onAnswer: (answer: RecordConsent) => void }) {
   const [mic, setMic] = createSignal(false)
   const refuse = () => props.onAnswer({ allowed: false, mic: false })
-  const what = () => (props.target.kind === "pane" ? `il pannello ${props.target.paneId}` : "tutta la finestra di ADE")
+  const what = () => (props.target.kind === "pane" ? t("record.consent.pane", props.target.paneId) : t("record.consent.window"))
   return (
     <Overlay
       data-component="record-consent"
@@ -24,19 +25,18 @@ export function RecordConsentDialog(props: { target: RecordTarget; onAnswer: (an
         if (event.key === "Escape") refuse()
       }}
     >
-      <Surface size="sm" role="alertdialog" aria-modal="true" aria-label="Registrazione chiesta da un agente">
+      <Surface size="sm" role="alertdialog" aria-modal="true" aria-label={t("record.consent.label")}>
         <header data-slot="sheet-head">
-          <strong>Registrare un video?</strong>
+          <strong>{t("record.consent.title")}</strong>
         </header>
         <div data-slot="record-consent-body">
-          <p>Un agente chiede di registrare {what()}.</p>
+          <p>{t("record.consent.ask", what())}</p>
           <p data-slot="record-consent-note">
-            Il video riprende tutto quello che appare finché non la fermi dal pulsante REC. I campi con chiavi e
-            password vengono oscurati.
+            {t("record.consent.note")}
           </p>
           <label data-slot="record-consent-mic">
             <input type="checkbox" checked={mic()} onChange={(event) => setMic(event.currentTarget.checked)} />
-            Registra anche il microfono
+            {t("record.consent.mic")}
           </label>
         </div>
         <footer data-slot="record-consent-actions">
@@ -46,14 +46,14 @@ export function RecordConsentDialog(props: { target: RecordTarget; onAnswer: (an
             ref={(button) => queueMicrotask(() => button.focus())}
             onClick={refuse}
           >
-            No
+            {t("record.consent.no")}
           </button>
           <button
             type="button"
             data-slot="decision-submit"
             onClick={() => props.onAnswer({ allowed: true, mic: mic() })}
           >
-            Registra
+            {t("record.consent.yes")}
           </button>
         </footer>
       </Surface>

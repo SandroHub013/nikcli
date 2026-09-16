@@ -22,6 +22,7 @@ import {
 } from "./model"
 import type { ModelViewer } from "./viewer"
 import "./model-pane.css"
+import { locale, t } from "../i18n"
 
 /**
  * A 3D model, in the grid, with the same chrome as every other pane.
@@ -52,11 +53,11 @@ export interface ModelPaneProps {
   onExpand?: () => void
 }
 
-const VIEW_BUTTONS: { preset: ViewPreset; label: string }[] = [
+const VIEW_BUTTONS: { preset: ViewPreset; readonly label: string }[] = [
   { preset: "iso", label: "Iso" },
-  { preset: "front", label: "Fronte" },
-  { preset: "right", label: "Lato" },
-  { preset: "top", label: "Sopra" },
+  { preset: "front", get label() { return t("model.view.front") } },
+  { preset: "right", get label() { return t("model.view.side") } },
+  { preset: "top", get label() { return t("model.view.top") } },
 ]
 
 export function ModelPane(props: ModelPaneProps) {
@@ -279,12 +280,12 @@ export function ModelPane(props: ModelPaneProps) {
           {props.path ? (props.path.split(/[\\/]/).pop() ?? props.title) : props.title}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -297,20 +298,20 @@ export function ModelPane(props: ModelPaneProps) {
         <Show when={!props.path}>
           <div data-slot="model-empty">
             <p data-slot="model-empty-text">
-              Trascina qui un modello 3D del progetto, o scegline uno.
+              {t("model.empty")}
               <br />
               <span data-slot="model-empty-formats">{MODEL_EXTENSIONS.join(" · ")}</span>
             </p>
             <Show when={props.onPick}>
               <button type="button" data-slot="model-open" onClick={() => void pick()}>
-                Scegli un file
+                {t("media.pick")}
               </button>
             </Show>
           </div>
         </Show>
         <Show when={props.path && loading()}>
           <div data-slot="model-overlay" role="status">
-            Caricamento…
+            {t("media.loading")}
           </div>
         </Show>
         <Show when={props.path && !loading() && error()}>
@@ -337,14 +338,14 @@ export function ModelPane(props: ModelPaneProps) {
             )}
           </For>
           <span data-slot="model-stats" title={describeModelState(state())}>
-            {stats() ? `${stats()!.triangles.toLocaleString("it-IT")} triangoli` : ""}
+            {stats() ? t("model.triangles", stats()!.triangles.toLocaleString(locale() === "en" ? "en-US" : "it-IT")) : ""}
           </span>
           <button
             type="button"
             data-slot="model-button"
             onClick={() => void controller.reload()}
-            aria-label="Ricarica dal disco"
-            title="Ricarica dal disco"
+            aria-label={t("model.reload")}
+            title={t("model.reload")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
               <path d="M10 6a4 4 0 1 1-1.2-2.8M10 1.5v2.2H7.8" />
@@ -356,8 +357,8 @@ export function ModelPane(props: ModelPaneProps) {
               data-slot="model-button"
               disabled={!stats()}
               onClick={() => void captureNow()}
-              aria-label="Salva la vista come immagine"
-              title="Salva la vista come immagine"
+              aria-label={t("model.capture")}
+              title={t("model.capture")}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
                 <rect x="1" y="3" width="10" height="7" rx="1" />

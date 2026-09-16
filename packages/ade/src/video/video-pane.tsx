@@ -13,6 +13,7 @@ import {
 } from "./video"
 import type { VideoController } from "./commands"
 import "./video-pane.css"
+import { t } from "../i18n"
 
 /**
  * A video, in the grid, wearing the same chrome as everything else — and
@@ -241,12 +242,12 @@ export function VideoPane(props: VideoPaneProps) {
           {props.path ? (props.path.split(/[\\/]/).pop() ?? props.title) : props.title}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -260,13 +261,13 @@ export function VideoPane(props: VideoPaneProps) {
           fallback={
             <div data-slot="video-empty">
               <p data-slot="video-empty-text">
-                Trascina qui un video del progetto, o scegline uno.
+                {t("video.empty")}
                 <br />
                 <span data-slot="video-empty-formats">{PLAYABLE_EXTENSIONS.join(" · ")}</span>
               </p>
               <Show when={props.onPick}>
                 <button type="button" data-slot="video-open" onClick={() => void pick()}>
-                  Scegli un file
+                  {t("media.pick")}
                 </button>
               </Show>
             </div>
@@ -294,7 +295,7 @@ export function VideoPane(props: VideoPaneProps) {
             onPause={() => setPlaying(false)}
             onEnded={() => setPlaying(false)}
             onRateChange={(event) => setRate(event.currentTarget.playbackRate)}
-            onError={() => setNote("il file non è leggibile o il formato non è supportato")}
+            onError={() => setNote(t("video.unreadable"))}
           />
         </Show>
       </div>
@@ -336,7 +337,7 @@ export function VideoPane(props: VideoPaneProps) {
             onInput={(event) => {
               void seekTo(clampSeek(Number(event.currentTarget.value), duration()))
             }}
-            aria-label="Posizione"
+            aria-label={t("video.position")}
           />
 
           <span data-slot="video-time">
@@ -344,11 +345,11 @@ export function VideoPane(props: VideoPaneProps) {
           </span>
 
           <label data-slot="video-rate">
-            <span data-slot="video-rate-label">velocità</span>
+            <span data-slot="video-rate-label">{t("video.speed")}</span>
             <select
               value={String(rate())}
               onChange={(event) => controller.setRate(Number(event.currentTarget.value))}
-              aria-label="Velocità di riproduzione"
+              aria-label={t("video.speed.label")}
             >
               {[MIN_RATE, 0.5, 1, 1.5, 2, MAX_RATE].map((value) => (
                 <option value={String(value)}>{value}×</option>
@@ -357,7 +358,7 @@ export function VideoPane(props: VideoPaneProps) {
           </label>
 
           <Show when={props.onCapture}>
-            <button type="button" data-slot="video-button" onClick={() => void captureNow()} aria-label="Cattura il fotogramma">
+            <button type="button" data-slot="video-button" onClick={() => void captureNow()} aria-label={t("video.capture")}>
               <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2">
                 <rect x="1" y="3" width="10" height="7" rx="1" />
                 <circle cx="6" cy="6.5" r="2" />

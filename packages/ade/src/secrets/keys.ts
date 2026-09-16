@@ -11,6 +11,7 @@
  */
 
 import type { PanelOutcome, PanelRequest } from "../panels/protocol"
+import { locale, t, translate, type Locale } from "../i18n"
 
 export interface KeyInfo {
   readonly name: string
@@ -33,8 +34,8 @@ export interface KeyDraft {
 /** Mirrors `check_name` in `secrets.rs`, so the form can say so before saving. */
 export function nameProblem(name: string): string | undefined {
   const trimmed = name.trim()
-  if (!trimmed) return "serve un nome"
-  if (trimmed.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(trimmed)) return "lettere, cifre, spazio, . _ -"
+  if (!trimmed) return t("keys.problem.noName")
+  if (trimmed.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/.test(trimmed)) return t("keys.problem.nameChars")
   return undefined
 }
 
@@ -44,21 +45,24 @@ const RESERVED_ENV = new Set([
   "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "NODE_OPTIONS",
 ])
 
-/** Mirrors `check_env` in `secrets.rs`. */
-export function envProblem(env: string, others: readonly KeyInfo[] = [], name = ""): string | undefined {
+/**
+ * Mirrors `check_env` in `secrets.rs`. In the interface language, except
+ * where an agent reads it (`@ade keys ask`), which passes Italian.
+ */
+export function envProblem(env: string, others: readonly KeyInfo[] = [], name = "", language: Locale = locale()): string | undefined {
   const trimmed = env.trim()
-  if (!trimmed) return "serve il nome della variabile"
-  if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(trimmed)) return "maiuscole, cifre e _, es. OPENAI_API_KEY"
-  if (RESERVED_ENV.has(trimmed) || trimmed.startsWith("ADE_")) return `${trimmed} è riservata`
-  if (others.some((key) => key.env === trimmed && key.name !== name.trim())) return `${trimmed} è già di un'altra chiave`
+  if (!trimmed) return translate(language, "keys.problem.noEnv")
+  if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(trimmed)) return translate(language, "keys.problem.envChars")
+  if (RESERVED_ENV.has(trimmed) || trimmed.startsWith("ADE_")) return translate(language, "keys.problem.reserved", trimmed)
+  if (others.some((key) => key.env === trimmed && key.name !== name.trim())) return translate(language, "keys.problem.taken", trimmed)
   return undefined
 }
 
 /** Mirrors `check_value` in `secrets.rs`. */
 export function valueProblem(value: string): string | undefined {
-  if (!value.trim()) return "incolla il valore"
-  if (value.length > 4096) return "troppo lungo (massimo 4096 caratteri)"
-  if (/[\0\r\n]/.test(value)) return "contiene un a capo: incollalo su una riga"
+  if (!value.trim()) return t("keys.problem.noValue")
+  if (value.length > 4096) return t("keys.problem.tooLong")
+  if (/[\0\r\n]/.test(value)) return t("keys.problem.newline")
   return undefined
 }
 
@@ -85,16 +89,16 @@ export function keysForAgent(keys: readonly KeyInfo[], agentId: string): string[
  * can reach. Claude Code with `ANTHROPIC_API_KEY` in its environment uses the
  * key instead of the subscription; codex with `OPENAI_API_KEY` likewise.
  */
-const BILLING_SWITCH: Record<string, { agent: string; label: string; account: string }> = {
-  ANTHROPIC_API_KEY: { agent: "claude-code", label: "Claude Code", account: "dell'abbonamento Claude" },
-  OPENAI_API_KEY: { agent: "codex", label: "Codex", account: "dell'accesso ChatGPT" },
+const BILLING_SWITCH: Record<string, { agent: string; label: string; account: "keys.billing.claude" | "keys.billing.chatgpt" }> = {
+  ANTHROPIC_API_KEY: { agent: "claude-code", label: "Claude Code", account: "keys.billing.claude" },
+  OPENAI_API_KEY: { agent: "codex", label: "Codex", account: "keys.billing.chatgpt" },
 }
 
 /** The warning to show next to an agent that would switch to paid API use. */
 export function billingWarning(env: string, agentId: string): string | undefined {
   const rule = BILLING_SWITCH[env.trim()]
   if (!rule || rule.agent !== agentId) return undefined
-  return `${rule.label} userà questa chiave invece ${rule.account}: consumo a pagamento`
+  return t("keys.billing", rule.label, t(rule.account))
 }
 
 /* What an agent can ask for with `@ade keys …`. */
@@ -127,7 +131,7 @@ export async function runKeysCommand(controller: KeysController, request: PanelR
   }
   if (request.verb === "ask") {
     const [env = "", ...rest] = request.args
-    const problem = envProblem(env)
+    const problem = envProblem(env, [], "", "it")
     if (problem) return { ok: false, reason: `variabile: ${problem}` }
     const keys = await controller.list()
     const existing = keys.find((key) => key.env === env)
@@ -146,7 +150,7 @@ export async function runKeysCommand(controller: KeysController, request: PanelR
 export function addedLabel(createdMs: number, now: number): string {
   if (!createdMs) return ""
   const days = Math.floor((now - createdMs) / 86_400_000)
-  if (days <= 0) return "aggiunta oggi"
-  if (days === 1) return "aggiunta ieri"
-  return `aggiunta ${days} giorni fa`
+  if (days <= 0) return t("keys.added.today")
+  if (days === 1) return t("keys.added.yesterday")
+  return t("keys.added.days", days)
 }

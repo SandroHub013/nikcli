@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 /**
  * Recording a video of ADE in use (S36).
  *
@@ -144,8 +145,8 @@ export function createEventLog(startedAt: number) {
 
 /** What the user is told when a take cannot start. */
 export function startProblem(state: RecordState): string | undefined {
-  if (state.status === "recording") return "Una registrazione è già in corso."
-  if (state.status === "stopping") return "La registrazione precedente sta chiudendo il file: riprova tra un istante."
+  if (state.status === "recording") return t("record.busy")
+  if (state.status === "stopping") return t("record.closingPrevious")
   return undefined
 }
 

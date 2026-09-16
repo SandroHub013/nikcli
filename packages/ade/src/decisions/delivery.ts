@@ -18,6 +18,7 @@
 
 import type { Decision } from "./state"
 import { resolvedMessage } from "./state"
+import { t } from "../i18n"
 
 /** A session that could receive the line, as `mailPanes` describes it. */
 export interface DeliveryCandidate {
@@ -93,14 +94,14 @@ export function recipientOptions(
   pending?: string,
 ): RecipientOption[] {
   const shown = pending ?? (recipient.state === "non scelta" ? "" : recipient.id)
-  const options: RecipientOption[] = [{ value: "", label: "nessuna sessione", selected: shown === "" }]
+  const options: RecipientOption[] = [{ value: "", label: t("decisions.recipient.nobody"), selected: shown === "" }]
   for (const pane of sessions) {
-    const label = `${pane.title}${pane.project ? ` · ${pane.project}` : ""}${pane.running ? "" : " (ferma)"}`
+    const label = `${pane.title}${pane.project ? ` · ${pane.project}` : ""}${pane.running ? "" : ` ${t("decisions.recipient.stopped")}`}`
     options.push({ value: pane.id, label, selected: pane.id === shown })
   }
   // A chosen session whose pane was closed is still listed, so the choice stays visible.
   if (recipient.state !== "non scelta" && !sessions.some((pane) => pane.id === recipient.id)) {
-    options.push({ value: recipient.id, label: `${recipient.title} (chiusa)`, selected: recipient.id === shown })
+    options.push({ value: recipient.id, label: `${recipient.title} ${t("decisions.recipient.closed")}`, selected: recipient.id === shown })
   }
   return options
 }

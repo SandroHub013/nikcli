@@ -30,6 +30,7 @@ import {
   type RecordTarget,
 } from "./recording"
 import { buildVoiceTrack, type VoiceClip } from "./wav"
+import { t } from "../i18n"
 
 /** A microphone being recorded; `stop` hands back the file's bytes. */
 export interface MicTake {
@@ -128,7 +129,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       const problem = startProblem(state)
       if (problem) return problem
       const dir = deps.dir()
-      if (!dir) return "Scegli prima la cartella dove salvare i video."
+      if (!dir) return t("record.chooseFolder")
 
       const startedAt = deps.now()
       const name = recordingName(startedAt)
@@ -170,7 +171,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         const stopped = await deps.stop()
         const problems = await writeTracks(stopped.path ?? recording.path, recording.startedAt, events, clips, micTake)
         settle({ status: "idle" })
-        return problems.length > 0 ? `Video salvato, ma non tutte le tracce: ${problems.join("; ")}` : undefined
+        return problems.length > 0 ? t("record.partial", problems.join("; ")) : undefined
       } catch (error) {
         // The video may still be on disk: what was collected goes next to it anyway.
         await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})

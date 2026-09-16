@@ -10,6 +10,7 @@
  * one that does not close.
  */
 import { ErrorBoundary, Show, type JSX } from "solid-js"
+import { t } from "../i18n"
 
 export interface PluginPaneProps {
   id: string
@@ -41,12 +42,12 @@ export function PluginPane(props: PluginPaneProps) {
           {props.title}
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
@@ -64,7 +65,7 @@ export function PluginPane(props: PluginPaneProps) {
         <ErrorBoundary
           fallback={(error: unknown) => (
             <div data-slot="pane-plugin-error" role="alert">
-              <p>Questo plugin non è riuscito a disegnare il pannello.</p>
+              <p>{t("plugins.renderFailed")}</p>
               <Show when={error instanceof Error ? error.message : String(error)}>
                 {(text) => <code>{text()}</code>}
               </Show>
@@ -91,7 +92,7 @@ export function PluginSection(props: { title: string; render: () => JSX.Element 
       <ErrorBoundary
         fallback={
           <div data-slot="sidebar-section-error" role="alert">
-            Sezione non disponibile.
+            {t("plugins.sectionFailed")}
           </div>
         }
       >
