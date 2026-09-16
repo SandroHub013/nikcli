@@ -128,6 +128,25 @@ export interface Host {
   transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
   mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
+  /**
+   * Records the window, or a rectangle of it, to `dir/name.mp4` (S36).
+   *
+   * The system's own capture, so the frames are the window's composed pixels
+   * rather than a picture of the screen. Only one take at a time.
+   */
+  recordStart?: (
+    target: RecordTarget,
+    dir: string,
+    name: string,
+    quality?: { fps: number; width?: number; height?: number; bitrate?: number },
+  ) => Promise<RecordingState>
+  recordStop?: () => Promise<RecordingState>
+  recordState?: () => Promise<RecordingState>
+  /**
+   * Writes one track of a recent take (events, voice, microphone, promo).
+   * The take's folder is not a write root: this is the only way in.
+   */
+  recordWrite?: (path: string, contents: Uint8Array) => Promise<void>
   /** The mailbox folder (per worktree in ADE Test, see `ADE_MAILBOX_ROOT`). */
   mailboxDir?: () => Promise<string>
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
@@ -265,6 +284,7 @@ export { stripAnsi } from "./ansi"
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
+import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -605,6 +625,26 @@ export async function getHost(): Promise<Host | undefined> {
     async mailboxState(id, text, kind) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_state", { id, text, kind: kind ?? null })
+    },
+
+    async recordStart(target, dir, name, quality) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_start", { target, dir, name, quality: quality ?? null })
+    },
+
+    async recordWrite(path, contents) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("record_write", { path, contents: Array.from(contents) })
+    },
+
+    async recordStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_stop")
+    },
+
+    async recordState() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_state")
     },
 
     async mailboxDir() {

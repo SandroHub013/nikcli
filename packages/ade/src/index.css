@@ -870,3 +870,95 @@ body,
   font-family: var(--ade-sans);
 }
 
+
+/* Registrazione in corso (S36): sopra ogni cosa, perché nessuno deve filmare
+   senza saperlo. Il punto pulsa solo mentre si registra davvero. */
+[data-slot="ade-rec"] {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklab, red 45%, var(--ade-border));
+  border-radius: 999px;
+  background: color-mix(in oklab, red 12%, var(--ade-surface));
+  color: var(--ade-text);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+[data-slot="ade-rec-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: red;
+  animation: ade-rec-pulse 1.4s ease-in-out infinite;
+}
+
+[data-slot="ade-rec"][data-stopping] [data-slot="ade-rec-dot"] {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes ade-rec-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="ade-rec-dot"] { animation: none; }
+}
+
+/* An agent asks to record (S36): one question, the microphone as its own switch. */
+[data-component="record-consent"] [data-slot="record-consent-body"] {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+}
+[data-component="record-consent"] [data-slot="record-consent-note"] {
+  color: var(--ade-text-weak);
+}
+[data-component="record-consent"] [data-slot="record-consent-mic"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+[data-component="record-consent"] [data-slot="record-consent-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+
+/*
+ * While a take runs (S36), secrets are not drawn at all, so no frame of the
+ * video can hold one. The user sees them covered too, which says why.
+ */
+html[data-ade-recording] [data-sensitive],
+html[data-ade-recording] input[type="password"],
+html[data-ade-recording] #openrouter-key-field {
+  color: transparent !important;
+  text-shadow: none !important;
+  caret-color: transparent !important;
+  background: #2a2a2a !important;
+  -webkit-text-security: disc;
+}
+html[data-ade-recording] [data-sensitive]::selection,
+html[data-ade-recording] [data-sensitive] *::selection,
+html[data-ade-recording] input[type="password"]::selection,
+html[data-ade-recording] #openrouter-key-field::selection {
+  color: transparent !important;
+  background: transparent !important;
+}
+html[data-ade-recording] [data-sensitive] *,
+html[data-ade-recording] [data-sensitive]::placeholder,
+html[data-ade-recording] input[type="password"]::placeholder,
+html[data-ade-recording] #openrouter-key-field::placeholder {
+  visibility: hidden !important;
+  color: transparent !important;
+}

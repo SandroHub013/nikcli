@@ -142,6 +142,20 @@ import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
+import { createRecorder, eventsPathFor, micPathFor, voicePathFor } from "../record/recorder"
+import { startMicTake } from "../record/mic"
+import { exportPromo } from "../record/export"
+import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
+import { RecordConsentDialog } from "../record/consent-dialog"
+import { coverSecrets } from "../record/sensitive"
+import {
+  DEFAULT_QUALITY,
+  qualityLevel,
+  QUALITY_LEVELS,
+  sizePerMinute,
+  type RecordQuality,
+  type RecordState,
+} from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
 import { importPluginModule } from "../plugin/loader"
@@ -580,6 +594,250 @@ export function Workbench() {
         (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
       )
     },
+  })
+
+  /*
+   * Recording a video of ADE in use (S36).
+   *
+   * The folder is remembered rather than asked every time: a promo take is
+   * started in the middle of doing something, and a dialog in the first second
+   * is in the video. `record.folder` changes it.
+   */
+  const [recordState, setRecordState] = createSignal<RecordState>({ status: "idle" })
+  const [recordDir, setRecordDir] = createSignal<string | undefined>(
+    (() => {
+      try {
+        return localStorage.getItem("ade.record.dir") ?? undefined
+      } catch {
+        return undefined
+      }
+    })(),
+  )
+  const [recordQuality, setRecordQuality] = createSignal<RecordQuality>(
+    (() => {
+      try {
+        const saved = localStorage.getItem("ade.record.quality")
+        return QUALITY_LEVELS.some((level) => level.id === saved) ? (saved as RecordQuality) : DEFAULT_QUALITY
+      } catch {
+        return DEFAULT_QUALITY
+      }
+    })(),
+  )
+  /** The microphone for takes the user starts: off until switched on (`record.mic`). */
+  const [recordMic, setRecordMic] = createSignal(
+    (() => {
+      try {
+        return localStorage.getItem("ade.record.mic") === "on"
+      } catch {
+        return false
+      }
+    })(),
+  )
+  const recorder = createRecorder({
+    start: async (target, dir, name, quality) => {
+      const host = await getHost()
+      if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
+      // Covered before the first frame exists, uncovered only once the take is over:
+      // two frames, so the covered page is painted before the capture starts.
+      coverSecrets(true)
+      await new Promise<void>((painted) => requestAnimationFrame(() => requestAnimationFrame(() => painted())))
+      try {
+        return await host.recordStart(target, dir, name, quality)
+      } catch (error) {
+        coverSecrets(false)
+        throw error
+      }
+    },
+    stop: async () => {
+      const host = await getHost()
+      if (!host?.recordStop) throw new Error("La registrazione funziona solo nell'app desktop.")
+      return host.recordStop()
+    },
+    writeText: async (path, text) => {
+      const host = await getHost()
+      await host?.recordWrite?.(path, new TextEncoder().encode(text))
+    },
+    writeBytes: async (path, bytes) => {
+      const host = await getHost()
+      await host?.recordWrite?.(path, bytes)
+    },
+    startMic: () => startMicTake(voiceSettings().inputDeviceId),
+    frame: (target) => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      ...(target.kind === "pane"
+        ? { cropX: target.x, cropY: target.y, cropWidth: target.width, cropHeight: target.height }
+        : {}),
+    }),
+    dir: () => recordDir(),
+    quality: () => qualityLevel(recordQuality()),
+    now: () => Date.now(),
+    onState: setRecordState,
+  })
+
+  /** Asks for the folder once, and keeps it for the next takes. */
+  const pickRecordDir = async () => {
+    const host = await getHost()
+    const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
+    if (!chosen) return undefined
+    setRecordDir(chosen)
+    try {
+      localStorage.setItem("ade.record.dir", chosen)
+    } catch {
+      // A take still records; only the choice is forgotten next launch.
+    }
+    return chosen
+  }
+
+  /*
+   * The folder is not made a write root: Rust writes and serves only the
+   * files of the takes it started (`record_write`, `ade-media`).
+   */
+  const startRecording = async (target: Parameters<typeof recorder.start>[0], options: { mic: boolean }) => {
+    if (!recordDir() && !(await pickRecordDir())) return "Nessuna cartella scelta: registrazione annullata."
+    return recorder.start(target, options)
+  }
+
+  createEffect(() => {
+    if (recordState().status === "idle") coverSecrets(false)
+  })
+
+  /*
+   * A minimised window ends the take: the capture gets no frames then, and a
+   * video frozen on the last one is not what anybody meant to record.
+   */
+  createEffect(() => {
+    if (recordState().status !== "recording") return
+    const watch = setInterval(() => {
+      void getHost()
+        .then((host) => host?.recordState?.())
+        .then(async (now) => {
+          if (!now?.minimized || recordState().status !== "recording") return
+          const problem = await recorder.stop()
+          report(problem ?? "Registrazione fermata: la finestra di ADE è stata ridotta a icona.", "info")
+        })
+        .catch(() => {})
+    }, 1000)
+    onCleanup(() => clearInterval(watch))
+  })
+
+  const recordMicOn = () => {
+    const now = recordState()
+    return now.status !== "idle" && now.recording.mic === true
+  }
+
+  /** An agent's take waits here for the user's answer. */
+  const [recordAsk, setRecordAsk] = createSignal<{
+    target: Parameters<typeof recorder.start>[0]
+    answer: (consent: RecordConsent) => void
+  }>()
+  const confirmRecording = (target: Parameters<typeof recorder.start>[0]) =>
+    new Promise<RecordConsent>((resolve) => {
+      // One question at a time: a second agent asking meanwhile is refused.
+      if (recordAsk()) return resolve({ allowed: false, mic: false })
+      setRecordAsk({
+        target,
+        answer: (consent) => {
+          setRecordAsk(undefined)
+          resolve(consent)
+        },
+      })
+    })
+
+  /** The last take, remembered so "esporta" knows which one. */
+  const [lastTake, setLastTake] = createSignal<string | undefined>()
+  createEffect(() => {
+    const now = recordState()
+    if (now.status === "stopping") setLastTake(now.recording.path)
+  })
+
+  const [exporting, setExporting] = createSignal(false)
+  /** Writes `<nome>.promo.mp4` beside the take: zoom, click rings, pointer, both tracks. */
+  const exportLastTake = async () => {
+    const video = lastTake()
+    if (!video) return report("Nessuna registrazione da esportare in questa sessione.", "info")
+    if (exporting()) return report("Un'esportazione è già in corso.", "info")
+    const host = await getHost()
+    if (!host?.readTextFile || !host.recordWrite) return report("L'esportazione funziona solo nell'app desktop.")
+    setExporting(true)
+    report("Esporto il video con zoom e clic: dura quanto la registrazione.", "info")
+    try {
+      const events = await host.readTextFile(eventsPathFor(video)).then((file) => file.text).catch(() => "")
+      const exists = async (path: string) => ((await host.exists?.(path).catch(() => false)) ? path : undefined)
+      const mic = (await exists(micPathFor(video, "webm"))) ?? (await exists(micPathFor(video, "m4a")))
+      const voice = await exists(voicePathFor(video))
+      const level = qualityLevel(recordQuality())
+      const result = await exportPromo({
+        video,
+        eventsText: events,
+        ...(voice ? { voice } : {}),
+        ...(mic ? { mic } : {}),
+        fps: level.fps,
+        bitrate: level.bitrate,
+      })
+      const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
+      await host.recordWrite(out, result.bytes)
+      report(`Video pronto: ${out}`, "info")
+    } catch (failure) {
+      report(`Esportazione non riuscita: ${failure instanceof Error ? failure.message : String(failure)}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  /*
+   * What the pointer did, at about a frame's pace, and every click.
+   *
+   * On the window rather than on each pane: a take follows the user wherever
+   * they go, and a listener per pane would miss the space between them.
+   */
+  const noteMove = (event: PointerEvent) =>
+    recorder.note({ kind: "pointer", at: Date.now(), x: Math.round(event.clientX), y: Math.round(event.clientY) })
+  const noteClick = (event: PointerEvent) =>
+    recorder.note({
+      kind: "click",
+      at: Date.now(),
+      x: Math.round(event.clientX),
+      y: Math.round(event.clientY),
+      button: event.button === 2 ? "right" : event.button === 1 ? "middle" : "left",
+    })
+  window.addEventListener("pointermove", noteMove, { passive: true })
+  window.addEventListener("pointerdown", noteClick, { passive: true })
+  onCleanup(() => {
+    window.removeEventListener("pointermove", noteMove)
+    window.removeEventListener("pointerdown", noteClick)
+  })
+
+  panels.register("record", {
+    verbs: RECORD_VERBS,
+    run: (request) =>
+      runRecordRequest(request, {
+        confirm: confirmRecording,
+        start: (target, options) => startRecording(target, { mic: options.mic === true }),
+        stop: () => recorder.stop(),
+        paneRect: (name) => {
+          const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
+          if (!pane) return undefined
+          const node = document.querySelector(`[data-pane-id="${pane.id}"]`)
+          const rect = node?.getBoundingClientRect()
+          if (!rect || rect.width < 2 || rect.height < 2) return undefined
+          const scale = window.devicePixelRatio || 1
+          return {
+            x: Math.round(rect.left * scale),
+            y: Math.round(rect.top * scale),
+            width: Math.round(rect.width * scale),
+            height: Math.round(rect.height * scale),
+          }
+        },
+        state: () => {
+          const now = recordState()
+          return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
+        },
+      }).catch((failure: unknown) => ({
+        ok: false as const,
+        reason: failure instanceof Error ? failure.message : String(failure),
+      })),
   })
 
   /** Announces a newly opened panel to every session currently running. */
@@ -2439,7 +2697,11 @@ export function Workbench() {
       if (!host?.ttsPiperSpeak) throw new Error("Nessun host per la voce.")
       return host.ttsPiperSpeak(voice, text)
     },
-    play: (wav, signal) => playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter),
+    play: (wav, signal) => {
+      // A take keeps the assistant's voice as its own track (S36).
+      recorder.noteVoice(wav)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
+    },
     fallback: systemSpeaker,
     onInstall: (voice, state, problem) => {
       if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
@@ -3214,6 +3476,40 @@ export function Workbench() {
       }
     } else if (id === "voice.toggle") {
       void voiceEngine.toggle()
+    } else if (id === "record.toggle") {
+      const problem =
+        recordState().status === "recording"
+          ? await recorder.stop()
+          : await startRecording({ kind: "window" }, { mic: recordMic() })
+      if (problem) report(problem)
+    } else if (id === "record.mic") {
+      const next = !recordMic()
+      setRecordMic(next)
+      try {
+        localStorage.setItem("ade.record.mic", next ? "on" : "off")
+      } catch {
+        // Kept for this session only.
+      }
+      report(next ? "Le tue registrazioni includeranno il microfono." : "Le tue registrazioni saranno senza microfono.", "info")
+    } else if (id === "record.quality") {
+      /*
+       * Cycled rather than a submenu: three levels, and the palette row
+       * already says which one is on and what it costs a minute.
+       */
+      const order = QUALITY_LEVELS.map((level) => level.id)
+      const next = order[(order.indexOf(recordQuality()) + 1) % order.length] ?? DEFAULT_QUALITY
+      setRecordQuality(next)
+      try {
+        localStorage.setItem("ade.record.quality", next)
+      } catch {
+        // Kept for this session only.
+      }
+      const level = qualityLevel(next)
+      report(`Qualità del video: ${level.label} — ${sizePerMinute(level)}.`, "info")
+    } else if (id === "record.export") {
+      void exportLastTake()
+    } else if (id === "record.folder") {
+      await pickRecordDir()
     } else if (id === "voice.settings") {
       setVoiceSettingsOpen(true)
     } else if (id.startsWith("project.recent.")) {
@@ -3247,6 +3543,9 @@ export function Workbench() {
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
+      recording: recordState().status === "recording",
+      recordMic: recordMic(),
+      recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
       // Read through the registry signal, so a plugin loading or being torn
       // down changes the palette without anything having to refresh it.
       pluginCommands: pluginRuntime.registry.commands().map((command) => ({
@@ -4964,6 +5263,32 @@ export function Workbench() {
             </>
           }
         />
+
+        {/* The user must never be unsure whether ADE is filming: the badge
+            stays on top of everything, says where the file is going, and
+            stops the take when clicked. */}
+        <Show when={recordAsk()}>
+          {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+        </Show>
+
+        <Show when={recordState().status !== "idle"}>
+          <button
+            type="button"
+            data-slot="ade-rec"
+            data-stopping={recordState().status === "stopping" ? "" : undefined}
+            data-mic={recordMicOn() ? "" : undefined}
+            title={
+              recordState().status === "recording"
+                ? `Registrazione in corso${recordMicOn() ? " con il microfono" : ", senza microfono"} — ${recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : ""}`
+                : "Chiusura del file"
+            }
+            aria-label="Ferma la registrazione"
+            onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
+          >
+            <span data-slot="ade-rec-dot" aria-hidden="true" />
+            {recordState().status === "recording" ? (recordMicOn() ? "REC · MIC" : "REC") : "…"}
+          </button>
+        </Show>
 
         <main data-slot="ade-main">
           {/* Above the section rather than over it: these messages are about

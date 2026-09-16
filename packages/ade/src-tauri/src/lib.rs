@@ -18,6 +18,7 @@ mod frontend;
 mod media;
 mod project_bytes;
 mod pty;
+mod record;
 mod secrets;
 mod serve;
 mod shots;
@@ -1124,6 +1125,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
+        .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
         .manage(shots::Watch::default())
@@ -1142,11 +1144,20 @@ pub fn run() {
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
-            let roots = match state.0.lock() {
+            let mut roots = match state.0.lock() {
                 Ok(guard) => guard.clone(),
                 Err(_) => Vec::new(),
             };
-            media::respond(&roots, &request)
+            // The recent takes' own files, one by one: their folder is not a root.
+            roots.extend(ctx.app_handle().state::<record::Recorder>().playable());
+            // The asking page's own origin, as the webview reports it: the
+            // one origin that may read a take back into a canvas.
+            let origin = ctx
+                .app_handle()
+                .get_webview_window(ctx.webview_label())
+                .and_then(|webview| webview.url().ok())
+                .map(|url| url.origin().ascii_serialization());
+            media::respond(&roots, &request, origin.as_deref())
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -1165,6 +1176,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
             update::ade_update_install,
+            record::record_start,
+            record::record_stop,
+            record::record_state,
+            record::record_write,
             allow_write_root,
             git_run,
             bot_delete,
