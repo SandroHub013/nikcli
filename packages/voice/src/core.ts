@@ -151,6 +151,7 @@ export {
 // Voice orchestration engine
 export {
   createVoiceEngine,
+  holdsToTalk,
   type VoiceEngine,
   type VoiceEngineOptions,
 } from "./engine"

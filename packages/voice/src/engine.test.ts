@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./settings/model"
-import { createVoiceEngine } from "./engine"
+import { createVoiceEngine, holdsToTalk } from "./engine"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
 import { createFakeSpeaker } from "./tts/speaker"
@@ -1598,5 +1598,75 @@ describe("after 0.7.0: opened by hand, with listening by itself turned off", () 
     await new Promise((r) => setTimeout(r, 60))
     expect(engine.isRunning()).toBe(true)
     await engine.stop()
+  })
+})
+
+describe("after 0.7.0: dictation is held on its key", () => {
+  function listening() {
+    let clock = 10_000
+    const host = new MockVoiceHost()
+    const asked: string[] = []
+    ;(host as VoiceHost).askAgent = async (request) => {
+      asked.push(request.text)
+      return { ok: true, text: "Fatto.", ran: true }
+    }
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto" } })
+    const settle = () => new Promise((r) => setTimeout(r, 40))
+    return { host, asked, transcriber, engine, settle, advance: (ms: number) => (clock += ms) }
+  }
+
+  test("the dictation key is held, whatever the activation", () => {
+    expect(holdsToTalk({ activation: "wake-word" }, "transcription")).toBe(true)
+    expect(holdsToTalk({ activation: "wake-word" }, "agent")).toBe(false)
+    expect(holdsToTalk({ activation: "push-to-talk" }, "agent")).toBe(true)
+  })
+
+  test("held over always-on listening: what is said is dictated, and on release it goes back to waiting for the name", async () => {
+    const { host, asked, transcriber, engine, settle, advance } = listening()
+    await engine.start("agent", { waitForName: true })
+    await engine.pressToTalk("transcription")
+    expect(engine.activeMode()).toBe("transcription")
+    advance(2_000)
+    transcriber.setCommitResult(true)
+    await engine.releaseToTalk()
+    // The sentence comes back after the key is up.
+    transcriber.emit("questo va nel pannello", true)
+    await settle()
+    expect(host.calls.some((c) => JSON.stringify(c).includes("questo va nel pannello"))).toBe(true)
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.activeMode()).toBe("agent")
+    // The room is not dictated, and not asked either.
+    transcriber.emit("il telegiornale di stasera", true)
+    await settle()
+    expect(engine.dictated()).toEqual([])
+    expect(asked).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("a tap on the dictation key does not leave dictation open", async () => {
+    const { transcriber, engine, settle, advance } = listening()
+    await engine.start("agent", { waitForName: true })
+    await engine.pressToTalk("transcription")
+    advance(10)
+    await engine.releaseToTalk()
+    await settle()
+    expect(engine.activeMode()).toBe("agent")
+    transcriber.emit("il telegiornale di stasera", true)
+    await settle()
+    expect(engine.dictated()).toEqual([])
+    await engine.stop()
+  })
+
+  test("held with the microphone closed: it closes again on release", async () => {
+    const { transcriber, engine, settle, advance } = listening()
+    await engine.pressToTalk("transcription")
+    advance(2_000)
+    transcriber.setCommitResult(true)
+    await engine.releaseToTalk()
+    // The sentence comes back after the key is up.
+    transcriber.emit("una nota", true)
+    await settle()
+    expect(engine.isRunning()).toBe(false)
   })
 })

@@ -290,6 +290,7 @@ import {
   wakeWordEnabled,
   shortcutActivationEnabled,
   describeShortcut,
+  holdsToTalk,
   type VoiceEngine,
   type VoiceSettings,
 } from "@nikcli-ai/voice"
@@ -3166,7 +3167,7 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
-        if (voiceSettings().activation === "push-to-talk") {
+        if (holdsToTalk(voiceSettings(), mode)) {
           const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
           void pttHandler.onKeyDown(parseChord(chord, platform), e, mode)
         } else {
@@ -3330,17 +3331,18 @@ export function Workbench() {
               return
             }
 
-            if (voiceSettings().activation === "push-to-talk") {
-              if (action.kind === "press") {
-                const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
-                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
-              } else {
-                // No key to compare: the native side already said the chord let go.
-                void pttHandler.onKeyUp()
-              }
+            if (action.kind === "release") {
+              // No key to compare: the native side already said the chord let go.
+              // Nothing held, nothing released.
+              void pttHandler.onKeyUp()
               return
             }
-            if (action.kind === "press") void voiceEngine.toggle(action.mode)
+            if (holdsToTalk(voiceSettings(), action.mode)) {
+              const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
+              void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
+              return
+            }
+            void voiceEngine.toggle(action.mode)
           })
 
           releaseGlobal = () => {

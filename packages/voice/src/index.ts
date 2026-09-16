@@ -156,7 +156,7 @@ export {
 } from "./plan/schema"
 
 // Voice orchestration engine
-export { createVoiceEngine, type VoiceEngine, type VoiceEngineOptions } from "./engine"
+export { createVoiceEngine, holdsToTalk, type VoiceEngine, type VoiceEngineOptions } from "./engine"
 
 // Solid UI components
 export { VoiceButton, type VoiceButtonProps } from "./ui/voice-button"
