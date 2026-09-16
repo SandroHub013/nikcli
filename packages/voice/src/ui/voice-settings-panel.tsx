@@ -111,6 +111,14 @@ export interface VoiceSettingsPanelProps {
   onChange: (next: VoiceSettings) => void
   /** Optional callback fired when the panel requests closing. */
   onClose?: () => void
+  /**
+   * What changed under the user in this profile, shown where they can undo it.
+   *
+   * The startup strip says it once and is dismissed; a rule that changed how
+   * the microphone answers has to be readable next to the switch that turns
+   * it back, or the only way to find out is to wonder why nothing replies.
+   */
+  settingsNotice?: string
   /** Optional existing ADE keymap bindings to evaluate for shortcut collision. */
   existingBindings?: readonly Binding[]
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
@@ -1439,6 +1447,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
             {/* Wake Word */}
             <div data-slot="activation-group">
+              <Show when={props.settingsNotice}>
+                {(text) => (
+                  <div data-slot="reason-box" role="status">
+                    {text()}
+                  </div>
+                )}
+              </Show>
               <div
                 role="radio"
                 data-value="wake-word"
@@ -1464,8 +1479,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 onClick={() => selectActivation("wake-word")}
               >
                 <div data-slot="item-text-group">
-                  <span data-slot="item-title">Parola di richiamo</span>
-                  <span data-slot="item-desc">Solo per la modalità agente</span>
+                  <span data-slot="item-title">Risponde solo se lo chiami per nome</span>
+                  <span data-slot="item-desc">
+                    Consigliato con il microfono aperto: quello che si dice in stanza, o alla televisione, resta fuori
+                  </span>
                 </div>
                 <Show when={props.settings.mode === "agent"}>
                   <kbd data-slot="chord-chip">«{props.settings.wakeWord}»</kbd>
@@ -1489,7 +1506,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               >
                 <div data-slot="wake-word-wrap">
                   <label for="wake-word-input" data-slot="label">
-                    Frase di richiamo
+                    Il suo nome
                   </label>
                   <div data-slot="field-row">
                     <input
@@ -1525,9 +1542,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     </button>
                   </div>
                   <p id="wake-word-hint" data-slot="hint">
-                    Puoi parlare di seguito senza pause (es.{" "}
-                    <em>&quot;{props.settings.wakeWord} apri il browser&quot;</em>). Invio
-                    per confermare, Esc per annullare.
+                    La frase deve iniziare con il nome, con o senza saluto (es.{" "}
+                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em> oppure{" "}
+                    <em>&quot;ehi {props.settings.wakeWord}, apri il browser&quot;</em>); quello che dici
+                    dopo vale subito, senza pause. Mentre sta lavorando non serve chiamarlo: «annulla» lo ferma comunque.
+                    Invio per confermare, Esc per annullare.
                   </p>
                 </div>
               </Show>

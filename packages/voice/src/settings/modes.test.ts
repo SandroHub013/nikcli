@@ -134,7 +134,7 @@ describe("Voice Modes & Settings Interaction", () => {
       speaker,
       transcriber,
       now: () => Date.now(),
-      settings: {
+      settings: { activation: "toggle",
         mode: "transcription",
         transcriptionSend: "manual",
       },
@@ -167,7 +167,7 @@ describe("Voice Modes & Settings Interaction", () => {
       speaker,
       transcriber,
       now: () => Date.now(),
-      settings: {
+      settings: { activation: "toggle",
         mode: "transcription",
         transcriptionSend: "auto",
       },
@@ -389,7 +389,7 @@ describe("Voice Modes & Settings Interaction", () => {
         speaker: createFakeSpeaker(),
         transcriber,
         now: () => Date.now(),
-        settings: { mode, transcriptionSend: "manual" },
+        settings: { activation: "toggle", mode, transcriptionSend: "manual" },
       })
 
     test("il controllo premuto decide, e la preferenza salvata non cambia", async () => {
@@ -495,7 +495,7 @@ describe("Voice Modes & Settings Interaction", () => {
       speaker,
       createTranscriber: mockTranscriberFactory,
       now: () => Date.now(),
-      settings: {
+      settings: { activation: "toggle",
         backend: "openrouter",
       },
     })

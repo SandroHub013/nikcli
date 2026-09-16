@@ -296,9 +296,9 @@ import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import {
   GLOBAL_VOICE_EVENT,
-  modeForGlobalChord,
-  readGlobalVoicePayload,
-  toTauriChord,
+  globalVoiceAction,
+  registerVoiceShortcuts,
+  unknownChordMessage,
 } from "../voice/global-shortcut"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -2215,6 +2215,16 @@ export function Workbench() {
     bindings,
     platform
   )
+  /*
+   * The migration to the wake word, kept for the settings panel.
+   *
+   * The strip above is dismissed and gone; this is the same sentence where the
+   * switch that undoes it lives, and it stays until the user turns the rule
+   * off or on themselves.
+   */
+  const migratedToWakeWord = initialVoice.corrections.find((line) => line.includes("per nome"))
+  const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(migratedToWakeWord)
+
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
     [
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
@@ -2399,6 +2409,8 @@ export function Workbench() {
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
+    // Once they have decided for themselves, the note about the change is spent.
+    if (next.activation !== voiceSettings().activation) setVoiceSettingsNotice(undefined)
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
     await voiceEngine.updateSettings(saved.settings)
@@ -2817,14 +2829,11 @@ export function Workbench() {
            * the microphone from anywhere.
            */
           const syncGlobalShortcuts = async (settings: VoiceSettings) => {
-            try {
-              await invoke("unregister_global_voice_shortcuts")
-              for (const chord of [settings.transcriptionChord, settings.agentChord]) {
-                await invoke("register_global_voice_shortcut", { chord: toTauriChord(chord) })
-              }
-            } catch (err) {
-              console.warn("Registrazione scorciatoia globale non riuscita:", err)
-            }
+            await registerVoiceShortcuts(settings, {
+              unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
+              register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
+              report: (message) => report(message, "warning"),
+            })
           }
 
           await syncGlobalShortcuts(voiceSettings())
@@ -2838,22 +2847,25 @@ export function Workbench() {
            * push-to-talk on the release.
            */
           const unlisten = await listen<unknown>(GLOBAL_VOICE_EVENT, (event) => {
-            const payload = readGlobalVoicePayload(event.payload)
-            if (!payload) return
-            const mode = modeForGlobalChord(payload.chord, voiceSettings(), platform)
-            if (!mode) return
+            const action = globalVoiceAction(event.payload, voiceSettings(), platform)
+            if (action.kind === "ignore") return
+            if (action.kind === "unknown") {
+              // Said, never guessed: see `globalVoiceAction`.
+              report(unknownChordMessage(action.chord), "warning")
+              return
+            }
 
             if (voiceSettings().activation === "push-to-talk") {
-              if (payload.state === "pressed") {
-                const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
-                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, mode)
+              if (action.kind === "press") {
+                const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
+                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
               } else {
                 // No key to compare: the native side already said the chord let go.
                 void pttHandler.onKeyUp()
               }
               return
             }
-            if (payload.state === "pressed") void voiceEngine.toggle(mode)
+            if (action.kind === "press") void voiceEngine.toggle(action.mode)
           })
 
           releaseGlobal = () => {
@@ -4901,6 +4913,7 @@ export function Workbench() {
           onClose={() => setVoiceSettingsOpen(false)}
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
+          settingsNotice={voiceSettingsNotice()}
           title="Impostazioni"
           subtitle="Voce, routine, bot, codice, MCP, plugin e competenze"
           /*

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
+  globalVoiceAction,
   modeForGlobalChord,
+  registerVoiceShortcuts,
+  unknownChordMessage,
   parseGlobalChord,
   readGlobalVoicePayload,
   toTauriChord,
@@ -87,5 +90,91 @@ describe("readGlobalVoicePayload", () => {
     expect(readGlobalVoicePayload("")).toBeUndefined()
     expect(readGlobalVoicePayload({ state: "pressed" })).toBeUndefined()
     expect(readGlobalVoicePayload(42)).toBeUndefined()
+  })
+})
+
+describe("registerVoiceShortcuts", () => {
+  const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+space" }
+
+  test("a chord another application holds does not take the other one down with it", async () => {
+    const registered: string[] = []
+    const said: string[] = []
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => {},
+      // Ctrl+Space is often already claimed: the dictation chord fails, the assistant's must not.
+      register: async (chord) => {
+        if (chord === "CommandOrControl+SPACE") throw new Error("HotKey already registered")
+        registered.push(chord)
+      },
+      report: (message) => said.push(message),
+    })
+
+    expect(registered).toEqual(["CommandOrControl+Shift+K"])
+    expect(result.registered).toEqual(["agent"])
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0]).toMatchObject({ mode: "transcription", chord: "mod+space" })
+    // Said in the interface, not only in the console.
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain("mod+space")
+    expect(said[0]).toContain("dettatura")
+  })
+
+  test("both chords are claimed, the previous ones dropped first", async () => {
+    const order: string[] = []
+    const result = await registerVoiceShortcuts(settings, {
+      unregisterAll: async () => void order.push("unregister"),
+      register: async (chord) => void order.push(chord),
+    })
+
+    expect(order).toEqual(["unregister", "CommandOrControl+SPACE", "CommandOrControl+Shift+K"])
+    expect(result.failed).toHaveLength(0)
+  })
+
+  test("the two chords of this user's settings are told apart on both sides", () => {
+    // What the OS reports for each, as `global-hotkey` prints it.
+    expect(modeForGlobalChord("shift+control+KeyK", settings, "other")).toBe("agent")
+    expect(modeForGlobalChord("control+Space", settings, "other")).toBe("transcription")
+  })
+})
+
+describe("globalVoiceAction", () => {
+  const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+space" }
+
+  test("each chord opens its own feature, on press", () => {
+    expect(globalVoiceAction({ chord: "shift+control+KeyK", state: "pressed" }, settings, "other")).toEqual({
+      kind: "press",
+      mode: "agent",
+    })
+    expect(globalVoiceAction({ chord: "control+Space", state: "pressed" }, settings, "other")).toEqual({
+      kind: "press",
+      mode: "transcription",
+    })
+    expect(globalVoiceAction({ chord: "control+Space", state: "released" }, settings, "other")).toEqual({ kind: "release" })
+  })
+
+  test("a chord ADE cannot place is said, never turned into dictation", () => {
+    const action = globalVoiceAction({ chord: "control+F24", state: "pressed" }, settings, "other")
+    expect(action).toEqual({ kind: "unknown", chord: "control+F24" })
+    expect(unknownChordMessage("control+F24")).toContain("non riconosciuta")
+    // The dangerous answer would be a mode: with the stored mode on dictation,
+    // the assistant's chord would open the microphone for dictation instead.
+    expect(action).not.toHaveProperty("mode")
+  })
+
+  test("a chord on a punctuation key is recognised: the recorder writes «,», the system says «Comma»", () => {
+    const punctuation = { agentChord: "mod+,", transcriptionChord: "mod+." }
+    expect(globalVoiceAction({ chord: "control+Comma", state: "pressed" }, punctuation, "other")).toEqual({
+      kind: "press",
+      mode: "agent",
+    })
+    expect(globalVoiceAction({ chord: "control+Period", state: "pressed" }, punctuation, "other")).toEqual({
+      kind: "press",
+      mode: "transcription",
+    })
+  })
+
+  test("an empty or malformed payload does nothing at all", () => {
+    expect(globalVoiceAction(undefined, settings, "other")).toEqual({ kind: "ignore" })
+    expect(globalVoiceAction({ state: "pressed" }, settings, "other")).toEqual({ kind: "ignore" })
   })
 })

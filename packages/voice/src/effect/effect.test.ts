@@ -1,3 +1,4 @@
+import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import { describe, expect, test } from "bun:test"
 import {
   Clock,
@@ -235,7 +236,7 @@ describe("Effect-TS Voice Backend", () => {
     )
 
     const testProgram = Effect.gen(function* () {
-      const handle = yield* makeVoiceProgram()
+      const handle = yield* makeVoiceProgram({ getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }) })
       // Emit recognized command
       fakeTranscriber.emit("nuova sessione", true)
       yield* Effect.sleep(Duration.millis(30))
@@ -307,7 +308,7 @@ describe("Effect-TS Voice Backend", () => {
     )
 
     const program = Effect.gen(function* () {
-      yield* makeVoiceProgram()
+      yield* makeVoiceProgram({ getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }) })
 
       // 1. Emit an error from the transcriber
       fakeTranscriber.emitError(new Error("Errore di rete temporaneo"))
@@ -350,7 +351,7 @@ describe("Effect-TS Voice Backend", () => {
     const startTime = Date.now()
 
     const testProgram = Effect.gen(function* () {
-      const handle = yield* makeVoiceProgram()
+      const handle = yield* makeVoiceProgram({ getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }) })
 
       // "termina processo" is a destructive command requiring confirmation
       yield* handle.submitText("termina processo")

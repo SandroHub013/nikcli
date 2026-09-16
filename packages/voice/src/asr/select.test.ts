@@ -126,8 +126,7 @@ describe("asr/select", () => {
             isTypeSupported: () => true,
           },
         },
-      },
-    })
+      }, settings: { activation: "toggle" } })
 
     expect(engine).toBeDefined()
     expect(engine.status()).toBe("idle")
