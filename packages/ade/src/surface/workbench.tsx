@@ -253,7 +253,8 @@ import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
-import { isModel, MODEL_EXTENSIONS } from "../model3d/model"
+import { MODEL_EXTENSIONS } from "../model3d/model"
+import { routeForFile } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
@@ -880,6 +881,25 @@ export function Workbench() {
       model: "—",
       mode: "model",
       modelPath: path,
+      workspaceId: project()?.name ?? "workspace",
+      lines: [],
+    }))
+  }
+
+  /** A video panel on `path`, or the one already playing it. */
+  const openVideo = (path: string) => {
+    const existing = wb().panes.find((pane) => pane.mode === "video" && pane.videoPath === path)
+    if (existing) {
+      setWb((w) => ({ ...w, focusedId: existing.id }))
+      return
+    }
+    setWb((w) => addPane(w, {
+      id: `v${Date.now()}`,
+      title: path.split(/[\\/]/).pop() ?? "Video",
+      status: "working",
+      model: "—",
+      mode: "video",
+      videoPath: path,
       workspaceId: project()?.name ?? "workspace",
       lines: [],
     }))
@@ -3839,9 +3859,14 @@ export function Workbench() {
   const openFile = async (path: string) => {
     setSelectedFile(path)
 
-    // A model is looked at, not edited as text: it opens in the 3D panel.
-    if (isModel(path)) {
+    // A model or a video is looked at, not edited as text: each opens in its panel.
+    const route = routeForFile(path)
+    if (route === "model") {
       openModel(path)
+      return
+    }
+    if (route === "video") {
+      openVideo(path)
       return
     }
 
