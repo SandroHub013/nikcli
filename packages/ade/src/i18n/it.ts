@@ -112,8 +112,6 @@ export const it = {
   "newPane.app.hint": "l'app del dev server in un telefono o in una finestra",
   "newPane.decisions": "Decisioni",
   "newPane.decisions.hint": "tutto il registro: aperte, risposte, rimandate, chiuse",
-  "restore.activity.resume": "Da riprendere",
-  "restore.activity.restored": "Ripristinato",
   "restore.note": "Sessione ripristinata.",
   "restore.note.gone": "Il processo non è più attivo.",
   "restore.note.reopen": "Riapro la conversazione dell'agente dov'era rimasta.",
@@ -306,6 +304,25 @@ export const it = {
   "record.export.done": (path: string) => `Video pronto: ${path}`,
   "record.export.failed": (problem: string) => `Esportazione non riuscita: ${problem}`,
   "pane.maybeStuck": (request: string) => `Forse bloccata: al lavoro da oltre un'ora senza output né modifiche (richiesta ${request})`,
+
+  // Pane activity (labels for the codes in grid/activity.ts)
+  "activity.ready": "Disponibile",
+  "activity.running": "In esecuzione",
+  "activity.starting": "Inizializzazione",
+  "activity.done": "Fatto",
+  "activity.exited": (code: string) => `Uscito con ${code}`,
+  "activity.resumed": "Sessione ripresa",
+  "activity.toResume": "Da riprendere",
+  "activity.restored": "Ripristinato",
+  "activity.killed": "Ucciso",
+  "activity.permission": "In attesa di permesso",
+  "activity.startFailed": "Avvio fallito",
+  "activity.sshConnecting": "Connessione ssh",
+  "activity.connected": "Connesso",
+  "activity.connectFailed": "Connessione fallita",
+  "pane.killed": "Processo ucciso",
+  "pane.limit": "limite raggiunto",
+  "pane.limit.window": (window: string) => `finestra ${window} esaurita`,
 }
 
 /** The shape every catalog has: the same keys, the same parameters. */

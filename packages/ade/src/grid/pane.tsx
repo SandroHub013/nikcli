@@ -20,6 +20,7 @@ import {
   resolvePaneState,
 } from "./pane-state"
 import { t } from "../i18n"
+import { activityLabel } from "./activity"
 
 export {
   type PaneStatus,
@@ -463,17 +464,17 @@ export function SessionPane(props: SessionPaneProps) {
 
   const stateHead = createMemo(() => {
     if (props.stateDetail) return props.stateDetail
-    if (props.activity) return props.activity
+    if (props.activity) return activityLabel(props.activity)
     const st = state()
-    if (st === "limit") return reading()?.countdown ? `finestra ${reading()?.bindingKey} esaurita` : "limite raggiunto"
-    if (st === "work") return props.mode ?? "In esecuzione"
-    if (st === "perm") return props.actions?.[0]?.label ?? "Permesso"
-    if (st === "err") return "Bloccata"
+    if (st === "limit") return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")
+    if (st === "work") return props.mode ?? t("activity.running")
+    if (st === "perm") return props.actions?.[0]?.label ?? t("paneState.short.perm")
+    if (st === "err") return t("paneState.err")
     return STATE_FULL[st]
   })
 
   const stateDetail = createMemo(() => {
-    return props.stateDetail ?? props.activity ?? STATE_FULL[state()]
+    return props.stateDetail ?? activityLabel(props.activity) ?? STATE_FULL[state()]
   })
 
   const tipAll = createMemo(() => {

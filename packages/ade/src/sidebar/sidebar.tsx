@@ -74,6 +74,7 @@ import {
 import { mergeChildren, markDirectoryError } from "./fs-tree"
 import { describeStats, type StatView } from "./system-stats"
 import { t } from "../i18n"
+import { activityLabel, isReadyActivity } from "../grid/activity"
 
 export interface SidebarProps {
   workspaces: Workspace[]
@@ -262,8 +263,8 @@ function SessionChildRow(props: {
       aria-selected={props.row.isSelected}
       onClick={() => props.onSelect?.(props.row.id)}
       title={
-        props.row.session.activity && props.row.session.activity !== "Disponibile"
-          ? `${props.row.session.title} — ${props.row.session.activity}`
+        props.row.session.activity && !isReadyActivity(props.row.session.activity)
+          ? `${props.row.session.title} — ${activityLabel(props.row.session.activity)}`
           : props.row.session.title
       }
     >
@@ -336,8 +337,8 @@ function ActiveAgentRow(props: {
       aria-selected={props.isSelected}
       onClick={() => props.onSelect?.(props.session.id)}
       title={
-        props.session.activity && props.session.activity !== "Disponibile"
-          ? `${props.session.title} — ${props.session.activity}`
+        props.session.activity && !isReadyActivity(props.session.activity)
+          ? `${props.session.title} — ${activityLabel(props.session.activity)}`
           : props.session.title
       }
     >

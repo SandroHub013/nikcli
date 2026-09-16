@@ -239,7 +239,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * as Enter — one dictated sentence could arrive as two submissions.
        */
       const singleLine = asOneLine(text)
-      deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+      deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
       session.write(asSubmittedLine(singleLine))
     },

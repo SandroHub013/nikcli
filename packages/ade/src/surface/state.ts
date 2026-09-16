@@ -522,7 +522,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         id: p.id,
         title: p.title,
         status: restoredStatus(p.status),
-        activity: p.wasRunning ? t("restore.activity.resume") : t("restore.activity.restored"),
+        activity: p.wasRunning ? "toResume" : "restored",
         model: p.model ?? p.agent,
         mode: "auto",
         agent: p.agent,
@@ -563,7 +563,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
                 : p.cwd && state.projectPath && !p.project && samePath(p.cwd, state.projectPath) === false
                   ? "stale"
                   : "project",
-              note: "Ripristinato",
+              note: t("activity.restored"),
             }
           : undefined
       }

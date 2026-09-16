@@ -340,7 +340,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
           if (data.includes("\r")) deps.panels.newTurn(current().id)
           if (data.includes("\r") && current().status === "idle") {
-            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
           }
           session.write(data)
         }}
@@ -382,7 +382,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 // The composer types into the terminal like a keyboard would,
                 // carriage return included: the CLI cannot tell the
                 // difference, which is the point.
-                deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+                deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
                 deps.sessionFor(current().id)?.write(`${line}\r`)
               }
             : restartable()

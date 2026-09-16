@@ -42,6 +42,7 @@ import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookH
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
 import { refreshSystemLocale, syncDocumentLanguage, t } from "../i18n"
+import { exitedActivity } from "../grid/activity"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
@@ -1530,7 +1531,7 @@ export function Workbench() {
   const markWorking = (paneId: string) => {
     workingSince.set(paneId, Date.now())
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    if (pane?.status === "idle") setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+    if (pane?.status === "idle") setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
     settleWhenQuiet(paneId)
   }
 
@@ -1562,9 +1563,9 @@ export function Workbench() {
       if (next === "working") {
         panels.newTurn(paneId, activity.at)
         workingSince.set(paneId, Date.now())
-        setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+        setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       } else if (next === "idle") {
-        setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+        setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
       }
     }
   }
@@ -3485,7 +3486,7 @@ export function Workbench() {
         running.get(wb().focusedId!)?.kill()
         running.delete(wb().focusedId!)
         touchRunning()
-        setWb(w => updatePane(w, w.focusedId!, { status: "error", activity: "Ucciso", lines: [...(w.panes.find(p=>p.id===w.focusedId)?.lines||[]), {kind:"note", text:"Processo ucciso"}] }))
+        setWb(w => updatePane(w, w.focusedId!, { status: "error", activity: "killed", lines: [...(w.panes.find(p=>p.id===w.focusedId)?.lines||[]), {kind:"note", text:t("pane.killed")}] }))
       }
     } else if (id === "voice.toggle") {
       void voiceEngine.toggle()
@@ -3600,7 +3601,7 @@ export function Workbench() {
       // else would come back to look at a pane whose terminal has gone quiet.
       if (outcome === "recheck") return settleWhenQuiet(paneId)
       if (outcome === "wait") return
-      setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+      setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
     }, QUIET_MS))
   }
   const forgetQuiet = (paneId: string) => {
@@ -3776,7 +3777,7 @@ export function Workbench() {
     forgetQuiet(id)
     setWb(w => updatePane(w, id, {
       status: code === 0 ? "done" : "error",
-      activity: code === 0 ? "Fatto" : `Uscito con ${code}`
+      activity: code === 0 ? "done" : exitedActivity(code)
     }))
   }
 
@@ -4029,7 +4030,7 @@ export function Workbench() {
       if (!isResolved(pending, recent, agent)) return
       permissions.forget(paneId)
       // The agent moved on by itself, so the pane is working again.
-      setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+      setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       return
     }
 
@@ -4037,7 +4038,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
-    setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "In attesa di permesso" }))
+    setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
       void voiceEngine.handlePermissionRequest(paneId, request.what)
     }
@@ -4251,7 +4252,7 @@ export function Workbench() {
           ? launched.tree
           : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
         status: hasTask ? "working" : "idle",
-        activity: resumed ? "Sessione ripresa" : (hasTask ? "In esecuzione" : "Disponibile"),
+        activity: resumed ? "resumed" : (hasTask ? "running" : "ready"),
         // A fresh start drops an id whose conversation is gone, so the pane
         // stops promising to reopen it.
         ...(mintedId ? { resumeId: mintedId } : resume?.kind === "fresh" ? { resumeId: undefined } : {}),
@@ -4447,7 +4448,7 @@ export function Workbench() {
           if (decision === "send") {
             setWb(w => updatePane(w, paneId, {
               status: "working",
-              activity: "In esecuzione",
+              activity: "running",
             }))
             // Opening tasks only — a line the user typed later is theirs alone.
             // Text and Enter apart, for the reason `typeLine` gives.
@@ -4469,7 +4470,7 @@ export function Workbench() {
            */
           setWb(w => updatePane(w, paneId, {
             status: "idle",
-            activity: "Disponibile",
+            activity: "ready",
           }))
           noteInTerminal(
             paneId,
@@ -4482,7 +4483,7 @@ export function Workbench() {
 
     } catch (e) {
       appendLine(paneId, String(e))
-      setWb(w => updatePane(w, paneId, { status: "error", activity: "Avvio fallito" }))
+      setWb(w => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
 
@@ -4515,7 +4516,7 @@ export function Workbench() {
         tree: undefined,
         resumeId: undefined,
         status: task.trim() ? "working" : "idle",
-        activity: "Connessione ssh",
+        activity: "sshConnecting",
       }),
     )
     appendLine(paneId, `ssh ${args.join(" ")}`, "shell")
@@ -4571,13 +4572,13 @@ export function Workbench() {
         if (decision === "abandon") {
           stopOpeningPoll(poll)
           noteInTerminal(paneId, t("task.stepNotSent", String(steps[index])))
-          setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
+          setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
         const text = steps[index]!
         index += 1
         void typeLine(session, text)
-        setWb((w) => updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "Connesso" : "In esecuzione" }))
+        setWb((w) => updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "connected" : "running" }))
         if (index >= steps.length) {
           stopOpeningPoll(poll)
           return
@@ -4588,7 +4589,7 @@ export function Workbench() {
       openingPolls.add(poll)
     } catch (e) {
       appendLine(paneId, String(e))
-      setWb((w) => updatePane(w, paneId, { status: "error", activity: "Connessione fallita" }))
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
 
@@ -4660,7 +4661,7 @@ export function Workbench() {
       title,
       // If there is an initial task, provisioning begins; otherwise idle ("disponibile")
       status: hasInitialTask ? "provisioning" : "idle",
-      activity: hasInitialTask ? "Inizializzazione" : "Disponibile",
+      activity: hasInitialTask ? "starting" : "ready",
       model: entry.agentId,
       agent: entry.agentId,
       mode: input.preset ?? "custom",
@@ -4724,7 +4725,7 @@ export function Workbench() {
       id,
       title: bot.identifier,
       status: "idle",
-      activity: "Disponibile",
+      activity: "ready",
       model: bot.model ?? launch.command,
       agent: launch.agentId,
       mode: "bot",
@@ -4753,7 +4754,7 @@ export function Workbench() {
       id,
       title: `${runner.label} · accesso`,
       status: "idle",
-      activity: "Disponibile",
+      activity: "ready",
       model: runner.command,
       agent: agentId,
       mode: "bot",

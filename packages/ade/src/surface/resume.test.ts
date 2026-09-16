@@ -115,14 +115,14 @@ describe("saving and restoring a session", () => {
 
   test("a session that was running says it is being picked up again", () => {
     const { restored } = roundTrip([session()])
-    expect(restored.panes[0].activity).toBe("Da riprendere")
+    expect(restored.panes[0].activity).toBe("toResume")
     expect(restored.panes[0].lines.at(-1)?.text).toContain("riprendo il compito")
   })
 
   test("a finished agent session is brought back too, and says so", () => {
     // The workbench reopens every agent pane on launch, not only the live ones.
     const { restored } = roundTrip([session({ status: "done" })])
-    expect(restored.panes[0].activity).toBe("Ripristinato")
+    expect(restored.panes[0].activity).toBe("restored")
     expect(restored.panes[0].lines.at(-1)?.text).toContain("riprendo")
   })
 
