@@ -61,6 +61,8 @@ const loaded = (element: HTMLMediaElement) =>
 export async function exportPromo(input: ExportInput): Promise<ExportResult> {
   const events = readEvents(input.eventsText)
   const video = document.createElement("video")
+  // Without CORS the canvas turns unclean and MediaRecorder writes 0 bytes.
+  video.crossOrigin = "anonymous"
   video.src = mediaUrl(input.video)
   video.muted = true
   video.playsInline = true

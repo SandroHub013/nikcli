@@ -1113,7 +1113,14 @@ pub fn run() {
                 Ok(guard) => guard.clone(),
                 Err(_) => Vec::new(),
             };
-            media::respond(&roots, &request)
+            // The asking page's own origin, as the webview reports it: the
+            // one origin that may read a take back into a canvas.
+            let origin = ctx
+                .app_handle()
+                .get_webview_window(ctx.webview_label())
+                .and_then(|webview| webview.url().ok())
+                .map(|url| url.origin().ascii_serialization());
+            media::respond(&roots, &request, origin.as_deref())
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
