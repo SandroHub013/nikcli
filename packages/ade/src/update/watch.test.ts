@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import {
   CHECK_EVERY_MS,
+  ERROR_BACKOFF_MS,
   MAX_CALLS_PER_HOUR,
   MIN_CHECK_GAP_MS,
+  ReleaseFeedError,
   checkMessage,
   createUpdateWatch,
   githubReleaseFeed,
+  retryAfter,
   type CheckResult,
   type ReleaseFeed,
 } from "./watch"
@@ -122,9 +125,86 @@ describe("createUpdateWatch", () => {
     const it = watching({ answers })
     for (let i = 0; i < MAX_CALLS_PER_HOUR + 5; i++) {
       const result = await it.watch.check({ force: true })
-      expect(result.status).toBe("unchanged")
+      expect(result.status).toBe("current")
+      expect(result.cached).toBe(true)
     }
     expect(it.calls()).toBe(MAX_CALLS_PER_HOUR + 5)
+  })
+
+  /*
+   * The command is pressed to confirm what the bell said. Answering "you are
+   * on the newest one" because GitHub replied 304 — which carries no list —
+   * would contradict the notice sitting right above it.
+   */
+  test("after an update was found, an unchanged answer still reports it", async () => {
+    const it = watching({
+      answers: [
+        async () => ({ releases: RELEASES, notModified: false }),
+        async () => ({ notModified: true }),
+        async () => ({ notModified: true }),
+      ],
+    })
+    expect((await it.watch.check({ force: true })).update?.version).toBe("1.1.0")
+
+    const cached = await it.watch.check({ force: true })
+    expect(cached.status).toBe("update")
+    expect(cached.update?.version).toBe("1.1.0")
+    expect(cached.cached).toBe(true)
+    expect(checkMessage(cached).text).toBe("ADE 1.1.0 è disponibile")
+
+    // And it is not announced twice: the bell already has that line.
+    await it.watch.check({ force: true })
+    expect(it.announced).toEqual(["1.1.0"])
+  })
+
+  test("an unchanged answer to a build that has since caught up says so", async () => {
+    const it = watching({
+      version: "1.1.0",
+      answers: [async () => ({ releases: RELEASES, notModified: false }), async () => ({ notModified: true })],
+    })
+    expect((await it.watch.check({ force: true })).status).toBe("current")
+    expect((await it.watch.check({ force: true })).status).toBe("current")
+  })
+
+  test("a refused request is not retried until GitHub said to come back", async () => {
+    const it = watching({
+      answers: [async () => Promise.reject(new ReleaseFeedError("GitHub 403", 1_000_000 + 30 * 60_000))],
+    })
+    expect((await it.watch.check({ force: true })).status).toBe("error")
+    expect(it.calls()).toBe(1)
+
+    // Not even by hand: asking again would only earn the same refusal.
+    const waiting = await it.watch.check({ force: true })
+    expect(waiting.status).toBe("skipped")
+    expect(waiting.problem).toContain("aspettare")
+    expect(it.calls()).toBe(1)
+
+    it.advance(30 * 60_000)
+    expect((await it.watch.check({ force: true })).status).toBe("update")
+    expect(it.calls()).toBe(2)
+  })
+
+  test("without a time to come back, each failure in a row waits longer", async () => {
+    const it = watching({ answers: Array.from({ length: 3 }, () => async () => Promise.reject(new Error("offline"))) })
+
+    expect((await it.watch.check({ force: true })).status).toBe("error")
+    it.advance(ERROR_BACKOFF_MS[0]! - 1)
+    expect((await it.watch.check({ force: true })).status).toBe("skipped")
+
+    it.advance(1)
+    expect((await it.watch.check({ force: true })).status).toBe("error")
+    // The second failure buys a longer wait than the first.
+    it.advance(ERROR_BACKOFF_MS[0]!)
+    expect((await it.watch.check({ force: true })).status).toBe("skipped")
+    expect(it.calls()).toBe(2)
+  })
+
+  test("a dev build is told it is one, not that it is up to date", async () => {
+    const it = watching({ version: "0.0.0" })
+    const result = await it.watch.check({ force: true })
+    expect(result.status).toBe("dev")
+    expect(checkMessage(result).text).toContain("build di sviluppo")
+    expect(it.announced).toEqual([])
   })
 
   test("the hourly budget stops the charged calls, and comes back an hour later", async () => {
@@ -205,6 +285,46 @@ describe("githubReleaseFeed", () => {
     const doFetch = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch
     expect(githubReleaseFeed(doFetch).read()).rejects.toThrow("GitHub 403")
   })
+
+  test("the tag survives a restart, so the first check after launch costs nothing", async () => {
+    const box: { etag?: string } = {}
+    const store = {
+      read: () => box.etag,
+      write: (etag: string) => {
+        box.etag = etag
+      },
+    }
+    const seen: (HeadersInit | undefined)[] = []
+    const doFetch = (async (_url: string, init?: RequestInit) => {
+      seen.push(init?.headers)
+      return new Response(JSON.stringify(RELEASES), { status: 200, headers: { etag: 'W/"abc"' } })
+    }) as unknown as typeof fetch
+
+    await githubReleaseFeed(doFetch, store).read()
+    expect(box.etag).toBe('W/"abc"')
+
+    // A new window, the tag already on disk.
+    await githubReleaseFeed(doFetch, store).read()
+    expect((seen[1] as Record<string, string>)["If-None-Match"]).toBe('W/"abc"')
+  })
+})
+
+describe("retryAfter", () => {
+  const head = (headers: Record<string, string>) => ({ headers: new Headers(headers), status: 403 })
+
+  test("reads the seconds, the date, and the hour the allowance refills", () => {
+    const at = 1_000_000
+    expect(retryAfter(head({ "retry-after": "60" }), at)).toBe(at + 60_000)
+    expect(retryAfter(head({ "retry-after": "Wed, 16 Sep 2026 10:00:00 GMT" }), at)).toBe(
+      Date.parse("Wed, 16 Sep 2026 10:00:00 GMT"),
+    )
+    expect(retryAfter(head({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1700" }), at)).toBe(1_700_000)
+  })
+
+  test("the reset header alone, with calls left, is not a reason to wait", () => {
+    expect(retryAfter(head({ "x-ratelimit-remaining": "37", "x-ratelimit-reset": "1700" }), 1_000_000)).toBeUndefined()
+    expect(retryAfter(head({}), 1_000_000)).toBeUndefined()
+  })
 })
 
 describe("checkMessage", () => {
@@ -213,7 +333,7 @@ describe("checkMessage", () => {
     const cases: CheckResult[] = [
       { status: "update", at, update: { version: "1.2.0", url: "https://github.com/SandroHub013/nikcli/releases/tag/ade-v1.2.0" } },
       { status: "current", at, currentVersion: "1.2.0" },
-      { status: "unchanged", at, currentVersion: "1.2.0" },
+      { status: "dev", at, currentVersion: "0.0.0" },
       { status: "skipped", at, problem: "Controllato da poco." },
       { status: "error", at, problem: "offline" },
     ]

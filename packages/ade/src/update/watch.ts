@@ -28,7 +28,7 @@
  *     not charge it to the limit, so a window that checks every three minutes
  *     and sees no new release spends almost nothing.
  */
-import { newerRelease, RELEASE_REPO, type AvailableUpdate, type GithubRelease } from "./release"
+import { newerRelease, parseVersion, RELEASE_REPO, type AvailableUpdate, type GithubRelease } from "./release"
 
 /** After launch, once the window has drawn. */
 export const FIRST_CHECK_MS = 15_000
@@ -59,15 +59,26 @@ export const WAKE_GAP_MS = 2 * 60_000
 /** How often the clock is looked at to notice a sleep. */
 export const WAKE_POLL_MS = 30_000
 
+/**
+ * After a refused request, how long before trying again, when the answer
+ * itself does not say. Doubles per consecutive failure up to the last.
+ *
+ * The hourly budget below counts *this process*: another ADE window, or a git
+ * tool, spends from the same per-IP allowance without telling anyone. What
+ * actually protects the limit is therefore not the counter but this: when
+ * GitHub says no, ADE waits as long as it was told to, or longer each time.
+ */
+export const ERROR_BACKOFF_MS = [5 * 60_000, 10 * 60_000, 20 * 60_000, 60 * 60_000] as const
+
 /** What a check found, for whoever asked for it. */
 export type CheckStatus =
-  /** A release newer than this build, not announced yet. */
+  /** A release newer than this build. */
   | "update"
   /** This build is the newest release. */
   | "current"
-  /** GitHub said nothing changed since the last look. */
-  | "unchanged"
-  /** Not asked: too soon, out of budget, or the window is hidden. */
+  /** A dev build (`0.0.0`): there is no installed version to be behind. */
+  | "dev"
+  /** Not asked: too soon, out of budget, waiting after a refusal, or hidden. */
   | "skipped"
   /** The request failed. */
   | "error"
@@ -81,6 +92,8 @@ export interface CheckResult {
   readonly currentVersion?: string
   /** Why it was skipped, or what failed; a sentence for a person. */
   readonly problem?: string
+  /** True when GitHub said nothing changed and this is the last answer again. */
+  readonly cached?: boolean
 }
 
 /** One look at the releases, or `notModified` when GitHub says nothing changed. */
@@ -91,6 +104,29 @@ export interface ReleaseFeedResult {
 
 export interface ReleaseFeed {
   read(): Promise<ReleaseFeedResult>
+}
+
+/**
+ * A refused or failed request, with when GitHub said to come back.
+ *
+ * `retryAt` comes from the answer itself — `Retry-After` on a secondary rate
+ * limit, `x-ratelimit-reset` when the hourly one is spent — so ADE waits
+ * exactly as long as it was told instead of asking again in three minutes and
+ * being refused again.
+ */
+export class ReleaseFeedError extends Error {
+  readonly retryAt?: number
+  constructor(message: string, retryAt?: number) {
+    super(message)
+    this.name = "ReleaseFeedError"
+    if (retryAt !== undefined) this.retryAt = retryAt
+  }
+}
+
+/** Where the ETag is kept, so a restart does not spend a call to learn nothing. */
+export interface EtagStore {
+  read(): string | undefined
+  write(etag: string): void
 }
 
 export interface UpdateWatchOptions {
@@ -113,8 +149,10 @@ export interface UpdateWatchOptions {
  * published last, which is usually not ADE's. The filtering is in
  * `newerRelease`, so the list has to be the one that contains `ade-v*`.
  */
-export function githubReleaseFeed(doFetch: typeof fetch = fetch): ReleaseFeed {
-  let etag: string | undefined
+export function githubReleaseFeed(doFetch: typeof fetch = fetch, store?: EtagStore): ReleaseFeed {
+  // Read once: the tag survives a restart, so the first check after launch
+  // usually costs a 304 instead of the whole list.
+  let etag: string | undefined = store?.read()
   return {
     async read(): Promise<ReleaseFeedResult> {
       const response = await doFetch(`https://api.github.com/repos/${RELEASE_REPO}/releases?per_page=30`, {
@@ -125,12 +163,36 @@ export function githubReleaseFeed(doFetch: typeof fetch = fetch): ReleaseFeed {
       })
       // Not charged to the rate limit, which is what makes a short interval affordable.
       if (response.status === 304) return { notModified: true }
-      if (!response.ok) throw new Error(`GitHub ${response.status}`)
+      if (!response.ok) throw new ReleaseFeedError(`GitHub ${response.status}`, retryAfter(response, Date.now()))
       const tag = response.headers.get("etag")
-      if (tag) etag = tag
+      if (tag) {
+        etag = tag
+        store?.write(tag)
+      }
       return { releases: (await response.json()) as GithubRelease[], notModified: false }
     },
   }
+}
+
+/**
+ * When a refused answer says to come back, as a moment in time.
+ *
+ * `Retry-After` is either seconds or a date; `x-ratelimit-reset` is the
+ * epoch second the hourly allowance refills, and only counts when the
+ * allowance really is spent — the header rides along on every answer.
+ */
+export function retryAfter(response: { headers: Headers; status: number }, at: number): number | undefined {
+  const after = response.headers.get("retry-after")
+  if (after) {
+    const seconds = Number(after)
+    if (Number.isFinite(seconds)) return at + Math.max(0, seconds) * 1000
+    const date = Date.parse(after)
+    if (!Number.isNaN(date)) return date
+  }
+  const remaining = response.headers.get("x-ratelimit-remaining")
+  const reset = Number(response.headers.get("x-ratelimit-reset"))
+  if (remaining === "0" && Number.isFinite(reset) && reset > 0) return reset * 1000
+  return undefined
 }
 
 /** Kept for callers that only want the list. */
@@ -153,6 +215,23 @@ export interface UpdateWatch {
   check(options?: { force?: boolean }): Promise<CheckResult>
 }
 
+/** A build with no released version behind it: `tauri dev` and anything unreleased. */
+function devBuild(version: string): boolean {
+  const parsed = parseVersion(version)
+  return !parsed || (parsed[0] === 0 && parsed[1] === 0 && parsed[2] === 0)
+}
+
+/** The newest release newer than `current`, with the row it came from. */
+function pickUpdate(
+  current: string,
+  releases: readonly GithubRelease[],
+): { update: AvailableUpdate; release: GithubRelease } | undefined {
+  const update = newerRelease(current, releases)
+  if (!update) return undefined
+  const release = releases.find((candidate) => candidate.html_url === update.url)
+  return release ? { update, release } : undefined
+}
+
 export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
   const now = options.now ?? Date.now
   const feed = options.feed ?? githubReleaseFeed()
@@ -161,6 +240,17 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
   /** When each charged call was made, over the last hour. */
   const charged: number[] = []
   let lastCallAt: number | undefined
+  /**
+   * The newest release seen, with the row it came from.
+   *
+   * Kept because a `304` carries no list: without it the answer to "is there
+   * an update?" would be "no" for as long as GitHub keeps saying "unchanged".
+   */
+  let lastUpdate: { update: AvailableUpdate; release: GithubRelease } | undefined
+  /** Set when a request was refused; nothing is asked before it. */
+  let waitUntil: number | undefined
+  /** Consecutive failures, for the wait that grows. */
+  let failures = 0
   let timers: ReturnType<typeof setTimeout>[] = []
   let unsubscribe: (() => void) | undefined
   let lastTick = now()
@@ -181,20 +271,49 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
     if (!budgetLeft(at)) {
       return { status: "skipped", at, problem: "Troppi controlli in un'ora: riprovo più tardi." }
     }
+    /*
+     * GitHub said to come back later, and asking sooner earns another refusal.
+     * Not even a person pressing the command gets through: the answer would be
+     * the refusal, and the wait would start again from here.
+     */
+    if (waitUntil !== undefined && at < waitUntil) {
+      return { status: "skipped", at, problem: "GitHub ha chiesto di aspettare: riprovo più tardi." }
+    }
     lastCallAt = at
     try {
       const [currentVersion, result] = await Promise.all([options.currentVersion(), feed.read()])
-      if (result.notModified) return { status: "unchanged", at, currentVersion }
+      waitUntil = undefined
+      failures = 0
+      /*
+       * Nothing changed since the last look, so the last verdict still holds.
+       * Recomputing it from an empty list would say "you are on the newest
+       * one" to someone who was told about a release a minute ago — which is
+       * exactly what the command is pressed to confirm.
+       */
+      if (result.notModified) {
+        if (lastUpdate && newerRelease(currentVersion, [lastUpdate.release])) {
+          return { status: "update", at, currentVersion, update: lastUpdate.update, cached: true }
+        }
+        return { status: devBuild(currentVersion) ? "dev" : "current", at, currentVersion, cached: true }
+      }
       charged.push(at)
-      const update = newerRelease(currentVersion, result.releases ?? [])
-      if (!update) return { status: "current", at, currentVersion }
-      if (announced.has(update.version)) return { status: "update", at, currentVersion, update }
-      announced.add(update.version)
-      options.onUpdate(update)
-      return { status: "update", at, currentVersion, update }
+      if (devBuild(currentVersion)) {
+        lastUpdate = undefined
+        return { status: "dev", at, currentVersion }
+      }
+      const found = pickUpdate(currentVersion, result.releases ?? [])
+      lastUpdate = found
+      if (!found) return { status: "current", at, currentVersion }
+      if (announced.has(found.update.version)) return { status: "update", at, currentVersion, update: found.update }
+      announced.add(found.update.version)
+      options.onUpdate(found.update)
+      return { status: "update", at, currentVersion, update: found.update }
     } catch (error) {
       // A charged call all the same: GitHub counted the request that failed.
       charged.push(at)
+      const told = error instanceof ReleaseFeedError ? error.retryAt : undefined
+      waitUntil = told ?? at + (ERROR_BACKOFF_MS[Math.min(failures, ERROR_BACKOFF_MS.length - 1)] ?? 0)
+      failures++
       return { status: "error", at, problem: error instanceof Error ? error.message : String(error) }
     }
   }
@@ -251,12 +370,16 @@ export function checkMessage(result: CheckResult): { kind: "info" | "error"; tex
         ...(result.update ? { href: result.update.url } : {}),
       }
     case "current":
-    case "unchanged":
       return {
         kind: "info",
         text: result.currentVersion
           ? `Nessun aggiornamento: ADE ${result.currentVersion} è l'ultima versione.`
           : "Nessun aggiornamento disponibile.",
+      }
+    case "dev":
+      return {
+        kind: "info",
+        text: "Questa è una build di sviluppo: non c'è una versione installata da aggiornare.",
       }
     case "skipped":
       return { kind: "info", text: result.problem ?? "Controllo saltato." }

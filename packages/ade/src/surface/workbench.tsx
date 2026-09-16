@@ -292,7 +292,7 @@ import {
   type Notice,
   type NoticeKind,
 } from "./notifications"
-import { checkMessage, createUpdateWatch, type UpdateWatch } from "../update/watch"
+import { checkMessage, createUpdateWatch, githubReleaseFeed, type UpdateWatch } from "../update/watch"
 import { isReleasePage } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
@@ -2078,6 +2078,27 @@ export function Workbench() {
             at: Date.now(),
           }),
         ),
+      /*
+       * The tag GitHub last answered with, kept across restarts: the first
+       * check after launch then usually costs a 304, which is not charged to
+       * the hourly limit.
+       */
+      feed: githubReleaseFeed(fetch, {
+        read: () => {
+          try {
+            return localStorage.getItem("ade.update.etag") ?? undefined
+          } catch {
+            return undefined
+          }
+        },
+        write: (etag) => {
+          try {
+            localStorage.setItem("ade.update.etag", etag)
+          } catch {
+            /* A profile without storage still checks; it just pays for the list. */
+          }
+        },
+      }),
       // A window nobody is looking at does not poll: see `watch.ts`.
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
       /*
