@@ -296,9 +296,9 @@ import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import {
   GLOBAL_VOICE_EVENT,
-  modeForGlobalChord,
+  globalVoiceAction,
   registerVoiceShortcuts,
-  readGlobalVoicePayload,
+  unknownChordMessage,
 } from "../voice/global-shortcut"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -2835,22 +2835,25 @@ export function Workbench() {
            * push-to-talk on the release.
            */
           const unlisten = await listen<unknown>(GLOBAL_VOICE_EVENT, (event) => {
-            const payload = readGlobalVoicePayload(event.payload)
-            if (!payload) return
-            const mode = modeForGlobalChord(payload.chord, voiceSettings(), platform)
-            if (!mode) return
+            const action = globalVoiceAction(event.payload, voiceSettings(), platform)
+            if (action.kind === "ignore") return
+            if (action.kind === "unknown") {
+              // Said, never guessed: see `globalVoiceAction`.
+              report(unknownChordMessage(action.chord), "warning")
+              return
+            }
 
             if (voiceSettings().activation === "push-to-talk") {
-              if (payload.state === "pressed") {
-                const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
-                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, mode)
+              if (action.kind === "press") {
+                const chord = action.mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
+                void pttHandler.onKeyDown(parseChord(chord, platform), { repeat: false }, action.mode)
               } else {
                 // No key to compare: the native side already said the chord let go.
                 void pttHandler.onKeyUp()
               }
               return
             }
-            if (payload.state === "pressed") void voiceEngine.toggle(mode)
+            if (action.kind === "press") void voiceEngine.toggle(action.mode)
           })
 
           releaseGlobal = () => {

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
+  globalVoiceAction,
   modeForGlobalChord,
   registerVoiceShortcuts,
+  unknownChordMessage,
   parseGlobalChord,
   readGlobalVoicePayload,
   toTauriChord,
@@ -132,5 +134,47 @@ describe("registerVoiceShortcuts", () => {
     // What the OS reports for each, as `global-hotkey` prints it.
     expect(modeForGlobalChord("shift+control+KeyK", settings, "other")).toBe("agent")
     expect(modeForGlobalChord("control+Space", settings, "other")).toBe("transcription")
+  })
+})
+
+describe("globalVoiceAction", () => {
+  const settings = { agentChord: "mod+shift+k", transcriptionChord: "mod+space" }
+
+  test("each chord opens its own feature, on press", () => {
+    expect(globalVoiceAction({ chord: "shift+control+KeyK", state: "pressed" }, settings, "other")).toEqual({
+      kind: "press",
+      mode: "agent",
+    })
+    expect(globalVoiceAction({ chord: "control+Space", state: "pressed" }, settings, "other")).toEqual({
+      kind: "press",
+      mode: "transcription",
+    })
+    expect(globalVoiceAction({ chord: "control+Space", state: "released" }, settings, "other")).toEqual({ kind: "release" })
+  })
+
+  test("a chord ADE cannot place is said, never turned into dictation", () => {
+    const action = globalVoiceAction({ chord: "control+F24", state: "pressed" }, settings, "other")
+    expect(action).toEqual({ kind: "unknown", chord: "control+F24" })
+    expect(unknownChordMessage("control+F24")).toContain("non riconosciuta")
+    // The dangerous answer would be a mode: with the stored mode on dictation,
+    // the assistant's chord would open the microphone for dictation instead.
+    expect(action).not.toHaveProperty("mode")
+  })
+
+  test("a chord on a punctuation key is recognised: the recorder writes «,», the system says «Comma»", () => {
+    const punctuation = { agentChord: "mod+,", transcriptionChord: "mod+." }
+    expect(globalVoiceAction({ chord: "control+Comma", state: "pressed" }, punctuation, "other")).toEqual({
+      kind: "press",
+      mode: "agent",
+    })
+    expect(globalVoiceAction({ chord: "control+Period", state: "pressed" }, punctuation, "other")).toEqual({
+      kind: "press",
+      mode: "transcription",
+    })
+  })
+
+  test("an empty or malformed payload does nothing at all", () => {
+    expect(globalVoiceAction(undefined, settings, "other")).toEqual({ kind: "ignore" })
+    expect(globalVoiceAction({ state: "pressed" }, settings, "other")).toEqual({ kind: "ignore" })
   })
 })

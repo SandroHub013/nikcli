@@ -131,6 +131,39 @@ export function modeForGlobalChord(
   return undefined
 }
 
+/**
+ * What the window should do about one event from a system-wide voice hotkey.
+ *
+ * A separate function because the answer has to be testable without a webview:
+ * this event is the *whole* keyboard for a registered chord, and if the chord
+ * the native side names is not recognised, the safe answer is to say so. It is
+ * never to fall back on a mode — falling back would open the microphone in
+ * whichever mode happens to be stored, and the user who pressed the
+ * assistant's chord would get dictation with no idea why.
+ */
+export type GlobalVoiceAction =
+  | { kind: "press"; mode: VoiceMode }
+  | { kind: "release" }
+  | { kind: "unknown"; chord: string }
+  | { kind: "ignore" }
+
+export function globalVoiceAction(
+  rawPayload: unknown,
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord">,
+  platform: Platform,
+): GlobalVoiceAction {
+  const payload = readGlobalVoicePayload(rawPayload)
+  if (!payload) return { kind: "ignore" }
+  const mode = modeForGlobalChord(payload.chord, settings, platform)
+  if (!mode) return { kind: "unknown", chord: payload.chord }
+  return payload.state === "released" ? { kind: "release" } : { kind: "press", mode }
+}
+
+/** What to say when the system reports a chord ADE cannot place. */
+export function unknownChordMessage(chord: string): string {
+  return `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`
+}
+
 /** What each chord is for, in the words the user reads. */
 export const VOICE_CHORD_FEATURE: Record<VoiceMode, string> = {
   agent: "assistente vocale",
