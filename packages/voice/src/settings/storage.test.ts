@@ -225,4 +225,15 @@ describe("the migration to the wake word happens once", () => {
     expect(second.settings.activation).toBe("wake-word")
     expect(second.migrations).toEqual([])
   })
+
+  test("the old default name is rewritten once, and a later choice of it is kept", () => {
+    const store = new MemoryStorage()
+    store.setItem("voice.settings", JSON.stringify({ version: 2, activation: "wake-word", wakeWord: "hei nik" }))
+
+    expect(loadVoiceSettings(store).settings.wakeWord).toBe("nik")
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("nik")
+
+    saveVoiceSettings({ wakeWord: "hei nik" }, store)
+    expect(loadVoiceSettings(store).settings.wakeWord).toBe("hei nik")
+  })
 })
