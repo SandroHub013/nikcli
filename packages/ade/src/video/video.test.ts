@@ -6,6 +6,7 @@ import {
   frameFileName,
   isPlayable,
   MAX_RATE,
+  mediaUrl,
   MIN_RATE,
   parseRate,
   parseTimecode,
@@ -190,5 +191,17 @@ describe("VIDEO_VERBS", () => {
 
   test("no verb is listed twice", () => {
     expect(new Set(VIDEO_VERBS.map((verb) => verb.name)).size).toBe(VIDEO_VERBS.length)
+  })
+})
+
+describe("mediaUrl", () => {
+  const path = "C:\\Video\\ADE 1.mp4"
+
+  test("uses the http form WebView2 answers on Windows", () => {
+    expect(mediaUrl(path, true)).toBe("http://ade-media.localhost/C%3A/Video/ADE%201.mp4")
+  })
+
+  test("uses the scheme form elsewhere", () => {
+    expect(mediaUrl(path, false)).toBe("ade-media://localhost/C%3A/Video/ADE%201.mp4")
   })
 })
