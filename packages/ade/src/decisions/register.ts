@@ -17,6 +17,7 @@ import type { DirEntry } from "../host/shell"
 import type { DecisionEvent } from "./log"
 import { foldDecisions, type DecisionsState } from "./state"
 import { appendDecisionEvent, loadDecisions, type DecisionsIo, type LoadedRegister } from "./store"
+import { t } from "../i18n"
 
 export const REGISTER_WATCH_MS = 2500
 
@@ -97,7 +98,7 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   const append = async (event: DecisionEvent) => {
     const path = deps.path()
     const io = await deps.io()
-    if (!path || !io) throw new Error("nessun progetto aperto")
+    if (!path || !io) throw new Error(t("decisions.noProject.short"))
     await appendDecisionEvent(io, path, event)
     await refresh()
   }

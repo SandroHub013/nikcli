@@ -28,3 +28,21 @@ describe("the MCP catalog in English", () => {
     expect(filterCatalog(MCP_CATALOG, "fatture", "tutti").map((entry) => entry.id)).toContain("stripe")
   })
 })
+
+describe("validation errors follow the language", () => {
+  test("an MCP configuration error is written in English under English", async () => {
+    const { addMcpServer } = await import("./mcp-config")
+    resetLocaleForTests("en")
+    expect(() => addMcpServer("{ not json", { name: "x", server: { type: "http", url: "https://example.test/mcp" } })).toThrow(
+      /doesn't contain valid JSON/,
+    )
+  })
+
+  test("a broken decision log line is described in English under English", async () => {
+    const { parseDecisionLog } = await import("../decisions/log")
+    const { describeProblems } = await import("../decisions/state")
+    resetLocaleForTests("en")
+    const { problems } = parseDecisionLog("{ nope\n")
+    expect(describeProblems(problems, [])).toEqual(["line 1: invalid JSON"])
+  })
+})

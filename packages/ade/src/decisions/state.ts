@@ -19,6 +19,7 @@
 
 import { asOneLine } from "../session/typing"
 import type { DecisionEvent, DecisionOption, LogProblem } from "./log"
+import { t } from "../i18n"
 
 export type DecisionStatus = "aperta" | "risposta" | "rimandata" | "chiusa"
 
@@ -80,7 +81,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
 
     if (event.type === "aperta") {
       if (current) {
-        reject(event, `${event.k} esiste già`)
+        reject(event, t("decisions.rule.exists", event.k))
         continue
       }
       byKey.set(event.k, {
@@ -100,12 +101,12 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
     }
 
     if (!current) {
-      reject(event, `${event.k} non è mai stata aperta`)
+      reject(event, t("decisions.rule.neverOpened", event.k))
       continue
     }
     const status = effectiveStatus(current, now)
     if (status === "chiusa") {
-      reject(event, `${event.k} è già chiusa`)
+      reject(event, t("decisions.rule.closed", event.k))
       continue
     }
 
@@ -114,7 +115,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         if (status === "risposta") {
           // A second answer without a reopen is almost always two writers
           // racing. The first one stands; the user can change it on purpose.
-          reject(event, `${event.k} ha già una risposta: prima va riaperta`)
+          reject(event, t("decisions.rule.answered", event.k))
           continue
         }
         current.answer = { choice: event.choice, note: event.note, words: event.words, at: event.at, by: event.by }
@@ -123,7 +124,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         break
       case "rimandata":
         if (status !== "aperta") {
-          reject(event, `si rimanda solo una decisione aperta (${event.k} è ${status})`)
+          reject(event, t("decisions.rule.deferOpen", event.k, status))
           continue
         }
         current.status = "rimandata"
@@ -131,7 +132,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         break
       case "riaperta":
         if (status === "aperta") {
-          reject(event, `${event.k} è già aperta`)
+          reject(event, t("decisions.rule.open", event.k))
           continue
         }
         current.status = "aperta"
@@ -140,7 +141,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         break
       case "chiusa":
         if (status !== "risposta" && !event.evidence) {
-          reject(event, `${event.k} si chiude solo dopo una risposta o con un'evidenza`)
+          reject(event, t("decisions.rule.close", event.k))
           continue
         }
         current.status = "chiusa"
@@ -231,7 +232,7 @@ export function nextDecisionKey(decisions: readonly Pick<Decision, "k">[], prefi
 /** What to show about a register that could not be read cleanly. */
 export function describeProblems(problems: readonly LogProblem[], rejected: readonly RejectedEvent[]): string[] {
   return [
-    ...problems.map((problem) => `riga ${problem.line}: ${problem.reason}`),
+    ...problems.map((problem) => t("decisions.problem.line", problem.line, problem.reason)),
     ...rejected.map((item) => `${item.event.type} ${item.event.k}: ${item.reason}`),
   ]
 }

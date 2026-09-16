@@ -16,6 +16,7 @@
 
 import { parseDecisionLog, serializeDecisionEvent, type DecisionEvent, type ParsedLog } from "./log"
 import { foldDecisions, type DecisionsState } from "./state"
+import { t } from "../i18n"
 
 export const DEFAULT_DECISIONS_PATH = ".ade/decisions.jsonl"
 
@@ -71,7 +72,7 @@ async function readRegister(io: DecisionsIo, path: string): Promise<string> {
     if (!io.exists && /not found|no such file|os error 2|impossibile trovare/i.test(String(error))) return ""
     throw error
   }
-  if (read.truncated) throw new Error(`il registro delle decisioni supera ${MAX_REGISTER_BYTES / (1024 * 1024)} MB`)
+  if (read.truncated) throw new Error(t("decisions.log.tooLarge", MAX_REGISTER_BYTES / (1024 * 1024)))
   return read.text
 }
 

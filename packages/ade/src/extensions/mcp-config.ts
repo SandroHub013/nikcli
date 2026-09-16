@@ -1,5 +1,6 @@
 import { joinPath } from "../host/path"
 import type { McpInstallConfiguration, McpServerConfig } from "./mcp-catalog"
+import { t } from "../i18n"
 
 export type { McpInstallConfiguration, McpServerConfig } from "./mcp-catalog"
 
@@ -65,21 +66,21 @@ export function parseMcpConfig(raw: string | null | undefined): McpConfigDocumen
   try {
     parsed = JSON.parse(raw.replace(/^\ufeff/, ""))
   } catch {
-    throw new McpConfigError("invalid-json", `${MCP_CONFIG_FILENAME} non contiene JSON valido.`)
+    throw new McpConfigError("invalid-json", t("mcp.error.json", MCP_CONFIG_FILENAME))
   }
 
   if (!isObject(parsed)) {
-    throw new McpConfigError("invalid-document", `${MCP_CONFIG_FILENAME} deve contenere un oggetto JSON.`)
+    throw new McpConfigError("invalid-document", t("mcp.error.document", MCP_CONFIG_FILENAME))
   }
   if ("mcpServers" in parsed && !isObject(parsed.mcpServers)) {
-    throw new McpConfigError("invalid-document", `${MCP_CONFIG_FILENAME}: "mcpServers" deve essere un oggetto.`)
+    throw new McpConfigError("invalid-document", t("mcp.error.servers", MCP_CONFIG_FILENAME))
   }
   return parsed
 }
 
 function serverName(name: string): string {
   if (name.trim() !== name || name.length === 0 || name.length > 128 || name === "__proto__") {
-    throw new McpConfigError("invalid-server-name", "Il nome del server MCP non è valido.")
+    throw new McpConfigError("invalid-server-name", t("mcp.error.name"))
   }
   return name
 }
@@ -94,7 +95,7 @@ function hasSafeSecretTemplate(value: string, pattern = SECRET_HEADER_TEMPLATE):
 
 function assertString(value: unknown, label: string): asserts value is string {
   if (typeof value !== "string" || value.length === 0) {
-    throw new McpConfigError("invalid-server-config", `${label} deve essere una stringa non vuota.`)
+    throw new McpConfigError("invalid-server-config", t("mcp.error.emptyString", label))
   }
 }
 
@@ -105,26 +106,26 @@ function assertString(value: unknown, label: string): asserts value is string {
  */
 export function validateMcpServerConfig(config: McpServerConfig): void {
   if (!isObject(config)) {
-    throw new McpConfigError("invalid-server-config", "La configurazione del server MCP non è un oggetto.")
+    throw new McpConfigError("invalid-server-config", t("mcp.error.notObject"))
   }
 
   const hasUrl = config.url !== undefined
   const hasCommand = config.command !== undefined
   if (!hasUrl && !hasCommand) {
-    throw new McpConfigError("invalid-server-config", "La configurazione MCP deve avere url oppure command.")
+    throw new McpConfigError("invalid-server-config", t("mcp.error.urlOrCommand"))
   }
 
   if (hasUrl && hasCommand) {
-    throw new McpConfigError("invalid-server-config", "La configurazione MCP deve avere url oppure command, non entrambi.")
+    throw new McpConfigError("invalid-server-config", t("mcp.error.urlAndCommand"))
   }
   if (hasUrl && config.type !== "http" && config.type !== "sse") {
     throw new McpConfigError(
       "invalid-server-config",
-      'Un server MCP remoto deve dichiarare type "http" o "sse": senza, Claude Code lo ignora.',
+      t("mcp.error.remoteType"),
     )
   }
   if (hasCommand && config.type !== undefined && config.type !== "stdio") {
-    throw new McpConfigError("invalid-server-config", 'Un server MCP con command ha type "stdio" o nessun type.')
+    throw new McpConfigError("invalid-server-config", t("mcp.error.stdioType"))
   }
 
   if (hasUrl) {
@@ -132,26 +133,26 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
     try {
       const url = new URL(config.url)
       if (url.username || url.password) {
-        throw new McpConfigError("secret-value", "url non può contenere credenziali incorporate.")
+        throw new McpConfigError("secret-value", t("mcp.error.urlCredentials"))
       }
       for (const [name, value] of url.searchParams) {
         if (isSensitiveName(name) && !isSecretReference(value)) {
           throw new McpConfigError(
             "secret-value",
-            `url contiene un valore segreto nel parametro ${name}: usa un riferimento "\${NOME_VARIABILE}".`,
+            t("mcp.error.urlSecret", name),
           )
         }
       }
     } catch (error) {
       if (error instanceof McpConfigError) throw error
-      throw new McpConfigError("invalid-server-config", "url deve essere un URL valido.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.url"))
     }
   }
   if (hasCommand) assertString(config.command, "command")
 
   if (config.args !== undefined) {
     if (!Array.isArray(config.args) || config.args.some((arg) => typeof arg !== "string")) {
-      throw new McpConfigError("invalid-server-config", "args deve essere un array di stringhe.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.args"))
     }
     for (const [index, arg] of config.args.entries()) {
       if (!isSensitiveName(arg)) continue
@@ -162,7 +163,7 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
       if (!safe) {
         throw new McpConfigError(
           "secret-value",
-          `args[${index}] contiene un possibile segreto: usa un riferimento \"\${NOME_VARIABILE}\".`,
+          t("mcp.error.argSecret", index),
         )
       }
     }
@@ -170,14 +171,14 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
 
   if (config.env !== undefined) {
     if (!isObject(config.env)) {
-      throw new McpConfigError("invalid-server-config", "env deve essere un oggetto di stringhe.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.env"))
     }
     for (const [name, value] of Object.entries(config.env)) {
       assertString(value, `env.${name}`)
       if (isSensitiveName(name) && !isSecretReference(value)) {
         throw new McpConfigError(
           "secret-value",
-          `env.${name} deve usare un riferimento \"\${NOME_VARIABILE}\", non un valore segreto.`,
+          t("mcp.error.secretRef", `env.${name}`),
         )
       }
     }
@@ -185,14 +186,14 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
 
   if (config.headers !== undefined) {
     if (!isObject(config.headers)) {
-      throw new McpConfigError("invalid-server-config", "headers deve essere un oggetto di stringhe.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.headers"))
     }
     for (const [name, value] of Object.entries(config.headers)) {
       assertString(value, `headers.${name}`)
       if (isSensitiveName(name) && !hasSafeSecretTemplate(value)) {
         throw new McpConfigError(
           "secret-value",
-          `headers.${name} deve usare un riferimento \"\${NOME_VARIABILE}\", non un valore segreto.`,
+          t("mcp.error.secretRef", `headers.${name}`),
         )
       }
     }
@@ -200,14 +201,14 @@ export function validateMcpServerConfig(config: McpServerConfig): void {
 
   if (config.oauth !== undefined) {
     if (!isObject(config.oauth)) {
-      throw new McpConfigError("invalid-server-config", "oauth deve essere un oggetto.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.oauth"))
     }
     assertString(config.oauth.clientId, "oauth.clientId")
     assertString(config.oauth.clientSecret, "oauth.clientSecret")
     if (!isSecretReference(config.oauth.clientId) || !isSecretReference(config.oauth.clientSecret)) {
       throw new McpConfigError(
         "secret-value",
-        "oauth.clientId e oauth.clientSecret devono usare riferimenti di variabile, non valori segreti.",
+        t("mcp.error.oauthSecret"),
       )
     }
   }
@@ -219,7 +220,7 @@ function installationOf(
 ): McpInstallConfiguration {
   if (typeof input === "string") {
     if (definition === undefined) {
-      throw new McpConfigError("invalid-server-config", "Manca la configurazione del server MCP.")
+      throw new McpConfigError("invalid-server-config", t("mcp.error.missing"))
     }
     return { name: input, server: definition }
   }
@@ -243,7 +244,7 @@ function render(document: JsonObject, source: string | null | undefined): string
   try {
     json = JSON.stringify(document, null, indentation(source))
   } catch {
-    throw new McpConfigError("invalid-document", `${MCP_CONFIG_FILENAME} non è serializzabile.`)
+    throw new McpConfigError("invalid-document", t("mcp.error.serialize", MCP_CONFIG_FILENAME))
   }
   const lineBreak = newline(source)
   if (lineBreak === "\r\n") json = json.replace(/\n/g, "\r\n")
@@ -265,7 +266,7 @@ export function addMcpServer(
   const document = parseMcpConfig(raw)
   const servers = isObject(document.mcpServers) ? document.mcpServers : {}
   if (Object.prototype.hasOwnProperty.call(servers, name)) {
-    throw new McpConfigError("duplicate-server", `Il server MCP "${name}" è già presente in ${MCP_CONFIG_FILENAME}.`)
+    throw new McpConfigError("duplicate-server", t("mcp.error.duplicate", name, MCP_CONFIG_FILENAME))
   }
 
   return render({ ...document, mcpServers: { ...servers, [name]: chosen.server } }, raw)
@@ -292,7 +293,7 @@ export async function readProjectMcpConfig(projectRoot: string, io: McpConfigIO)
     if (read.truncated) {
       throw new McpConfigError(
         "read-failed",
-        `${MCP_CONFIG_FILENAME} è troppo grande per essere riscritto in sicurezza.`,
+        t("mcp.error.tooLarge", MCP_CONFIG_FILENAME),
       )
     }
     return read.text
@@ -308,7 +309,7 @@ export async function readProjectMcpConfig(projectRoot: string, io: McpConfigIO)
       if (present) {
         throw new McpConfigError(
           "read-failed",
-          `Impossibile leggere ${MCP_CONFIG_FILENAME}: ${error instanceof Error ? error.message : String(error)}`,
+          t("mcp.error.read", MCP_CONFIG_FILENAME, error instanceof Error ? error.message : String(error)),
         )
       }
     }
@@ -319,7 +320,7 @@ export async function readProjectMcpConfig(projectRoot: string, io: McpConfigIO)
 async function writeProjectMcpConfig(projectRoot: string, contents: string, io: McpConfigIO): Promise<void> {
   const failure = await io.writeTextFile(mcpConfigPath(projectRoot), contents)
   if (failure) {
-    throw new McpConfigError("write-failed", `Impossibile scrivere ${MCP_CONFIG_FILENAME}: ${failure}`)
+    throw new McpConfigError("write-failed", t("mcp.error.write", MCP_CONFIG_FILENAME, String(failure)))
   }
 }
 

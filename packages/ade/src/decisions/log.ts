@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 /**
  * The decisions register, as it is written to disk.
  *
@@ -116,7 +117,7 @@ export function parseDecisionLog(text: string): ParsedLog {
     } catch {
       // The last line of a file whose writer died mid-append: expected, and
       // not worth more than a note.
-      problems.push({ line: index + 1, reason: "JSON non valido" })
+      problems.push({ line: index + 1, reason: t("decisions.log.json") })
       return
     }
     const checked = toEvent(value)
@@ -129,33 +130,33 @@ export function parseDecisionLog(text: string): ParsedLog {
 /** One line, newline included, ready to append. */
 export function serializeDecisionEvent(event: DecisionEvent): string {
   const checked = toEvent(event)
-  if (typeof checked === "string") throw new Error(`evento non valido: ${checked}`)
+  if (typeof checked === "string") throw new Error(t("decisions.log.invalid", checked))
   // JSON.stringify escapes line breaks inside strings, so the record is one line.
   return `${JSON.stringify(checked)}\n`
 }
 
 /** The event with only its known fields, or the reason it is not one. */
 export function toEvent(value: unknown): DecisionEvent | string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "non è un oggetto"
+  if (!value || typeof value !== "object" || Array.isArray(value)) return t("decisions.log.notObject")
   const record = value as Record<string, unknown>
   const type = record.type
-  if (typeof type !== "string" || !DECISION_EVENT_TYPES.includes(type as DecisionEventType)) return "tipo sconosciuto"
+  if (typeof type !== "string" || !DECISION_EVENT_TYPES.includes(type as DecisionEventType)) return t("decisions.log.type")
   const k = text(record.k)
-  if (!k || !isDecisionKey(k)) return "chiave mancante o non valida"
+  if (!k || !isDecisionKey(k)) return t("decisions.log.key")
   const at = text(record.at)
-  if (!at || Number.isNaN(Date.parse(at))) return "data mancante o non valida"
+  if (!at || Number.isNaN(Date.parse(at))) return t("decisions.log.date")
   const by = text(record.by)
-  if (!by) return "autore mancante"
+  if (!by) return t("decisions.log.author")
   const base = { k, at, by }
 
   switch (type as DecisionEventType) {
     case "aperta": {
       const title = text(record.title)
-      if (!title) return "titolo mancante"
+      if (!title) return t("decisions.log.title")
       const options = optionsOf(record.options)
       if (typeof options === "string") return options
       const order = record.order
-      if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return "ordine non numerico"
+      if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("decisions.log.order")
       return compact({
         type: "aperta",
         ...base,
@@ -169,12 +170,12 @@ export function toEvent(value: unknown): DecisionEvent | string {
     }
     case "risposta": {
       const words = text(record.words)
-      if (!words) return "risposta senza le parole dell'utente"
+      if (!words) return t("decisions.log.words")
       return compact({ type: "risposta", ...base, words, choice: text(record.choice), note: text(record.note) }) as AnsweredEvent
     }
     case "rimandata": {
       const until = text(record.until)
-      if (!until || Number.isNaN(Date.parse(until))) return "rimandata senza una data valida"
+      if (!until || Number.isNaN(Date.parse(until))) return t("decisions.log.until")
       return compact({ type: "rimandata", ...base, until, reason: text(record.reason) }) as DeferredEvent
     }
     case "riaperta":
@@ -192,11 +193,11 @@ function text(value: unknown): string | undefined {
 
 function optionsOf(value: unknown): DecisionOption[] | string {
   if (value === undefined) return []
-  if (!Array.isArray(value)) return "opzioni non in elenco"
+  if (!Array.isArray(value)) return t("decisions.log.options")
   const options: DecisionOption[] = []
   for (const item of value) {
     const label = item && typeof item === "object" ? text((item as Record<string, unknown>).label) : text(item)
-    if (!label) return "opzione senza etichetta"
+    if (!label) return t("decisions.log.optionLabel")
     const detail = item && typeof item === "object" ? text((item as Record<string, unknown>).detail) : undefined
     options.push(detail ? { label, detail } : { label })
   }
