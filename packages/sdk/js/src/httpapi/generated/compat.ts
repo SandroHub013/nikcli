@@ -172,6 +172,16 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
         unstage: result(raw["mobile"]["gitUnstage"]),
       },
       github: {
+        actions: {
+          run: {
+            cancel: result(raw["mobile"]["githubWorkflowRunCancel"]),
+            jobs: result(raw["mobile"]["githubWorkflowRunJobs"]),
+            rerun: result(raw["mobile"]["githubWorkflowRunRerun"]),
+          },
+          runs: result(raw["mobile"]["githubWorkflowRuns"]),
+          workflow: { dispatch: result(raw["mobile"]["githubWorkflowDispatch"]) },
+          workflows: result(raw["mobile"]["githubWorkflows"]),
+        },
         auth: { remove: result0(raw["mobile"]["githubAuthRemove"]), set: result(raw["mobile"]["githubAuthSet"]) },
         branches: result(raw["mobile"]["githubBranches"]),
         import: result(raw["mobile"]["githubImport"]),

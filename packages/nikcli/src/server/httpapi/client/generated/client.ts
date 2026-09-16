@@ -740,38 +740,110 @@ const Endpoint16_12 = (raw: RawClient["mobile"]) => (input: Endpoint16_12Input) 
     Effect.mapError(mapClientError),
   )
 
-const Endpoint16_13 = (raw: RawClient["mobile"]) => () => raw["githubImports"]({}).pipe(Effect.mapError(mapClientError))
+type Endpoint16_13Request = Parameters<RawClient["mobile"]["githubWorkflows"]>[0]
+type Endpoint16_13Input = {
+  readonly owner: Endpoint16_13Request["params"]["owner"]
+  readonly repo: Endpoint16_13Request["params"]["repo"]
+}
+const Endpoint16_13 = (raw: RawClient["mobile"]) => (input: Endpoint16_13Input) =>
+  raw["githubWorkflows"]({ params: { owner: input["owner"], repo: input["repo"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
 
-type Endpoint16_14Request = Parameters<RawClient["mobile"]["githubOauthClient"]>[0]
-type Endpoint16_14Input = { readonly clientId: Endpoint16_14Request["payload"]["clientId"] }
+type Endpoint16_14Request = Parameters<RawClient["mobile"]["githubWorkflowRuns"]>[0]
+type Endpoint16_14Input = {
+  readonly owner: Endpoint16_14Request["params"]["owner"]
+  readonly repo: Endpoint16_14Request["params"]["repo"]
+  readonly branch?: Endpoint16_14Request["query"]["branch"]
+  readonly limit?: Endpoint16_14Request["query"]["limit"]
+}
 const Endpoint16_14 = (raw: RawClient["mobile"]) => (input: Endpoint16_14Input) =>
+  raw["githubWorkflowRuns"]({
+    params: { owner: input["owner"], repo: input["repo"] },
+    query: { branch: input["branch"], limit: input["limit"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint16_15Request = Parameters<RawClient["mobile"]["githubWorkflowRunJobs"]>[0]
+type Endpoint16_15Input = {
+  readonly owner: Endpoint16_15Request["params"]["owner"]
+  readonly repo: Endpoint16_15Request["params"]["repo"]
+  readonly runID: Endpoint16_15Request["params"]["runID"]
+}
+const Endpoint16_15 = (raw: RawClient["mobile"]) => (input: Endpoint16_15Input) =>
+  raw["githubWorkflowRunJobs"]({ params: { owner: input["owner"], repo: input["repo"], runID: input["runID"] } }).pipe(
+    Effect.mapError(mapClientError),
+  )
+
+type Endpoint16_16Request = Parameters<RawClient["mobile"]["githubWorkflowRunRerun"]>[0]
+type Endpoint16_16Input = {
+  readonly owner: Endpoint16_16Request["params"]["owner"]
+  readonly repo: Endpoint16_16Request["params"]["repo"]
+  readonly runID: Endpoint16_16Request["params"]["runID"]
+  readonly failedOnly?: Endpoint16_16Request["payload"]["failedOnly"]
+}
+const Endpoint16_16 = (raw: RawClient["mobile"]) => (input: Endpoint16_16Input) =>
+  raw["githubWorkflowRunRerun"]({
+    params: { owner: input["owner"], repo: input["repo"], runID: input["runID"] },
+    payload: { failedOnly: input["failedOnly"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint16_17Request = Parameters<RawClient["mobile"]["githubWorkflowRunCancel"]>[0]
+type Endpoint16_17Input = {
+  readonly owner: Endpoint16_17Request["params"]["owner"]
+  readonly repo: Endpoint16_17Request["params"]["repo"]
+  readonly runID: Endpoint16_17Request["params"]["runID"]
+}
+const Endpoint16_17 = (raw: RawClient["mobile"]) => (input: Endpoint16_17Input) =>
+  raw["githubWorkflowRunCancel"]({
+    params: { owner: input["owner"], repo: input["repo"], runID: input["runID"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+type Endpoint16_18Request = Parameters<RawClient["mobile"]["githubWorkflowDispatch"]>[0]
+type Endpoint16_18Input = {
+  readonly owner: Endpoint16_18Request["params"]["owner"]
+  readonly repo: Endpoint16_18Request["params"]["repo"]
+  readonly workflowID: Endpoint16_18Request["params"]["workflowID"]
+  readonly ref: Endpoint16_18Request["payload"]["ref"]
+  readonly inputs?: Endpoint16_18Request["payload"]["inputs"]
+}
+const Endpoint16_18 = (raw: RawClient["mobile"]) => (input: Endpoint16_18Input) =>
+  raw["githubWorkflowDispatch"]({
+    params: { owner: input["owner"], repo: input["repo"], workflowID: input["workflowID"] },
+    payload: { ref: input["ref"], inputs: input["inputs"] },
+  }).pipe(Effect.mapError(mapClientError))
+
+const Endpoint16_19 = (raw: RawClient["mobile"]) => () => raw["githubImports"]({}).pipe(Effect.mapError(mapClientError))
+
+type Endpoint16_20Request = Parameters<RawClient["mobile"]["githubOauthClient"]>[0]
+type Endpoint16_20Input = { readonly clientId: Endpoint16_20Request["payload"]["clientId"] }
+const Endpoint16_20 = (raw: RawClient["mobile"]) => (input: Endpoint16_20Input) =>
   raw["githubOauthClient"]({ payload: { clientId: input["clientId"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_15 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_21 = (raw: RawClient["mobile"]) => () =>
   raw["githubOauthDeviceStart"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_16Request = Parameters<RawClient["mobile"]["githubOauthDevicePoll"]>[0]
-type Endpoint16_16Input = { readonly deviceCode: Endpoint16_16Request["payload"]["deviceCode"] }
-const Endpoint16_16 = (raw: RawClient["mobile"]) => (input: Endpoint16_16Input) =>
+type Endpoint16_22Request = Parameters<RawClient["mobile"]["githubOauthDevicePoll"]>[0]
+type Endpoint16_22Input = { readonly deviceCode: Endpoint16_22Request["payload"]["deviceCode"] }
+const Endpoint16_22 = (raw: RawClient["mobile"]) => (input: Endpoint16_22Input) =>
   raw["githubOauthDevicePoll"]({ payload: { deviceCode: input["deviceCode"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_17Request = Parameters<RawClient["mobile"]["githubAuthSet"]>[0]
-type Endpoint16_17Input = { readonly token: Endpoint16_17Request["payload"]["token"] }
-const Endpoint16_17 = (raw: RawClient["mobile"]) => (input: Endpoint16_17Input) =>
+type Endpoint16_23Request = Parameters<RawClient["mobile"]["githubAuthSet"]>[0]
+type Endpoint16_23Input = { readonly token: Endpoint16_23Request["payload"]["token"] }
+const Endpoint16_23 = (raw: RawClient["mobile"]) => (input: Endpoint16_23Input) =>
   raw["githubAuthSet"]({ payload: { token: input["token"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_18 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_24 = (raw: RawClient["mobile"]) => () =>
   raw["githubAuthRemove"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_19Request = Parameters<RawClient["mobile"]["githubImport"]>[0]
-type Endpoint16_19Input = {
-  readonly owner: Endpoint16_19Request["payload"]["owner"]
-  readonly repo: Endpoint16_19Request["payload"]["repo"]
-  readonly cloneUrl: Endpoint16_19Request["payload"]["cloneUrl"]
-  readonly defaultBranch: Endpoint16_19Request["payload"]["defaultBranch"]
-  readonly private?: Endpoint16_19Request["payload"]["private"]
+type Endpoint16_25Request = Parameters<RawClient["mobile"]["githubImport"]>[0]
+type Endpoint16_25Input = {
+  readonly owner: Endpoint16_25Request["payload"]["owner"]
+  readonly repo: Endpoint16_25Request["payload"]["repo"]
+  readonly cloneUrl: Endpoint16_25Request["payload"]["cloneUrl"]
+  readonly defaultBranch: Endpoint16_25Request["payload"]["defaultBranch"]
+  readonly private?: Endpoint16_25Request["payload"]["private"]
 }
-const Endpoint16_19 = (raw: RawClient["mobile"]) => (input: Endpoint16_19Input) =>
+const Endpoint16_25 = (raw: RawClient["mobile"]) => (input: Endpoint16_25Input) =>
   raw["githubImport"]({
     payload: {
       owner: input["owner"],
@@ -782,19 +854,19 @@ const Endpoint16_19 = (raw: RawClient["mobile"]) => (input: Endpoint16_19Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_20Request = Parameters<RawClient["mobile"]["githubSessionCreate"]>[0]
-type Endpoint16_20Input = {
-  readonly owner: Endpoint16_20Request["payload"]["owner"]
-  readonly repo: Endpoint16_20Request["payload"]["repo"]
-  readonly cloneUrl: Endpoint16_20Request["payload"]["cloneUrl"]
-  readonly htmlUrl?: Endpoint16_20Request["payload"]["htmlUrl"]
-  readonly defaultBranch: Endpoint16_20Request["payload"]["defaultBranch"]
-  readonly baseBranch: Endpoint16_20Request["payload"]["baseBranch"]
-  readonly private?: Endpoint16_20Request["payload"]["private"]
-  readonly title?: Endpoint16_20Request["payload"]["title"]
-  readonly executionTarget?: Endpoint16_20Request["payload"]["executionTarget"]
+type Endpoint16_26Request = Parameters<RawClient["mobile"]["githubSessionCreate"]>[0]
+type Endpoint16_26Input = {
+  readonly owner: Endpoint16_26Request["payload"]["owner"]
+  readonly repo: Endpoint16_26Request["payload"]["repo"]
+  readonly cloneUrl: Endpoint16_26Request["payload"]["cloneUrl"]
+  readonly htmlUrl?: Endpoint16_26Request["payload"]["htmlUrl"]
+  readonly defaultBranch: Endpoint16_26Request["payload"]["defaultBranch"]
+  readonly baseBranch: Endpoint16_26Request["payload"]["baseBranch"]
+  readonly private?: Endpoint16_26Request["payload"]["private"]
+  readonly title?: Endpoint16_26Request["payload"]["title"]
+  readonly executionTarget?: Endpoint16_26Request["payload"]["executionTarget"]
 }
-const Endpoint16_20 = (raw: RawClient["mobile"]) => (input: Endpoint16_20Input) =>
+const Endpoint16_26 = (raw: RawClient["mobile"]) => (input: Endpoint16_26Input) =>
   raw["githubSessionCreate"]({
     payload: {
       owner: input["owner"],
@@ -809,25 +881,25 @@ const Endpoint16_20 = (raw: RawClient["mobile"]) => (input: Endpoint16_20Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_21Request = Parameters<RawClient["mobile"]["sessionList"]>[0]
-type Endpoint16_21Input = {
-  readonly limit?: Endpoint16_21Request["query"]["limit"]
-  readonly search?: Endpoint16_21Request["query"]["search"]
+type Endpoint16_27Request = Parameters<RawClient["mobile"]["sessionList"]>[0]
+type Endpoint16_27Input = {
+  readonly limit?: Endpoint16_27Request["query"]["limit"]
+  readonly search?: Endpoint16_27Request["query"]["search"]
 }
-const Endpoint16_21 = (raw: RawClient["mobile"]) => (input?: Endpoint16_21Input) =>
+const Endpoint16_27 = (raw: RawClient["mobile"]) => (input?: Endpoint16_27Input) =>
   raw["sessionList"]({ query: { limit: input?.["limit"], search: input?.["search"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_22Request = Parameters<RawClient["mobile"]["sessionCreate"]>[0]
-type Endpoint16_22Input = {
-  readonly parentID?: Endpoint16_22Request["payload"]["parentID"]
-  readonly title?: Endpoint16_22Request["payload"]["title"]
-  readonly permission?: Endpoint16_22Request["payload"]["permission"]
-  readonly github?: Endpoint16_22Request["payload"]["github"]
-  readonly executionTarget?: Endpoint16_22Request["payload"]["executionTarget"]
+type Endpoint16_28Request = Parameters<RawClient["mobile"]["sessionCreate"]>[0]
+type Endpoint16_28Input = {
+  readonly parentID?: Endpoint16_28Request["payload"]["parentID"]
+  readonly title?: Endpoint16_28Request["payload"]["title"]
+  readonly permission?: Endpoint16_28Request["payload"]["permission"]
+  readonly github?: Endpoint16_28Request["payload"]["github"]
+  readonly executionTarget?: Endpoint16_28Request["payload"]["executionTarget"]
 }
-const Endpoint16_22 = (raw: RawClient["mobile"]) => (input?: Endpoint16_22Input) =>
+const Endpoint16_28 = (raw: RawClient["mobile"]) => (input?: Endpoint16_28Input) =>
   raw["sessionCreate"]({
     payload: {
       parentID: input?.["parentID"],
@@ -838,41 +910,41 @@ const Endpoint16_22 = (raw: RawClient["mobile"]) => (input?: Endpoint16_22Input)
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_23Request = Parameters<RawClient["mobile"]["sessionDetail"]>[0]
-type Endpoint16_23Input = { readonly sessionID: Endpoint16_23Request["params"]["sessionID"] }
-const Endpoint16_23 = (raw: RawClient["mobile"]) => (input: Endpoint16_23Input) =>
+type Endpoint16_29Request = Parameters<RawClient["mobile"]["sessionDetail"]>[0]
+type Endpoint16_29Input = { readonly sessionID: Endpoint16_29Request["params"]["sessionID"] }
+const Endpoint16_29 = (raw: RawClient["mobile"]) => (input: Endpoint16_29Input) =>
   raw["sessionDetail"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_24Request = Parameters<RawClient["mobile"]["sessionDelete"]>[0]
-type Endpoint16_24Input = { readonly sessionID: Endpoint16_24Request["params"]["sessionID"] }
-const Endpoint16_24 = (raw: RawClient["mobile"]) => (input: Endpoint16_24Input) =>
+type Endpoint16_30Request = Parameters<RawClient["mobile"]["sessionDelete"]>[0]
+type Endpoint16_30Input = { readonly sessionID: Endpoint16_30Request["params"]["sessionID"] }
+const Endpoint16_30 = (raw: RawClient["mobile"]) => (input: Endpoint16_30Input) =>
   raw["sessionDelete"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_25Request = Parameters<RawClient["mobile"]["sessionDiff"]>[0]
-type Endpoint16_25Input = {
-  readonly sessionID: Endpoint16_25Request["params"]["sessionID"]
-  readonly messageID: Endpoint16_25Request["params"]["messageID"]
+type Endpoint16_31Request = Parameters<RawClient["mobile"]["sessionDiff"]>[0]
+type Endpoint16_31Input = {
+  readonly sessionID: Endpoint16_31Request["params"]["sessionID"]
+  readonly messageID: Endpoint16_31Request["params"]["messageID"]
 }
-const Endpoint16_25 = (raw: RawClient["mobile"]) => (input: Endpoint16_25Input) =>
+const Endpoint16_31 = (raw: RawClient["mobile"]) => (input: Endpoint16_31Input) =>
   raw["sessionDiff"]({ params: { sessionID: input["sessionID"], messageID: input["messageID"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_26Request = Parameters<RawClient["mobile"]["sessionCommandList"]>[0]
-type Endpoint16_26Input = { readonly sessionID: Endpoint16_26Request["params"]["sessionID"] }
-const Endpoint16_26 = (raw: RawClient["mobile"]) => (input: Endpoint16_26Input) =>
+type Endpoint16_32Request = Parameters<RawClient["mobile"]["sessionCommandList"]>[0]
+type Endpoint16_32Input = { readonly sessionID: Endpoint16_32Request["params"]["sessionID"] }
+const Endpoint16_32 = (raw: RawClient["mobile"]) => (input: Endpoint16_32Input) =>
   raw["sessionCommandList"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_27Request = Parameters<RawClient["mobile"]["sessionCommand"]>[0]
-type Endpoint16_27Input = {
-  readonly sessionID: Endpoint16_27Request["params"]["sessionID"]
-  readonly command: Endpoint16_27Request["payload"]["command"]
-  readonly arguments?: Endpoint16_27Request["payload"]["arguments"]
-  readonly agent?: Endpoint16_27Request["payload"]["agent"]
-  readonly model?: Endpoint16_27Request["payload"]["model"]
-  readonly variant?: Endpoint16_27Request["payload"]["variant"]
+type Endpoint16_33Request = Parameters<RawClient["mobile"]["sessionCommand"]>[0]
+type Endpoint16_33Input = {
+  readonly sessionID: Endpoint16_33Request["params"]["sessionID"]
+  readonly command: Endpoint16_33Request["payload"]["command"]
+  readonly arguments?: Endpoint16_33Request["payload"]["arguments"]
+  readonly agent?: Endpoint16_33Request["payload"]["agent"]
+  readonly model?: Endpoint16_33Request["payload"]["model"]
+  readonly variant?: Endpoint16_33Request["payload"]["variant"]
 }
-const Endpoint16_27 = (raw: RawClient["mobile"]) => (input: Endpoint16_27Input) =>
+const Endpoint16_33 = (raw: RawClient["mobile"]) => (input: Endpoint16_33Input) =>
   raw["sessionCommand"]({
     params: { sessionID: input["sessionID"] },
     payload: {
@@ -884,22 +956,22 @@ const Endpoint16_27 = (raw: RawClient["mobile"]) => (input: Endpoint16_27Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_28Request = Parameters<RawClient["mobile"]["sessionMessage"]>[0]
-type Endpoint16_28Input = {
-  readonly sessionID: Endpoint16_28Request["params"]["sessionID"]
-  readonly messageID?: Endpoint16_28Request["payload"]["messageID"]
-  readonly delivery?: Endpoint16_28Request["payload"]["delivery"]
-  readonly model?: Endpoint16_28Request["payload"]["model"]
-  readonly agent?: Endpoint16_28Request["payload"]["agent"]
-  readonly noReply?: Endpoint16_28Request["payload"]["noReply"]
-  readonly tools?: Endpoint16_28Request["payload"]["tools"]
-  readonly format?: Endpoint16_28Request["payload"]["format"]
-  readonly system?: Endpoint16_28Request["payload"]["system"]
-  readonly variant?: Endpoint16_28Request["payload"]["variant"]
-  readonly parts: Endpoint16_28Request["payload"]["parts"]
-  readonly parentSessionID?: Endpoint16_28Request["payload"]["parentSessionID"]
+type Endpoint16_34Request = Parameters<RawClient["mobile"]["sessionMessage"]>[0]
+type Endpoint16_34Input = {
+  readonly sessionID: Endpoint16_34Request["params"]["sessionID"]
+  readonly messageID?: Endpoint16_34Request["payload"]["messageID"]
+  readonly delivery?: Endpoint16_34Request["payload"]["delivery"]
+  readonly model?: Endpoint16_34Request["payload"]["model"]
+  readonly agent?: Endpoint16_34Request["payload"]["agent"]
+  readonly noReply?: Endpoint16_34Request["payload"]["noReply"]
+  readonly tools?: Endpoint16_34Request["payload"]["tools"]
+  readonly format?: Endpoint16_34Request["payload"]["format"]
+  readonly system?: Endpoint16_34Request["payload"]["system"]
+  readonly variant?: Endpoint16_34Request["payload"]["variant"]
+  readonly parts: Endpoint16_34Request["payload"]["parts"]
+  readonly parentSessionID?: Endpoint16_34Request["payload"]["parentSessionID"]
 }
-const Endpoint16_28 = (raw: RawClient["mobile"]) => (input: Endpoint16_28Input) =>
+const Endpoint16_34 = (raw: RawClient["mobile"]) => (input: Endpoint16_34Input) =>
   raw["sessionMessage"]({
     params: { sessionID: input["sessionID"] },
     payload: {
@@ -917,66 +989,66 @@ const Endpoint16_28 = (raw: RawClient["mobile"]) => (input: Endpoint16_28Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_29Request = Parameters<RawClient["mobile"]["sessionAbort"]>[0]
-type Endpoint16_29Input = { readonly sessionID: Endpoint16_29Request["params"]["sessionID"] }
-const Endpoint16_29 = (raw: RawClient["mobile"]) => (input: Endpoint16_29Input) =>
+type Endpoint16_35Request = Parameters<RawClient["mobile"]["sessionAbort"]>[0]
+type Endpoint16_35Input = { readonly sessionID: Endpoint16_35Request["params"]["sessionID"] }
+const Endpoint16_35 = (raw: RawClient["mobile"]) => (input: Endpoint16_35Input) =>
   raw["sessionAbort"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_30Request = Parameters<RawClient["mobile"]["permissionRespond"]>[0]
-type Endpoint16_30Input = {
-  readonly sessionID: Endpoint16_30Request["params"]["sessionID"]
-  readonly permissionID: Endpoint16_30Request["params"]["permissionID"]
-  readonly response: Endpoint16_30Request["payload"]["response"]
+type Endpoint16_36Request = Parameters<RawClient["mobile"]["permissionRespond"]>[0]
+type Endpoint16_36Input = {
+  readonly sessionID: Endpoint16_36Request["params"]["sessionID"]
+  readonly permissionID: Endpoint16_36Request["params"]["permissionID"]
+  readonly response: Endpoint16_36Request["payload"]["response"]
 }
-const Endpoint16_30 = (raw: RawClient["mobile"]) => (input: Endpoint16_30Input) =>
+const Endpoint16_36 = (raw: RawClient["mobile"]) => (input: Endpoint16_36Input) =>
   raw["permissionRespond"]({
     params: { sessionID: input["sessionID"], permissionID: input["permissionID"] },
     payload: { response: input["response"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_31Request = Parameters<RawClient["mobile"]["questionRespond"]>[0]
-type Endpoint16_31Input = {
-  readonly sessionID: Endpoint16_31Request["params"]["sessionID"]
-  readonly requestID: Endpoint16_31Request["params"]["requestID"]
-  readonly answers: Endpoint16_31Request["payload"]["answers"]
+type Endpoint16_37Request = Parameters<RawClient["mobile"]["questionRespond"]>[0]
+type Endpoint16_37Input = {
+  readonly sessionID: Endpoint16_37Request["params"]["sessionID"]
+  readonly requestID: Endpoint16_37Request["params"]["requestID"]
+  readonly answers: Endpoint16_37Request["payload"]["answers"]
 }
-const Endpoint16_31 = (raw: RawClient["mobile"]) => (input: Endpoint16_31Input) =>
+const Endpoint16_37 = (raw: RawClient["mobile"]) => (input: Endpoint16_37Input) =>
   raw["questionRespond"]({
     params: { sessionID: input["sessionID"], requestID: input["requestID"] },
     payload: { answers: input["answers"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_32Request = Parameters<RawClient["mobile"]["questionReject"]>[0]
-type Endpoint16_32Input = {
-  readonly sessionID: Endpoint16_32Request["params"]["sessionID"]
-  readonly requestID: Endpoint16_32Request["params"]["requestID"]
+type Endpoint16_38Request = Parameters<RawClient["mobile"]["questionReject"]>[0]
+type Endpoint16_38Input = {
+  readonly sessionID: Endpoint16_38Request["params"]["sessionID"]
+  readonly requestID: Endpoint16_38Request["params"]["requestID"]
 }
-const Endpoint16_32 = (raw: RawClient["mobile"]) => (input: Endpoint16_32Input) =>
+const Endpoint16_38 = (raw: RawClient["mobile"]) => (input: Endpoint16_38Input) =>
   raw["questionReject"]({ params: { sessionID: input["sessionID"], requestID: input["requestID"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_33Request = Parameters<RawClient["mobile"]["sessionPublish"]>[0]
-type Endpoint16_33Input = {
-  readonly sessionID: Endpoint16_33Request["params"]["sessionID"]
-  readonly title?: Endpoint16_33Request["payload"]["title"]
-  readonly body?: Endpoint16_33Request["payload"]["body"]
-  readonly commitMessage?: Endpoint16_33Request["payload"]["commitMessage"]
+type Endpoint16_39Request = Parameters<RawClient["mobile"]["sessionPublish"]>[0]
+type Endpoint16_39Input = {
+  readonly sessionID: Endpoint16_39Request["params"]["sessionID"]
+  readonly title?: Endpoint16_39Request["payload"]["title"]
+  readonly body?: Endpoint16_39Request["payload"]["body"]
+  readonly commitMessage?: Endpoint16_39Request["payload"]["commitMessage"]
 }
-const Endpoint16_33 = (raw: RawClient["mobile"]) => (input: Endpoint16_33Input) =>
+const Endpoint16_39 = (raw: RawClient["mobile"]) => (input: Endpoint16_39Input) =>
   raw["sessionPublish"]({
     params: { sessionID: input["sessionID"] },
     payload: { title: input["title"], body: input["body"], commitMessage: input["commitMessage"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_34Request = Parameters<RawClient["mobile"]["sessionCleanup"]>[0]
-type Endpoint16_34Input = { readonly sessionID: Endpoint16_34Request["params"]["sessionID"] }
-const Endpoint16_34 = (raw: RawClient["mobile"]) => (input: Endpoint16_34Input) =>
+type Endpoint16_40Request = Parameters<RawClient["mobile"]["sessionCleanup"]>[0]
+type Endpoint16_40Input = { readonly sessionID: Endpoint16_40Request["params"]["sessionID"] }
+const Endpoint16_40 = (raw: RawClient["mobile"]) => (input: Endpoint16_40Input) =>
   raw["sessionCleanup"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_35Request = Parameters<RawClient["mobile"]["sessionStream"]>[0]
-type Endpoint16_35Input = { readonly sessionID: Endpoint16_35Request["params"]["sessionID"] }
-const Endpoint16_35 = (raw: RawClient["mobile"]) => (input: Endpoint16_35Input) =>
+type Endpoint16_41Request = Parameters<RawClient["mobile"]["sessionStream"]>[0]
+type Endpoint16_41Input = { readonly sessionID: Endpoint16_41Request["params"]["sessionID"] }
+const Endpoint16_41 = (raw: RawClient["mobile"]) => (input: Endpoint16_41Input) =>
   Stream.unwrap(
     raw["sessionStream"]({ params: { sessionID: input["sessionID"] } }).pipe(
       Effect.mapError(mapClientError),
@@ -984,39 +1056,39 @@ const Endpoint16_35 = (raw: RawClient["mobile"]) => (input: Endpoint16_35Input) 
     ),
   )
 
-type Endpoint16_36Request = Parameters<RawClient["mobile"]["sessionRename"]>[0]
-type Endpoint16_36Input = {
-  readonly sessionID: Endpoint16_36Request["params"]["sessionID"]
-  readonly title: Endpoint16_36Request["payload"]["title"]
+type Endpoint16_42Request = Parameters<RawClient["mobile"]["sessionRename"]>[0]
+type Endpoint16_42Input = {
+  readonly sessionID: Endpoint16_42Request["params"]["sessionID"]
+  readonly title: Endpoint16_42Request["payload"]["title"]
 }
-const Endpoint16_36 = (raw: RawClient["mobile"]) => (input: Endpoint16_36Input) =>
+const Endpoint16_42 = (raw: RawClient["mobile"]) => (input: Endpoint16_42Input) =>
   raw["sessionRename"]({ params: { sessionID: input["sessionID"] }, payload: { title: input["title"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_37Request = Parameters<RawClient["mobile"]["sessionTodo"]>[0]
-type Endpoint16_37Input = { readonly sessionID: Endpoint16_37Request["params"]["sessionID"] }
-const Endpoint16_37 = (raw: RawClient["mobile"]) => (input: Endpoint16_37Input) =>
+type Endpoint16_43Request = Parameters<RawClient["mobile"]["sessionTodo"]>[0]
+type Endpoint16_43Input = { readonly sessionID: Endpoint16_43Request["params"]["sessionID"] }
+const Endpoint16_43 = (raw: RawClient["mobile"]) => (input: Endpoint16_43Input) =>
   raw["sessionTodo"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_38 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_44 = (raw: RawClient["mobile"]) => () =>
   raw["teleportUploadBegin"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_39Request = Parameters<RawClient["mobile"]["teleportUploadChunk"]>[0]
-type Endpoint16_39Input = { readonly uploadID: Endpoint16_39Request["params"]["uploadID"] }
-const Endpoint16_39 = (raw: RawClient["mobile"]) => (input: Endpoint16_39Input) =>
+type Endpoint16_45Request = Parameters<RawClient["mobile"]["teleportUploadChunk"]>[0]
+type Endpoint16_45Input = { readonly uploadID: Endpoint16_45Request["params"]["uploadID"] }
+const Endpoint16_45 = (raw: RawClient["mobile"]) => (input: Endpoint16_45Input) =>
   raw["teleportUploadChunk"]({ params: { uploadID: input["uploadID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_40Request = Parameters<RawClient["mobile"]["teleportIn"]>[0]
-type Endpoint16_40Input = {
-  readonly title?: Endpoint16_40Request["payload"]["title"]
-  readonly name?: Endpoint16_40Request["payload"]["name"]
-  readonly origin?: Endpoint16_40Request["payload"]["origin"]
-  readonly permission?: Endpoint16_40Request["payload"]["permission"]
-  readonly messages: Endpoint16_40Request["payload"]["messages"]
-  readonly uploadID?: Endpoint16_40Request["payload"]["uploadID"]
+type Endpoint16_46Request = Parameters<RawClient["mobile"]["teleportIn"]>[0]
+type Endpoint16_46Input = {
+  readonly title?: Endpoint16_46Request["payload"]["title"]
+  readonly name?: Endpoint16_46Request["payload"]["name"]
+  readonly origin?: Endpoint16_46Request["payload"]["origin"]
+  readonly permission?: Endpoint16_46Request["payload"]["permission"]
+  readonly messages: Endpoint16_46Request["payload"]["messages"]
+  readonly uploadID?: Endpoint16_46Request["payload"]["uploadID"]
 }
-const Endpoint16_40 = (raw: RawClient["mobile"]) => (input: Endpoint16_40Input) =>
+const Endpoint16_46 = (raw: RawClient["mobile"]) => (input: Endpoint16_46Input) =>
   raw["teleportIn"]({
     payload: {
       title: input["title"],
@@ -1028,33 +1100,33 @@ const Endpoint16_40 = (raw: RawClient["mobile"]) => (input: Endpoint16_40Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_41Request = Parameters<RawClient["mobile"]["teleportOut"]>[0]
-type Endpoint16_41Input = {
-  readonly sessionID: Endpoint16_41Request["params"]["sessionID"]
-  readonly url: Endpoint16_41Request["payload"]["url"]
-  readonly token: Endpoint16_41Request["payload"]["token"]
-  readonly content?: Endpoint16_41Request["payload"]["content"]
-  readonly includeGit?: Endpoint16_41Request["payload"]["includeGit"]
+type Endpoint16_47Request = Parameters<RawClient["mobile"]["teleportOut"]>[0]
+type Endpoint16_47Input = {
+  readonly sessionID: Endpoint16_47Request["params"]["sessionID"]
+  readonly url: Endpoint16_47Request["payload"]["url"]
+  readonly token: Endpoint16_47Request["payload"]["token"]
+  readonly content?: Endpoint16_47Request["payload"]["content"]
+  readonly includeGit?: Endpoint16_47Request["payload"]["includeGit"]
 }
-const Endpoint16_41 = (raw: RawClient["mobile"]) => (input: Endpoint16_41Input) =>
+const Endpoint16_47 = (raw: RawClient["mobile"]) => (input: Endpoint16_47Input) =>
   raw["teleportOut"]({
     params: { sessionID: input["sessionID"] },
     payload: { url: input["url"], token: input["token"], content: input["content"], includeGit: input["includeGit"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_42Request = Parameters<RawClient["mobile"]["worktreeCreate"]>[0]
-type Endpoint16_42Input = {
-  readonly name?: Extract<Endpoint16_42Request["payload"], object>["name"]
-  readonly branch?: Extract<Endpoint16_42Request["payload"], object>["branch"]
-  readonly branchPrefix?: Extract<Endpoint16_42Request["payload"], object>["branchPrefix"]
-  readonly baseBranch?: Extract<Endpoint16_42Request["payload"], object>["baseBranch"]
-  readonly remote?: Extract<Endpoint16_42Request["payload"], object>["remote"]
-  readonly startCommand?: Extract<Endpoint16_42Request["payload"], object>["startCommand"]
-  readonly detached?: Extract<Endpoint16_42Request["payload"], object>["detached"]
-  readonly sourceDirectory?: Extract<Endpoint16_42Request["payload"], object>["sourceDirectory"]
-  readonly root?: Extract<Endpoint16_42Request["payload"], object>["root"]
+type Endpoint16_48Request = Parameters<RawClient["mobile"]["worktreeCreate"]>[0]
+type Endpoint16_48Input = {
+  readonly name?: Extract<Endpoint16_48Request["payload"], object>["name"]
+  readonly branch?: Extract<Endpoint16_48Request["payload"], object>["branch"]
+  readonly branchPrefix?: Extract<Endpoint16_48Request["payload"], object>["branchPrefix"]
+  readonly baseBranch?: Extract<Endpoint16_48Request["payload"], object>["baseBranch"]
+  readonly remote?: Extract<Endpoint16_48Request["payload"], object>["remote"]
+  readonly startCommand?: Extract<Endpoint16_48Request["payload"], object>["startCommand"]
+  readonly detached?: Extract<Endpoint16_48Request["payload"], object>["detached"]
+  readonly sourceDirectory?: Extract<Endpoint16_48Request["payload"], object>["sourceDirectory"]
+  readonly root?: Extract<Endpoint16_48Request["payload"], object>["root"]
 }
-const Endpoint16_42 = (raw: RawClient["mobile"]) => (input?: Endpoint16_42Input) =>
+const Endpoint16_48 = (raw: RawClient["mobile"]) => (input?: Endpoint16_48Input) =>
   raw["worktreeCreate"]({
     payload: {
       name: input?.["name"],
@@ -1069,46 +1141,46 @@ const Endpoint16_42 = (raw: RawClient["mobile"]) => (input?: Endpoint16_42Input)
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_43Request = Parameters<RawClient["mobile"]["worktreeRemove"]>[0]
-type Endpoint16_43Input = {
-  readonly directory: Endpoint16_43Request["payload"]["directory"]
-  readonly force?: Endpoint16_43Request["payload"]["force"]
+type Endpoint16_49Request = Parameters<RawClient["mobile"]["worktreeRemove"]>[0]
+type Endpoint16_49Input = {
+  readonly directory: Endpoint16_49Request["payload"]["directory"]
+  readonly force?: Endpoint16_49Request["payload"]["force"]
 }
-const Endpoint16_43 = (raw: RawClient["mobile"]) => (input: Endpoint16_43Input) =>
+const Endpoint16_49 = (raw: RawClient["mobile"]) => (input: Endpoint16_49Input) =>
   raw["worktreeRemove"]({ payload: { directory: input["directory"], force: input["force"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_44Request = Parameters<RawClient["mobile"]["worktreeReset"]>[0]
-type Endpoint16_44Input = { readonly directory: Endpoint16_44Request["payload"]["directory"] }
-const Endpoint16_44 = (raw: RawClient["mobile"]) => (input: Endpoint16_44Input) =>
+type Endpoint16_50Request = Parameters<RawClient["mobile"]["worktreeReset"]>[0]
+type Endpoint16_50Input = { readonly directory: Endpoint16_50Request["payload"]["directory"] }
+const Endpoint16_50 = (raw: RawClient["mobile"]) => (input: Endpoint16_50Input) =>
   raw["worktreeReset"]({ payload: { directory: input["directory"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_45 = (raw: RawClient["mobile"]) => () => raw["gitStatus"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_51 = (raw: RawClient["mobile"]) => () => raw["gitStatus"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_46Request = Parameters<RawClient["mobile"]["gitDiff"]>[0]
-type Endpoint16_46Input = {
-  readonly file?: Endpoint16_46Request["query"]["file"]
-  readonly staged?: Endpoint16_46Request["query"]["staged"]
+type Endpoint16_52Request = Parameters<RawClient["mobile"]["gitDiff"]>[0]
+type Endpoint16_52Input = {
+  readonly file?: Endpoint16_52Request["query"]["file"]
+  readonly staged?: Endpoint16_52Request["query"]["staged"]
 }
-const Endpoint16_46 = (raw: RawClient["mobile"]) => (input?: Endpoint16_46Input) =>
+const Endpoint16_52 = (raw: RawClient["mobile"]) => (input?: Endpoint16_52Input) =>
   raw["gitDiff"]({ query: { file: input?.["file"], staged: input?.["staged"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_47Request = Parameters<RawClient["mobile"]["gitCommits"]>[0]
-type Endpoint16_47Input = { readonly limit?: Endpoint16_47Request["query"]["limit"] }
-const Endpoint16_47 = (raw: RawClient["mobile"]) => (input?: Endpoint16_47Input) =>
+type Endpoint16_53Request = Parameters<RawClient["mobile"]["gitCommits"]>[0]
+type Endpoint16_53Input = { readonly limit?: Endpoint16_53Request["query"]["limit"] }
+const Endpoint16_53 = (raw: RawClient["mobile"]) => (input?: Endpoint16_53Input) =>
   raw["gitCommits"]({ query: { limit: input?.["limit"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_48 = (raw: RawClient["mobile"]) => () => raw["gitBranches"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_54 = (raw: RawClient["mobile"]) => () => raw["gitBranches"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_49Request = Parameters<RawClient["mobile"]["gitCommit"]>[0]
-type Endpoint16_49Input = {
-  readonly message: Endpoint16_49Request["payload"]["message"]
-  readonly files?: Endpoint16_49Request["payload"]["files"]
-  readonly amend?: Endpoint16_49Request["payload"]["amend"]
-  readonly stagedOnly?: Endpoint16_49Request["payload"]["stagedOnly"]
+type Endpoint16_55Request = Parameters<RawClient["mobile"]["gitCommit"]>[0]
+type Endpoint16_55Input = {
+  readonly message: Endpoint16_55Request["payload"]["message"]
+  readonly files?: Endpoint16_55Request["payload"]["files"]
+  readonly amend?: Endpoint16_55Request["payload"]["amend"]
+  readonly stagedOnly?: Endpoint16_55Request["payload"]["stagedOnly"]
 }
-const Endpoint16_49 = (raw: RawClient["mobile"]) => (input: Endpoint16_49Input) =>
+const Endpoint16_55 = (raw: RawClient["mobile"]) => (input: Endpoint16_55Input) =>
   raw["gitCommit"]({
     payload: {
       message: input["message"],
@@ -1118,54 +1190,54 @@ const Endpoint16_49 = (raw: RawClient["mobile"]) => (input: Endpoint16_49Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_50Request = Parameters<RawClient["mobile"]["gitCheckout"]>[0]
-type Endpoint16_50Input = {
-  readonly branch: Endpoint16_50Request["payload"]["branch"]
-  readonly create?: Endpoint16_50Request["payload"]["create"]
+type Endpoint16_56Request = Parameters<RawClient["mobile"]["gitCheckout"]>[0]
+type Endpoint16_56Input = {
+  readonly branch: Endpoint16_56Request["payload"]["branch"]
+  readonly create?: Endpoint16_56Request["payload"]["create"]
 }
-const Endpoint16_50 = (raw: RawClient["mobile"]) => (input: Endpoint16_50Input) =>
+const Endpoint16_56 = (raw: RawClient["mobile"]) => (input: Endpoint16_56Input) =>
   raw["gitCheckout"]({ payload: { branch: input["branch"], create: input["create"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_51Request = Parameters<RawClient["mobile"]["gitStage"]>[0]
-type Endpoint16_51Input = { readonly files: Endpoint16_51Request["payload"]["files"] }
-const Endpoint16_51 = (raw: RawClient["mobile"]) => (input: Endpoint16_51Input) =>
+type Endpoint16_57Request = Parameters<RawClient["mobile"]["gitStage"]>[0]
+type Endpoint16_57Input = { readonly files: Endpoint16_57Request["payload"]["files"] }
+const Endpoint16_57 = (raw: RawClient["mobile"]) => (input: Endpoint16_57Input) =>
   raw["gitStage"]({ payload: { files: input["files"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_52Request = Parameters<RawClient["mobile"]["gitUnstage"]>[0]
-type Endpoint16_52Input = { readonly files: Endpoint16_52Request["payload"]["files"] }
-const Endpoint16_52 = (raw: RawClient["mobile"]) => (input: Endpoint16_52Input) =>
+type Endpoint16_58Request = Parameters<RawClient["mobile"]["gitUnstage"]>[0]
+type Endpoint16_58Input = { readonly files: Endpoint16_58Request["payload"]["files"] }
+const Endpoint16_58 = (raw: RawClient["mobile"]) => (input: Endpoint16_58Input) =>
   raw["gitUnstage"]({ payload: { files: input["files"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_53Request = Parameters<RawClient["mobile"]["gitDiscard"]>[0]
-type Endpoint16_53Input = { readonly files: Endpoint16_53Request["payload"]["files"] }
-const Endpoint16_53 = (raw: RawClient["mobile"]) => (input: Endpoint16_53Input) =>
+type Endpoint16_59Request = Parameters<RawClient["mobile"]["gitDiscard"]>[0]
+type Endpoint16_59Input = { readonly files: Endpoint16_59Request["payload"]["files"] }
+const Endpoint16_59 = (raw: RawClient["mobile"]) => (input: Endpoint16_59Input) =>
   raw["gitDiscard"]({ payload: { files: input["files"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_54Request = Parameters<RawClient["mobile"]["gitPush"]>[0]
-type Endpoint16_54Input = { readonly upstream?: Endpoint16_54Request["query"]["upstream"] }
-const Endpoint16_54 = (raw: RawClient["mobile"]) => (input?: Endpoint16_54Input) =>
+type Endpoint16_60Request = Parameters<RawClient["mobile"]["gitPush"]>[0]
+type Endpoint16_60Input = { readonly upstream?: Endpoint16_60Request["query"]["upstream"] }
+const Endpoint16_60 = (raw: RawClient["mobile"]) => (input?: Endpoint16_60Input) =>
   raw["gitPush"]({ query: { upstream: input?.["upstream"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_55 = (raw: RawClient["mobile"]) => () => raw["gitPull"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_61 = (raw: RawClient["mobile"]) => () => raw["gitPull"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_56 = (raw: RawClient["mobile"]) => () => raw["loopList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_62 = (raw: RawClient["mobile"]) => () => raw["loopList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_57Request = Parameters<RawClient["mobile"]["loopCreate"]>[0]
-type Endpoint16_57Input = {
-  readonly name: Endpoint16_57Request["payload"]["name"]
-  readonly stages: Endpoint16_57Request["payload"]["stages"]
-  readonly trigger: Endpoint16_57Request["payload"]["trigger"]
-  readonly maxRuns?: Endpoint16_57Request["payload"]["maxRuns"]
-  readonly timeoutMs?: Endpoint16_57Request["payload"]["timeoutMs"]
-  readonly createPR?: Endpoint16_57Request["payload"]["createPR"]
-  readonly sandbox?: Endpoint16_57Request["payload"]["sandbox"]
-  readonly worktree?: Endpoint16_57Request["payload"]["worktree"]
-  readonly paused?: Endpoint16_57Request["payload"]["paused"]
-  readonly enabled: Endpoint16_57Request["payload"]["enabled"]
+type Endpoint16_63Request = Parameters<RawClient["mobile"]["loopCreate"]>[0]
+type Endpoint16_63Input = {
+  readonly name: Endpoint16_63Request["payload"]["name"]
+  readonly stages: Endpoint16_63Request["payload"]["stages"]
+  readonly trigger: Endpoint16_63Request["payload"]["trigger"]
+  readonly maxRuns?: Endpoint16_63Request["payload"]["maxRuns"]
+  readonly timeoutMs?: Endpoint16_63Request["payload"]["timeoutMs"]
+  readonly createPR?: Endpoint16_63Request["payload"]["createPR"]
+  readonly sandbox?: Endpoint16_63Request["payload"]["sandbox"]
+  readonly worktree?: Endpoint16_63Request["payload"]["worktree"]
+  readonly paused?: Endpoint16_63Request["payload"]["paused"]
+  readonly enabled: Endpoint16_63Request["payload"]["enabled"]
 }
-const Endpoint16_57 = (raw: RawClient["mobile"]) => (input: Endpoint16_57Input) =>
+const Endpoint16_63 = (raw: RawClient["mobile"]) => (input: Endpoint16_63Input) =>
   raw["loopCreate"]({
     payload: {
       name: input["name"],
@@ -1181,16 +1253,16 @@ const Endpoint16_57 = (raw: RawClient["mobile"]) => (input: Endpoint16_57Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_58 = (raw: RawClient["mobile"]) => () => raw["loopTemplates"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_64 = (raw: RawClient["mobile"]) => () => raw["loopTemplates"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_59Request = Parameters<RawClient["mobile"]["loopGenerate"]>[0]
-type Endpoint16_59Input = {
-  readonly description: Endpoint16_59Request["payload"]["description"]
-  readonly model?: Endpoint16_59Request["payload"]["model"]
-  readonly agent?: Endpoint16_59Request["payload"]["agent"]
-  readonly sessionID?: Endpoint16_59Request["payload"]["sessionID"]
+type Endpoint16_65Request = Parameters<RawClient["mobile"]["loopGenerate"]>[0]
+type Endpoint16_65Input = {
+  readonly description: Endpoint16_65Request["payload"]["description"]
+  readonly model?: Endpoint16_65Request["payload"]["model"]
+  readonly agent?: Endpoint16_65Request["payload"]["agent"]
+  readonly sessionID?: Endpoint16_65Request["payload"]["sessionID"]
 }
-const Endpoint16_59 = (raw: RawClient["mobile"]) => (input: Endpoint16_59Input) =>
+const Endpoint16_65 = (raw: RawClient["mobile"]) => (input: Endpoint16_65Input) =>
   raw["loopGenerate"]({
     payload: {
       description: input["description"],
@@ -1200,36 +1272,36 @@ const Endpoint16_59 = (raw: RawClient["mobile"]) => (input: Endpoint16_59Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_60Request = Parameters<RawClient["mobile"]["loopRunsRecent"]>[0]
-type Endpoint16_60Input = { readonly limit?: Endpoint16_60Request["query"]["limit"] }
-const Endpoint16_60 = (raw: RawClient["mobile"]) => (input?: Endpoint16_60Input) =>
+type Endpoint16_66Request = Parameters<RawClient["mobile"]["loopRunsRecent"]>[0]
+type Endpoint16_66Input = { readonly limit?: Endpoint16_66Request["query"]["limit"] }
+const Endpoint16_66 = (raw: RawClient["mobile"]) => (input?: Endpoint16_66Input) =>
   raw["loopRunsRecent"]({ query: { limit: input?.["limit"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_61Request = Parameters<RawClient["mobile"]["loopGet"]>[0]
-type Endpoint16_61Input = { readonly id: Endpoint16_61Request["params"]["id"] }
-const Endpoint16_61 = (raw: RawClient["mobile"]) => (input: Endpoint16_61Input) =>
+type Endpoint16_67Request = Parameters<RawClient["mobile"]["loopGet"]>[0]
+type Endpoint16_67Input = { readonly id: Endpoint16_67Request["params"]["id"] }
+const Endpoint16_67 = (raw: RawClient["mobile"]) => (input: Endpoint16_67Input) =>
   raw["loopGet"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_62Request = Parameters<RawClient["mobile"]["loopDelete"]>[0]
-type Endpoint16_62Input = { readonly id: Endpoint16_62Request["params"]["id"] }
-const Endpoint16_62 = (raw: RawClient["mobile"]) => (input: Endpoint16_62Input) =>
+type Endpoint16_68Request = Parameters<RawClient["mobile"]["loopDelete"]>[0]
+type Endpoint16_68Input = { readonly id: Endpoint16_68Request["params"]["id"] }
+const Endpoint16_68 = (raw: RawClient["mobile"]) => (input: Endpoint16_68Input) =>
   raw["loopDelete"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_63Request = Parameters<RawClient["mobile"]["loopUpdate"]>[0]
-type Endpoint16_63Input = {
-  readonly id: Endpoint16_63Request["params"]["id"]
-  readonly name: Endpoint16_63Request["payload"]["name"]
-  readonly stages: Endpoint16_63Request["payload"]["stages"]
-  readonly trigger: Endpoint16_63Request["payload"]["trigger"]
-  readonly maxRuns?: Endpoint16_63Request["payload"]["maxRuns"]
-  readonly timeoutMs?: Endpoint16_63Request["payload"]["timeoutMs"]
-  readonly createPR?: Endpoint16_63Request["payload"]["createPR"]
-  readonly sandbox?: Endpoint16_63Request["payload"]["sandbox"]
-  readonly worktree?: Endpoint16_63Request["payload"]["worktree"]
-  readonly paused?: Endpoint16_63Request["payload"]["paused"]
-  readonly enabled: Endpoint16_63Request["payload"]["enabled"]
+type Endpoint16_69Request = Parameters<RawClient["mobile"]["loopUpdate"]>[0]
+type Endpoint16_69Input = {
+  readonly id: Endpoint16_69Request["params"]["id"]
+  readonly name: Endpoint16_69Request["payload"]["name"]
+  readonly stages: Endpoint16_69Request["payload"]["stages"]
+  readonly trigger: Endpoint16_69Request["payload"]["trigger"]
+  readonly maxRuns?: Endpoint16_69Request["payload"]["maxRuns"]
+  readonly timeoutMs?: Endpoint16_69Request["payload"]["timeoutMs"]
+  readonly createPR?: Endpoint16_69Request["payload"]["createPR"]
+  readonly sandbox?: Endpoint16_69Request["payload"]["sandbox"]
+  readonly worktree?: Endpoint16_69Request["payload"]["worktree"]
+  readonly paused?: Endpoint16_69Request["payload"]["paused"]
+  readonly enabled: Endpoint16_69Request["payload"]["enabled"]
 }
-const Endpoint16_63 = (raw: RawClient["mobile"]) => (input: Endpoint16_63Input) =>
+const Endpoint16_69 = (raw: RawClient["mobile"]) => (input: Endpoint16_69Input) =>
   raw["loopUpdate"]({
     params: { id: input["id"] },
     payload: {
@@ -1246,80 +1318,80 @@ const Endpoint16_63 = (raw: RawClient["mobile"]) => (input: Endpoint16_63Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_64Request = Parameters<RawClient["mobile"]["loopRuns"]>[0]
-type Endpoint16_64Input = {
-  readonly id: Endpoint16_64Request["params"]["id"]
-  readonly limit?: Endpoint16_64Request["query"]["limit"]
+type Endpoint16_70Request = Parameters<RawClient["mobile"]["loopRuns"]>[0]
+type Endpoint16_70Input = {
+  readonly id: Endpoint16_70Request["params"]["id"]
+  readonly limit?: Endpoint16_70Request["query"]["limit"]
 }
-const Endpoint16_64 = (raw: RawClient["mobile"]) => (input: Endpoint16_64Input) =>
+const Endpoint16_70 = (raw: RawClient["mobile"]) => (input: Endpoint16_70Input) =>
   raw["loopRuns"]({ params: { id: input["id"] }, query: { limit: input["limit"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_65Request = Parameters<RawClient["mobile"]["loopRun"]>[0]
-type Endpoint16_65Input = { readonly id: Endpoint16_65Request["params"]["id"] }
-const Endpoint16_65 = (raw: RawClient["mobile"]) => (input: Endpoint16_65Input) =>
+type Endpoint16_71Request = Parameters<RawClient["mobile"]["loopRun"]>[0]
+type Endpoint16_71Input = { readonly id: Endpoint16_71Request["params"]["id"] }
+const Endpoint16_71 = (raw: RawClient["mobile"]) => (input: Endpoint16_71Input) =>
   raw["loopRun"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_66Request = Parameters<RawClient["mobile"]["loopAbort"]>[0]
-type Endpoint16_66Input = { readonly id: Endpoint16_66Request["params"]["id"] }
-const Endpoint16_66 = (raw: RawClient["mobile"]) => (input: Endpoint16_66Input) =>
+type Endpoint16_72Request = Parameters<RawClient["mobile"]["loopAbort"]>[0]
+type Endpoint16_72Input = { readonly id: Endpoint16_72Request["params"]["id"] }
+const Endpoint16_72 = (raw: RawClient["mobile"]) => (input: Endpoint16_72Input) =>
   raw["loopAbort"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_67Request = Parameters<RawClient["mobile"]["loopToggle"]>[0]
-type Endpoint16_67Input = {
-  readonly id: Endpoint16_67Request["params"]["id"]
-  readonly enabled: Endpoint16_67Request["payload"]["enabled"]
+type Endpoint16_73Request = Parameters<RawClient["mobile"]["loopToggle"]>[0]
+type Endpoint16_73Input = {
+  readonly id: Endpoint16_73Request["params"]["id"]
+  readonly enabled: Endpoint16_73Request["payload"]["enabled"]
 }
-const Endpoint16_67 = (raw: RawClient["mobile"]) => (input: Endpoint16_67Input) =>
+const Endpoint16_73 = (raw: RawClient["mobile"]) => (input: Endpoint16_73Input) =>
   raw["loopToggle"]({ params: { id: input["id"] }, payload: { enabled: input["enabled"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_68Request = Parameters<RawClient["mobile"]["loopPause"]>[0]
-type Endpoint16_68Input = { readonly id: Endpoint16_68Request["params"]["id"] }
-const Endpoint16_68 = (raw: RawClient["mobile"]) => (input: Endpoint16_68Input) =>
+type Endpoint16_74Request = Parameters<RawClient["mobile"]["loopPause"]>[0]
+type Endpoint16_74Input = { readonly id: Endpoint16_74Request["params"]["id"] }
+const Endpoint16_74 = (raw: RawClient["mobile"]) => (input: Endpoint16_74Input) =>
   raw["loopPause"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_69Request = Parameters<RawClient["mobile"]["loopResume"]>[0]
-type Endpoint16_69Input = { readonly id: Endpoint16_69Request["params"]["id"] }
-const Endpoint16_69 = (raw: RawClient["mobile"]) => (input: Endpoint16_69Input) =>
+type Endpoint16_75Request = Parameters<RawClient["mobile"]["loopResume"]>[0]
+type Endpoint16_75Input = { readonly id: Endpoint16_75Request["params"]["id"] }
+const Endpoint16_75 = (raw: RawClient["mobile"]) => (input: Endpoint16_75Input) =>
   raw["loopResume"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_70 = (raw: RawClient["mobile"]) => () => raw["routineList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_76 = (raw: RawClient["mobile"]) => () => raw["routineList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_71Request = Parameters<RawClient["mobile"]["routineCreate"]>[0]
-type Endpoint16_71Input = {
-  readonly name: Endpoint16_71Request["payload"]["name"]
-  readonly prompt: Endpoint16_71Request["payload"]["prompt"]
-  readonly triggers?: Endpoint16_71Request["payload"]["triggers"]
-  readonly model?: Endpoint16_71Request["payload"]["model"]
+type Endpoint16_77Request = Parameters<RawClient["mobile"]["routineCreate"]>[0]
+type Endpoint16_77Input = {
+  readonly name: Endpoint16_77Request["payload"]["name"]
+  readonly prompt: Endpoint16_77Request["payload"]["prompt"]
+  readonly triggers?: Endpoint16_77Request["payload"]["triggers"]
+  readonly model?: Endpoint16_77Request["payload"]["model"]
 }
-const Endpoint16_71 = (raw: RawClient["mobile"]) => (input: Endpoint16_71Input) =>
+const Endpoint16_77 = (raw: RawClient["mobile"]) => (input: Endpoint16_77Input) =>
   raw["routineCreate"]({
     payload: { name: input["name"], prompt: input["prompt"], triggers: input["triggers"], model: input["model"] },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_72Request = Parameters<RawClient["mobile"]["routineGet"]>[0]
-type Endpoint16_72Input = { readonly id: Endpoint16_72Request["params"]["id"] }
-const Endpoint16_72 = (raw: RawClient["mobile"]) => (input: Endpoint16_72Input) =>
+type Endpoint16_78Request = Parameters<RawClient["mobile"]["routineGet"]>[0]
+type Endpoint16_78Input = { readonly id: Endpoint16_78Request["params"]["id"] }
+const Endpoint16_78 = (raw: RawClient["mobile"]) => (input: Endpoint16_78Input) =>
   raw["routineGet"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_73Request = Parameters<RawClient["mobile"]["routineDelete"]>[0]
-type Endpoint16_73Input = { readonly id: Endpoint16_73Request["params"]["id"] }
-const Endpoint16_73 = (raw: RawClient["mobile"]) => (input: Endpoint16_73Input) =>
+type Endpoint16_79Request = Parameters<RawClient["mobile"]["routineDelete"]>[0]
+type Endpoint16_79Input = { readonly id: Endpoint16_79Request["params"]["id"] }
+const Endpoint16_79 = (raw: RawClient["mobile"]) => (input: Endpoint16_79Input) =>
   raw["routineDelete"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_74Request = Parameters<RawClient["mobile"]["routineUpdate"]>[0]
-type Endpoint16_74Input = {
-  readonly id: Endpoint16_74Request["params"]["id"]
-  readonly name?: Endpoint16_74Request["payload"]["name"]
-  readonly prompt?: Endpoint16_74Request["payload"]["prompt"]
-  readonly triggers?: Endpoint16_74Request["payload"]["triggers"]
-  readonly model?: Endpoint16_74Request["payload"]["model"]
-  readonly paused?: Endpoint16_74Request["payload"]["paused"]
+type Endpoint16_80Request = Parameters<RawClient["mobile"]["routineUpdate"]>[0]
+type Endpoint16_80Input = {
+  readonly id: Endpoint16_80Request["params"]["id"]
+  readonly name?: Endpoint16_80Request["payload"]["name"]
+  readonly prompt?: Endpoint16_80Request["payload"]["prompt"]
+  readonly triggers?: Endpoint16_80Request["payload"]["triggers"]
+  readonly model?: Endpoint16_80Request["payload"]["model"]
+  readonly paused?: Endpoint16_80Request["payload"]["paused"]
 }
-const Endpoint16_74 = (raw: RawClient["mobile"]) => (input: Endpoint16_74Input) =>
+const Endpoint16_80 = (raw: RawClient["mobile"]) => (input: Endpoint16_80Input) =>
   raw["routineUpdate"]({
     params: { id: input["id"] },
     payload: {
@@ -1331,47 +1403,47 @@ const Endpoint16_74 = (raw: RawClient["mobile"]) => (input: Endpoint16_74Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_75Request = Parameters<RawClient["mobile"]["routineRun"]>[0]
-type Endpoint16_75Input = {
-  readonly id: Endpoint16_75Request["params"]["id"]
-  readonly text?: Extract<Endpoint16_75Request["payload"], object>["text"]
+type Endpoint16_81Request = Parameters<RawClient["mobile"]["routineRun"]>[0]
+type Endpoint16_81Input = {
+  readonly id: Endpoint16_81Request["params"]["id"]
+  readonly text?: Extract<Endpoint16_81Request["payload"], object>["text"]
 }
-const Endpoint16_75 = (raw: RawClient["mobile"]) => (input: Endpoint16_75Input) =>
+const Endpoint16_81 = (raw: RawClient["mobile"]) => (input: Endpoint16_81Input) =>
   raw["routineRun"]({ params: { id: input["id"] }, payload: { text: input["text"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_76Request = Parameters<RawClient["mobile"]["routinePause"]>[0]
-type Endpoint16_76Input = { readonly id: Endpoint16_76Request["params"]["id"] }
-const Endpoint16_76 = (raw: RawClient["mobile"]) => (input: Endpoint16_76Input) =>
+type Endpoint16_82Request = Parameters<RawClient["mobile"]["routinePause"]>[0]
+type Endpoint16_82Input = { readonly id: Endpoint16_82Request["params"]["id"] }
+const Endpoint16_82 = (raw: RawClient["mobile"]) => (input: Endpoint16_82Input) =>
   raw["routinePause"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_77Request = Parameters<RawClient["mobile"]["routineResume"]>[0]
-type Endpoint16_77Input = { readonly id: Endpoint16_77Request["params"]["id"] }
-const Endpoint16_77 = (raw: RawClient["mobile"]) => (input: Endpoint16_77Input) =>
+type Endpoint16_83Request = Parameters<RawClient["mobile"]["routineResume"]>[0]
+type Endpoint16_83Input = { readonly id: Endpoint16_83Request["params"]["id"] }
+const Endpoint16_83 = (raw: RawClient["mobile"]) => (input: Endpoint16_83Input) =>
   raw["routineResume"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_78Request = Parameters<RawClient["mobile"]["routineTrigger"]>[0]
-type Endpoint16_78Input = {
-  readonly token: Endpoint16_78Request["params"]["token"]
-  readonly text?: Extract<Endpoint16_78Request["payload"], object>["text"]
+type Endpoint16_84Request = Parameters<RawClient["mobile"]["routineTrigger"]>[0]
+type Endpoint16_84Input = {
+  readonly token: Endpoint16_84Request["params"]["token"]
+  readonly text?: Extract<Endpoint16_84Request["payload"], object>["text"]
 }
-const Endpoint16_78 = (raw: RawClient["mobile"]) => (input: Endpoint16_78Input) =>
+const Endpoint16_84 = (raw: RawClient["mobile"]) => (input: Endpoint16_84Input) =>
   raw["routineTrigger"]({ params: { token: input["token"] }, payload: { text: input["text"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-const Endpoint16_79 = (raw: RawClient["mobile"]) => () => raw["ptyList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_85 = (raw: RawClient["mobile"]) => () => raw["ptyList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_80Request = Parameters<RawClient["mobile"]["ptyCreate"]>[0]
-type Endpoint16_80Input = {
-  readonly command?: Endpoint16_80Request["payload"]["command"]
-  readonly args?: Endpoint16_80Request["payload"]["args"]
-  readonly cwd?: Endpoint16_80Request["payload"]["cwd"]
-  readonly title?: Endpoint16_80Request["payload"]["title"]
-  readonly env?: Endpoint16_80Request["payload"]["env"]
+type Endpoint16_86Request = Parameters<RawClient["mobile"]["ptyCreate"]>[0]
+type Endpoint16_86Input = {
+  readonly command?: Endpoint16_86Request["payload"]["command"]
+  readonly args?: Endpoint16_86Request["payload"]["args"]
+  readonly cwd?: Endpoint16_86Request["payload"]["cwd"]
+  readonly title?: Endpoint16_86Request["payload"]["title"]
+  readonly env?: Endpoint16_86Request["payload"]["env"]
 }
-const Endpoint16_80 = (raw: RawClient["mobile"]) => (input?: Endpoint16_80Input) =>
+const Endpoint16_86 = (raw: RawClient["mobile"]) => (input?: Endpoint16_86Input) =>
   raw["ptyCreate"]({
     payload: {
       command: input?.["command"],
@@ -1382,40 +1454,40 @@ const Endpoint16_80 = (raw: RawClient["mobile"]) => (input?: Endpoint16_80Input)
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_81Request = Parameters<RawClient["mobile"]["ptyGet"]>[0]
-type Endpoint16_81Input = { readonly ptyID: Endpoint16_81Request["params"]["ptyID"] }
-const Endpoint16_81 = (raw: RawClient["mobile"]) => (input: Endpoint16_81Input) =>
+type Endpoint16_87Request = Parameters<RawClient["mobile"]["ptyGet"]>[0]
+type Endpoint16_87Input = { readonly ptyID: Endpoint16_87Request["params"]["ptyID"] }
+const Endpoint16_87 = (raw: RawClient["mobile"]) => (input: Endpoint16_87Input) =>
   raw["ptyGet"]({ params: { ptyID: input["ptyID"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_82Request = Parameters<RawClient["mobile"]["ptyUpdate"]>[0]
-type Endpoint16_82Input = {
-  readonly ptyID: Endpoint16_82Request["params"]["ptyID"]
-  readonly title?: Endpoint16_82Request["payload"]["title"]
-  readonly size?: Endpoint16_82Request["payload"]["size"]
+type Endpoint16_88Request = Parameters<RawClient["mobile"]["ptyUpdate"]>[0]
+type Endpoint16_88Input = {
+  readonly ptyID: Endpoint16_88Request["params"]["ptyID"]
+  readonly title?: Endpoint16_88Request["payload"]["title"]
+  readonly size?: Endpoint16_88Request["payload"]["size"]
 }
-const Endpoint16_82 = (raw: RawClient["mobile"]) => (input: Endpoint16_82Input) =>
+const Endpoint16_88 = (raw: RawClient["mobile"]) => (input: Endpoint16_88Input) =>
   raw["ptyUpdate"]({ params: { ptyID: input["ptyID"] }, payload: { title: input["title"], size: input["size"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_83Request = Parameters<RawClient["mobile"]["ptyRemove"]>[0]
-type Endpoint16_83Input = { readonly ptyID: Endpoint16_83Request["params"]["ptyID"] }
-const Endpoint16_83 = (raw: RawClient["mobile"]) => (input: Endpoint16_83Input) =>
+type Endpoint16_89Request = Parameters<RawClient["mobile"]["ptyRemove"]>[0]
+type Endpoint16_89Input = { readonly ptyID: Endpoint16_89Request["params"]["ptyID"] }
+const Endpoint16_89 = (raw: RawClient["mobile"]) => (input: Endpoint16_89Input) =>
   raw["ptyRemove"]({ params: { ptyID: input["ptyID"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_84 = (raw: RawClient["mobile"]) => () => raw["missionList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_90 = (raw: RawClient["mobile"]) => () => raw["missionList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_85Request = Parameters<RawClient["mobile"]["missionCreate"]>[0]
-type Endpoint16_85Input = {
-  readonly name: Endpoint16_85Request["payload"]["name"]
-  readonly brief: Endpoint16_85Request["payload"]["brief"]
-  readonly milestones: Endpoint16_85Request["payload"]["milestones"]
-  readonly models?: Endpoint16_85Request["payload"]["models"]
-  readonly timeoutMs?: Endpoint16_85Request["payload"]["timeoutMs"]
-  readonly sandbox?: Endpoint16_85Request["payload"]["sandbox"]
-  readonly worktree?: Endpoint16_85Request["payload"]["worktree"]
+type Endpoint16_91Request = Parameters<RawClient["mobile"]["missionCreate"]>[0]
+type Endpoint16_91Input = {
+  readonly name: Endpoint16_91Request["payload"]["name"]
+  readonly brief: Endpoint16_91Request["payload"]["brief"]
+  readonly milestones: Endpoint16_91Request["payload"]["milestones"]
+  readonly models?: Endpoint16_91Request["payload"]["models"]
+  readonly timeoutMs?: Endpoint16_91Request["payload"]["timeoutMs"]
+  readonly sandbox?: Endpoint16_91Request["payload"]["sandbox"]
+  readonly worktree?: Endpoint16_91Request["payload"]["worktree"]
 }
-const Endpoint16_85 = (raw: RawClient["mobile"]) => (input: Endpoint16_85Input) =>
+const Endpoint16_91 = (raw: RawClient["mobile"]) => (input: Endpoint16_91Input) =>
   raw["missionCreate"]({
     payload: {
       name: input["name"],
@@ -1428,17 +1500,17 @@ const Endpoint16_85 = (raw: RawClient["mobile"]) => (input: Endpoint16_85Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_86 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_92 = (raw: RawClient["mobile"]) => () =>
   raw["missionTemplates"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_87Request = Parameters<RawClient["mobile"]["missionGenerate"]>[0]
-type Endpoint16_87Input = {
-  readonly description: Endpoint16_87Request["payload"]["description"]
-  readonly model?: Endpoint16_87Request["payload"]["model"]
-  readonly agent?: Endpoint16_87Request["payload"]["agent"]
-  readonly sessionID?: Endpoint16_87Request["payload"]["sessionID"]
+type Endpoint16_93Request = Parameters<RawClient["mobile"]["missionGenerate"]>[0]
+type Endpoint16_93Input = {
+  readonly description: Endpoint16_93Request["payload"]["description"]
+  readonly model?: Endpoint16_93Request["payload"]["model"]
+  readonly agent?: Endpoint16_93Request["payload"]["agent"]
+  readonly sessionID?: Endpoint16_93Request["payload"]["sessionID"]
 }
-const Endpoint16_87 = (raw: RawClient["mobile"]) => (input: Endpoint16_87Input) =>
+const Endpoint16_93 = (raw: RawClient["mobile"]) => (input: Endpoint16_93Input) =>
   raw["missionGenerate"]({
     payload: {
       description: input["description"],
@@ -1448,30 +1520,30 @@ const Endpoint16_87 = (raw: RawClient["mobile"]) => (input: Endpoint16_87Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_88Request = Parameters<RawClient["mobile"]["missionExecsRecent"]>[0]
-type Endpoint16_88Input = { readonly limit?: Endpoint16_88Request["query"]["limit"] }
-const Endpoint16_88 = (raw: RawClient["mobile"]) => (input?: Endpoint16_88Input) =>
+type Endpoint16_94Request = Parameters<RawClient["mobile"]["missionExecsRecent"]>[0]
+type Endpoint16_94Input = { readonly limit?: Endpoint16_94Request["query"]["limit"] }
+const Endpoint16_94 = (raw: RawClient["mobile"]) => (input?: Endpoint16_94Input) =>
   raw["missionExecsRecent"]({ query: { limit: input?.["limit"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_89Request = Parameters<RawClient["mobile"]["missionGet"]>[0]
-type Endpoint16_89Input = { readonly id: Endpoint16_89Request["params"]["id"] }
-const Endpoint16_89 = (raw: RawClient["mobile"]) => (input: Endpoint16_89Input) =>
+type Endpoint16_95Request = Parameters<RawClient["mobile"]["missionGet"]>[0]
+type Endpoint16_95Input = { readonly id: Endpoint16_95Request["params"]["id"] }
+const Endpoint16_95 = (raw: RawClient["mobile"]) => (input: Endpoint16_95Input) =>
   raw["missionGet"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_90Request = Parameters<RawClient["mobile"]["missionUpdate"]>[0]
-type Endpoint16_90Input = {
-  readonly id: Endpoint16_90Request["params"]["id"]
-  readonly name: Endpoint16_90Request["payload"]["name"]
-  readonly brief: Endpoint16_90Request["payload"]["brief"]
-  readonly milestones: Endpoint16_90Request["payload"]["milestones"]
-  readonly models?: Endpoint16_90Request["payload"]["models"]
-  readonly timeoutMs?: Endpoint16_90Request["payload"]["timeoutMs"]
-  readonly sandbox?: Endpoint16_90Request["payload"]["sandbox"]
-  readonly worktree?: Endpoint16_90Request["payload"]["worktree"]
-  readonly status?: Endpoint16_90Request["payload"]["status"]
-  readonly createdAt: Endpoint16_90Request["payload"]["createdAt"]
+type Endpoint16_96Request = Parameters<RawClient["mobile"]["missionUpdate"]>[0]
+type Endpoint16_96Input = {
+  readonly id: Endpoint16_96Request["params"]["id"]
+  readonly name: Endpoint16_96Request["payload"]["name"]
+  readonly brief: Endpoint16_96Request["payload"]["brief"]
+  readonly milestones: Endpoint16_96Request["payload"]["milestones"]
+  readonly models?: Endpoint16_96Request["payload"]["models"]
+  readonly timeoutMs?: Endpoint16_96Request["payload"]["timeoutMs"]
+  readonly sandbox?: Endpoint16_96Request["payload"]["sandbox"]
+  readonly worktree?: Endpoint16_96Request["payload"]["worktree"]
+  readonly status?: Endpoint16_96Request["payload"]["status"]
+  readonly createdAt: Endpoint16_96Request["payload"]["createdAt"]
 }
-const Endpoint16_90 = (raw: RawClient["mobile"]) => (input: Endpoint16_90Input) =>
+const Endpoint16_96 = (raw: RawClient["mobile"]) => (input: Endpoint16_96Input) =>
   raw["missionUpdate"]({
     params: { id: input["id"] },
     payload: {
@@ -1487,51 +1559,51 @@ const Endpoint16_90 = (raw: RawClient["mobile"]) => (input: Endpoint16_90Input) 
     },
   }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_91Request = Parameters<RawClient["mobile"]["missionDelete"]>[0]
-type Endpoint16_91Input = { readonly id: Endpoint16_91Request["params"]["id"] }
-const Endpoint16_91 = (raw: RawClient["mobile"]) => (input: Endpoint16_91Input) =>
+type Endpoint16_97Request = Parameters<RawClient["mobile"]["missionDelete"]>[0]
+type Endpoint16_97Input = { readonly id: Endpoint16_97Request["params"]["id"] }
+const Endpoint16_97 = (raw: RawClient["mobile"]) => (input: Endpoint16_97Input) =>
   raw["missionDelete"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_92Request = Parameters<RawClient["mobile"]["missionExecs"]>[0]
-type Endpoint16_92Input = {
-  readonly id: Endpoint16_92Request["params"]["id"]
-  readonly limit?: Endpoint16_92Request["query"]["limit"]
+type Endpoint16_98Request = Parameters<RawClient["mobile"]["missionExecs"]>[0]
+type Endpoint16_98Input = {
+  readonly id: Endpoint16_98Request["params"]["id"]
+  readonly limit?: Endpoint16_98Request["query"]["limit"]
 }
-const Endpoint16_92 = (raw: RawClient["mobile"]) => (input: Endpoint16_92Input) =>
+const Endpoint16_98 = (raw: RawClient["mobile"]) => (input: Endpoint16_98Input) =>
   raw["missionExecs"]({ params: { id: input["id"] }, query: { limit: input["limit"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-type Endpoint16_93Request = Parameters<RawClient["mobile"]["missionStart"]>[0]
-type Endpoint16_93Input = { readonly id: Endpoint16_93Request["params"]["id"] }
-const Endpoint16_93 = (raw: RawClient["mobile"]) => (input: Endpoint16_93Input) =>
+type Endpoint16_99Request = Parameters<RawClient["mobile"]["missionStart"]>[0]
+type Endpoint16_99Input = { readonly id: Endpoint16_99Request["params"]["id"] }
+const Endpoint16_99 = (raw: RawClient["mobile"]) => (input: Endpoint16_99Input) =>
   raw["missionStart"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_94Request = Parameters<RawClient["mobile"]["missionPause"]>[0]
-type Endpoint16_94Input = { readonly id: Endpoint16_94Request["params"]["id"] }
-const Endpoint16_94 = (raw: RawClient["mobile"]) => (input: Endpoint16_94Input) =>
+type Endpoint16_100Request = Parameters<RawClient["mobile"]["missionPause"]>[0]
+type Endpoint16_100Input = { readonly id: Endpoint16_100Request["params"]["id"] }
+const Endpoint16_100 = (raw: RawClient["mobile"]) => (input: Endpoint16_100Input) =>
   raw["missionPause"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_95Request = Parameters<RawClient["mobile"]["missionCancel"]>[0]
-type Endpoint16_95Input = { readonly id: Endpoint16_95Request["params"]["id"] }
-const Endpoint16_95 = (raw: RawClient["mobile"]) => (input: Endpoint16_95Input) =>
+type Endpoint16_101Request = Parameters<RawClient["mobile"]["missionCancel"]>[0]
+type Endpoint16_101Input = { readonly id: Endpoint16_101Request["params"]["id"] }
+const Endpoint16_101 = (raw: RawClient["mobile"]) => (input: Endpoint16_101Input) =>
   raw["missionCancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_96Request = Parameters<RawClient["mobile"]["missionFeatureMutate"]>[0]
-type Endpoint16_96Input = {
-  readonly id: Endpoint16_96Request["params"]["id"]
-  readonly featureID: Endpoint16_96Request["params"]["featureID"]
-  readonly status?: Endpoint16_96Request["payload"]["status"]
-  readonly error?: Endpoint16_96Request["payload"]["error"]
-  readonly appendDependsOn?: Endpoint16_96Request["payload"]["appendDependsOn"]
+type Endpoint16_102Request = Parameters<RawClient["mobile"]["missionFeatureMutate"]>[0]
+type Endpoint16_102Input = {
+  readonly id: Endpoint16_102Request["params"]["id"]
+  readonly featureID: Endpoint16_102Request["params"]["featureID"]
+  readonly status?: Endpoint16_102Request["payload"]["status"]
+  readonly error?: Endpoint16_102Request["payload"]["error"]
+  readonly appendDependsOn?: Endpoint16_102Request["payload"]["appendDependsOn"]
 }
-const Endpoint16_96 = (raw: RawClient["mobile"]) => (input: Endpoint16_96Input) =>
+const Endpoint16_102 = (raw: RawClient["mobile"]) => (input: Endpoint16_102Input) =>
   raw["missionFeatureMutate"]({
     params: { id: input["id"], featureID: input["featureID"] },
     payload: { status: input["status"], error: input["error"], appendDependsOn: input["appendDependsOn"] },
   }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_97 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_103 = (raw: RawClient["mobile"]) => () =>
   Stream.unwrap(
     raw["events"]({}).pipe(
       Effect.mapError(mapClientError),
@@ -1539,67 +1611,67 @@ const Endpoint16_97 = (raw: RawClient["mobile"]) => () =>
     ),
   )
 
-const Endpoint16_98 = (raw: RawClient["mobile"]) => () => raw["brainStatus"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_104 = (raw: RawClient["mobile"]) => () => raw["brainStatus"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_99Request = Parameters<RawClient["mobile"]["brainTrigger"]>[0]
-type Endpoint16_99Input = { readonly payload: Endpoint16_99Request["payload"] }
-const Endpoint16_99 = (raw: RawClient["mobile"]) => (input: Endpoint16_99Input) =>
+type Endpoint16_105Request = Parameters<RawClient["mobile"]["brainTrigger"]>[0]
+type Endpoint16_105Input = { readonly payload: Endpoint16_105Request["payload"] }
+const Endpoint16_105 = (raw: RawClient["mobile"]) => (input: Endpoint16_105Input) =>
   raw["brainTrigger"]({ payload: input["payload"] }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_100 = (raw: RawClient["mobile"]) => () => raw["chatBotList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_106 = (raw: RawClient["mobile"]) => () => raw["chatBotList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_101Request = Parameters<RawClient["mobile"]["chatBotStart"]>[0]
-type Endpoint16_101Input = { readonly name: Endpoint16_101Request["params"]["name"] }
-const Endpoint16_101 = (raw: RawClient["mobile"]) => (input: Endpoint16_101Input) =>
+type Endpoint16_107Request = Parameters<RawClient["mobile"]["chatBotStart"]>[0]
+type Endpoint16_107Input = { readonly name: Endpoint16_107Request["params"]["name"] }
+const Endpoint16_107 = (raw: RawClient["mobile"]) => (input: Endpoint16_107Input) =>
   raw["chatBotStart"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_102Request = Parameters<RawClient["mobile"]["chatBotStop"]>[0]
-type Endpoint16_102Input = { readonly name: Endpoint16_102Request["params"]["name"] }
-const Endpoint16_102 = (raw: RawClient["mobile"]) => (input: Endpoint16_102Input) =>
+type Endpoint16_108Request = Parameters<RawClient["mobile"]["chatBotStop"]>[0]
+type Endpoint16_108Input = { readonly name: Endpoint16_108Request["params"]["name"] }
+const Endpoint16_108 = (raw: RawClient["mobile"]) => (input: Endpoint16_108Input) =>
   raw["chatBotStop"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_103 = (raw: RawClient["mobile"]) => () =>
+const Endpoint16_109 = (raw: RawClient["mobile"]) => () =>
   raw["observabilityGet"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_104Request = Parameters<RawClient["mobile"]["observabilitySet"]>[0]
-type Endpoint16_104Input = { readonly enabled: Endpoint16_104Request["payload"]["enabled"] }
-const Endpoint16_104 = (raw: RawClient["mobile"]) => (input: Endpoint16_104Input) =>
+type Endpoint16_110Request = Parameters<RawClient["mobile"]["observabilitySet"]>[0]
+type Endpoint16_110Input = { readonly enabled: Endpoint16_110Request["payload"]["enabled"] }
+const Endpoint16_110 = (raw: RawClient["mobile"]) => (input: Endpoint16_110Input) =>
   raw["observabilitySet"]({ payload: { enabled: input["enabled"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_105 = (raw: RawClient["mobile"]) => () => raw["lspStatus"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_111 = (raw: RawClient["mobile"]) => () => raw["lspStatus"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_106 = (raw: RawClient["mobile"]) => () => raw["fusionList"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_112 = (raw: RawClient["mobile"]) => () => raw["fusionList"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_107Request = Parameters<RawClient["mobile"]["fusionSet"]>[0]
-type Endpoint16_107Input = {
-  readonly name: Endpoint16_107Request["payload"]["name"]
-  readonly enabled: Endpoint16_107Request["payload"]["enabled"]
+type Endpoint16_113Request = Parameters<RawClient["mobile"]["fusionSet"]>[0]
+type Endpoint16_113Input = {
+  readonly name: Endpoint16_113Request["payload"]["name"]
+  readonly enabled: Endpoint16_113Request["payload"]["enabled"]
 }
-const Endpoint16_107 = (raw: RawClient["mobile"]) => (input: Endpoint16_107Input) =>
+const Endpoint16_113 = (raw: RawClient["mobile"]) => (input: Endpoint16_113Input) =>
   raw["fusionSet"]({ payload: { name: input["name"], enabled: input["enabled"] } }).pipe(
     Effect.mapError(mapClientError),
   )
 
-const Endpoint16_108 = (raw: RawClient["mobile"]) => () => raw["hostBrowser"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_114 = (raw: RawClient["mobile"]) => () => raw["hostBrowser"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_109 = (raw: RawClient["mobile"]) => () => raw["hostComputer"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_115 = (raw: RawClient["mobile"]) => () => raw["hostComputer"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_110 = (raw: RawClient["mobile"]) => () => raw["hostHerdrGet"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_116 = (raw: RawClient["mobile"]) => () => raw["hostHerdrGet"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_111Request = Parameters<RawClient["mobile"]["hostHerdrSet"]>[0]
-type Endpoint16_111Input = { readonly enabled: Endpoint16_111Request["payload"]["enabled"] }
-const Endpoint16_111 = (raw: RawClient["mobile"]) => (input: Endpoint16_111Input) =>
+type Endpoint16_117Request = Parameters<RawClient["mobile"]["hostHerdrSet"]>[0]
+type Endpoint16_117Input = { readonly enabled: Endpoint16_117Request["payload"]["enabled"] }
+const Endpoint16_117 = (raw: RawClient["mobile"]) => (input: Endpoint16_117Input) =>
   raw["hostHerdrSet"]({ payload: { enabled: input["enabled"] } }).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_112 = (raw: RawClient["mobile"]) => () => raw["hostIsland"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_118 = (raw: RawClient["mobile"]) => () => raw["hostIsland"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_113 = (raw: RawClient["mobile"]) => () => raw["hostDevtools"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_119 = (raw: RawClient["mobile"]) => () => raw["hostDevtools"]({}).pipe(Effect.mapError(mapClientError))
 
-const Endpoint16_114 = (raw: RawClient["mobile"]) => () => raw["hostLanGet"]({}).pipe(Effect.mapError(mapClientError))
+const Endpoint16_120 = (raw: RawClient["mobile"]) => () => raw["hostLanGet"]({}).pipe(Effect.mapError(mapClientError))
 
-type Endpoint16_115Request = Parameters<RawClient["mobile"]["hostLanStart"]>[0]
-type Endpoint16_115Input = { readonly mdns?: Extract<Endpoint16_115Request["payload"], object>["mdns"] }
-const Endpoint16_115 = (raw: RawClient["mobile"]) => (input?: Endpoint16_115Input) =>
+type Endpoint16_121Request = Parameters<RawClient["mobile"]["hostLanStart"]>[0]
+type Endpoint16_121Input = { readonly mdns?: Extract<Endpoint16_121Request["payload"], object>["mdns"] }
+const Endpoint16_121 = (raw: RawClient["mobile"]) => (input?: Endpoint16_121Input) =>
   raw["hostLanStart"]({ payload: { mdns: input?.["mdns"] } }).pipe(Effect.mapError(mapClientError))
 
 const adaptGroup16 = (raw: RawClient["mobile"]) => ({
@@ -1616,109 +1688,115 @@ const adaptGroup16 = (raw: RawClient["mobile"]) => ({
   memoryStashDelete: Endpoint16_10(raw),
   githubRepos: Endpoint16_11(raw),
   githubBranches: Endpoint16_12(raw),
-  githubImports: Endpoint16_13(raw),
-  githubOauthClient: Endpoint16_14(raw),
-  githubOauthDeviceStart: Endpoint16_15(raw),
-  githubOauthDevicePoll: Endpoint16_16(raw),
-  githubAuthSet: Endpoint16_17(raw),
-  githubAuthRemove: Endpoint16_18(raw),
-  githubImport: Endpoint16_19(raw),
-  githubSessionCreate: Endpoint16_20(raw),
-  sessionList: Endpoint16_21(raw),
-  sessionCreate: Endpoint16_22(raw),
-  sessionDetail: Endpoint16_23(raw),
-  sessionDelete: Endpoint16_24(raw),
-  sessionDiff: Endpoint16_25(raw),
-  sessionCommandList: Endpoint16_26(raw),
-  sessionCommand: Endpoint16_27(raw),
-  sessionMessage: Endpoint16_28(raw),
-  sessionAbort: Endpoint16_29(raw),
-  permissionRespond: Endpoint16_30(raw),
-  questionRespond: Endpoint16_31(raw),
-  questionReject: Endpoint16_32(raw),
-  sessionPublish: Endpoint16_33(raw),
-  sessionCleanup: Endpoint16_34(raw),
-  sessionStream: Endpoint16_35(raw),
-  sessionRename: Endpoint16_36(raw),
-  sessionTodo: Endpoint16_37(raw),
-  teleportUploadBegin: Endpoint16_38(raw),
-  teleportUploadChunk: Endpoint16_39(raw),
-  teleportIn: Endpoint16_40(raw),
-  teleportOut: Endpoint16_41(raw),
-  worktreeCreate: Endpoint16_42(raw),
-  worktreeRemove: Endpoint16_43(raw),
-  worktreeReset: Endpoint16_44(raw),
-  gitStatus: Endpoint16_45(raw),
-  gitDiff: Endpoint16_46(raw),
-  gitCommits: Endpoint16_47(raw),
-  gitBranches: Endpoint16_48(raw),
-  gitCommit: Endpoint16_49(raw),
-  gitCheckout: Endpoint16_50(raw),
-  gitStage: Endpoint16_51(raw),
-  gitUnstage: Endpoint16_52(raw),
-  gitDiscard: Endpoint16_53(raw),
-  gitPush: Endpoint16_54(raw),
-  gitPull: Endpoint16_55(raw),
-  loopList: Endpoint16_56(raw),
-  loopCreate: Endpoint16_57(raw),
-  loopTemplates: Endpoint16_58(raw),
-  loopGenerate: Endpoint16_59(raw),
-  loopRunsRecent: Endpoint16_60(raw),
-  loopGet: Endpoint16_61(raw),
-  loopDelete: Endpoint16_62(raw),
-  loopUpdate: Endpoint16_63(raw),
-  loopRuns: Endpoint16_64(raw),
-  loopRun: Endpoint16_65(raw),
-  loopAbort: Endpoint16_66(raw),
-  loopToggle: Endpoint16_67(raw),
-  loopPause: Endpoint16_68(raw),
-  loopResume: Endpoint16_69(raw),
-  routineList: Endpoint16_70(raw),
-  routineCreate: Endpoint16_71(raw),
-  routineGet: Endpoint16_72(raw),
-  routineDelete: Endpoint16_73(raw),
-  routineUpdate: Endpoint16_74(raw),
-  routineRun: Endpoint16_75(raw),
-  routinePause: Endpoint16_76(raw),
-  routineResume: Endpoint16_77(raw),
-  routineTrigger: Endpoint16_78(raw),
-  ptyList: Endpoint16_79(raw),
-  ptyCreate: Endpoint16_80(raw),
-  ptyGet: Endpoint16_81(raw),
-  ptyUpdate: Endpoint16_82(raw),
-  ptyRemove: Endpoint16_83(raw),
-  missionList: Endpoint16_84(raw),
-  missionCreate: Endpoint16_85(raw),
-  missionTemplates: Endpoint16_86(raw),
-  missionGenerate: Endpoint16_87(raw),
-  missionExecsRecent: Endpoint16_88(raw),
-  missionGet: Endpoint16_89(raw),
-  missionUpdate: Endpoint16_90(raw),
-  missionDelete: Endpoint16_91(raw),
-  missionExecs: Endpoint16_92(raw),
-  missionStart: Endpoint16_93(raw),
-  missionPause: Endpoint16_94(raw),
-  missionCancel: Endpoint16_95(raw),
-  missionFeatureMutate: Endpoint16_96(raw),
-  events: Endpoint16_97(raw),
-  brainStatus: Endpoint16_98(raw),
-  brainTrigger: Endpoint16_99(raw),
-  chatBotList: Endpoint16_100(raw),
-  chatBotStart: Endpoint16_101(raw),
-  chatBotStop: Endpoint16_102(raw),
-  observabilityGet: Endpoint16_103(raw),
-  observabilitySet: Endpoint16_104(raw),
-  lspStatus: Endpoint16_105(raw),
-  fusionList: Endpoint16_106(raw),
-  fusionSet: Endpoint16_107(raw),
-  hostBrowser: Endpoint16_108(raw),
-  hostComputer: Endpoint16_109(raw),
-  hostHerdrGet: Endpoint16_110(raw),
-  hostHerdrSet: Endpoint16_111(raw),
-  hostIsland: Endpoint16_112(raw),
-  hostDevtools: Endpoint16_113(raw),
-  hostLanGet: Endpoint16_114(raw),
-  hostLanStart: Endpoint16_115(raw),
+  githubWorkflows: Endpoint16_13(raw),
+  githubWorkflowRuns: Endpoint16_14(raw),
+  githubWorkflowRunJobs: Endpoint16_15(raw),
+  githubWorkflowRunRerun: Endpoint16_16(raw),
+  githubWorkflowRunCancel: Endpoint16_17(raw),
+  githubWorkflowDispatch: Endpoint16_18(raw),
+  githubImports: Endpoint16_19(raw),
+  githubOauthClient: Endpoint16_20(raw),
+  githubOauthDeviceStart: Endpoint16_21(raw),
+  githubOauthDevicePoll: Endpoint16_22(raw),
+  githubAuthSet: Endpoint16_23(raw),
+  githubAuthRemove: Endpoint16_24(raw),
+  githubImport: Endpoint16_25(raw),
+  githubSessionCreate: Endpoint16_26(raw),
+  sessionList: Endpoint16_27(raw),
+  sessionCreate: Endpoint16_28(raw),
+  sessionDetail: Endpoint16_29(raw),
+  sessionDelete: Endpoint16_30(raw),
+  sessionDiff: Endpoint16_31(raw),
+  sessionCommandList: Endpoint16_32(raw),
+  sessionCommand: Endpoint16_33(raw),
+  sessionMessage: Endpoint16_34(raw),
+  sessionAbort: Endpoint16_35(raw),
+  permissionRespond: Endpoint16_36(raw),
+  questionRespond: Endpoint16_37(raw),
+  questionReject: Endpoint16_38(raw),
+  sessionPublish: Endpoint16_39(raw),
+  sessionCleanup: Endpoint16_40(raw),
+  sessionStream: Endpoint16_41(raw),
+  sessionRename: Endpoint16_42(raw),
+  sessionTodo: Endpoint16_43(raw),
+  teleportUploadBegin: Endpoint16_44(raw),
+  teleportUploadChunk: Endpoint16_45(raw),
+  teleportIn: Endpoint16_46(raw),
+  teleportOut: Endpoint16_47(raw),
+  worktreeCreate: Endpoint16_48(raw),
+  worktreeRemove: Endpoint16_49(raw),
+  worktreeReset: Endpoint16_50(raw),
+  gitStatus: Endpoint16_51(raw),
+  gitDiff: Endpoint16_52(raw),
+  gitCommits: Endpoint16_53(raw),
+  gitBranches: Endpoint16_54(raw),
+  gitCommit: Endpoint16_55(raw),
+  gitCheckout: Endpoint16_56(raw),
+  gitStage: Endpoint16_57(raw),
+  gitUnstage: Endpoint16_58(raw),
+  gitDiscard: Endpoint16_59(raw),
+  gitPush: Endpoint16_60(raw),
+  gitPull: Endpoint16_61(raw),
+  loopList: Endpoint16_62(raw),
+  loopCreate: Endpoint16_63(raw),
+  loopTemplates: Endpoint16_64(raw),
+  loopGenerate: Endpoint16_65(raw),
+  loopRunsRecent: Endpoint16_66(raw),
+  loopGet: Endpoint16_67(raw),
+  loopDelete: Endpoint16_68(raw),
+  loopUpdate: Endpoint16_69(raw),
+  loopRuns: Endpoint16_70(raw),
+  loopRun: Endpoint16_71(raw),
+  loopAbort: Endpoint16_72(raw),
+  loopToggle: Endpoint16_73(raw),
+  loopPause: Endpoint16_74(raw),
+  loopResume: Endpoint16_75(raw),
+  routineList: Endpoint16_76(raw),
+  routineCreate: Endpoint16_77(raw),
+  routineGet: Endpoint16_78(raw),
+  routineDelete: Endpoint16_79(raw),
+  routineUpdate: Endpoint16_80(raw),
+  routineRun: Endpoint16_81(raw),
+  routinePause: Endpoint16_82(raw),
+  routineResume: Endpoint16_83(raw),
+  routineTrigger: Endpoint16_84(raw),
+  ptyList: Endpoint16_85(raw),
+  ptyCreate: Endpoint16_86(raw),
+  ptyGet: Endpoint16_87(raw),
+  ptyUpdate: Endpoint16_88(raw),
+  ptyRemove: Endpoint16_89(raw),
+  missionList: Endpoint16_90(raw),
+  missionCreate: Endpoint16_91(raw),
+  missionTemplates: Endpoint16_92(raw),
+  missionGenerate: Endpoint16_93(raw),
+  missionExecsRecent: Endpoint16_94(raw),
+  missionGet: Endpoint16_95(raw),
+  missionUpdate: Endpoint16_96(raw),
+  missionDelete: Endpoint16_97(raw),
+  missionExecs: Endpoint16_98(raw),
+  missionStart: Endpoint16_99(raw),
+  missionPause: Endpoint16_100(raw),
+  missionCancel: Endpoint16_101(raw),
+  missionFeatureMutate: Endpoint16_102(raw),
+  events: Endpoint16_103(raw),
+  brainStatus: Endpoint16_104(raw),
+  brainTrigger: Endpoint16_105(raw),
+  chatBotList: Endpoint16_106(raw),
+  chatBotStart: Endpoint16_107(raw),
+  chatBotStop: Endpoint16_108(raw),
+  observabilityGet: Endpoint16_109(raw),
+  observabilitySet: Endpoint16_110(raw),
+  lspStatus: Endpoint16_111(raw),
+  fusionList: Endpoint16_112(raw),
+  fusionSet: Endpoint16_113(raw),
+  hostBrowser: Endpoint16_114(raw),
+  hostComputer: Endpoint16_115(raw),
+  hostHerdrGet: Endpoint16_116(raw),
+  hostHerdrSet: Endpoint16_117(raw),
+  hostIsland: Endpoint16_118(raw),
+  hostDevtools: Endpoint16_119(raw),
+  hostLanGet: Endpoint16_120(raw),
+  hostLanStart: Endpoint16_121(raw),
 })
 
 const Endpoint17_0 = (raw: RawClient["project"]) => () => raw["list"]({}).pipe(Effect.mapError(mapClientError))

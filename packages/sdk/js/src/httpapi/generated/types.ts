@@ -700,6 +700,43 @@ export type MobileSuccess = { success: true }
 
 export type MobileGithubBranch = { name: string; protected?: boolean | undefined; commit: { sha: string } }
 
+export type MobileGithubWorkflow = {
+  id: number
+  name: string
+  path: string
+  state: string
+  htmlUrl?: string | undefined
+}
+
+export type MobileGithubWorkflowRun = {
+  id: number
+  name: string
+  workflowID?: number | undefined
+  runNumber: number
+  attempt?: number | undefined
+  status: string
+  conclusion?: string | undefined
+  event: string
+  branch: string
+  sha: string
+  title: string
+  actor?: { login: string; avatarUrl?: string | undefined } | undefined
+  htmlUrl: string
+  createdAt: number
+  updatedAt: number
+  startedAt?: number | undefined
+  durationMs?: number | undefined
+}
+
+export type MobileGithubWorkflowStep = {
+  name: string
+  number: number
+  status: string
+  conclusion?: string | undefined
+  startedAt?: number | undefined
+  completedAt?: number | undefined
+}
+
 export type MobileGithubImport = {
   owner: string
   repo: string
@@ -2708,6 +2745,24 @@ export type MobileBootstrap = {
         root?: string | undefined
       }
     | undefined
+}
+
+export type MobileGithubWorkflowRunList = {
+  runs: Array<MobileGithubWorkflowRun>
+  totalCount: number
+  configured: boolean
+}
+
+export type MobileGithubWorkflowJob = {
+  id: number
+  name: string
+  status: string
+  conclusion?: string | undefined
+  htmlUrl?: string | undefined
+  startedAt?: number | undefined
+  completedAt?: number | undefined
+  durationMs?: number | undefined
+  steps: Array<MobileGithubWorkflowStep>
 }
 
 export type AdsConfig1 = {
@@ -4720,6 +4775,13 @@ export type MissionFeatureMutatePayload = {
 export type MobileAuthTokenCreatePayload = { readonly name?: string; readonly expiresInDays?: number }
 
 export type MobileMemoryStashCreatePayload = { readonly input: string }
+
+export type MobileGithubWorkflowRunRerunPayload = { readonly failedOnly?: boolean | undefined }
+
+export type MobileGithubWorkflowDispatchPayload = {
+  readonly ref: string
+  readonly inputs?: { readonly [x: string]: string } | undefined
+}
 
 export type MobileGithubOauthClientPayload = { readonly clientId: string }
 
@@ -7237,6 +7299,57 @@ export type MobileGithubBranchesInput = {
 }
 
 export type MobileGithubBranchesOutput = Array<MobileGithubBranch>
+
+export type MobileGithubWorkflowsInput = {
+  readonly owner: { readonly owner: string; readonly repo: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string }["repo"]
+}
+
+export type MobileGithubWorkflowsOutput = Array<MobileGithubWorkflow>
+
+export type MobileGithubWorkflowRunsInput = {
+  readonly owner: { readonly owner: string; readonly repo: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string }["repo"]
+  readonly branch?: { readonly branch?: string | undefined; readonly limit?: number | undefined }["branch"]
+  readonly limit?: { readonly branch?: string | undefined; readonly limit?: number | undefined }["limit"]
+}
+
+export type MobileGithubWorkflowRunsOutput = MobileGithubWorkflowRunList
+
+export type MobileGithubWorkflowRunJobsInput = {
+  readonly owner: { readonly owner: string; readonly repo: string; readonly runID: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string; readonly runID: string }["repo"]
+  readonly runID: { readonly owner: string; readonly repo: string; readonly runID: string }["runID"]
+}
+
+export type MobileGithubWorkflowRunJobsOutput = Array<MobileGithubWorkflowJob>
+
+export type MobileGithubWorkflowRunRerunInput = {
+  readonly owner: { readonly owner: string; readonly repo: string; readonly runID: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string; readonly runID: string }["repo"]
+  readonly runID: { readonly owner: string; readonly repo: string; readonly runID: string }["runID"]
+  readonly failedOnly?: MobileGithubWorkflowRunRerunPayload["failedOnly"]
+}
+
+export type MobileGithubWorkflowRunRerunOutput = MobileSuccess
+
+export type MobileGithubWorkflowRunCancelInput = {
+  readonly owner: { readonly owner: string; readonly repo: string; readonly runID: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string; readonly runID: string }["repo"]
+  readonly runID: { readonly owner: string; readonly repo: string; readonly runID: string }["runID"]
+}
+
+export type MobileGithubWorkflowRunCancelOutput = MobileSuccess
+
+export type MobileGithubWorkflowDispatchInput = {
+  readonly owner: { readonly owner: string; readonly repo: string; readonly workflowID: string }["owner"]
+  readonly repo: { readonly owner: string; readonly repo: string; readonly workflowID: string }["repo"]
+  readonly workflowID: { readonly owner: string; readonly repo: string; readonly workflowID: string }["workflowID"]
+  readonly ref: MobileGithubWorkflowDispatchPayload["ref"]
+  readonly inputs?: MobileGithubWorkflowDispatchPayload["inputs"]
+}
+
+export type MobileGithubWorkflowDispatchOutput = MobileSuccess
 
 export type MobileGithubImportsOutput = Array<MobileGithubImport>
 
