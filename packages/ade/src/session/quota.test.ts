@@ -16,6 +16,7 @@ import {
   QUOTA_STALE_MS,
   AGY_QUOTA_STALE_MS,
   readAgyQuota,
+  readClaudeQuota,
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
@@ -469,16 +470,29 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
     expect(isQuotaUnavailable(quotaForAgent("nikcli", snapshot, soon))).toBe(true)
   })
 
-  test("no report, an old report, or a stale provider is n/d", () => {
+  test("no report or an undated one is n/d; an old or stale report stays, marked with its time", () => {
     expect(isQuotaUnavailable(quotaForAgent("claude-code", undefined, soon))).toBe(true)
-    expect(isQuotaUnavailable(quotaForAgent("claude-code", snapshot, written + QUOTA_STALE_MS + 1))).toBe(true)
-    const stale = readQuotaAxiSnapshot({
+    const undated = readQuotaAxiSnapshot({ providers: report.providers })
+    expect(isQuotaUnavailable(quotaForAgent("claude-code", undated, soon))).toBe(true)
+
+    const fresh = quotaForAgent("claude-code", snapshot, soon)
+    if (!fresh || isQuotaUnavailable(fresh)) throw new Error("expected a reading")
+    expect(fresh.stale).toBe(false)
+
+    const old = quotaForAgent("claude-code", snapshot, written + QUOTA_STALE_MS + 1)
+    if (!old || isQuotaUnavailable(old)) throw new Error("an old report must stay visible")
+    expect(old.stale).toBe(true)
+    expect(old.displayValue).toBe("57%")
+    expect(old.readAt).toBeTruthy()
+    expect(old.tooltip).toContain("Dato non recente")
+
+    const marked = readQuotaAxiSnapshot({
       ...report,
       providers: [{ ...report.providers[0], state: { stale: true } }],
     })
-    expect(isQuotaUnavailable(quotaForAgent("claude-code", stale, soon))).toBe(true)
-    const undated = readQuotaAxiSnapshot({ providers: report.providers })
-    expect(isQuotaUnavailable(quotaForAgent("claude-code", undated, soon))).toBe(true)
+    const kept = quotaForAgent("claude-code", marked, soon)
+    if (!kept || isQuotaUnavailable(kept)) throw new Error("a report quota-axi marks stale must stay visible")
+    expect(kept.stale).toBe(true)
   })
 
   test("a provider with no windows is n/d, not 100%", () => {
@@ -538,9 +552,14 @@ describe("agy's quota from its status line (S30)", () => {
     if (isQuotaUnavailable(claude)) expect(claude.tooltip).toContain("quota-axi")
   })
 
-  test("a file older than an hour, undated, empty or missing is n/d", () => {
-    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS - 1))).toBe(false)
-    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS + 1))).toBe(true)
+  test("a file older than an hour stays, marked; undated, empty or missing is n/d", () => {
+    const recent = quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS - 1)
+    if (!recent || isQuotaUnavailable(recent)) throw new Error("expected a reading")
+    expect(recent.stale).toBe(false)
+    const old = quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS + 1)
+    if (!old || isQuotaUnavailable(old)) throw new Error("an old file must stay visible")
+    expect(old.stale).toBe(true)
+    expect(old.displayValue).toBe("94%")
     const undated = { providers: {}, agy: readAgyQuota({ ...file, capturedAt: undefined }) }
     expect(isQuotaUnavailable(quotaForAgent("agy", undated, captured))).toBe(true)
     const empty = { providers: {}, agy: readAgyQuota({ ...file, data: { planTier: "Google AI Pro" } }) }
@@ -585,6 +604,86 @@ describe("agy's quota from its status line (S30)", () => {
     if (!agy || isQuotaUnavailable(agy)) throw new Error("expected a reading")
     expect(agy.isLimit).toBe(true)
     expect(agy.providerName).toBe("Google")
+  })
+})
+
+describe("Claude's quota from its status line", () => {
+  // The shape llm-quota's bridge writes, reset times in epoch seconds.
+  const line = (used5h: number, at: string) => ({
+    version: 1,
+    provider: "claude",
+    capturedAt: at,
+    data: { rateLimits: { five_hour: { used_percentage: used5h, resets_at: 1789593600 }, seven_day: { used_percentage: 72, resets_at: 1789995600 } } },
+  })
+  const axiAt = Date.parse("2026-09-16T16:20:12.177Z")
+  const axi = readQuotaAxiSnapshot({
+    generatedAt: "2026-09-16T16:20:12.177Z",
+    providers: [
+      {
+        provider: "claude",
+        plan: "max",
+        windows: [
+          { id: "five_hour", kind: "session", percentRemaining: 100, resetsAt: "2026-09-16T21:19:59Z" },
+          { id: "seven_day", kind: "weekly", percentRemaining: 31, resetsAt: "2026-09-21T12:59:59Z" },
+        ],
+      },
+    ],
+  })
+
+  test("reads the windows, with reset times given in seconds", () => {
+    const reading = readClaudeQuota(line(26, "2026-09-16T18:59:21.8409116Z"))
+    expect(reading?.capturedAt).toBe(Date.parse("2026-09-16T18:59:21.8409116Z"))
+    expect(reading?.quota.metrics.map((m) => `${m.label} ${m.remaining} ${m.resetAt}`)).toEqual([
+      "5h 74 2026-09-16T21:20:00.000Z",
+      "sett. 28 2026-09-21T13:00:00.000Z",
+    ])
+    expect(readClaudeQuota({ ...line(26, "2026-09-16T18:59:21Z"), provider: "antigravity" })).toBeUndefined()
+  })
+
+  test("the newer of the two sources is shown, with the plan quota-axi knows", () => {
+    // The state on this PC at 18:59 UTC: quota-axi last ran at 16:20.
+    const now = Date.parse("2026-09-16T19:00:00Z")
+    const both = { ...axi, claude: readClaudeQuota(line(26, "2026-09-16T18:59:21Z")) }
+    const shown = quotaForAgent("claude-code", both, now)
+    if (!shown || isQuotaUnavailable(shown)) throw new Error("expected a reading")
+    expect(shown.stale).toBe(false)
+    expect(shown.providerName).toBe("Anthropic · Max")
+    expect(shown.displayValue).toBe("28%")
+    expect(shown.tooltip).toContain("statusLine di Claude Code")
+
+    // A quota-axi run after the status line wins again.
+    const later = { ...axi, generatedAt: Date.parse("2026-09-16T18:59:50Z"), claude: both.claude }
+    const fromAxi = quotaForAgent("claude-code", later, now)
+    if (!fromAxi || isQuotaUnavailable(fromAxi)) throw new Error("expected a reading")
+    expect(fromAxi.tooltip).toContain("quota-axi")
+  })
+
+  test("the status line alone is enough, without quota-axi's report", () => {
+    const now = Date.parse("2026-09-16T19:00:00Z")
+    const shown = quotaForAgent("claude-code", { providers: {}, axiMissing: true, claude: readClaudeQuota(line(26, "2026-09-16T18:59:21Z")) }, now)
+    if (!shown || isQuotaUnavailable(shown)) throw new Error("expected a reading")
+    expect(shown.providerName).toBe("Anthropic")
+  })
+
+  test("the bar no longer alternates with quota-axi's runs (the reported bug)", () => {
+    // quota-axi ran at 16:20 and not again; Claude's status line kept writing.
+    // Before: a reading until 16:50, then n/d until the next quota-axi run.
+    const seen: string[] = []
+    for (let minute = 0; minute <= 180; minute += 15) {
+      const now = axiAt + minute * 60_000
+      const status = new Date(now - 30_000).toISOString()
+      const snapshot = { ...axi, claude: readClaudeQuota(line(26, status)) }
+      const shown = quotaForAgent("claude-code", snapshot, now)
+      seen.push(isQuotaUnavailable(shown) ? "n/d" : shown!.stale ? "old" : "ok")
+    }
+    expect(seen.every((state) => state === "ok")).toBe(true)
+
+    // With no status line either, the last figure stays with its time: never n/d.
+    const onlyAxi = [0, 29, 31, 120].map((minute) => {
+      const shown = quotaForAgent("claude-code", axi, axiAt + minute * 60_000)
+      return isQuotaUnavailable(shown) ? "n/d" : shown!.stale ? "old" : "ok"
+    })
+    expect(onlyAxi).toEqual(["ok", "ok", "old", "old"])
   })
 })
 

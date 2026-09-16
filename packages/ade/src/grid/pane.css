@@ -1305,6 +1305,19 @@
   flex: 0 0 auto;
 }
 
+/* An old reading: the last figure there is, dimmed, with its time in place of
+   the countdown. Kept visible even when narrow, since the time is what says
+   the figure is old. */
+.hA [data-stale] .qbar,
+.hA [data-stale] .qv {
+  opacity: 0.55;
+}
+
+.hA [data-stale] .qat {
+  display: inline;
+  font-style: italic;
+}
+
 /* "quota n/d": no bar and no colour, so an absent reading never looks like a
    low one. */
 .hA [data-lv="na"] .qv {

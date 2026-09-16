@@ -422,6 +422,14 @@ export interface SessionQuotaWindow {
 
 export interface SessionQuotaView {
   readonly providerName: string
+  /**
+   * The reading is older than its source's limit, or its source marked it
+   * so: still the last figure there is, shown with the time it was read
+   * rather than replaced by "n/d".
+   */
+  readonly stale?: boolean
+  /** When the figure was read, as the bar prints it ("16:20"). */
+  readonly readAt?: string
   readonly isLimit?: boolean
   readonly remainingRatio: number
   readonly bindingKey: string
@@ -574,20 +582,78 @@ export const AGY_QUOTA_FILE = [".llm-quota", "official", "antigravity.json"] as 
  */
 export const AGY_QUOTA_STALE_MS = 60 * 60_000
 
-/** agy's quota as its status line last wrote it. */
-export interface AgyQuotaReading {
+/**
+ * Where Claude Code's status line leaves its rate limits, relative to the
+ * user's home.
+ *
+ * llm-quota's bridge rewrites it at every status line refresh of any Claude
+ * session, so while one is open it is minutes old at most. quota-axi's report
+ * is written only when something runs `quota-axi`, which can be hours apart:
+ * read alone, it made the bar show Claude's quota for half an hour after
+ * each run and "n/d" until the next.
+ */
+export const CLAUDE_QUOTA_FILE = [".llm-quota", "official", "claude.json"] as const
+
+/** A provider's quota as a status line last wrote it. */
+export interface StatusLineReading {
   /** When the status line wrote the file, in epoch ms. */
   readonly capturedAt?: number
   readonly quota: ProviderQuota
 }
 
+/** agy's quota as its status line last wrote it. */
+export type AgyQuotaReading = StatusLineReading
+
 export interface QuotaSnapshot {
   /** When quota-axi wrote the report, in epoch ms. */
   readonly generatedAt?: number
   readonly providers: Readonly<Record<string, ProviderQuota & { readonly stale?: boolean }>>
-  /** True when the snapshot holds only agy's file: quota-axi's report is missing. */
+  /** True when the snapshot holds only status line files: quota-axi's report is missing. */
   readonly axiMissing?: boolean
   readonly agy?: AgyQuotaReading
+  readonly claude?: StatusLineReading
+}
+
+/** A reset time as the status line gives it: epoch seconds, or an ISO string. */
+function resetTime(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value * 1000).toISOString()
+  return typeof value === "string" ? value : undefined
+}
+
+/** Claude's status line file as a reading, or nothing when the file is not Claude's. */
+export function readClaudeQuota(raw: unknown): StatusLineReading | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const record = raw as Record<string, unknown>
+  if (record.provider !== undefined && record.provider !== "claude") return undefined
+  const data = record.data && typeof record.data === "object" ? (record.data as Record<string, unknown>) : {}
+  const limits = data.rateLimits && typeof data.rateLimits === "object" ? (data.rateLimits as Record<string, unknown>) : {}
+  const metrics: QuotaMetric[] = []
+  for (const [key, label] of [["five_hour", "5h"], ["seven_day", t("quota.week")]] as const) {
+    const window = limits[key]
+    if (!window || typeof window !== "object") continue
+    const used = (window as Record<string, unknown>).used_percentage
+    if (typeof used !== "number" || !Number.isFinite(used)) continue
+    const remaining = Math.max(0, Math.min(100, Math.round(100 - used)))
+    metrics.push({
+      label,
+      used: Math.round(used),
+      remaining,
+      limit: 100,
+      unit: "percent",
+      resetAt: resetTime((window as Record<string, unknown>).resets_at),
+      isRateLimited: remaining <= 0,
+    })
+  }
+  const captured = typeof record.capturedAt === "string" ? Date.parse(record.capturedAt) : Number.NaN
+  return {
+    ...(Number.isFinite(captured) ? { capturedAt: captured } : {}),
+    quota: {
+      id: "claude",
+      name: "Anthropic",
+      status: metrics.some((m) => m.isRateLimited) ? "rate_limited" : "ok",
+      metrics,
+    },
+  }
 }
 
 /** A bucket as the bar names it: `gemini-5h` is "Gemini 5h", `3p-weekly` is "3p sett.". */
@@ -724,13 +790,75 @@ function clock(epoch: number): string {
   return new Date(epoch).toLocaleString(dateLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
+/** One source's reading of a provider, as `currentReading` weighs it. */
+export interface QuotaReading {
+  readonly quota: ProviderQuota
+  /** When the source wrote it, in epoch ms. */
+  readonly readAt: number
+  /** Older than the source's limit, or marked so by the source itself. */
+  readonly stale: boolean
+  readonly source: "axi" | "claude" | "agy"
+}
+
 /**
- * The quota the bar shows for a session's agent: a real reading, or "n/d".
+ * The newest usable reading of a provider, from every source that has one,
+ * or why there is none.
  *
- * Every path that is not a fresh report from quota-axi for a provider it
- * covers ends in `QuotaUnavailable`. There is deliberately no fallback figure:
- * the bar exists so the user can decide whether to start more work on a
- * provider, and a plausible invented number is worse than no number for that.
+ * Usable means it has windows, says when it was written, and was not written
+ * in the future (a date ahead of the clock would never age). An old reading
+ * is still usable: it is the last figure there is, and it is returned marked
+ * `stale` so the bar can show its time instead of "n/d".
+ */
+export function currentReading(
+  id: string,
+  snapshot: QuotaSnapshot | undefined,
+  now: number,
+): { reading: QuotaReading } | { missing: string } {
+  const found: QuotaReading[] = []
+  const reasons: string[] = []
+
+  if (QUOTA_AXI_PROVIDERS.has(id)) {
+    const quota = snapshot?.providers[id]
+    const at = snapshot?.generatedAt
+    if (!snapshot || snapshot.axiMissing) reasons.push(t("quota.na.noReport"))
+    else if (!quota || quota.metrics.length === 0) reasons.push(t("quota.na.noWindows"))
+    else if (at === undefined) reasons.push(t("quota.na.noTime"))
+    else if (at > now) reasons.push(t("quota.na.future", clock(at)))
+    else found.push({ quota, readAt: at, stale: quota.stale === true || now - at > QUOTA_STALE_MS, source: "axi" })
+  }
+
+  const line = id === "agy" ? snapshot?.agy : id === "claude" ? snapshot?.claude : undefined
+  if (id === "agy" || id === "claude") {
+    const at = line?.capturedAt
+    if (!line) reasons.push(id === "agy" ? t("quota.na.agy.noFile") : t("quota.na.claude.noFile"))
+    else if (line.quota.metrics.length === 0) reasons.push(id === "agy" ? t("quota.na.agy.noBuckets") : t("quota.na.claude.noWindows"))
+    else if (at === undefined) reasons.push(id === "agy" ? t("quota.na.agy.noTime") : t("quota.na.claude.noTime"))
+    else if (at > now) reasons.push(id === "agy" ? t("quota.na.agy.future", clock(at)) : t("quota.na.future", clock(at)))
+    else {
+      // The plan is only in quota-axi's report: borrow it for the name.
+      const name = id === "claude" ? (snapshot?.providers.claude?.name ?? line.quota.name) : line.quota.name
+      found.push({
+        quota: { ...line.quota, name },
+        readAt: at,
+        stale: now - at > (id === "agy" ? AGY_QUOTA_STALE_MS : QUOTA_STALE_MS),
+        source: id,
+      })
+    }
+  }
+
+  if (found.length === 0) return { missing: reasons.join("\n") || t("quota.na.noSource") }
+  // Newest first; at equal times quota-axi, which also has the per-model windows.
+  found.sort((a, b) => b.readAt - a.readAt)
+  return { reading: found[0]! }
+}
+
+/**
+ * The quota the bar shows for a session's agent: a reading, or "n/d".
+ *
+ * "n/d" only when no source has a figure at all. There is deliberately no
+ * invented fallback: the bar exists so the user can decide whether to start
+ * more work on a provider. A figure that is merely old is the last one there
+ * is, so it stays, marked stale and with the time it was read.
  */
 export function quotaForAgent(
   agentId: string | undefined,
@@ -747,35 +875,24 @@ export function quotaForAgent(
     tooltip: t("quota.na.tooltip", vendor, why),
   })
 
-  if (id === "agy") return agyQuota(snapshot?.agy, now, unavailable)
-  if (!QUOTA_AXI_PROVIDERS.has(id)) return unavailable(t("quota.na.noSource"))
-  if (!snapshot || snapshot.axiMissing) return unavailable(t("quota.na.noReport"))
-  const quota = snapshot.providers[id]
-  if (!quota || quota.metrics.length === 0) return unavailable(t("quota.na.noWindows"))
-  if (quota.stale) return unavailable(t("quota.na.stale"))
-  if (snapshot.generatedAt === undefined) return unavailable(t("quota.na.noTime"))
-  if (now - snapshot.generatedAt > QUOTA_STALE_MS) {
-    return unavailable(t("quota.na.old", clock(snapshot.generatedAt)))
-  }
-
+  const current = currentReading(id, snapshot, now)
+  if ("missing" in current) return unavailable(current.missing)
+  const { quota, readAt, stale, source } = current.reading
   const view = formatSessionQuota(quota, now)
-  return { ...view, tooltip: `${view.tooltip}\n${t("quota.readAxi", clock(snapshot.generatedAt))}` }
+  const time = clock(readAt)
+  const from =
+    source === "axi" ? t("quota.readAxi", time) : source === "agy" ? t("quota.readAgy", time) : t("quota.readClaude", time)
+  const lines = [view.tooltip, from, ...(stale ? [t("quota.staleNote")] : [])]
+  return { ...view, stale, readAt: shortClock(readAt), tooltip: lines.join("\n") }
 }
 
-/** agy's quota from its status line file: the same rules, with its own age limit. */
-function agyQuota(
-  reading: AgyQuotaReading | undefined,
-  now: number,
-  unavailable: (why: string) => QuotaUnavailable,
-): SessionQuota {
-  if (!reading) return unavailable(t("quota.na.agy.noFile"))
-  if (reading.quota.metrics.length === 0) return unavailable(t("quota.na.agy.noBuckets"))
-  if (reading.capturedAt === undefined) return unavailable(t("quota.na.agy.noTime"))
-  // A date ahead of the clock would never age: the file cannot be trusted.
-  if (reading.capturedAt > now) return unavailable(t("quota.na.agy.future", clock(reading.capturedAt)))
-  if (now - reading.capturedAt > AGY_QUOTA_STALE_MS) return unavailable(t("quota.na.old", clock(reading.capturedAt)))
-  const view = formatSessionQuota(reading.quota, now)
-  return { ...view, tooltip: `${view.tooltip}\n${t("quota.readAgy", clock(reading.capturedAt))}` }
+/** The time alone when it is today, the day too when it is not. */
+function shortClock(epoch: number): string {
+  const date = new Date(epoch)
+  const sameDay = date.toDateString() === new Date().toDateString()
+  return sameDay
+    ? date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString(dateLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
 /** The provider an agent id or model name draws its quota from: `claude`, `codex`, `agy`, `nikcli`, or itself. */

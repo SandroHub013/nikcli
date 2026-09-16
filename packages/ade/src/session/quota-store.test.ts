@@ -117,7 +117,7 @@ describe("createQuotaStore", () => {
     expect(isQuotaUnavailable(claude())).toBe(false)
   })
 
-  test("a reading kept through failures still turns n/d once it is too old", async () => {
+  test("a reading kept through failures stays, marked old, once it is too old", async () => {
     let clock = Date.parse("2026-09-15T20:00:00Z")
     let fail = false
     const store = createQuotaStore(async () => {
@@ -128,6 +128,28 @@ describe("createQuotaStore", () => {
     fail = true
     clock += 31 * 60_000
     await store.refresh()
-    expect(isQuotaUnavailable(quotaForAgent("claude-code", store.snapshot(), store.now()))).toBe(true)
+    const kept = quotaForAgent("claude-code", store.snapshot(), store.now())
+    if (!kept || isQuotaUnavailable(kept)) throw new Error("the last reading must stay visible")
+    expect(kept.stale).toBe(true)
+    expect(kept.displayValue).toBe("64%")
+  })
+
+  test("Claude's status line file keeps the bar current between quota-axi runs", async () => {
+    let clock = Date.parse("2026-09-15T20:00:00Z")
+    const line = () =>
+      JSON.stringify({
+        provider: "claude",
+        capturedAt: new Date(clock - 5_000).toISOString(),
+        data: { rateLimits: { five_hour: { used_percentage: 40, resets_at: 1789593600 } } },
+      })
+    const store = createQuotaStore(async () => report(64, "2026-09-15T19:59:00Z"), () => clock, 2_000, undefined, async () => line())
+    const states: string[] = []
+    for (let i = 0; i < 6; i++) {
+      await store.refresh()
+      const shown = quotaForAgent("claude-code", store.snapshot(), store.now())
+      states.push(isQuotaUnavailable(shown) ? "n/d" : shown!.stale ? "old" : shown!.displayValue)
+      clock += 20 * 60_000
+    }
+    expect(states).toEqual(["60%", "60%", "60%", "60%", "60%", "60%"])
   })
 })

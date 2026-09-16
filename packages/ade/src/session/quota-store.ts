@@ -15,7 +15,16 @@
 
 import { createRoot, createSignal } from "solid-js"
 import { every } from "../host/every"
-import { AGY_QUOTA_FILE, type AgyQuotaReading, QUOTA_AXI_FILE, type QuotaSnapshot, readAgyQuota, readQuotaAxiSnapshot } from "./quota"
+import {
+  AGY_QUOTA_FILE,
+  CLAUDE_QUOTA_FILE,
+  QUOTA_AXI_FILE,
+  type QuotaSnapshot,
+  type StatusLineReading,
+  readAgyQuota,
+  readClaudeQuota,
+  readQuotaAxiSnapshot,
+} from "./quota"
 
 /**
  * How often the report is read again, and the countdown moves.
@@ -47,24 +56,26 @@ export interface QuotaStore {
 }
 
 /**
- * `read` gives quota-axi's report; `readAgy` agy's status line file, read
- * alongside it on every refresh.
+ * `read` gives quota-axi's report; `readAgy` and `readClaude` the status line
+ * files of agy and Claude Code, read alongside it on every refresh.
  */
 export function createQuotaStore(
   read: QuotaReader,
   clock: () => number = Date.now,
   timeoutMs: number = QUOTA_READ_TIMEOUT_MS,
   readAgy: QuotaReader = async () => undefined,
+  readClaude: QuotaReader = async () => undefined,
 ): QuotaStore {
   return createRoot(() => {
     const [axi, setAxi] = createSignal<QuotaSnapshot | undefined>()
-    const [agy, setAgy] = createSignal<AgyQuotaReading | undefined>()
+    const [agy, setAgy] = createSignal<StatusLineReading | undefined>()
+    const [claude, setClaude] = createSignal<StatusLineReading | undefined>()
     const [now, setNow] = createSignal(clock())
     const snapshot = (): QuotaSnapshot | undefined => {
       const report = axi()
-      const reading = agy()
-      if (!reading) return report
-      return report ? { ...report, agy: reading } : { providers: {}, axiMissing: true, agy: reading }
+      const lines = { ...(agy() ? { agy: agy() } : {}), ...(claude() ? { claude: claude() } : {}) }
+      if (!lines.agy && !lines.claude) return report
+      return report ? { ...report, ...lines } : { providers: {}, axiMissing: true, ...lines }
     }
 
     /** Reads one file within the timeout; `false` when the read itself failed. */
@@ -106,9 +117,10 @@ export function createQuotaStore(
      * `QUOTA_STALE_MS`, however it was kept.
      */
     const refresh = async () => {
-      const [axiText, agyText] = await Promise.all([load(read), load(readAgy)])
+      const [axiText, agyText, claudeText] = await Promise.all([load(read), load(readAgy), load(readClaude)])
       apply(axiText, readQuotaAxiSnapshot, (value) => setAxi(() => value))
       apply(agyText, readAgyQuota, (value) => setAgy(() => value))
+      apply(claudeText, readClaudeQuota, (value) => setClaude(() => value))
       setNow(clock())
     }
 
@@ -138,6 +150,7 @@ function readFromHome(file: readonly string[]): QuotaReader {
 
 const readFromHost = readFromHome(QUOTA_AXI_FILE)
 const readAgyFromHost = readFromHome(AGY_QUOTA_FILE)
+const readClaudeFromHost = readFromHome(CLAUDE_QUOTA_FILE)
 
 let shared: QuotaStore | undefined
 
@@ -148,7 +161,7 @@ let shared: QuotaStore | undefined
  * start the periodic refresh and its immediate read on top of this one.
  */
 export async function freshSharedQuota(): Promise<QuotaStore> {
-  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost)
+  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost, readClaudeFromHost)
   await shared.refresh()
   return shared
 }
@@ -163,7 +176,7 @@ let stop: (() => void) | undefined
  * polling the disk, and six panes must not start six timers.
  */
 export function useSharedQuota(): { store: QuotaStore; release: () => void } {
-  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost)
+  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost, readClaudeFromHost)
   users++
   if (users === 1) stop = shared.start()
   let released = false

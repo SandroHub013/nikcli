@@ -411,7 +411,7 @@ export function SessionPane(props: SessionPaneProps) {
 
   /*
    * The quota comes from the shared store, which re-reads quota-axi's report
-   * on a timer. Reading its signals here is what makes a pane mounted before
+   * and the status line files on a timer. Reading its signals here is what makes a pane mounted before
    * the first report update when it arrives, and the countdown move.
    */
   const shared = useSharedQuota()
@@ -640,7 +640,8 @@ export function SessionPane(props: SessionPaneProps) {
             <span
               class="a-q"
               data-lv={q().level}
-              data-urg={state() === "limit" || q().isLimit ? "" : undefined}
+              data-urg={!q().stale && (state() === "limit" || q().isLimit) ? "" : undefined}
+              data-stale={q().stale ? "" : undefined}
               tabIndex={0}
               title={q().tooltip}
               data-tip={q().tooltip}
@@ -650,8 +651,16 @@ export function SessionPane(props: SessionPaneProps) {
               </span>
               <span class="qk">{q().bindingKey}</span>
               <b class="qv">{q().displayValue}</b>
-              <Show when={q().countdown}>
-                {(cd) => <span class="qr">↻ {cd()}</span>}
+              {/* An old figure shows when it was read; a current one when it resets. */}
+              <Show
+                when={q().stale && q().readAt}
+                fallback={
+                  <Show when={q().countdown}>
+                    {(cd) => <span class="qr">↻ {cd()}</span>}
+                  </Show>
+                }
+              >
+                {(at) => <span class="qr qat">{at()}</span>}
               </Show>
             </span>
           )}

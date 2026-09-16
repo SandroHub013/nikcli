@@ -25,6 +25,7 @@
 import {
   type ProviderQuota,
   type QuotaSnapshot,
+  currentReading,
   isQuotaUnavailable,
   normalizeProviderId,
   quotaForAgent,
@@ -53,7 +54,8 @@ export function pickByQuota(
   candidates: readonly string[] = REROUTE_CANDIDATES,
 ): PickResult {
   const asked = quotaForAgent(input.agent, snapshot, now)
-  if (!asked || isQuotaUnavailable(asked) || !asked.isLimit) return { agent: input.agent }
+  // An old "limit" may have reset since: only a current reading reroutes.
+  if (!asked || isQuotaUnavailable(asked) || asked.stale || !asked.isLimit) return { agent: input.agent }
 
   const spent = `quota ${asked.providerName} esaurita (finestra ${asked.bindingKey}${resetPhrase(asked.countdown)})`
 
@@ -63,10 +65,10 @@ export function pickByQuota(
   for (const agent of candidates) {
     if (agent === input.agent) continue
     const view = quotaForAgent(agent, snapshot, now)
-    if (!view || isQuotaUnavailable(view) || view.isLimit) continue
-    const provider = snapshot?.providers[normalizeProviderId(agent)]
-    if (!provider) continue
-    usable[agent] = provider
+    if (!view || isQuotaUnavailable(view) || view.stale || view.isLimit) continue
+    const current = currentReading(normalizeProviderId(agent), snapshot, now)
+    if (!("reading" in current)) continue
+    usable[agent] = current.reading.quota
     agentOf.set(agent, view.providerName)
   }
 
