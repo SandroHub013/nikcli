@@ -15,10 +15,10 @@ describe("settings/model - normalizeSettings", () => {
 
       expect(res.version).toBe(CURRENT_SETTINGS_VERSION)
       expect(res.mode).toBe("agent")
-      expect(res.activation).toBe("toggle")
+      expect(res.activation).toBe("wake-word")
       expect(res.transcriptionSend).toBe("manual")
       expect(res.language).toBe("it")
-      expect(res.wakeWord).toBe("hei nik")
+      expect(res.wakeWord).toBe("nik")
       expect(res.agentChord).toBe("mod+shift+k")
       expect(res.transcriptionChord).toBe("mod+shift+j")
       expect(res.backend).toBe("openrouter")
@@ -47,12 +47,12 @@ describe("settings/model - normalizeSettings", () => {
     const res = normalizeSettings(corrupted)
 
     expect(res.mode).toBe("agent")
-    expect(res.activation).toBe("toggle")
+    expect(res.activation).toBe("wake-word")
     expect(res.transcriptionSend).toBe("manual")
     expect(res.backend).toBe("openrouter")
     expect(res.parakeetBackend).toBe("auto")
     expect(res.language).toBe("it")
-    expect(res.wakeWord).toBe("hei nik")
+    expect(res.wakeWord).toBe("nik")
     expect(res.agentChord).toBe("mod+shift+k")
     expect(res.transcriptionChord).toBe("mod+shift+j")
 
@@ -91,9 +91,21 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.corrections.some((c) => c.includes("Migrata versione"))).toBe(true)
   })
 
+  test("a profile written before the name was asked for is moved to it, once and only from toggle", () => {
+    const old = { version: 1, activation: "toggle" as const }
+    const moved = normalizeSettings(old)
+    expect(moved.activation).toBe("wake-word")
+    expect(moved.corrections.some((line) => line.includes("per nome"))).toBe(true)
+
+    // Push-to-talk already has a key holding the microphone: left as it was.
+    expect(normalizeSettings({ version: 1, activation: "push-to-talk" }).activation).toBe("push-to-talk")
+    // And a profile that chose toggle *after* this version keeps it.
+    expect(normalizeSettings({ ...moved, activation: "toggle" }).activation).toBe("toggle")
+  })
+
   test("preserves valid configuration with zero corrections", () => {
     const valid = {
-      version: 1,
+      version: 2,
       mode: "transcription" as const,
       activation: "wake-word" as const,
       transcriptionSend: "auto" as const,

@@ -1464,8 +1464,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 onClick={() => selectActivation("wake-word")}
               >
                 <div data-slot="item-text-group">
-                  <span data-slot="item-title">Parola di richiamo</span>
-                  <span data-slot="item-desc">Solo per la modalità agente</span>
+                  <span data-slot="item-title">Risponde solo se lo chiami per nome</span>
+                  <span data-slot="item-desc">
+                    Consigliato con il microfono aperto: quello che si dice in stanza, o alla televisione, resta fuori
+                  </span>
                 </div>
                 <Show when={props.settings.mode === "agent"}>
                   <kbd data-slot="chord-chip">«{props.settings.wakeWord}»</kbd>
@@ -1489,7 +1491,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               >
                 <div data-slot="wake-word-wrap">
                   <label for="wake-word-input" data-slot="label">
-                    Frase di richiamo
+                    Il suo nome
                   </label>
                   <div data-slot="field-row">
                     <input
@@ -1525,9 +1527,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     </button>
                   </div>
                   <p id="wake-word-hint" data-slot="hint">
-                    Puoi parlare di seguito senza pause (es.{" "}
-                    <em>&quot;{props.settings.wakeWord} apri il browser&quot;</em>). Invio
-                    per confermare, Esc per annullare.
+                    La frase deve iniziare con il nome, con o senza saluto (es.{" "}
+                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em> oppure{" "}
+                    <em>&quot;ehi {props.settings.wakeWord}, apri il browser&quot;</em>); quello che dici
+                    dopo vale subito, senza pause. Mentre sta lavorando non serve chiamarlo: «annulla» lo ferma comunque.
+                    Invio per confermare, Esc per annullare.
                   </p>
                 </div>
               </Show>

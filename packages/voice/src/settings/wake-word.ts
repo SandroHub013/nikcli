@@ -53,12 +53,24 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
 }
 
 /**
- * Inspects a partial or final spoken utterance for the configured wake-phrase.
+ * What people put in front of the name, and which is not part of it.
+ *
+ * "Nik, apri il browser" and "ehi Nik, apri il browser" are the same request.
+ * Only these may come first: the name has to open the sentence, otherwise the
+ * television saying "nick" halfway through a line would be an address.
+ */
+const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "ok", "okay", "ciao", "senti", "scusa", "per", "favore"])
+
+/**
+ * Inspects a spoken utterance for the configured name, at its start.
  *
  * Guarantees:
- * - Detects "hei nik" across ASR misrecognitions: "ehi nik", "hey nick", "ei nik".
- * - Never triggers when the wake-word is part of a longer word (e.g. "nikopolis").
- * - Returns what remains of the utterance after the wake-phrase, enabling single-shot commands.
+ * - Detects "nik" across ASR misrecognitions: "nick", "nic", with or without
+ *   a greeting in front ("ehi nik", "ok nick").
+ * - Never triggers when the name is part of a longer word (e.g. "nikopolis").
+ * - Never triggers on a name buried in the middle of a sentence, which is what
+ *   a radio or a conversation in the room sounds like.
+ * - Returns what remains of the utterance after the name, enabling single-shot commands.
  */
 export function matchesWakeWord(
   utterance: string,
@@ -78,7 +90,16 @@ export function matchesWakeWord(
     return { matched: false, remainder: "" }
   }
 
-  for (let i = 0; i <= uTokens.length - wTokens.length; i++) {
+  /*
+   * Only from the start, past any greeting. This used to scan the whole
+   * sentence, so "domani il nick della squadra" woke the assistant up.
+   */
+  let start = 0
+  while (start < uTokens.length && OPENERS.has(uTokens[start]) && !matchToken(uTokens[start], wTokens[0])) {
+    start++
+  }
+
+  for (let i = start; i <= Math.min(start, uTokens.length - wTokens.length); i++) {
     let allMatched = true
     for (let j = 0; j < wTokens.length; j++) {
       if (!matchToken(uTokens[i + j], wTokens[j])) {

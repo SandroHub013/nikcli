@@ -1048,10 +1048,27 @@ export function makeVoiceProgram(
            */
           const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
 
-          if (!isWakeWordAwake && !awaitingAnswer) {
+          /*
+           * A turn already running is its own conversation: «annulla» said
+           * while the assistant thinks is meant for it, and the name would be
+           * a strange thing to require of someone stopping what they just
+           * asked for. What may end a turn is decided in `while-thinking.ts`,
+           * which holds a free sentence rather than obeying it.
+           */
+          const thinking = currentState.status === "executing" && agentAbort !== null
+
+          if (!isWakeWordAwake && !awaitingAnswer && !thinking) {
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             if (!match.matched) {
-              // Deaf until wake-word is detected
+              /*
+               * Shown, not obeyed and not silently dropped: a sentence that
+               * vanishes looks like a microphone that has stopped working, and
+               * the reason has to be readable — it is the whole rule.
+               */
+              options.onOutcome?.({
+                success: true,
+                spoken: `Ignorata, non inizia con «${currentSettings.wakeWord}»: «${trimmed}».`,
+              })
               return
             }
             if (match.remainder.length > 0) {
@@ -1065,7 +1082,7 @@ export function makeVoiceProgram(
               return
             }
           } else {
-            // Already awake: check if user repeated the wake-word
+            // Awake, answering, or already at work on the last sentence.
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
             yield* executeAgentUtterance(commandText, heard)

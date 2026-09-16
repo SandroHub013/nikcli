@@ -86,8 +86,7 @@ function setup(answer: string | ((prompt: { signal?: AbortSignal }) => Promise<s
     plan: async (prompt) => {
       prompts.push({ system: prompt.system, user: prompt.user })
       return typeof answer === "string" ? answer : answer(prompt)
-    },
-  })
+    }, settings: { activation: "toggle" } })
 
   return { engine, host, transcriber, speaker, prompts }
 }

@@ -76,3 +76,18 @@ describe("settings/wake-word - matchesWakeWord", () => {
     expect(matchesWakeWord("jarvisiano", customWake).matched).toBe(false)
   })
 })
+
+describe("the name has to open the sentence", () => {
+  test("a name in the middle of a sentence is not an address", () => {
+    // What a television or a conversation in the room sounds like.
+    expect(matchesWakeWord("domani il nick della squadra sarà annunciato", "nik").matched).toBe(false)
+    expect(matchesWakeWord("secondo nick il mercato è in crescita", "nik").matched).toBe(false)
+  })
+
+  test("a greeting may come first, nothing else", () => {
+    expect(matchesWakeWord("nik apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    expect(matchesWakeWord("ehi nik apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    expect(matchesWakeWord("ok nick apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)
+  })
+})

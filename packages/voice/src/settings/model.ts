@@ -28,7 +28,15 @@ export type AgentEngine = (typeof AGENT_ENGINES)[number]
 export const REPLY_VOICES = ["ugo", "paola", "system"] as const
 export type ReplyVoice = (typeof REPLY_VOICES)[number]
 
-export const CURRENT_SETTINGS_VERSION = 1
+/**
+ * 2: the assistant answers when it is called by name.
+ *
+ * With the microphone open and no name to wait for, everything the room said
+ * was a request — a television in the background ran up a bill and opened
+ * sessions. A profile written before this is moved to the wake word once; the
+ * switch in the voice settings turns it back off.
+ */
+export const CURRENT_SETTINGS_VERSION = 2
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
@@ -113,10 +121,10 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   version: CURRENT_SETTINGS_VERSION,
   mode: "agent",
-  activation: "toggle",
+  activation: "wake-word",
   transcriptionSend: "manual",
   language: "it",
-  wakeWord: "hei nik",
+  wakeWord: "nik",
   agentChord: "mod+shift+k",
   transcriptionChord: "mod+shift+j",
   /*
@@ -195,7 +203,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     }
   }
 
-  const candidate = raw as Record<string, unknown>
+  let candidate = raw as Record<string, unknown>
 
   // 1. Version migration
   let version = candidate.version
@@ -204,6 +212,18 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     corrections.push(`Migrata versione impostazioni da ${version} a ${CURRENT_SETTINGS_VERSION}.`)
+    /*
+     * The one migration this version carries: an assistant that answered
+     * everything it heard now waits to be called. Only "toggle" is moved —
+     * push-to-talk already has a key holding the microphone open, and a
+     * profile already on the wake word is left alone.
+     */
+    if (candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "wake-word" }
+      corrections.push(
+        "Ora l'assistente risponde solo quando lo chiami per nome: puoi cambiarlo nelle impostazioni vocali.",
+      )
+    }
     version = CURRENT_SETTINGS_VERSION
   }
 
