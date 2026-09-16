@@ -169,6 +169,18 @@ describe("record/recorder tracks", () => {
     expect(bytes).toEqual([])
   })
 
+  test("the state says whether the microphone is being recorded", async () => {
+    const { recorder } = withTracks({ extension: "webm", bytes: new Uint8Array([1]) })
+    await recorder.start({ kind: "window" }, { mic: true })
+    const on = recorder.state()
+    expect(on.status === "recording" && on.recording.mic).toBe(true)
+    await recorder.stop()
+    await recorder.start({ kind: "window" })
+    const off = recorder.state()
+    expect(off.status === "recording" && off.recording.mic).toBe(false)
+    await recorder.stop()
+  })
+
   test("the microphone stays closed unless the take asked for it", async () => {
     let opened = 0
     const recorder = createRecorder({

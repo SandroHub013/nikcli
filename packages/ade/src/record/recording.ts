@@ -61,6 +61,8 @@ export interface Recording {
   /** Where the video and its events are written, without extension. */
   readonly path: string
   readonly startedAt: number
+  /** The microphone is being recorded too: the badge says so. */
+  readonly mic?: boolean
 }
 
 /** What the platform side answers: it knows the file, not why a take was made. */

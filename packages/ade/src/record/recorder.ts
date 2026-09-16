@@ -148,7 +148,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         mic = options.mic ? await deps.startMic?.().catch(() => undefined) : undefined
         settle({
           status: "recording",
-          recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt },
+          recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt, mic: mic !== undefined },
         })
         return undefined
       } catch (error) {

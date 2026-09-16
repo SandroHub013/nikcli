@@ -27,6 +27,8 @@ describe("record/sensitive", () => {
     const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
     for (const part of ['[data-sensitive]', 'input[type="password"]', "#openrouter-key-field"]) {
       expect(css).toContain(`html[${RECORDING_ATTRIBUTE}] ${part}`)
+      // Selecting a covered field must not paint its text back.
+      expect(css).toContain(`html[${RECORDING_ATTRIBUTE}] ${part}::selection`)
     }
   })
 })

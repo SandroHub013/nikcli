@@ -633,8 +633,10 @@ export function Workbench() {
     start: async (target, dir, name, quality) => {
       const host = await getHost()
       if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
-      // Covered before the first frame exists, uncovered only once the take is over.
+      // Covered before the first frame exists, uncovered only once the take is over:
+      // two frames, so the covered page is painted before the capture starts.
       coverSecrets(true)
+      await new Promise<void>((painted) => requestAnimationFrame(() => requestAnimationFrame(() => painted())))
       try {
         return await host.recordStart(target, dir, name, quality)
       } catch (error) {
@@ -715,6 +717,11 @@ export function Workbench() {
     }, 1000)
     onCleanup(() => clearInterval(watch))
   })
+
+  const recordMicOn = () => {
+    const now = recordState()
+    return now.status !== "idle" && now.recording.mic === true
+  }
 
   /** An agent's take waits here for the user's answer. */
   const [recordAsk, setRecordAsk] = createSignal<{
@@ -5057,16 +5064,17 @@ export function Workbench() {
             type="button"
             data-slot="ade-rec"
             data-stopping={recordState().status === "stopping" ? "" : undefined}
+            data-mic={recordMicOn() ? "" : undefined}
             title={
               recordState().status === "recording"
-                ? `Registrazione in corso — ${recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : ""}`
+                ? `Registrazione in corso${recordMicOn() ? " con il microfono" : ", senza microfono"} — ${recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : ""}`
                 : "Chiusura del file"
             }
             aria-label="Ferma la registrazione"
             onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
           >
             <span data-slot="ade-rec-dot" aria-hidden="true" />
-            {recordState().status === "recording" ? "REC" : "…"}
+            {recordState().status === "recording" ? (recordMicOn() ? "REC · MIC" : "REC") : "…"}
           </button>
         </Show>
 

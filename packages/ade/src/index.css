@@ -948,6 +948,13 @@ html[data-ade-recording] #openrouter-key-field {
   background: #2a2a2a !important;
   -webkit-text-security: disc;
 }
+html[data-ade-recording] [data-sensitive]::selection,
+html[data-ade-recording] [data-sensitive] *::selection,
+html[data-ade-recording] input[type="password"]::selection,
+html[data-ade-recording] #openrouter-key-field::selection {
+  color: transparent !important;
+  background: transparent !important;
+}
 html[data-ade-recording] [data-sensitive] *,
 html[data-ade-recording] [data-sensitive]::placeholder,
 html[data-ade-recording] input[type="password"]::placeholder,
