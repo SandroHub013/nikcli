@@ -2,15 +2,20 @@
  * The browser side of a take: what ADE knows and the capture does not.
  *
  * The platform writes the pixels; this writes everything a promo cut needs
- * afterwards — where the pointer went, what was clicked, which pane had focus,
- * which command ran, what the assistant said — next to the video as JSON
- * lines. Nothing is drawn onto the frames: zoom and click highlights are a
- * decision taken at export, when the cut is known, and a take can be re-cut
- * without filming it again.
+ * afterwards, each in a file of its own beside the video:
+ *
+ * - `<nome>.events.jsonl`: pointer, clicks, panes, commands, what was said;
+ * - `<nome>.voce.wav`: the assistant's voice, from the clips ADE synthesised;
+ * - `<nome>.microfono.webm`: the microphone, when the user allowed it.
+ *
+ * Separate tracks rather than a mix, because an editor wants to lower the
+ * microphone under the voice-over, not undo a mix made for them. Nothing is
+ * drawn onto the frames either: zoom and click highlights are a decision taken
+ * at export (`zoom.ts`), and a take can be re-cut without filming it again.
  *
  * Kept out of `workbench.tsx` because it is the part with rules: one take at a
- * time, the events file written even when the capture fails to close, and the
- * listeners removed whatever happens.
+ * time, and what was collected is written even when the capture fails to
+ * close.
  */
 
 import {
@@ -24,6 +29,13 @@ import {
   type RecordState,
   type RecordTarget,
 } from "./recording"
+import { buildVoiceTrack, type VoiceClip } from "./wav"
+
+/** A microphone being recorded; `stop` hands back the file's bytes. */
+export interface MicTake {
+  readonly extension: string
+  stop(): Promise<Uint8Array | undefined>
+}
 
 export interface RecorderDeps {
   /** The platform capture: `host.recordStart` and friends. */
@@ -36,6 +48,12 @@ export interface RecorderDeps {
   stop: () => Promise<{ path: string | null }>
   /** Writes the events file beside the video. */
   writeText: (path: string, text: string) => Promise<void>
+  /** Writes an audio track beside the video. */
+  writeBytes?: (path: string, bytes: Uint8Array) => Promise<void>
+  /** Starts recording the microphone; undefined when it is off or refused. */
+  startMic?: () => Promise<MicTake | undefined>
+  /** The page's geometry at the start, for the `frame` event. */
+  frame?: (target: RecordTarget) => Omit<Extract<RecordEvent, { kind: "frame" }>, "kind" | "at">
   /** The folder the user chose; undefined asks the caller to pick one. */
   dir: () => string | undefined
   /** The level chosen in the panel; the heaviest when absent. */
@@ -49,21 +67,52 @@ export interface Recorder {
   stop(): Promise<string | undefined>
   /** Notes something worth keeping: ignored when nothing is being recorded. */
   note(event: RecordEvent): void
+  /** Keeps a sentence the assistant is about to say, for the voice track. */
+  noteVoice(wav: ArrayBuffer, text?: string): void
   state(): RecordState
 }
 
+const stem = (video: string) => video.replace(/\.mp4$/i, "")
+
 /** The events file sits beside the video, same name. */
 export function eventsPathFor(video: string): string {
-  return `${video.replace(/\.mp4$/i, "")}.events.jsonl`
+  return `${stem(video)}.events.jsonl`
+}
+
+export function voicePathFor(video: string): string {
+  return `${stem(video)}.voce.wav`
+}
+
+export function micPathFor(video: string, extension: string): string {
+  return `${stem(video)}.microfono.${extension}`
 }
 
 export function createRecorder(deps: RecorderDeps): Recorder {
   let state: RecordState = { status: "idle" }
   let log: ReturnType<typeof createEventLog> | undefined
+  let voice: VoiceClip[] = []
+  let mic: MicTake | undefined
 
   const settle = (next: RecordState) => {
     state = next
     deps.onState(state)
+  }
+
+  /** Everything collected during the take, written beside `video`. */
+  const writeTracks = async (video: string, startedAt: number, events: string, clips: VoiceClip[], micTake?: MicTake) => {
+    const problems: string[] = []
+    if (events) await deps.writeText(eventsPathFor(video), events).catch((error) => problems.push(String(error)))
+    const track = buildVoiceTrack(clips, deps.now() - startedAt)
+    if (track && deps.writeBytes) {
+      await deps.writeBytes(voicePathFor(video), new Uint8Array(track.wav)).catch((error) => problems.push(String(error)))
+    }
+    if (micTake && deps.writeBytes) {
+      const bytes = await micTake.stop().catch(() => undefined)
+      if (bytes && bytes.length > 0) {
+        await deps.writeBytes(micPathFor(video, micTake.extension), bytes).catch((error) => problems.push(String(error)))
+      }
+    }
+    return problems
   }
 
   return {
@@ -84,6 +133,11 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           ...(level.height ? { height: level.height } : {}),
         })
         log = createEventLog(startedAt)
+        voice = []
+        const frame = deps.frame?.(target)
+        if (frame) log.add({ kind: "frame", at: startedAt, ...frame })
+        // The microphone is extra: a refusal records the take without it.
+        mic = await deps.startMic?.().catch(() => undefined)
         settle({
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt },
@@ -98,22 +152,20 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       if (state.status !== "recording") return undefined
       const { recording } = state
       const events = log?.text() ?? ""
+      const clips = voice
+      const micTake = mic
       log = undefined
+      voice = []
+      mic = undefined
       settle({ status: "stopping", recording })
       try {
         const stopped = await deps.stop()
-        const video = stopped.path ?? recording.path
-        /*
-         * Written after the capture closed its own file, and only when there
-         * is something to write: an empty events file beside a video would
-         * read as "nothing happened" rather than "nothing was noted".
-         */
-        if (events) await deps.writeText(eventsPathFor(video), events)
+        const problems = await writeTracks(stopped.path ?? recording.path, recording.startedAt, events, clips, micTake)
         settle({ status: "idle" })
-        return undefined
+        return problems.length > 0 ? `Video salvato, ma non tutte le tracce: ${problems.join("; ")}` : undefined
       } catch (error) {
-        // The video may still be on disk: the events go next to it anyway.
-        if (events) await deps.writeText(eventsPathFor(recording.path), events).catch(() => {})
+        // The video may still be on disk: what was collected goes next to it anyway.
+        await writeTracks(recording.path, recording.startedAt, events, clips, micTake).catch(() => {})
         settle({ status: "idle" })
         return error instanceof Error ? error.message : String(error)
       }
@@ -122,6 +174,13 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     note(event) {
       if (state.status !== "recording") return
       log?.add(event)
+    },
+
+    noteVoice(wav, text) {
+      if (state.status !== "recording") return
+      const at = deps.now()
+      voice.push({ at: at - state.recording.startedAt, wav })
+      if (text) log?.add({ kind: "said", at, text })
     },
 
     state() {

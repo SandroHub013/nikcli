@@ -191,6 +191,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
     },
     {
+      id: "record.export",
+      title: "Esporta l'ultima registrazione con zoom e clic",
+      group: "Vista",
+      keywords: ["video", "esporta", "zoom", "clic", "pubblicità", "promo"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
+    },
+    {
       id: "record.folder",
       title: "Cartella dei video registrati",
       group: "Vista",

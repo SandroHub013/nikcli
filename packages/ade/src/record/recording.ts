@@ -31,6 +31,21 @@ export type RecordTarget =
     }
 
 export type RecordEvent =
+  /**
+   * Written first: how the page's CSS pixels map onto the captured frame.
+   * `crop*` are set for a pane take, in physical pixels of the window.
+   */
+  | {
+      readonly kind: "frame"
+      readonly at: number
+      readonly width: number
+      readonly height: number
+      readonly dpr: number
+      readonly cropX?: number
+      readonly cropY?: number
+      readonly cropWidth?: number
+      readonly cropHeight?: number
+    }
   /** Where the pointer was, in window coordinates. */
   | { readonly kind: "pointer"; readonly at: number; readonly x: number; readonly y: number }
   | { readonly kind: "click"; readonly at: number; readonly x: number; readonly y: number; readonly button: "left" | "right" | "middle" }

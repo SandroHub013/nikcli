@@ -142,7 +142,9 @@ import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
-import { createRecorder } from "../record/recorder"
+import { createRecorder, eventsPathFor, micPathFor, voicePathFor } from "../record/recorder"
+import { startMicTake } from "../record/mic"
+import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest } from "../record/record-panel"
 import {
   DEFAULT_QUALITY,
@@ -630,6 +632,19 @@ export function Workbench() {
       const host = await getHost()
       await host?.writeTextFile?.(path, text)
     },
+    writeBytes: async (path, bytes) => {
+      const host = await getHost()
+      await host?.writeBytes?.(path, bytes)
+    },
+    startMic: () => startMicTake(voiceSettings().inputDeviceId),
+    frame: (target) => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      ...(target.kind === "pane"
+        ? { cropX: target.x, cropY: target.y, cropWidth: target.width, cropHeight: target.height }
+        : {}),
+    }),
     dir: () => recordDir(),
     quality: () => qualityLevel(recordQuality()),
     now: () => Date.now(),
@@ -652,7 +667,55 @@ export function Workbench() {
 
   const startRecording = async (target: Parameters<typeof recorder.start>[0]) => {
     if (!recordDir() && !(await pickRecordDir())) return "Nessuna cartella scelta: registrazione annullata."
+    const dir = recordDir()
+    /*
+     * The folder becomes a root the window may write to and play from: the
+     * tracks are written there, and the export reads the take back through
+     * the same `ade-media` scheme the video panel uses.
+     */
+    if (dir) await (await getHost())?.allowWriteRoot?.(dir).catch(() => {})
     return recorder.start(target)
+  }
+
+  /** The last take, remembered so "esporta" knows which one. */
+  const [lastTake, setLastTake] = createSignal<string | undefined>()
+  createEffect(() => {
+    const now = recordState()
+    if (now.status === "stopping") setLastTake(now.recording.path)
+  })
+
+  const [exporting, setExporting] = createSignal(false)
+  /** Writes `<nome>.promo.mp4` beside the take: zoom, click rings, pointer, both tracks. */
+  const exportLastTake = async () => {
+    const video = lastTake()
+    if (!video) return report("Nessuna registrazione da esportare in questa sessione.", "info")
+    if (exporting()) return report("Un'esportazione è già in corso.", "info")
+    const host = await getHost()
+    if (!host?.readTextFile || !host.writeBytes) return report("L'esportazione funziona solo nell'app desktop.")
+    setExporting(true)
+    report("Esporto il video con zoom e clic: dura quanto la registrazione.", "info")
+    try {
+      const events = await host.readTextFile(eventsPathFor(video)).then((file) => file.text).catch(() => "")
+      const exists = async (path: string) => ((await host.exists?.(path).catch(() => false)) ? path : undefined)
+      const mic = (await exists(micPathFor(video, "webm"))) ?? (await exists(micPathFor(video, "m4a")))
+      const voice = await exists(voicePathFor(video))
+      const level = qualityLevel(recordQuality())
+      const result = await exportPromo({
+        video,
+        eventsText: events,
+        ...(voice ? { voice } : {}),
+        ...(mic ? { mic } : {}),
+        fps: level.fps,
+        bitrate: level.bitrate,
+      })
+      const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
+      await host.writeBytes(out, result.bytes)
+      report(`Video pronto: ${out}`, "info")
+    } catch (failure) {
+      report(`Esportazione non riuscita: ${failure instanceof Error ? failure.message : String(failure)}`)
+    } finally {
+      setExporting(false)
+    }
   }
 
   /*
@@ -2451,7 +2514,11 @@ export function Workbench() {
       if (!host?.ttsPiperSpeak) throw new Error("Nessun host per la voce.")
       return host.ttsPiperSpeak(voice, text)
     },
-    play: (wav, signal) => playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter),
+    play: (wav, signal) => {
+      // A take keeps the assistant's voice as its own track (S36).
+      recorder.noteVoice(wav)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
+    },
     fallback: systemSpeaker,
     onInstall: (voice, state, problem) => {
       if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
@@ -3174,6 +3241,8 @@ export function Workbench() {
       }
       const level = qualityLevel(next)
       report(`Qualità del video: ${level.label} — ${sizePerMinute(level)}.`, "info")
+    } else if (id === "record.export") {
+      void exportLastTake()
     } else if (id === "record.folder") {
       await pickRecordDir()
     } else if (id === "voice.settings") {

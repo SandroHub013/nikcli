@@ -95,3 +95,85 @@ describe("record/recorder", () => {
     expect(eventsPathFor("C:/video/ADE 2026.MP4")).toBe("C:/video/ADE 2026.events.jsonl")
   })
 })
+
+describe("record/recorder tracks", () => {
+  const wav = (values: number[]) => {
+    const samples = Int16Array.from(values)
+    const buffer = new ArrayBuffer(44 + samples.length * 2)
+    const view = new DataView(buffer)
+    const text = (offset: number, value: string) => [...value].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)))
+    text(0, "RIFF")
+    view.setUint32(4, 36 + samples.length * 2, true)
+    text(8, "WAVE")
+    text(12, "fmt ")
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true)
+    view.setUint32(24, 10, true)
+    view.setUint32(28, 20, true)
+    view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true)
+    text(36, "data")
+    view.setUint32(40, samples.length * 2, true)
+    samples.forEach((s, i) => view.setInt16(44 + i * 2, s, true))
+    return buffer
+  }
+
+  function withTracks(mic?: { extension: string; bytes?: Uint8Array; refuse?: boolean }) {
+    const bytes: { path: string; size: number }[] = []
+    const texts: { path: string; text: string }[] = []
+    let now = T0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => ({ path: "C:/video/ADE.mp4" }),
+      writeText: async (path, text) => {
+        texts.push({ path, text })
+      },
+      writeBytes: async (path, data) => {
+        bytes.push({ path, size: data.length })
+      },
+      startMic: mic
+        ? async () => (mic.refuse ? Promise.reject(new Error("negato")) : { extension: mic.extension, stop: async () => mic.bytes })
+        : undefined,
+      frame: () => ({ width: 1440, height: 900, dpr: 1.25 }),
+      dir: () => "C:/video",
+      now: () => now,
+      onState: () => {},
+    })
+    return { recorder, bytes, texts, advance: (ms: number) => (now += ms) }
+  }
+
+  test("the voice, the microphone and the events each get a file beside the video", async () => {
+    const { recorder, bytes, texts, advance } = withTracks({ extension: "webm", bytes: new Uint8Array([1, 2, 3]) })
+    await recorder.start({ kind: "window" })
+    advance(200)
+    recorder.noteVoice(wav([100, 100]), "Ci sono due sessioni.")
+    advance(800)
+    expect(await recorder.stop()).toBeUndefined()
+
+    expect(bytes.map((file) => file.path)).toEqual(["C:/video/ADE.voce.wav", "C:/video/ADE.microfono.webm"])
+    expect(bytes[1]!.size).toBe(3)
+    const lines = texts[0]!.text.trimEnd().split("\n").map((line) => JSON.parse(line))
+    // The frame comes first, so the export can map page pixels to the video.
+    expect(lines[0]).toMatchObject({ kind: "frame", at: 0, width: 1440, dpr: 1.25 })
+    expect(lines[1]).toEqual({ kind: "said", at: 200, text: "Ci sono due sessioni." })
+    // 1 s at 10 samples a second: the voice track lasts as long as the take.
+    expect(bytes[0]!.size).toBe(44 + 10 * 2)
+  })
+
+  test("a refused microphone records the take anyway, without that track", async () => {
+    const { recorder, bytes } = withTracks({ extension: "webm", refuse: true })
+    expect(await recorder.start({ kind: "window" })).toBeUndefined()
+    expect(recorder.state().status).toBe("recording")
+    await recorder.stop()
+    expect(bytes).toEqual([])
+  })
+
+  test("a voice clip said outside a take is not kept for the next one", async () => {
+    const { recorder, bytes } = withTracks()
+    recorder.noteVoice(wav([1]))
+    await recorder.start({ kind: "window" })
+    await recorder.stop()
+    expect(bytes).toEqual([])
+  })
+})
