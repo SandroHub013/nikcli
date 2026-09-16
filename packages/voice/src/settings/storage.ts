@@ -13,6 +13,7 @@ import {
   type NormalizedVoiceSettings,
   type VoiceSettings,
 } from "./model"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
 
@@ -144,7 +145,7 @@ export function saveVoiceSettings(
       ...normalized,
       corrections: [
         ...normalized.corrections,
-        "Archiviazione locale non accessibile; le modifiche rimarranno solo in memoria.",
+        t("vui.fix.noStorage"),
       ],
     }
   }
@@ -154,7 +155,7 @@ export function saveVoiceSettings(
     ...normalized,
     corrections: [
       ...normalized.corrections,
-      "Impossibile salvare le impostazioni nell'archiviazione locale.",
+      t("vui.fix.saveFailed"),
     ],
   }
 }

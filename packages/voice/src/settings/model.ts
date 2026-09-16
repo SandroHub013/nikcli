@@ -7,6 +7,7 @@
 
 import { describeChordRisk } from "./shortcuts"
 import type { TranscriberBackend } from "../asr/select"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export type VoiceMode = "agent" | "transcription"
 
@@ -212,11 +213,11 @@ export type VoiceMigration = "wake-word" | "always-listen"
  */
 function chordProblem(chordStr: unknown): string | undefined {
   if (typeof chordStr !== "string" || chordStr.trim().length === 0) {
-    return "Manca un tasto principale."
+    return t("vui.fix.noMainKey")
   }
   const risk = describeChordRisk(chordStr.trim(), "other")
   if (risk.level !== "refuse") return undefined
-  return risk.message ?? "Scorciatoia non valida."
+  return risk.message ?? t("vui.shortcut.invalid")
 }
 
 /**
@@ -231,7 +232,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   const corrections: string[] = []
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    corrections.push("Impostazioni non valide o assenti: ripristinati i valori predefiniti.")
+    corrections.push(t("vui.fix.defaults"))
     return {
       ...DEFAULT_VOICE_SETTINGS,
       settings: DEFAULT_VOICE_SETTINGS,
@@ -246,10 +247,10 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   const migrations: VoiceMigration[] = []
   let version = candidate.version
   if (typeof version !== "number" || Number.isNaN(version)) {
-    corrections.push("Versione impostazioni mancante: impostata alla versione 1.")
+    corrections.push(t("vui.fix.noVersion"))
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
-    corrections.push(`Migrata versione impostazioni da ${version} a ${CURRENT_SETTINGS_VERSION}.`)
+    corrections.push(t("vui.fix.migrated", String(version), String(CURRENT_SETTINGS_VERSION)))
     /*
      * The one migration this version carries: an assistant that answered
      * everything it heard now waits to be called. Only "toggle" is moved —
@@ -260,7 +261,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       candidate = { ...candidate, activation: "wake-word" }
       migrations.push("wake-word")
       corrections.push(
-        "Ora l'assistente risponde solo quando lo chiami per nome: puoi cambiarlo nelle impostazioni vocali.",
+        t("vui.fix.wakeDefault"),
       )
     }
     /*
@@ -279,7 +280,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     mode = candidate.mode
   } else {
     corrections.push(
-      `Modalità '${String(candidate.mode)}' non riconosciuta: ripristinata '${DEFAULT_VOICE_SETTINGS.mode}'.`,
+      t("vui.fix.mode", String(candidate.mode), DEFAULT_VOICE_SETTINGS.mode),
     )
     mode = DEFAULT_VOICE_SETTINGS.mode
   }
@@ -294,7 +295,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     activation = candidate.activation
   } else {
     corrections.push(
-      `Attivazione '${String(candidate.activation)}' non riconosciuta: ripristinata '${DEFAULT_VOICE_SETTINGS.activation}'.`,
+      t("vui.fix.activation", String(candidate.activation), DEFAULT_VOICE_SETTINGS.activation),
     )
     activation = DEFAULT_VOICE_SETTINGS.activation
   }
@@ -305,7 +306,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionSend = candidate.transcriptionSend
   } else {
     corrections.push(
-      `Invio trascrizione '${String(candidate.transcriptionSend)}' non valido: ripristinato '${DEFAULT_VOICE_SETTINGS.transcriptionSend}'.`,
+      t("vui.fix.send", String(candidate.transcriptionSend), DEFAULT_VOICE_SETTINGS.transcriptionSend),
     )
     transcriptionSend = DEFAULT_VOICE_SETTINGS.transcriptionSend
   }
@@ -315,7 +316,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (typeof candidate.language === "string" && candidate.language.trim().length > 0) {
     language = candidate.language.trim().toLowerCase()
   } else {
-    corrections.push(`Lingua non specificata: ripristinata '${DEFAULT_VOICE_SETTINGS.language}'.`)
+    corrections.push(t("vui.fix.language", DEFAULT_VOICE_SETTINGS.language))
     language = DEFAULT_VOICE_SETTINGS.language
   }
 
@@ -332,7 +333,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     agentChord = String(candidate.agentChord).trim()
   } else {
     corrections.push(
-      `Scorciatoia modalità agente non utilizzabile ('${String(candidate.agentChord)}'). ${agentChordProblem} Ripristinata '${DEFAULT_VOICE_SETTINGS.agentChord}'.`,
+      t("vui.fix.agentChord", String(candidate.agentChord), agentChordProblem, DEFAULT_VOICE_SETTINGS.agentChord),
     )
     agentChord = DEFAULT_VOICE_SETTINGS.agentChord
   }
@@ -344,7 +345,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionChord = String(candidate.transcriptionChord).trim()
   } else {
     corrections.push(
-      `Scorciatoia modalità trascrizione non utilizzabile ('${String(candidate.transcriptionChord)}'). ${transcriptionChordProblem} Ripristinata '${DEFAULT_VOICE_SETTINGS.transcriptionChord}'.`,
+      t("vui.fix.transcriptionChord", String(candidate.transcriptionChord), transcriptionChordProblem, DEFAULT_VOICE_SETTINGS.transcriptionChord),
     )
     transcriptionChord = DEFAULT_VOICE_SETTINGS.transcriptionChord
   }
@@ -359,7 +360,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     backend = candidate.backend
   } else {
     corrections.push(
-      `Backend '${String(candidate.backend)}' non valido: ripristinato '${DEFAULT_VOICE_SETTINGS.backend}'.`,
+      t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend),
     )
     backend = DEFAULT_VOICE_SETTINGS.backend
   }
@@ -380,7 +381,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend = candidate.parakeetBackend
   } else {
     corrections.push(
-      `Backend Parakeet '${String(candidate.parakeetBackend)}' non riconosciuto: ripristinato '${DEFAULT_VOICE_SETTINGS.parakeetBackend}'.`,
+      t("vui.fix.parakeetBackend", String(candidate.parakeetBackend), DEFAULT_VOICE_SETTINGS.parakeetBackend),
     )
     parakeetBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
   }
@@ -410,10 +411,10 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       customWords.push(word)
     }
     if (dropped > 0) {
-      corrections.push(`Parole personalizzate non testuali ignorate: ${dropped}.`)
+      corrections.push(t("vui.fix.wordsDropped", String(dropped)))
     }
   } else if (candidate.customWords !== undefined) {
-    corrections.push("Elenco di parole personalizzate non valido: svuotato.")
+    corrections.push(t("vui.fix.wordsInvalid"))
   }
 
   /*
@@ -427,13 +428,13 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (typeof candidate.speakReplies === "boolean") {
     speakReplies = candidate.speakReplies
   } else if (candidate.speakReplies !== undefined) {
-    corrections.push("Lettura delle risposte non valida: ripristinata attiva.")
+    corrections.push(t("vui.fix.speakReplies"))
   }
   let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
   if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
     replyVoice = candidate.replyVoice as ReplyVoice
   } else if (candidate.replyVoice !== undefined) {
-    corrections.push(`Voce delle risposte '${String(candidate.replyVoice)}' non riconosciuta: ripristinata Ugo.`)
+    corrections.push(t("vui.fix.replyVoice", String(candidate.replyVoice)))
   }
 
   /*
@@ -471,7 +472,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (AGENT_ENGINES.includes(candidate.agentEngine as AgentEngine)) {
     agentEngine = candidate.agentEngine as AgentEngine
   } else if (candidate.agentEngine !== undefined) {
-    corrections.push(`Motore dell'agente '${String(candidate.agentEngine)}' non riconosciuto: ripristinato automatico.`)
+    corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)))
   }
 
   const cleanSettings: VoiceSettings = {

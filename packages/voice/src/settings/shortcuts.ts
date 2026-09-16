@@ -15,6 +15,7 @@ import {
   type Platform,
 } from "@nikcli-ai/ade/keyboard/keymap"
 import type { VoiceSettings } from "./model"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_COMMAND_AGENT = "voice.mode.agent"
 export const VOICE_COMMAND_TRANSCRIPTION = "voice.mode.transcription"
@@ -57,23 +58,23 @@ export function findVoiceShortcutConflicts(
  * on. Every id ADE ships is spelled out; anything else falls back to the raw
  * id, which is still better than silence.
  */
-const ADE_COMMAND_LABELS: Record<string, string> = {
-  "palette.open": "Tavolozza comandi",
-  "session.new": "Nuova sessione",
-  "pane.close": "Chiudi pannello",
-  "pane.expand": "Espandi pannello",
-  "pane.rename": "Rinomina pannello",
-  "view.toggle": "Cambia vista",
-  "theme.toggle": "Cambia tema",
+const ADE_COMMAND_LABELS: Record<string, () => string> = {
+  "palette.open": () => t("vui.command.palette"),
+  "session.new": () => t("vui.command.sessionNew"),
+  "pane.close": () => t("vui.command.paneClose"),
+  "pane.expand": () => t("vui.command.paneExpand"),
+  "pane.rename": () => t("vui.command.paneRename"),
+  "view.toggle": () => t("vui.command.viewToggle"),
+  "theme.toggle": () => t("vui.command.themeToggle"),
 }
 
 /**
  * Names a command in a way a user can recognise.
  */
 export function describeCommandId(commandId: string): string {
-  if (commandId === VOICE_COMMAND_AGENT) return "Modalità agente"
-  if (commandId === VOICE_COMMAND_TRANSCRIPTION) return "Modalità trascrizione"
-  const label = ADE_COMMAND_LABELS[commandId]
+  if (commandId === VOICE_COMMAND_AGENT) return t("vui.command.agent")
+  if (commandId === VOICE_COMMAND_TRANSCRIPTION) return t("vui.command.transcription")
+  const label = ADE_COMMAND_LABELS[commandId]?.()
   return label ? `${commandId} (${label})` : commandId
 }
 
@@ -101,13 +102,13 @@ export function summarizeVoiceShortcutConflicts(
       const winner = others.length > 0 ? others.map(describeCommandId).join(", ") : undefined
       const label = mine.map(describeCommandId).join(" e ")
       return winner
-        ? `${label}: «${describeShortcut(conflict.chord, platform)}» è già di '${winner}' e ha la precedenza.`
-        : `${label}: usano entrambe «${describeShortcut(conflict.chord, platform)}», quindi nessuna delle due si attiva.`
+        ? t("vui.clash.taken", label, describeShortcut(conflict.chord, platform), winner)
+        : t("vui.clash.both", label, describeShortcut(conflict.chord, platform))
     })
     .filter((line): line is string => line !== undefined)
 
   if (shadowed.length === 0) return undefined
-  return `Scorciatoie vocali non attive. ${shadowed.join(" ")} Cambiale nel pannello vocale.`
+  return t("vui.clash.inactive", shadowed.join(" "))
 }
 
 /**
@@ -190,13 +191,13 @@ export function describeChordRisk(
   try {
     parsed = typeof chord === "string" ? parseChord(chord, platform) : chord
   } catch {
-    return { level: "refuse", message: "Scorciatoia non valida." }
+    return { level: "refuse", message: t("vui.shortcut.invalid") }
   }
 
   if (NON_KEYS.has(parsed.key)) {
     return {
       level: "refuse",
-      message: "Scorciatoia non valida: manca un tasto principale.",
+      message: t("vui.risk.noMainKey"),
     }
   }
 
@@ -206,13 +207,13 @@ export function describeChordRisk(
     if (parsed.key.length === 1) {
       return {
         level: "refuse",
-        message: `«${shown}» da solo serve a scrivere: aggiungi Ctrl, Alt o Cmd.`,
+        message: t("vui.risk.typing", shown),
       }
     }
     if (TYPING_KEYS.has(parsed.key)) {
       return {
         level: "refuse",
-        message: `«${shown}» da solo serve a scrivere e a spostarsi nel testo: aggiungi Ctrl, Alt o Cmd.`,
+        message: t("vui.risk.typingMove", shown),
       }
     }
   }
@@ -227,14 +228,14 @@ export function describeChordRisk(
     return {
       level: "warn",
       message:
-        "Windows e molti ambienti Linux riservano le combinazioni con il tasto Win: potrebbe non arrivare mai ad ADE.",
+        t("vui.risk.winKey"),
     }
   }
   if (platform !== "mac" && parsed.alt && !parsed.ctrl && !parsed.meta && parsed.key.length === 1) {
     return {
       level: "warn",
       message:
-        "Alt più una lettera può essere intercettato dal menu della finestra o servire ad AltGr per scrivere caratteri accentati.",
+        t("vui.risk.altLetter"),
     }
   }
 

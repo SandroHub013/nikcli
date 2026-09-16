@@ -13,6 +13,7 @@ import {
   createSpeechDetector,
   type SpeechDetectorConfig,
 } from "./level"
+import { t } from "@nikcli-ai/ade/i18n"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -117,7 +118,7 @@ export function chooseSupportedAudioMimeType(
   }
 
   throw new Error(
-    "Nessun formato audio supportato per la registrazione: né 'audio/webm;codecs=opus' né 'audio/mp4' sono disponibili in questo ambiente."
+    t("vui.mic.noFormat")
   )
 }
 
@@ -488,7 +489,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
           recorder.start()
         } catch (err: any) {
           if (options.preferredFormat !== "wav") {
-            onErrorCb(new Error(`Errore avvio registrazione audio: ${err?.message ?? "sconosciuto"}`))
+            onErrorCb(new Error(t("vui.mic.recordFailed", err?.message ?? t("vui.error.unknown"))))
           }
         }
       }
@@ -689,7 +690,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
             const nav = typeof navigator !== "undefined" ? navigator : (globalThis as any).navigator
             if (!nav?.mediaDevices?.getUserMedia) {
               throw new Error(
-                "Accesso al microfono non supportato in questo browser o ambiente."
+                t("vui.mic.unsupported")
               )
             }
             return nav.mediaDevices.getUserMedia.bind(nav.mediaDevices)
@@ -711,28 +712,28 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
             // Only reachable if a browser treats `ideal` as binding. Named so the
             // message points at the picker rather than at the permission dialog.
             throw new Error(
-              "Il microfono scelto non è disponibile. Scegline un altro nelle impostazioni vocali."
+              t("vui.mic.chosenMissing")
             )
           }
           if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
             throw new Error(
-              "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop)."
+              t("vui.mic.denied")
             )
           }
           if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
             throw new Error(
-              "Nessun microfono rilevato. Collega un microfono e riprova."
+              t("vui.mic.none")
             )
           }
           throw new Error(
-            `Impossibile accedere al microfono: ${err?.message ?? "errore sconosciuto"}`
+            t("vui.mic.failed", err?.message ?? t("vui.error.unknown"))
           )
         }
       }
 
       // Only reachable through an injected `mediaStream` of null; said rather
       // than asserted, because the graph below would fail far less legibly.
-      if (!stream) throw new Error("Nessun flusso audio disponibile.")
+      if (!stream) throw new Error(t("vui.mic.noStream"))
 
       mediaStream = stream
 

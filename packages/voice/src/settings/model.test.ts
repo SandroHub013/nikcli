@@ -257,3 +257,18 @@ describe("settings/model replyVoice", () => {
     expect(normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, replyVoice: "system" }).settings.replyVoice).toBe("system")
   })
 })
+
+describe("repairs and warnings follow the language", () => {
+  test("a repaired setting and a risky shortcut are described in English under English", async () => {
+    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    const { describeChordRisk } = await import("./shortcuts")
+    resetLocaleForTests("en")
+    try {
+      const { corrections } = normalizeSettings({ version: CURRENT_SETTINGS_VERSION, mode: "boh" })
+      expect(corrections).toContain(`Unknown mode 'boh': restored '${DEFAULT_VOICE_SETTINGS.mode}'.`)
+      expect(describeChordRisk("Ctrl+Shift").message).toBe("Invalid shortcut: a main key is missing.")
+    } finally {
+      resetLocaleForTests("it")
+    }
+  })
+})
