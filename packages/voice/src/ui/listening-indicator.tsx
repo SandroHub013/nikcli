@@ -16,28 +16,30 @@ export function ListeningIndicator(props: { engine: VoiceEngine }) {
       paused: props.engine.listenPaused(),
     }),
   )
+  const visible = createMemo(() => {
+    const current = state()
+    return current.kind === "hidden" ? undefined : current
+  })
+  // Keyed: paused and listening are both shown, and the button has to be rebuilt between them.
   return (
-    <Show when={state().kind !== "hidden" ? state() : undefined}>
-      {(shown) => {
-        const current = shown() as Exclude<ReturnType<typeof state>, { kind: "hidden" }>
-        return (
-          <button
-            type="button"
-            data-component="listening-indicator"
-            data-state={current.kind}
-            title={current.title}
-            aria-label={current.title}
-            onClick={() =>
-              void (current.kind === "listening"
-                ? props.engine.stop()
-                : props.engine.start("agent", { waitForName: true }))
-            }
-          >
-            <i data-slot="listening-dot" />
-            {current.text}
-          </button>
-        )
-      }}
+    <Show when={visible()} keyed>
+      {(current) => (
+        <button
+          type="button"
+          data-component="listening-indicator"
+          data-state={current.kind}
+          title={current.title}
+          aria-label={current.title}
+          onClick={() =>
+            void (current.kind === "listening"
+              ? props.engine.stop()
+              : props.engine.start("agent", { waitForName: true }))
+          }
+        >
+          <i data-slot="listening-dot" />
+          {current.text}
+        </button>
+      )}
     </Show>
   )
 }
