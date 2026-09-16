@@ -10,13 +10,14 @@
 //! from the events file, where a click can be highlighted and zoomed.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::Manager;
 use windows_capture::capture::{CaptureControl, Context, GraphicsCaptureApiHandler};
 use windows_capture::encoder::{
-    AudioSettingsBuilder, ContainerSettingsBuilder, ContainerSettingsSubType, VideoEncoder, VideoSettingsBuilder,
+    set_hardware_acceleration, AudioSettingsBuilder, ContainerSettingsBuilder, ContainerSettingsSubType, VideoEncoder, VideoSettingsBuilder,
     VideoSettingsSubType,
 };
 use windows_capture::frame::Frame;
@@ -43,6 +44,30 @@ fn frame_interval(fps: u32) -> Duration {
 /// back to software by itself — and at a fixed rate the file is the same size
 /// either way, so the take never fails for want of a GPU.
 const BITRATE: u32 = 8_000_000;
+
+/// Set once the hardware encoder has refused a take in this process.
+///
+/// From then on every take is encoded in software: the refusal does not heal
+/// by itself (measured on 2026-09-16: still failing a minute later, while
+/// another process could use the same encoder), and a second failed start is
+/// a second promo that was never recorded.
+static SOFTWARE_ONLY: AtomicBool = AtomicBool::new(false);
+
+/// The hardware first, software when it refuses. `create` builds the encoder.
+fn with_fallback<T, E: std::fmt::Display>(mut create: impl FnMut() -> Result<T, E>) -> Result<T, E> {
+    if !SOFTWARE_ONLY.load(Ordering::Relaxed) {
+        set_hardware_acceleration(true);
+        match create() {
+            Ok(value) => return Ok(value),
+            Err(error) => {
+                eprintln!("[record] encoder hardware rifiutato ({error}): passo al software");
+                SOFTWARE_ONLY.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+    set_hardware_acceleration(false);
+    create()
+}
 
 struct Take {
     encoder: Option<VideoEncoder>,
@@ -79,17 +104,19 @@ impl GraphicsCaptureApiHandler for Take {
          * the file — fitted inside the level's box, never stretched to it.
          */
         let (width, height) = fit_in((captured_width, captured_height), (flags.quality.width, flags.quality.height));
-        let encoder = VideoEncoder::new(
-            VideoSettingsBuilder::new(width, height)
-                .sub_type(VideoSettingsSubType::H264)
-                .frame_rate(flags.quality.fps)
-                .bitrate(flags.quality.bitrate.unwrap_or(BITRATE)),
-            // The assistant's voice and the microphone are written as their own
-            // tracks by ADE, not mixed into the video here (S36, D33-D35).
-            AudioSettingsBuilder::default().disabled(true),
-            ContainerSettingsBuilder::default().sub_type(ContainerSettingsSubType::MPEG4),
-            &flags.path,
-        )?;
+        let encoder = with_fallback(|| {
+            VideoEncoder::new(
+                VideoSettingsBuilder::new(width, height)
+                    .sub_type(VideoSettingsSubType::H264)
+                    .frame_rate(flags.quality.fps)
+                    .bitrate(flags.quality.bitrate.unwrap_or(BITRATE)),
+                // The assistant's voice and the microphone are written as their own
+                // tracks by ADE, not mixed into the video here (S36, D33-D35).
+                AudioSettingsBuilder::default().disabled(true),
+                ContainerSettingsBuilder::default().sub_type(ContainerSettingsSubType::MPEG4),
+                &flags.path,
+            )
+        })?;
         Ok(Self { encoder: Some(encoder), crop: flags.crop, scratch: Vec::new(), problem: flags.problem })
     }
 
@@ -172,7 +199,21 @@ pub fn start(app: &tauri::AppHandle, target: Target, path: &Path, quality: Quali
 
 pub fn stop(mut active: Active) -> Result<PathBuf, String> {
     if let Some(control) = active.control.take() {
-        control.stop().map_err(|error| error.to_string())?;
+        let callback = control.callback();
+        let stopped = control.stop().map_err(|error| error.to_string());
+        /*
+         * The encoder is closed here, not whenever the handler happens to be
+         * dropped: `on_closed` only runs when the window itself goes away, and
+         * a drop swallows the error. Closing it now releases the encoder
+         * before the next take asks for one, and says if the file is bad.
+         */
+        let encoder = callback.lock().encoder.take();
+        if let Some(encoder) = encoder {
+            if let Err(error) = encoder.finish() {
+                *active.problem.lock().map_err(|_| "registratore occupato".to_string())? = Some(error.to_string());
+            }
+        }
+        stopped?;
     }
     if let Some(problem) = active.problem.lock().map_err(|_| "registratore occupato".to_string())?.clone() {
         return Err(format!("La registrazione si è interrotta: {problem}"));
@@ -192,4 +233,40 @@ fn describe(error: &str) -> String {
         );
     }
     format!("Registrazione non avviata: {error}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_hardware_encoder_falls_back_to_software_and_stays_there() {
+        SOFTWARE_ONLY.store(false, Ordering::Relaxed);
+        let mut calls = 0;
+        let made: Result<u8, String> = with_fallback(|| {
+            calls += 1;
+            if calls == 1 { Err("0xC00D6D60".to_string()) } else { Ok(7) }
+        });
+        assert_eq!(made, Ok(7));
+        assert_eq!(calls, 2);
+        assert!(SOFTWARE_ONLY.load(Ordering::Relaxed));
+
+        // The next take goes straight to software: one call, no failed start first.
+        let mut next = 0;
+        let again: Result<u8, String> = with_fallback(|| {
+            next += 1;
+            Ok(1)
+        });
+        assert_eq!(again, Ok(1));
+        assert_eq!(next, 1);
+        SOFTWARE_ONLY.store(false, Ordering::Relaxed);
+    }
+
+    #[test]
+    fn a_software_failure_is_the_error_the_user_sees() {
+        SOFTWARE_ONLY.store(true, Ordering::Relaxed);
+        let made: Result<u8, String> = with_fallback(|| Err("nessun encoder".to_string()));
+        assert_eq!(made, Err("nessun encoder".to_string()));
+        SOFTWARE_ONLY.store(false, Ordering::Relaxed);
+    }
 }
