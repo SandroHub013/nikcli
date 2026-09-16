@@ -2460,8 +2460,11 @@ export function Workbench() {
     const guard = createListenGuard({
       now: () => Date.now(),
       isLocked: async () => {
-        // Set from a test driving the page: a lock cannot be staged on the user's PC.
-        const staged = (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+        // Set from a test driving the page, in a dev build only: a lock cannot be
+        // staged on the user's PC, and a release must not read it.
+        const staged = import.meta.env.DEV
+          ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+          : undefined
         if (typeof staged === "boolean") return staged
         if (!isTauriDesktop()) return false
         const { invoke } = await import("@tauri-apps/api/core")

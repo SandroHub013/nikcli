@@ -1230,6 +1230,23 @@ describe("always-on listening", () => {
     await engine.stop()
   })
 
+  test("a question answered by typing does not leave it awake: the room hours later is ignored", async () => {
+    const { host, engine, hear } = listening()
+    await engine.start("agent", { waitForName: true })
+    // The name alone, then the command: the path that held it awake.
+    await hear("ei nik")
+    await hear("chiudi pannello 1")
+    expect(engine.status()).toBe("confirming")
+    await engine.submitText("sì")
+    await settle()
+    expect(engine.status()).not.toBe("confirming")
+    const before = ran(host).length
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(before)
+    expect(engine.history().at(-1)).toMatchObject({ kind: "action", label: expect.stringContaining("Ignorata") })
+    await engine.stop()
+  })
+
   test("switched off, the button closes the microphone as before", async () => {
     const { engine } = listening({ alwaysListen: false })
     await engine.start()

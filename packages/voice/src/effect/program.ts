@@ -1127,12 +1127,13 @@ export function makeVoiceProgram(
               named: match.matched || awake || awaitingAnswer,
             })
             /*
-             * Si torna a dormire solo se non è rimasta una domanda aperta.
-             * Altrimenti la risposta dell'utente — che arriva un secondo
-             * dopo — cadrebbe nel vuoto.
+             * The sentence spent the name. A question left open still gets its
+             * answer: `awaitingAnswer` is read afresh for every sentence. Held
+             * awake here instead, a question answered by typing or by a button
+             * left the assistant awake for good, and the room's next sentence,
+             * hours later, was a request.
              */
-            isWakeWordAwake = currentState.status === "confirming" || pendingDisambiguation !== null
-            // A question holds it for as long as it is open; a sentence spent the name.
+            isWakeWordAwake = false
             wakeUntil = undefined
             return
           }
