@@ -6,6 +6,8 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  holdsForAnswer,
+  ANSWER_HOLD_MS,
   WEDGE_MS,
   formatWedged,
   relaunchRefusal,
@@ -497,5 +499,35 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     const open = openDecisions([{ spec: "S25", text: log }])
     expect(open).toEqual([{ spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" }])
     expect(requestsTable([], [], () => "in corso", now, open)).toContain("decisioni aperte:\n  S25 [k=quota]")
+  })
+})
+
+describe("holdsForAnswer: a session without hooks is working until it answers", () => {
+  const request = (to: string, deliveredAt: number) => ({ to, at: deliveredAt, deliveredAt })
+
+  test("holds while the request it was given is still open", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("lets go as soon as the request is gone, which is what the answer does", () => {
+    expect(holdsForAnswer([], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("holds nobody else: another session's request says nothing about this one", () => {
+    expect(holdsForAnswer([request("p2", 1_000)], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("gives up after the hold, so a session that never answers is not at work forever", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS - 1)).toBe(true)
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS)).toBe(false)
+  })
+
+  test("a spawn counts from when the session was opened, before any line was typed", () => {
+    expect(holdsForAnswer([{ to: "p1", at: 1_000 }], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("any of several requests holds it", () => {
+    const old = { to: "p1", at: 0, deliveredAt: 0 }
+    expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
   })
 })
