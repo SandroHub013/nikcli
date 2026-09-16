@@ -90,10 +90,10 @@ describe("the name has to open the sentence", () => {
     for (const heard of ["ei nik", "hei nik", "hey nick", "ehi, Nick", "Nick,"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     }
-    for (const heard of ["e nik", "eh nik", "ok nik", "ehnik"]) {
+    for (const heard of ["e nik", "eh nik", "ehnik"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     }
-    for (const heard of ["ciao nik", "senti nik", "scusa nik"]) {
+    for (const heard of ["ok nik", "ciao nik", "senti nik", "scusa nik"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik").matched).toBe(false)
     }
     expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)

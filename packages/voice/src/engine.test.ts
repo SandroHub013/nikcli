@@ -1340,7 +1340,8 @@ describe("always-on listening", () => {
     expect(gate.active()).toBe(true)
     expect(gate.accepts("ehi nick apri")).toBe(true)
     expect(gate.accepts("nik apri")).toBe(true)
-    expect(gate.accepts("ok nik apri")).toBe(true)
+    expect(gate.accepts("eh nik apri")).toBe(true)
+    expect(gate.accepts("ok nik apri")).toBe(false)
     expect(gate.accepts("nì")).toBe(false)
     expect(gate.accepts("Nike apri")).toBe(false)
 
@@ -1556,6 +1557,7 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     }
     await hear("raccontami la storia di Roma")
     await hear("senti nik raccontami la storia di Roma")
+    await hear("ok nik raccontami la storia di Roma")
     // «nì» alone is not the name, and the sentence after it is still the room's.
     await hear("nì")
     await hear("raccontami la storia di Roma")
