@@ -88,3 +88,38 @@ describe("wavHead", () => {
     expect(await wavHead(wavOf(1_000), 1_500)).toBeUndefined()
   })
 })
+
+describe("what the gate counts", () => {
+  test("every request sent while it waits for the name, and none otherwise", async () => {
+    let counted = 0
+    const make = (active: boolean, answers: string[]) => {
+      let segmentCb: any = null
+      const capture = createMicCapture({ mediaStream: { getTracks: () => [] } as any, isTypeSupported: () => true })
+      capture.onSegment = (cb: any) => {
+        segmentCb = cb
+      }
+      const transcriber = createOpenRouterTranscriber({
+        apiKey: "k",
+        capture,
+        fetch: (async () => new Response(JSON.stringify({ text: answers.shift() ?? "" }), { status: 200 })) as any,
+        nameGate: {
+          active: () => active,
+          accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+          onRequest: () => counted++,
+        },
+      })
+      return async (ms: number) => {
+        await transcriber.start()
+        await segmentCb({ blob: wavOf(ms), format: "wav", mimeType: "audio/wav", durationMs: ms })
+      }
+    }
+    await make(true, ["la televisione"])(6_000) // one probe
+    expect(counted).toBe(1)
+    await make(true, ["ei nik apri", "ei nik apri il browser"])(6_000) // probe and whole
+    expect(counted).toBe(3)
+    await make(true, ["ok"])(1_000) // short, whole
+    expect(counted).toBe(4)
+    await make(false, ["sì"])(6_000) // not waiting: not counted
+    expect(counted).toBe(4)
+  })
+})

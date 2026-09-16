@@ -1530,10 +1530,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   <p id="wake-word-hint" data-slot="hint">
                     Inizia la frase con <em>&quot;{props.settings.wakeWord}&quot;</em> (va bene anche
                     &quot;ehi nik&quot; o &quot;hey nick&quot;), per esempio{" "}
-                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em>. Mentre aspetta il nome manda al
-                    servizio di trascrizione solo il primo secondo e mezzo di ogni frase, e dopo dieci minuti senza
-                    sentirlo si mette in pausa finché non torni sulla finestra. Il pulsante in alto e la scorciatoia
-                    lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.
+                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em>. Il silenzio non costa niente; mentre
+                    aspetta il nome manda al servizio di trascrizione solo il primo secondo e mezzo di ogni frase, e se
+                    in un'ora sono più di 120 te lo dice. Si mette in pausa solo con il PC bloccato o in sospensione e
+                    riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta
+                    lavorando «annulla» lo ferma comunque.
                   </p>
                 </div>
               </Show>

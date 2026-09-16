@@ -31,8 +31,8 @@ export function listeningState(input: {
   if (input.paused) {
     return {
       kind: "paused",
-      text: "Ascolto in pausa",
-      title: "In pausa dopo dieci minuti senza sentire il nome. Premi per riprendere ad ascoltare.",
+      text: "Ascolto in pausa: PC bloccato",
+      title: "Riprende da solo quando sblocchi il PC. Premi per riprendere adesso.",
     }
   }
   return { kind: "hidden" }

@@ -84,8 +84,8 @@ export interface VoiceEngineOptions {
   plannerModel?: string
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
-  /** Overrides `LISTEN_IDLE_PAUSE_MS`, for tests. */
-  listenIdlePauseMs?: number
+  /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
+  listenRequestsPerHour?: number
 }
 
 export interface VoiceEngine {
@@ -155,10 +155,16 @@ export interface VoiceEngine {
    */
   readonly held: () => string | null
   /**
-   * Always-on listening stopped by itself after `LISTEN_IDLE_PAUSE_MS` without
-   * anyone calling the assistant. Cleared by any start or stop.
+   * Always-on listening closed by `pauseListening` — the PC locked or asleep —
+   * and waiting to be opened again. Cleared by any start or stop.
    */
   readonly listenPaused: () => boolean
+  /**
+   * Set when always-on listening has sent more than `LISTEN_REQUESTS_PER_HOUR`
+   * sentences to the cloud in the last hour: said on screen, and listening
+   * goes on. At most once an hour.
+   */
+  readonly listenWarning: () => string | undefined
 
   // Control methods
   /**
@@ -169,6 +175,8 @@ export interface VoiceEngine {
    */
   start(mode?: VoiceMode, options?: { waitForName?: boolean }): Promise<void>
   stop(): Promise<void>
+  /** Closes the microphone because nobody can be talking to it, and remembers to open it again. */
+  pauseListening(): Promise<void>
   /**
    * What one of the two controls does when pressed.
    *
@@ -204,12 +212,13 @@ const DICTATION_MEMORY = 6
 export const DRAIN_TIMEOUT_MS = 32_000
 
 /**
- * How long always-on listening waits for the name before it closes the
- * microphone. Every sentence in the room costs a request while it listens, so
- * a house that has not called the assistant for this long is not paying for
- * it; ADE opens it again when the user comes back to the window.
+ * How many sentences always-on listening may send to the cloud in an hour
+ * before the user is told. Silence costs nothing — the capture only sends
+ * speech — so this is a room that talks a lot: a television, a call. Past it
+ * listening goes on, and the screen says why the bill may grow.
  */
-export const LISTEN_IDLE_PAUSE_MS = 10 * 60_000
+export const LISTEN_REQUESTS_PER_HOUR = 120
+const HOUR_MS = 60 * 60_000
 
 /**
  * A push-to-talk press shorter than this is a tap, and a tap latches.
@@ -294,6 +303,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [history, setHistory] = createSignal<AgentEntry[]>([])
   const [held, setHeld] = createSignal<string | null>(null)
   const [listenPaused, setListenPaused] = createSignal(false)
+  const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
@@ -463,28 +473,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let stopping: Promise<void> | null = null
 
   /*
-   * Always-on listening closes itself after a long wait for the name. Armed
-   * when it starts and again whenever the assistant is called or speaks; when
-   * it fires in the middle of something, it waits for the next quiet moment.
+   * Requests sent while waiting for the name, over the last hour, and when
+   * the user was last told there were too many.
    */
-  let idlePauseTimer: ReturnType<typeof setTimeout> | undefined
-  function clearIdlePause(): void {
-    if (idlePauseTimer !== undefined) clearTimeout(idlePauseTimer)
-    idlePauseTimer = undefined
-  }
-  function armIdlePause(): void {
-    clearIdlePause()
-    const s = currentSettings()
-    if (!s.alwaysListen || s.activation !== "wake-word") return
-    idlePauseTimer = setTimeout(() => {
-      idlePauseTimer = undefined
-      if (!isRunning()) return
-      if (!programHandle?.waitingForName() || activeTranscriber?.hasInFlight) {
-        armIdlePause()
-        return
-      }
-      void stop().then(() => setListenPaused(true))
-    }, options.listenIdlePauseMs ?? LISTEN_IDLE_PAUSE_MS)
+  let listenRequests: number[] = []
+  let listenWarnedAt: number | undefined
+  function countListenRequest(): void {
+    const at = now()
+    listenRequests = [...listenRequests.filter((t) => at - t < HOUR_MS), at]
+    const cap = options.listenRequestsPerHour ?? LISTEN_REQUESTS_PER_HOUR
+    if (listenRequests.length <= cap) return
+    if (listenWarnedAt !== undefined && at - listenWarnedAt < HOUR_MS) return
+    listenWarnedAt = at
+    const text = `Nell'ultima ora l'ascolto sempre attivo ha mandato al servizio di trascrizione più di ${cap} frasi: c'è molto parlato intorno, per esempio la televisione. Continua ad ascoltare; per fermarlo premi «In ascolto» in alto.`
+    setListenWarning(text)
+    record({ kind: "error", text, at })
   }
 
   const stop = (): Promise<void> => {
@@ -504,7 +507,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        stale and free what it has built rather than install it. */
     sessionGeneration++
     clearPttTimers()
-    clearIdlePause()
     setListenPaused(false)
 
     setIsRunning(false)
@@ -584,11 +586,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       openRouterOptions: {
         nameGate: {
           active: () => programHandle?.waitingForName() ?? false,
-          accepts: (text: string) => {
-            const heard = matchesWakeWord(text, currentSettings().wakeWord).matched
-            if (heard) armIdlePause()
-            return heard
-          },
+          accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
+          onRequest: countListenRequest,
           onRejected: (text: string) =>
             record({
               kind: "action",
@@ -727,10 +726,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         }
       }
     },
-    onUtterance: (text) => {
-      armIdlePause()
-      record({ kind: "user", text, at: now() })
-    },
+    onUtterance: (text) => record({ kind: "user", text, at: now() }),
     onHeld: (text) => setHeld(text),
     onTranscribed: (text) => {
       setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
@@ -863,6 +859,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     history,
     held,
     listenPaused,
+    listenWarning,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
       /* A session still delivering its last sentence owns the scopes this
@@ -926,7 +923,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           setParakeetProgress(undefined)
 
           setListenPaused(false)
-          if (currentSettings().alwaysListen) armIdlePause()
           const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
           if (waitForName && programHandle) {
             await Effect.runPromise(programHandle.listenForName)
@@ -960,6 +956,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     stop,
 
+    async pauseListening(): Promise<void> {
+      if (!isRunning()) return
+      await stop()
+      setListenPaused(true)
+    },
+
     async toggle(mode?: VoiceMode): Promise<void> {
       if (!isRunning()) {
         await this.start(mode)
@@ -976,7 +978,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         activeMode() === "agent" &&
         programHandle?.waitingForName()
       ) {
-        armIdlePause()
         await Effect.runPromise(programHandle.wake)
         return
       }

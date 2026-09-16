@@ -1164,10 +1164,22 @@ describe("always-on listening", () => {
     expect(engine.isRunning()).toBe(false)
   })
 
-  test("after a long wait for the phrase it pauses, and says so; any start clears it", async () => {
-    const { engine } = listening({}, { listenIdlePauseMs: 30 })
+  test("it never pauses by itself: a long silence leaves it listening", async () => {
+    const { engine } = listening()
     await engine.start("agent", { waitForName: true })
-    await new Promise((r) => setTimeout(r, 120))
+    await new Promise((r) => setTimeout(r, 60))
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.listenPaused()).toBe(false)
+    await engine.stop()
+  })
+
+  test("paused for a locked PC, it says so; a start clears it, and a pause with nothing open does nothing", async () => {
+    const { engine } = listening()
+    await engine.pauseListening()
+    expect(engine.listenPaused()).toBe(false)
+
+    await engine.start("agent", { waitForName: true })
+    await engine.pauseListening()
     expect(engine.isRunning()).toBe(false)
     expect(engine.listenPaused()).toBe(true)
 
@@ -1177,15 +1189,37 @@ describe("always-on listening", () => {
     expect(engine.listenPaused()).toBe(false)
   })
 
-  test("being called puts the pause off", async () => {
-    const { engine, hear } = listening({}, { listenIdlePauseMs: 80 })
+  test("past the hourly limit of cloud requests it warns once, on screen, and keeps listening", async () => {
+    let clock = 0
+    let gate: any
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      listenRequestsPerHour: 3,
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return createFakeTranscriber()
+      },
+    })
     await engine.start("agent", { waitForName: true })
-    await new Promise((r) => setTimeout(r, 50))
-    await hear("ei nik apri la tavolozza")
-    await new Promise((r) => setTimeout(r, 50))
+    for (let i = 0; i < 3; i++) gate.onRequest()
+    expect(engine.listenWarning()).toBeUndefined()
+    gate.onRequest()
+    const warning = engine.listenWarning()
+    expect(warning).toContain("più di 3 frasi")
+    expect(engine.history().at(-1)).toMatchObject({ kind: "error", text: warning })
     expect(engine.isRunning()).toBe(true)
-    await new Promise((r) => setTimeout(r, 100))
-    expect(engine.listenPaused()).toBe(true)
+
+    // Not repeated within the hour...
+    gate.onRequest()
+    expect(engine.history().filter((entry) => entry.kind === "error")).toHaveLength(1)
+    // ...and the window slides: an hour later, a quiet room says nothing.
+    clock += 61 * 60_000
+    gate.onRequest()
+    expect(engine.history().filter((entry) => entry.kind === "error")).toHaveLength(1)
+    await engine.stop()
   })
 
   test("the cloud transcriber is told when only the start of a sentence is needed", async () => {

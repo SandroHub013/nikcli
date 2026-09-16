@@ -864,6 +864,41 @@ pub(crate) fn is_test_build(app: &tauri::AppHandle) -> bool {
     app.config().identifier.ends_with(".test")
 }
 
+/// Whether the Windows session is locked, so always-on listening can pause.
+///
+/// While the lock screen is up the input desktop is Winlogon's, which this
+/// process may not switch to: that refusal is the whole test. No event is
+/// needed — the page asks every few seconds — and no new crate: two calls into
+/// user32, which every Windows process already loads.
+#[tauri::command]
+fn session_locked() -> bool {
+    #[cfg(windows)]
+    {
+        use std::ffi::c_void;
+        #[link(name = "user32")]
+        extern "system" {
+            fn OpenInputDesktop(flags: u32, inherit: i32, access: u32) -> *mut c_void;
+            fn SwitchDesktop(desktop: *mut c_void) -> i32;
+            fn CloseDesktop(desktop: *mut c_void) -> i32;
+        }
+        const DESKTOP_SWITCHDESKTOP: u32 = 0x0100;
+        // SAFETY: plain Win32 calls; the handle is closed before returning.
+        unsafe {
+            let desktop = OpenInputDesktop(0, 0, DESKTOP_SWITCHDESKTOP);
+            if desktop.is_null() {
+                return true;
+            }
+            let switched = SwitchDesktop(desktop);
+            CloseDesktop(desktop);
+            switched == 0
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 #[tauri::command]
 async fn register_global_voice_shortcut(app: tauri::AppHandle, chord: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -1188,6 +1223,7 @@ pub fn run() {
             secrets::secret_assigned,
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
+            session_locked,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ADE")

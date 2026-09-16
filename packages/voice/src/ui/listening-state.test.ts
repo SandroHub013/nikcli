@@ -11,7 +11,8 @@ describe("the always-on indicator", () => {
   })
 
   test("says when it has paused, so the user knows why it stopped answering", () => {
-    expect(listeningState({ settings: on, running: false, mode: "agent", paused: true }).kind).toBe("paused")
+    const state = listeningState({ settings: on, running: false, mode: "agent", paused: true })
+    expect(state.kind === "paused" && state.text).toBe("Ascolto in pausa: PC bloccato")
   })
 
   test("hidden when switched off, on another activation, during dictation, or closed by hand", () => {

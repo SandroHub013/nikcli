@@ -211,6 +211,8 @@ export interface NameGate {
   accepts(text: string): boolean
   /** The start of a sentence that did not call it, for the console to show. */
   onRejected?(text: string): void
+  /** Each request sent while the gate was active, so the caller can count them. */
+  onRequest?(): void
   probeMs?: number
   wholeUnderMs?: number
 }
@@ -538,7 +540,7 @@ export function createOpenRouterTranscriber(
   /** The start of a sentence, when that is all that should be sent; see `NameGate`. */
   async function probeFor(segment: CapturedSegment): Promise<Blob | undefined> {
     const gate = options.nameGate
-    if (!gate || !gate.active() || segment.format !== "wav") return undefined
+    if (!gate || segment.format !== "wav") return undefined
     if (segment.durationMs <= (gate.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)) return undefined
     return wavHead(segment.blob, gate.probeMs ?? NAME_PROBE_MS)
   }
@@ -548,7 +550,9 @@ export function createOpenRouterTranscriber(
     // flight, and a stop that looked then would drop the sentence.
     inFlightRequests++
     try {
-      const head = await probeFor(segment)
+      const gated = options.nameGate?.active() === true
+      const head = gated ? await probeFor(segment) : undefined
+      if (gated) options.nameGate!.onRequest?.()
       if (head) {
         let heard = ""
         await transcribeSegment({ ...segment, blob: head }, (text) => (heard = text))
@@ -557,6 +561,7 @@ export function createOpenRouterTranscriber(
           options.nameGate!.onRejected?.(heard)
           return
         }
+        options.nameGate!.onRequest?.()
       }
       await transcribeSegment(segment)
     } catch (err: any) {

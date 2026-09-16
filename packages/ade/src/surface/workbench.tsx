@@ -303,6 +303,7 @@ import {
   registerVoiceShortcuts,
   unknownChordMessage,
 } from "../voice/global-shortcut"
+import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -2455,21 +2456,43 @@ export function Workbench() {
 
   onMount(() => {
     if (listensByItself(voiceSettings())) listenForName()
-    /* Paused after a long wait for the name: coming back to the window is
-       coming back to the house, so it listens again. */
-    const resume = () => {
-      if (voiceEngine.listenPaused() && listensByItself(voiceSettings())) listenForName()
-    }
-    const onVisible = () => {
-      if (document.visibilityState === "visible") resume()
-    }
-    window.addEventListener("focus", resume)
-    document.addEventListener("visibilitychange", onVisible)
-    onCleanup(() => {
-      window.removeEventListener("focus", resume)
-      document.removeEventListener("visibilitychange", onVisible)
+    /* Paused only while the PC is locked or asleep; see `voice/listen-guard.ts`. */
+    const guard = createListenGuard({
+      now: () => Date.now(),
+      isLocked: async () => {
+        if (!isTauriDesktop()) return false
+        const { invoke } = await import("@tauri-apps/api/core")
+        return (await invoke("session_locked")) === true
+      },
+      shouldListen: () => listensByItself(voiceSettings()),
+      isListening: () => voiceEngine.isRunning() && voiceEngine.activeMode() === "agent",
+      isPaused: () => voiceEngine.listenPaused(),
+      pause: () => voiceEngine.pauseListening(),
+      resume: () => voiceEngine.start("agent", { waitForName: true }),
+      restart: async () => {
+        await voiceEngine.stop()
+        await voiceEngine.start("agent", { waitForName: true })
+      },
     })
+    let ticking = false
+    const timer = setInterval(() => {
+      if (ticking) return
+      ticking = true
+      void guard.tick().finally(() => (ticking = false))
+    }, LOCK_POLL_MS)
+    onCleanup(() => clearInterval(timer))
   })
+
+  // Too many sentences sent in an hour: said on screen, listening goes on.
+  createEffect(
+    on(
+      () => voiceEngine.listenWarning(),
+      (warning) => {
+        if (warning) report(warning, "warning")
+      },
+      { defer: true },
+    ),
+  )
 
   const pttHandler = createPushToTalkHandler(voiceEngine)
 
