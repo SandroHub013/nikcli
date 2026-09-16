@@ -5060,6 +5060,29 @@ export function Workbench() {
           </div>
         </Show>
 
+        {/* The user must never be unsure whether ADE is filming: the badge
+            stays above everything, says where the file is going, and stops
+            the take when clicked. In the bar, before the window controls:
+            laid over the corner it covered minimise, maximise and close. */}
+        <Show when={recordState().status !== "idle"}>
+          <button
+            type="button"
+            data-slot="ade-rec"
+            data-stopping={recordState().status === "stopping" ? "" : undefined}
+            data-mic={recordMicOn() ? "" : undefined}
+            title={
+              recordState().status === "recording"
+                ? t(recordMicOn() ? "record.active.mic" : "record.active.noMic", recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : "")
+                : t("record.closing")
+            }
+            aria-label={t("palette.record.stop")}
+            onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
+          >
+            <span data-slot="ade-rec-dot" aria-hidden="true" />
+            {recordState().status === "recording" ? (recordMicOn() ? "REC · MIC" : "REC") : "…"}
+          </button>
+        </Show>
+
         {/* On macOS the traffic lights hold the left edge, so the mark takes
             the place the window controls have elsewhere. */}
         <Show when={isTauriDesktop() && isMacOS()}>
@@ -5309,31 +5332,10 @@ export function Workbench() {
           }
         />
 
-        {/* The user must never be unsure whether ADE is filming: the badge
-            stays on top of everything, says where the file is going, and
-            stops the take when clicked. */}
         <Show when={recordAsk()}>
           {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
         </Show>
 
-        <Show when={recordState().status !== "idle"}>
-          <button
-            type="button"
-            data-slot="ade-rec"
-            data-stopping={recordState().status === "stopping" ? "" : undefined}
-            data-mic={recordMicOn() ? "" : undefined}
-            title={
-              recordState().status === "recording"
-                ? t(recordMicOn() ? "record.active.mic" : "record.active.noMic", recordState().status === "recording" ? (recordState() as { recording: { path: string } }).recording.path : "")
-                : t("record.closing")
-            }
-            aria-label={t("palette.record.stop")}
-            onClick={() => void recorder.stop().then((problem) => problem && report(problem))}
-          >
-            <span data-slot="ade-rec-dot" aria-hidden="true" />
-            {recordState().status === "recording" ? (recordMicOn() ? "REC · MIC" : "REC") : "…"}
-          </button>
-        </Show>
 
         <main data-slot="ade-main">
           {/* Above the section rather than over it: these messages are about
