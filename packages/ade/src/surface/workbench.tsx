@@ -297,8 +297,8 @@ import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcut
 import {
   GLOBAL_VOICE_EVENT,
   modeForGlobalChord,
+  registerVoiceShortcuts,
   readGlobalVoicePayload,
-  toTauriChord,
 } from "../voice/global-shortcut"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
@@ -2817,14 +2817,11 @@ export function Workbench() {
            * the microphone from anywhere.
            */
           const syncGlobalShortcuts = async (settings: VoiceSettings) => {
-            try {
-              await invoke("unregister_global_voice_shortcuts")
-              for (const chord of [settings.transcriptionChord, settings.agentChord]) {
-                await invoke("register_global_voice_shortcut", { chord: toTauriChord(chord) })
-              }
-            } catch (err) {
-              console.warn("Registrazione scorciatoia globale non riuscita:", err)
-            }
+            await registerVoiceShortcuts(settings, {
+              unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
+              register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
+              report: (message) => report(message, "warning"),
+            })
           }
 
           await syncGlobalShortcuts(voiceSettings())

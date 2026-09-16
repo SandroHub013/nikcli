@@ -131,6 +131,63 @@ export function modeForGlobalChord(
   return undefined
 }
 
+/** What each chord is for, in the words the user reads. */
+export const VOICE_CHORD_FEATURE: Record<VoiceMode, string> = {
+  agent: "assistente vocale",
+  transcription: "dettatura",
+}
+
+export interface RegisterVoiceShortcutsDeps {
+  /** Drops every hotkey ADE holds, so a changed chord stops answering. */
+  unregisterAll: () => Promise<void>
+  /** Claims one chord, in the grammar `toTauriChord` produces. */
+  register: (chord: string) => Promise<void>
+  /** Says what could not be claimed, in the interface rather than the console. */
+  report?: (message: string) => void
+}
+
+/**
+ * Claims both voice chords system-wide, each on its own.
+ *
+ * One `try` around both used to mean the first refusal — a chord another
+ * application already holds, which is common for Ctrl+Space — skipped the
+ * registration of the other one, so a single busy chord silently turned off
+ * both shortcuts. The failure was a `console.warn` nobody sees, and from the
+ * outside the feature simply did not work.
+ */
+export async function registerVoiceShortcuts(
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord">,
+  deps: RegisterVoiceShortcutsDeps,
+): Promise<{ registered: VoiceMode[]; failed: { mode: VoiceMode; chord: string; problem: string }[] }> {
+  try {
+    await deps.unregisterAll()
+  } catch {
+    // Nothing held, or the plugin is gone: the registrations below say so themselves.
+  }
+
+  const registered: VoiceMode[] = []
+  const failed: { mode: VoiceMode; chord: string; problem: string }[] = []
+  const wanted: { mode: VoiceMode; chord: string }[] = [
+    { mode: "transcription", chord: settings.transcriptionChord },
+    { mode: "agent", chord: settings.agentChord },
+  ]
+
+  for (const { mode, chord } of wanted) {
+    try {
+      await deps.register(toTauriChord(chord))
+      registered.push(mode)
+    } catch (err) {
+      const problem = err instanceof Error ? err.message : String(err)
+      failed.push({ mode, chord, problem })
+      deps.report?.(
+        `La scorciatoia ${chord} per ${VOICE_CHORD_FEATURE[mode]} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
+      )
+    }
+  }
+
+  return { registered, failed }
+}
+
 /**
  * The event payload, whichever shape the native side sent.
  *
