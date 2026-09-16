@@ -158,8 +158,12 @@ fn deny(status: StatusCode) -> Response<Vec<u8>> {
 /// reports it. A request whose `Origin` header matches it gets that origin
 /// back as allowed, which is what lets the recording export draw a take into
 /// a canvas and still record the canvas: a frame drawn without CORS leaves the
-/// canvas unclean and `MediaRecorder` writes nothing. The browser pane's frame
-/// sends its own origin, never matches, and stays locked out.
+/// canvas unclean and `MediaRecorder` writes nothing.
+///
+/// Any other origin gets no CORS header at all. Not `null`: the browser pane
+/// is a sandbox without `allow-same-origin`, so every page in it sends
+/// `Origin: null`, and `Access-Control-Allow-Origin: null` is exactly the
+/// answer that lets such a page read the file.
 pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option<&str>) -> Response<Vec<u8>> {
     let raw = request.uri().path().trim_start_matches('/');
     if raw.is_empty() {
@@ -210,19 +214,19 @@ pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option
         .headers()
         .get("origin")
         .and_then(|value| value.to_str().ok())
-        .filter(|origin| Some(*origin) == app_origin)
-        .unwrap_or("null");
+        .filter(|origin| *origin != "null" && Some(*origin) == app_origin);
 
-    Response::builder()
+    let mut response = Response::builder()
         .status(StatusCode::PARTIAL_CONTENT)
         .header("Content-Type", mime_of(&path))
         .header("Accept-Ranges", "bytes")
         .header("Content-Range", format!("bytes {start}-{last}/{length}"))
         .header("Content-Length", read.to_string())
-        // The window's own origin only; the browser pane's frame must not be
-        // able to fetch project files through this.
-        .header("Access-Control-Allow-Origin", allowed)
-        .header("Vary", "Origin")
+        .header("Vary", "Origin");
+    if let Some(origin) = allowed {
+        response = response.header("Access-Control-Allow-Origin", origin);
+    }
+    response
         .body(body)
         .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR))
 }
@@ -429,6 +433,26 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let url = url_for(&path.to_string_lossy());
         let response = respond(&roots, &with_origin(&url, "https://example.com"), Some("http://tauri.localhost"));
-        assert_eq!(response.headers().get("Access-Control-Allow-Origin").unwrap(), "null");
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
+    }
+
+    #[test]
+    fn the_sandboxed_browser_pane_is_not_allowed_to_read() {
+        // Its pages send `Origin: null`; answering `null` would let them in.
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        for app in [Some("http://tauri.localhost"), Some("null"), None] {
+            let response = respond(&roots, &with_origin(&url, "null"), app);
+            assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
+        }
+    }
+
+    #[test]
+    fn a_request_without_origin_gets_no_cors_header() {
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), Some("http://tauri.localhost"));
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 }
