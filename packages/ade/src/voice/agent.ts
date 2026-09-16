@@ -45,6 +45,16 @@ const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex"]
  */
 export const VOICE_AGENT_TIMEOUT_MS = 150_000
 
+/**
+ * The fast setting, per runner: what a spoken answer needs is a short reply
+ * soon, and the CLI's default model thinks longer than that.
+ */
+export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; readonly effort?: string }> = {
+  claude: { model: "claude-sonnet-5", effort: "low" },
+  codex: { effort: "low" },
+  nikcli: {},
+}
+
 /** What a voice turn may not do: edit, write, or run a command other than `ade-msg`. */
 export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash"]
 
@@ -108,6 +118,8 @@ export interface VoiceAgent {
   ask(request: {
     text: string
     engine: VoiceAgentEngine
+    /** `fast` uses `VOICE_AGENT_FAST`; absent or `cli` leaves the CLI's own model. */
+    speed?: "fast" | "cli"
     signal?: AbortSignal
     /** The answer so far, each time it grows, so it can be read before it is finished. */
     onText?: (soFar: string) => void
@@ -144,7 +156,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   let latest = 0
 
   return {
-    async ask({ text, engine, signal, onText }) {
+    async ask({ text, engine, speed, signal, onText }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
@@ -165,6 +177,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         // the user's connectors, and loading them tripled the wait.
         lean: true,
         timeoutMs: VOICE_AGENT_TIMEOUT_MS,
+        ...(speed === "fast" ? VOICE_AGENT_FAST[resolved.runner] : {}),
         ...(onText ? { partial: true, onUpdate: textFollower(onText) } : {}),
       })
       const onAbort = () => turn.stop()

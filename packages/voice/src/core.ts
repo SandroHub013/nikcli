@@ -309,6 +309,8 @@ export {
   shortcutActivationEnabled,
   setShortcutActivationEnabledForTests,
   type AgentEngine,
+  AGENT_SPEEDS,
+  type AgentSpeed,
   normalizeSettings,
   type NormalizedVoiceSettings,
   type ParakeetExecutionBackend,

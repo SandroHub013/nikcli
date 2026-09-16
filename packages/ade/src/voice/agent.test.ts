@@ -78,6 +78,19 @@ describe("voice/agent", () => {
     return { runTurn, requests, stops: () => stops }
   }
 
+  test("the fast setting asks Claude Code for Sonnet 5 with little effort, and cli leaves the CLI alone", async () => {
+    const runner = fakeRunner([{ text: "a" }, { text: "b" }, { text: "c" }])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    await agent.ask({ text: "ciao", engine: "claude", speed: "fast" })
+    await agent.ask({ text: "ciao", engine: "codex", speed: "fast" })
+    await agent.ask({ text: "ciao", engine: "claude", speed: "cli" })
+    expect(runner.requests[0]).toMatchObject({ model: "claude-sonnet-5", effort: "low" })
+    expect(runner.requests[1]!.model).toBeUndefined()
+    expect(runner.requests[1]!.effort).toBe("low")
+    expect(runner.requests[2]!.model).toBeUndefined()
+    expect(runner.requests[2]!.effort).toBeUndefined()
+  })
+
   test("the answer is passed on as it is written, only when it grows", async () => {
     const requests: TurnRequest[] = []
     const talk = (streaming: string) => ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never

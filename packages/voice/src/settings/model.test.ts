@@ -354,3 +354,14 @@ describe("0.7.0: the assistant starts only from its shortcut", () => {
     }
   })
 })
+
+describe("the agent's speed", () => {
+  test("fast by default and for older profiles; an unknown value is repaired aloud", () => {
+    expect(normalizeSettings({}).settings.agentSpeed).toBe("fast")
+    expect(normalizeSettings({ version: 5 }).settings.agentSpeed).toBe("fast")
+    expect(normalizeSettings({ agentSpeed: "cli" }).settings.agentSpeed).toBe("cli")
+    const odd = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, agentSpeed: "lampo" })
+    expect(odd.settings.agentSpeed).toBe("fast")
+    expect(odd.corrections).toEqual([expect.stringContaining("lampo")])
+  })
+})

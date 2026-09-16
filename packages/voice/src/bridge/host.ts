@@ -173,6 +173,8 @@ export interface VoiceHost {
     text: string
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
+    /* `VoiceSettings.agentSpeed`; absent is the CLI's own settings. */
+    speed?: "fast" | "cli"
     signal?: AbortSignal
     /**
      * The answer so far, each time it grows. Each call extends the one

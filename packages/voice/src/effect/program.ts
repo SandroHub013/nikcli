@@ -825,7 +825,13 @@ export function makeVoiceProgram(
            */
           try: (interrupted) => {
             interrupted.addEventListener("abort", () => abort.abort(), { once: true })
-            return askAgent.call(host, { text: utterance, engine, signal: abort.signal, ...(onText ? { onText } : {}) })
+            return askAgent.call(host, {
+              text: utterance,
+              engine,
+              speed: settings.agentSpeed,
+              signal: abort.signal,
+              ...(onText ? { onText } : {}),
+            })
           },
           catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
         }).pipe(
