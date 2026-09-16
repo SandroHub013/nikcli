@@ -61,6 +61,17 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
  */
 const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "ok", "okay", "ciao", "senti", "scusa"])
 
+/*
+ * «ei nik» written as one word, which the recogniser does when it is said
+ * quickly: «einik», «heynick». Split back into greeting and name.
+ */
+const JOINED = /^(hei|ehi|hey|ei)(nik|nick|nic)$/
+
+function splitJoined(token: string): string[] {
+  const joined = JOINED.exec(token)
+  return joined ? [joined[1], joined[2]] : [token]
+}
+
 /**
  * Inspects a spoken utterance for the configured name, at its start.
  *
@@ -83,7 +94,7 @@ export function matchesWakeWord(
     return { matched: false, remainder: "" }
   }
 
-  const uTokens = normUtterance.split(/\s+/).filter(Boolean)
+  const uTokens = normUtterance.split(/\s+/).filter(Boolean).flatMap(splitJoined)
   const wTokens = normWake.split(/\s+/).filter(Boolean)
 
   if (uTokens.length < wTokens.length) {

@@ -22,8 +22,12 @@ export interface VoiceOrbProps {
   class?: string
 }
 
-function labelFor(status: DialogStatus, isRunning: boolean, mode: VoiceMode): string {
+function labelFor(status: DialogStatus, isRunning: boolean, mode: VoiceMode, calls?: string): string {
   if (!isRunning) return "Apri il microfono"
+  // Always listening: pressing calls the assistant; the indicator beside it closes the microphone.
+  if (calls && mode === "agent" && status !== "executing" && status !== "confirming") {
+    return `In ascolto: dì «${calls}» o premi per chiamarlo`
+  }
   if (mode === "transcription") {
     return "Dettatura in corso: quello che dici finisce nel pannello (premi per chiudere)"
   }
@@ -58,7 +62,11 @@ export function VoiceOrb(props: VoiceOrbProps) {
   const isRunning = () => props.engine.isRunning()
   const mode = () => props.engine.activeMode()
 
-  const label = createMemo(() => labelFor(status(), isRunning(), mode()))
+  const label = createMemo(() => {
+    const s = props.engine.settings()
+    const calls = s.alwaysListen && s.activation === "wake-word" ? s.wakeWord : undefined
+    return labelFor(status(), isRunning(), mode(), calls)
+  })
 
   return (
     <button

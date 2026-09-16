@@ -91,3 +91,25 @@ describe("the name has to open the sentence", () => {
     expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)
   })
 })
+
+describe("the fixed phrase, «ei nik», as the recogniser writes it", () => {
+  const phrase = "ei nik"
+
+  test("the common transcriptions all call it", () => {
+    for (const heard of ["ei nik", "ehi nik", "hey nik", "hei nik", "ei nick", "ehi nick", "Hey, Nick!", "Ehi Nik,"]) {
+      expect(matchesWakeWord(`${heard} apri il browser`, phrase)).toEqual({ matched: true, remainder: "apri il browser" })
+    }
+  })
+
+  test("said quickly and written as one word, it still does", () => {
+    expect(matchesWakeWord("einik apri il browser", phrase)).toEqual({ matched: true, remainder: "apri il browser" })
+    expect(matchesWakeWord("heynick, apri il browser", phrase)).toEqual({ matched: true, remainder: "apri il browser" })
+  })
+
+  test("the name alone, or the greeting alone, does not", () => {
+    expect(matchesWakeWord("nik apri il browser", phrase).matched).toBe(false)
+    expect(matchesWakeWord("ehi apri il browser", phrase).matched).toBe(false)
+    expect(matchesWakeWord("il telegiornale ehi nik", phrase).matched).toBe(false)
+    expect(matchesWakeWord("einikolaus", phrase).matched).toBe(false)
+  })
+})

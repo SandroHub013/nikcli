@@ -949,24 +949,26 @@ describe("engine/agent answers what the grammar does not know", () => {
       await engine.start()
       await hear("il governo ha approvato la legge di bilancio nella notte")
       await hear("apri la tavolozza")
+      // The name alone is not the phrase.
+      await hear("nik apri la tavolozza")
 
       expect(asked).toHaveLength(0)
       expect(host.calls.some((call) => call.method === "runCommand")).toBe(false)
-      const ignored = engine.history().filter((entry) => entry.kind === "action" && entry.label.startsWith("Ignorata, non inizia con «nik»"))
-      expect(ignored).toHaveLength(2)
+      const ignored = engine.history().filter((entry) => entry.kind === "action" && entry.label.startsWith("Ignorata, non inizia con «ei nik»"))
+      expect(ignored).toHaveLength(3)
       await engine.stop()
     })
 
     test("called by name, with or without a greeting, it answers", async () => {
       const { host, asked, engine, hear } = calling()
       await engine.start()
-      await hear("nik apri la tavolozza")
+      await hear("ei nik apri la tavolozza")
       expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
 
       await hear("ehi nick quante sessioni ci sono")
       expect(engine.lastSpoken()).toContain("session")
 
-      await hear("nik raccontami la storia di Roma")
+      await hear("hey nick, raccontami la storia di Roma")
       // What is left after the name, as the recogniser's own normalisation leaves it.
       expect(asked).toEqual(["raccontami la storia di roma"])
       await engine.stop()
@@ -990,7 +992,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       const transcriber = createFakeTranscriber()
       const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
       await engine.start()
-      transcriber.emit("nik raccontami la storia di Roma in tre frasi", true)
+      transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
 
       // A video saying a command out loud must not close anything.
@@ -1000,7 +1002,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       expect(engine.held()).toBe("chiudi il pannello due")
       expect(engine.status()).toBe("executing")
 
-      transcriber.emit("nik apri la tavolozza", true)
+      transcriber.emit("ehi nik apri la tavolozza", true)
       await new Promise((r) => setTimeout(r, 20))
       expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
       await engine.stop()
@@ -1020,7 +1022,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       const transcriber = createFakeTranscriber()
       const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
       await engine.start()
-      transcriber.emit("nik raccontami la storia di Roma in tre frasi", true)
+      transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
       expect(engine.status()).toBe("executing")
 
@@ -1084,6 +1086,132 @@ describe("engine/agent answers what the grammar does not know", () => {
     expect(asked).toHaveLength(1)
     expect(engine.lastError()).toBe(notice)
     expect(speaker.lastSpoken).toBe(notice)
+    await engine.stop()
+  })
+})
+
+describe("always-on listening", () => {
+  const settle = () => new Promise((r) => setTimeout(r, 20))
+
+  function listening(settings: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const speaker = createFakeSpeaker()
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker,
+      now: () => 10_000,
+      settings: { agentEngine: "off", ...settings },
+      ...extra,
+    })
+    const hear = async (text: string) => {
+      transcriber.emit(text, true)
+      await settle()
+    }
+    return { host, engine, hear, speaker }
+  }
+  const ran = (host: MockVoiceHost) => host.calls.filter((call) => call.method === "runCommand")
+
+  test("opened by ADE, it says nothing and waits for the phrase, even after an earlier session", async () => {
+    const { host, engine, hear } = listening()
+    // A session opened and closed by hand leaves the dialogue asleep; the next
+    // start from the button would take the first sentence without the name.
+    await engine.start()
+    await engine.stop()
+
+    await engine.start("agent", { waitForName: true })
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.lastSpoken()).not.toContain("sveglio")
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(0)
+    await hear("ei nik apri la tavolozza")
+    expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
+    await engine.stop()
+  })
+
+  test("the button and the shortcut call it rather than closing the microphone", async () => {
+    const { host, engine, hear } = listening()
+    await engine.start("agent", { waitForName: true })
+    await engine.toggle()
+    expect(engine.isRunning()).toBe(true)
+    await hear("apri la tavolozza")
+    expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
+    // Back to waiting for the phrase after answering.
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(1)
+    await engine.stop()
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("closing dictation goes back to waiting for the phrase, after the dictation is delivered", async () => {
+    const { host, engine, hear } = listening()
+    await engine.start("agent", { waitForName: true })
+    await engine.toggle("transcription")
+    expect(engine.activeMode()).toBe("transcription")
+    await engine.toggle("transcription")
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.activeMode()).toBe("agent")
+    await hear("apri la tavolozza")
+    expect(ran(host)).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("switched off, the button closes the microphone as before", async () => {
+    const { engine } = listening({ alwaysListen: false })
+    await engine.start()
+    await engine.toggle()
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("after a long wait for the phrase it pauses, and says so; any start clears it", async () => {
+    const { engine } = listening({}, { listenIdlePauseMs: 30 })
+    await engine.start("agent", { waitForName: true })
+    await new Promise((r) => setTimeout(r, 120))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.listenPaused()).toBe(true)
+
+    await engine.start("agent", { waitForName: true })
+    expect(engine.listenPaused()).toBe(false)
+    await engine.stop()
+    expect(engine.listenPaused()).toBe(false)
+  })
+
+  test("being called puts the pause off", async () => {
+    const { engine, hear } = listening({}, { listenIdlePauseMs: 80 })
+    await engine.start("agent", { waitForName: true })
+    await new Promise((r) => setTimeout(r, 50))
+    await hear("ei nik apri la tavolozza")
+    await new Promise((r) => setTimeout(r, 50))
+    expect(engine.isRunning()).toBe(true)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(engine.listenPaused()).toBe(true)
+  })
+
+  test("the cloud transcriber is told when only the start of a sentence is needed", async () => {
+    let gate: any
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { agentEngine: "off", backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return transcriber
+      },
+    })
+    await engine.start("agent", { waitForName: true })
+    expect(gate.active()).toBe(true)
+    expect(gate.accepts("ehi nick apri")).toBe(true)
+    expect(gate.accepts("nik apri")).toBe(false)
+
+    gate.onRejected("il governo ha approvato la legge di bilancio nella notte fonda")
+    expect(engine.history().at(-1)).toMatchObject({ kind: "action", label: expect.stringContaining("Ignorata, non inizia con «ei nik»: «il governo") })
+
+    // Called by the button: the next sentence is meant, and has to go whole.
+    await engine.toggle()
+    expect(gate.active()).toBe(false)
     await engine.stop()
   })
 })

@@ -31,6 +31,8 @@ import {
   type ParakeetProgress,
 } from "./asr/parakeet-local"
 import { normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
+import { matchesWakeWord } from "./settings/wake-word"
+import { firstWords } from "./dialog/while-thinking"
 
 import { errorKind, HostActionFailed, spokenMessage, type VoiceErrorKind } from "./effect/errors"
 import {
@@ -82,6 +84,8 @@ export interface VoiceEngineOptions {
   plannerModel?: string
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
+  /** Overrides `LISTEN_IDLE_PAUSE_MS`, for tests. */
+  listenIdlePauseMs?: number
 }
 
 export interface VoiceEngine {
@@ -150,10 +154,20 @@ export interface VoiceEngine {
    * when there is none.
    */
   readonly held: () => string | null
+  /**
+   * Always-on listening stopped by itself after `LISTEN_IDLE_PAUSE_MS` without
+   * anyone calling the assistant. Cleared by any start or stop.
+   */
+  readonly listenPaused: () => boolean
 
   // Control methods
-  /** Opens the microphone. With a mode, opens it for that mode only. */
-  start(mode?: VoiceMode): Promise<void>
+  /**
+   * Opens the microphone. With a mode, opens it for that mode only.
+   *
+   * Opening it means "I am talking to you", so the first sentence needs no
+   * name — unless `waitForName`, which is how ADE opens it by itself.
+   */
+  start(mode?: VoiceMode, options?: { waitForName?: boolean }): Promise<void>
   stop(): Promise<void>
   /**
    * What one of the two controls does when pressed.
@@ -188,6 +202,14 @@ const DICTATION_MEMORY = 6
  * still arrives and a hung one ends as that backend's timeout error.
  */
 export const DRAIN_TIMEOUT_MS = 32_000
+
+/**
+ * How long always-on listening waits for the name before it closes the
+ * microphone. Every sentence in the room costs a request while it listens, so
+ * a house that has not called the assistant for this long is not paying for
+ * it; ADE opens it again when the user comes back to the window.
+ */
+export const LISTEN_IDLE_PAUSE_MS = 10 * 60_000
 
 /**
  * A push-to-talk press shorter than this is a tap, and a tap latches.
@@ -271,6 +293,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [dictated, setDictated] = createSignal<string[]>([])
   const [history, setHistory] = createSignal<AgentEntry[]>([])
   const [held, setHeld] = createSignal<string | null>(null)
+  const [listenPaused, setListenPaused] = createSignal(false)
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
@@ -439,6 +462,31 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   let stopping: Promise<void> | null = null
 
+  /*
+   * Always-on listening closes itself after a long wait for the name. Armed
+   * when it starts and again whenever the assistant is called or speaks; when
+   * it fires in the middle of something, it waits for the next quiet moment.
+   */
+  let idlePauseTimer: ReturnType<typeof setTimeout> | undefined
+  function clearIdlePause(): void {
+    if (idlePauseTimer !== undefined) clearTimeout(idlePauseTimer)
+    idlePauseTimer = undefined
+  }
+  function armIdlePause(): void {
+    clearIdlePause()
+    const s = currentSettings()
+    if (!s.alwaysListen || s.activation !== "wake-word") return
+    idlePauseTimer = setTimeout(() => {
+      idlePauseTimer = undefined
+      if (!isRunning()) return
+      if (!programHandle?.waitingForName() || activeTranscriber?.hasInFlight) {
+        armIdlePause()
+        return
+      }
+      void stop().then(() => setListenPaused(true))
+    }, options.listenIdlePauseMs ?? LISTEN_IDLE_PAUSE_MS)
+  }
+
   const stop = (): Promise<void> => {
     if (stopping) return stopping
     stopping = (async () => {
@@ -456,6 +504,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        stale and free what it has built rather than install it. */
     sessionGeneration++
     clearPttTimers()
+    clearIdlePause()
+    setListenPaused(false)
 
     setIsRunning(false)
 
@@ -532,6 +582,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       // backends asked for Italian whatever the picker said.
       language: s.language,
       openRouterOptions: {
+        nameGate: {
+          active: () => programHandle?.waitingForName() ?? false,
+          accepts: (text: string) => {
+            const heard = matchesWakeWord(text, currentSettings().wakeWord).matched
+            if (heard) armIdlePause()
+            return heard
+          },
+          onRejected: (text: string) =>
+            record({
+              kind: "action",
+              label: `Ignorata, non inizia con «${currentSettings().wakeWord}»: «${firstWords(text).replace(/…$/, "")}…».`,
+              ok: true,
+              at: now(),
+            }),
+        },
         ...options.backendOptions?.openRouterOptions,
         captureOptions: {
           ...options.backendOptions?.openRouterOptions?.captureOptions,
@@ -662,7 +727,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         }
       }
     },
-    onUtterance: (text) => record({ kind: "user", text, at: now() }),
+    onUtterance: (text) => {
+      armIdlePause()
+      record({ kind: "user", text, at: now() })
+    },
     onHeld: (text) => setHeld(text),
     onTranscribed: (text) => {
       setDictated((previous) => [...previous, text].slice(-DICTATION_MEMORY))
@@ -794,8 +862,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     dictated,
     history,
     held,
+    listenPaused,
 
-    async start(mode?: VoiceMode): Promise<void> {
+    async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
       /* A session still delivering its last sentence owns the scopes this
          start would overwrite; and the stop resets the mode, so wait first. */
       if (stopping) await stopping
@@ -856,7 +925,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
              or four files and the first one finishing is not the end of it. */
           setParakeetProgress(undefined)
 
-          if (dialogState().status === "asleep") {
+          setListenPaused(false)
+          if (currentSettings().alwaysListen) armIdlePause()
+          const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
+          if (waitForName && programHandle) {
+            await Effect.runPromise(programHandle.listenForName)
+          } else if (dialogState().status === "asleep") {
             if (programHandle) {
               await Effect.runPromise(programHandle.wake)
             }
@@ -892,6 +966,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         return
       }
       /*
+       * Always listening and waiting for the name: the button and the
+       * shortcut are another way of calling it, not a way of closing a
+       * microphone the user did not open. Closing it is the indicator's job.
+       */
+      if (
+        currentSettings().alwaysListen &&
+        (mode === undefined || mode === "agent") &&
+        activeMode() === "agent" &&
+        programHandle?.waitingForName()
+      ) {
+        armIdlePause()
+        await Effect.runPromise(programHandle.wake)
+        return
+      }
+      /*
        * Pressing the control that is already listening closes the microphone;
        * pressing the other one takes it over. Taking it over deliberately does
        * not stop and restart: the transcriber, the meter and the Effect scope
@@ -900,7 +989,15 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        * sentence goes.
        */
       if (mode === undefined || mode === activeMode()) {
+        const dictating = activeMode() === "transcription"
         await stop()
+        /* Closing dictation is not closing the house's microphone: once what
+           was dictated has been delivered, it goes back to waiting for the
+           phrase. */
+        const s = currentSettings()
+        if (dictating && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
+          await this.start("agent", { waitForName: true })
+        }
         return
       }
       setSessionMode(mode)

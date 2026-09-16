@@ -36,10 +36,19 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * sessions. A profile written before this is moved to the wake word once; the
  * switch in the voice settings turns it back off.
  *
- * 3: the name is "nik". Profiles still holding the old default, "hei nik",
- * are moved to it once, so a bare "nik, ..." is heard.
+ * 3: the assistant listens all the time and answers to one fixed phrase,
+ * «ei nik». The name is no longer a setting, so every profile is moved to it,
+ * and a profile on the wake word is told once that listening is now always on.
  */
 export const CURRENT_SETTINGS_VERSION = 3
+
+/**
+ * The phrase that calls the assistant. Fixed, by the user's decision: one
+ * phrase everybody in the house learns, rather than a field to get wrong.
+ * What the recogniser makes of it — «ehi nik», «hey nick» — is accepted by
+ * `settings/wake-word.ts`.
+ */
+export const WAKE_PHRASE = "ei nik"
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
@@ -52,8 +61,17 @@ export interface VoiceSettings {
   readonly transcriptionSend: TranscriptionSendMode
   /** Target recognition language as an ISO-639-1 code (e.g. 'it'). */
   readonly language: string
-  /** Spoken wake-phrase waking the assistant in wake-word mode. */
+  /** Spoken wake-phrase waking the assistant in wake-word mode; always `WAKE_PHRASE`. */
   readonly wakeWord: string
+  /**
+   * Whether ADE opens the microphone by itself and waits for `WAKE_PHRASE`.
+   *
+   * Only meaningful with the wake word: a microphone that is always open and
+   * obeys everything would obey the television. While it waits, only the
+   * first second and a half of each sentence goes to the cloud; see
+   * `asr/openrouter.ts`.
+   */
+  readonly alwaysListen: boolean
   /** Keyboard chord triggering or toggling agent command mode. */
   readonly agentChord: string
   /** Keyboard chord triggering or toggling transcription mode. */
@@ -127,7 +145,8 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   activation: "wake-word",
   transcriptionSend: "manual",
   language: "it",
-  wakeWord: "nik",
+  wakeWord: WAKE_PHRASE,
+  alwaysListen: true,
   agentChord: "mod+shift+k",
   transcriptionChord: "mod+shift+j",
   /*
@@ -172,8 +191,11 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
   readonly migrations: readonly VoiceMigration[]
 }
 
-/** `wake-word`: a profile that answered everything now waits to be called. */
-export type VoiceMigration = "wake-word"
+/**
+ * `wake-word`: a profile that answered everything now waits to be called.
+ * `always-listen`: a profile on the wake word now listens without being opened.
+ */
+export type VoiceMigration = "wake-word" | "always-listen"
 
 /**
  * Why a stored chord cannot be used, in Italian, or undefined when it can.
@@ -196,9 +218,6 @@ function chordProblem(chordStr: unknown): string | undefined {
   if (risk.level !== "refuse") return undefined
   return risk.message ?? "Scorciatoia non valida."
 }
-
-/** The name stored by profiles written before version 3. */
-const OLD_DEFAULT_WAKE_WORD = "hei nik"
 
 /**
  * Validates and repairs arbitrary settings objects into canonical VoiceSettings.
@@ -245,20 +264,11 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       )
     }
     /*
-     * Version 3: the name to call the assistant by is "nik". A profile saved
-     * before then holds the old default, "hei nik", and since the name is
-     * matched at the start of the sentence, a bare "nik, apri..." was ignored.
-     * Only that exact old default moves; a name the user typed stays.
+     * Version 3: listening is always on for whoever waits for the name. Told
+     * once, where the switch that turns it off is.
      */
-    if (
-      version < 3 &&
-      typeof candidate.wakeWord === "string" &&
-      candidate.wakeWord.trim().toLowerCase().replace(/\s+/g, " ") === OLD_DEFAULT_WAKE_WORD
-    ) {
-      candidate = { ...candidate, wakeWord: DEFAULT_VOICE_SETTINGS.wakeWord }
-      corrections.push(
-        `Il nome dell'assistente ora è «${DEFAULT_VOICE_SETTINGS.wakeWord}»: puoi cambiarlo nelle impostazioni vocali.`,
-      )
+    if (version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
+      migrations.push("always-listen")
     }
     version = CURRENT_SETTINGS_VERSION
   }
@@ -309,14 +319,11 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     language = DEFAULT_VOICE_SETTINGS.language
   }
 
-  // 6. Wake word
-  let wakeWord: string
-  if (typeof candidate.wakeWord === "string" && candidate.wakeWord.trim().length > 0) {
-    wakeWord = candidate.wakeWord.trim()
-  } else {
-    corrections.push(`Parola di richiamo non valida: ripristinata '${DEFAULT_VOICE_SETTINGS.wakeWord}'.`)
-    wakeWord = DEFAULT_VOICE_SETTINGS.wakeWord
-  }
+  // 6. Wake word: fixed. Whatever was stored — "hei nik", a name the user
+  // typed — is replaced without a word; the phrase is not theirs to set now.
+  const wakeWord = WAKE_PHRASE
+  let alwaysListen = DEFAULT_VOICE_SETTINGS.alwaysListen
+  if (typeof candidate.alwaysListen === "boolean") alwaysListen = candidate.alwaysListen
 
   // 7. Agent chord shortcut
   let agentChord: string
@@ -474,6 +481,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionSend,
     language,
     wakeWord,
+    alwaysListen,
     agentChord,
     transcriptionChord,
     backend,

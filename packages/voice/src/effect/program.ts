@@ -197,6 +197,8 @@ export interface VoiceProgramHandle {
   readonly handlePermissionRequest: (paneId: string, what: string) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
+  /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
+  readonly listenForName: Effect.Effect<void>
   readonly sleep: Effect.Effect<void>
   readonly getDialogState: Effect.Effect<DialogState>
   readonly pressToTalk: Effect.Effect<void>
@@ -210,6 +212,14 @@ export interface VoiceProgramHandle {
    * request came back.
    */
   readonly isIdle: Effect.Effect<boolean>
+  /**
+   * Whether the next sentence is ignored unless it calls the assistant.
+   *
+   * False while it is awake, waiting for an answer, at work on a turn or
+   * held by a key: those sentences are meant for it without the name, so
+   * the transcriber has to send them whole.
+   */
+  readonly waitingForName: () => boolean
 }
 
 export type ExternalCommand =
@@ -1217,6 +1227,14 @@ export function makeVoiceProgram(
         yield* applyDialogEvent({ type: "wake" })
       }),
 
+      listenForName: Effect.sync(() => {
+        isWakeWordAwake = false
+        if (currentState.status === "asleep") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
+      }),
+
       sleep: Effect.gen(function* () {
         isWakeWordAwake = false
         yield* applyDialogEvent({ type: "sleep" })
@@ -1232,6 +1250,14 @@ export function makeVoiceProgram(
       releaseToTalk: Effect.sync(() => {
         isPushToTalkPressed = false
       }),
+
+      waitingForName: () => {
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        if (settings.mode !== "agent" || settings.activation !== "wake-word") return false
+        if (isWakeWordAwake || isPushToTalkPressed) return false
+        if (currentState.status === "confirming" || pendingDisambiguation !== null) return false
+        return !(currentState.status === "executing" && agentAbort !== null)
+      },
 
       isIdle: Effect.gen(function* () {
         /*

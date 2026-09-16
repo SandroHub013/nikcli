@@ -382,8 +382,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
    */
   const [pendingModifiers, setPendingModifiers] = createSignal<readonly string[]>([])
 
-  // Local input states for wake-word, API key, language filter and command trial
-  const [wakeWordInput, setWakeWordInput] = createSignal(props.settings.wakeWord)
+  // Local input states for API key, language filter and command trial
   const [apiKeyInput, setApiKeyInput] = createSignal("")
   const [apiKeyVisible, setApiKeyVisible] = createSignal(false)
   const [languageFilter, setLanguageFilter] = createSignal("")
@@ -433,11 +432,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     refreshCache()
     const stop = onDeviceChange(refreshDevices)
     onCleanup(stop)
-  })
-
-  // Keep local inputs synchronized with incoming props
-  createEffect(() => {
-    setWakeWordInput(props.settings.wakeWord)
   })
 
   // Backend readiness diagnostics from select.ts
@@ -622,15 +616,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const selectActivation = (activation: VoiceActivation) => {
     if (activation === "wake-word" && props.settings.mode !== "agent") return
     updateSettings({ activation })
-  }
-
-  const commitWakeWord = () => {
-    const trimmed = wakeWordInput().trim()
-    if (trimmed.length > 0) {
-      updateSettings({ wakeWord: trimmed })
-    } else {
-      setWakeWordInput(props.settings.wakeWord)
-    }
   }
 
   const commitApiKey = () => {
@@ -912,6 +897,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const sendKeys = radioGroupKeys((value) =>
     updateSettings({ transcriptionSend: value as TranscriptionSendMode }),
   )
+  const listenKeys = radioGroupKeys((value) => updateSettings({ alwaysListen: value === "always" }))
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
   const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
@@ -1498,56 +1484,56 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 </div>
               </Show>
 
-              {/* Wake Word configuration field */}
+              {/* The phrase is fixed; what can be chosen is whether ADE listens by itself. */}
               <Show
                 when={
                   props.settings.mode === "agent" &&
                   props.settings.activation === "wake-word"
                 }
               >
-                <div data-slot="wake-word-wrap">
-                  <label for="wake-word-input" data-slot="label">
-                    Il suo nome
-                  </label>
-                  <div data-slot="field-row">
-                    <input
-                      id="wake-word-input"
-                      data-slot="input"
-                      type="text"
-                      value={wakeWordInput()}
-                      placeholder={DEFAULT_VOICE_SETTINGS.wakeWord}
-                      aria-describedby="wake-word-hint"
-                      onInput={(e) => setWakeWordInput(e.currentTarget.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          commitWakeWord()
-                        } else if (e.key === "Escape") {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setWakeWordInput(props.settings.wakeWord)
-                        }
-                      }}
-                      onBlur={commitWakeWord}
-                    />
-                    <button
-                      type="button"
-                      data-slot="ghost-btn"
-                      disabled={props.settings.wakeWord === DEFAULT_VOICE_SETTINGS.wakeWord}
-                      onClick={() => {
-                        setWakeWordInput(DEFAULT_VOICE_SETTINGS.wakeWord)
-                        updateSettings({ wakeWord: DEFAULT_VOICE_SETTINGS.wakeWord })
-                      }}
+                <div data-slot="sub-choice-box">
+                  <span id="listen-label" data-slot="sub-choice-label">
+                    Ascolto
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="listen-label"
+                    aria-describedby="wake-word-hint"
+                    data-slot="sub-choice-row"
+                    onKeyDown={listenKeys}
+                  >
+                    <div
+                      role="radio"
+                      data-value="always"
+                      aria-checked={props.settings.alwaysListen !== false}
+                      tabIndex={props.settings.alwaysListen !== false ? 0 : -1}
+                      data-slot="sub-choice-item"
+                      onClick={() => updateSettings({ alwaysListen: true })}
                     >
-                      Predefinita
-                    </button>
+                      <span data-slot="sub-item-title">Sempre attivo</span>
+                      <span data-slot="sub-item-desc">
+                        Il microfono si apre con ADE e aspetta «{props.settings.wakeWord}»
+                      </span>
+                    </div>
+                    <div
+                      role="radio"
+                      data-value="manual"
+                      aria-checked={props.settings.alwaysListen === false}
+                      tabIndex={props.settings.alwaysListen === false ? 0 : -1}
+                      data-slot="sub-choice-item"
+                      onClick={() => updateSettings({ alwaysListen: false })}
+                    >
+                      <span data-slot="sub-item-title">Solo quando lo apri</span>
+                      <span data-slot="sub-item-desc">Con il pulsante in alto o la scorciatoia</span>
+                    </div>
                   </div>
                   <p id="wake-word-hint" data-slot="hint">
-                    La frase deve iniziare con il nome, con o senza saluto (es.{" "}
-                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em> oppure{" "}
-                    <em>&quot;ehi {props.settings.wakeWord}, apri il browser&quot;</em>); quello che dici
-                    dopo vale subito, senza pause. Mentre sta lavorando non serve chiamarlo: «annulla» lo ferma comunque.
-                    Invio per confermare, Esc per annullare.
+                    Inizia la frase con <em>&quot;{props.settings.wakeWord}&quot;</em> (va bene anche
+                    &quot;ehi nik&quot; o &quot;hey nick&quot;), per esempio{" "}
+                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em>. Mentre aspetta il nome manda al
+                    servizio di trascrizione solo il primo secondo e mezzo di ogni frase, e dopo dieci minuti senza
+                    sentirlo si mette in pausa finché non torni sulla finestra. Il pulsante in alto e la scorciatoia
+                    lo chiamano senza dire niente; mentre sta lavorando «annulla» lo ferma comunque.
                   </p>
                 </div>
               </Show>

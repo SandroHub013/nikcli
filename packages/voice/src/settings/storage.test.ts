@@ -202,13 +202,13 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
 
   test("l'export non può portarla fuori per distrazione", () => {
     const storage = new MemoryStorage()
-    saveVoiceSettings({ openRouterApiKey: "sk-or-segreta", wakeWord: "ehi nik" }, storage)
+    saveVoiceSettings({ openRouterApiKey: "sk-or-segreta", language: "en" }, storage)
 
     const exported = exportVoiceSettings(storage)
     expect(JSON.stringify(exported)).not.toContain("sk-or-segreta")
     expect("openRouterApiKey" in exported).toBe(false)
     // E resta utile: il resto delle impostazioni c'è.
-    expect(exported.wakeWord).toBe("ehi nik")
+    expect(exported.language).toBe("en")
   })
 })
 
@@ -219,21 +219,19 @@ describe("the migration to the wake word happens once", () => {
 
     const first = loadVoiceSettings(store)
     expect(first.settings.activation).toBe("wake-word")
-    expect(first.migrations).toEqual(["wake-word"])
+    expect(first.migrations).toEqual(["wake-word", "always-listen"])
 
     const second = loadVoiceSettings(store)
     expect(second.settings.activation).toBe("wake-word")
     expect(second.migrations).toEqual([])
   })
 
-  test("the old default name is rewritten once, and a later choice of it is kept", () => {
+  test("a stored name is rewritten to the fixed phrase in the profile", () => {
     const store = new MemoryStorage()
     store.setItem("voice.settings", JSON.stringify({ version: 2, activation: "wake-word", wakeWord: "hei nik" }))
 
-    expect(loadVoiceSettings(store).settings.wakeWord).toBe("nik")
-    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("nik")
-
-    saveVoiceSettings({ wakeWord: "hei nik" }, store)
-    expect(loadVoiceSettings(store).settings.wakeWord).toBe("hei nik")
+    expect(loadVoiceSettings(store).settings.wakeWord).toBe("ei nik")
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("ei nik")
+    expect(loadVoiceSettings(store).migrations).toEqual([])
   })
 })

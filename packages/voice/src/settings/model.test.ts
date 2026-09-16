@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   CURRENT_SETTINGS_VERSION,
   DEFAULT_VOICE_SETTINGS,
+  WAKE_PHRASE,
   normalizeSettings,
 } from "./model"
 
@@ -18,7 +19,7 @@ describe("settings/model - normalizeSettings", () => {
       expect(res.activation).toBe("wake-word")
       expect(res.transcriptionSend).toBe("manual")
       expect(res.language).toBe("it")
-      expect(res.wakeWord).toBe("nik")
+      expect(res.wakeWord).toBe("ei nik")
       expect(res.agentChord).toBe("mod+shift+k")
       expect(res.transcriptionChord).toBe("mod+shift+j")
       expect(res.backend).toBe("openrouter")
@@ -52,7 +53,7 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.backend).toBe("openrouter")
     expect(res.parakeetBackend).toBe("auto")
     expect(res.language).toBe("it")
-    expect(res.wakeWord).toBe("nik")
+    expect(res.wakeWord).toBe("ei nik")
     expect(res.agentChord).toBe("mod+shift+k")
     expect(res.transcriptionChord).toBe("mod+shift+j")
 
@@ -83,7 +84,8 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.activation).toBe("push-to-talk")
     expect(res.transcriptionSend).toBe("auto")
     expect(res.language).toBe("en")
-    expect(res.wakeWord).toBe("hey agent")
+    // The phrase is fixed: a stored one is replaced.
+    expect(res.wakeWord).toBe("ei nik")
     // A stored choice survives migration; only a missing or invalid one falls
     // back to the default, which is now the cloud engine.
     expect(res.backend).toBe("parakeet")
@@ -95,7 +97,7 @@ describe("settings/model - normalizeSettings", () => {
     const old = { version: 1, activation: "toggle" as const }
     const moved = normalizeSettings(old)
     expect(moved.activation).toBe("wake-word")
-    expect(moved.migrations).toEqual(["wake-word"])
+    expect(moved.migrations).toEqual(["wake-word", "always-listen"])
     expect(moved.corrections.some((line) => line.includes("per nome"))).toBe(true)
 
     // Push-to-talk already has a key holding the microphone: left as it was.
@@ -106,19 +108,29 @@ describe("settings/model - normalizeSettings", () => {
     expect(normalizeSettings({ ...moved, activation: "toggle" }).activation).toBe("toggle")
   })
 
-  test("the old default name moves to «nik» once; a name the user chose stays", () => {
-    const old = normalizeSettings({ version: 2, activation: "wake-word" as const, wakeWord: "hei nik" })
-    expect(old.wakeWord).toBe("nik")
-    expect(old.corrections.some((line) => line.includes("«nik»"))).toBe(true)
-    expect(normalizeSettings({ version: 1, activation: "toggle" as const, wakeWord: " Hei  Nik " }).wakeWord).toBe("nik")
+  test("the phrase is fixed to «ei nik», whatever was stored", () => {
+    for (const wakeWord of ["hei nik", "nik", "jarvis", "", undefined]) {
+      const res = normalizeSettings({ version: 2, activation: "wake-word" as const, wakeWord })
+      expect(res.wakeWord).toBe(WAKE_PHRASE)
+      // Replaced without a word: it is not the user's to set.
+      expect(res.corrections.some((line) => line.includes("richiamo"))).toBe(false)
+    }
+    expect(WAKE_PHRASE).toBe("ei nik")
+  })
 
-    expect(normalizeSettings({ version: 2, wakeWord: "ehi nik" }).wakeWord).toBe("ehi nik")
-    expect(normalizeSettings({ version: 2, wakeWord: "jarvis" }).wakeWord).toBe("jarvis")
-    // Chosen again after the move, it is kept.
-    expect(normalizeSettings({ ...old, wakeWord: "hei nik" }).wakeWord).toBe("hei nik")
-    // A version-2 profile already on the wake word is not moved to anything else.
-    expect(old.activation).toBe("wake-word")
-    expect(old.migrations).toEqual([])
+  test("always-on listening is the default, and a profile on the wake word is told once", () => {
+    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(true)
+    const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const })
+    expect(moved.alwaysListen).toBe(true)
+    expect(moved.migrations).toEqual(["always-listen"])
+    // Written back at version 3, it is not told again, and a choice of off is kept.
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).migrations).toEqual([])
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).alwaysListen).toBe(false)
+    // Push-to-talk and dictation are not told anything.
+    expect(normalizeSettings({ version: 2, activation: "push-to-talk" }).migrations).toEqual([])
+    expect(normalizeSettings({ version: 2, mode: "transcription", activation: "wake-word" }).migrations).toEqual([])
+    // Not a boolean: the default.
+    expect(normalizeSettings({ version: 3, alwaysListen: "si" }).alwaysListen).toBe(true)
   })
 
   test("preserves valid configuration with zero corrections", () => {
