@@ -6,6 +6,9 @@ import {
   formatRequest,
   isFree,
   statusFromActivity,
+  holdsForAnswer,
+  quietOutcome,
+  ANSWER_HOLD_MS,
   WEDGE_MS,
   formatWedged,
   relaunchRefusal,
@@ -497,5 +500,65 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     const open = openDecisions([{ spec: "S25", text: log }])
     expect(open).toEqual([{ spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" }])
     expect(requestsTable([], [], () => "in corso", now, open)).toContain("decisioni aperte:\n  S25 [k=quota]")
+  })
+})
+
+describe("holdsForAnswer: a session without hooks is working until it answers", () => {
+  const request = (to: string, deliveredAt: number) => ({ to, at: deliveredAt, deliveredAt })
+
+  test("holds while the request it was given is still open", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("lets go as soon as the request is gone, which is what the answer does", () => {
+    expect(holdsForAnswer([], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("holds nobody else: another session's request says nothing about this one", () => {
+    expect(holdsForAnswer([request("p2", 1_000)], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("gives up after the hold, so a session that never answers is not at work forever", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS - 1)).toBe(true)
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS)).toBe(false)
+  })
+
+  test("a spawn counts from when the session was opened, before any line was typed", () => {
+    expect(holdsForAnswer([{ to: "p1", at: 1_000 }], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("any of several requests holds it", () => {
+    const old = { to: "p1", at: 0, deliveredAt: 0 }
+    expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("quietOutcome: what silence means for a pane marked working", () => {
+  test("without hooks and owing nothing, silence ends the turn", () => {
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("with hooks the turn ends when the hook says so, not when the terminal goes quiet", () => {
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false })).toBe("wait")
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("a session with hooks is not held by a request: its own turn says when", () => {
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: true })).toBe("settle")
+  })
+
+  test("while it owes an answer the check is asked again, never dropped", () => {
+    // Dropping it here was the bug: the pane was left held with no timer and no
+    // output coming, so the end of the hold was never noticed and the session
+    // stayed at work for good.
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: true })).toBe("recheck")
+  })
+
+  test("the recheck is what makes the hold expire: after it, silence settles the pane", () => {
+    const given = [{ to: "p1", at: 1_000, deliveredAt: 1_000 }]
+    const owesAnswer = (now: number) => holdsForAnswer(given, "p1", now)
+    const asked = (now: number) => quietOutcome({ hooked: false, busy: false, owesAnswer: owesAnswer(now) })
+    expect(asked(1_000 + ANSWER_HOLD_MS - 1)).toBe("recheck")
+    expect(asked(1_000 + ANSWER_HOLD_MS)).toBe("settle")
   })
 })

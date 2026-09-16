@@ -1168,7 +1168,16 @@
   min-width: 0;
   overflow: hidden;
   flex: 0 100 auto;
-  cursor: default;
+  /* Inherited, so the chip shows the header's grab cursor: it is part of the
+     handle, not a control. */
+  cursor: inherit;
+}
+
+/* The chip takes focus so its state can be read out, and a keyboard user has
+   to see where the focus is even though there is nothing to press. */
+.hA .chip:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 .hA .lbl {

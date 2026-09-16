@@ -617,9 +617,19 @@ export function SessionPane(props: SessionPaneProps) {
           />
         </Show>
 
-        <button
-          type="button"
+        {/*
+          A span, not a button. It was a `<button>` with no `onClick`: pressing
+          it did nothing, it offered a pointer cursor and a focus ring for an
+          action that did not exist, and — because every button is excluded
+          from the grid's drag handles — it took the middle of the header,
+          where the chip sits, out of the area the pane can be dragged by.
+          Focusable still, so the state and its detail can be read out — but
+          not a live region: the state changes with every tool call, and a
+          screen reader would read a chip nobody asked about over and over.
+        */}
+        <span
           class="chip a-state"
+          tabIndex={0}
           title={tipState()}
           data-tip={tipState()}
           aria-label={`${STATE_FULL[state()]}: ${stateDetail()}`}
@@ -630,7 +640,7 @@ export function SessionPane(props: SessionPaneProps) {
           <Show when={props.elapsed}>
             <span class="a-el mono">{props.elapsed}</span>
           </Show>
-        </button>
+        </span>
 
         <span class="sp"></span>
 

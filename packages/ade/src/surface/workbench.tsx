@@ -183,6 +183,8 @@ import {
   shouldNudge,
   type OpenRequest,
   formatDelivery,
+  holdsForAnswer,
+  quietOutcome,
   isFree,
   statusFromActivity,
   sameDir,
@@ -1303,8 +1305,15 @@ export function Workbench() {
 
   /** Ends a request: its waiter gets `result`, and nothing about it is kept. */
   const settle = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, result?: string) => {
+    const answering = openRequests.get(id)?.to
     openRequests.delete(id)
     saveRequests()
+    /*
+     * The answer is what ends the turn for a session without turn hooks: with
+     * the request gone, `holdsForAnswer` stops holding it at work, and the
+     * quiet that follows the reply settles it back to "Disponibile" (S14).
+     */
+    if (answering) settleWhenQuiet(answering)
     statesWritten.delete(id)
     await host.mailboxState?.(id, "").catch(() => {})
     if (result !== undefined) await host.mailboxResult?.(id, result).catch(() => {})
@@ -3106,8 +3115,16 @@ export function Workbench() {
     quietTimers.set(paneId, setTimeout(() => {
       quietTimers.delete(paneId)
       if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
-      // With turn hooks, silence is not the end of a turn (a long tool call is silent): the hook says when.
-      if (hooked(paneId) && activityOf.get(paneId)?.state === "busy") return
+      // Without turn hooks, a session that owes an answer is working until it answers (S14).
+      const outcome = quietOutcome({
+        hooked: hooked(paneId),
+        busy: activityOf.get(paneId)?.state === "busy",
+        owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
+      })
+      // The hold has to be re-armed: it ends with time passing, and nothing
+      // else would come back to look at a pane whose terminal has gone quiet.
+      if (outcome === "recheck") return settleWhenQuiet(paneId)
+      if (outcome === "wait") return
       setWb((w) => updatePane(w, paneId, { status: "idle", activity: "Disponibile" }))
     }, QUIET_MS))
   }

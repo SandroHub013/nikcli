@@ -968,3 +968,68 @@ export const USAGE =
   "  --timeout <sec>  ask/spawn/wait: quanto aspettare (predefinito 110)\n" +
   "<sessione> = numero, id, titolo o nome dell'agente; progetto/nome cerca solo in quel progetto,\n" +
   "  un nome da solo preferisce le sessioni del tuo progetto.\n"
+
+/**
+ * How long a session without turn hooks is believed to be still working on a
+ * request it has not answered.
+ *
+ * Long on purpose. It is not a guess at how long the work takes — it is how
+ * long the "still working" claim may go unchecked before ADE stops making it.
+ * Thirty minutes matches `STALE_BUSY_MS`, which is where a hooked session's
+ * unclosed turn is given up on for the same reason.
+ */
+export const ANSWER_HOLD_MS = STALE_BUSY_MS
+
+/**
+ * Whether a quiet session is still in the turn a request opened.
+ *
+ * Silence ends a turn only for a session that owes nobody an answer. Without
+ * turn hooks (agy, and Codex until it installs its own) the end of a turn is
+ * read from the terminal going quiet for a couple of seconds — which a long
+ * tool call, a wait on the network or a model thinking also look like. For
+ * work the user started that is a harmless flicker; for work another session
+ * asked for it it is a wrong answer to a question somebody is acting on: the
+ * sidebar, the header bar and `ade-msg list` all say the session is free while
+ * it is still working, so the caller stops waiting and asks someone else.
+ *
+ * This is about what the state *says*. Delivery is decided separately, by
+ * `isFree`, which for a session without hooks still goes by the quiet
+ * terminal alone: holding the state here does not keep the mailbox from
+ * typing into it.
+ *
+ * The turn ends when the answer goes out — the request is no longer open —
+ * or when the hold expires, so a session that dies without answering does not
+ * stay "at work" forever.
+ */
+export function holdsForAnswer(
+  requests: readonly Pick<OpenRequest, "to" | "at" | "deliveredAt">[],
+  paneId: string,
+  now: number,
+): boolean {
+  return requests.some((request) => {
+    if (request.to !== paneId) return false
+    const reached = request.deliveredAt ?? request.at
+    return now - reached < ANSWER_HOLD_MS
+  })
+}
+
+/** What a couple of seconds of silence mean for a pane marked working. */
+export type QuietOutcome =
+  /** The turn is over: the pane goes back to available. */
+  | "settle"
+  /** The turn is not over, and something else — a hook's Stop — will end it. */
+  | "wait"
+  /**
+   * The turn is not over, and nothing else will end it: ask again after the
+   * next quiet spell. Without this the pane is left held with no timer and no
+   * output coming, so an expired hold is never noticed and the session stays
+   * "at work" for good.
+   */
+  | "recheck"
+
+export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer: boolean }): QuietOutcome {
+  // With turn hooks silence is not the end of a turn (a long tool call is
+  // silent): the hook says when, and its `idle` settles the pane on its own.
+  if (pane.hooked) return pane.busy ? "wait" : "settle"
+  return pane.owesAnswer ? "recheck" : "settle"
+}
