@@ -417,6 +417,14 @@ export async function dispatch(
          */
         const named = VIEWS.find((view) => view === slots.text)
         const targetView: AdeView = named ?? "code"
+        const available = host.availableViews?.() ?? VIEWS
+        if (!available.includes(targetView)) {
+          return {
+            success: false,
+            spoken: `La sezione ${targetView} non è disponibile per ora.`,
+            error: "view_unavailable",
+          }
+        }
         host.setView(targetView)
         return {
           success: true,

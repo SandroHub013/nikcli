@@ -377,6 +377,21 @@ describe("dispatch", () => {
       expect(host.calls.some((c) => c.method === "setView" && c.args[0] === "bot")).toBe(true)
     })
 
+    test("a section the host has hidden is refused and said, not switched to", async () => {
+      const host = new MockVoiceHost()
+      const hiding = Object.assign(host, { availableViews: () => ["agent", "code"] as const })
+      const spec = VOCABULARY.find((v) => v.intent === "view.set")!
+
+      const chat = await dispatch(makeParseResult(spec, { text: "chat" }), hiding)
+      expect(chat.success).toBe(false)
+      expect(chat.spoken).toBe("La sezione chat non è disponibile per ora.")
+      expect(host.calls.some((c) => c.method === "setView")).toBe(false)
+
+      const code = await dispatch(makeParseResult(spec, { text: "code" }), hiding)
+      expect(code.success).toBe(true)
+      expect(host.calls.some((c) => c.method === "setView" && c.args[0] === "code")).toBe(true)
+    })
+
     test("dispatches scrollTranscript", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "transcript.scroll")!
