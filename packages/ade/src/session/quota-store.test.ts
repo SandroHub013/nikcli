@@ -88,6 +88,35 @@ describe("createQuotaStore", () => {
     expect(kept.displayValue).toBe("64%")
   })
 
+  test("agy's file is read on every refresh, alongside quota-axi's report and without it", async () => {
+    const clock = () => Date.parse("2026-09-16T13:06:00Z")
+    let agyText: string | undefined = JSON.stringify({
+      provider: "antigravity",
+      capturedAt: "2026-09-16T13:05:00Z",
+      data: { quota: { "gemini-5h": { remaining_fraction: 0.4, reset_time: "2026-09-16T18:00:00Z" } } },
+    })
+    let axiText: string | undefined
+    const store = createQuotaStore(async () => axiText, clock, 2_000, async () => agyText)
+    const agy = () => quotaForAgent("agy", store.snapshot(), store.now())
+    const claude = () => quotaForAgent("claude-code", store.snapshot(), store.now())
+
+    await store.refresh()
+    const first = agy()
+    if (!first || isQuotaUnavailable(first)) throw new Error("expected agy's reading")
+    expect(first.displayValue).toBe("40%")
+    expect(isQuotaUnavailable(claude())).toBe(true)
+
+    axiText = report(64, "2026-09-16T13:05:00Z")
+    await store.refresh()
+    expect(isQuotaUnavailable(claude())).toBe(false)
+    expect(isQuotaUnavailable(agy())).toBe(false)
+
+    agyText = undefined
+    await store.refresh()
+    expect(isQuotaUnavailable(agy())).toBe(true)
+    expect(isQuotaUnavailable(claude())).toBe(false)
+  })
+
   test("a reading kept through failures still turns n/d once it is too old", async () => {
     let clock = Date.parse("2026-09-15T20:00:00Z")
     let fail = false

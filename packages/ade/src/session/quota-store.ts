@@ -15,7 +15,7 @@
 
 import { createRoot, createSignal } from "solid-js"
 import { every } from "../host/every"
-import { QUOTA_AXI_FILE, type QuotaSnapshot, readQuotaAxiSnapshot } from "./quota"
+import { AGY_QUOTA_FILE, type AgyQuotaReading, QUOTA_AXI_FILE, type QuotaSnapshot, readAgyQuota, readQuotaAxiSnapshot } from "./quota"
 
 /**
  * How often the report is read again, and the countdown moves.
@@ -34,7 +34,7 @@ export const QUOTA_REFRESH_MS = 30_000
  */
 export const QUOTA_READ_TIMEOUT_MS = 2_000
 
-/** Reads the quota-axi report's text, or `undefined` when there is none. */
+/** Reads a report's text, or `undefined` when there is none. */
 export type QuotaReader = () => Promise<string | undefined>
 
 export interface QuotaStore {
@@ -46,14 +46,54 @@ export interface QuotaStore {
   start: (options?: { immediate?: boolean }) => () => void
 }
 
+/**
+ * `read` gives quota-axi's report; `readAgy` agy's status line file, read
+ * alongside it on every refresh.
+ */
 export function createQuotaStore(
   read: QuotaReader,
   clock: () => number = Date.now,
   timeoutMs: number = QUOTA_READ_TIMEOUT_MS,
+  readAgy: QuotaReader = async () => undefined,
 ): QuotaStore {
   return createRoot(() => {
-    const [snapshot, setSnapshot] = createSignal<QuotaSnapshot | undefined>()
+    const [axi, setAxi] = createSignal<QuotaSnapshot | undefined>()
+    const [agy, setAgy] = createSignal<AgyQuotaReading | undefined>()
     const [now, setNow] = createSignal(clock())
+    const snapshot = (): QuotaSnapshot | undefined => {
+      const report = axi()
+      const reading = agy()
+      if (!reading) return report
+      return report ? { ...report, agy: reading } : { providers: {}, axiMissing: true, agy: reading }
+    }
+
+    /** Reads one file within the timeout; `false` when the read itself failed. */
+    const load = async (reader: QuotaReader): Promise<string | undefined | false> => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        return await Promise.race([
+          reader(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("timeout")), timeoutMs)
+          }),
+        ])
+      } catch {
+        return false
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+    }
+
+    /** Applies one file's text: failure keeps, absence clears, half-written keeps. */
+    const apply = <T,>(text: string | undefined | false, parse: (raw: unknown) => T | undefined, set: (value: T | undefined) => void) => {
+      if (text === false) return
+      if (!text) return set(undefined)
+      try {
+        set(parse(JSON.parse(text)))
+      } catch {
+        // Half-written: keep what was read last.
+      }
+    }
 
     /*
      * A read that fails keeps the last reading; only a read that finds no
@@ -66,30 +106,9 @@ export function createQuotaStore(
      * `QUOTA_STALE_MS`, however it was kept.
      */
     const refresh = async () => {
-      let text: string | undefined
-      let timer: ReturnType<typeof setTimeout> | undefined
-      try {
-        text = await Promise.race([
-          read(),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error("timeout")), timeoutMs)
-          }),
-        ])
-      } catch {
-        setNow(clock())
-        return
-      } finally {
-        if (timer) clearTimeout(timer)
-      }
-      if (!text) {
-        setSnapshot(undefined)
-      } else {
-        try {
-          setSnapshot(readQuotaAxiSnapshot(JSON.parse(text)))
-        } catch {
-          // Half-written: keep what was read last.
-        }
-      }
+      const [axiText, agyText] = await Promise.all([load(read), load(readAgy)])
+      apply(axiText, readQuotaAxiSnapshot, (value) => setAxi(() => value))
+      apply(agyText, readAgyQuota, (value) => setAgy(() => value))
       setNow(clock())
     }
 
@@ -102,18 +121,23 @@ export function createQuotaStore(
   })
 }
 
-/** The report read through the Tauri host; nothing outside it. */
-async function readFromHost(): Promise<string | undefined> {
-  const { invoke } = await import("@tauri-apps/api/core")
-  const home = await invoke<string>("home_dir")
-  if (!home) return undefined
-  const sep = home.includes("\\") ? "\\" : "/"
-  const result = await invoke<{ text: string }>("read_text_file", {
-    path: [home, ...QUOTA_AXI_FILE].join(sep),
-    maxBytes: 1_000_000,
-  })
-  return result?.text
+/** A file under the user's home, read through the Tauri host; nothing outside it. */
+function readFromHome(file: readonly string[]): QuotaReader {
+  return async () => {
+    const { invoke } = await import("@tauri-apps/api/core")
+    const home = await invoke<string>("home_dir")
+    if (!home) return undefined
+    const sep = home.includes("\\") ? "\\" : "/"
+    const result = await invoke<{ text: string }>("read_text_file", {
+      path: [home, ...file].join(sep),
+      maxBytes: 1_000_000,
+    })
+    return result?.text
+  }
 }
+
+const readFromHost = readFromHome(QUOTA_AXI_FILE)
+const readAgyFromHost = readFromHome(AGY_QUOTA_FILE)
 
 let shared: QuotaStore | undefined
 
@@ -124,7 +148,7 @@ let shared: QuotaStore | undefined
  * start the periodic refresh and its immediate read on top of this one.
  */
 export async function freshSharedQuota(): Promise<QuotaStore> {
-  shared ??= createQuotaStore(readFromHost)
+  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost)
   await shared.refresh()
   return shared
 }
@@ -139,7 +163,7 @@ let stop: (() => void) | undefined
  * polling the disk, and six panes must not start six timers.
  */
 export function useSharedQuota(): { store: QuotaStore; release: () => void } {
-  shared ??= createQuotaStore(readFromHost)
+  shared ??= createQuotaStore(readFromHost, Date.now, QUOTA_READ_TIMEOUT_MS, readAgyFromHost)
   users++
   if (users === 1) stop = shared.start()
   let released = false

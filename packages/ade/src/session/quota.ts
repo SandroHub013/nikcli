@@ -535,9 +535,9 @@ export const QUOTA_AXI_FILE = [".cache", "quota-axi", "quotas.json"] as const
 /**
  * The providers whose numbers ADE takes from quota-axi.
  *
- * quota-axi knows Claude and Codex. For agy and nikcli it has nothing, and
- * until S30 chooses where their quota comes from the bar says so rather than
- * showing a number from anywhere else.
+ * quota-axi knows Claude and Codex. agy's figures come from its own status
+ * line (`AGY_QUOTA_FILE`); nikcli has no source, and the bar says so rather
+ * than showing a number from anywhere else.
  */
 export const QUOTA_AXI_PROVIDERS: ReadonlySet<string> = new Set(["claude", "codex"])
 
@@ -551,10 +551,69 @@ export const QUOTA_AXI_PROVIDERS: ReadonlySet<string> = new Set(["claude", "code
  */
 export const QUOTA_STALE_MS = 30 * 60_000
 
+/**
+ * Where agy's status line leaves its quota (S30, D32 and D42), relative to the
+ * user's home.
+ *
+ * llm-quota's bridge rewrites it at every status line refresh of agy, through
+ * a temporary file and a rename, so a read never sees half of it.
+ */
+export const AGY_QUOTA_FILE = [".llm-quota", "official", "antigravity.json"] as const
+
+/**
+ * How old agy's file may be and still be shown (D32).
+ *
+ * Longer than quota-axi's limit because the file is only written while agy
+ * runs: an hour without an agy session is common, and the figure is still
+ * about the current window most of that time.
+ */
+export const AGY_QUOTA_STALE_MS = 60 * 60_000
+
+/** agy's quota as its status line last wrote it. */
+export interface AgyQuotaReading {
+  /** When the status line wrote the file, in epoch ms. */
+  readonly capturedAt?: number
+  readonly quota: ProviderQuota
+}
+
 export interface QuotaSnapshot {
   /** When quota-axi wrote the report, in epoch ms. */
   readonly generatedAt?: number
   readonly providers: Readonly<Record<string, ProviderQuota & { readonly stale?: boolean }>>
+  /** True when the snapshot holds only agy's file: quota-axi's report is missing. */
+  readonly axiMissing?: boolean
+  readonly agy?: AgyQuotaReading
+}
+
+/** A bucket as the bar names it: `gemini-5h` is "Gemini 5h", `3p-weekly` is "3p sett.". */
+function agyBucketLabel(bucket: string): string {
+  const match = /^(.*?)[-_](5h|weekly)$/i.exec(bucket)
+  if (!match) return bucket
+  const family = match[1]!.toLowerCase() === "gemini" ? "Gemini" : match[1]!
+  return `${family} ${match[2]!.toLowerCase() === "5h" ? "5h" : "sett."}`
+}
+
+/** agy's file as a reading, or nothing when the file is not antigravity's. */
+export function readAgyQuota(raw: unknown): AgyQuotaReading | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const record = raw as Record<string, unknown>
+  if (record.provider !== undefined && record.provider !== "antigravity") return undefined
+  const parsed = parseAntigravitySnapshot(raw)
+  const captured = typeof record.capturedAt === "string" ? Date.parse(record.capturedAt) : Number.NaN
+  const plan = parsed.plan
+  const name = !plan ? "Google" : plan.toLowerCase().startsWith("google") ? plan : `Google · ${plan}`
+  return {
+    ...(Number.isFinite(captured) ? { capturedAt: captured } : {}),
+    quota: {
+      ...parsed,
+      id: "agy",
+      name,
+      // A bucket without a fraction says nothing about the quota.
+      metrics: parsed.metrics
+        .filter((metric) => metric.remaining !== undefined)
+        .map((metric) => ({ ...metric, label: agyBucketLabel(metric.label), limit: 100, isRateLimited: metric.remaining! <= 0 })),
+    },
+  }
 }
 
 /** What the bar shows when there is no real figure to show. */
@@ -683,8 +742,9 @@ export function quotaForAgent(
     tooltip: t("quota.na.tooltip", vendor, why),
   })
 
+  if (id === "agy") return agyQuota(snapshot?.agy, now, unavailable)
   if (!QUOTA_AXI_PROVIDERS.has(id)) return unavailable(t("quota.na.noSource"))
-  if (!snapshot) return unavailable(t("quota.na.noReport"))
+  if (!snapshot || snapshot.axiMissing) return unavailable(t("quota.na.noReport"))
   const quota = snapshot.providers[id]
   if (!quota || quota.metrics.length === 0) return unavailable(t("quota.na.noWindows"))
   if (quota.stale) return unavailable(t("quota.na.stale"))
@@ -695,6 +755,20 @@ export function quotaForAgent(
 
   const view = formatSessionQuota(quota, now)
   return { ...view, tooltip: `${view.tooltip}\nLetto da quota-axi alle ${clock(snapshot.generatedAt)}` }
+}
+
+/** agy's quota from its status line file: the same rules, with its own age limit. */
+function agyQuota(
+  reading: AgyQuotaReading | undefined,
+  now: number,
+  unavailable: (why: string) => QuotaUnavailable,
+): SessionQuota {
+  if (!reading) return unavailable(t("quota.na.agy.noFile"))
+  if (reading.quota.metrics.length === 0) return unavailable(t("quota.na.agy.noBuckets"))
+  if (reading.capturedAt === undefined) return unavailable(t("quota.na.agy.noTime"))
+  if (now - reading.capturedAt > AGY_QUOTA_STALE_MS) return unavailable(t("quota.na.old", clock(reading.capturedAt)))
+  const view = formatSessionQuota(reading.quota, now)
+  return { ...view, tooltip: `${view.tooltip}\n${t("quota.readAgy", clock(reading.capturedAt))}` }
 }
 
 /** The provider an agent id or model name draws its quota from: `claude`, `codex`, `agy`, `nikcli`, or itself. */

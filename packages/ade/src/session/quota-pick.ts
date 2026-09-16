@@ -11,8 +11,8 @@
  *
  *   - A `--model` or a `--fork` never reaches here: the mailbox does not ask.
  *   - An agent whose quota is fine, or unknown ("n/d"), is started as asked.
- *     Rerouting on no evidence would move work off agy or nikcli only because
- *     ADE cannot see their quota — which says nothing about the quota itself.
+ *     Rerouting on no evidence would move work off nikcli only because ADE
+ *     cannot see its quota — which says nothing about the quota itself.
  *   - An agent in Limite is replaced by another agent with a real reading and
  *     quota left, the one with the most. Agents that are "n/d" or in Limite
  *     are never picked as the replacement: Codex, spent until its window
@@ -35,9 +35,9 @@ import type { PickInput, PickResult } from "./provider-pick"
 /**
  * The agents a spawn may be rerouted to, in the order ties are broken.
  *
- * Only agents whose quota ADE can actually read: a candidate that is "n/d" is
- * never chosen, so listing agy or nikcli here would change nothing but the
- * work done to discard them.
+ * Only agents quota-axi reports, since the ranking below reads its providers.
+ * agy's quota comes from another file (S30): an agy in Limite is rerouted to
+ * these, but agy is not yet offered as a replacement.
  */
 export const REROUTE_CANDIDATES: readonly string[] = ["claude-code", "codex"]
 

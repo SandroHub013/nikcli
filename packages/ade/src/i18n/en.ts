@@ -604,6 +604,10 @@ export const en: Messages = {
   "quota.na.stale": "quota-axi marks this reading as out of date.",
   "quota.na.noTime": "The quota-axi report doesn't say when it was written.",
   "quota.na.old": (time) => `Last reading at ${time} is too old to reflect current quota.`,
+  "quota.na.agy.noFile": "agy's quota file wasn't found (~/.llm-quota/official/antigravity.json): agy's status line writes it.",
+  "quota.na.agy.noBuckets": "agy's file reports no quota windows.",
+  "quota.na.agy.noTime": "agy's file doesn't say when it was written.",
+  "quota.readAgy": (time) => `Read from agy's status line at ${time}`,
 
   // Browser address
   "browser.address.placeholder": "localhost:3000 or port :5173",

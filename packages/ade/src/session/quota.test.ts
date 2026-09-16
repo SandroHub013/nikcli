@@ -14,6 +14,8 @@ import {
   readQuotaAxiSnapshot,
   isQuotaUnavailable,
   QUOTA_STALE_MS,
+  AGY_QUOTA_STALE_MS,
+  readAgyQuota,
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
@@ -461,7 +463,7 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
     expect(codex.isLimit).toBe(true)
   })
 
-  test("agy and nikcli are n/d even when the report mentions other providers", () => {
+  test("agy is n/d without its own file, and nikcli is always n/d", () => {
     expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, soon))).toBe(true)
     expect(isQuotaUnavailable(quotaForAgent("nikcli", snapshot, soon))).toBe(true)
   })
@@ -486,6 +488,77 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
   test("an agent ADE has no quota notion for shows nothing", () => {
     expect(quotaForAgent("terminal", snapshot, soon)).toBeUndefined()
     expect(quotaForAgent(undefined, snapshot, soon)).toBeUndefined()
+  })
+})
+
+describe("agy's quota from its status line (S30)", () => {
+  const captured = Date.parse("2026-09-16T13:05:25.8021499Z")
+  const file = {
+    version: 1,
+    provider: "antigravity",
+    capturedAt: "2026-09-16T13:05:25.8021499Z",
+    data: {
+      quota: {
+        "3p-5h": { remaining_fraction: 1, reset_time: "2026-09-16T18:03:04Z", reset_in_seconds: 17858 },
+        "3p-weekly": { remaining_fraction: 1, reset_time: "2026-09-23T13:03:04Z", reset_in_seconds: 604658 },
+        "gemini-5h": { remaining_fraction: 1, reset_time: "2026-09-16T18:03:04Z", reset_in_seconds: 17858 },
+        "gemini-weekly": { remaining_fraction: 0.9404899, reset_time: "2026-09-23T06:46:39Z", reset_in_seconds: 582073 },
+      },
+      planTier: "Google AI Pro",
+    },
+  }
+  const reading = readAgyQuota(file)
+  const snapshot = { providers: {}, axiMissing: true, agy: reading }
+
+  test("the real file reads as agy's windows, named for the bar", () => {
+    expect(reading?.capturedAt).toBe(captured)
+    expect(reading?.quota.name).toBe("Google AI Pro")
+    expect(reading?.quota.metrics.map((m) => `${m.label} ${m.remaining}`)).toEqual([
+      "3p 5h 100",
+      "3p sett. 100",
+      "Gemini 5h 100",
+      "Gemini sett. 94",
+    ])
+  })
+
+  test("a fresh file is agy's quota, bound by the lowest window, even without quota-axi", () => {
+    const agy = quotaForAgent("agy", snapshot, captured + 60_000)
+    if (!agy || isQuotaUnavailable(agy)) throw new Error("expected a reading")
+    expect(agy.providerName).toBe("Google AI Pro")
+    expect(agy.displayValue).toBe("94%")
+    expect(agy.bindingKey).toBe("Gemini sett.")
+    expect(agy.tooltip).toContain("statusLine di agy")
+    expect(quotaForAgent("gemini-2.5-pro", snapshot, captured + 60_000)?.providerName).toBe("Google AI Pro")
+  })
+
+  test("quota-axi missing still leaves Claude n/d when only agy's file is there", () => {
+    const claude = quotaForAgent("claude-code", snapshot, captured + 60_000)
+    expect(isQuotaUnavailable(claude)).toBe(true)
+    if (isQuotaUnavailable(claude)) expect(claude.tooltip).toContain("quota-axi")
+  })
+
+  test("a file older than an hour, undated, empty or missing is n/d", () => {
+    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS - 1))).toBe(false)
+    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, captured + AGY_QUOTA_STALE_MS + 1))).toBe(true)
+    const undated = { providers: {}, agy: readAgyQuota({ ...file, capturedAt: undefined }) }
+    expect(isQuotaUnavailable(quotaForAgent("agy", undated, captured))).toBe(true)
+    const empty = { providers: {}, agy: readAgyQuota({ ...file, data: { planTier: "Google AI Pro" } }) }
+    expect(isQuotaUnavailable(quotaForAgent("agy", empty, captured))).toBe(true)
+    expect(isQuotaUnavailable(quotaForAgent("agy", { providers: {} }, captured))).toBe(true)
+    expect(isQuotaUnavailable(quotaForAgent("agy", undefined, captured))).toBe(true)
+  })
+
+  test("a file from another provider, or not an object, is no reading", () => {
+    expect(readAgyQuota({ ...file, provider: "claude" })).toBeUndefined()
+    expect(readAgyQuota(null)).toBeUndefined()
+  })
+
+  test("an exhausted window is a limit", () => {
+    const spent = readAgyQuota({ ...file, data: { quota: { "gemini-5h": { remaining_fraction: 0, reset_time: "2026-09-16T18:03:04Z" } } } })
+    const agy = quotaForAgent("agy", { providers: {}, agy: spent }, captured)
+    if (!agy || isQuotaUnavailable(agy)) throw new Error("expected a reading")
+    expect(agy.isLimit).toBe(true)
+    expect(agy.providerName).toBe("Google")
   })
 })
 

@@ -609,6 +609,10 @@ export const it = {
   "quota.na.stale": "quota-axi segna il dato come non aggiornato.",
   "quota.na.noTime": "Il rapporto di quota-axi non dice quando è stato scritto.",
   "quota.na.old": (time: string) => `Ultima lettura ${time}: troppo vecchia per essere la quota di adesso.`,
+  "quota.na.agy.noFile": "File di quota di agy non trovato (~/.llm-quota/official/antigravity.json): lo scrive la statusLine di agy.",
+  "quota.na.agy.noBuckets": "Il file di agy non riporta finestre di quota.",
+  "quota.na.agy.noTime": "Il file di agy non dice quando è stato scritto.",
+  "quota.readAgy": (time: string) => `Letto dalla statusLine di agy alle ${time}`,
 
   // Browser address
   "browser.address.placeholder": "localhost:3000 o porta :5173",
