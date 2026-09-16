@@ -2222,8 +2222,12 @@ export function Workbench() {
    * switch that undoes it lives, and it stays until the user turns the rule
    * off or on themselves.
    */
-  const migratedToWakeWord = initialVoice.corrections.find((line) => line.includes("per nome"))
-  const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(migratedToWakeWord)
+  const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
+  const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
+    migratedToWakeWord
+      ? "Da questa versione l'assistente risponde solo quando lo chiami per nome. Se preferivi il microfono sempre aperto, scegli «Acceso e spento» qui sotto."
+      : undefined,
+  )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
     [
@@ -2409,8 +2413,9 @@ export function Workbench() {
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
-    // Once they have decided for themselves, the note about the change is spent.
-    if (next.activation !== voiceSettings().activation) setVoiceSettingsNotice(undefined)
+    // Once they have been in here and changed something, the note is spent —
+    // and the profile was written back on the way in, so it does not return.
+    setVoiceSettingsNotice(undefined)
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
     await voiceEngine.updateSettings(saved.settings)

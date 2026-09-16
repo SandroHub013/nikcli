@@ -95,10 +95,13 @@ describe("settings/model - normalizeSettings", () => {
     const old = { version: 1, activation: "toggle" as const }
     const moved = normalizeSettings(old)
     expect(moved.activation).toBe("wake-word")
+    expect(moved.migrations).toEqual(["wake-word"])
     expect(moved.corrections.some((line) => line.includes("per nome"))).toBe(true)
 
     // Push-to-talk already has a key holding the microphone: left as it was.
-    expect(normalizeSettings({ version: 1, activation: "push-to-talk" }).activation).toBe("push-to-talk")
+    const heldKey = normalizeSettings({ version: 1, activation: "push-to-talk" })
+    expect(heldKey.activation).toBe("push-to-talk")
+    expect(heldKey.migrations).toEqual([])
     // And a profile that chose toggle *after* this version keeps it.
     expect(normalizeSettings({ ...moved, activation: "toggle" }).activation).toBe("toggle")
   })

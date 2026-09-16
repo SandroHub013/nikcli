@@ -159,7 +159,18 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
   readonly settings: VoiceSettings
   /** List of repair descriptions applied in Italian for UI feedback. */
   readonly corrections: readonly string[]
+  /**
+   * What this load changed under the user, named rather than described.
+   *
+   * The interface has to find these to show them where they can be undone,
+   * and finding them by searching the Italian sentence for a word breaks the
+   * first time the sentence is reworded.
+   */
+  readonly migrations: readonly VoiceMigration[]
 }
+
+/** `wake-word`: a profile that answered everything now waits to be called. */
+export type VoiceMigration = "wake-word"
 
 /**
  * Why a stored chord cannot be used, in Italian, or undefined when it can.
@@ -200,12 +211,14 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       ...DEFAULT_VOICE_SETTINGS,
       settings: DEFAULT_VOICE_SETTINGS,
       corrections,
+      migrations: [],
     }
   }
 
   let candidate = raw as Record<string, unknown>
 
   // 1. Version migration
+  const migrations: VoiceMigration[] = []
   let version = candidate.version
   if (typeof version !== "number" || Number.isNaN(version)) {
     corrections.push("Versione impostazioni mancante: impostata alla versione 1.")
@@ -220,6 +233,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      */
     if (candidate.activation === "toggle") {
       candidate = { ...candidate, activation: "wake-word" }
+      migrations.push("wake-word")
       corrections.push(
         "Ora l'assistente risponde solo quando lo chiami per nome: puoi cambiarlo nelle impostazioni vocali.",
       )
@@ -455,5 +469,6 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     ...cleanSettings,
     settings: cleanSettings,
     corrections,
+    migrations,
   }
 }

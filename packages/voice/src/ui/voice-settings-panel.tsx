@@ -1449,7 +1449,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             <div data-slot="activation-group">
               <Show when={props.settingsNotice}>
                 {(text) => (
-                  <div data-slot="reason-box" role="status">
+                  // Informational, not a failure: nothing went wrong, a default changed.
+                  <div data-slot="reason-box" data-tone="muted" role="status">
                     {text()}
                   </div>
                 )}

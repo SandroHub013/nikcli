@@ -211,3 +211,18 @@ describe("la chiave API sta fuori dal blob delle impostazioni", () => {
     expect(exported.wakeWord).toBe("ehi nik")
   })
 })
+
+describe("the migration to the wake word happens once", () => {
+  test("a profile is written back with the new version, so the notice is not shown at every start", () => {
+    const store = new MemoryStorage()
+    store.setItem("voice.settings", JSON.stringify({ version: 1, activation: "toggle", mode: "agent" }))
+
+    const first = loadVoiceSettings(store)
+    expect(first.settings.activation).toBe("wake-word")
+    expect(first.migrations).toEqual(["wake-word"])
+
+    const second = loadVoiceSettings(store)
+    expect(second.settings.activation).toBe("wake-word")
+    expect(second.migrations).toEqual([])
+  })
+})

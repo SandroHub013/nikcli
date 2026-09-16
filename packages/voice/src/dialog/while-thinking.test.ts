@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { parseUtterance } from "../intent/parse"
-import { isSendHeld, triageWhileThinking } from "./while-thinking"
+import { firstWords, isSendHeld, triageWhileThinking } from "./while-thinking"
 
 const heard = (text: string) => triageWhileThinking(parseUtterance(text), { typed: false }).action
 const typed = (text: string) => triageWhileThinking(parseUtterance(text), { typed: true }).action
@@ -39,5 +39,22 @@ describe("dialog/while-thinking", () => {
   test("«invia questa» sends the held sentence; a bare «invia» does not", () => {
     for (const text of ["invia questa", "Invia questa.", "mandala", "manda questa frase"]) expect(isSendHeld(text)).toBe(true)
     for (const text of ["invia", "invia il messaggio al pannello due"]) expect(isSendHeld(text)).toBe(false)
+  })
+})
+
+describe("what reaches the console, and what a command needs", () => {
+  test("a long sentence is named by its first words, not quoted whole", () => {
+    expect(firstWords("il governo ha approvato nella notte la legge di bilancio con nuove misure")).toBe(
+      "il governo ha approvato nella notte la legge di…",
+    )
+    expect(firstWords("apri il browser")).toBe("apri il browser")
+  })
+
+  test("while thinking, a command not addressed by name is held, not carried out", () => {
+    const command = parseUtterance("chiudi il pannello due")
+    expect(triageWhileThinking(command, { typed: false, named: false }).action).toBe("hold")
+    expect(triageWhileThinking(command, { typed: false, named: true }).action).toBe("request")
+    // Stopping is the exception: it undoes, and it is wanted at once.
+    expect(triageWhileThinking(parseUtterance("annulla"), { typed: false, named: false }).action).toBe("stop")
   })
 })

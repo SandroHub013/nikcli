@@ -47,13 +47,36 @@ export function isSendHeld(raw: string): boolean {
   return SEND_HELD.test(text) && text !== "invia" && text !== "manda"
 }
 
-export function triageWhileThinking(parsed: ParseResult, heard: { typed: boolean }): WhileThinking {
+/** The first words of a sentence, for a line that names it without quoting the room. */
+export function firstWords(text: string, limit = 48): string {
+  const clean = text.trim().replace(/\s+/g, " ")
+  if (clean.length <= limit) return clean
+  const cut = clean.slice(0, limit)
+  const space = cut.lastIndexOf(" ")
+  return `${(space > limit / 2 ? cut.slice(0, space) : cut).trim()}…`
+}
+
+export function triageWhileThinking(
+  parsed: ParseResult,
+  heard: {
+    typed: boolean
+    /**
+     * Whether the sentence called the assistant by name, when the name is
+     * being asked for. A command is an action — «chiudi il pannello due» from
+     * a video would close a session — so while a turn is running it is obeyed
+     * only when it was addressed to the assistant. Stopping is the exception
+     * below: it undoes rather than does, and it is what someone says when
+     * they need it now.
+     */
+    named?: boolean
+  },
+): WhileThinking {
   const text = plain(parsed.rawUtterance)
   const intent = parsed.outcome === "matched" ? parsed.intent?.intent : undefined
 
   if (STOP.test(text)) return { action: "stop" }
   if (heard.typed) return intent === "dialog.cancel" ? { action: "stop" } : { action: "request" }
-  if (intent && !NOT_COMMANDS.has(intent)) return { action: "request" }
+  if (intent && !NOT_COMMANDS.has(intent)) return heard.named === false ? { action: "hold" } : { action: "request" }
   if (text.length === 0 || FILLER.test(text)) return { action: "ignore" }
   return { action: "hold" }
 }

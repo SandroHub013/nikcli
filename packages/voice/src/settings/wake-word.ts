@@ -59,7 +59,7 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
  * Only these may come first: the name has to open the sentence, otherwise the
  * television saying "nick" halfway through a line would be an address.
  */
-const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "ok", "okay", "ciao", "senti", "scusa", "per", "favore"])
+const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "ok", "okay", "ciao", "senti", "scusa"])
 
 /**
  * Inspects a spoken utterance for the configured name, at its start.

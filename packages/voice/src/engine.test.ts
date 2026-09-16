@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createVoiceEngine } from "./engine"
+import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
@@ -782,7 +783,10 @@ describe("engine/agent answers what the grammar does not know", () => {
       expect(aborted()).toBe(0)
       expect(engine.status()).toBe("executing")
       expect(engine.held()).toBe(TV)
-      expect(engine.history().some((entry) => entry.kind === "action" && entry.label.startsWith(`Sentito mentre pensavo: «${TV}»`))).toBe(true)
+      // The console names the sentence by its first words, it does not quote the room.
+      expect(
+        engine.history().some((entry) => entry.kind === "action" && entry.label.startsWith(`Sentito mentre pensavo: «${firstWords(TV)}»`)),
+      ).toBe(true)
 
       // Not confirmed: the turn answers and the held sentence is never asked.
       await answer("Roma fu fondata nel 753 a.C.")
@@ -977,6 +981,31 @@ describe("engine/agent answers what the grammar does not know", () => {
       await engine.stop()
     })
 
+    test("while it is thinking, a command from the room is held: only one addressed by name is carried out", async () => {
+      const host = new MockVoiceHost()
+      ;(host as VoiceHost).askAgent = (request) =>
+        new Promise((resolve) => {
+          request.signal?.addEventListener("abort", () => resolve({ ok: false, text: "", ran: true }))
+        })
+      const transcriber = createFakeTranscriber()
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+      await engine.start()
+      transcriber.emit("nik raccontami la storia di Roma in tre frasi", true)
+      await new Promise((r) => setTimeout(r, 20))
+
+      // A video saying a command out loud must not close anything.
+      transcriber.emit("chiudi il pannello due", true)
+      await new Promise((r) => setTimeout(r, 20))
+      expect(host.calls.some((call) => call.method === "runCommand")).toBe(false)
+      expect(engine.held()).toBe("chiudi il pannello due")
+      expect(engine.status()).toBe("executing")
+
+      transcriber.emit("nik apri la tavolozza", true)
+      await new Promise((r) => setTimeout(r, 20))
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
+      await engine.stop()
+    })
+
     test("while it is thinking the name is not required: «annulla» stops the turn, the room is still held", async () => {
       const host = new MockVoiceHost()
       let aborted = 0
@@ -999,6 +1028,10 @@ describe("engine/agent answers what the grammar does not know", () => {
       await new Promise((r) => setTimeout(r, 20))
       expect(aborted).toBe(0)
       expect(engine.held()).toBe("il governo ha approvato la legge di bilancio nella notte")
+      // Named by its first words in the console, not quoted whole.
+      expect(
+        engine.history().some((entry) => entry.kind === "action" && entry.label.startsWith("Sentito mentre pensavo: «il governo ha approvato la legge di bilancio…»")),
+      ).toBe(true)
 
       transcriber.emit("annulla", true)
       await new Promise((r) => setTimeout(r, 20))

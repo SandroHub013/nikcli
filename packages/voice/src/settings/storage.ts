@@ -78,9 +78,41 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
         ? null
         : { ...(typeof parsed === "object" && parsed !== null ? parsed : {}), openRouterApiKey: apiKey }
 
-    return normalizeSettings(merged)
+    const normalized = normalizeSettings(merged)
+
+    /*
+     * A profile the loader had to migrate is written back at once.
+     *
+     * Otherwise the migration runs again at every start: the stored blob keeps
+     * the old version, and the sentence explaining what changed is shown to
+     * the user each time as though it had just happened.
+     */
+    const storedVersion = typeof parsed === "object" && parsed !== null ? (parsed as { version?: unknown }).version : undefined
+    if (merged !== null && storedVersion !== normalized.settings.version) {
+      writeSettings(store, normalized.settings)
+    }
+
+    return normalized
   } catch {
     return normalizeSettings(null)
+  }
+}
+
+/** Writes the blob and the credential, each in its own slot. Never throws. */
+function writeSettings(store: Storage, settings: VoiceSettings): boolean {
+  try {
+    // The blob never carries the credential again, including for a profile
+    // that had it inline before the split.
+    const { openRouterApiKey, ...withoutKey } = settings
+    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(withoutKey))
+    if (openRouterApiKey) {
+      store.setItem(VOICE_API_KEY_STORAGE_KEY, openRouterApiKey)
+    } else {
+      store.removeItem(VOICE_API_KEY_STORAGE_KEY)
+    }
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -117,26 +149,13 @@ export function saveVoiceSettings(
     }
   }
 
-  try {
-    // The blob never carries the credential again, including for a profile
-    // that had it inline before the split.
-    const { openRouterApiKey, ...withoutKey } = normalized.settings
-    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(withoutKey))
-
-    if (openRouterApiKey) {
-      store.setItem(VOICE_API_KEY_STORAGE_KEY, openRouterApiKey)
-    } else {
-      store.removeItem(VOICE_API_KEY_STORAGE_KEY)
-    }
-    return normalized
-  } catch {
-    return {
-      ...normalized,
-      corrections: [
-        ...normalized.corrections,
-        "Impossibile salvare le impostazioni nell'archiviazione locale.",
-      ],
-    }
+  if (writeSettings(store, normalized.settings)) return normalized
+  return {
+    ...normalized,
+    corrections: [
+      ...normalized.corrections,
+      "Impossibile salvare le impostazioni nell'archiviazione locale.",
+    ],
   }
 }
 

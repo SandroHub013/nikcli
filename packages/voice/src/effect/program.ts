@@ -32,7 +32,7 @@ import { matchesWakeWord } from "../settings/wake-word"
 import { replySpeech } from "../tts/reply"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
-import { isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
+import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -771,7 +771,7 @@ export function makeVoiceProgram(
 
     function executeAgentUtterance(
       trimmed: string,
-      heard: { typed: boolean; confidence?: number } = { typed: false },
+      heard: { typed: boolean; confidence?: number; named?: boolean } = { typed: false },
     ): Effect.Effect<void> {
       return Effect.gen(function* () {
         /*
@@ -875,7 +875,8 @@ export function makeVoiceProgram(
             options.onHeld?.(trimmed)
             options.onOutcome?.({
               success: true,
-              spoken: `Sentito mentre pensavo: «${trimmed}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,
+              // The first words only: what the room says is not the console's business.
+              spoken: `Sentito mentre pensavo: «${firstWords(trimmed)}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,
             })
             return
           }
@@ -1067,7 +1068,7 @@ export function makeVoiceProgram(
                */
               options.onOutcome?.({
                 success: true,
-                spoken: `Ignorata, non inizia con «${currentSettings.wakeWord}»: «${trimmed}».`,
+                spoken: `Ignorata, non inizia con «${currentSettings.wakeWord}»: «${firstWords(trimmed)}».`,
               })
               return
             }
@@ -1085,7 +1086,13 @@ export function makeVoiceProgram(
             // Awake, answering, or already at work on the last sentence.
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             const commandText = match.matched && match.remainder.length > 0 ? match.remainder : trimmed
-            yield* executeAgentUtterance(commandText, heard)
+            /* While a turn runs the name is not required to be heard, but a
+               command is only carried out when it was addressed: see the
+               `named` note in `while-thinking.ts`. */
+            yield* executeAgentUtterance(commandText, {
+              ...heard,
+              named: match.matched || isWakeWordAwake || awaitingAnswer,
+            })
             /*
              * Si torna a dormire solo se non è rimasta una domanda aperta.
              * Altrimenti la risposta dell'utente — che arriva un secondo
