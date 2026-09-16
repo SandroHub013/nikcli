@@ -162,6 +162,8 @@ export interface VoiceEngine {
    * and waiting to be opened again. Cleared by any start or stop.
    */
   readonly listenPaused: () => boolean
+  /** Until when the next sentence needs no name, after an answer; undefined otherwise. */
+  readonly followUp: () => number | undefined
   /**
    * Set when always-on listening has sent more than `LISTEN_REQUESTS_PER_HOUR`
    * sentences to the cloud in the last hour: said on screen, and listening
@@ -319,6 +321,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [history, setHistory] = createSignal<AgentEntry[]>([])
   const [held, setHeld] = createSignal<string | null>(null)
   const [listenPaused, setListenPaused] = createSignal(false)
+  const [followUp, setFollowUp] = createSignal<number | undefined>(undefined)
   const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
@@ -576,6 +579,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     heldDictation = false
 
     setIsRunning(false)
+    setFollowUp(undefined)
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
@@ -811,6 +815,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     onSpeaking: (text) => {
       if (activeMode() !== "transcription") setLastSpoken(text)
     },
+    onFollowUp: (until) => setFollowUp(until),
     onCue: (kind) => {
       if (activeMode() !== "transcription") (options.cue ?? playCue)(kind)
     },
@@ -981,6 +986,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     held,
     listenPaused,
     listenWarning,
+    followUp,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
       /* A session still delivering its last sentence owns the scopes this

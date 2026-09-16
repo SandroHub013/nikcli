@@ -28,6 +28,8 @@ export const voiceEn: VoiceMessages = {
   "vui.listening.text": (wakeWord) => `Listening · “${wakeWord}”`,
   "vui.listening.title": (wakeWord) => `The microphone is open and waiting for “${wakeWord}”. Press to stop listening.`,
   "vui.paused.text": "Listening paused: PC locked",
+  "vui.followUp.text": "Go on…",
+  "vui.followUp.title": (wakeWord) => `For a few seconds you can go on without saying “${wakeWord}”. Press to stop listening.`,
   "vui.paused.title": "It resumes by itself when you unlock the PC. Press to resume now.",
   "vui.shortcut.invalid": "Invalid shortcut.",
   "vui.shortcut.conflict": (command) => `Conflicts with the '${command}' command.`,

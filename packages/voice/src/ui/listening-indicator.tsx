@@ -14,6 +14,7 @@ export function ListeningIndicator(props: { engine: VoiceEngine }) {
       running: props.engine.isRunning(),
       mode: props.engine.activeMode(),
       paused: props.engine.listenPaused(),
+      followUp: props.engine.followUp() !== undefined,
     }),
   )
   const visible = createMemo(() => {
@@ -31,7 +32,7 @@ export function ListeningIndicator(props: { engine: VoiceEngine }) {
           title={current.title}
           aria-label={current.title}
           onClick={() =>
-            void (current.kind === "listening"
+            void (current.kind !== "paused"
               ? props.engine.stop()
               : props.engine.start("agent", { waitForName: true }))
           }

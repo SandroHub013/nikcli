@@ -29,6 +29,8 @@ export const voiceIt = {
   "vui.listening.text": (wakeWord: string) => `In ascolto · «${wakeWord}»`,
   "vui.listening.title": (wakeWord: string) => `Il microfono è aperto e aspetta «${wakeWord}». Premi per smettere di ascoltare.`,
   "vui.paused.text": "Ascolto in pausa: PC bloccato",
+  "vui.followUp.text": "Ti ascolto…",
+  "vui.followUp.title": (wakeWord: string) => `Per qualche secondo puoi continuare senza dire «${wakeWord}». Premi per smettere di ascoltare.`,
   "vui.paused.title": "Riprende da solo quando sblocchi il PC. Premi per riprendere adesso.",
   "vui.shortcut.invalid": "Scorciatoia non valida.",
   "vui.shortcut.conflict": (command: string) => `In conflitto con il comando '${command}'.`,
