@@ -13,6 +13,7 @@
 
 import { mediaUrl } from "../video/video"
 import { parseEventLine, type RecordEvent } from "./recording"
+import { writeWav } from "./wav"
 import { cameraAt, mappingFor, planShots, pointerAt, ringsAt } from "./zoom"
 
 export interface ExportInput {
@@ -40,6 +41,15 @@ export function pickExportMime(isSupported: (type: string) => boolean): { mimeTy
     { mimeType: "video/webm;codecs=vp9,opus", extension: "webm" as const },
   ]
   return candidates.find((candidate) => isSupported(candidate.mimeType)) ?? { mimeType: "video/webm", extension: "webm" }
+}
+
+/** Mono noise of one sample step (-90 dBFS), 8 kHz, as long as the take plus a second. */
+export function quietWav(seconds: number, random: () => number = Math.random): ArrayBuffer {
+  const sampleRate = 8000
+  const length = Math.ceil(((Number.isFinite(seconds) ? seconds : 0) + 1) * sampleRate)
+  const samples = new Int16Array(length)
+  for (let i = 0; i < length; i++) samples[i] = random() < 0.5 ? -1 : 1
+  return writeWav({ sampleRate, channels: 1, samples })
 }
 
 export function readEvents(text: string): RecordEvent[] {
@@ -84,10 +94,19 @@ export async function exportPromo(input: ExportInput): Promise<ExportResult> {
   const audio = new AudioContext()
   const mix = audio.createMediaStreamDestination()
   const players: HTMLAudioElement[] = []
-  for (const path of [input.voice, input.mic]) {
+  /*
+   * A take with neither track still plays one element: a bed of noise too
+   * quiet to hear. Without a playing element, WebView2's recorder never
+   * starts its audio encoder and writes an MP4 with only the last second
+   * and a half of the take (a WebM with nothing); synthetic Web Audio nodes
+   * and a file of pure zeros do not count.
+   */
+  const bed =
+    input.voice || input.mic ? undefined : URL.createObjectURL(new Blob([quietWav(video.duration)], { type: "audio/wav" }))
+  for (const path of [input.voice, input.mic, bed]) {
     if (!path) continue
-    const player = new Audio(mediaUrl(path))
-    player.crossOrigin = "anonymous"
+    const player = new Audio(path === bed ? path : mediaUrl(path))
+    if (path !== bed) player.crossOrigin = "anonymous"
     try {
       await loaded(player)
       audio.createMediaElementSource(player).connect(mix)
@@ -176,6 +195,7 @@ export async function exportPromo(input: ExportInput): Promise<ExportResult> {
     for (const track of stream.getTracks()) track.stop()
     await audio.close()
     video.removeAttribute("src")
+    if (bed) URL.revokeObjectURL(bed)
   }
 
   const blob = new Blob(chunks, { type: mime.mimeType })
