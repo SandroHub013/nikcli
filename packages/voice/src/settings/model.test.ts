@@ -106,9 +106,24 @@ describe("settings/model - normalizeSettings", () => {
     expect(normalizeSettings({ ...moved, activation: "toggle" }).activation).toBe("toggle")
   })
 
+  test("the old default name moves to «nik» once; a name the user chose stays", () => {
+    const old = normalizeSettings({ version: 2, activation: "wake-word" as const, wakeWord: "hei nik" })
+    expect(old.wakeWord).toBe("nik")
+    expect(old.corrections.some((line) => line.includes("«nik»"))).toBe(true)
+    expect(normalizeSettings({ version: 1, activation: "toggle" as const, wakeWord: " Hei  Nik " }).wakeWord).toBe("nik")
+
+    expect(normalizeSettings({ version: 2, wakeWord: "ehi nik" }).wakeWord).toBe("ehi nik")
+    expect(normalizeSettings({ version: 2, wakeWord: "jarvis" }).wakeWord).toBe("jarvis")
+    // Chosen again after the move, it is kept.
+    expect(normalizeSettings({ ...old, wakeWord: "hei nik" }).wakeWord).toBe("hei nik")
+    // A version-2 profile already on the wake word is not moved to anything else.
+    expect(old.activation).toBe("wake-word")
+    expect(old.migrations).toEqual([])
+  })
+
   test("preserves valid configuration with zero corrections", () => {
     const valid = {
-      version: 2,
+      version: CURRENT_SETTINGS_VERSION,
       mode: "transcription" as const,
       activation: "wake-word" as const,
       transcriptionSend: "auto" as const,

@@ -35,8 +35,11 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * was a request — a television in the background ran up a bill and opened
  * sessions. A profile written before this is moved to the wake word once; the
  * switch in the voice settings turns it back off.
+ *
+ * 3: the name is "nik". Profiles still holding the old default, "hei nik",
+ * are moved to it once, so a bare "nik, ..." is heard.
  */
-export const CURRENT_SETTINGS_VERSION = 2
+export const CURRENT_SETTINGS_VERSION = 3
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
@@ -194,6 +197,9 @@ function chordProblem(chordStr: unknown): string | undefined {
   return risk.message ?? "Scorciatoia non valida."
 }
 
+/** The name stored by profiles written before version 3. */
+const OLD_DEFAULT_WAKE_WORD = "hei nik"
+
 /**
  * Validates and repairs arbitrary settings objects into canonical VoiceSettings.
  *
@@ -231,11 +237,27 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
      * push-to-talk already has a key holding the microphone open, and a
      * profile already on the wake word is left alone.
      */
-    if (candidate.activation === "toggle") {
+    if (version < 2 && candidate.activation === "toggle") {
       candidate = { ...candidate, activation: "wake-word" }
       migrations.push("wake-word")
       corrections.push(
         "Ora l'assistente risponde solo quando lo chiami per nome: puoi cambiarlo nelle impostazioni vocali.",
+      )
+    }
+    /*
+     * Version 3: the name to call the assistant by is "nik". A profile saved
+     * before then holds the old default, "hei nik", and since the name is
+     * matched at the start of the sentence, a bare "nik, apri..." was ignored.
+     * Only that exact old default moves; a name the user typed stays.
+     */
+    if (
+      version < 3 &&
+      typeof candidate.wakeWord === "string" &&
+      candidate.wakeWord.trim().toLowerCase().replace(/\s+/g, " ") === OLD_DEFAULT_WAKE_WORD
+    ) {
+      candidate = { ...candidate, wakeWord: DEFAULT_VOICE_SETTINGS.wakeWord }
+      corrections.push(
+        `Il nome dell'assistente ora è «${DEFAULT_VOICE_SETTINGS.wakeWord}»: puoi cambiarlo nelle impostazioni vocali.`,
       )
     }
     version = CURRENT_SETTINGS_VERSION
