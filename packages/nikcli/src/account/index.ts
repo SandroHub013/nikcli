@@ -688,6 +688,15 @@ export namespace Account {
       },
     })
 
+    // The nikcli issuer has no organizations: `auth.nikcli.store` publishes no
+    // `/api/user/orgs` route and its schema has no orgs table, so every call
+    // here answered 404 and `nikcli account orgs` could only ever print
+    // "Failed to fetch orgs: 404 404 Not Found" — never its own "No
+    // organizations found". An issuer that does not expose the endpoint has no
+    // organizations to report, which is an empty list, not an error. A real
+    // failure (401, 5xx, a body that is not a list) still surfaces.
+    if (response.status === 404) return []
+
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error")
       throw new FetchOrgsError({
@@ -698,8 +707,8 @@ export namespace Account {
       })
     }
 
-    const data = (await response.json()) as { orgs: Org[] }
-    return data.orgs
+    const data = (await response.json().catch(() => undefined)) as { orgs?: Org[] } | undefined
+    return data?.orgs ?? []
   }
 
   // ============================================================================
@@ -733,7 +742,7 @@ export namespace Account {
    */
   function useImpl(accountID: AccountID | null, orgID?: OrgID | null): void {
     // Clear the outgoing account's cache too
-    const config = AccountDB.getConfig()
+    const config = Effect.runSync(AccountDB.getConfig())
     const previousActiveId = config.active_account_id
     if (previousActiveId) {
       tokenCache.delete(previousActiveId)
@@ -776,7 +785,7 @@ export namespace Account {
     if (cached && now - cached.cachedAt < ACCOUNT_ROW_CACHE_TTL) {
       return cached.row
     }
-    const row = AccountDB.getAccount(accountID)
+    const row = Effect.runSync(AccountDB.getAccount(accountID))
     if (row) {
       accountRowCache.set(accountID, { row, cachedAt: now })
     }

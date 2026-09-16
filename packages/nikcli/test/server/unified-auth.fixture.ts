@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -77,7 +78,7 @@ describe("unified server authentication", () => {
     expect(response.status).toBe(200)
     const body = (await response.json()) as { email: string }
     expect(body.email).toBe("identity@example.com")
-    expect(UserDB.ensureExternalUser({ sub: "acc_identity", email: body.email }).id).toStartWith("usr_")
+    expect(Effect.runSync(UserDB.ensureExternalUser({ sub: "acc_identity", email: body.email })).id).toStartWith("usr_")
   })
 
   it("accepts issuer identity on a /mobile route", async () => {
@@ -105,7 +106,7 @@ describe("unified server authentication", () => {
       email: "legacy@example.com",
       password: "Password1!",
     })
-    const legacy = UserDB.createSession(user.id, 1)
+    const legacy = Effect.runSync(UserDB.createSession(user.id, 1))
     expect((await request("/user/me", legacy)).status).toBe(401)
     expect((await request("/mobile/project")).status).toBe(401)
   })

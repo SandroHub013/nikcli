@@ -1,4 +1,5 @@
 import { eq, and, or, sql, desc, asc } from "drizzle-orm"
+import { Effect } from "effect"
 import { createHash, randomBytes } from "node:crypto"
 import type { UserSchema } from "@nikcli-ai/util/user-schema"
 import { Database } from "@/database/database"
@@ -64,12 +65,7 @@ export namespace UserDB {
   // Database access — uses the shared central Database.Service
   // ============================================================================
 
-  /**
-   * Get the shared Drizzle database instance from the central Database.Service.
-   */
-  export function db() {
-    return Database.syncDb()
-  }
+  type Executor = Database.TxOrDb
 
   // ============================================================================
   // Session cache — eliminates SHA-256 + 2 DB queries on every authenticated request
@@ -194,21 +190,23 @@ export namespace UserDB {
     const now = Date.now()
     const id = generateId("usr")
 
-    db()
-      .insert(users)
-      .values({
-        id,
-        username: input.username.trim(),
-        email: input.email.trim().toLowerCase(),
-        passwordHash: hash,
-        displayName: input.displayName?.trim() ?? null,
-        role,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run()
-
-    const row = db().select().from(users).where(eq(users.id, id)).get()
+    const row = Effect.runSync(
+      Database.query("UserDB.create", (db) => {
+        db.insert(users)
+          .values({
+            id,
+            username: input.username.trim(),
+            email: input.email.trim().toLowerCase(),
+            passwordHash: hash,
+            displayName: input.displayName?.trim() ?? null,
+            role,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run()
+        return db.select().from(users).where(eq(users.id, id)).get()
+      }),
+    )
     return row
       ? rowToPublic(row)
       : {
@@ -222,77 +220,97 @@ export namespace UserDB {
         }
   }
 
-  export function findByEmail(email: string): User | null {
-    const row = db().select().from(users).where(eq(users.email, email.toLowerCase())).get()
-    return row ? rowToUser(row) : null
+  export function findByEmail(email: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.findByEmail",
+      (db) => {
+        const row = db.select().from(users).where(eq(users.email, email.toLowerCase())).get()
+        return row ? rowToUser(row) : null
+      },
+      executor,
+    )
   }
 
-  export function findById(id: string): User | null {
-    const row = db().select().from(users).where(eq(users.id, id)).get()
-    return row ? rowToUser(row) : null
+  export function findById(id: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.findById",
+      (db) => {
+        const row = db.select().from(users).where(eq(users.id, id)).get()
+        return row ? rowToUser(row) : null
+      },
+      executor,
+    )
   }
 
-  export function ensureExternalUser(input: { sub: string; email: string }): PublicUser {
-    const subject = input.sub.trim()
-    const email = input.email.trim().toLowerCase()
-    if (!subject) throw new Error("External subject is required")
-    if (!email) throw new Error("External email is required")
+  export function ensureExternalUser(input: { sub: string; email: string }, executor?: Executor) {
+    return Database.query(
+      "UserDB.ensureExternalUser",
+      (db) => {
+        const subject = input.sub.trim()
+        const email = input.email.trim().toLowerCase()
+        if (!subject) throw new Error("External subject is required")
+        if (!email) throw new Error("External email is required")
 
-    const bySubject = db().select().from(users).where(eq(users.externalSubject, subject)).get()
-    if (bySubject) {
-      if (bySubject.email !== email) {
-        db().update(users).set({ email, updatedAt: Date.now() }).where(eq(users.id, bySubject.id)).run()
-        const updated = db().select().from(users).where(eq(users.id, bySubject.id)).get()
-        return rowToPublic(updated ?? bySubject)
-      }
-      return rowToPublic(bySubject)
-    }
+        const bySubject = db.select().from(users).where(eq(users.externalSubject, subject)).get()
+        if (bySubject) {
+          if (bySubject.email !== email) {
+            db.update(users).set({ email, updatedAt: Date.now() }).where(eq(users.id, bySubject.id)).run()
+            const updated = db.select().from(users).where(eq(users.id, bySubject.id)).get()
+            return rowToPublic(updated ?? bySubject)
+          }
+          return rowToPublic(bySubject)
+        }
 
-    const byEmail = db().select().from(users).where(eq(users.email, email)).get()
-    if (byEmail) {
-      if (byEmail.externalSubject && byEmail.externalSubject !== subject) {
-        throw new Error("Email is already linked to another external identity")
-      }
-      db().update(users).set({ externalSubject: subject, updatedAt: Date.now() }).where(eq(users.id, byEmail.id)).run()
-      const updated = db().select().from(users).where(eq(users.id, byEmail.id)).get()
-      return rowToPublic(updated ?? byEmail)
-    }
+        const byEmail = db.select().from(users).where(eq(users.email, email)).get()
+        if (byEmail) {
+          if (byEmail.externalSubject && byEmail.externalSubject !== subject) {
+            throw new Error("Email is already linked to another external identity")
+          }
+          db.update(users)
+            .set({ externalSubject: subject, updatedAt: Date.now() })
+            .where(eq(users.id, byEmail.id))
+            .run()
+          const updated = db.select().from(users).where(eq(users.id, byEmail.id)).get()
+          return rowToPublic(updated ?? byEmail)
+        }
 
-    const base =
-      email
-        .split("@", 1)[0]
-        ?.replace(/[^a-z0-9_-]/gi, "-")
-        .replace(/^-+|-+$/g, "") || "member"
-    let username = base
-    for (
-      let suffix = 1;
-      db().select({ id: users.id }).from(users).where(eq(users.username, username)).get();
-      suffix++
-    ) {
-      username = `${base}-${suffix}`
-    }
-    const now = Date.now()
-    const id = generateId("usr")
-    // First identity on this database owns it — same rule as password
-    // registration, where the first local user becomes admin.
-    const role = hasUsers() ? "user" : "admin"
-    db()
-      .insert(users)
-      .values({
-        id,
-        username,
-        email,
-        externalSubject: subject,
-        passwordHash: `!oauth:${randomBytes(32).toString("base64url")}`,
-        displayName: null,
-        role,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run()
-    const created = db().select().from(users).where(eq(users.id, id)).get()
-    if (!created) throw new Error("Failed to provision external user")
-    return rowToPublic(created)
+        const base =
+          email
+            .split("@", 1)[0]
+            ?.replace(/[^a-z0-9_-]/gi, "-")
+            .replace(/^-+|-+$/g, "") || "member"
+        let username = base
+        for (
+          let suffix = 1;
+          db.select({ id: users.id }).from(users).where(eq(users.username, username)).get();
+          suffix++
+        ) {
+          username = `${base}-${suffix}`
+        }
+        const now = Date.now()
+        const id = generateId("usr")
+        // First identity on this database owns it — same rule as password
+        // registration, where the first local user becomes admin.
+        const role = hasUsers() ? "user" : "admin"
+        db.insert(users)
+          .values({
+            id,
+            username,
+            email,
+            externalSubject: subject,
+            passwordHash: `!oauth:${randomBytes(32).toString("base64url")}`,
+            displayName: null,
+            role,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run()
+        const created = db.select().from(users).where(eq(users.id, id)).get()
+        if (!created) throw new Error("Failed to provision external user")
+        return rowToPublic(created)
+      },
+      executor,
+    )
   }
 
   export async function verifyPassword(user: User, password: string): Promise<boolean> {
@@ -300,130 +318,165 @@ export namespace UserDB {
     return Bun.password.verify(password, user.password_hash)
   }
 
-  export function createSession(userId: string, expiresInDays?: number): string {
-    const token = `nku_${randomBytes(32).toString("base64url")}`
-    const id = generateId("ses")
-    const now = Date.now()
-    const expiresAt = expiresInDays ? now + expiresInDays * 24 * 60 * 60 * 1000 : null
+  export function createSession(userId: string, expiresInDays?: number, executor?: Executor) {
+    return Database.query(
+      "UserDB.createSession",
+      (db) => {
+        const token = `nku_${randomBytes(32).toString("base64url")}`
+        const id = generateId("ses")
+        const now = Date.now()
+        const expiresAt = expiresInDays ? now + expiresInDays * 24 * 60 * 60 * 1000 : null
 
-    db()
-      .insert(userSessions)
-      .values({
-        id,
-        userId,
-        tokenHash: hashToken(token),
-        expiresAt,
-        createdAt: now,
-      })
-      .run()
+        db.insert(userSessions)
+          .values({
+            id,
+            userId,
+            tokenHash: hashToken(token),
+            expiresAt,
+            createdAt: now,
+          })
+          .run()
 
-    return token
+        return token
+      },
+      executor,
+    )
   }
 
   /**
    * Verify a bearer token and return the associated public user.
    * Uses an in-memory cache to avoid hitting the database on every request.
    */
-  export function verifySession(rawToken: string): PublicUser | null {
-    if (!rawToken.startsWith("nku_")) return null
-    const hash = hashToken(rawToken)
-    const now = Date.now()
+  export function verifySession(rawToken: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.verifySession",
+      (db) => {
+        if (!rawToken.startsWith("nku_")) return null
+        const hash = hashToken(rawToken)
+        const now = Date.now()
 
-    // Check cache first
-    const cached = sessionCache.get(hash)
-    if (cached) {
-      if (now - cached.cachedAt < SESSION_CACHE_TTL) {
-        // Cache entry is still within TTL
-        if (cached.expiresAt === null || cached.expiresAt > now) {
-          return cached.user
+        // Check cache first
+        const cached = sessionCache.get(hash)
+        if (cached) {
+          if (now - cached.cachedAt < SESSION_CACHE_TTL) {
+            // Cache entry is still within TTL
+            if (cached.expiresAt === null || cached.expiresAt > now) {
+              return cached.user
+            }
+            // Session expired — remove from cache
+            sessionCache.delete(hash)
+            return null
+          }
+          // TTL expired — fall through to DB
+          sessionCache.delete(hash)
         }
-        // Session expired — remove from cache
-        sessionCache.delete(hash)
-        return null
-      }
-      // TTL expired — fall through to DB
-      sessionCache.delete(hash)
-    }
 
-    // Cache miss — use JOIN query (1 query instead of 2)
-    const row = db()
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        expiresAt: userSessions.expiresAt,
-      })
-      .from(userSessions)
-      .innerJoin(users, eq(userSessions.userId, users.id))
-      .where(eq(userSessions.tokenHash, hash))
-      .get()
+        // Cache miss — use JOIN query (1 query instead of 2)
+        const row = db
+          .select({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+            expiresAt: userSessions.expiresAt,
+          })
+          .from(userSessions)
+          .innerJoin(users, eq(userSessions.userId, users.id))
+          .where(eq(userSessions.tokenHash, hash))
+          .get()
 
-    if (!row) {
-      // Token not found
-      return null
-    }
+        if (!row) {
+          // Token not found
+          return null
+        }
 
-    if (row.expiresAt !== null && row.expiresAt <= now) {
-      // Session expired — delete and return null
-      db().delete(userSessions).where(eq(userSessions.tokenHash, hash)).run()
-      sessionCache.delete(hash)
-      return null
-    }
+        if (row.expiresAt !== null && row.expiresAt <= now) {
+          // Session expired — delete and return null
+          db.delete(userSessions).where(eq(userSessions.tokenHash, hash)).run()
+          sessionCache.delete(hash)
+          return null
+        }
 
-    const publicUser: PublicUser = {
-      id: row.id,
-      username: row.username,
-      email: row.email,
-      display_name: row.displayName,
-      role: row.role as "admin" | "user",
-      created_at: row.createdAt,
-      updated_at: row.updatedAt,
-    }
+        const publicUser: PublicUser = {
+          id: row.id,
+          username: row.username,
+          email: row.email,
+          display_name: row.displayName,
+          role: row.role as "admin" | "user",
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+        }
 
-    // Populate cache (with LRU cap)
-    sessionCacheSet(hash, {
-      user: publicUser,
-      expiresAt: row.expiresAt,
-      cachedAt: now,
-    })
-    return publicUser
+        // Populate cache (with LRU cap)
+        sessionCacheSet(hash, {
+          user: publicUser,
+          expiresAt: row.expiresAt,
+          cachedAt: now,
+        })
+        return publicUser
+      },
+      executor,
+    )
   }
 
-  export function revokeSession(rawToken: string): boolean {
-    const hash = hashToken(rawToken)
-    invalidateSessionCache(hash)
-    const result = db().delete(userSessions).where(eq(userSessions.tokenHash, hash)).run()
-    return getChanges(result) > 0
+  export function revokeSession(rawToken: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.revokeSession",
+      (db) => {
+        const hash = hashToken(rawToken)
+        invalidateSessionCache(hash)
+        const result = db.delete(userSessions).where(eq(userSessions.tokenHash, hash)).run()
+        return getChanges(result) > 0
+      },
+      executor,
+    )
   }
 
-  export function revokeAllUserSessions(userId: string): void {
-    invalidateSessionCache(undefined, userId)
-    db().delete(userSessions).where(eq(userSessions.userId, userId)).run()
+  export function revokeAllUserSessions(userId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.revokeAllUserSessions",
+      (db) => {
+        invalidateSessionCache(undefined, userId)
+        db.delete(userSessions).where(eq(userSessions.userId, userId)).run()
+      },
+      executor,
+    )
   }
 
-  export function listUsers(): PublicUser[] {
-    return db().select().from(users).orderBy(asc(users.createdAt)).all().map(rowToPublic)
+  export function listUsers(executor?: Executor) {
+    return Database.query(
+      "UserDB.listUsers",
+      (db) => {
+        return db.select().from(users).orderBy(asc(users.createdAt)).all().map(rowToPublic)
+      },
+      executor,
+    )
   }
 
-  export function hasUsers(): boolean {
-    const result = db()
-      .select({ exists: sql`exists(select 1 from users)` })
-      .from(users)
-      .limit(1)
-      .get()
-    // SQLite returns 1 or 0 for EXISTS
-    return (result as any)?.exists ? true : false
+  export function hasUsers(executor?: Executor) {
+    return Database.query(
+      "UserDB.hasUsers",
+      (db) => {
+        const result = db
+          .select({ exists: sql`exists(select 1 from users)` })
+          .from(users)
+          .limit(1)
+          .get()
+        // SQLite returns 1 or 0 for EXISTS
+        return (result as any)?.exists ? true : false
+      },
+      executor,
+    )
   }
 
   export async function updateUser(
     id: string,
     input: { displayName?: string; password?: string; role?: "admin" | "user" },
   ): Promise<PublicUser | null> {
-    const user = findById(id)
+    const user = Effect.runSync(findById(id))
     if (!user) return null
 
     // Enforce admin email allowlist: only allowlisted emails can hold the admin role
@@ -453,20 +506,24 @@ export namespace UserDB {
     updates.updatedAt = Date.now()
 
     // Use RETURNING to get updated row in one query instead of read + write + read
-    const [updated] = db()
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .all()
+    const [updated] = Effect.runSync(
+      Database.query("UserDB.updateUser", (db) =>
+        db
+          .update(users)
+          .set(updates)
+          .where(eq(users.id, id))
+          .returning({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          })
+          .all(),
+      ),
+    )
 
     if (!updated) return null
 
@@ -486,10 +543,16 @@ export namespace UserDB {
     }
   }
 
-  export function deleteUser(id: string): boolean {
-    invalidateSessionCache(undefined, id)
-    const result = db().delete(users).where(eq(users.id, id)).run()
-    return getChanges(result) > 0
+  export function deleteUser(id: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.deleteUser",
+      (db) => {
+        invalidateSessionCache(undefined, id)
+        const result = db.delete(users).where(eq(users.id, id)).run()
+        return getChanges(result) > 0
+      },
+      executor,
+    )
   }
 
   // ============================================================================
@@ -507,175 +570,226 @@ export namespace UserDB {
   /**
    * Add a contact bidirectionally (wrapped in a transaction).
    */
-  export function addContact(userId: string, contactId: string): void {
-    const now = Date.now()
-    db().transaction((tx) => {
-      tx.insert(chatContacts).values({ userId, contactId, createdAt: now }).onConflictDoNothing().run()
-      tx.insert(chatContacts)
-        .values({ userId: contactId, contactId: userId, createdAt: now })
-        .onConflictDoNothing()
-        .run()
-    })
+  export function addContact(userId: string, contactId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.addContact",
+      (db) => {
+        const now = Date.now()
+        db.transaction((tx) => {
+          tx.insert(chatContacts).values({ userId, contactId, createdAt: now }).onConflictDoNothing().run()
+          tx.insert(chatContacts)
+            .values({ userId: contactId, contactId: userId, createdAt: now })
+            .onConflictDoNothing()
+            .run()
+        })
+      },
+      executor,
+    )
   }
 
   /**
    * Remove a contact bidirectionally (both directions).
    */
-  export function removeContact(userId: string, contactId: string): void {
-    db()
-      .delete(chatContacts)
-      .where(
-        or(
-          and(eq(chatContacts.userId, userId), eq(chatContacts.contactId, contactId)),
-          and(eq(chatContacts.userId, contactId), eq(chatContacts.contactId, userId)),
-        ),
-      )
-      .run()
+  export function removeContact(userId: string, contactId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.removeContact",
+      (db) => {
+        db.delete(chatContacts)
+          .where(
+            or(
+              and(eq(chatContacts.userId, userId), eq(chatContacts.contactId, contactId)),
+              and(eq(chatContacts.userId, contactId), eq(chatContacts.contactId, userId)),
+            ),
+          )
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function listContacts(userId: string): PublicUser[] {
-    const rows = db()
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(chatContacts)
-      .innerJoin(users, eq(chatContacts.contactId, users.id))
-      .where(eq(chatContacts.userId, userId))
-      .orderBy(asc(chatContacts.createdAt))
-      .all()
+  export function listContacts(userId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.listContacts",
+      (db) => {
+        const rows = db
+          .select({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          })
+          .from(chatContacts)
+          .innerJoin(users, eq(chatContacts.contactId, users.id))
+          .where(eq(chatContacts.userId, userId))
+          .orderBy(asc(chatContacts.createdAt))
+          .all()
 
-    return rows.map((row) => ({
-      id: row.id,
-      username: row.username,
-      email: row.email,
-      display_name: row.displayName,
-      role: row.role as "admin" | "user",
-      created_at: row.createdAt,
-      updated_at: row.updatedAt,
-    }))
+        return rows.map((row) => ({
+          id: row.id,
+          username: row.username,
+          email: row.email,
+          display_name: row.displayName,
+          role: row.role as "admin" | "user",
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+        }))
+      },
+      executor,
+    )
   }
 
-  export function searchUsers(query: string, excludeUserId: string): PublicUser[] {
-    const like = `%${query.toLowerCase()}%`
-    const rows = db()
-      .select({
-        id: users.id,
-        username: users.username,
-        email: users.email,
-        displayName: users.displayName,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(
-        and(
-          sql`${users.id} != ${excludeUserId}`,
-          or(
-            sql`LOWER(${users.username}) LIKE ${like}`,
-            sql`LOWER(${users.email}) LIKE ${like}`,
-            sql`LOWER(${users.displayName}) LIKE ${like}`,
-          ),
-        ),
-      )
-      .limit(10)
-      .all()
+  export function searchUsers(query: string, excludeUserId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.searchUsers",
+      (db) => {
+        const like = `%${query.toLowerCase()}%`
+        const rows = db
+          .select({
+            id: users.id,
+            username: users.username,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          })
+          .from(users)
+          .where(
+            and(
+              sql`${users.id} != ${excludeUserId}`,
+              or(
+                sql`LOWER(${users.username}) LIKE ${like}`,
+                sql`LOWER(${users.email}) LIKE ${like}`,
+                sql`LOWER(${users.displayName}) LIKE ${like}`,
+              ),
+            ),
+          )
+          .limit(10)
+          .all()
 
-    return rows.map((row) => ({
-      id: row.id,
-      username: row.username,
-      email: row.email,
-      display_name: row.displayName,
-      role: row.role as "admin" | "user",
-      created_at: row.createdAt,
-      updated_at: row.updatedAt,
-    }))
+        return rows.map((row) => ({
+          id: row.id,
+          username: row.username,
+          email: row.email,
+          display_name: row.displayName,
+          role: row.role as "admin" | "user",
+          created_at: row.createdAt,
+          updated_at: row.updatedAt,
+        }))
+      },
+      executor,
+    )
   }
 
-  export function sendMessage(senderId: string, receiverId: string, content: string): ChatMessage {
-    const id = generateId("msg")
-    const now = Date.now()
-    db()
-      .insert(chatMessages)
-      .values({
-        id,
-        senderId,
-        receiverId,
-        content,
-        read: false,
-        createdAt: now,
-      })
-      .run()
-    return {
-      id,
-      sender_id: senderId,
-      receiver_id: receiverId,
-      content,
-      read: 0,
-      created_at: now,
-    }
+  export function sendMessage(senderId: string, receiverId: string, content: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.sendMessage",
+      (db) => {
+        const id = generateId("msg")
+        const now = Date.now()
+        db.insert(chatMessages)
+          .values({
+            id,
+            senderId,
+            receiverId,
+            content,
+            read: false,
+            createdAt: now,
+          })
+          .run()
+        return {
+          id,
+          sender_id: senderId,
+          receiver_id: receiverId,
+          content,
+          read: 0,
+          created_at: now,
+        }
+      },
+      executor,
+    )
   }
 
-  export function getMessages(userId: string, contactId: string, limit = 100): ChatMessage[] {
-    // Use a subquery approach with Drizzle for the bidirectional conversation query
-    const recentMessages = db()
-      .select()
-      .from(chatMessages)
-      .where(
-        or(
-          and(eq(chatMessages.senderId, userId), eq(chatMessages.receiverId, contactId)),
-          and(eq(chatMessages.senderId, contactId), eq(chatMessages.receiverId, userId)),
-        ),
-      )
-      .orderBy(desc(chatMessages.createdAt))
-      .limit(limit)
-      .as("recent_messages")
+  export function getMessages(userId: string, contactId: string, limit = 100, executor?: Executor) {
+    return Database.query(
+      "UserDB.getMessages",
+      (db) => {
+        // Use a subquery approach with Drizzle for the bidirectional conversation query
+        const recentMessages = db
+          .select()
+          .from(chatMessages)
+          .where(
+            or(
+              and(eq(chatMessages.senderId, userId), eq(chatMessages.receiverId, contactId)),
+              and(eq(chatMessages.senderId, contactId), eq(chatMessages.receiverId, userId)),
+            ),
+          )
+          .orderBy(desc(chatMessages.createdAt))
+          .limit(limit)
+          .as("recent_messages")
 
-    const rows = db().select().from(recentMessages).orderBy(asc(recentMessages.createdAt)).all()
+        const rows = db.select().from(recentMessages).orderBy(asc(recentMessages.createdAt)).all()
 
-    return rows.map((row) => ({
-      id: row.id,
-      sender_id: row.senderId,
-      receiver_id: row.receiverId,
-      content: row.content,
-      read: row.read ? 1 : 0,
-      created_at: row.createdAt,
-    }))
+        return rows.map((row) => ({
+          id: row.id,
+          sender_id: row.senderId,
+          receiver_id: row.receiverId,
+          content: row.content,
+          read: row.read ? 1 : 0,
+          created_at: row.createdAt,
+        }))
+      },
+      executor,
+    )
   }
 
-  export function markMessagesRead(userId: string, senderId: string): void {
-    db()
-      .update(chatMessages)
-      .set({ read: true })
-      .where(
-        and(eq(chatMessages.receiverId, userId), eq(chatMessages.senderId, senderId), eq(chatMessages.read, false)),
-      )
-      .run()
+  export function markMessagesRead(userId: string, senderId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.markMessagesRead",
+      (db) => {
+        db.update(chatMessages)
+          .set({ read: true })
+          .where(
+            and(eq(chatMessages.receiverId, userId), eq(chatMessages.senderId, senderId), eq(chatMessages.read, false)),
+          )
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function getUnreadCount(userId: string, senderId: string): number {
-    const [result] = db()
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(chatMessages)
-      .where(
-        and(eq(chatMessages.receiverId, userId), eq(chatMessages.senderId, senderId), eq(chatMessages.read, false)),
-      )
-      .all()
-    return result?.count ?? 0
+  export function getUnreadCount(userId: string, senderId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.getUnreadCount",
+      (db) => {
+        const [result] = db
+          .select({ count: sql<number>`cast(count(*) as integer)` })
+          .from(chatMessages)
+          .where(
+            and(eq(chatMessages.receiverId, userId), eq(chatMessages.senderId, senderId), eq(chatMessages.read, false)),
+          )
+          .all()
+        return result?.count ?? 0
+      },
+      executor,
+    )
   }
 
-  export function getTotalUnreadCount(userId: string): number {
-    const [result] = db()
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(chatMessages)
-      .where(and(eq(chatMessages.receiverId, userId), eq(chatMessages.read, false)))
-      .all()
-    return result?.count ?? 0
+  export function getTotalUnreadCount(userId: string, executor?: Executor) {
+    return Database.query(
+      "UserDB.getTotalUnreadCount",
+      (db) => {
+        const [result] = db
+          .select({ count: sql<number>`cast(count(*) as integer)` })
+          .from(chatMessages)
+          .where(and(eq(chatMessages.receiverId, userId), eq(chatMessages.read, false)))
+          .all()
+        return result?.count ?? 0
+      },
+      executor,
+    )
   }
 }

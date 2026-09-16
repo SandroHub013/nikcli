@@ -290,6 +290,90 @@ export const MobileGithubBranch = z
   })
   .meta({ ref: "MobileGithubBranch" })
 
+/**
+ * Normalized GitHub Actions shapes.
+ *
+ * `status` / `conclusion` stay `z.string()` on purpose: GitHub keeps adding members
+ * ("waiting", "pending", "stale", …) and a literal union here would turn a new one into a
+ * 400 on the whole list. The client maps unknown values to a neutral appearance instead.
+ */
+export const MobileGithubWorkflowRun = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    workflowID: z.number().optional(),
+    runNumber: z.number(),
+    attempt: z.number().optional(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    event: z.string(),
+    branch: z.string(),
+    sha: z.string(),
+    title: z.string(),
+    actor: z.object({ login: z.string(), avatarUrl: z.string().optional() }).optional(),
+    htmlUrl: z.string(),
+    createdAt: z.number(),
+    updatedAt: z.number(),
+    startedAt: z.number().optional(),
+    durationMs: z.number().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowRun" })
+
+export const MobileGithubWorkflowStep = z
+  .object({
+    name: z.string(),
+    number: z.number(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    startedAt: z.number().optional(),
+    completedAt: z.number().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowStep" })
+
+export const MobileGithubWorkflowJob = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    status: z.string(),
+    conclusion: z.string().optional(),
+    htmlUrl: z.string().optional(),
+    startedAt: z.number().optional(),
+    completedAt: z.number().optional(),
+    durationMs: z.number().optional(),
+    steps: MobileGithubWorkflowStep.array(),
+  })
+  .meta({ ref: "MobileGithubWorkflowJob" })
+
+export const MobileGithubWorkflow = z
+  .object({
+    id: z.number(),
+    name: z.string(),
+    path: z.string(),
+    state: z.string(),
+    htmlUrl: z.string().optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflow" })
+
+export const MobileGithubWorkflowRunList = z
+  .object({
+    runs: MobileGithubWorkflowRun.array(),
+    totalCount: z.number(),
+    /** False when the repository has no workflow files at all — a different empty state. */
+    configured: z.boolean(),
+  })
+  .meta({ ref: "MobileGithubWorkflowRunList" })
+
+export const MobileGithubWorkflowDispatchInput = z
+  .object({
+    ref: z.string().min(1),
+    inputs: z.record(z.string(), z.string()).optional(),
+  })
+  .meta({ ref: "MobileGithubWorkflowDispatchInput" })
+
+export const MobileGithubRerunInput = z
+  .object({ failedOnly: z.boolean().default(false) })
+  .meta({ ref: "MobileGithubRerunInput" })
+
 export const MobileGithubImport = MobileGithubRepo.Import.meta({ ref: "MobileGithubImport" })
 
 export const MobileGithubSessionCreateInput = z
@@ -638,7 +722,7 @@ export async function searchPromptMemories(query: string) {
   }> = []
 
   // Search the authoritative SQL session index rather than scanning files.
-  const allSessions = SessionRepo.listAll()
+  const allSessions = Effect.runSync(SessionRepo.listAll())
   for (const session of allSessions) {
     const messages = await runSessionForSession(
       session,
@@ -693,7 +777,7 @@ export async function resolveMobilePromptDefaults(session: Session.Info) {
     // Sibling candidates come from the SQL store (SessionRepo), sorted
     // newest-updated first. We filter to the same project because prompt
     // defaults only make sense within the same context.
-    const sessions = SessionRepo.listAll()
+    const sessions = Effect.runSync(SessionRepo.listAll())
       .filter((c) => c.id !== session.id && c.projectID === session.projectID)
       .sort((a, b) => b.time.updated - a.time.updated)
 
@@ -867,7 +951,15 @@ async function refreshGithubToken(key: string): Promise<string | null> {
     refresh_token_expires_in?: number
     error?: string
   }
-  if (!payload.access_token) return null
+  if (!payload.access_token) {
+    // GitHub answers 200 with an `error` field here, so the only signal that a
+    // refresh is failing is this body. Silently dropping it is how
+    // `incorrect_client_credentials` — what GitHub returns when a refresh
+    // arrives without the app's client secret, which a public CLI client does
+    // not have — stayed invisible while every GitHub call quietly went stale.
+    log.warn("github token refresh rejected", { connector: key, error: payload.error ?? "no access_token" })
+    return null
+  }
 
   await storeGithubToken({
     accessToken: payload.access_token,
@@ -893,6 +985,13 @@ export async function githubToken() {
   if (expired) {
     const refreshed = await refreshGithubToken(key)
     if (refreshed) return refreshed
+    // The refresh did not produce a token, and the stored one is known dead.
+    // Handing it back anyway is what turned an expired GitHub grant into a
+    // stream of unexplained 401s and 404s from api.github.com instead of the
+    // one thing the user can act on — "GitHub token not configured", which is
+    // what re-opens the sign-in. An explicitly configured credential (an env
+    // token or a PAT in nikcli.json) is a different secret and still wins.
+    return explicitGithubCredential(connector)
   }
 
   const credential = await resolveCredential(key, connector)
@@ -903,6 +1002,18 @@ export async function githubToken() {
   }
 
   return null
+}
+
+/**
+ * A GitHub credential that does not come from the OAuth store: `NIKCLI_GITHUB_TOKEN`
+ * or a `token` on the connector in `nikcli.json`. `resolveCredential` reads
+ * those first and the stored grant only last, so asking for them alone is the
+ * same lookup with the expired grant left out.
+ */
+async function explicitGithubCredential(connector: Config.Connector): Promise<string | null> {
+  const flag = Flag.NIKCLI_GITHUB_TOKEN?.trim()
+  if (flag) return flag
+  return connector.type === "github" ? (connector.token?.trim() ?? null) : null
 }
 
 export async function githubOAuthClientID() {

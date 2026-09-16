@@ -316,7 +316,7 @@ describe("v2 entry projection", () => {
         expect(before.length).toBeGreaterThan(0)
 
         // simulate a session written before session_entry existed
-        SessionEntryRepo.clear(session.id)
+        Effect.runSync(SessionEntryRepo.clear(session.id))
         expect(SessionV2.entryCount(session.id)).toBe(0)
 
         const after = await SessionV2.entries(session.id)
@@ -342,31 +342,35 @@ describe("v2 entry projection", () => {
         expect(projected.length).toBeGreaterThan(0)
 
         const smuggledID = Identifier.ascending("message")
-        MessageRepo.upsertMessage({
-          id: smuggledID,
-          sessionID: session.id,
-          role: "assistant",
-          time: { created: 2, completed: 3 },
-          providerID: "p",
-          modelID: "m",
-          agent: "build",
-          mode: "build",
-          cost: 0,
-          tokens: {
-            input: 1,
-            output: 1,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          path: { cwd: projectDir, root: projectDir },
-        } as any)
-        MessageRepo.upsertPart({
-          id: Identifier.ascending("part"),
-          sessionID: session.id,
-          messageID: smuggledID,
-          type: "text",
-          text: "imported",
-        } as any)
+        Effect.runSync(
+          MessageRepo.upsertMessage({
+            id: smuggledID,
+            sessionID: session.id,
+            role: "assistant",
+            time: { created: 2, completed: 3 },
+            providerID: "p",
+            modelID: "m",
+            agent: "build",
+            mode: "build",
+            cost: 0,
+            tokens: {
+              input: 1,
+              output: 1,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            path: { cwd: projectDir, root: projectDir },
+          } as any),
+        )
+        Effect.runSync(
+          MessageRepo.upsertPart({
+            id: Identifier.ascending("part"),
+            sessionID: session.id,
+            messageID: smuggledID,
+            type: "text",
+            text: "imported",
+          } as any),
+        )
 
         const entries = await SessionV2.entries(session.id)
         expect(entries.some((e) => e.messageID === smuggledID)).toBe(true)
@@ -648,14 +652,18 @@ describe("live and persisted projections agree", () => {
           text: "from payload",
         }
 
-        Database.transaction((tx) => {
-          SessionEntryProjection.message(tx, info as any)
-          MessageRepo.upsertMessage(info as any, tx)
-          SessionEntryProjection.part(tx, part as any)
-        })
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => {
+              SessionEntryProjection.message(tx, info as any)
+              Effect.runSync(MessageRepo.upsertMessage(info as any, tx))
+              SessionEntryProjection.part(tx, part as any)
+            }),
+          ),
+        )
 
-        expect(MessageRepo.listParts(userID)).toEqual([])
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        expect(Effect.runSync(MessageRepo.listParts(userID))).toEqual([])
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(user).toMatchObject({ type: "user", text: "from payload" })
         expect(SessionEntry.toV1WrittenPart(user!, part as any)).toMatchObject({
           id: part.id,
@@ -670,16 +678,18 @@ describe("live and persisted projections agree", () => {
       directory: projectDir,
       fn: async () => {
         const { session, userID } = await conversation()
-        const parts = MessageRepo.listParts(userID)
+        const parts = Effect.runSync(MessageRepo.listParts(userID))
         expect(parts.length).toBeGreaterThan(0)
         const partID = parts[0]!.id
 
-        Database.transaction((tx) => {
-          SessionEntryProjection.partRemoved(tx, session.id, userID, partID)
-        })
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => SessionEntryProjection.partRemoved(tx, session.id, userID, partID)),
+          ),
+        )
 
-        expect(MessageRepo.listParts(userID).some((part) => part.id === partID)).toBe(true)
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        expect(Effect.runSync(MessageRepo.listParts(userID)).some((part) => part.id === partID)).toBe(true)
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(user).toMatchObject({ type: "user", text: "" })
       },
     })
@@ -714,7 +724,7 @@ describe("live and persisted projections agree", () => {
             }),
           ),
         ).rejects.toThrow()
-        expect(MessageRepo.getMessage(session.id, userID)).toBeUndefined()
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, userID))).toBeUndefined()
       },
     })
   })
@@ -725,8 +735,8 @@ describe("live and persisted projections agree", () => {
       fn: async () => {
         const { session, userID, assistantID, assistant } = await conversation()
 
-        const userInfo = MessageRepo.getMessage(session.id, userID)
-        const userEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user")
+        const userInfo = Effect.runSync(MessageRepo.getMessage(session.id, userID))
+        const userEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
         expect(userInfo).toEqual(JSON.parse(JSON.stringify(SessionEntry.toV1Message([userEntry!]))))
         expect(userInfo).toMatchObject({
           role: "user",
@@ -734,11 +744,11 @@ describe("live and persisted projections agree", () => {
           model: { providerID: "p", modelID: "m" },
         })
 
-        const start = SessionEntryRepo.list(session.id).find((entry) => entry.type === "start")
-        expect(MessageRepo.getMessage(session.id, assistantID)).toEqual(
+        const start = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([start!]))),
         )
-        expect(MessageRepo.getMessage(session.id, assistantID)).toMatchObject({
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toMatchObject({
           parentID: userID,
           path: { cwd: projectDir, root: projectDir },
         })
@@ -772,18 +782,20 @@ describe("live and persisted projections agree", () => {
           }),
         )
 
-        const storedStart = SessionEntryRepo.list(session.id).find((entry) => entry.type === "start")
-        const storedComplete = SessionEntryRepo.list(session.id).find((entry) => entry.type === "complete")
-        expect(MessageRepo.getMessage(session.id, assistantID)).toEqual(
+        const storedStart = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
+        const storedComplete = Effect.runSync(SessionEntryRepo.list(session.id)).find(
+          (entry) => entry.type === "complete",
+        )
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([storedStart!, storedComplete!]))),
         )
 
-        const stepEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "step-start")
-        const patchEntry = SessionEntryRepo.list(session.id).find((entry) => entry.type === "patch")
-        expect(MessageRepo.listParts(assistantID).find((part) => part.id === stepStart.id)).toEqual(
+        const stepEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "step-start")
+        const patchEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "patch")
+        expect(Effect.runSync(MessageRepo.listParts(assistantID)).find((part) => part.id === stepStart.id)).toEqual(
           SessionEntry.toV1Part(stepEntry!),
         )
-        expect(MessageRepo.listParts(assistantID).find((part) => part.id === patch.id)).toEqual(
+        expect(Effect.runSync(MessageRepo.listParts(assistantID)).find((part) => part.id === patch.id)).toEqual(
           SessionEntry.toV1Part(patchEntry!),
         )
       },

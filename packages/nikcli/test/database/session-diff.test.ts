@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -32,11 +33,11 @@ describe("session diff SQL", () => {
       const { SessionDiffRepo } = await import("@/session/diff-repo")
       Database.syncDb()
 
-      expect(SessionDiffRepo.get(sessionID)).toEqual(payload)
+      expect(Effect.runSync(SessionDiffRepo.get(sessionID))).toEqual(payload)
 
       const sessionDiff = (await import("@/database/migration/20260814080000_session_diff")).default
       sessionDiff.up(Database.syncNative())
-      expect(SessionDiffRepo.get(sessionID)[0]?.file).toBe("src/moved.ts")
+      expect(Effect.runSync(SessionDiffRepo.get(sessionID))[0]?.file).toBe("src/moved.ts")
 
       expect(await fs.readFile(path.join(storage, "session_diff", `${sessionID}.json`), "utf8")).toContain(
         "src/moved.ts",
@@ -51,11 +52,11 @@ describe("session diff SQL", () => {
       Database.syncDb()
 
       const sessionID = "ses_no_json"
-      SessionDiffRepo.upsert(sessionID, diffs())
+      Effect.runSync(SessionDiffRepo.upsert(sessionID, diffs()))
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(path.join(storage, "session_diff"))).toBe(false)
-      expect(SessionDiffRepo.get(sessionID)[0]?.after).toBe("new")
+      expect(Effect.runSync(SessionDiffRepo.get(sessionID))[0]?.after).toBe("new")
     })
   })
 
@@ -66,7 +67,7 @@ describe("session diff SQL", () => {
       Database.syncDb()
 
       const sessionID = "ses_trap"
-      SessionDiffRepo.upsert(sessionID, [{ ...diffs()[0]!, after: "sql-after" }])
+      Effect.runSync(SessionDiffRepo.upsert(sessionID, [{ ...diffs()[0]!, after: "sql-after" }]))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "session_diff"), { recursive: true })
@@ -75,11 +76,11 @@ describe("session diff SQL", () => {
         JSON.stringify([{ ...diffs()[0]!, after: "json-after" }]),
       )
 
-      expect(SessionDiffRepo.get(sessionID)[0]?.after).toBe("sql-after")
+      expect(Effect.runSync(SessionDiffRepo.get(sessionID))[0]?.after).toBe("sql-after")
 
       const onlyJson = "ses_json_only"
       await fs.writeFile(path.join(storage, "session_diff", `${onlyJson}.json`), JSON.stringify(diffs()))
-      expect(SessionDiffRepo.get(onlyJson)).toEqual([])
+      expect(Effect.runSync(SessionDiffRepo.get(onlyJson))).toEqual([])
     })
   })
 
@@ -90,10 +91,10 @@ describe("session diff SQL", () => {
       Database.syncDb()
 
       const sessionID = "ses_remove"
-      SessionDiffRepo.upsert(sessionID, diffs())
-      expect(SessionDiffRepo.remove(sessionID)).toBe(true)
-      expect(SessionDiffRepo.get(sessionID)).toEqual([])
-      expect(SessionDiffRepo.remove(sessionID)).toBe(false)
+      Effect.runSync(SessionDiffRepo.upsert(sessionID, diffs()))
+      expect(Effect.runSync(SessionDiffRepo.remove(sessionID))).toBe(true)
+      expect(Effect.runSync(SessionDiffRepo.get(sessionID))).toEqual([])
+      expect(Effect.runSync(SessionDiffRepo.remove(sessionID))).toBe(false)
     })
   })
 })

@@ -198,17 +198,19 @@ describe("session lifecycle", () => {
   it("removes stored session diffs when deleting a session", async () => {
     await withProject(async () => {
       const session = await createSession()
-      SessionDiffRepo.upsert(session.id, [
-        {
-          file: "src/a.ts",
-          patch: "@@ -0,0 +1 @@\n+hello",
-          additions: 1,
-          deletions: 0,
-          before: "",
-          after: "hello",
-        },
-      ])
-      expect(SessionDiffRepo.get(session.id)).toHaveLength(1)
+      Effect.runSync(
+        SessionDiffRepo.upsert(session.id, [
+          {
+            file: "src/a.ts",
+            patch: "@@ -0,0 +1 @@\n+hello",
+            additions: 1,
+            deletions: 0,
+            before: "",
+            after: "hello",
+          },
+        ]),
+      )
+      expect(Effect.runSync(SessionDiffRepo.get(session.id))).toHaveLength(1)
 
       await runSession(
         Effect.gen(function* () {
@@ -217,7 +219,7 @@ describe("session lifecycle", () => {
         }),
       )
 
-      expect(SessionDiffRepo.get(session.id)).toEqual([])
+      expect(Effect.runSync(SessionDiffRepo.get(session.id))).toEqual([])
     })
   })
 
@@ -229,11 +231,13 @@ describe("session lifecycle", () => {
         mode: "local",
         id: "share_json_trap",
       })
-      ShareRepo.put(session.id, {
-        url: "http://sql/share",
-        mode: "local",
-        id: "share_sql",
-      })
+      Effect.runSync(
+        ShareRepo.put(session.id, {
+          url: "http://sql/share",
+          mode: "local",
+          id: "share_sql",
+        }),
+      )
 
       const share = await runSession(
         Effect.gen(function* () {

@@ -3,6 +3,129 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.360.0 (September 2026)
+
+## Core
+
+- Streamline IP retrieval for mobile pairing (@nikomatt69)
+
+## Mobile
+
+- Build and publish iOS artifacts alongside Android (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(ci): build and publish iOS artifacts alongside Android
+  - refactor(network): streamline IP retrieval for mobile pairing
+
+## v1.359.0 (September 2026)
+
+## Core
+
+- Register Actions endpoints in the compat map and resolve nikcli in autofix (@nikomatt69)
+- Integrate GitHub Actions workflows and runs management (@nikomatt69)
+
+## Mobile
+
+- Improve styling and layout of ScopeToggle component (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(github): integrate GitHub Actions workflows and runs management
+  - docs(agents): add command for building iOS app for Nikoemme
+  - refactor(git): improve styling and layout of ScopeToggle component
+  - fix(ci): register Actions endpoints in the compat map and resolve nikcli in autofix
+
+## v1.358.0 (September 2026)
+
+- No notable changes
+
+## v1.357.0 (September 2026)
+
+## Core
+
+- Treat the background service's loopback listener as local (@nikomatt69)
+- Drive the update dialog off the check result, not the bus (@nikomatt69)
+- Implement local account session handling and improve request authorization (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(auth): implement local account session handling and improve request authorization
+  - fix(upgrade): drive the update dialog off the check result, not the bus
+  - fix(auth): treat the background service's loopback listener as local
+  - test(upgrade): assert the check wiring without pinning its line breaks
+
+## v1.356.0 (September 2026)
+
+## Core
+
+- Enhance database interactions with Effect.runSync (@nikomatt69)
+- Retire the synchronous singleton — syncDb has no callers in src (@nikomatt69)
+- Move MobileAuth, SyncSnapshot and Outbox onto Effect (@nikomatt69)
+- Move UserDB onto Effect-returning queries (@nikomatt69)
+- Move SessionPending onto Effect-returning queries (@nikomatt69)
+- Move SessionRepo onto Effect-returning queries (@nikomatt69)
+- Move MessageRepo onto Effect-returning queries (@nikomatt69)
+- Move SessionEntryRepo and InstructionRepo onto Effect (@nikomatt69)
+- Move AccountDB and ProjectRepo onto Effect-returning queries (@nikomatt69)
+- Move WorkspaceDB onto Effect-returning queries (@nikomatt69)
+- Move loop, mission and routine repositories onto Effect (@nikomatt69)
+- Move nine repositories onto Effect-returning queries (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(database): move nine repositories onto Effect-returning queries
+  - refactor(database): move loop, mission and routine repositories onto Effect
+  - refactor(database): move WorkspaceDB onto Effect-returning queries
+  - refactor(database): move AccountDB and ProjectRepo onto Effect-returning queries
+  - refactor(database): move SessionEntryRepo and InstructionRepo onto Effect
+  - refactor(database): move MessageRepo onto Effect-returning queries
+  - refactor(database): move SessionRepo onto Effect-returning queries
+  - refactor(database): move SessionPending onto Effect-returning queries
+  - refactor(database): move UserDB onto Effect-returning queries
+  - refactor(database): move MobileAuth, SyncSnapshot and Outbox onto Effect
+  - refactor(database): retire the synchronous singleton — syncDb has no callers in src
+  - refactor(database): enhance database interactions with Effect.runSync
+
+## v1.355.0 (September 2026)
+
+## Core
+
+- Format mobile pairing files with prettier (@nikomatt69)
+- Update server context and router types for consistency (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(mobile): update server context and router types for consistency
+  - fix(ci): format mobile pairing files with prettier
+
+## v1.354.0 (September 2026)
+
+## Mobile
+
+- Streamline loading functions and update router types (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - refactor(mobile): streamline loading functions and update router types
+
+## v1.353.0 (September 2026)
+
+## Core
+
+- Enhance QR code handling and pairing link visibility (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(mobile): enhance QR code handling and pairing link visibility
+
 ## v1.352.0 (September 2026)
 
 - No notable changes

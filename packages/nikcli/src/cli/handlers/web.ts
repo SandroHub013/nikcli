@@ -6,24 +6,14 @@ import { UI } from "@/cli/ui"
 import { resolveNetworkOptions } from "@/cli/network"
 import { Flag } from "@nikcli-ai/util/flag"
 import open from "open"
-import { networkInterfaces } from "os"
+import { getLocalIPs } from "@nikcli-ai/util/mobile-pairing"
 
+/**
+ * Addresses to print for "open this on your phone", best first. Shares the pairing ranking, which
+ * drops link-local adapters the phone cannot reach and puts VM switches last.
+ */
 export function getNetworkIPs() {
-  const nets = networkInterfaces()
-  const results: string[] = []
-
-  for (const name of Object.keys(nets)) {
-    const net = nets[name]
-    if (!net) continue
-
-    for (const netInfo of net) {
-      if (netInfo.internal || netInfo.family !== "IPv4") continue
-      if (netInfo.address.startsWith("172.")) continue
-      results.push(netInfo.address)
-    }
-  }
-
-  return results
+  return getLocalIPs()
 }
 
 export default Runtime.handler(Commands.commands["web"], async (input) => {

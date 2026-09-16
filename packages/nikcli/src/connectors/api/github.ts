@@ -299,6 +299,96 @@ export namespace GithubApi {
     return response.json()
   }
 
+  /**
+   * Shared request path for the Actions endpoints below. The older functions in this file each
+   * inline their own `fetch`; the Actions surface is six calls that differ only in method and
+   * path, so they share one.
+   */
+  async function actionsRequest(
+    token: string,
+    path: string,
+    init?: { method?: "GET" | "POST"; body?: unknown },
+  ): Promise<any> {
+    const response = await fetch(`${GITHUB_API_BASE}${path}`, {
+      method: init?.method ?? "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        ...(init?.body === undefined ? null : { "Content-Type": "application/json" }),
+      },
+      ...(init?.body === undefined ? null : { body: JSON.stringify(init.body) }),
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "")
+      throw new GithubApiError({
+        message: detail
+          ? `GitHub API error: ${response.status} - ${detail.slice(0, 300)}`
+          : `GitHub API error: ${response.status} ${response.statusText}`,
+        status: response.status,
+      })
+    }
+    // `POST /rerun` and `POST /cancel` answer 201/202 with an empty body.
+    if (response.status === 204 || response.headers.get("content-length") === "0") return {}
+    return response.json().catch(() => ({}))
+  }
+
+  export async function listWorkflows(token: string, owner: string, repo: string): Promise<any> {
+    return actionsRequest(token, `/repos/${owner}/${repo}/actions/workflows?per_page=100`)
+  }
+
+  export async function listWorkflowRuns(
+    token: string,
+    owner: string,
+    repo: string,
+    options: { branch?: string; perPage?: number; event?: string } = {},
+  ): Promise<any> {
+    const params = new URLSearchParams({ per_page: String(Math.min(options.perPage ?? 20, 100)) })
+    if (options.branch) params.set("branch", options.branch)
+    if (options.event) params.set("event", options.event)
+    // `exclude_pull_requests` keeps the payload small; nothing here renders the PR list.
+    params.set("exclude_pull_requests", "true")
+    return actionsRequest(token, `/repos/${owner}/${repo}/actions/runs?${params.toString()}`)
+  }
+
+  export async function listWorkflowRunJobs(token: string, owner: string, repo: string, runID: number): Promise<any> {
+    return actionsRequest(token, `/repos/${owner}/${repo}/actions/runs/${runID}/jobs?per_page=100&filter=latest`)
+  }
+
+  export async function rerunWorkflowRun(
+    token: string,
+    owner: string,
+    repo: string,
+    runID: number,
+    options: { failedOnly?: boolean } = {},
+  ): Promise<any> {
+    const path = options.failedOnly
+      ? `/repos/${owner}/${repo}/actions/runs/${runID}/rerun-failed-jobs`
+      : `/repos/${owner}/${repo}/actions/runs/${runID}/rerun`
+    return actionsRequest(token, path, { method: "POST" })
+  }
+
+  export async function cancelWorkflowRun(token: string, owner: string, repo: string, runID: number): Promise<any> {
+    return actionsRequest(token, `/repos/${owner}/${repo}/actions/runs/${runID}/cancel`, { method: "POST" })
+  }
+
+  export async function dispatchWorkflow(
+    token: string,
+    owner: string,
+    repo: string,
+    workflowID: string,
+    ref: string,
+    inputs?: Record<string, string>,
+  ): Promise<any> {
+    return actionsRequest(
+      token,
+      `/repos/${owner}/${repo}/actions/workflows/${encodeURIComponent(workflowID)}/dispatches`,
+      {
+        method: "POST",
+        body: { ref, ...(inputs ? { inputs } : null) },
+      },
+    )
+  }
+
   export async function getFileContent(token: string, owner: string, repo: string, path: string): Promise<string> {
     const content = await getRepoContent(token, owner, repo, path)
     if (content.encoding === "base64" && content.content) {

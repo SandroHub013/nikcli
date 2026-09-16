@@ -18,7 +18,6 @@ import { HttpError, readForm, readJson, requestIP } from "./http"
 import { completeLogin, finalizeLogin, loadLoginIntent } from "./login"
 import { consumeRateLimit } from "./rate-limit"
 import type { PasskeyOffer, PasskeyRow } from "./types"
-import { resultPage } from "./ui"
 
 type AppContext = Context<{ Bindings: Env }>
 
@@ -172,17 +171,26 @@ export async function passkeyAuthenticationVerify(c: AppContext): Promise<Respon
   }
   if (!verified) throw new HttpError(400, "Passkey verification failed")
 
+  // `issueTokenPair` refuses a disabled account, but the device branch of
+  // `finalizeLogin` never reaches it: the approval is written first and the
+  // refusal surfaced later, as a 500 against the terminal's poll. Check here so
+  // a disabled account cannot approve a device at all.
+  const owner = await getAccount(c.env.DB, passkey.account_id)
+  if (!owner || owner.disabled_at !== null) throw new HttpError(400, "Passkey verification failed")
+
   await updatePasskeyCounter(c.env.DB, passkey.credential_id, newCounter, Date.now())
   return loginResultJson(c, await finalizeLogin(c, loginState, passkey.account_id))
 }
 
 export async function passkeyRegistrationOptions(c: AppContext): Promise<Response> {
   const loginState = requireLoginState(await readJson(c.req.raw))
-  await requireIntent(c, loginState)
+  // The offer is the authority for enrollment, not the `login:` entry: it is
+  // written after the account is already verified and it carries its own copy
+  // of the intent, so a lapsed login state must not block saving a passkey.
   const offer = await c.env.STATE.get<PasskeyOffer>(offerKey(loginState), "json")
   if (!offer) throw new HttpError(400, "Passkey enrollment is not available")
   const account = await getAccount(c.env.DB, offer.accountID)
-  if (!account) throw new HttpError(400, "Passkey enrollment is not available")
+  if (!account || account.disabled_at !== null) throw new HttpError(400, "Passkey enrollment is not available")
 
   const { rpID, rpName } = relyingParty(c.env)
   const existing = await listPasskeys(c.env.DB, account.id)
@@ -196,8 +204,19 @@ export async function passkeyRegistrationOptions(c: AppContext): Promise<Respons
     authenticatorSelection: {
       residentKey: "required",
       userVerification: "preferred",
-      authenticatorAttachment: "platform",
+      // Deliberately no `authenticatorAttachment`. Pinning it to "platform"
+      // meant a security key, or the phone offered through hybrid transport,
+      // was refused — so anyone on a machine without Touch ID, Windows Hello,
+      // or an equivalent could never save a passkey at all, however many times
+      // the offer was shown. Authentication already accepts whatever is
+      // discoverable (`allowCredentials: []`), so restricting enrollment only
+      // narrowed who could enroll, never what could sign in.
+      //
+      // `residentKey: "required"` stays: a non-discoverable credential could
+      // not be found by that same authentication call.
     },
+    // An authenticator that already holds a credential for this account says so
+    // with `InvalidStateError` instead of silently making a second one.
     excludeCredentials: existing.map((row) => ({
       id: row.credential_id,
       transports: parseTransports(row.transports),
@@ -212,7 +231,6 @@ export async function passkeyRegistrationOptions(c: AppContext): Promise<Respons
 export async function passkeyRegistrationVerify(c: AppContext): Promise<Response> {
   const body = await readJson(c.req.raw)
   const loginState = requireLoginState(body)
-  await requireIntent(c, loginState)
   const offer = await c.env.STATE.get<PasskeyOffer>(offerKey(loginState), "json")
   if (!offer) throw new HttpError(400, "Passkey enrollment is not available")
   const challenge = await c.env.STATE.get(regChallengeKey(loginState))
@@ -232,7 +250,7 @@ export async function passkeyRegistrationVerify(c: AppContext): Promise<Response
     if (!result.verified || !result.registrationInfo) throw new Error("unverified")
     const now = Date.now()
     const { credential, credentialBackedUp, credentialDeviceType } = result.registrationInfo
-    await insertPasskey(c.env.DB, {
+    const stored = await insertPasskey(c.env.DB, {
       id: createID("pk", now),
       account_id: offer.accountID,
       credential_id: credential.id,
@@ -245,21 +263,35 @@ export async function passkeyRegistrationVerify(c: AppContext): Promise<Response
       created_at: now,
       last_used_at: null,
     })
+    // Already registered to somebody else. Signing in here would hand this
+    // session a passkey that authenticates as a different account, so the
+    // enrollment is refused — the sign-in itself is untouched and "Not now"
+    // still completes it.
+    if (stored === "conflict") throw new HttpError(400, "That passkey is already registered to another account")
   } catch (error) {
     if (error instanceof HttpError) throw error
     throw new HttpError(400, "Passkey registration failed")
   }
 
-  return loginResultJson(c, await finalizeLogin(c, loginState, offer.accountID))
+  return loginResultJson(c, await finalizeLogin(c, loginState, offer.accountID, offer.intent))
 }
 
+/**
+ * "Not now" — and the only exit from the offer page when the device cannot
+ * create a passkey at all. It has to work in every state the page can be in,
+ * because by the time it renders the user is already authenticated and this
+ * button is all that stands between them and a connected terminal.
+ */
 export async function skipPasskey(c: AppContext): Promise<Response> {
   const form = await readForm(c.req.raw)
   const loginState = form.get("login_state") ?? ""
   const offer = await c.env.STATE.get<PasskeyOffer>(offerKey(loginState), "json")
-  if (offer) return completeLogin(c, loginState, offer.accountID)
-  if (await loadLoginIntent(c.env, loginState)) {
-    return resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
-  }
+  // The offer's own copy of the intent covers the case where the separate
+  // `login:` entry lapsed while the user was reading the prompt.
+  if (offer) return completeLogin(c, loginState, offer.accountID, offer.intent)
+  // No offer left. That is either a duplicate submit of a skip that already
+  // completed — which `finalizeLogin` answers from the replay marker — or a
+  // page so old that nothing remains to finish. Both are handled there, and
+  // the second one is the only one that ends on "Session expired".
   return completeLogin(c, loginState, "")
 }

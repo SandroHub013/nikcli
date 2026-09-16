@@ -40,12 +40,10 @@ or turn the whole thing off with `/profile`.
 
 - Authentication and onboarding flows are the recurring review surface: PKCE S256, device-code, OAuth callback redirects, passwordless email, account creation cannot be skipped.
 - TUI dialog lifecycle (e.g. `DialogAccountLogin`) is reviewed for cleanup on unmount — cancellation, polling, post-unmount state must be torn down deterministically.
-- `Account.Service` and friends are the canonical Effect service layers; tests target the Effect boundary, not the React/Solid adapter.
-- Work often crosses both `packages/nikcli` (CLI + TUI + server) and `packages/identity` (browser identity + DB + contracts) in the same change — keep the seam clean in both directions.
-- The HttpApi contract in `packages/nikcli/src/server/httpapi/` is the source of truth: edit the group, then run `bun run generate:httpapi-clients`, commit the generated output.
+- Test service behavior at the Effect boundary rather than only through React/Solid adapters.
+- Keep CLI/server and browser-identity boundaries consistent when authentication changes cross packages.
 
 ## Working style
 
-- Italian session text is fine for narration; English stays the default for prose replies.
 - Trust the standing `<user_profile>` over re-asking; ask only when the choice materially changes the outcome.
 - For git and DB operations, ask permission first — even when the task seems obvious.

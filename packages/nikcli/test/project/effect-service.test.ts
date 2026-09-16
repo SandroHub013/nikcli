@@ -36,7 +36,7 @@ describe("Project.Service", () => {
     const { Database } = await import("@/database/database")
     const { ProjectRepo } = await import("@/project/repo")
     Database.syncDb()
-    ProjectRepo.clear()
+    Effect.runSync(ProjectRepo.clear())
     await removeTestDir(path.join(testHome, "data", "storage"))
   })
 

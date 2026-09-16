@@ -29,7 +29,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useProject } from "@tui/context/project"
 import { Binary } from "@nikcli-ai/util/binary"
 import { createSimpleContext } from "./helper"
-import { namedFailures } from "@tui/util/settled"
+import { clientErrorStatus, isTransientHttpInterrupt, namedFailures, retryTransient } from "@tui/util/settled"
 import { createReconnectGate } from "@tui/util/reconnect"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
@@ -790,10 +790,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       // blocking - include session.list when continuing a session.
       // GET /provider is the full models.dev catalog (~5MB) and is loaded
       // below without throwOnError so a 400/OOM there cannot kill the TUI.
+      // GET /config/providers stays required for the model picker, but a 499/503
+      // from an interrupted catalog build must not take the TUI down: retry,
+      // then degrade to an empty list so the add-provider prompt still appears.
       const blockingRequests: Promise<unknown>[] = [
-        client.config
-          .providers({}, { throwOnError: true })
-          .then((x) => {
+        retryTransient(() =>
+          client.config.providers({}, { throwOnError: true }).then((x) => {
             if (!current()) return
             const providers = x.data!.providers
             const defaults = x.data!.default
@@ -809,16 +811,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 }),
               )
             })
-          })
-          .catch(fail("GET /config/providers")),
-        client.app
-          .agents({}, { throwOnError: true })
-          .then((x) => current() && setStore("agent", reconcile(x.data ?? [])))
-          .catch(fail("GET /agent")),
-        client.config
-          .get({}, { throwOnError: true })
-          .then((x) => current() && setStore("config", reconcile(x.data!)))
-          .catch(fail("GET /config")),
+          }),
+        ).catch((error) => {
+          if (isTransientHttpInterrupt(error)) {
+            Log.Default.warn("tui bootstrap GET /config/providers failed", {
+              error: error instanceof Error ? error.message : String(error),
+              status: clientErrorStatus(error),
+            })
+            return
+          }
+          fail("GET /config/providers")(error)
+        }),
+        retryTransient(() =>
+          client.app
+            .agents({}, { throwOnError: true })
+            .then((x) => current() && setStore("agent", reconcile(x.data ?? []))),
+        ).catch(fail("GET /agent")),
+        retryTransient(() =>
+          client.config
+            .get({}, { throwOnError: true })
+            .then((x) => current() && setStore("config", reconcile(x.data!))),
+        ).catch(fail("GET /config")),
         ...(args.continue ? [sessionListPromise] : []),
       ]
 

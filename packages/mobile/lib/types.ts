@@ -672,6 +672,88 @@ export type GitHubBranch = {
   }
 }
 
+/**
+ * GitHub Actions run status/conclusion arrive as plain strings: GitHub keeps adding members
+ * and a closed union here would make a new one a type error on every consumer. The known
+ * members are listed for autocomplete; anything else renders neutral.
+ */
+export type WorkflowRunStatus =
+  | "queued"
+  | "in_progress"
+  | "completed"
+  | "waiting"
+  | "requested"
+  | "pending"
+  | (string & {})
+
+export type WorkflowRunConclusion =
+  | "success"
+  | "failure"
+  | "cancelled"
+  | "skipped"
+  | "timed_out"
+  | "action_required"
+  | "neutral"
+  | "stale"
+  | "startup_failure"
+  | (string & {})
+
+export type WorkflowRun = {
+  id: number
+  name: string
+  workflowID?: number
+  runNumber: number
+  attempt?: number
+  status: WorkflowRunStatus
+  conclusion?: WorkflowRunConclusion
+  event: string
+  branch: string
+  sha: string
+  title: string
+  actor?: { login: string; avatarUrl?: string }
+  htmlUrl: string
+  createdAt: number
+  updatedAt: number
+  startedAt?: number
+  durationMs?: number
+}
+
+export type WorkflowStep = {
+  name: string
+  number: number
+  status: WorkflowRunStatus
+  conclusion?: WorkflowRunConclusion
+  startedAt?: number
+  completedAt?: number
+}
+
+export type WorkflowJob = {
+  id: number
+  name: string
+  status: WorkflowRunStatus
+  conclusion?: WorkflowRunConclusion
+  htmlUrl?: string
+  startedAt?: number
+  completedAt?: number
+  durationMs?: number
+  steps: WorkflowStep[]
+}
+
+export type WorkflowRunList = {
+  runs: WorkflowRun[]
+  totalCount: number
+  /** False when the repository has no workflow files at all — a different empty state. */
+  configured: boolean
+}
+
+export type Workflow = {
+  id: number
+  name: string
+  path: string
+  state: string
+  htmlUrl?: string
+}
+
 export type GitHubSessionCreateResult = {
   session: Session
   worktree: WorktreeInfo

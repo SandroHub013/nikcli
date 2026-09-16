@@ -205,7 +205,7 @@ export namespace Monitor {
   }
 
   async function persist(record: Record) {
-    MonitorRepo.upsert(record)
+    Effect.runSync(MonitorRepo.upsert(record))
   }
 
   async function resolveToolPart(record: Record): Promise<MessageV2.ToolPart | undefined> {
@@ -505,7 +505,7 @@ export namespace Monitor {
   async function load(sessionID: string, monitorID: string): Promise<Record> {
     const active = state().get(key(monitorID))
     if (active && active.record.sessionID === sessionID) return active.record
-    const record = MonitorRepo.get(sessionID, monitorID)
+    const record = Effect.runSync(MonitorRepo.get(sessionID, monitorID))
     if (!record) {
       throw new SessionError.NotFoundError({
         message: `Resource not found: monitor/${sessionID}/${monitorID}`,
@@ -698,7 +698,7 @@ export namespace Monitor {
    * keeps ownership of its monitors.
    */
   export async function reconcile(): Promise<void> {
-    for (const record of MonitorRepo.listRunning()) {
+    for (const record of Effect.runSync(MonitorRepo.listRunning())) {
       if (record.status !== "running") continue
       if (state().get(key(record.id))) continue
       if (record.pid && pidAlive(record.pid)) continue

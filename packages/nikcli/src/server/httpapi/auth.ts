@@ -1,8 +1,9 @@
 import { Option } from "effect"
+import { Effect } from "effect"
 import { Flag } from "@nikcli-ai/util/flag"
 import { MobileAuth } from "@/mobile/auth"
 import { UserDB } from "@/user/users"
-import { externalSessionForToken } from "@/server/identity-auth"
+import { externalSessionForToken, identityVerifierOptions, localAccountSession } from "@/server/identity-auth"
 import { Log } from "@nikcli-ai/util/log"
 
 /**
@@ -50,6 +51,31 @@ export namespace Auth {
 
   export function remember(request: Request, value: Principal) {
     principals.set(request, value)
+  }
+
+  const localRequests = new WeakSet<Request>()
+
+  /**
+   * Record that a request came from this machine.
+   *
+   * `ServerRouter` marks two shapes: a request handed to it without a
+   * `Bun.Server` (no socket at all — `Server.fetch` from the TUI worker, the
+   * CLI, plugins, sdk-next), and one that arrived on a listener bound to
+   * loopback, whose only reachable peers are on this machine. The second is
+   * what the background service is, and it stopped being a detail when that
+   * service became the default: the TUI no longer runs the engine in-process,
+   * so "never crossed a socket" alone would have excluded the terminal itself.
+   *
+   * Either way the caller is already inside the trust boundary: it needs no
+   * credentials to be admitted, it can read the same database directly, and
+   * the token file it presents is its own.
+   */
+  export function markLocal(request: Request) {
+    localRequests.add(request)
+  }
+
+  export function isLocal(request: Request): boolean {
+    return localRequests.has(request)
   }
 
   const upstreamVerified = new WeakSet<Request>()
@@ -194,7 +220,7 @@ export namespace Auth {
     const mobile = await MobileAuth.verify(bearer)
     if (mobile) return { type: "mobile", token: mobile }
     if (bearer.startsWith("nku_") && legacyUserTokenAllowed()) {
-      const user = UserDB.verifySession(bearer)
+      const user = Effect.runSync(UserDB.verifySession(bearer))
       if (user) return { type: "user", session: { user, token: bearer } }
     }
     return undefined
@@ -210,7 +236,21 @@ export namespace Auth {
     if (bearer) {
       const principal = await resolveBearer(request)
       if (principal) return { ok: true, principal }
-      return unauthorized()
+      // A local caller is admitted with no bearer at all, so an *aged-out* one
+      // must not leave it less authorized than sending none. The terminal
+      // holds a fifteen-minute issuer token on disk and sends it on every
+      // `/user/*` call; rejecting the request outright turned "my token aged
+      // out" into "signed out" for a machine whose account is still valid and
+      // still refreshing. Fall through to the credential-free decision below —
+      // the stale token buys nothing, it is simply ignored, and a configured
+      // `NIKCLI_SERVER_PASSWORD` still has to be satisfied down there.
+      //
+      // Only for a token of the shape the terminal actually stores, though. A
+      // bearer that was never this issuer's — an unknown `?token=`, a revoked
+      // `nku_`, a typo — is a caller presenting a credential that does not
+      // belong here, and "invalid" must stay 401 rather than decay into
+      // "unauthenticated".
+      if (!isLocal(request) || !carriesIssuerClaim(bearer)) return unauthorized()
     }
 
     if (options?.mobileAuthRequired || (Flag.NIKCLI_REQUIRE_OAUTH && !Flag.NIKCLI_LEGACY_LOGIN)) {
@@ -243,6 +283,45 @@ export namespace Auth {
         status: 401,
         headers: { "www-authenticate": challenge },
       }),
+    }
+  }
+
+  /**
+   * The user session behind a request, for the `/user/*` and `/account`
+   * handlers that need an identity rather than an authorization decision.
+   *
+   * A valid bearer answers first and always wins. Only when there is none —
+   * and only for a request `markLocal` accepted as this machine's own — does
+   * this fall back to the account this machine is signed into, whose token is
+   * refreshed and verified by `localAccountSession`. A remote caller gets
+   * `null`, exactly as before.
+   */
+  export async function sessionFor(request: Request): Promise<{ user: UserDB.PublicUser; token: string } | null> {
+    const principal = await resolveBearer(request).catch(() => undefined)
+    if (principal?.type === "user") return principal.session
+    if (!isLocal(request)) return null
+    return (await localAccountSession().catch(() => undefined)) ?? null
+  }
+
+  /**
+   * Whether a rejected bearer is at least *shaped* like the issuer token this
+   * machine stores — a JWT naming the configured issuer.
+   *
+   * The payload is read without verifying the signature, which is safe because
+   * of what the answer is used for: it never grants anything, it only decides
+   * whether a local caller's dead credential is ignored or refused. Anything
+   * unparseable, or naming another issuer, is refused.
+   */
+  function carriesIssuerClaim(bearer: string): boolean {
+    const issuer = identityVerifierOptions()?.issuer
+    if (!issuer) return false
+    const payload = bearer.split(".")[1]
+    if (!payload) return false
+    try {
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { iss?: unknown }
+      return claims.iss === issuer
+    } catch {
+      return false
     }
   }
 

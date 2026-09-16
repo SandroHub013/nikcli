@@ -11,10 +11,6 @@ import type { Monitor } from "./manager"
  * monitor; this is the durable copy `reconcile` and `get` fall back to.
  */
 export namespace MonitorRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   type Executor = Database.TxOrDb
 
   function toRow(record: Monitor.Record) {
@@ -39,38 +35,55 @@ export namespace MonitorRepo {
     }
   }
 
-  export function get(sessionId: string, id: string): Monitor.Record | undefined {
-    const row = db()
-      .select({ data: monitor.data })
-      .from(monitor)
-      .where(and(eq(monitor.sessionId, sessionId), eq(monitor.id, id)))
-      .get()
-    return row ? readRecord(row.data) : undefined
+  export function get(sessionId: string, id: string, executor?: Executor) {
+    return Database.query(
+      "MonitorRepo.get",
+      (db) => {
+        const row = db
+          .select({ data: monitor.data })
+          .from(monitor)
+          .where(and(eq(monitor.sessionId, sessionId), eq(monitor.id, id)))
+          .get()
+        return row ? readRecord(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function upsert(record: Monitor.Record, executor: Executor = db()): void {
-    const row = toRow(record)
-    executor
-      .insert(monitor)
-      .values(row)
-      .onConflictDoUpdate({
-        target: monitor.id,
-        set: {
-          sessionId: row.sessionId,
-          status: row.status,
-          data: row.data,
-          updatedAt: row.updatedAt,
-        },
-      })
-      .run()
+  export function upsert(record: Monitor.Record, executor?: Executor) {
+    return Database.query(
+      "MonitorRepo.upsert",
+      (db) => {
+        const row = toRow(record)
+        db.insert(monitor)
+          .values(row)
+          .onConflictDoUpdate({
+            target: monitor.id,
+            set: {
+              sessionId: row.sessionId,
+              status: row.status,
+              data: row.data,
+              updatedAt: row.updatedAt,
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
   /** Every monitor still marked `running`, across every session. */
-  export function listRunning(): Monitor.Record[] {
-    const rows = db().select({ data: monitor.data }).from(monitor).where(eq(monitor.status, "running")).all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
-    })
+  export function listRunning(executor?: Executor) {
+    return Database.query(
+      "MonitorRepo.listRunning",
+      (db) => {
+        const rows = db.select({ data: monitor.data }).from(monitor).where(eq(monitor.status, "running")).all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
   }
 }

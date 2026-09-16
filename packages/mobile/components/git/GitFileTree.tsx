@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { LayoutAnimation, Pressable, ScrollView, Text, View } from "react-native"
 import { ChevronRight, Folder, FolderOpen } from "lucide-react-native"
-import type { GitFileStatus, ParsedFileDiff } from "@/lib/types"
+import type { GitFileStatus } from "@/lib/types"
 import { GitFileStatusBadge } from "./GitFileStatusBadge"
 import { contrastOn, hexToRgba, useAppTheme } from "@/lib/theme"
 

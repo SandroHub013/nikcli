@@ -1,4 +1,5 @@
 import { and, eq, desc, asc, inArray, isNotNull, isNull, gte, sql } from "drizzle-orm"
+import { Effect } from "effect"
 import { parseModel, stringifyModel } from "@nikcli-ai/util/model"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Database } from "@/database/database"
@@ -14,10 +15,6 @@ import type { Session } from "./index"
  * not extracted into dedicated columns (github, mobile, summary, share, etc.).
  */
 export namespace SessionRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   /**
    * Writes accept an executor so a projector can run inside the same
    * transaction that appends its event (see sync/sync-event.ts). Reads stay
@@ -75,23 +72,35 @@ export namespace SessionRepo {
     }
   }
 
-  export function get(id: string): Session.Info | undefined {
-    const row = db().select().from(sessionInfo).where(eq(sessionInfo.id, id)).get()
-    return row ? rowToInfo(row) : undefined
+  export function get(id: string, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.get",
+      (db) => {
+        const row = db.select().from(sessionInfo).where(eq(sessionInfo.id, id)).get()
+        return row ? rowToInfo(row) : undefined
+      },
+      executor,
+    )
   }
 
-  export function getByProject(projectId: string): Session.Info[] {
-    const rows = db()
-      .select()
-      .from(sessionInfo)
-      .where(eq(sessionInfo.projectId, projectId))
-      .orderBy(asc(sessionInfo.createdAt))
-      .all()
-    return rows.map(rowToInfo)
+  export function getByProject(projectId: string, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.getByProject",
+      (db) => {
+        const rows = db
+          .select()
+          .from(sessionInfo)
+          .where(eq(sessionInfo.projectId, projectId))
+          .orderBy(asc(sessionInfo.createdAt))
+          .all()
+        return rows.map(rowToInfo)
+      },
+      executor,
+    )
   }
 
-  export function list(projectId: string): Session.Info[] {
-    return getByProject(projectId)
+  export function list(projectId: string, executor?: Executor) {
+    return getByProject(projectId, executor)
   }
 
   /**
@@ -124,25 +133,31 @@ export namespace SessionRepo {
     limit?: number | undefined
   }
 
-  export function query(input: Query): Session.Info[] {
-    const conditions = [eq(sessionInfo.projectId, input.projectId)]
-    if (input.workspaceId !== undefined) conditions.push(eq(sessionInfo.workspaceId, input.workspaceId))
-    if (input.directoryKey !== undefined) conditions.push(eq(sessionInfo.directoryKey, input.directoryKey))
-    if (input.roots) conditions.push(isNull(sessionInfo.parentId))
-    if (input.start !== undefined) conditions.push(gte(sessionInfo.updatedAt, input.start))
-    if (input.search !== undefined && input.search !== "") {
-      conditions.push(sql`instr(${sessionInfo.titleLower}, ${input.search.toLowerCase()}) > 0`)
-    }
-    const base = db()
-      .select()
-      .from(sessionInfo)
-      .where(and(...conditions))
-      // `createdAt` breaks ties the way the old JS path did: its input came
-      // from `getByProject` (created-ascending) and `Array.prototype.sort` is
-      // stable, so equal `updatedAt` kept created order.
-      .orderBy(desc(sessionInfo.updatedAt), asc(sessionInfo.createdAt))
-    const rows = input.limit !== undefined ? base.limit(input.limit).all() : base.all()
-    return rows.map(rowToInfo)
+  export function query(input: Query, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.query",
+      (db) => {
+        const conditions = [eq(sessionInfo.projectId, input.projectId)]
+        if (input.workspaceId !== undefined) conditions.push(eq(sessionInfo.workspaceId, input.workspaceId))
+        if (input.directoryKey !== undefined) conditions.push(eq(sessionInfo.directoryKey, input.directoryKey))
+        if (input.roots) conditions.push(isNull(sessionInfo.parentId))
+        if (input.start !== undefined) conditions.push(gte(sessionInfo.updatedAt, input.start))
+        if (input.search !== undefined && input.search !== "") {
+          conditions.push(sql`instr(${sessionInfo.titleLower}, ${input.search.toLowerCase()}) > 0`)
+        }
+        const base = db
+          .select()
+          .from(sessionInfo)
+          .where(and(...conditions))
+          // `createdAt` breaks ties the way the old JS path did: its input came
+          // from `getByProject` (created-ascending) and `Array.prototype.sort` is
+          // stable, so equal `updatedAt` kept created order.
+          .orderBy(desc(sessionInfo.updatedAt), asc(sessionInfo.createdAt))
+        const rows = input.limit !== undefined ? base.limit(input.limit).all() : base.all()
+        return rows.map(rowToInfo)
+      },
+      executor,
+    )
   }
 
   /**
@@ -155,62 +170,78 @@ export namespace SessionRepo {
    * nothing — the list screen therefore showed "0 sessions" until this
    * method was wired in.
    */
-  export function listAll(): Session.Info[] {
-    const rows = db().select().from(sessionInfo).orderBy(desc(sessionInfo.updatedAt)).all()
-    return rows.map(rowToInfo)
+  export function listAll(executor?: Executor) {
+    return Database.query(
+      "SessionRepo.listAll",
+      (db) => {
+        const rows = db.select().from(sessionInfo).orderBy(desc(sessionInfo.updatedAt)).all()
+        return rows.map(rowToInfo)
+      },
+      executor,
+    )
   }
 
-  export function upsert(info: Session.Info, tx: Executor = db()): void {
-    const row = infoToRow(info)
-    tx.insert(sessionInfo)
-      .values(row)
-      .onConflictDoUpdate({
-        target: sessionInfo.id,
-        set: {
-          projectId: row.projectId,
-          title: row.title,
-          directory: row.directory,
-          parentId: row.parentId,
-          workspaceId: row.workspaceId,
-          version: row.version,
-          data: row.data,
-          updatedAt: row.updatedAt,
-          lastModel: row.lastModel,
-          // Derived from `title` / `directory` above; both column lists here
-          // are enumerated by hand, so these have to move with their source
-          // or a rename would leave `query()` filtering on the old value.
-          directoryKey: row.directoryKey,
-          titleLower: row.titleLower,
+  export function upsert(info: Session.Info, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.upsert",
+      (db) => {
+        const row = infoToRow(info)
+        db.insert(sessionInfo)
+          .values(row)
+          .onConflictDoUpdate({
+            target: sessionInfo.id,
+            set: {
+              projectId: row.projectId,
+              title: row.title,
+              directory: row.directory,
+              parentId: row.parentId,
+              workspaceId: row.workspaceId,
+              version: row.version,
+              data: row.data,
+              updatedAt: row.updatedAt,
+              lastModel: row.lastModel,
+              // Derived from `title` / `directory` above; both column lists here
+              // are enumerated by hand, so these have to move with their source
+              // or a rename would leave `query()` filtering on the old value.
+              directoryKey: row.directoryKey,
+              titleLower: row.titleLower,
+            },
+          })
+          .run()
+      },
+      executor,
+    )
+  }
+
+  export function update(id: string, editor: (session: Session.Info) => Session.Info, executor?: Executor) {
+    return Effect.gen(function* () {
+      const existing = yield* get(id, executor)
+      if (!existing) return undefined
+      const updated = editor(existing)
+      const row = infoToRow(updated)
+      yield* Database.query(
+        "SessionRepo.update",
+        (db) => {
+          db.update(sessionInfo)
+            .set({
+              title: row.title,
+              directory: row.directory,
+              parentId: row.parentId,
+              workspaceId: row.workspaceId,
+              version: row.version,
+              data: row.data,
+              updatedAt: row.updatedAt,
+              lastModel: row.lastModel,
+              directoryKey: row.directoryKey,
+              titleLower: row.titleLower,
+            })
+            .where(eq(sessionInfo.id, id))
+            .run()
         },
-      })
-      .run()
-  }
-
-  export function update(
-    id: string,
-    editor: (session: Session.Info) => Session.Info,
-    tx: Executor = db(),
-  ): Session.Info | undefined {
-    const existing = get(id)
-    if (!existing) return undefined
-    const updated = editor(existing)
-    const row = infoToRow(updated)
-    tx.update(sessionInfo)
-      .set({
-        title: row.title,
-        directory: row.directory,
-        parentId: row.parentId,
-        workspaceId: row.workspaceId,
-        version: row.version,
-        data: row.data,
-        updatedAt: row.updatedAt,
-        lastModel: row.lastModel,
-        directoryKey: row.directoryKey,
-        titleLower: row.titleLower,
-      })
-      .where(eq(sessionInfo.id, id))
-      .run()
-    return updated
+        executor,
+      )
+      return updated
+    })
   }
 
   /**
@@ -222,18 +253,32 @@ export namespace SessionRepo {
    * a needless write per turn. Also patches the in-memory `data` blob so the
    * next read through `get()` reflects the update immediately.
    */
-  export function setLastModel(id: string, model: { providerID: string; modelID: string }, tx: Executor = db()): void {
-    const existing = get(id)
-    if (!existing) return
-    const value = stringifyModel(model)
-    if (existing.lastModel && stringifyModel(existing.lastModel) === value) return
-    tx.update(sessionInfo).set({ lastModel: value, updatedAt: Date.now() }).where(eq(sessionInfo.id, id)).run()
-    existing.lastModel = model
+  export function setLastModel(id: string, model: { providerID: string; modelID: string }, executor?: Executor) {
+    return Effect.gen(function* () {
+      const existing = yield* get(id, executor)
+      if (!existing) return
+      const value = stringifyModel(model)
+      if (existing.lastModel && stringifyModel(existing.lastModel) === value) return
+      yield* Database.query(
+        "SessionRepo.setLastModel",
+        (db) => {
+          db.update(sessionInfo).set({ lastModel: value, updatedAt: Date.now() }).where(eq(sessionInfo.id, id)).run()
+        },
+        executor,
+      )
+      existing.lastModel = model
+    })
   }
 
-  export function remove(id: string, tx: Executor = db()): boolean {
-    const result = tx.delete(sessionInfo).where(eq(sessionInfo.id, id)).run()
-    return (result as any).changes > 0
+  export function remove(id: string, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.remove",
+      (db) => {
+        const result = db.delete(sessionInfo).where(eq(sessionInfo.id, id)).run()
+        return (result as { changes: number }).changes > 0
+      },
+      executor,
+    )
   }
 
   /**
@@ -245,9 +290,15 @@ export namespace SessionRepo {
    * cheap and correct. The reverse order loses the turn, which is the failure
    * this exists to fix.
    */
-  export function suspend(ids: string[], at = Date.now(), tx: Executor = db()): void {
-    if (ids.length === 0) return
-    tx.update(sessionInfo).set({ timeSuspended: at }).where(inArray(sessionInfo.id, ids)).run()
+  export function suspend(ids: string[], at = Date.now(), executor?: Executor) {
+    return Database.query(
+      "SessionRepo.suspend",
+      (db) => {
+        if (ids.length === 0) return
+        db.update(sessionInfo).set({ timeSuspended: at }).where(inArray(sessionInfo.id, ids)).run()
+      },
+      executor,
+    )
   }
 
   /**
@@ -257,22 +308,33 @@ export namespace SessionRepo {
    * start on one data directory: only one of them can observe a given row as
    * non-null, so a session is resumed at most once.
    */
-  export function consumeSuspended(tx: Executor = db()): { id: string; directory: string }[] {
-    return tx
-      .update(sessionInfo)
-      .set({ timeSuspended: null })
-      .where(isNotNull(sessionInfo.timeSuspended))
-      .returning({ id: sessionInfo.id, directory: sessionInfo.directory })
-      .all()
+  export function consumeSuspended(executor?: Executor) {
+    return Database.query(
+      "SessionRepo.consumeSuspended",
+      (db) =>
+        db
+          .update(sessionInfo)
+          .set({ timeSuspended: null })
+          .where(isNotNull(sessionInfo.timeSuspended))
+          .returning({ id: sessionInfo.id, directory: sessionInfo.directory })
+          .all(),
+      executor,
+    )
   }
 
-  export function getChildren(parentId: string): Session.Info[] {
-    const rows = db()
-      .select()
-      .from(sessionInfo)
-      .where(eq(sessionInfo.parentId, parentId))
-      .orderBy(asc(sessionInfo.createdAt))
-      .all()
-    return rows.map(rowToInfo)
+  export function getChildren(parentId: string, executor?: Executor) {
+    return Database.query(
+      "SessionRepo.getChildren",
+      (db) => {
+        const rows = db
+          .select()
+          .from(sessionInfo)
+          .where(eq(sessionInfo.parentId, parentId))
+          .orderBy(asc(sessionInfo.createdAt))
+          .all()
+        return rows.map(rowToInfo)
+      },
+      executor,
+    )
   }
 }

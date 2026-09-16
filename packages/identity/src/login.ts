@@ -7,13 +7,15 @@ import {
   EMAIL_CODE_BURST_WINDOW_SECONDS,
   EMAIL_CODE_HOURLY_LIMIT,
   EMAIL_CODE_HOURLY_WINDOW_SECONDS,
+  EMAIL_CODE_IP_LIMIT,
+  EMAIL_CODE_IP_WINDOW_SECONDS,
   EMAIL_CODE_MAX_ATTEMPTS,
   EMAIL_CODE_TTL_SECONDS,
   LOGIN_STATE_TTL_SECONDS,
 } from "./constants"
 import { randomDigits, randomToken, secureEqual, sha256 } from "./crypto"
 import { countPasskeys, getDeviceByUserCode, linkAccount, setDeviceDecision } from "./database"
-import { HttpError, readForm, requestIP } from "./http"
+import { HttpError, logSignInFailure, readForm, requestIP } from "./http"
 import { consumeRateLimit } from "./rate-limit"
 import type { AuthCode, EmailChallenge, LoginIntent, PasskeyOffer } from "./types"
 import { devicePage, emailCodePage, loginPage, passkeyOfferPage, resultPage } from "./ui"
@@ -120,8 +122,29 @@ const COMPLETED_REPLAY_TTL_SECONDS = 60
  */
 const DEVICE_COMPLETED_MARKER = "device"
 
-function deviceConnectedPage(c: AppContext): Response {
+/**
+ * Exported because it is also served at `GET /device/connected`, a stable URL
+ * the passkey script can navigate to. It used to call `location.reload()`
+ * instead, which re-issued whatever request had rendered the page — for a
+ * GitHub sign-in that is `GET /callback/github` with an authorization code
+ * GitHub has already spent, so a device approval that had just *succeeded*
+ * repainted itself as "Sign-in failed".
+ */
+export function deviceConnectedPage(c: AppContext): Response {
   return resultPage(c, "Device connected", "You can close this window and return to your terminal.")
+}
+
+/**
+ * What the sign-in pages say when the login they interrupt is a terminal
+ * waiting to be approved. Every page that can be reached mid-approval carries
+ * it, errors included — losing it is how a user stops understanding that the
+ * terminal still depends on this tab.
+ */
+const DEVICE_LEAD =
+  "Your terminal is not connected yet — finish signing in below and keep this tab open until you see the confirmation."
+
+function leadFor(intent: LoginIntent | null | undefined): string | undefined {
+  return intent?.kind === "device" ? DEVICE_LEAD : undefined
 }
 
 /**
@@ -167,14 +190,29 @@ export async function finalizeLogin(
   c: AppContext,
   loginState: string,
   accountID: string,
+  fallbackIntent?: LoginIntent,
 ): Promise<FinalizeLoginResult> {
-  const intent = await loadLoginIntent(c.env, loginState)
+  // A replay always answers first: a duplicate submit of a sign-in that already
+  // finished must re-serve its outcome, never redo it against a fallback.
+  const intent = (await loadLoginIntent(c.env, loginState)) ?? undefined
   if (!intent) {
     const replay = await c.env.STATE.get(completedKey(loginState))
     if (replay === DEVICE_COMPLETED_MARKER) return { kind: "device" }
     if (replay) return { kind: "redirect", url: replay }
-    throw new HttpError(400, "Session expired")
   }
+  // Only then the copy the passkey offer carries, for the case the `login:`
+  // entry lapsed while the user was deciding about the passkey.
+  const resolved = intent ?? fallbackIntent
+  if (!resolved) throw new HttpError(400, "Session expired")
+  return finalizeWithIntent(c, loginState, accountID, resolved)
+}
+
+async function finalizeWithIntent(
+  c: AppContext,
+  loginState: string,
+  accountID: string,
+  intent: LoginIntent,
+): Promise<FinalizeLoginResult> {
   await c.env.STATE.delete(loginKey(loginState))
   await c.env.STATE.delete(emailKey(loginState))
   await c.env.STATE.delete(`passkey:auth:${loginState}`)
@@ -219,15 +257,26 @@ export async function finalizeLogin(
   return { kind: "redirect", url: redirect.toString() }
 }
 
-export async function completeLogin(c: AppContext, loginState: string, accountID: string): Promise<Response> {
+export async function completeLogin(
+  c: AppContext,
+  loginState: string,
+  accountID: string,
+  fallbackIntent?: LoginIntent,
+): Promise<Response> {
   try {
-    const result = await finalizeLogin(c, loginState, accountID)
+    const result = await finalizeLogin(c, loginState, accountID, fallbackIntent)
     return result.kind === "device" ? deviceConnectedPage(c) : c.redirect(result.url, 302)
   } catch (error) {
     if (error instanceof HttpError && error.status === 400) {
       if (error.message === "Device code expired") {
+        // The user authenticated successfully and *then* lost the race with the
+        // device code's lifetime. That is the failure most worth counting: it
+        // is invisible to them (they did everything right) and it is the one a
+        // longer window actually fixes.
+        logSignInFailure(c, "complete-login", "device-code-expired")
         return resultPage(c, "Device code expired", "Return to the terminal and start sign-in again.", 400)
       }
+      logSignInFailure(c, "complete-login", "session-expired")
       return resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
     }
     throw error
@@ -240,19 +289,34 @@ export async function completeLogin(c: AppContext, loginState: string, accountID
  */
 async function completeOrOfferPasskey(c: AppContext, loginState: string, accountID: string): Promise<Response> {
   if ((await countPasskeys(c.env.DB, accountID)) > 0) return completeLogin(c, loginState, accountID)
-  const offer: PasskeyOffer = { accountID }
+  const intent = await loadLoginIntent(c.env, loginState)
+  const offer: PasskeyOffer = { accountID, ...(intent ? { intent } : {}) }
   await c.env.STATE.put(passkeyOfferKey(loginState), JSON.stringify(offer), {
     expirationTtl: LOGIN_STATE_TTL_SECONDS,
   })
-  return passkeyOfferPage(c, loginState)
+  // This page is the last thing standing between a device sign-in and the
+  // approval, and it looks entirely optional — "Save a passkey", with a "Not
+  // now" beside it. Abandoning it is a reasonable thing to do and it silently
+  // strands the terminal, so a device flow gets told what "Not now" is for.
+  return passkeyOfferPage(
+    c,
+    loginState,
+    undefined,
+    200,
+    intent?.kind === "device"
+      ? "Use Face ID, Touch ID, Windows Hello, or a password manager passkey next time. Either button connects your terminal — choose one to finish."
+      : undefined,
+  )
 }
 
 export async function startGitHub(c: AppContext): Promise<Response> {
   const unavailable = requireGitHubCredentials(c)
   if (unavailable) return unavailable
   const loginState = c.req.query("login_state") ?? ""
-  if (!(await loadLoginIntent(c.env, loginState)))
+  if (!(await loadLoginIntent(c.env, loginState))) {
+    logSignInFailure(c, "github-start", "no-login-intent", { hadState: loginState.length > 0 })
     return resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
+  }
   const callback = githubRedirectURI(c.env)
   const url = new URL("https://github.com/login/oauth/authorize")
   url.searchParams.set("client_id", c.env.GITHUB_CLIENT_ID)
@@ -268,8 +332,15 @@ export async function finishGitHub(c: AppContext): Promise<Response> {
 
   const loginState = c.req.query("state") ?? ""
   const code = c.req.query("code") ?? ""
-  if (!code || !(await loadLoginIntent(c.env, loginState)))
+  if (!code || !(await loadLoginIntent(c.env, loginState))) {
+    // GitHub sends `error=access_denied` when the user refuses on its consent
+    // screen, which is a decision rather than a fault — worth separating from
+    // a login intent that genuinely went missing between the two requests.
+    logSignInFailure(c, "github-callback", code ? "no-login-intent" : "no-code", {
+      githubError: c.req.query("error") ?? null,
+    })
     return resultPage(c, "Sign-in failed", "The GitHub sign-in session is invalid or expired.", 400)
+  }
 
   const callback = githubRedirectURI(c.env)
   const exchange = await fetch("https://github.com/login/oauth/access_token", {
@@ -370,32 +441,48 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
   const form = await readForm(c.req.raw)
   const loginState = form.get("login_state") ?? ""
   const email = (form.get("email") ?? "").trim().toLowerCase()
-  if (!(await loadLoginIntent(c.env, loginState))) {
+  const intent = await loadLoginIntent(c.env, loginState)
+  if (!intent) {
     const replay = await replayCompleted(c, loginState)
     return replay ?? resultPage(c, "Session expired", "Start the sign-in flow again.", 400)
   }
-  if (!EMAIL_PATTERN.test(email) || email.length > 254) return loginPage(c, loginState, "Enter a valid email address.")
+  const lead = leadFor(intent)
+  if (!EMAIL_PATTERN.test(email) || email.length > 254)
+    return loginPage(c, loginState, "Enter a valid email address.", 200, lead)
 
-  const [burst, sustained] = await Promise.all([
+  // Two budgets bound what one address can be made to receive; the third bounds
+  // what one network can make the issuer send in total, across addresses.
+  const [burst, sustained, perIP] = await Promise.all([
     consumeRateLimit(c.env.STATE, "email", email, EMAIL_CODE_BURST_LIMIT, EMAIL_CODE_BURST_WINDOW_SECONDS),
     consumeRateLimit(c.env.STATE, "email-hour", email, EMAIL_CODE_HOURLY_LIMIT, EMAIL_CODE_HOURLY_WINDOW_SECONDS),
+    consumeRateLimit(c.env.STATE, "email-ip", requestIP(c.req.raw), EMAIL_CODE_IP_LIMIT, EMAIL_CODE_IP_WINDOW_SECONDS),
   ])
-  const limited = !burst.allowed ? burst : !sustained.allowed ? sustained : null
+  const addressLimited = !burst.allowed ? burst : !sustained.allowed ? sustained : null
+  const limited = addressLimited ?? (perIP.allowed ? null : perIP)
   if (limited) {
     c.header("Retry-After", String(limited.retryAfter))
+    logSignInFailure(c, "email-request", addressLimited ? "address-rate-limited" : "network-rate-limited", {
+      retryAfter: limited.retryAfter,
+    })
     // An already-delivered code stays usable while the sender is throttled, so
     // keep the user on the page where they can still enter it.
     const pending = await c.env.STATE.get<EmailChallenge>(emailKey(loginState), "json")
     const wait = formatDuration(limited.retryAfter)
+    // Whose budget ran out changes what the user can do about it: waiting helps
+    // for their own address, while a shared network says nothing about the code
+    // they may already be holding.
+    const reason = addressLimited
+      ? "Too many codes were sent to this address."
+      : "Too many sign-in codes were requested from this network."
     return pending
       ? emailCodePage(
           c,
           loginState,
           email,
-          `Too many codes were sent to this address. Enter the code you already received, or request another in ${wait}.`,
+          `${reason} Enter the code you already received, or request another in ${wait}.`,
           429,
         )
-      : loginPage(c, loginState, `Too many codes were sent to this address. Try again in ${wait}.`, 429)
+      : loginPage(c, loginState, `${reason} Try again in ${wait}.`, 429, lead)
   }
 
   const code = randomDigits(6)
@@ -432,6 +519,7 @@ export async function requestEmailCode(c: AppContext): Promise<Response> {
       loginState,
       "We could not send the code right now. Try again in a moment, or continue with GitHub.",
       502,
+      lead,
     )
   }
   // Persist only after the mail is accepted: a challenge nobody can satisfy
@@ -447,7 +535,8 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
   const loginState = form.get("login_state") ?? ""
   const code = digitsOnly(form.get("code") ?? "")
   const challenge = await c.env.STATE.get<EmailChallenge>(emailKey(loginState), "json")
-  if (!challenge || !(await loadLoginIntent(c.env, loginState))) {
+  const intent = await loadLoginIntent(c.env, loginState)
+  if (!challenge || !intent) {
     // A prior submit for this same login_state may have already verified the
     // code and consumed both KV entries — replay its outcome instead of
     // telling a merely-late duplicate request its code is expired.
@@ -455,11 +544,12 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
     if (replay) return replay
     return resultPage(c, "Code expired", "Request a new sign-in code.", 400)
   }
+  const lead = leadFor(intent)
 
   const expiresAt = challenge.expiresAt ?? Date.now() + EMAIL_CODE_TTL_SECONDS * 1000
   if (expiresAt <= Date.now()) {
     await c.env.STATE.delete(emailKey(loginState))
-    return loginPage(c, loginState, "That code expired. Request a new one.")
+    return loginPage(c, loginState, "That code expired. Request a new one.", 200, lead)
   }
 
   // Empty or short submissions are typos and half-finished autofills, not
@@ -474,7 +564,7 @@ export async function verifyEmailCode(c: AppContext): Promise<Response> {
     await c.env.STATE.delete(emailKey(loginState))
     // The login intent is still alive, so offer a new code here rather than
     // sending the user back to the terminal to restart the whole flow.
-    return loginPage(c, loginState, "Too many wrong codes. Request a new one.", 429)
+    return loginPage(c, loginState, "Too many wrong codes. Request a new one.", 429, lead)
   }
   await c.env.STATE.put(emailKey(loginState), JSON.stringify({ ...challenge, expiresAt }), {
     expirationTtl: remainingTtl(expiresAt),
@@ -547,5 +637,5 @@ export async function beginDeviceApproval(c: AppContext): Promise<Response> {
     kind: "device",
     userCode: formatted,
   })
-  return loginPage(c, loginState)
+  return loginPage(c, loginState, undefined, 200, DEVICE_LEAD)
 }

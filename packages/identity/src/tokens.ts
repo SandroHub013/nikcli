@@ -6,6 +6,7 @@ import {
   getRefreshToken,
   getSigningKey,
   insertRefreshToken,
+  pruneRefreshTokens,
   revokeRefreshFamily,
   rotateRefreshToken,
 } from "./database"
@@ -65,6 +66,11 @@ export async function issueTokenPair(
   const row = refreshRow(account.id, clientID, createID("fam", now), await sha256(refreshToken), now)
   const accessToken = await signAccessToken(env, account, clientID, now)
   await insertRefreshToken(env.DB, row)
+  // Here rather than in `refreshTokenPair`: this runs once per sign-in, that
+  // one runs every fifteen minutes per client, and a `DELETE` on the hot
+  // refresh path would cost far more than the rows it reclaims. Never fatal —
+  // a token was just issued and a failed cleanup must not undo it.
+  await pruneRefreshTokens(env.DB, now).catch(() => 0)
   return {
     access_token: accessToken,
     refresh_token: refreshToken,

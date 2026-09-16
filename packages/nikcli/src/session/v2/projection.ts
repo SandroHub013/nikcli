@@ -1,4 +1,5 @@
 import { Database } from "@/database/database"
+import { Effect } from "effect"
 import { MessageRepo } from "../message-repo"
 import { MessageV2 } from "../message-v2"
 import { SessionEntry } from "./entry"
@@ -29,7 +30,7 @@ export namespace SessionEntryProjection {
    * memory so the write does not depend on `message_part` already holding it.
    */
   function partsForUser(messageID: string, incoming?: MessageV2.Part, without?: string): MessageV2.Part[] {
-    let parts = MessageRepo.listParts(messageID)
+    let parts = Effect.runSync(MessageRepo.listParts(messageID))
     if (without) parts = parts.filter((part) => part.id !== without)
     if (!incoming) return parts
     const index = parts.findIndex((part) => part.id === incoming.id)
@@ -42,12 +43,14 @@ export namespace SessionEntryProjection {
   function upsertMessage(tx: Executor, entry: SessionEntry.Entry, kind: SessionEntry.MessageKind) {
     const messageID = entry.messageID
     if (!messageID) return
-    SessionEntryRepo.upsert(
-      {
-        entry,
-        ref: messageRef(messageID, kind),
-      },
-      tx,
+    Effect.runSync(
+      SessionEntryRepo.upsert(
+        {
+          entry,
+          ref: messageRef(messageID, kind),
+        },
+        tx,
+      ),
     )
   }
 
@@ -96,7 +99,7 @@ export namespace SessionEntryProjection {
    * of its own, upserted on the part id so a stream of deltas stays one row.
    */
   export function part(tx: Executor, input: MessageV2.Part): SessionEntry.Entry | undefined {
-    const info = MessageRepo.getMessage(input.sessionID, input.messageID)
+    const info = Effect.runSync(MessageRepo.getMessage(input.sessionID, input.messageID))
     if (info?.role === "user" && SessionEntry.foldsIntoUser(input)) {
       return user(tx, info, input)
     }
@@ -107,30 +110,32 @@ export namespace SessionEntryProjection {
     })
     if (!entry) return
 
-    SessionEntryRepo.upsert(
-      {
-        entry,
-        ref: input.id,
-      },
-      tx,
+    Effect.runSync(
+      SessionEntryRepo.upsert(
+        {
+          entry,
+          ref: input.id,
+        },
+        tx,
+      ),
     )
     return entry
   }
 
   export function partRemoved(tx: Executor, sessionID: string, messageID: string, partID: string): void {
-    const info = MessageRepo.getMessage(sessionID, messageID)
+    const info = Effect.runSync(MessageRepo.getMessage(sessionID, messageID))
     if (info?.role === "user") {
       user(tx, info, undefined, partID)
     }
-    SessionEntryRepo.removeRef(sessionID, partID, tx)
+    Effect.runSync(SessionEntryRepo.removeRef(sessionID, partID, tx))
   }
 
   export function messageRemoved(tx: Executor, messageID: string): void {
-    SessionEntryRepo.removeMessage(messageID, tx)
+    Effect.runSync(SessionEntryRepo.removeMessage(messageID, tx))
   }
 
   export function sessionRemoved(tx: Executor, sessionID: string): void {
-    SessionEntryRepo.clear(sessionID, tx)
+    Effect.runSync(SessionEntryRepo.clear(sessionID, tx))
   }
 
   /**
@@ -141,7 +146,7 @@ export namespace SessionEntryProjection {
    * path if a projection is ever found to have drifted.
    */
   export function backfill(tx: Executor, sessionID: string, messages: MessageV2.WithParts[]): void {
-    SessionEntryRepo.clear(sessionID, tx)
+    Effect.runSync(SessionEntryRepo.clear(sessionID, tx))
     for (const msg of messages) {
       message(tx, msg.info)
       for (const item of msg.parts) {
@@ -161,6 +166,6 @@ export namespace SessionEntryProjection {
    * already-committed parts.
    */
   export function rebuild(sessionID: string, messages: MessageV2.WithParts[]): void {
-    Database.transaction((tx) => backfill(tx, sessionID, messages))
+    Effect.runSync(Database.transaction((tx) => Effect.sync(() => backfill(tx, sessionID, messages))))
   }
 }

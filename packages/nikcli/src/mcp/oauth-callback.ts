@@ -56,19 +56,46 @@ export namespace McpOAuthCallback {
 
   const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000
 
+  /**
+   * Path a second process probes to learn who owns {@link OAUTH_CALLBACK_PORT}.
+   * Answering it is what separates "another nikcli holds the port" from "an
+   * unrelated service holds it" — a distinction the old bare TCP connect could
+   * not make, and the reason the wrong answer was silent.
+   */
+  const OWNER_PROBE_PATH = "/mcp/oauth/owner"
+  const OWNER_MARKER = "nikcli-mcp-oauth-callback"
+
   export async function ensureRunning(): Promise<void> {
     if (server) return
 
-    const running = await isPortInUse()
-    if (running) {
-      log.info("oauth callback server already running on another instance", { port: OAUTH_CALLBACK_PORT })
-      return
+    // The callback listens on one fixed port, so at most one process in this
+    // machine can receive it. When somebody else holds the port, this process
+    // used to carry on and register the pending state in its *own* map: the
+    // browser then delivered the code to the other listener, which answered
+    // "Invalid or expired state" (or 404, for a foreign service), and the
+    // authorization here simply hung for five minutes and timed out with no
+    // explanation. Saying so up front is the whole fix — there is nothing this
+    // process can do to receive that redirect.
+    const owner = await probeOwner()
+    if (owner === "nikcli") {
+      throw new Error(
+        `Another nikcli instance already owns the MCP OAuth callback port (${OAUTH_CALLBACK_PORT}). ` +
+          `Finish or cancel the authorization running there, then try again.`,
+      )
+    }
+    if (owner === "foreign") {
+      throw new Error(
+        `Port ${OAUTH_CALLBACK_PORT} is in use by another program, so the MCP OAuth callback cannot be received. ` +
+          `Stop that program and try again.`,
+      )
     }
 
     server = Bun.serve({
       port: OAUTH_CALLBACK_PORT,
       fetch(req) {
         const url = new URL(req.url)
+
+        if (url.pathname === OWNER_PROBE_PATH) return new Response(OWNER_MARKER)
 
         if (url.pathname !== OAUTH_CALLBACK_PATH) {
           return new Response("Not found", { status: 404 })
@@ -153,6 +180,24 @@ export namespace McpOAuthCallback {
       clearTimeout(pending.timeout)
       pendingAuths.delete(mcpName)
       pending.reject(new Error("Authorization cancelled"))
+    }
+  }
+
+  /**
+   * Who is listening on the callback port: another nikcli, an unrelated
+   * program, or nobody.
+   */
+  async function probeOwner(): Promise<"nikcli" | "foreign" | "free"> {
+    if (!(await isPortInUse())) return "free"
+    try {
+      const response = await fetch(`http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OWNER_PROBE_PATH}`, {
+        signal: AbortSignal.timeout(2_000),
+      })
+      return (await response.text()).trim() === OWNER_MARKER ? "nikcli" : "foreign"
+    } catch {
+      // Something accepted the connection but did not speak HTTP back, which
+      // makes it foreign by definition — it will not hand us the redirect.
+      return "foreign"
     }
   }
 

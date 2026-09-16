@@ -13,6 +13,7 @@
  * "column does not exist" case.
  */
 import type { JsonValue } from "@/util/json"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { Sync } from "@/sync"
 import { SyncEvents } from "@/sync/events"
@@ -35,10 +36,13 @@ export namespace SyncUnifyMigration {
     const sentinel = await Sync.readAggregate(sentinelAggregate)
     if (sentinel.length > 0) return 0
 
-    const db = Database.syncDb()
-    const rows = projectID
-      ? db.select().from(schema.workspace).where(eq(schema.workspace.projectId, projectID)).all()
-      : db.select().from(schema.workspace).all()
+    const rows = Effect.runSync(
+      Database.query("SyncMigrateFromWorkspace.rows", (db) =>
+        projectID
+          ? db.select().from(schema.workspace).where(eq(schema.workspace.projectId, projectID)).all()
+          : db.select().from(schema.workspace).all(),
+      ),
+    )
 
     let seeded = 0
     for (const row of rows) {

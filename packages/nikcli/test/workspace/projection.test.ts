@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
@@ -46,7 +47,7 @@ describe("WorkspaceProjection", () => {
       config: { type: "worktree", directory: "/tmp/projected-space" },
       timeUsed: 1234,
     })
-    expect(WorkspaceDB.get(workspaceID)).toEqual(result.info)
+    expect(Effect.runSync(WorkspaceDB.get(workspaceID))).toEqual(result.info)
   })
 
   it("reprojects config and status lifecycle events idempotently", async () => {
@@ -81,7 +82,7 @@ describe("WorkspaceProjection", () => {
 
     expect(first.lastSeq).toBe(3)
     expect(second.lastSeq).toBe(3)
-    expect(WorkspaceDB.get(workspaceID)).toEqual({
+    expect(Effect.runSync(WorkspaceDB.get(workspaceID))).toEqual({
       id: workspaceID,
       projectID,
       name: "before",
@@ -89,7 +90,7 @@ describe("WorkspaceProjection", () => {
       config: { type: "worktree", directory: "/tmp/after" },
       timeUsed: 2000,
     })
-    expect(WorkspaceDB.getStatus(workspaceID)).toBe("connected")
+    expect(Effect.runSync(WorkspaceDB.getStatus(workspaceID))).toBe("connected")
   })
 
   it("keeps an explicitly cleared branch cleared across replay", async () => {
@@ -109,7 +110,7 @@ describe("WorkspaceProjection", () => {
 
     expect((await WorkspaceProjection.project(projectID, workspaceID)).info?.branch).toBeNull()
     expect((await WorkspaceProjection.project(projectID, workspaceID)).info?.branch).toBeNull()
-    expect(WorkspaceDB.get(workspaceID)?.branch).toBeNull()
+    expect(Effect.runSync(WorkspaceDB.get(workspaceID))?.branch).toBeNull()
   })
 
   it("projects workspace.removed by deleting the workspace row", async () => {
@@ -122,12 +123,12 @@ describe("WorkspaceProjection", () => {
       config: { type: "worktree", directory: "/tmp/deleted-space" },
     })
 
-    expect(WorkspaceDB.get(workspaceID)).toBeDefined()
+    expect(Effect.runSync(WorkspaceDB.get(workspaceID))).toBeDefined()
 
     const removed = await WorkspaceProjection.emitLifecycle(projectID, workspaceID, "workspace.removed", {})
 
     expect(removed.removed).toBe(true)
-    expect(WorkspaceDB.get(workspaceID)).toBeUndefined()
+    expect(Effect.runSync(WorkspaceDB.get(workspaceID))).toBeUndefined()
   })
 })
 
@@ -138,22 +139,26 @@ describe("SyncUnifyMigration workspace projection", () => {
     const workspaceA = `wrk_migration_a_${run}`
     const workspaceB = `wrk_migration_b_${run}`
 
-    WorkspaceDB.upsert({
-      id: workspaceA,
-      projectID: projectA,
-      name: "space-a",
-      branch: "main",
-      config: { type: "worktree", directory: "/tmp/space-a" },
-      timeUsed: 3000,
-    })
-    WorkspaceDB.upsert({
-      id: workspaceB,
-      projectID: projectB,
-      name: "space-b",
-      branch: "dev",
-      config: { type: "worktree", directory: "/tmp/space-b" },
-      timeUsed: 4000,
-    })
+    Effect.runSync(
+      WorkspaceDB.upsert({
+        id: workspaceA,
+        projectID: projectA,
+        name: "space-a",
+        branch: "main",
+        config: { type: "worktree", directory: "/tmp/space-a" },
+        timeUsed: 3000,
+      }),
+    )
+    Effect.runSync(
+      WorkspaceDB.upsert({
+        id: workspaceB,
+        projectID: projectB,
+        name: "space-b",
+        branch: "dev",
+        config: { type: "worktree", directory: "/tmp/space-b" },
+        timeUsed: 4000,
+      }),
+    )
 
     expect(await SyncUnifyMigration.run(projectA)).toBe(1)
     expect(await SyncUnifyMigration.run(projectA)).toBe(0)

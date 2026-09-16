@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import app from "../src/index"
+import { EMAIL_CODE_IP_LIMIT } from "../src/constants"
 import { memoryD1, type MemoryD1 } from "./support/d1"
 
 type SentEmail = { to: string; subject: string; text: string }
@@ -173,6 +174,119 @@ describe("passkey skip after first-factor offer", () => {
     expect(location.protocol).toBe("nikcli:")
     expect(location.searchParams.get("state")).toBe("client-state")
     expect(location.searchParams.get("code")).toBeTruthy()
+  })
+})
+
+describe("passkey enrollment edge cases", () => {
+  /**
+   * The offer page renders *after* the account is verified, so the only thing
+   * it can still cost the user is the sign-in itself. The separate `login:`
+   * entry lapsing while they read the prompt used to do exactly that.
+   */
+  test("skip still finishes when the login intent lapsed on the offer page", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "device")
+    // What an expired KV entry looks like to the next request.
+    await kit.env.STATE.delete(`login:${loginState}`)
+
+    const skipped = await kit.postForm("/login/passkey/skip", { login_state: loginState })
+    expect(skipped.status).toBe(200)
+    expect(await skipped.text()).toContain("Device connected")
+  })
+
+  test("enrollment still opens when the login intent lapsed on the offer page", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "authorize")
+    await kit.env.STATE.delete(`login:${loginState}`)
+
+    const options = await kit.postJSON("/login/passkey/registration/options", { login_state: loginState })
+    expect(options.status).toBe(200)
+    const body = (await options.json()) as { authenticatorSelection?: Record<string, unknown> }
+    // No attachment pin: a security key or a phone over hybrid transport has to
+    // be allowed, or a machine without Touch ID/Hello can never enroll at all.
+    expect(body.authenticatorSelection?.authenticatorAttachment).toBeUndefined()
+    expect(body.authenticatorSelection?.residentKey).toBe("required")
+  })
+
+  test("offers a device approval a confirmation that survives a reload", async () => {
+    const kit = fixture()
+    const connected = await kit.get("/device/connected")
+    expect(connected.status).toBe(200)
+    expect(await connected.text()).toContain("Device connected")
+  })
+
+  test("a second skip replays the first instead of expiring", async () => {
+    const kit = fixture()
+    const { loginState } = await reachEmailOffer(kit, "device")
+    expect((await kit.postForm("/login/passkey/skip", { login_state: loginState })).status).toBe(200)
+
+    const again = await kit.postForm("/login/passkey/skip", { login_state: loginState })
+    expect(again.status).toBe(200)
+    expect(await again.text()).toContain("Device connected")
+  })
+
+  /**
+   * An error must not cancel the context: a device approval that mistypes its
+   * email still has a terminal waiting on this tab.
+   */
+  test("keeps the device context on an email error", async () => {
+    const kit = fixture()
+    const device = await kit.startDevice()
+    const approved = await kit.postForm("/device", { user_code: device.user_code, decision: "approve" })
+    const loginState = loginStateOf(await approved.text())
+
+    const rejected = await kit.postForm("/login/email/request", { login_state: loginState, email: "not-an-email" })
+    const page = await rejected.text()
+    expect(page).toContain("Enter a valid email address")
+    expect(page).toContain("Your terminal is not connected yet")
+    expect(page).toContain("One more step")
+    expect(page).not.toContain("Sign in or create an account")
+  })
+
+  test("an authorize flow keeps its own copy on the same error", async () => {
+    const kit = fixture()
+    const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+    const page = await kit
+      .postForm("/login/email/request", { login_state: loginState, email: "not-an-email" })
+      .then((r) => r.text())
+    expect(page).toContain("Enter a valid email address")
+    expect(page).toContain("Sign in or create an account")
+    expect(page).not.toContain("Your terminal is not connected yet")
+  })
+
+  /**
+   * The per-address budgets bound what one mailbox receives and nothing else.
+   * Varying the address was unlimited, and what comes out is mail signed by the
+   * issuer's own domain.
+   */
+  test("caps sign-in codes per network across different addresses", async () => {
+    const kit = fixture()
+    let sent = 0
+    let limited = 0
+    for (let i = 0; i < EMAIL_CODE_IP_LIMIT + 3; i++) {
+      const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+      const response = await kit.postForm("/login/email/request", {
+        login_state: loginState,
+        email: `person-${i}@example.com`,
+      })
+      if (response.status === 429) {
+        limited++
+        expect(await response.text()).toContain("from this network")
+      } else {
+        sent++
+      }
+    }
+    expect(sent).toBe(EMAIL_CODE_IP_LIMIT)
+    expect(limited).toBe(3)
+    expect(kit.sent).toHaveLength(EMAIL_CODE_IP_LIMIT)
+  })
+
+  test("refuses enrollment for a login_state that never had an offer", async () => {
+    const kit = fixture()
+    const loginState = loginStateOf(await kit.get(authorizePath()).then((r) => r.text()))
+    const options = await kit.postJSON("/login/passkey/registration/options", { login_state: loginState })
+    expect(options.status).toBe(400)
+    expect(((await options.json()) as { error_description?: string }).error_description).toMatch(/not available/i)
   })
 })
 

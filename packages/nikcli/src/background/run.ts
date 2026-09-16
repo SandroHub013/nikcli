@@ -127,7 +127,7 @@ export namespace BackgroundRun {
   }
 
   function mutate(id: string, fn: (draft: Record) => void) {
-    const updated = BackgroundRunRepo.update(projectID(), id, fn)
+    const updated = Effect.runSync(BackgroundRunRepo.update(projectID(), id, fn))
     if (!updated) missing(id)
     return updated
   }
@@ -364,7 +364,7 @@ ${result}
       record.sandboxState = sandbox.state
     }
 
-    BackgroundRunRepo.upsert(projectID(), record)
+    Effect.runSync(BackgroundRunRepo.upsert(projectID(), record))
     invalidateListCache()
     return record
   }
@@ -420,7 +420,7 @@ ${result}
   }
 
   export async function get(id: string) {
-    const record = BackgroundRunRepo.get(projectID(), id)
+    const record = Effect.runSync(BackgroundRunRepo.get(projectID(), id))
     if (!record) missing(id)
     return record
   }
@@ -445,7 +445,7 @@ ${result}
     if (cache.value && now < cache.value.expiresAt) {
       return cache.value.records
     }
-    const records = BackgroundRunRepo.list(projectID())
+    const records = Effect.runSync(BackgroundRunRepo.list(projectID()))
     cache.value = { records, expiresAt: now + LIST_CACHE_TTL_MS }
     return records
   }
@@ -474,7 +474,7 @@ ${result}
   }
 
   export async function listRunning(): Promise<Record[]> {
-    return BackgroundRunRepo.listRunning(projectID())
+    return Effect.runSync(BackgroundRunRepo.listRunning(projectID()))
   }
 
   export async function countRunningForParent(parentSessionID: string) {

@@ -55,7 +55,35 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * A structured line for a sign-in that did not complete.
+ *
+ * Nothing here throws, so `app.onError` never sees these: every
+ * `invalid_grant`, every "Session expired", every lapsed device code left the
+ * worker without a trace, and "it fails sometimes" stayed an anecdote nobody
+ * could turn into a cause. The fields are deliberately non-identifying — a
+ * stage and a reason, the client, never a code, a token, or an address.
+ */
+export function logSignInFailure(
+  c: Context,
+  stage: string,
+  reason: string,
+  detail: Record<string, string | number | boolean | null> = {},
+): void {
+  console.error(
+    JSON.stringify({
+      message: "sign-in did not complete",
+      stage,
+      reason,
+      method: c.req.method,
+      path: c.req.path,
+      ...detail,
+    }),
+  )
+}
+
 export function oauthError(c: Context, error: string, description: string, status = 400): Response {
+  logSignInFailure(c, "oauth", error, { status })
   return c.json({ error, error_description: description }, status as 400)
 }
 

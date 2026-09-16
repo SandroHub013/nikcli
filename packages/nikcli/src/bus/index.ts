@@ -22,7 +22,7 @@ const islandHost = {
   },
   async identity(sessionID: string) {
     const { SessionRepo } = await import("@/session/repo")
-    const info = SessionRepo.get(sessionID)
+    const info = Effect.runSync(SessionRepo.get(sessionID))
     return { parentID: info?.parentID ?? "", agentTitle: info?.title ?? "" }
   },
 }

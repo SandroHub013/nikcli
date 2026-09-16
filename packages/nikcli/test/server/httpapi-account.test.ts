@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -69,7 +70,7 @@ describe("account routing", () => {
       email: "local-only@example.com",
       password: "Password1!",
     })
-    const token = UserDB.createSession(user.id, 30)
+    const token = Effect.runSync(UserDB.createSession(user.id, 30))
 
     const response = await get("/account", token)
     expect(response.status).toBe(200)

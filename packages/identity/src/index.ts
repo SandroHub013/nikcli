@@ -15,12 +15,14 @@ import {
   hashDeviceCode,
   listPublicSigningKeys,
   markDevicePolled,
+  pruneDeviceCodes,
   revokeRefreshByHash,
 } from "./database"
-import { bearerToken, HttpError, noStore, oauthError, readForm, readJson, requestIP } from "./http"
+import { bearerToken, HttpError, logSignInFailure, noStore, oauthError, readForm, readJson, requestIP } from "./http"
 import {
   beginDeviceApproval,
   createLoginState,
+  deviceConnectedPage,
   finishGitHub,
   normalizeUserCode,
   requestEmailCode,
@@ -141,6 +143,9 @@ app.get("/device", (c) => {
   return devicePage(c, normalizeUserCode(provided) || provided.replace(/\D+/g, "").slice(0, 8))
 })
 app.post("/device", beginDeviceApproval)
+// Where the passkey script lands after approving a device, so the confirmation
+// survives a reload instead of replaying a spent authorization code.
+app.get("/device/connected", deviceConnectedPage)
 
 app.post("/oauth/device/code", async (c) => {
   const rate = await consumeRateLimit(c.env.STATE, "device-start", requestIP(c.req.raw), 20, 60)
@@ -151,22 +156,35 @@ app.post("/oauth/device/code", async (c) => {
   const body = await readJson(c.req.raw)
   const clientID = typeof body.client_id === "string" ? body.client_id : ""
   if (!isClientID(clientID)) return oauthError(c, "invalid_client", "Unknown public client")
-  const deviceCode = randomToken(48)
-  const userDigits = randomDigits(8)
-  const userCode = `${userDigits.slice(0, 4)}-${userDigits.slice(4)}`
   const now = Date.now()
-  const row: DeviceCodeRow = {
-    device_code_hash: await hashDeviceCode(deviceCode),
-    user_code: userCode,
-    client_id: clientID,
-    scope: typeof body.scope === "string" ? body.scope : "openid profile email offline_access",
-    status: "pending",
-    account_id: null,
-    expires_at: now + DEVICE_CODE_TTL_SECONDS * 1000,
-    last_poll_at: null,
-    created_at: now,
+  // Expired codes hold their `user_code` against every later sign-in, so clear
+  // them before drawing one. This is the only writer of the table, so it is
+  // also the only place the cleanup can live without a scheduled worker.
+  await pruneDeviceCodes(c.env.DB, now).catch(() => 0)
+  const scope = typeof body.scope === "string" ? body.scope : "openid profile email offline_access"
+  const expiresAt = now + DEVICE_CODE_TTL_SECONDS * 1000
+  // A taken `user_code` is not a failure, it is a redraw. Three attempts put
+  // the odds of giving up below any rate the table can reach.
+  let created: { deviceCode: string; userCode: string } | undefined
+  for (let attempt = 0; attempt < 3 && !created; attempt++) {
+    const deviceCode = randomToken(48)
+    const userDigits = randomDigits(8)
+    const userCode = `${userDigits.slice(0, 4)}-${userDigits.slice(4)}`
+    const row: DeviceCodeRow = {
+      device_code_hash: await hashDeviceCode(deviceCode),
+      user_code: userCode,
+      client_id: clientID,
+      scope,
+      status: "pending",
+      account_id: null,
+      expires_at: expiresAt,
+      last_poll_at: null,
+      created_at: now,
+    }
+    if (await createDeviceCode(c.env.DB, row)) created = { deviceCode, userCode }
   }
-  await createDeviceCode(c.env.DB, row)
+  if (!created) return oauthError(c, "temporarily_unavailable", "Could not allocate a device code", 503)
+  const { deviceCode, userCode } = created
   const verificationURL = new URL("/device", c.env.ISSUER).toString()
   return c.json({
     device_code: deviceCode,
@@ -186,11 +204,33 @@ async function pollDevice(c: Context<AppEnv>, provided?: Record<string, unknown>
       : formRecord(await readForm(c.req.raw)))
   const clientID = typeof body.client_id === "string" ? body.client_id : ""
   const deviceCode = typeof body.device_code === "string" ? body.device_code : ""
-  if (!isClientID(clientID) || !deviceCode) return c.json({ status: "expired" })
+  if (!isClientID(clientID) || !deviceCode) {
+    logSignInFailure(c, "device-poll", "malformed-request", { client: clientID || null })
+    return c.json({ status: "expired" })
+  }
   const hash = await hashDeviceCode(deviceCode)
   const row = await getDeviceCode(c.env.DB, hash)
   const now = Date.now()
+  // Four very different situations answered one indistinguishable "expired":
+  // a code the issuer never had, a code polled by the wrong client, a code the
+  // user simply did not approve in time, and one already redeemed. Only the
+  // third is a lifetime problem, and telling them apart is the whole point of
+  // logging here — the wire answer stays exactly as it was.
   if (!row || row.client_id !== clientID || row.expires_at <= now || row.status === "consumed") {
+    logSignInFailure(c, "device-poll", "expired", {
+      client: clientID,
+      cause: !row
+        ? "unknown-code"
+        : row.client_id !== clientID
+          ? "client-mismatch"
+          : row.status === "consumed"
+            ? "already-redeemed"
+            : "lapsed",
+      status: row?.status ?? null,
+      // How long the code outlived its window, for a lapsed one: the number
+      // that says whether the lifetime is the problem.
+      lateBySeconds: row && row.expires_at <= now ? Math.round((now - row.expires_at) / 1000) : null,
+    })
     return c.json({ status: "expired" })
   }
   if (row.status === "denied") return c.json({ status: "denied" })

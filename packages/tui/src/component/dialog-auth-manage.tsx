@@ -12,6 +12,7 @@ import { UserApi } from "@tui/util/user-api"
 import { UserSession } from "@nikcli-ai/util/user-session"
 import type { UserSchema } from "@nikcli-ai/util/user-schema"
 import { useTheme } from "@tui/context/theme"
+import { DialogLogin } from "@tui/component/dialog-login"
 
 type ProfileNotice = {
   message: string
@@ -92,7 +93,6 @@ export function DialogAuthManage() {
         category: "Account",
         description: "Continue with nikcli (browser) or use a local password",
         onSelect: async () => {
-          const { DialogLogin } = await import("@tui/component/dialog-login")
           await DialogLogin.run(dialog, sdk)
           dialog.replace(() => <DialogAuthManage />)
         },

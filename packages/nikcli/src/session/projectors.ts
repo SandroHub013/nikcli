@@ -1,4 +1,5 @@
 import z from "zod"
+import { Effect } from "effect"
 import { SyncEvent } from "@/sync/sync-event"
 import { MessageV2 } from "./message-v2"
 import { MessageRepo } from "./message-repo"
@@ -150,18 +151,18 @@ export namespace SessionSync {
 
   export const projectors = [
     SyncEvent.project(Created, (tx, data) => {
-      SessionRepo.upsert(data.info, tx)
+      Effect.runSync(SessionRepo.upsert(data.info, tx))
     }),
 
     SyncEvent.project(Updated, (tx, data) => {
-      SessionRepo.upsert(data.info, tx)
+      Effect.runSync(SessionRepo.upsert(data.info, tx))
     }),
 
     SyncEvent.project(Deleted, (tx, data) => {
       SessionEntryProjection.sessionRemoved(tx, data.sessionID)
-      SessionPending.removeSession(data.sessionID, tx)
-      InstructionRepo.removeSession(data.sessionID, tx)
-      SessionRepo.remove(data.sessionID, tx)
+      Effect.runSync(SessionPending.removeSession(data.sessionID, tx))
+      Effect.runSync(InstructionRepo.removeSession(data.sessionID, tx))
+      Effect.runSync(SessionRepo.remove(data.sessionID, tx))
     }),
 
     // Entries first. v1 is derived from the entries just written;
@@ -170,15 +171,15 @@ export namespace SessionSync {
       const written = SessionEntryProjection.message(tx, data.info)
       const derived = SessionEntry.toV1Message(written)
       if (!derived) throw new Error("session entry projection produced no v1 message")
-      MessageRepo.upsertMessage(derived, tx)
+      Effect.runSync(MessageRepo.upsertMessage(derived, tx))
       if (data.promptData !== undefined) {
-        MessageRepo.setPromptData(data.info.id, data.promptData, tx)
+        Effect.runSync(MessageRepo.setPromptData(data.info.id, data.promptData, tx))
       }
     }),
 
     SyncEvent.project(MessageRemoved, (tx, data) => {
       SessionEntryProjection.messageRemoved(tx, data.messageID)
-      MessageRepo.removeMessage(data.sessionID, data.messageID, tx)
+      Effect.runSync(MessageRepo.removeMessage(data.sessionID, data.messageID, tx))
     }),
 
     SyncEvent.project(PartUpdated, (tx, data) => {
@@ -186,20 +187,25 @@ export namespace SessionSync {
       if (!written) throw new Error("session entry projection produced no v1 part")
       const derived = SessionEntry.toV1WrittenPart(written, data.part)
       if (!derived) throw new Error("session entry projection produced no v1 part")
-      MessageRepo.upsertPart(derived, tx)
+      Effect.runSync(MessageRepo.upsertPart(derived, tx))
     }),
 
     SyncEvent.project(PartRemoved, (tx, data) => {
       SessionEntryProjection.partRemoved(tx, data.sessionID, data.messageID, data.partID)
-      MessageRepo.removePart(data.messageID, data.partID, tx)
+      Effect.runSync(MessageRepo.removePart(data.messageID, data.partID, tx))
     }),
 
     SyncEvent.project(InstructionsUpdated, (tx, data, event) => {
-      InstructionRepo.applyDelta(tx, {
-        sessionID: data.sessionID,
-        delta: data.delta,
-        seq: event.seq,
-      })
+      Effect.runSync(
+        InstructionRepo.applyDelta(
+          {
+            sessionID: data.sessionID,
+            delta: data.delta,
+            seq: event.seq,
+          },
+          tx,
+        ),
+      )
     }),
   ]
 

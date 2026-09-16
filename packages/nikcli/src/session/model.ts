@@ -47,7 +47,7 @@ function providerDefaultModel(): Promise<ModelRef> {
  */
 export async function sessionModelOwn(sessionID: string | undefined): Promise<ModelRef | undefined> {
   if (!sessionID) return undefined
-  const persisted = SessionRepo.get(sessionID)?.lastModel
+  const persisted = Effect.runSync(SessionRepo.get(sessionID))?.lastModel
   if (persisted) return persisted
   for await (const item of MessageV2.stream(sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model

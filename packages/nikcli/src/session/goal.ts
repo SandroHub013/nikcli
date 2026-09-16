@@ -94,48 +94,41 @@ export namespace SessionGoal {
       timeCreated: now,
       timeUpdated: now,
     }
-    GoalRepo.upsert(state)
-    publishGoal(sessionID, state)
-    return state
+    return GoalRepo.upsert(state).pipe(
+      Effect.map(() => {
+        publishGoal(sessionID, state)
+        return state
+      }),
+    )
   }
 
   function updateStatusImpl(sessionID: string, status: Status) {
-    const updated = GoalRepo.update(sessionID, (draft) => {
+    return GoalRepo.update(sessionID, (draft) => {
       draft.status = status
       draft.timeUpdated = Date.now()
-    })
-    if (!updated) return undefined
-    publishGoal(sessionID, updated)
-    return updated
+    }).pipe(Effect.tap((updated) => Effect.sync(() => updated && publishGoal(sessionID, updated))))
   }
 
   function accountUsageImpl(sessionID: string, tokensDelta: number, timeDeltaSeconds: number) {
-    const updated = GoalRepo.update(sessionID, (draft) => {
+    return GoalRepo.update(sessionID, (draft) => {
       draft.tokensUsed += Math.max(0, Math.floor(tokensDelta))
       draft.timeUsedSeconds += Math.max(0, Math.floor(timeDeltaSeconds))
       if (draft.status === "active" && draft.tokenBudget !== undefined && draft.tokensUsed >= draft.tokenBudget) {
         draft.status = "budget_limited"
       }
       draft.timeUpdated = Date.now()
-    })
-    if (!updated) return undefined
-    publishGoal(sessionID, updated)
-    return updated
+    }).pipe(Effect.tap((updated) => Effect.sync(() => updated && publishGoal(sessionID, updated))))
   }
 
   function incrementIterationImpl(sessionID: string) {
-    const updated = GoalRepo.update(sessionID, (draft) => {
+    return GoalRepo.update(sessionID, (draft) => {
       draft.iterationCount += 1
       draft.timeUpdated = Date.now()
-    })
-    if (!updated) return undefined
-    publishGoal(sessionID, updated)
-    return updated
+    }).pipe(Effect.tap((updated) => Effect.sync(() => updated && publishGoal(sessionID, updated))))
   }
 
   function clearImpl(sessionID: string) {
-    GoalRepo.remove(sessionID)
-    publishGoal(sessionID, undefined)
+    return GoalRepo.remove(sessionID).pipe(Effect.map(() => publishGoal(sessionID, undefined)))
   }
 
   function isGoalContinueNeeded(state: State) {
@@ -232,16 +225,16 @@ export namespace SessionGoal {
   export const layer = Layer.succeed(
     Service,
     Service.of({
-      get: (sessionID) => Effect.sync(() => getImpl(sessionID)),
-      set: (sessionID, objective, tokenBudget) => Effect.sync(() => setImpl(sessionID, objective, tokenBudget)),
-      updateStatus: (sessionID, status) => Effect.sync(() => updateStatusImpl(sessionID, status)),
+      get: (sessionID) => getImpl(sessionID),
+      set: (sessionID, objective, tokenBudget) => setImpl(sessionID, objective, tokenBudget),
+      updateStatus: (sessionID, status) => updateStatusImpl(sessionID, status),
       accountUsage: (sessionID, tokensDelta, timeDeltaSeconds) =>
-        Effect.sync(() => accountUsageImpl(sessionID, tokensDelta, timeDeltaSeconds)),
-      incrementIteration: (sessionID) => Effect.sync(() => incrementIterationImpl(sessionID)),
-      pause: (sessionID) => Effect.sync(() => updateStatusImpl(sessionID, "paused")),
-      resume: (sessionID) => Effect.sync(() => updateStatusImpl(sessionID, "active")),
-      usageLimit: (sessionID) => Effect.sync(() => updateStatusImpl(sessionID, "usage_limited")),
-      clear: (sessionID) => Effect.sync(() => clearImpl(sessionID)),
+        accountUsageImpl(sessionID, tokensDelta, timeDeltaSeconds),
+      incrementIteration: (sessionID) => incrementIterationImpl(sessionID),
+      pause: (sessionID) => updateStatusImpl(sessionID, "paused"),
+      resume: (sessionID) => updateStatusImpl(sessionID, "active"),
+      usageLimit: (sessionID) => updateStatusImpl(sessionID, "usage_limited"),
+      clear: (sessionID) => clearImpl(sessionID),
       isGoalContinueNeeded,
       isIterationLimitReached,
       continuationPrompt,

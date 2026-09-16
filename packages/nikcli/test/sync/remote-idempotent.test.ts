@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
@@ -41,22 +42,22 @@ describe("RemoteSync.start", () => {
       expect(again).toBe(first)
       expect(other).not.toBe(first)
 
-      const before = Outbox.status(url).total
+      const before = Effect.runSync(Outbox.status(url)).total
       await Sync.emitRaw(projectID, `wrk_ri_${run}`, { type: "session.idle", properties: {} })
-      expect(Outbox.status(url).total).toBe(before + 1)
+      expect(Effect.runSync(Outbox.status(url)).total).toBe(before + 1)
 
       // Remote-origin events are never pushed back.
       await Sync.emitRaw(projectID, `wrk_ri_${run}`, { type: "session.idle", properties: {} }, { origin: "remote:hub" })
-      expect(Outbox.status(url).total).toBe(before + 1)
+      expect(Effect.runSync(Outbox.status(url)).total).toBe(before + 1)
     } finally {
       await first.stop()
       await other.stop()
     }
 
     // With every sync stopped the emit hook is removed: no new enqueues.
-    const after = Outbox.status(url).total
+    const after = Effect.runSync(Outbox.status(url)).total
     await Sync.emitRaw(projectID, `wrk_ri_${run}`, { type: "session.idle", properties: {} })
-    expect(Outbox.status(url).total).toBe(after)
+    expect(Effect.runSync(Outbox.status(url)).total).toBe(after)
 
     // A fresh start works after full teardown.
     const restarted = await RemoteSync.start({ url, token: "t", projectID, drainIntervalMs: 3_600_000 })

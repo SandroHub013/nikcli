@@ -75,10 +75,30 @@ export async function getDeviceByUserCode(db: D1Database, userCode: string): Pro
   return db.prepare("SELECT * FROM device_codes WHERE user_code = ?").bind(userCode).first<DeviceCodeRow>()
 }
 
-export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Promise<void> {
-  await db
+/**
+ * Drop device codes that can no longer be used.
+ *
+ * Nothing else ever deleted from this table, and `user_code` is `UNIQUE`: every
+ * eight-digit code ever issued stayed reserved forever, so the space a new code
+ * is drawn from shrank on every sign-in and the `INSERT` eventually started
+ * losing to a code somebody used months ago — surfacing as a 500 from
+ * `/oauth/device/code` and "Failed to start device code flow" in the terminal.
+ * A code past `expires_at` cannot be approved, polled, or consumed, so keeping
+ * the row buys nothing.
+ */
+export async function pruneDeviceCodes(db: D1Database, now: number): Promise<number> {
+  return changes(await db.prepare("DELETE FROM device_codes WHERE expires_at <= ?").bind(now).run())
+}
+
+/**
+ * Insert a device code, reporting rather than throwing when the generated
+ * `user_code` is already taken. The caller draws another one; a bare `INSERT`
+ * turned that collision into a 500.
+ */
+export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Promise<boolean> {
+  const result = await db
     .prepare(
-      "INSERT INTO device_codes (device_code_hash, user_code, client_id, scope, status, account_id, expires_at, last_poll_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO device_codes (device_code_hash, user_code, client_id, scope, status, account_id, expires_at, last_poll_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       row.device_code_hash,
@@ -92,6 +112,7 @@ export async function createDeviceCode(db: D1Database, row: DeviceCodeRow): Prom
       row.created_at,
     )
     .run()
+  return changes(result) === 1
 }
 
 export async function setDeviceDecision(
@@ -122,6 +143,24 @@ export async function consumeDeviceCode(db: D1Database, deviceHash: string, now:
     .bind(deviceHash, now)
     .run()
   return changes(result) === 1
+}
+
+/**
+ * Drop refresh tokens that can no longer be presented.
+ *
+ * Same omission as `device_codes`, with a much faster clock: an access token
+ * lives fifteen minutes, so every signed-in client rotates its refresh token
+ * about a hundred times a day and each rotation leaves the superseded row
+ * behind forever. Unlike a user code, a spent row is never *wrong* — the hash
+ * is 48 random bytes — so this is growth rather than breakage, which is exactly
+ * why it would have gone unnoticed until the table became a problem.
+ *
+ * Only rows past their expiry go: a rotated or revoked token inside its window
+ * still has to be findable, because presenting one is how `refreshTokenPair`
+ * detects replay and kills the whole family.
+ */
+export async function pruneRefreshTokens(db: D1Database, now: number): Promise<number> {
+  return changes(await db.prepare("DELETE FROM refresh_tokens WHERE expires_at <= ?").bind(now).run())
 }
 
 export async function getRefreshToken(db: D1Database, tokenHash: string): Promise<RefreshTokenRow | null> {
@@ -235,10 +274,23 @@ export async function getPasskeyByCredentialID(db: D1Database, credentialID: str
   return db.prepare("SELECT * FROM passkeys WHERE credential_id = ?").bind(credentialID).first<PasskeyRow>()
 }
 
-export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<void> {
-  await db
+/**
+ * Register a passkey, tolerating the one that is already there.
+ *
+ * `credential_id` is `UNIQUE` and this was a bare `INSERT`, so re-sending an
+ * attestation the server had already stored — a double-tap on "Save a passkey",
+ * a retried request, a browser replaying the POST — threw and answered 500 on a
+ * registration that had in fact succeeded. Storing the same credential twice is
+ * a no-op, not a failure.
+ *
+ * The one case that must not pass quietly is a credential already registered to
+ * a *different* account: succeeding there would let a sign-in appear to save a
+ * passkey that in fact authenticates as somebody else.
+ */
+export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<"inserted" | "already" | "conflict"> {
+  const result = await db
     .prepare(
-      "INSERT INTO passkeys (id, account_id, credential_id, public_key, sign_count, transports, backed_up, device_type, user_handle, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO passkeys (id, account_id, credential_id, public_key, sign_count, transports, backed_up, device_type, user_handle, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       row.id,
@@ -254,6 +306,9 @@ export async function insertPasskey(db: D1Database, row: PasskeyRow): Promise<vo
       row.last_used_at,
     )
     .run()
+  if (changes(result) === 1) return "inserted"
+  const existing = await getPasskeyByCredentialID(db, row.credential_id)
+  return existing?.account_id === row.account_id ? "already" : "conflict"
 }
 
 export async function updatePasskeyCounter(

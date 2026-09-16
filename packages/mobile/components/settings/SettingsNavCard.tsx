@@ -82,12 +82,11 @@ export const SettingsNavCard = forwardRef<View, SettingsNavCardProps>(function S
         {...props}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        // Layout lives on the inner View, never in this style function: every card is
+        // the child of a `<Link asChild>`, and on that path the function's layout props
+        // never reach the native view -- rows render with zero padding and the group's
+        // 28pt corner clips the last badge. The function keeps press feedback only.
         style={({ pressed }) => ({
-          width: "100%",
-          paddingLeft: 20,
-          paddingRight: 16,
-          paddingVertical: 16,
-          minHeight: 88,
           opacity: pressed ? 0.9 : 1,
           backgroundColor: pressed ? hexToRgba(palette.ink, 0.04) : "transparent",
         })}
@@ -95,6 +94,10 @@ export const SettingsNavCard = forwardRef<View, SettingsNavCardProps>(function S
         <View
           style={{
             width: "100%",
+            paddingLeft: 20,
+            paddingRight: 16,
+            paddingVertical: 16,
+            minHeight: 88,
             flexDirection: "row",
             alignItems: "flex-start",
             gap: 14,

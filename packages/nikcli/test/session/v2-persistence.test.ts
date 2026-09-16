@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import { preserveTestEnv } from "../helpers/env"
 import { afterAll, describe, expect, it } from "bun:test"
 import type { MessageV2 as MessageV2Types } from "@/session/message-v2"
@@ -292,12 +293,14 @@ describe("SessionV2 write API", () => {
           projectID: Instance.project.id,
         })
 
-        const user = SessionEntryRepo.list(session.id).find((entry) => entry.type === "user") as SessionEntryTypes.User
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find(
+          (entry) => entry.type === "user",
+        ) as SessionEntryTypes.User
         expect(user.text).toBe("from persist")
-        expect(MessageRepo.getMessage(session.id, messageID)).toEqual(
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, messageID))).toEqual(
           JSON.parse(JSON.stringify(SessionEntry.toV1Message([user]))),
         )
-        expect(MessageRepo.getPromptData(session.id, messageID)).toBe(promptData)
+        expect(Effect.runSync(MessageRepo.getPromptData(session.id, messageID))).toBe(promptData)
       },
     })
   })
@@ -315,38 +318,42 @@ describe("SessionV2 write API", () => {
         const messageID = Identifier.ascending("message")
         const partID = Identifier.ascending("part")
         expect(() => {
-          Database.transaction(() => {
-            SessionV2.persist({
-              prepared: {
-                info: {
-                  id: messageID,
-                  sessionID: session.id,
-                  role: "user" as const,
-                  time: { created: 1 },
-                  agent: "build",
-                  model: { providerID: "p", modelID: "m" },
-                },
-                parts: [
-                  {
-                    id: partID,
-                    sessionID: session.id,
-                    messageID,
-                    type: "text" as const,
-                    text: "rolled back",
+          Effect.runSync(
+            Database.transaction(() =>
+              Effect.sync(() => {
+                SessionV2.persist({
+                  prepared: {
+                    info: {
+                      id: messageID,
+                      sessionID: session.id,
+                      role: "user" as const,
+                      time: { created: 1 },
+                      agent: "build",
+                      model: { providerID: "p", modelID: "m" },
+                    },
+                    parts: [
+                      {
+                        id: partID,
+                        sessionID: session.id,
+                        messageID,
+                        type: "text" as const,
+                        text: "rolled back",
+                      },
+                    ],
                   },
-                ],
-              },
-              promptData: JSON.stringify({
-                sessionID: session.id,
-                parts: [{ type: "text", text: "rolled back" }],
+                  promptData: JSON.stringify({
+                    sessionID: session.id,
+                    parts: [{ type: "text", text: "rolled back" }],
+                  }),
+                  projectID: Instance.project.id,
+                })
+                throw new Error("boom")
               }),
-              projectID: Instance.project.id,
-            })
-            throw new Error("boom")
-          })
+            ),
+          )
         }).toThrow("boom")
-        expect(SessionEntryRepo.list(session.id).some((entry) => entry.type === "user")).toBe(false)
-        expect(MessageRepo.getMessage(session.id, messageID)).toBeUndefined()
+        expect(Effect.runSync(SessionEntryRepo.list(session.id)).some((entry) => entry.type === "user")).toBe(false)
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, messageID))).toBeUndefined()
       },
     })
   })

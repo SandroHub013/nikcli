@@ -128,7 +128,7 @@ describe("ShareNext · remote mode", () => {
         expect(share.id).toBeTruthy()
         expect(share.secret).toBe("s3cret")
         expect(share.url).toContain(share.id!)
-        expect(ShareRepo.get(sessionID)).toMatchObject({ mode: "remote", secret: "s3cret" })
+        expect(Effect.runSync(ShareRepo.get(sessionID))).toMatchObject({ mode: "remote", secret: "s3cret" })
         // create() full-syncs, and the envelope list for a fresh session is
         // session + session_diff + model.
         expect(synced.at(-1)).toEqual({ id: share.id!, count: 3 })
@@ -163,8 +163,8 @@ describe("ShareNext · remote mode", () => {
         )
 
         expect(deleted).toContain(share.id!)
-        expect(ShareRepo.get(sessionID)).toBeUndefined()
-        expect(ShareRepo.getLocal(share.id!)).toBeUndefined()
+        expect(Effect.runSync(ShareRepo.get(sessionID))).toBeUndefined()
+        expect(Effect.runSync(ShareRepo.getLocal(share.id!))).toBeUndefined()
       },
     })
   })
@@ -210,7 +210,7 @@ describe("ShareNext · local mode", () => {
             return yield* (yield* ShareNext.Service).create(sessionID, { baseUrl: "https://viewer.example" })
           }),
         )
-        expect(ShareRepo.getLocal(share.id!)).toBeDefined()
+        expect(Effect.runSync(ShareRepo.getLocal(share.id!))).toBeDefined()
 
         await runShare(
           Effect.gen(function* () {
@@ -218,8 +218,8 @@ describe("ShareNext · local mode", () => {
           }),
         )
 
-        expect(ShareRepo.get(sessionID)).toBeUndefined()
-        expect(ShareRepo.getLocal(share.id!)).toBeUndefined()
+        expect(Effect.runSync(ShareRepo.get(sessionID))).toBeUndefined()
+        expect(Effect.runSync(ShareRepo.getLocal(share.id!))).toBeUndefined()
         expect(
           await runShare(
             Effect.gen(function* () {
@@ -246,7 +246,7 @@ describe("ShareNext · local mode", () => {
             ).pipe(Effect.provide(ShareNext.defaultLayer)),
           )
           expect(exit._tag).toBe("Failure")
-          expect(ShareRepo.get(sessionID)).toBeUndefined()
+          expect(Effect.runSync(ShareRepo.get(sessionID))).toBeUndefined()
         },
       })
     } finally {

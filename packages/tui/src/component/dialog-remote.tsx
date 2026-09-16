@@ -7,7 +7,8 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
-import { connectToTerminal, generateQR, type TunnelProvider, type TerminalConnection } from "@nikcli-ai/remote"
+import { connectToTerminal, generateQRMatrix, type TunnelProvider, type TerminalConnection } from "@nikcli-ai/remote"
+import { QRCode, useQRRepaint } from "@tui/component/qr"
 import { remoteService, type RemoteSession } from "@nikcli-ai/util/remote-tunnel"
 
 interface RemoteConfig {
@@ -25,39 +26,6 @@ interface Device {
   id: string
   name: string
   connectedAt: Date
-}
-
-function parseQRGrid(qrText: string): boolean[][] {
-  const lines = qrText.split("\n").filter((l) => l.trim())
-  const grid: boolean[][] = []
-  for (const line of lines) {
-    const row: boolean[] = []
-    for (const char of line) {
-      if (char === " " || char === "░" || char === "▒") {
-        row.push(false)
-      } else if (char === "█" || char === "▀" || char === "▄") {
-        row.push(true)
-      }
-    }
-    if (row.length > 0) grid.push(row)
-  }
-  return grid
-}
-
-function QRCodeDisplay({ qrText }: { qrText: string }) {
-  const grid = createMemo(() => parseQRGrid(qrText))
-
-  return (
-    <box flexDirection="column" marginLeft={1}>
-      <For each={grid().slice(0, 21)}>
-        {(row) => (
-          <box>
-            <For each={row.slice(0, 21)}>{(cell) => <text fg={cell ? "white" : "gray"}>{cell ? "█" : "░"}</text>}</For>
-          </box>
-        )}
-      </For>
-    </box>
-  )
 }
 
 function TerminalView({ connection }: { connection: TerminalConnection }) {
@@ -132,7 +100,11 @@ export function DialogRemote() {
   const toast = useToast()
   const renderer = useRenderer()
   const [query, setQuery] = createSignal("")
-  const [qrData, setQrData] = createSignal<string>("")
+  // The matrix, not the ASCII art: rendering re-parsed half-block text lost the
+  // half that each glyph encodes, so every `▀` came out as a full dark module
+  // and the symbol could not be scanned.
+  const [qrData, setQrData] = createSignal<boolean[][]>()
+  useQRRepaint(qrData)
   const [sessionInfo, setSessionInfo] = createSignal<{ url: string; localUrl: string; port: number } | null>(null)
   const [isStarting, setIsStarting] = createSignal(false)
   const [devices, setDevices] = createSignal<Device[]>([])
@@ -223,7 +195,7 @@ export function DialogRemote() {
     if (remoteService.hasActiveSession()) {
       remoteService.stopSession().catch(() => {})
     }
-    setQrData("")
+    setQrData(undefined)
     setSessionInfo(null)
     setDevices([])
     cleanupListeners?.()
@@ -342,7 +314,7 @@ export function DialogRemote() {
                 <text fg="gray">Press 'q' to stop</text>
               </box>
             </box>
-            <QRCodeDisplay qrText={qrData()} />
+            <QRCode matrix={qrData()!} />
           </box>
         </box>
       </Show>
@@ -450,12 +422,12 @@ export function DialogRemote() {
 
   function syncSessionInfo(session: RemoteSession) {
     const url = session.tunnelUrl || session.qrUrl
-    generateQR(url)
-      .then((qrAscii) => {
-        setQrData(qrAscii)
+    generateQRMatrix(url)
+      .then((matrix) => {
+        setQrData(matrix ?? undefined)
       })
       .catch(() => {
-        setQrData("")
+        setQrData(undefined)
       })
     setSessionInfo({
       url,

@@ -1,4 +1,5 @@
 import { SyncEvent } from "@/sync/sync-event"
+import { Effect } from "effect"
 import type { MessageV2 } from "../message-v2"
 import { SessionSync } from "../projectors"
 

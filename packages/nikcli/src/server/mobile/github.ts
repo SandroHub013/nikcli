@@ -13,7 +13,9 @@ import {
   GithubAuthInput,
   GithubOAuthClientInput,
   MobileGithubDeviceAuthPollInput,
+  MobileGithubRerunInput,
   MobileGithubSessionCreateInput,
+  MobileGithubWorkflowDispatchInput,
   configGet,
   createExecutionWorkspace,
   ensureGlobalGithubConnector,
@@ -76,6 +78,204 @@ export async function githubBranches(owner: string, repo: string) {
     if (error instanceof GithubApiError) throw githubHttpError(error)
     throw error
   }
+}
+
+/** ms timestamp from a GitHub ISO date, or `undefined` for null/absent/unparsable. */
+function timestamp(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function duration(startedAt: number | undefined, completedAt: number | undefined) {
+  if (startedAt === undefined || completedAt === undefined) return undefined
+  const elapsed = completedAt - startedAt
+  return elapsed >= 0 ? elapsed : undefined
+}
+
+/** First line of a commit message — the run list shows one line per run. */
+function firstLine(value: unknown) {
+  return typeof value === "string" ? (value.split("\n")[0] ?? "").trim() : ""
+}
+
+type RawRun = {
+  id: number
+  name?: string | null
+  display_title?: string | null
+  workflow_id?: number
+  run_number?: number
+  run_attempt?: number
+  status?: string | null
+  conclusion?: string | null
+  event?: string
+  head_branch?: string | null
+  head_sha?: string
+  html_url?: string
+  created_at?: string
+  updated_at?: string
+  run_started_at?: string
+  actor?: { login?: string; avatar_url?: string } | null
+  head_commit?: { message?: string } | null
+}
+
+function normalizeRun(raw: RawRun) {
+  const createdAt = timestamp(raw.created_at) ?? Date.now()
+  const updatedAt = timestamp(raw.updated_at) ?? createdAt
+  const startedAt = timestamp(raw.run_started_at) ?? createdAt
+  const status = raw.status ?? "queued"
+  // A run that is still going has no end yet; its elapsed time is measured against now by the
+  // client so the number keeps ticking without a refetch.
+  const completedAt = status === "completed" ? updatedAt : undefined
+  const title = firstLine(raw.display_title) || firstLine(raw.head_commit?.message) || (raw.name ?? "Workflow run")
+  return {
+    id: raw.id,
+    name: raw.name ?? "Workflow",
+    ...spreadIf("workflowID", raw.workflow_id),
+    runNumber: raw.run_number ?? 0,
+    ...spreadIf("attempt", raw.run_attempt),
+    status,
+    ...spreadIf("conclusion", raw.conclusion ?? undefined),
+    event: raw.event ?? "unknown",
+    branch: raw.head_branch ?? "",
+    sha: raw.head_sha ?? "",
+    title,
+    ...spreadIf(
+      "actor",
+      raw.actor?.login ? { login: raw.actor.login, ...spreadIf("avatarUrl", raw.actor.avatar_url) } : undefined,
+    ),
+    htmlUrl: raw.html_url ?? "",
+    createdAt,
+    updatedAt,
+    startedAt,
+    ...spreadIf("durationMs", duration(startedAt, completedAt)),
+  }
+}
+
+type RawJob = {
+  id: number
+  name?: string
+  status?: string | null
+  conclusion?: string | null
+  html_url?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  steps?: Array<{
+    name?: string
+    number?: number
+    status?: string | null
+    conclusion?: string | null
+    started_at?: string | null
+    completed_at?: string | null
+  }> | null
+}
+
+function normalizeJob(raw: RawJob) {
+  const startedAt = timestamp(raw.started_at)
+  const completedAt = timestamp(raw.completed_at)
+  return {
+    id: raw.id,
+    name: raw.name ?? "Job",
+    status: raw.status ?? "queued",
+    ...spreadIf("conclusion", raw.conclusion ?? undefined),
+    ...spreadIf("htmlUrl", raw.html_url ?? undefined),
+    ...spreadIf("startedAt", startedAt),
+    ...spreadIf("completedAt", completedAt),
+    ...spreadIf("durationMs", duration(startedAt, completedAt)),
+    steps: (raw.steps ?? []).map((step, index) => {
+      const stepStarted = timestamp(step.started_at)
+      const stepCompleted = timestamp(step.completed_at)
+      return {
+        name: step.name ?? `Step ${index + 1}`,
+        number: step.number ?? index + 1,
+        status: step.status ?? "queued",
+        ...spreadIf("conclusion", step.conclusion ?? undefined),
+        ...spreadIf("startedAt", stepStarted),
+        ...spreadIf("completedAt", stepCompleted),
+      }
+    }),
+  }
+}
+
+async function withGithub<A>(fn: (token: string) => Promise<A>): Promise<A> {
+  const token = await githubToken()
+  if (!token) throw noToken()
+  try {
+    return await fn(token)
+  } catch (error) {
+    if (error instanceof GithubApiError) throw githubHttpError(error)
+    throw error
+  }
+}
+
+export async function githubWorkflows(owner: string, repo: string) {
+  return withGithub(async (token) => {
+    const body = (await GithubApi.listWorkflows(token, owner, repo)) as {
+      workflows?: Array<{ id: number; name?: string; path?: string; state?: string; html_url?: string }>
+    }
+    return (body.workflows ?? []).map((workflow) => ({
+      id: workflow.id,
+      name: workflow.name ?? workflow.path ?? "Workflow",
+      path: workflow.path ?? "",
+      state: workflow.state ?? "active",
+      ...spreadIf("htmlUrl", workflow.html_url),
+    }))
+  })
+}
+
+export async function githubWorkflowRuns(owner: string, repo: string, query: { branch?: string; limit?: number }) {
+  return withGithub(async (token) => {
+    const body = (await GithubApi.listWorkflowRuns(token, owner, repo, {
+      ...spreadIf("branch", query.branch?.trim() || undefined),
+      perPage: query.limit ?? 20,
+    })) as { workflow_runs?: RawRun[]; total_count?: number }
+    const runs = (body.workflow_runs ?? []).map(normalizeRun)
+    // An empty list is ambiguous: no runs yet, or no workflows in the repo at all. The panel
+    // shows a different empty state for each, so resolve it here rather than in the client.
+    const configured =
+      runs.length > 0 ||
+      (await githubWorkflows(owner, repo)
+        .then((workflows) => workflows.length > 0)
+        .catch(() => true))
+    return { runs, totalCount: body.total_count ?? runs.length, configured }
+  })
+}
+
+export async function githubWorkflowRunJobs(owner: string, repo: string, runID: number) {
+  return withGithub(async (token) => {
+    const body = (await GithubApi.listWorkflowRunJobs(token, owner, repo, runID)) as { jobs?: RawJob[] }
+    return (body.jobs ?? []).map(normalizeJob)
+  })
+}
+
+export async function githubWorkflowRunRerun(
+  owner: string,
+  repo: string,
+  runID: number,
+  input: typeof MobileGithubRerunInput._output,
+) {
+  return withGithub(async (token) => {
+    await GithubApi.rerunWorkflowRun(token, owner, repo, runID, { failedOnly: input.failedOnly })
+    return { success: true as const }
+  })
+}
+
+export async function githubWorkflowRunCancel(owner: string, repo: string, runID: number) {
+  return withGithub(async (token) => {
+    await GithubApi.cancelWorkflowRun(token, owner, repo, runID)
+    return { success: true as const }
+  })
+}
+
+export async function githubWorkflowDispatch(
+  owner: string,
+  repo: string,
+  workflowID: string,
+  input: typeof MobileGithubWorkflowDispatchInput._output,
+) {
+  return withGithub(async (token) => {
+    await GithubApi.dispatchWorkflow(token, owner, repo, workflowID, input.ref, input.inputs)
+    return { success: true as const }
+  })
 }
 
 export function githubImportsList() {

@@ -186,11 +186,18 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(source).toMatch(/current:\s*Schema\.optional\(Schema\.String\)/)
   })
 
-  it("the TUI subscribes to installation.update-available and shows a confirm dialog", async () => {
+  it("the TUI drives the confirm dialog off the check result, not the event stream", async () => {
     const source = await readSrc("packages/tui/src/app.tsx")
-    expect(source).toContain("InstallationEventName.updateAvailable")
     expect(source).toContain("DialogConfirm.show(")
     expect(source).toContain("Update Available")
+    // The dialog must hang off `checkUpgrade`'s return value. Subscribing to
+    // the event instead is the regression this test exists for: the check runs
+    // in the CLI process (it replaces the installed binary, so it cannot run in
+    // the background service) while the event stream comes from that service,
+    // and the Bus is per-process — so the event never arrived and the TUI
+    // silently stopped offering updates.
+    expect(source).toContain("offerUpdate(available)")
+    expect(source).not.toContain("InstallationEventName.updateAvailable")
   })
 
   it("the TUI dialog passes the detected install method to upgradeNow", async () => {
@@ -293,7 +300,52 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(thread).toContain('client.call("checkUpgrade"')
     expect(thread).toContain("upgrade check failed")
     expect(thread).not.toContain('setTimeout(() => {\n        client.call("checkUpgrade"')
-    expect(app).toContain("checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade)")
+    // Whitespace-insensitive: prettier rewraps this call whenever the arguments or the print
+    // width move, and the wiring is what matters, not where the line broke.
+    expect(app).toMatch(/checkUpgradeWhenSubscriptionReady\(\s*sdk\.subscriptionReady,\s*props\.checkUpgrade,?\s*\)/)
+    // Both host paths must hand the result back rather than fire and forget:
+    // that return value is the only thing the TUI's dialog is driven by.
+    expect(thread.replace(/\s+/g, " ")).toContain('return client.call("checkUpgrade"')
+    expect(thread.replace(/\s+/g, " ")).toContain("return upgrade()")
+  })
+
+  it("hands the check result back to the caller instead of relying on the bus", async () => {
+    let subscribed = () => {}
+    const established = new Promise<void>((resolve) => {
+      subscribed = resolve
+    })
+    let result: unknown
+    let dispose = () => {}
+
+    createRoot((cleanup) => {
+      dispose = cleanup
+      const provider = createComponent(SDKProvider, {
+        url: "http://nikcli.test",
+        events: {
+          subscribe: async () => {
+            await established
+            return () => {}
+          },
+        },
+        get children() {
+          const sdk = useSDK()
+          void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, async () => ({
+            version: "1.355.0",
+            method: "curl" as const,
+            current: "1.354.0",
+          })).then((value) => {
+            result = value
+          })
+          return null
+        },
+      })
+      ;(provider as unknown as () => unknown)()
+    })
+
+    subscribed()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(result).toEqual({ version: "1.355.0", method: "curl", current: "1.354.0" })
+    dispose()
   })
 
   it("upgrade() publishes the event for every supported install method", async () => {
@@ -302,6 +354,9 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(source).toContain("Bus.publish(Installation.Event.UpdateAvailable")
     // it must consult semver, not string-equality
     expect(source).toContain("shouldNotifyUpdate")
+    // ...and it must also *return* what it found, which is what the TUI acts on
+    expect(source).toContain("Promise<UpdateAvailable | undefined>")
+    expect(source).toContain("return available")
   })
 
   it("every install method has a working upgrade command (per platform)", async () => {

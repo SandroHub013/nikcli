@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { createHash, randomBytes } from "node:crypto"
 import z from "zod"
 import { Global } from "@nikcli-ai/util/global"
@@ -92,8 +93,9 @@ export namespace MobileAuth {
   // Database access — uses the shared central Database.Service
   // ============================================================================
 
-  function db() {
-    return Database.syncDb()
+  /** Run one synchronous query as this module's async functions expect it. */
+  function query<A>(operation: string, run: (db: Database.TxOrDb) => A): A {
+    return Effect.runSync(Database.query(`MobileAuth.${operation}`, run))
   }
 
   // ============================================================================
@@ -161,18 +163,20 @@ export namespace MobileAuth {
       if (!parsed.success) return
 
       for (const token of parsed.data) {
-        db()
-          .insert(mobileTokens)
-          .values({
-            id: token.id,
-            name: token.name,
-            hash: token.hash,
-            createdAt: token.createdAt,
-            lastUsedAt: token.lastUsedAt ?? null,
-            expiresAt: token.expiresAt ?? null,
-          })
-          .onConflictDoNothing()
-          .run()
+        query("migrateFromJson", (db) =>
+          db
+            .insert(mobileTokens)
+            .values({
+              id: token.id,
+              name: token.name,
+              hash: token.hash,
+              createdAt: token.createdAt,
+              lastUsedAt: token.lastUsedAt ?? null,
+              expiresAt: token.expiresAt ?? null,
+            })
+            .onConflictDoNothing()
+            .run(),
+        )
       }
 
       // Remove the old JSON file after successful migration
@@ -194,7 +198,7 @@ export namespace MobileAuth {
 
   export async function all(): Promise<Token[]> {
     await ensureMigrated()
-    const rows = db().select().from(mobileTokens).all()
+    const rows = query("all", (db) => db.select().from(mobileTokens).all())
     return rows.map(toToken)
   }
 
@@ -220,7 +224,7 @@ export namespace MobileAuth {
       scope: input?.scope ?? "mobile",
     }
 
-    db().insert(mobileTokens).values(info).run()
+    query("create", (db) => db.insert(mobileTokens).values(info).run())
 
     invalidateCache()
 
@@ -240,7 +244,7 @@ export namespace MobileAuth {
   export async function remove(id: string) {
     await ensureMigrated()
     invalidateCache()
-    const result = db().delete(mobileTokens).where(eq(mobileTokens.id, id)).run()
+    const result = query("remove", (db) => db.delete(mobileTokens).where(eq(mobileTokens.id, id)).run())
     return getChanges(result) > 0
   }
 
@@ -270,14 +274,14 @@ export namespace MobileAuth {
     }
 
     // Cache miss — query SQLite
-    const row = db().select().from(mobileTokens).where(eq(mobileTokens.hash, hashed)).get()
+    const row = query("verify", (db) => db.select().from(mobileTokens).where(eq(mobileTokens.hash, hashed)).get())
     if (!row) return undefined
 
     if (row.expiresAt !== null && row.expiresAt <= now) return undefined
 
     // Debounced lastUsedAt update — only write if >5 minutes since last write
     if (!row.lastUsedAt || now - row.lastUsedAt > LAST_USED_WRITE_INTERVAL) {
-      db().update(mobileTokens).set({ lastUsedAt: now }).where(eq(mobileTokens.id, row.id)).run()
+      query("touch", (db) => db.update(mobileTokens).set({ lastUsedAt: now }).where(eq(mobileTokens.id, row.id)).run())
     }
 
     const publicToken = toPublicToken(row)

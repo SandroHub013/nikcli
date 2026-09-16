@@ -4,7 +4,7 @@ import { spreadIf } from "@/util/optional-key"
 import { zod, zodObject, zodObjectMode, zodOverride, type DeepMutable } from "@nikcli-ai/util/effect-zod"
 import z from "zod"
 import { EventError } from "./event-error"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import {
   APICallError,
   convertToModelMessages,
@@ -988,12 +988,12 @@ export namespace MessageV2 {
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
     // Use SQL repository for listing messages
-    const msgs = MessageRepo.listMessages(sessionID)
+    const msgs = Effect.runSync(MessageRepo.listMessages(sessionID))
     // Fetch messages with parts, reversed (newest first)
     const messages = await workMap(
       8,
       msgs.slice().reverse(),
-      async (msg) => MessageRepo.getMessageWithParts(sessionID, msg.id) ?? null,
+      async (msg) => Effect.runSync(MessageRepo.getMessageWithParts(sessionID, msg.id)) ?? null,
     )
     for (const msg of messages) {
       if (msg) yield msg
@@ -1002,7 +1002,7 @@ export namespace MessageV2 {
 
   export const page = fn(PageInput, async (input) => {
     // Use SQL repository for listing messages
-    const allMsgs = MessageRepo.listMessages(input.sessionID)
+    const allMsgs = Effect.runSync(MessageRepo.listMessages(input.sessionID))
     // Sort by createdAt ascending (same as storage list order)
     allMsgs.sort((a, b) => a.time.created - b.time.created)
     // Build a list of [sessionId, _, messageId] tuples to match existing cursor logic
@@ -1028,7 +1028,7 @@ export namespace MessageV2 {
     const results = await workMap(
       8,
       ids,
-      async (messageID) => MessageRepo.getMessageWithParts(input.sessionID, messageID) ?? null,
+      async (messageID) => Effect.runSync(MessageRepo.getMessageWithParts(input.sessionID, messageID)) ?? null,
     )
     // Preserve the same ordering as sequential fetch (ids order)
     const items = results.filter((r): r is WithParts => r !== null)
@@ -1042,7 +1042,7 @@ export namespace MessageV2 {
 
   export const parts = fn(Identifier.schema("message"), async (messageID) => {
     // Use SQL repository for listing parts
-    const result = MessageRepo.listParts(messageID)
+    const result = Effect.runSync(MessageRepo.listParts(messageID))
     return result
   })
 
@@ -1052,7 +1052,7 @@ export namespace MessageV2 {
       messageID: Identifier.schema("message"),
     }),
     async (input): Promise<WithParts> => {
-      const withParts = await MessageRepo.getMessageWithParts(input.sessionID, input.messageID)
+      const withParts = await Effect.runSync(MessageRepo.getMessageWithParts(input.sessionID, input.messageID))
       if (!withParts) {
         throw new SessionError.NotFoundError({
           message: `Message not found: ${input.messageID}`,

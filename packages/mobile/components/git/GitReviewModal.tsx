@@ -12,19 +12,19 @@ import {
   View,
 } from "react-native"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, Circle, GitBranch, GitCommit, History, Layers, RefreshCw } from "lucide-react-native"
+import { ArrowLeft, Circle, GitBranch, GitCommit, History, Layers, PlayCircle, RefreshCw } from "lucide-react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { contrastOn, hexToRgba, useAppTheme } from "@/lib/theme"
-import { usePressAnimation } from "@/lib/animation"
-import { type as typeStyle } from "@/lib/typography"
-import { IconCircleButton } from "@/components/ui/IconCircleButton"
+import { SPRING_CONFIG, useAnimatedValue, usePrefersReducedMotion, usePressAnimation } from "@/lib/animation"
+import { caps, type as typeStyle } from "@/lib/typography"
 import { triggerHaptic } from "@/lib/haptics"
+import { GitActionsPanel } from "./GitActionsPanel"
 import { GitFileTree } from "./GitFileTree"
 import { GitLineDiffEditor } from "./GitLineDiffEditor"
 import { ActionButton } from "@/components/ui/ActionButton"
 import type { GitBranchInfo, GitFileStatus, GitState, ParsedFileDiff } from "@/lib/types"
 
-type TabType = "changes" | "graph" | "review"
+type TabType = "changes" | "graph" | "review" | "actions"
 
 /** Long enough to cover the Modal's own `animationType="slide"` dismissal before we unmount. */
 const NATIVE_SLIDE_EXIT_MS = 400
@@ -67,7 +67,7 @@ function MetricPill({ label, value, color }: { label: string; value: number; col
         borderRadius: 999,
         borderWidth: 1,
         borderColor: isDark ? hexToRgba(palette.ink, 0.1) : hexToRgba(palette.border, 0.8),
-        backgroundColor: isDark ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.72)",
+        backgroundColor: palette.surfaceRaised,
         paddingHorizontal: 10,
         paddingVertical: 7,
       }}
@@ -109,13 +109,7 @@ function MiniGitButton({
         borderCurve: "continuous",
         borderWidth: 1,
         borderColor: disabled ? palette.border : isDark ? `${color}55` : `${color}35`,
-        backgroundColor: disabled
-          ? isDark
-            ? "rgba(255,255,255,0.035)"
-            : "rgba(255,255,255,0.56)"
-          : isDark
-            ? `${color}1F`
-            : `${color}14`,
+        backgroundColor: disabled ? palette.surfaceRaised : isDark ? `${color}1F` : `${color}14`,
         opacity: disabled ? 0.48 : pressed ? 0.74 : 1,
         transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
       })}
@@ -133,11 +127,14 @@ function BranchPill({ branch, onPress }: { branch: GitBranchInfo; onPress?: () =
   const content = (
     <>
       <GitBranch size={12} color={active ? palette.accentLight : palette.muted} strokeWidth={2.2} />
-      <Text style={{ color: active ? palette.ink : palette.soft, fontSize: 11, fontWeight: "700" }} numberOfLines={1}>
+      <Text
+        style={{ color: active ? palette.ink : palette.soft, ...typeStyle(11, { weight: "700" }) }}
+        numberOfLines={1}
+      >
         {branch.name.replace(/^remotes\//, "")}
       </Text>
       {branch.aheadBy > 0 || branch.behindBy > 0 ? (
-        <Text style={{ color: palette.muted, fontSize: 10, fontWeight: "700", fontVariant: ["tabular-nums"] }}>
+        <Text style={{ color: palette.muted, fontVariant: ["tabular-nums"], ...typeStyle(10, { weight: "700" }) }}>
           {branch.aheadBy ? `+${branch.aheadBy}` : ""}
           {branch.behindBy ? ` -${branch.behindBy}` : ""}
         </Text>
@@ -155,11 +152,7 @@ function BranchPill({ branch, onPress }: { branch: GitBranchInfo; onPress?: () =
           borderRadius: 999,
           borderWidth: 1,
           borderColor: active ? palette.accent : palette.border,
-          backgroundColor: active
-            ? hexToRgba(palette.ink, isDark ? 0.16 : 0.1)
-            : isDark
-              ? "rgba(255,255,255,0.04)"
-              : "rgba(255,255,255,0.64)",
+          backgroundColor: active ? hexToRgba(palette.ink, isDark ? 0.16 : 0.1) : palette.surfaceRaised,
           paddingHorizontal: 10,
           paddingVertical: 7,
         }}
@@ -180,7 +173,7 @@ function BranchPill({ branch, onPress }: { branch: GitBranchInfo; onPress?: () =
         borderCurve: "continuous",
         borderWidth: 1,
         borderColor: palette.border,
-        backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.64)",
+        backgroundColor: palette.surfaceRaised,
         paddingHorizontal: 10,
         paddingVertical: 7,
         opacity: pressed ? 0.72 : 1,
@@ -188,6 +181,159 @@ function BranchPill({ branch, onPress }: { branch: GitBranchInfo; onPress?: () =
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>{content}</View>
     </Pressable>
+  )
+}
+
+type TabItem = {
+  id: TabType
+  label: string
+  icon: typeof Layers
+  /** Omitted or zero renders no badge — a badge means "there is something here". */
+  count?: number
+  /** Colours the badge when the count is a warning rather than a quantity. */
+  tone?: "neutral" | "danger"
+}
+
+/**
+ * The modal's segmented control.
+ *
+ * Four segments do not fit icon-beside-label on a 375pt screen, so the pair stacks — which is
+ * also what every iOS tab bar does, and it survives a larger Dynamic Type setting. The active
+ * pill is one spring-driven layer sliding behind the row rather than four background colours
+ * switching, so a fast double-tap redirects the pill mid-flight instead of snapping.
+ *
+ * Each segment renders its content twice, active and inactive, cross-faded from the same
+ * animated value. That keeps the label's colour change on the native driver and in step with
+ * the pill, instead of flipping a frame early.
+ */
+function TabBar({ tabs, active, onChange }: { tabs: TabItem[]; active: TabType; onChange(next: TabType): void }) {
+  const { palette, isDark } = useAppTheme()
+  const prefersReducedMotion = usePrefersReducedMotion()
+  const [width, setWidth] = useState(0)
+  const index = Math.max(
+    0,
+    tabs.findIndex((item) => item.id === active),
+  )
+  const slide = useAnimatedValue(index)
+  const padding = 4
+  const segment = width > 0 ? (width - padding * 2) / tabs.length : 0
+  const onAccent = contrastOn(palette.accent)
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      slide.setValue(index)
+      return undefined
+    }
+    const animation = Animated.spring(slide, { toValue: index, ...SPRING_CONFIG })
+    animation.start()
+    return () => animation.stop()
+  }, [index, prefersReducedMotion, slide])
+
+  const positions = tabs.map((_, position) => position)
+
+  return (
+    <View
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={{
+        flexDirection: "row",
+        borderRadius: 16,
+        borderCurve: "continuous",
+        padding,
+        backgroundColor: hexToRgba(palette.ink, isDark ? 0.08 : 0.05),
+      }}
+    >
+      {segment > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: padding,
+            bottom: padding,
+            left: padding,
+            width: segment,
+            borderRadius: 13,
+            borderCurve: "continuous",
+            backgroundColor: palette.accent,
+            transform: [
+              {
+                translateX: slide.interpolate({
+                  inputRange: positions.length > 1 ? positions : [0, 1],
+                  outputRange: (positions.length > 1 ? positions : [0, 1]).map((position) => position * segment),
+                }),
+              },
+            ],
+          }}
+        />
+      ) : null}
+
+      {tabs.map((item, position) => {
+        const range = [position - 1, position, position + 1]
+        const activeOpacity = slide.interpolate({ inputRange: range, outputRange: [0, 1, 0], extrapolate: "clamp" })
+        const idleOpacity = slide.interpolate({ inputRange: range, outputRange: [1, 0, 1], extrapolate: "clamp" })
+        const badgeCount = item.count ?? 0
+
+        const content = (color: string, badgeBackground: string, badgeColor: string) => (
+          <View style={{ alignItems: "center", gap: 4 }}>
+            {/* Sized so the badge sits *inside* its parent: Android clips an overflowing child. */}
+            <View style={{ width: 40, height: 22, alignItems: "center", justifyContent: "center" }}>
+              <item.icon size={16} color={color} strokeWidth={2.2} />
+              {badgeCount > 0 ? (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    paddingHorizontal: 4,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: badgeBackground,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: badgeColor,
+                      fontVariant: ["tabular-nums"],
+                      ...typeStyle(9, { weight: "700" }),
+                    }}
+                  >
+                    {badgeCount > 99 ? "99+" : badgeCount}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={{ color, ...typeStyle(10, { weight: "600" }) }}>
+              {item.label}
+            </Text>
+          </View>
+        )
+
+        return (
+          <Pressable
+            key={item.id}
+            onPress={() => onChange(item.id)}
+            accessible
+            accessibilityRole="tab"
+            accessibilityState={{ selected: item.id === active }}
+            accessibilityLabel={badgeCount > 0 ? `${item.label}, ${badgeCount}` : item.label}
+            style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center" }}
+          >
+            <Animated.View style={{ position: "absolute", opacity: idleOpacity }}>
+              {content(
+                palette.soft,
+                item.tone === "danger" ? hexToRgba(palette.danger, 0.9) : hexToRgba(palette.ink, 0.12),
+                item.tone === "danger" ? contrastOn(palette.danger) : palette.muted,
+              )}
+            </Animated.View>
+            <Animated.View style={{ opacity: activeOpacity }}>
+              {content(onAccent, hexToRgba(onAccent, 0.24), onAccent)}
+            </Animated.View>
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 
@@ -205,7 +351,6 @@ export function GitReviewModal({
   const [tab, setTab] = useState<TabType>("changes")
   const [loading, setLoading] = useState(true)
   const [committing, setCommitting] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [gitState, setGitState] = useState<GitState | null>(null)
   const [commits, setCommits] = useState<CommitItem[]>([])
@@ -217,6 +362,8 @@ export function GitReviewModal({
   const [gitAction, setGitAction] = useState<"stage" | "unstage" | "discard" | "commit" | "push" | "checkout" | null>(
     null,
   )
+  /** Lifted out of the Actions panel so the tab badge can report CI without the tab being open. */
+  const [actionsSummary, setActionsSummary] = useState({ running: 0, failing: 0 })
 
   const resolveGitClient = useCallback(async () => {
     const { getMobileClient } = await import("@/lib/client")
@@ -231,9 +378,6 @@ export function GitReviewModal({
   const contentFadeAnimRef = useRef<Animated.Value | null>(null)
   if (contentFadeAnimRef.current === null) contentFadeAnimRef.current = new Animated.Value(1)
   const contentFadeAnim = contentFadeAnimRef.current
-  const tabSlideAnimRef = useRef<Animated.Value | null>(null)
-  if (tabSlideAnimRef.current === null) tabSlideAnimRef.current = new Animated.Value(0)
-  const tabSlideAnim = tabSlideAnimRef.current
   const commitItemAnims = useRef<Map<string, Animated.Value>>(new Map())
 
   /**
@@ -279,17 +423,10 @@ export function GitReviewModal({
   }, [visible, entranceAnim, contentFadeAnim])
 
   const handleTabChange = (newTab: TabType) => {
-    const newIndex = tabs.findIndex((t) => t.id === newTab)
-    const currentIndex = tabs.findIndex((t) => t.id === tab)
+    if (newTab === tab) return
+    void triggerHaptic("selection")
 
-    // Animate tab indicator slide
-    Animated.spring(tabSlideAnim, {
-      toValue: newIndex,
-      friction: 20,
-      tension: 160,
-      useNativeDriver: true,
-    }).start()
-
+    // The pill itself is driven inside TabBar; this is the content underneath crossing over.
     Animated.sequence([
       Animated.timing(contentFadeAnim, {
         toValue: 0,
@@ -396,7 +533,6 @@ export function GitReviewModal({
   }
 
   function handleFileSelect(path: string) {
-    setSelectedFile(path)
     const index = diffFiles.findIndex((file) => file.file === path || file.oldPath === path)
     if (index >= 0) setActiveFileIndex(index)
     setTab("review")
@@ -409,24 +545,6 @@ export function GitReviewModal({
       else next.delete(path)
       return next
     })
-  }
-
-  async function handleStageAll() {
-    if (!gitState) return
-    const allPaths = [...gitState.unstaged.map((f) => f.path), ...gitState.untracked]
-    if (!allPaths.length) return
-    const client = await resolveGitClient()
-    if (!client) return
-    try {
-      setGitAction("stage")
-      await client.stageGitFiles(allPaths)
-      void triggerHaptic("selection")
-      void handleRefresh()
-    } catch (error) {
-      console.error("Failed to stage files:", error)
-    } finally {
-      setGitAction(null)
-    }
   }
 
   const stagedPaths = useMemo(() => new Set(gitState?.staged.map((file) => file.path) ?? []), [gitState?.staged])
@@ -571,13 +689,25 @@ export function GitReviewModal({
     (gitState?.staged.length ?? 0) + (gitState?.unstaged.length ?? 0) + (gitState?.untracked.length ?? 0)
   const hasStagedChanges = (gitState?.staged.length ?? 0) > 0
 
-  // Tab configuration
-  const tabs = [
-    { id: "changes" as TabType, label: "Changes", icon: Layers, count: totalChanges },
-    { id: "graph" as TabType, label: "Commits", icon: GitCommit, count: commits.length },
-    { id: "review" as TabType, label: "Review", icon: GitBranch, count: diffFiles.length },
+  // Tab configuration. Actions only exists for a repository we can address on GitHub — a
+  // local-only worktree has no workflow runs to show, and an inert tab is worse than none.
+  const tabs: TabItem[] = [
+    { id: "changes", label: "Changes", icon: Layers, count: totalChanges },
+    { id: "graph", label: "Commits", icon: GitCommit, count: commits.length },
+    { id: "review", label: "Review", icon: GitBranch, count: diffFiles.length },
+    ...(github
+      ? [
+          {
+            id: "actions" as TabType,
+            label: "Actions",
+            icon: PlayCircle,
+            // Failing runs outrank running ones: a red badge is the reason to open the tab.
+            count: actionsSummary.failing || actionsSummary.running,
+            tone: actionsSummary.failing > 0 ? ("danger" as const) : ("neutral" as const),
+          },
+        ]
+      : []),
   ]
-  const tabIndex = tabs.findIndex((t) => t.id === tab)
 
   if (!mounted) return null
 
@@ -603,7 +733,7 @@ export function GitReviewModal({
                   width: 38,
                   height: 38,
                   borderRadius: 12,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
+                  backgroundColor: hexToRgba(palette.ink, isDark ? 0.1 : 0.06),
                   alignItems: "center",
                   justifyContent: "center",
                   opacity: pressed ? 0.7 : 1,
@@ -615,22 +745,20 @@ export function GitReviewModal({
               </Pressable>
             </Animated.View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ fontSize: 17, fontWeight: "700", color: palette.ink, letterSpacing: -0.3 }}>
-                Review Changes
-              </Text>
+              <Text style={{ color: palette.ink, ...typeStyle(17, { weight: "700" }) }}>Review Changes</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
                 {github ? (
                   <>
-                    <Text style={{ fontSize: 12, color: palette.soft }}>
+                    <Text style={{ color: palette.soft, ...typeStyle(12) }}>
                       {github.owner}/{github.repo}
                     </Text>
-                    <Text style={{ fontSize: 10, color: palette.muted }}>·</Text>
-                    <Text style={{ fontSize: 12, color: palette.accentLight, fontWeight: "600" }}>
+                    <Text style={{ color: palette.muted, ...typeStyle(10) }}>·</Text>
+                    <Text style={{ color: palette.accentLight, ...typeStyle(12, { weight: "600" }) }}>
                       {github.baseBranch} → {github.headBranch}
                     </Text>
                   </>
                 ) : (
-                  <Text style={{ fontSize: 12, color: palette.soft }}>Local repository</Text>
+                  <Text style={{ color: palette.soft, ...typeStyle(12) }}>Local repository</Text>
                 )}
               </View>
             </View>
@@ -643,7 +771,7 @@ export function GitReviewModal({
                   width: 38,
                   height: 38,
                   borderRadius: 12,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)",
+                  backgroundColor: hexToRgba(palette.ink, isDark ? 0.1 : 0.06),
                   alignItems: "center",
                   justifyContent: "center",
                   opacity: pressed ? 0.7 : 1,
@@ -656,79 +784,8 @@ export function GitReviewModal({
             </Animated.View>
           </View>
 
-          {/* Elegant sliding tabs */}
           <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
-                borderRadius: 14,
-                padding: 4,
-              }}
-            >
-              {/* Tab indicator - equidistant spacing */}
-              {tabs.map((item, index) => {
-                const isActive = tab === item.id
-                const Icon = item.icon
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => handleTabChange(item.id)}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: isActive }}
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingVertical: 10,
-                      marginHorizontal: 2,
-                      borderRadius: 11,
-                      backgroundColor: isActive ? palette.accent : "transparent",
-                      opacity: pressed && !isActive ? 0.7 : 1,
-                    })}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
-                      <Icon size={15} color={isActive ? contrastOn(palette.accent) : palette.soft} strokeWidth={2.2} />
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: "700",
-                          color: isActive ? contrastOn(palette.accent) : palette.soft,
-                          marginLeft: 6,
-                        }}
-                      >
-                        {item.label}
-                      </Text>
-                      <View
-                        style={{
-                          minWidth: 22,
-                          height: 22,
-                          borderRadius: 11,
-                          backgroundColor: isActive
-                            ? hexToRgba(contrastOn(palette.accent), 0.22)
-                            : hexToRgba(palette.ink, 0.1),
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginLeft: 6,
-                          paddingHorizontal: 5,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: "800",
-                            color: isActive ? contrastOn(palette.accent) : palette.muted,
-                            fontVariant: ["tabular-nums"],
-                          }}
-                        >
-                          {item.count}
-                        </Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                )
-              })}
-            </View>
+            <TabBar tabs={tabs} active={tab} onChange={handleTabChange} />
           </View>
 
           {/* Bottom info bar */}
@@ -741,33 +798,33 @@ export function GitReviewModal({
               paddingVertical: 10,
               borderTopWidth: StyleSheet.hairlineWidth,
               borderTopColor: palette.border,
-              backgroundColor: isDark ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.5)",
+              backgroundColor: hexToRgba(palette.ink, isDark ? 0.06 : 0.03),
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: palette.success }} />
-                <Text style={{ fontSize: 11, color: palette.soft, fontWeight: "600" }}>
+                <Text style={{ color: palette.soft, ...typeStyle(11, { weight: "600" }) }}>
                   {gitState?.staged.length ?? 0} staged
                 </Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: palette.warn }} />
-                <Text style={{ fontSize: 11, color: palette.soft, fontWeight: "600" }}>
+                <Text style={{ color: palette.soft, ...typeStyle(11, { weight: "600" }) }}>
                   {gitState?.unstaged.length ?? 0} changed
                 </Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: palette.muted }} />
-                <Text style={{ fontSize: 11, color: palette.soft, fontWeight: "600" }}>
+                <Text style={{ color: palette.soft, ...typeStyle(11, { weight: "600" }) }}>
                   {gitState?.untracked.length ?? 0} new
                 </Text>
               </View>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ fontSize: 11, color: palette.muted }}>{gitState?.branch || "No branch"}</Text>
+              <Text style={{ color: palette.muted, ...typeStyle(11) }}>{gitState?.branch || "No branch"}</Text>
               {gitState && (gitState.commitsAhead > 0 || gitState.commitsBehind > 0) && (
-                <Text style={{ fontSize: 10, color: palette.accentLight, fontWeight: "600" }}>
+                <Text style={{ color: palette.accentLight, ...typeStyle(10, { weight: "600" }) }}>
                   {gitState.commitsAhead > 0 ? `+${gitState.commitsAhead}` : ""}
                   {gitState.commitsBehind > 0 ? ` -${gitState.commitsBehind}` : ""}
                 </Text>
@@ -795,16 +852,13 @@ export function GitReviewModal({
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
-                        fontSize: 11,
-                        fontWeight: "700",
-                        letterSpacing: 1.4,
                         color: palette.accentLight,
-                        textTransform: "uppercase",
+                        ...caps(11, { weight: "700" }),
                       }}
                     >
                       {gitState?.branch || "Git worktree"}
                     </Text>
-                    <Text style={{ marginTop: 2, fontSize: 12, color: palette.soft }}>
+                    <Text style={{ marginTop: 2, color: palette.soft, ...typeStyle(12) }}>
                       {gitState?.commitsAhead ?? 0} ahead · {gitState?.commitsBehind ?? 0} behind · {selectedFiles.size}{" "}
                       selected
                     </Text>
@@ -896,7 +950,7 @@ export function GitReviewModal({
                   borderRadius: 24,
                   borderWidth: 1,
                   borderColor: palette.border,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.72)",
+                  backgroundColor: palette.surfaceRaised,
                   padding: 14,
                   gap: 12,
                 }}
@@ -917,16 +971,13 @@ export function GitReviewModal({
                   <View style={{ flex: 1 }}>
                     <Text
                       style={{
-                        fontSize: 11,
-                        fontWeight: "800",
-                        letterSpacing: 1.4,
                         color: palette.accentLight,
-                        textTransform: "uppercase",
+                        ...caps(11, { weight: "800" }),
                       }}
                     >
                       Commit pipeline
                     </Text>
-                    <Text style={{ marginTop: 2, fontSize: 12, color: palette.soft }}>
+                    <Text style={{ marginTop: 2, color: palette.soft, ...typeStyle(12) }}>
                       {hasStagedChanges
                         ? `${gitState?.staged.length ?? 0} staged files ready`
                         : "Stage files before committing"}
@@ -945,9 +996,11 @@ export function GitReviewModal({
                     borderRadius: 16,
                     borderWidth: 1,
                     borderColor: palette.border,
-                    backgroundColor: isDark ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.78)",
+                    backgroundColor: palette.background,
                     paddingHorizontal: 12,
                     color: palette.ink,
+                    // Bare size, not `typeStyle`: a lineHeight on TextInput mis-centres the
+                    // text vertically on Android.
                     fontSize: 14,
                     fontWeight: "600",
                   }}
@@ -977,18 +1030,15 @@ export function GitReviewModal({
                     borderRadius: 22,
                     borderWidth: 1,
                     borderColor: palette.border,
-                    backgroundColor: isDark ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.62)",
+                    backgroundColor: palette.surfaceRaised,
                     padding: 12,
                     gap: 10,
                   }}
                 >
                   <Text
                     style={{
-                      fontSize: 10,
-                      fontWeight: "800",
-                      letterSpacing: 1.5,
                       color: palette.muted,
-                      textTransform: "uppercase",
+                      ...caps(10, { weight: "800" }),
                     }}
                   >
                     Branches
@@ -1072,22 +1122,22 @@ export function GitReviewModal({
                           )}
                         </View>
                         <View style={{ flex: 1, marginLeft: 12 }}>
-                          <Text style={{ fontSize: 14, fontWeight: "500", color: palette.ink }} numberOfLines={2}>
+                          <Text style={{ color: palette.ink, ...typeStyle(14, { weight: "500" }) }} numberOfLines={2}>
                             {commit.message}
                           </Text>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-                            <Text style={{ fontSize: 11, color: palette.muted }}>{commit.author}</Text>
-                            <Text style={{ fontSize: 10, color: palette.muted }}>·</Text>
-                            <Text style={{ fontSize: 11, color: palette.muted }}>{commit.sha.slice(0, 7)}</Text>
+                            <Text style={{ color: palette.muted, ...typeStyle(11) }}>{commit.author}</Text>
+                            <Text style={{ color: palette.muted, ...typeStyle(10) }}>·</Text>
+                            <Text style={{ color: palette.muted, ...typeStyle(11) }}>{commit.sha.slice(0, 7)}</Text>
                           </View>
                           <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
-                            <Text style={{ fontSize: 10, color: palette.success, fontWeight: "600" }}>
+                            <Text style={{ color: palette.success, ...typeStyle(10, { weight: "600" }) }}>
                               +{commit.additions}
                             </Text>
-                            <Text style={{ fontSize: 10, color: palette.danger, fontWeight: "600" }}>
+                            <Text style={{ color: palette.danger, ...typeStyle(10, { weight: "600" }) }}>
                               -{commit.deletions}
                             </Text>
-                            <Text style={{ fontSize: 10, color: palette.muted }}>{commit.filesCount} files</Text>
+                            <Text style={{ color: palette.muted, ...typeStyle(10) }}>{commit.filesCount} files</Text>
                           </View>
                         </View>
                       </Pressable>
@@ -1112,16 +1162,30 @@ export function GitReviewModal({
               ) : (
                 <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 40 }}>
                   <Layers size={48} color={palette.muted} />
-                  <Text style={{ marginTop: 16, fontSize: 16, fontWeight: "600", color: palette.ink }}>
+                  <Text style={{ marginTop: 16, color: palette.ink, ...typeStyle(16, { weight: "600" }) }}>
                     No changes to review
                   </Text>
-                  <Text style={{ marginTop: 8, fontSize: 14, color: palette.soft, textAlign: "center" }}>
+                  <Text style={{ marginTop: 8, textAlign: "center", color: palette.soft, ...typeStyle(14) }}>
                     Make some changes in the session to see them here
                   </Text>
                 </View>
               )}
             </View>
           )}
+
+          {github ? (
+            <View style={{ flex: 1, display: tab === "actions" ? "flex" : "none" }}>
+              <GitActionsPanel
+                owner={github.owner}
+                repo={github.repo}
+                branch={github.headBranch}
+                {...(directory ? { directory } : null)}
+                active={visible && tab === "actions"}
+                bottomInset={bottom}
+                onSummary={setActionsSummary}
+              />
+            </View>
+          ) : null}
         </Animated.View>
       </Animated.View>
     </Modal>

@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
@@ -171,10 +172,12 @@ describe("mission/orchestrator · restore", () => {
       await Manager.upsert(inst.project.id, def)
       const exec = await Manager.startExec(inst.project.id, def.id, "feature", "a", "a")
       const expired = Date.now() - MISSION_EXEC_LEASE_MS - 1_000
-      MissionRepo.updateExec(inst.project.id, def.id, exec.id, (draft) => {
-        draft.startedAt = expired
-        draft.heartbeatAt = expired
-      })
+      Effect.runSync(
+        MissionRepo.updateExec(inst.project.id, def.id, exec.id, (draft) => {
+          draft.startedAt = expired
+          draft.heartbeatAt = expired
+        }),
+      )
 
       await Orchestrator.restore()
 

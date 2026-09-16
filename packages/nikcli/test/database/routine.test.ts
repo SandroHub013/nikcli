@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -32,12 +33,12 @@ describe("routine SQL", () => {
       const { RoutineRepo } = await import("@/mobile/repo")
       Database.syncDb()
 
-      expect(RoutineRepo.get(projectID, record.id)?.name).toBe("hourly check")
-      expect(RoutineRepo.list(projectID).map((row) => row.id)).toEqual([record.id])
+      expect(Effect.runSync(RoutineRepo.get(projectID, record.id))?.name).toBe("hourly check")
+      expect(Effect.runSync(RoutineRepo.list(projectID)).map((row) => row.id)).toEqual([record.id])
 
       const migration = (await import("@/database/migration/20260814070000_routine")).default
       migration.up(Database.syncNative())
-      expect(RoutineRepo.list(projectID)).toHaveLength(1)
+      expect(Effect.runSync(RoutineRepo.list(projectID))).toHaveLength(1)
 
       expect(await fs.readFile(path.join(storage, "routine", projectID, `${record.id}.json`), "utf8")).toContain(
         "hourly check",
@@ -53,11 +54,11 @@ describe("routine SQL", () => {
 
       const projectID = "proj_no_json"
       const record = routineRecord("quiet-red-owl", projectID)
-      RoutineRepo.upsert(projectID, record)
+      Effect.runSync(RoutineRepo.upsert(projectID, record))
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(path.join(storage, "routine"))).toBe(false)
-      expect(RoutineRepo.get(projectID, record.id)?.prompt).toBe("inspect the repo")
+      expect(Effect.runSync(RoutineRepo.get(projectID, record.id))?.prompt).toBe("inspect the repo")
     })
   })
 
@@ -69,7 +70,7 @@ describe("routine SQL", () => {
 
       const projectID = "proj_trap"
       const record = routineRecord("stale-json-rt", projectID)
-      RoutineRepo.upsert(projectID, { ...record, name: "sql-name" })
+      Effect.runSync(RoutineRepo.upsert(projectID, { ...record, name: "sql-name" }))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "routine", projectID), { recursive: true })
@@ -78,11 +79,11 @@ describe("routine SQL", () => {
         JSON.stringify({ ...record, name: "json-name" }),
       )
 
-      expect(RoutineRepo.get(projectID, record.id)?.name).toBe("sql-name")
+      expect(Effect.runSync(RoutineRepo.get(projectID, record.id))?.name).toBe("sql-name")
 
       const onlyJson = routineRecord("json-only-rt", projectID)
       await fs.writeFile(path.join(storage, "routine", projectID, `${onlyJson.id}.json`), JSON.stringify(onlyJson))
-      expect(RoutineRepo.get(projectID, onlyJson.id)).toBeUndefined()
+      expect(Effect.runSync(RoutineRepo.get(projectID, onlyJson.id))).toBeUndefined()
     })
   })
 
@@ -94,16 +95,18 @@ describe("routine SQL", () => {
 
       const projectID = "proj_mutate"
       const record = routineRecord("keep-going", projectID)
-      RoutineRepo.upsert(projectID, record)
-      const updated = RoutineRepo.update(projectID, record.id, (draft) => {
-        draft.paused = true
-        draft.lastRunAt = 42
-      })
+      Effect.runSync(RoutineRepo.upsert(projectID, record))
+      const updated = Effect.runSync(
+        RoutineRepo.update(projectID, record.id, (draft) => {
+          draft.paused = true
+          draft.lastRunAt = 42
+        }),
+      )
       expect(updated?.paused).toBe(true)
-      expect(RoutineRepo.get(projectID, record.id)?.lastRunAt).toBe(42)
+      expect(Effect.runSync(RoutineRepo.get(projectID, record.id))?.lastRunAt).toBe(42)
 
-      expect(RoutineRepo.remove(projectID, record.id)).toBe(true)
-      expect(RoutineRepo.get(projectID, record.id)).toBeUndefined()
+      expect(Effect.runSync(RoutineRepo.remove(projectID, record.id))).toBe(true)
+      expect(Effect.runSync(RoutineRepo.get(projectID, record.id))).toBeUndefined()
     })
   })
 })

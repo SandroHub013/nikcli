@@ -441,9 +441,11 @@ When constructing the summary, try to stick to this template:
     }
     resetCompactionFailures(input.sessionID)
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
-    InstructionRepo.advanceEpoch(
-      input.sessionID,
-      InstructionRepo.latestAggregateSeq(input.ctx.project.id, input.sessionID),
+    Effect.runSync(
+      Effect.gen(function* () {
+        const seq = yield* InstructionRepo.latestAggregateSeq(input.ctx.project.id, input.sessionID)
+        yield* InstructionRepo.advanceEpoch(input.sessionID, seq)
+      }),
     )
     return "continue"
   }

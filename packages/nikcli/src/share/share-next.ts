@@ -233,11 +233,11 @@ export namespace ShareNext {
   }
 
   async function get(sessionID: string) {
-    return ShareRepo.get(sessionID)
+    return Effect.runSync(ShareRepo.get(sessionID))
   }
 
   async function getLocal(shareID: string) {
-    return ShareRepo.getLocal(shareID) as LocalShare | undefined
+    return Effect.runSync(ShareRepo.getLocal(shareID)) as LocalShare | undefined
   }
 
   async function payload(sessionID: string): Promise<Data[]> {
@@ -290,19 +290,21 @@ export namespace ShareNext {
 
     const existing = await getLocal(shareID)
 
-    ShareRepo.putLocal({
-      id: shareID,
-      sessionID: existing?.sessionID ?? sessionID,
-      url: share.url,
-      time: {
-        created: existing?.time.created ?? Date.now(),
-        updated: Date.now(),
-      },
-      items: {
-        ...existing?.items,
-        ...toItemMap(data),
-      },
-    })
+    Effect.runSync(
+      ShareRepo.putLocal({
+        id: shareID,
+        sessionID: existing?.sessionID ?? sessionID,
+        url: share.url,
+        time: {
+          created: existing?.time.created ?? Date.now(),
+          updated: Date.now(),
+        },
+        items: {
+          ...existing?.items,
+          ...toItemMap(data),
+        },
+      }),
+    )
   }
 
   async function syncRemote(share: StoredShare, data: Data[]) {
@@ -342,22 +344,26 @@ export namespace ShareNext {
       url: `${normalizeBaseURL(baseUrl)}/share/${encodeURIComponent(id)}`,
     }
     const data = await payload(sessionID)
-    Database.transaction((tx) => {
-      ShareRepo.put(sessionID, share, tx)
-      ShareRepo.putLocal(
-        {
-          id,
-          sessionID,
-          url: share.url,
-          time: {
-            created: Date.now(),
-            updated: Date.now(),
-          },
-          items: toItemMap(data),
-        },
-        tx,
-      )
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* ShareRepo.put(sessionID, share, tx)
+          yield* ShareRepo.putLocal(
+            {
+              id,
+              sessionID,
+              url: share.url,
+              time: {
+                created: Date.now(),
+                updated: Date.now(),
+              },
+              items: toItemMap(data),
+            },
+            tx,
+          )
+        }),
+      ),
+    )
     return share
   }
 
@@ -388,7 +394,7 @@ export namespace ShareNext {
         url: result.url,
       }
 
-      await ShareRepo.put(sessionID, share)
+      Effect.runSync(ShareRepo.put(sessionID, share))
       await fullSync(sessionID)
       return share
     } catch (error) {
@@ -449,10 +455,14 @@ export namespace ShareNext {
     if (!share) return
 
     if (share.mode === "local") {
-      Database.transaction((tx) => {
-        if (share.id) ShareRepo.removeLocal(share.id, tx)
-        ShareRepo.remove(sessionID, tx)
-      })
+      Effect.runSync(
+        Database.transaction((tx) =>
+          Effect.gen(function* () {
+            if (share.id) yield* ShareRepo.removeLocal(share.id, tx)
+            yield* ShareRepo.remove(sessionID, tx)
+          }),
+        ),
+      )
       return
     }
 
@@ -472,7 +482,7 @@ export namespace ShareNext {
       })
     }
 
-    await ShareRepo.remove(sessionID)
+    Effect.runSync(ShareRepo.remove(sessionID))
   }
 
   async function fullSync(sessionID: string) {

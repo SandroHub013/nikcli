@@ -10,6 +10,7 @@
  * or corrupt, the reducer falls back to a full replay from `seq=0`.
  */
 import { and, eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { syncSnapshot } from "./sync.sql"
 import { Log } from "@nikcli-ai/util/log"
@@ -25,64 +26,78 @@ export type SnapshotKey = {
 }
 
 export namespace SyncSnapshot {
-  function db() {
-    return Database.syncDb()
+  type Executor = Database.TxOrDb
+
+  export function load(key: SnapshotKey, executor?: Executor) {
+    return Database.query(
+      "SyncSnapshot.load",
+      (db) => {
+        const row = db
+          .select()
+          .from(syncSnapshot)
+          .where(
+            and(
+              eq(syncSnapshot.projectId, key.projectID),
+              eq(syncSnapshot.aggregate, key.aggregate),
+              eq(syncSnapshot.aggregateId, key.aggregateID),
+            ),
+          )
+          .get()
+        if (!row) return undefined
+        try {
+          return { lastSeq: row.lastSeq, state: JSON.parse(row.state) as unknown }
+        } catch (error) {
+          log.warn("snapshot corrupt, will rebuild from scratch", {
+            ...key,
+            error,
+          })
+          return undefined
+        }
+      },
+      executor,
+    )
   }
 
-  export function load(key: SnapshotKey): { lastSeq: number; state: unknown } | undefined {
-    const row = db()
-      .select()
-      .from(syncSnapshot)
-      .where(
-        and(
-          eq(syncSnapshot.projectId, key.projectID),
-          eq(syncSnapshot.aggregate, key.aggregate),
-          eq(syncSnapshot.aggregateId, key.aggregateID),
-        ),
-      )
-      .get()
-    if (!row) return undefined
-    try {
-      return { lastSeq: row.lastSeq, state: JSON.parse(row.state) }
-    } catch (error) {
-      log.warn("snapshot corrupt, will rebuild from scratch", {
-        ...key,
-        error,
-      })
-      return undefined
-    }
+  export function save(key: SnapshotKey, lastSeq: number, state: unknown, executor?: Executor) {
+    return Database.query(
+      "SyncSnapshot.save",
+      (db) => {
+        const serialized = JSON.stringify(state ?? {})
+        const now = Date.now()
+        db.insert(syncSnapshot)
+          .values({
+            projectId: key.projectID,
+            aggregate: key.aggregate,
+            aggregateId: key.aggregateID,
+            lastSeq,
+            state: serialized,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [syncSnapshot.projectId, syncSnapshot.aggregate, syncSnapshot.aggregateId],
+            set: { lastSeq, state: serialized, updatedAt: now },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function save(key: SnapshotKey, lastSeq: number, state: unknown): void {
-    const serialized = JSON.stringify(state ?? {})
-    const now = Date.now()
-    db()
-      .insert(syncSnapshot)
-      .values({
-        projectId: key.projectID,
-        aggregate: key.aggregate,
-        aggregateId: key.aggregateID,
-        lastSeq,
-        state: serialized,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [syncSnapshot.projectId, syncSnapshot.aggregate, syncSnapshot.aggregateId],
-        set: { lastSeq, state: serialized, updatedAt: now },
-      })
-      .run()
-  }
-
-  export function clear(key: SnapshotKey): void {
-    db()
-      .delete(syncSnapshot)
-      .where(
-        and(
-          eq(syncSnapshot.projectId, key.projectID),
-          eq(syncSnapshot.aggregate, key.aggregate),
-          eq(syncSnapshot.aggregateId, key.aggregateID),
-        ),
-      )
-      .run()
+  export function clear(key: SnapshotKey, executor?: Executor) {
+    return Database.query(
+      "SyncSnapshot.clear",
+      (db) => {
+        db.delete(syncSnapshot)
+          .where(
+            and(
+              eq(syncSnapshot.projectId, key.projectID),
+              eq(syncSnapshot.aggregate, key.aggregate),
+              eq(syncSnapshot.aggregateId, key.aggregateID),
+            ),
+          )
+          .run()
+      },
+      executor,
+    )
   }
 }
