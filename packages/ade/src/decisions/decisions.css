@@ -386,11 +386,6 @@
   outline-offset: -1px;
 }
 
-[data-component="decisions-pane"]:hover [data-slot="pane-actions"],
-[data-component="decisions-pane"][data-focused] [data-slot="pane-actions"] {
-  opacity: 1;
-}
-
 [data-slot="decisions-body"] {
   flex: 1;
   min-height: 0;

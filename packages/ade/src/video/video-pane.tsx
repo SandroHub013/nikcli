@@ -12,6 +12,7 @@ import {
   type VideoState,
 } from "./video"
 import type { VideoController } from "./commands"
+import { FolderGlyph, PaneActions } from "../grid/pane-actions"
 import "./video-pane.css"
 import { t } from "../i18n"
 
@@ -231,28 +232,24 @@ export function VideoPane(props: VideoPaneProps) {
         props.onOpen(playable)
       }}
     >
-      <header data-slot="pane-header">
-        <span data-slot="pane-identity" aria-hidden="true">
+      <header class="pill hA" data-slot="pane-header">
+        <span class="logo" data-slot="pane-identity" aria-hidden="true">
           <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">
             <rect x="1.5" y="3.5" width="13" height="9" rx="1.5" />
             <path d="M6.5 6.5l4 2.5-4 2.5z" />
           </svg>
         </span>
-        <h2 data-slot="pane-title" title={props.path || props.title}>
+        <h2 class="nm" data-slot="pane-title" title={props.path || props.title}>
           {props.path ? (props.path.split(/[\\/]/).pop() ?? props.title) : props.title}
         </h2>
-        <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
-            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
-            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-        </div>
+        <span data-slot="video-header-gap" />
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
+          <Show when={props.onPick}>
+            <button type="button" class="act" data-slot="pane-action" onClick={() => void pick()} aria-label={t("media.pick")} title={t("media.pick")}>
+              <FolderGlyph />
+            </button>
+          </Show>
+        </PaneActions>
       </header>
 
       <div data-slot="video-stage">

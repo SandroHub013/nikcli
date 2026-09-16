@@ -269,8 +269,13 @@
   transition: opacity var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-component="session-pane"]:hover [data-slot="pane-actions"],
-[data-component="session-pane"][data-focused] [data-slot="pane-actions"],
+/*
+ * Revealed for every kind of pane, in one place. Each pane used to add its own
+ * rule, and the video and editor panes never did: their expand and close
+ * buttons stayed invisible (0.6.1). `pane-chrome.test.ts` keeps it so.
+ */
+[data-component$="-pane"]:hover [data-slot="pane-actions"],
+[data-component$="-pane"][data-focused] [data-slot="pane-actions"],
 [data-slot="pane-actions"]:focus-within {
   opacity: 1;
 }

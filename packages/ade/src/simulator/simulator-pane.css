@@ -360,9 +360,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Expand and close appear on hover and focus, as on a session pane. */
-[data-component="simulator-pane"]:hover [data-slot="pane-actions"],
-[data-component="simulator-pane"][data-focused] [data-slot="pane-actions"] {
-  opacity: 1;
-}

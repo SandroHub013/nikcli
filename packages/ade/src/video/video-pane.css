@@ -18,6 +18,25 @@
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-surface);
+  /* The header's container queries drop what does not fit, as on a session. */
+  container-type: inline-size;
+}
+
+/*
+ * The session's header pill, in the flow rather than over the content: over a
+ * terminal it covers blank lines, over a video it would cover the picture.
+ */
+[data-component="video-pane"] > .pill.hA {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  flex: 0 0 auto;
+  margin: 6px 6px 0;
+}
+
+[data-slot="video-header-gap"] {
+  flex: 1 1 auto;
 }
 
 [data-component="video-pane"][data-focused="true"] {

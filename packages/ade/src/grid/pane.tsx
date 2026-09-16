@@ -21,6 +21,7 @@ import {
 } from "./pane-state"
 import { t } from "../i18n"
 import { activityLabel } from "./activity"
+import { FolderGlyph, PaneActions } from "./pane-actions"
 
 export {
   type PaneStatus,
@@ -96,27 +97,6 @@ function BranchGlyph() {
       <circle cx="12" cy="4" r="2" />
       <circle cx="4" cy="12" r="2" />
       <path d="M12 6a6 6 0 0 1-6 6" />
-    </svg>
-  )
-}
-
-/* A folder stands for the project directory: the one case where the session
-   runs without any tree of its own, so it gets a glyph of its own — colour
-   alone could not separate it from the milder degradations at a glance. */
-function FolderGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="12"
-      height="12"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M2.5 4.5a1 1 0 0 1 1-1h2.8l1.7 2h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9.5a1 1 0 0 1-1-1z" />
     </svg>
   )
 }
@@ -733,18 +713,7 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
-        <span class="acts" data-slot="pane-actions">
-          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")} title={t("pane.expand")}>
-            <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-          <button type="button" class="act" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")} title={t("pane.close")}>
-            <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-        </span>
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
         <button
           type="button"
           class="act more"
