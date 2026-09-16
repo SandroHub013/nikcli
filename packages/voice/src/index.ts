@@ -162,6 +162,8 @@ export { createVoiceEngine, type VoiceEngine, type VoiceEngineOptions } from "./
 export { VoiceButton, type VoiceButtonProps } from "./ui/voice-button"
 
 export { VoiceOrb, orbLevel, type VoiceOrbProps } from "./ui/voice-orb"
+export { ListeningIndicator } from "./ui/listening-indicator"
+export { listeningState, type ListeningState } from "./ui/listening-state"
 
 export { OrbMark, type OrbMarkProps, type OrbRim } from "./ui/orb-mark"
 
@@ -312,6 +314,7 @@ export {
   REPLY_VOICES,
   type ReplyVoice,
   DEFAULT_VOICE_SETTINGS,
+  WAKE_PHRASE,
   type AgentEngine,
   normalizeSettings,
   type NormalizedVoiceSettings,

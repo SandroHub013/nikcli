@@ -273,6 +273,7 @@ import {
   NikCube,
   VoiceHud,
   VoiceOrb,
+  ListeningIndicator,
   VoiceSettingsPanel,
   type VoiceEngine,
   type VoiceSettings,
@@ -302,6 +303,7 @@ import {
   registerVoiceShortcuts,
   unknownChordMessage,
 } from "../voice/global-shortcut"
+import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -2324,9 +2326,10 @@ export function Workbench() {
    * off or on themselves.
    */
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
+  const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    migratedToWakeWord
-      ? "Da questa versione l'assistente risponde solo quando lo chiami per nome. Se preferivi il microfono sempre aperto, scegli «Acceso e spento» qui sotto."
+    migratedToWakeWord || migratedToAlwaysListen
+      ? `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${initialVoice.settings.wakeWord}». Per non farlo ascoltare da solo scegli «Solo quando lo apri» qui sotto; per il microfono aperto che risponde a tutto, «Acceso e spento».`
       : undefined,
   )
 
@@ -2513,15 +2516,81 @@ export function Workbench() {
   /* Set once the native shell has registered the voice hotkeys; see onMount. */
   let registerGlobalShortcuts: ((settings: VoiceSettings) => Promise<void>) | undefined
 
+  /*
+   * Always-on listening: whether ADE should hold the microphone open by
+   * itself. Needs something to transcribe with — without a key the cloud
+   * engine would greet every launch with an error nobody asked for.
+   */
+  const listensByItself = (s: VoiceSettings) =>
+    voiceAvailable &&
+    s.alwaysListen &&
+    s.activation === "wake-word" &&
+    s.mode === "agent" &&
+    (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
+  const listenForName = () => {
+    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true })
+  }
+
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
     // Once they have been in here and changed something, the note is spent —
     // and the profile was written back on the way in, so it does not return.
     setVoiceSettingsNotice(undefined)
+    const before = listensByItself(voiceSettings())
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
     await voiceEngine.updateSettings(saved.settings)
     await registerGlobalShortcuts?.(saved.settings)
+    const after = listensByItself(saved.settings)
+    // The switch is the switch: on opens the microphone, off closes it.
+    if (after && !before) listenForName()
+    else if (before && !after && voiceEngine.isRunning()) void voiceEngine.stop()
   }
+
+  onMount(() => {
+    if (listensByItself(voiceSettings())) listenForName()
+    /* Paused only while the PC is locked or asleep; see `voice/listen-guard.ts`. */
+    const guard = createListenGuard({
+      now: () => Date.now(),
+      isLocked: async () => {
+        // Set from a test driving the page, in a dev build only: a lock cannot be
+        // staged on the user's PC, and a release must not read it.
+        const staged = import.meta.env.DEV
+          ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+          : undefined
+        if (typeof staged === "boolean") return staged
+        if (!isTauriDesktop()) return false
+        const { invoke } = await import("@tauri-apps/api/core")
+        return (await invoke("session_locked")) === true
+      },
+      shouldListen: () => listensByItself(voiceSettings()),
+      isListening: () => voiceEngine.isRunning(),
+      isPaused: () => voiceEngine.listenPaused(),
+      pause: () => voiceEngine.pauseListening(),
+      resume: () => voiceEngine.start("agent", { waitForName: true }),
+      restart: async () => {
+        await voiceEngine.stop()
+        await voiceEngine.start("agent", { waitForName: true })
+      },
+    })
+    let ticking = false
+    const timer = setInterval(() => {
+      if (ticking) return
+      ticking = true
+      void guard.tick().finally(() => (ticking = false))
+    }, LOCK_POLL_MS)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  // Too many sentences sent in an hour: said on screen, listening goes on.
+  createEffect(
+    on(
+      () => voiceEngine.listenWarning(),
+      (warning) => {
+        if (warning) report(warning, "warning")
+      },
+      { defer: true },
+    ),
+  )
 
   const pttHandler = createPushToTalkHandler(voiceEngine)
 
@@ -4588,6 +4657,9 @@ export function Workbench() {
           title={voiceAvailable ? undefined : "Riconoscimento vocale non supportato da questo browser"}
         >
           <VoiceOrb engine={voiceEngine} class={voiceAvailable ? undefined : "disabled"} />
+          <Show when={voiceAvailable}>
+            <ListeningIndicator engine={voiceEngine} />
+          </Show>
         </div>
 
         {/* Everything that opens a pane, behind one mark.
@@ -4924,7 +4996,7 @@ export function Workbench() {
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
               held={voiceEngine.held()}
               onSubmit={(text) => void voiceEngine.submitText(text)}
-              onToggleMic={() => void voiceEngine.toggle()}
+              onToggleMic={() => void (voiceEngine.isRunning() ? voiceEngine.stop() : voiceEngine.toggle())}
               onOpenSettings={() => setVoiceSettingsOpen(true)}
             />
           </Show>

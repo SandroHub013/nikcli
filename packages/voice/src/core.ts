@@ -300,6 +300,7 @@ export {
   REPLY_VOICES,
   type ReplyVoice,
   DEFAULT_VOICE_SETTINGS,
+  WAKE_PHRASE,
   type AgentEngine,
   normalizeSettings,
   type NormalizedVoiceSettings,

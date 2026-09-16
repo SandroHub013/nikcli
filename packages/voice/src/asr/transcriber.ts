@@ -15,6 +15,12 @@ export interface TranscriptEvent {
   isFinal: boolean
   /** Confidence score [0.0 - 1.0] when provided by the recognition engine. */
   confidence?: number
+  /**
+   * When the sentence began (epoch ms), where the backend knows. A sentence
+   * arrives seconds after it started; whether the assistant was still awake
+   * is a question about when it was said.
+   */
+  spokenAt?: number
 }
 
 export type PartialTranscriptCallback = (text: string) => void

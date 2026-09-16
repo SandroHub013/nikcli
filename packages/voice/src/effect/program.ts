@@ -197,6 +197,8 @@ export interface VoiceProgramHandle {
   readonly handlePermissionRequest: (paneId: string, what: string) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
+  /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
+  readonly listenForName: Effect.Effect<void>
   readonly sleep: Effect.Effect<void>
   readonly getDialogState: Effect.Effect<DialogState>
   readonly pressToTalk: Effect.Effect<void>
@@ -210,6 +212,15 @@ export interface VoiceProgramHandle {
    * request came back.
    */
   readonly isIdle: Effect.Effect<boolean>
+  /**
+   * Whether the next sentence is ignored unless it calls the assistant.
+   *
+   * False while it is awake (for `WAKE_WINDOW_MS` after the name or the
+   * button, judged at `spokenAt`), waiting for an answer, or held by a key:
+   * those sentences are meant for it without the name, so the transcriber
+   * sends them whole. A turn at work does not count: see `waitingForName`.
+   */
+  readonly waitingForName: (spokenAt?: number) => boolean
 }
 
 export type ExternalCommand =
@@ -224,6 +235,9 @@ export type ExternalCommand =
 // ---------------------------------------------------------------------------
 // Program Constructor
 // ---------------------------------------------------------------------------
+
+/** How long the name said on its own, or the button, keeps the assistant listening without it. */
+export const WAKE_WINDOW_MS = 10_000
 
 /**
  * Creates and forks the resilient voice interaction loop inside the environment's Scope.
@@ -767,6 +781,18 @@ export function makeVoiceProgram(
     }
 
     let isWakeWordAwake = false
+    /*
+     * Until when the name, said on its own or replaced by the button, holds.
+     * It used to hold until the next sentence whenever that came, so a
+     * television speaking minutes later was taken as the request.
+     */
+    let wakeUntil: number | undefined
+    const clockMs = () => (options.now ? options.now() : Date.now())
+    const awakeAt = (at: number) => isWakeWordAwake && (wakeUntil === undefined || at <= wakeUntil)
+    const wakeFor = () => {
+      isWakeWordAwake = true
+      wakeUntil = clockMs() + WAKE_WINDOW_MS
+    }
     let isPushToTalkPressed = false
 
     function executeAgentUtterance(
@@ -977,9 +1003,16 @@ export function makeVoiceProgram(
      * either would drop every sentence typed with push-to-talk or wake-word
      * activation, since nothing is held and nobody said the word.
      */
-    function processUtterance(rawText: string, fromAsr = false, typed = false, confidence?: number): Effect.Effect<void> {
+    function processUtterance(
+      rawText: string,
+      fromAsr = false,
+      typed = false,
+      confidence?: number,
+      spokenAt?: number,
+    ): Effect.Effect<void> {
       return Effect.gen(function* () {
         const heard = { typed, confidence }
+        const awake = awakeAt(spokenAt ?? clockMs())
         const currentSettings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
 
         /*
@@ -1058,7 +1091,7 @@ export function makeVoiceProgram(
            */
           const thinking = currentState.status === "executing" && agentAbort !== null
 
-          if (!isWakeWordAwake && !awaitingAnswer && !thinking) {
+          if (!awake && !awaitingAnswer && !thinking) {
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             if (!match.matched) {
               /*
@@ -1078,7 +1111,7 @@ export function makeVoiceProgram(
               return
             } else {
               // Spoke only the wake-phrase
-              isWakeWordAwake = true
+              wakeFor()
               yield* applyDialogEvent({ type: "wake" })
               return
             }
@@ -1091,14 +1124,17 @@ export function makeVoiceProgram(
                `named` note in `while-thinking.ts`. */
             yield* executeAgentUtterance(commandText, {
               ...heard,
-              named: match.matched || isWakeWordAwake || awaitingAnswer,
+              named: match.matched || awake || awaitingAnswer,
             })
             /*
-             * Si torna a dormire solo se non è rimasta una domanda aperta.
-             * Altrimenti la risposta dell'utente — che arriva un secondo
-             * dopo — cadrebbe nel vuoto.
+             * The sentence spent the name. A question left open still gets its
+             * answer: `awaitingAnswer` is read afresh for every sentence. Held
+             * awake here instead, a question answered by typing or by a button
+             * left the assistant awake for good, and the room's next sentence,
+             * hours later, was a request.
              */
-            isWakeWordAwake = currentState.status === "confirming" || pendingDisambiguation !== null
+            isWakeWordAwake = false
+            wakeUntil = undefined
             return
           }
         }
@@ -1157,7 +1193,7 @@ export function makeVoiceProgram(
             if (previous && !(currentState.status === "executing" && agentAbort)) yield* Fiber.await(previous)
             handling++
             utteranceFiber = yield* Effect.forkIn(
-              processUtterance(ev.event.text, true, false, ev.event.confidence).pipe(
+              processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt).pipe(
                 Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
                 Effect.ensuring(Effect.sync(() => handling--)),
               ),
@@ -1213,8 +1249,16 @@ export function makeVoiceProgram(
       }),
 
       wake: Effect.gen(function* () {
-        isWakeWordAwake = true
+        wakeFor()
         yield* applyDialogEvent({ type: "wake" })
+      }),
+
+      listenForName: Effect.sync(() => {
+        isWakeWordAwake = false
+        if (currentState.status === "asleep") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
       }),
 
       sleep: Effect.gen(function* () {
@@ -1232,6 +1276,15 @@ export function makeVoiceProgram(
       releaseToTalk: Effect.sync(() => {
         isPushToTalkPressed = false
       }),
+
+      waitingForName: (spokenAt?: number) => {
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        if (settings.mode !== "agent" || settings.activation !== "wake-word") return false
+        if (awakeAt(spokenAt ?? clockMs()) || isPushToTalkPressed) return false
+        // A question is answered without the name. A turn at work is not: a
+        // stop is short enough to go whole, and the rest has to call it.
+        return !(currentState.status === "confirming" || pendingDisambiguation !== null)
+      },
 
       isIdle: Effect.gen(function* () {
         /*

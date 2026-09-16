@@ -183,6 +183,65 @@ export interface OpenRouterTranscriberOptions extends TranscriberOptions {
   fetch?: typeof globalThis.fetch
   /** Dependency injection hook for time provider. */
   now?: () => number
+  /** Sends only the start of a sentence while nobody has called the assistant; see `NameGate`. */
+  nameGate?: NameGate
+}
+
+/**
+ * How much of a sentence is sent to learn whether it calls the assistant.
+ *
+ * With the microphone always open, every sentence in the room is a paid
+ * request, and most of them are not for the assistant: the television, a
+ * phone call. The phrase that calls it comes first, so the first second and a
+ * half — the capture's pre-roll included — is enough to tell, and the rest of
+ * the sentence is sent only when it does.
+ */
+export const NAME_PROBE_MS = 1_500
+
+/**
+ * Sentences up to this long are sent whole: cutting one would save little and
+ * cost a second request when it does call the assistant.
+ */
+export const NAME_PROBE_WHOLE_UNDER_MS = 2_000
+
+export interface NameGate {
+  /**
+   * Whether a sentence begun at `spokenAt` had to call the assistant; false
+   * while it was awake or waiting for an answer.
+   */
+  active(spokenAt: number): boolean
+  /** Whether the transcribed start of a sentence calls the assistant. */
+  accepts(text: string): boolean
+  /** The start of a sentence that did not call it, for the console to show. */
+  onRejected?(text: string): void
+  /** Each request sent while the gate was active, so the caller can count them. */
+  onRequest?(): void
+  /** A long sentence that could not be cut, and so was not sent at all. */
+  onUncut?(): void
+  probeMs?: number
+  wholeUnderMs?: number
+}
+
+/**
+ * The first `ms` of a 16-bit mono WAV, with its header rewritten to match.
+ *
+ * Undefined when the blob is not the WAV the capture writes, so the caller
+ * sends the sentence whole rather than something the service cannot read.
+ */
+export async function wavHead(blob: Blob, ms: number): Promise<Blob | undefined> {
+  if (blob.size <= 44) return undefined
+  const header = new DataView(await blob.slice(0, 44).arrayBuffer())
+  const tag = (offset: number) =>
+    String.fromCharCode(header.getUint8(offset), header.getUint8(offset + 1), header.getUint8(offset + 2), header.getUint8(offset + 3))
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE" || tag(36) !== "data" || header.getUint16(34, true) !== 16) return undefined
+  const rate = header.getUint32(24, true)
+  const bytes = Math.floor((rate * ms) / 1000) * 2
+  if (bytes >= blob.size - 44) return undefined
+  const head = new Uint8Array(await blob.slice(0, 44 + bytes).arrayBuffer())
+  const view = new DataView(head.buffer)
+  view.setUint32(4, 36 + bytes, true)
+  view.setUint32(40, bytes, true)
+  return new Blob([head], { type: "audio/wav" })
 }
 
 export interface OpenRouterTranscriber extends Transcriber {
@@ -220,7 +279,9 @@ export function createOpenRouterTranscriber(
   const micCapture: MicCapture =
     options.capture ?? createMicCapture({ preferredFormat: "wav", ...options.captureOptions })
 
-  async function transcribeSegment(segment: CapturedSegment): Promise<void> {
+  const now = options.now ?? Date.now
+
+  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void): Promise<void> {
     if (!segment.blob || segment.blob.size === 0) return
 
     inFlightRequests++
@@ -458,13 +519,7 @@ export function createOpenRouterTranscriber(
         (Array.isArray(data?.segments) ? data.segments.map((s: any) => s.text).join(" ") : "") ??
         ""
       ).trim()
-      if (text) {
-        finalCb({
-          text,
-          isFinal: true,
-          confidence: 1.0,
-        })
-      }
+      if (text) deliver(text)
     } catch (parseErr: any) {
       if (parseErr?.name === "AbortError") {
         errorCb(
@@ -487,12 +542,47 @@ export function createOpenRouterTranscriber(
   }
 }
 
+  /** The start of a sentence, when that is all that should be sent; see `NameGate`. */
+  async function probeFor(segment: CapturedSegment): Promise<Blob | undefined> {
+    const gate = options.nameGate
+    if (!gate || segment.format !== "wav") return undefined
+    return wavHead(segment.blob, gate.probeMs ?? NAME_PROBE_MS)
+  }
+
   micCapture.onSegment(async (segment: CapturedSegment) => {
+    // Held for the whole exchange: between the two requests nothing is in
+    // flight, and a stop that looked then would drop the sentence.
+    inFlightRequests++
     try {
-      await transcribeSegment(segment)
+      const spokenAt = now() - segment.durationMs
+      const deliver = (text: string) => finalCb({ text, isFinal: true, confidence: 1.0, spokenAt })
+      const gate = options.nameGate
+      const gated = gate?.active(spokenAt) === true
+      const long = segment.durationMs > (gate?.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)
+      const head = gated && long ? await probeFor(segment) : undefined
+      /* Waiting for the name, a long sentence goes whole only once its start
+         has called; one that cannot be cut is not sent at all. */
+      if (gated && long && !head) {
+        gate!.onUncut?.()
+        return
+      }
+      if (gated) gate!.onRequest?.()
+      if (head) {
+        let heard = ""
+        await transcribeSegment({ ...segment, blob: head }, (text) => (heard = text))
+        if (!heard) return
+        if (!options.nameGate!.accepts(heard)) {
+          options.nameGate!.onRejected?.(heard)
+          return
+        }
+        options.nameGate!.onRequest?.()
+      }
+      await transcribeSegment(segment, deliver)
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
       errorCb(new Error(`Errore imprevisto trascrizione OpenRouter: ${safeMsg}`))
+    } finally {
+      inFlightRequests--
     }
   })
 
