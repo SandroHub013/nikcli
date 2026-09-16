@@ -658,6 +658,17 @@ describe("Claude's quota from its status line", () => {
     expect(fromAxi.tooltip).toContain("quota-axi")
   })
 
+  test("the reading time carries the day only when it is not the day of `now`", () => {
+    const read = new Date(2026, 8, 16, 16, 20).getTime()
+    const view = (now: number) => {
+      const shown = quotaForAgent("claude-code", { providers: {}, axiMissing: true, claude: readClaudeQuota(line(26, new Date(read).toISOString())) }, now)
+      if (!shown || isQuotaUnavailable(shown)) throw new Error("expected a reading")
+      return shown.readAt ?? ""
+    }
+    expect(view(new Date(2026, 8, 16, 18, 0).getTime())).toBe("16:20")
+    expect(view(new Date(2026, 8, 17, 9, 0).getTime())).toBe("16/09, 16:20")
+  })
+
   test("the status line alone is enough, without quota-axi's report", () => {
     const now = Date.parse("2026-09-16T19:00:00Z")
     const shown = quotaForAgent("claude-code", { providers: {}, axiMissing: true, claude: readClaudeQuota(line(26, "2026-09-16T18:59:21Z")) }, now)

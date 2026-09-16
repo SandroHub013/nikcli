@@ -640,7 +640,7 @@ export function SessionPane(props: SessionPaneProps) {
             <span
               class="a-q"
               data-lv={q().level}
-              data-urg={!q().stale && (state() === "limit" || q().isLimit) ? "" : undefined}
+              data-urg={state() === "limit" || (!q().stale && q().isLimit) ? "" : undefined}
               data-stale={q().stale ? "" : undefined}
               tabIndex={0}
               title={q().tooltip}

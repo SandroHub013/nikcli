@@ -112,9 +112,9 @@ export function createQuotaStore(
      *
      * Failing is a hiccup of the read — a timeout, a file caught half-written
      * — and says nothing about the quota, so it should not blank six panes
-     * for thirty seconds. The last reading is not trusted forever for that:
-     * `quotaForAgent` turns it into "n/d" once it is older than
-     * `QUOTA_STALE_MS`, however it was kept.
+     * for thirty seconds. The last reading is not passed off as current for
+     * that: `quotaForAgent` marks it stale, dimmed and with its time, once it
+     * is older than its source's limit, however it was kept.
      */
     const refresh = async () => {
       const [axiText, agyText, claudeText] = await Promise.all([load(read), load(readAgy), load(readClaude)])

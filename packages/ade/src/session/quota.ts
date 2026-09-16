@@ -883,13 +883,13 @@ export function quotaForAgent(
   const from =
     source === "axi" ? t("quota.readAxi", time) : source === "agy" ? t("quota.readAgy", time) : t("quota.readClaude", time)
   const lines = [view.tooltip, from, ...(stale ? [t("quota.staleNote")] : [])]
-  return { ...view, stale, readAt: shortClock(readAt), tooltip: lines.join("\n") }
+  return { ...view, stale, readAt: shortClock(readAt, now), tooltip: lines.join("\n") }
 }
 
-/** The time alone when it is today, the day too when it is not. */
-function shortClock(epoch: number): string {
+/** The time alone when it is the same day as `now`, the day too when it is not. */
+function shortClock(epoch: number, now: number): string {
   const date = new Date(epoch)
-  const sameDay = date.toDateString() === new Date().toDateString()
+  const sameDay = date.toDateString() === new Date(now).toDateString()
   return sameDay
     ? date.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" })
     : date.toLocaleString(dateLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
