@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::Target;
+use super::{Quality, Target};
 
 pub struct Active {
     path: PathBuf,
@@ -21,7 +21,7 @@ pub fn path_of(active: &Active) -> &Path {
     &active.path
 }
 
-pub fn start(_app: &tauri::AppHandle, _target: Target, _path: &Path) -> Result<Active, String> {
+pub fn start(_app: &tauri::AppHandle, _target: Target, _path: &Path, _quality: Quality) -> Result<Active, String> {
     Err(problem().into())
 }
 

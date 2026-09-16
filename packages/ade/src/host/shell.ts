@@ -134,7 +134,12 @@ export interface Host {
    * The system's own capture, so the frames are the window's composed pixels
    * rather than a picture of the screen. Only one take at a time.
    */
-  recordStart?: (target: RecordTarget, dir: string, name: string) => Promise<RecordingState>
+  recordStart?: (
+    target: RecordTarget,
+    dir: string,
+    name: string,
+    quality?: { fps: number; width?: number; height?: number },
+  ) => Promise<RecordingState>
   recordStop?: () => Promise<RecordingState>
   recordState?: () => Promise<RecordingState>
   /** The mailbox folder (per worktree in ADE Test, see `ADE_MAILBOX_ROOT`). */
@@ -274,7 +279,7 @@ export { stripAnsi } from "./ansi"
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
-import type { RecordTarget, RecordingState } from "../record/recording"
+import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -617,9 +622,9 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_state", { id, text, kind: kind ?? null })
     },
 
-    async recordStart(target, dir, name) {
+    async recordStart(target, dir, name, quality) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<RecordingState>("record_start", { target, dir, name })
+      return invoke<RecordingState>("record_start", { target, dir, name, quality: quality ?? null })
     },
 
     async recordStop() {

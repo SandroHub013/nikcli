@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
+  DEFAULT_QUALITY,
+  estimatedMegabytes,
+  qualityLevel,
+  QUALITY_LEVELS,
+  sizePerMinute,
   createEventLog,
   eventLine,
   keepEvent,
@@ -59,5 +64,23 @@ describe("record/recording", () => {
     expect(startProblem({ status: "idle" })).toBeUndefined()
     expect(startProblem({ status: "recording", recording })).toContain("già in corso")
     expect(startProblem({ status: "stopping", recording })).toContain("riprova")
+  })
+})
+
+describe("record/quality", () => {
+  test("three levels, the heaviest by default, each with its measured size", () => {
+    expect(QUALITY_LEVELS.map((level) => level.id)).toEqual(["alta", "media", "leggera"])
+    expect(qualityLevel(undefined).id).toBe(DEFAULT_QUALITY)
+    expect(qualityLevel("leggera")).toMatchObject({ width: 1280, height: 800, fps: 30 })
+    // Full-size levels leave the window's own size alone.
+    expect(qualityLevel("alta").width).toBeUndefined()
+    expect(qualityLevel("media").fps).toBe(30)
+  })
+
+  test("the size is written the way it is read beside the choice", () => {
+    expect(sizePerMinute(qualityLevel("alta"))).toBe("circa 66 MB al minuto")
+    expect(sizePerMinute(qualityLevel("leggera"))).toBe("circa 21,5 MB al minuto")
+    expect(estimatedMegabytes(qualityLevel("alta"), 90)).toBe(99)
+    expect(estimatedMegabytes(qualityLevel("leggera"), 30)).toBe(11)
   })
 })

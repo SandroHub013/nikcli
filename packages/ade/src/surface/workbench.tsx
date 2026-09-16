@@ -144,7 +144,14 @@ import { botLaunch } from "../bots/store"
 import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createRecorder } from "../record/recorder"
 import { RECORD_VERBS, runRecordRequest } from "../record/record-panel"
-import type { RecordState } from "../record/recording"
+import {
+  DEFAULT_QUALITY,
+  qualityLevel,
+  QUALITY_LEVELS,
+  sizePerMinute,
+  type RecordQuality,
+  type RecordState,
+} from "../record/recording"
 import { createAdePluginRuntime } from "../plugin/runtime"
 import { createManagerPlugin } from "../plugin/built-in/manager"
 import { importPluginModule } from "../plugin/loader"
@@ -598,11 +605,21 @@ export function Workbench() {
       }
     })(),
   )
+  const [recordQuality, setRecordQuality] = createSignal<RecordQuality>(
+    (() => {
+      try {
+        const saved = localStorage.getItem("ade.record.quality")
+        return QUALITY_LEVELS.some((level) => level.id === saved) ? (saved as RecordQuality) : DEFAULT_QUALITY
+      } catch {
+        return DEFAULT_QUALITY
+      }
+    })(),
+  )
   const recorder = createRecorder({
-    start: async (target, dir, name) => {
+    start: async (target, dir, name, quality) => {
       const host = await getHost()
       if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
-      return host.recordStart(target, dir, name)
+      return host.recordStart(target, dir, name, quality)
     },
     stop: async () => {
       const host = await getHost()
@@ -614,6 +631,7 @@ export function Workbench() {
       await host?.writeTextFile?.(path, text)
     },
     dir: () => recordDir(),
+    quality: () => qualityLevel(recordQuality()),
     now: () => Date.now(),
     onState: setRecordState,
   })
@@ -3141,6 +3159,21 @@ export function Workbench() {
       const problem =
         recordState().status === "recording" ? await recorder.stop() : await startRecording({ kind: "window" })
       if (problem) report(problem)
+    } else if (id === "record.quality") {
+      /*
+       * Cycled rather than a submenu: three levels, and the palette row
+       * already says which one is on and what it costs a minute.
+       */
+      const order = QUALITY_LEVELS.map((level) => level.id)
+      const next = order[(order.indexOf(recordQuality()) + 1) % order.length] ?? DEFAULT_QUALITY
+      setRecordQuality(next)
+      try {
+        localStorage.setItem("ade.record.quality", next)
+      } catch {
+        // Kept for this session only.
+      }
+      const level = qualityLevel(next)
+      report(`Qualità del video: ${level.label} — ${sizePerMinute(level)}.`, "info")
     } else if (id === "record.folder") {
       await pickRecordDir()
     } else if (id === "voice.settings") {
@@ -3177,6 +3210,7 @@ export function Workbench() {
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
       recording: recordState().status === "recording",
+      recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
       // Read through the registry signal, so a plugin loading or being torn
       // down changes the palette without anything having to refresh it.
       pluginCommands: pluginRuntime.registry.commands().map((command) => ({

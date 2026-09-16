@@ -129,3 +129,50 @@ export function startProblem(state: RecordState): string | undefined {
   if (state.status === "stopping") return "La registrazione precedente sta chiudendo il file: riprova tra un istante."
   return undefined
 }
+
+/**
+ * How heavy a take is (S36, misure di agy in `results/agy-S36-misure.md`).
+ *
+ * Measured on a real minute with software H.264, so the numbers are what the
+ * user's disk actually sees rather than the bitrate we ask for. The default is
+ * the heaviest on purpose: these videos are made to be watched by someone
+ * deciding whether to try ADE, and text that smears while a pane scrolls is
+ * the one thing a promo cannot have.
+ */
+export type RecordQuality = "alta" | "media" | "leggera"
+
+export interface QualityLevel {
+  readonly id: RecordQuality
+  readonly label: string
+  /** Undefined keeps the window's own size. */
+  readonly width?: number
+  readonly height?: number
+  readonly fps: number
+  /** Megabytes a minute, measured, for the line beside the choice. */
+  readonly megabytesPerMinute: number
+}
+
+export const QUALITY_LEVELS: readonly QualityLevel[] = [
+  { id: "alta", label: "Alta — schermo intero, 60 fps", fps: 60, megabytesPerMinute: 66 },
+  { id: "media", label: "Media — schermo intero, 30 fps", fps: 30, megabytesPerMinute: 49 },
+  { id: "leggera", label: "Leggera — 1280×800, 30 fps", width: 1280, height: 800, fps: 30, megabytesPerMinute: 21.5 },
+]
+
+export const DEFAULT_QUALITY: RecordQuality = "alta"
+
+export function qualityLevel(id: RecordQuality | undefined): QualityLevel {
+  return QUALITY_LEVELS.find((level) => level.id === id) ?? QUALITY_LEVELS[0]!
+}
+
+/** "circa 66 MB al minuto", as it is written beside the choice. */
+export function sizePerMinute(level: QualityLevel): string {
+  const rounded = Number.isInteger(level.megabytesPerMinute)
+    ? String(level.megabytesPerMinute)
+    : level.megabytesPerMinute.toFixed(1).replace(".", ",")
+  return `circa ${rounded} MB al minuto`
+}
+
+/** What a take of `seconds` will weigh, for a warning before a long one. */
+export function estimatedMegabytes(level: QualityLevel, seconds: number): number {
+  return Math.round((level.megabytesPerMinute * seconds) / 60)
+}

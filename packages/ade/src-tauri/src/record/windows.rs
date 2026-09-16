@@ -27,10 +27,12 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use super::{crop_in, even, Target};
+use super::{crop_in, even, Quality, Target};
 
-/// 60 frames a second: the pace a promo video is cut at.
-const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
+/// The pace the capture is throttled to, from the chosen frame rate.
+fn frame_interval(fps: u32) -> Duration {
+    Duration::from_nanos(1_000_000_000 / u64::from(fps.max(1)))
+}
 
 /// Deliberately generous: a take is re-encoded when it is cut, and a starved
 /// bitrate shows first on exactly what we film, moving text.
@@ -49,6 +51,7 @@ struct Flags {
     height: u32,
     crop: Option<(u32, u32, u32, u32)>,
     path: PathBuf,
+    quality: Quality,
     problem: Arc<Mutex<Option<String>>>,
 }
 
@@ -58,14 +61,22 @@ impl GraphicsCaptureApiHandler for Take {
 
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
         let flags = ctx.flags;
-        let (width, height) = match flags.crop {
+        let (captured_width, captured_height) = match flags.crop {
             Some((_, _, width, height)) => (width, height),
             None => (flags.width, flags.height),
         };
+        /*
+         * A lighter take is encoded smaller, not captured smaller: the capture
+         * is the window as it is, and Media Foundation scales on the way into
+         * the file. Asked for an odd size, H.264 refuses, so both sides are
+         * rounded down.
+         */
+        let width = super::even(flags.quality.width.unwrap_or(captured_width).min(captured_width));
+        let height = super::even(flags.quality.height.unwrap_or(captured_height).min(captured_height));
         let encoder = VideoEncoder::new(
             VideoSettingsBuilder::new(width, height)
                 .sub_type(VideoSettingsSubType::H264)
-                .frame_rate(60)
+                .frame_rate(flags.quality.fps)
                 .bitrate(BITRATE),
             // The assistant's voice and the microphone are written as their own
             // tracks by ADE, not mixed into the video here (S36, D33-D35).
@@ -109,7 +120,7 @@ pub fn path_of(active: &Active) -> &Path {
     &active.path
 }
 
-pub fn start(app: &tauri::AppHandle, target: Target, path: &Path) -> Result<Active, String> {
+pub fn start(app: &tauri::AppHandle, target: Target, path: &Path, quality: Quality) -> Result<Active, String> {
     let main = app
         .get_webview_window("main")
         .ok_or_else(|| "Nessuna finestra di ADE da registrare.".to_string())?;
@@ -139,10 +150,10 @@ pub fn start(app: &tauri::AppHandle, target: Target, path: &Path) -> Result<Acti
         CursorCaptureSettings::WithoutCursor,
         DrawBorderSettings::Default,
         SecondaryWindowSettings::Default,
-        MinimumUpdateIntervalSettings::Custom(FRAME_INTERVAL),
+        MinimumUpdateIntervalSettings::Custom(frame_interval(quality.fps)),
         DirtyRegionSettings::Default,
         ColorFormat::Bgra8,
-        Flags { width, height, crop, path: path.to_path_buf(), problem: Arc::clone(&problem) },
+        Flags { width, height, crop, path: path.to_path_buf(), quality, problem: Arc::clone(&problem) },
     );
 
     let control = Take::start_free_threaded(settings).map_err(|error| describe(&error.to_string()))?;

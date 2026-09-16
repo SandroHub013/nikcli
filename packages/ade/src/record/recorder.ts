@@ -13,16 +13,32 @@
  * listeners removed whatever happens.
  */
 
-import { createEventLog, recordingName, startProblem, type RecordEvent, type RecordState, type RecordTarget } from "./recording"
+import {
+  createEventLog,
+  qualityLevel,
+  recordingName,
+  startProblem,
+  type QualityLevel,
+  type RecordEvent,
+  type RecordState,
+  type RecordTarget,
+} from "./recording"
 
 export interface RecorderDeps {
   /** The platform capture: `host.recordStart` and friends. */
-  start: (target: RecordTarget, dir: string, name: string) => Promise<{ path: string | null }>
+  start: (
+    target: RecordTarget,
+    dir: string,
+    name: string,
+    quality: { fps: number; width?: number; height?: number },
+  ) => Promise<{ path: string | null }>
   stop: () => Promise<{ path: string | null }>
   /** Writes the events file beside the video. */
   writeText: (path: string, text: string) => Promise<void>
   /** The folder the user chose; undefined asks the caller to pick one. */
   dir: () => string | undefined
+  /** The level chosen in the panel; the heaviest when absent. */
+  quality?: () => QualityLevel
   now: () => number
   onState: (state: RecordState) => void
 }
@@ -59,7 +75,12 @@ export function createRecorder(deps: RecorderDeps): Recorder {
       const startedAt = deps.now()
       const name = recordingName(startedAt)
       try {
-        const started = await deps.start(target, dir, name)
+        const level = deps.quality?.() ?? qualityLevel(undefined)
+        const started = await deps.start(target, dir, name, {
+          fps: level.fps,
+          ...(level.width ? { width: level.width } : {}),
+          ...(level.height ? { height: level.height } : {}),
+        })
         log = createEventLog(startedAt)
         settle({
           status: "recording",

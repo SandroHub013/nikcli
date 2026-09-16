@@ -38,6 +38,25 @@ pub enum Target {
     Pane { x: u32, y: u32, width: u32, height: u32 },
 }
 
+/// How heavy a take is: the three levels the panel offers (S36).
+///
+/// Only the frame rate and the encoded size change; the capture itself is the
+/// same. Sent by name so the numbers stay in one place, the frontend, where
+/// they are also shown to the user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+pub struct Quality {
+    pub fps: u32,
+    /// Absent keeps the window's own size.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+impl Default for Quality {
+    fn default() -> Self {
+        Self { fps: 60, width: None, height: None }
+    }
+}
+
 /// A take in progress, as the frontend sees it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordState {
@@ -86,13 +105,14 @@ pub fn record_start(
     target: Target,
     dir: String,
     name: String,
+    quality: Option<Quality>,
 ) -> Result<RecordState, String> {
     let mut active = recorder.active.lock().map_err(|_| "registratore occupato".to_string())?;
     if active.is_some() {
         return Err("Una registrazione è già in corso.".into());
     }
     let path = video_path(&dir, &name);
-    let started = platform::start(&app, target, &path)?;
+    let started = platform::start(&app, target, &path, quality.unwrap_or_default())?;
     *active = Some(started);
     Ok(RecordState { recording: true, path: Some(path.to_string_lossy().into_owned()) })
 }
@@ -154,6 +174,15 @@ mod tests {
         let path = video_path("C:/Users/me/Video", "ADE 2026-09-16 09.05.03");
         assert!(path.ends_with("ADE 2026-09-16 09.05.03.mp4"));
         assert!(path.starts_with("C:/Users/me/Video"));
+    }
+
+    #[test]
+    fn a_quality_arrives_by_its_numbers_and_falls_back_to_the_heaviest() {
+        let light: Quality = serde_json::from_str(r#"{"fps":30,"width":1280,"height":800}"#).unwrap();
+        assert_eq!(light, Quality { fps: 30, width: Some(1280), height: Some(800) });
+        let full: Quality = serde_json::from_str(r#"{"fps":60,"width":null,"height":null}"#).unwrap();
+        assert_eq!(full, Quality::default());
+        assert_eq!(Quality::default().fps, 60);
     }
 
     #[test]

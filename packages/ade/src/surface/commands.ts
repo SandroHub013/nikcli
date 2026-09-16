@@ -39,6 +39,8 @@ export interface CommandContext {
   voiceChord?: string
   /** True while a take is being recorded (S36), so the palette offers to stop it. */
   recording?: boolean
+  /** The chosen quality, written out with its size per minute. */
+  recordQuality?: string
   /** Commands contributed by loaded plugins. Empty when none are loaded. */
   pluginCommands?: PluginCommandEntry[]
 }
@@ -177,6 +179,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       title: ctx.recording ? "Ferma la registrazione" : "Registra la finestra",
       group: "Vista",
       keywords: ["video", "registra", "schermo", "cattura", "demo", "pubblicità"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
+    },
+    {
+      id: "record.quality",
+      title: ctx.recordQuality ? `Qualità del video: ${ctx.recordQuality}` : "Qualità del video registrato",
+      group: "Vista",
+      keywords: ["video", "qualità", "fps", "peso", "dimensione"],
       enabled: ctx.hasHost,
       disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
     },
