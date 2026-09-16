@@ -3,6 +3,25 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.359.0 (September 2026)
+
+## Core
+
+- Register Actions endpoints in the compat map and resolve nikcli in autofix (@nikomatt69)
+- Integrate GitHub Actions workflows and runs management (@nikomatt69)
+
+## Mobile
+
+- Improve styling and layout of ScopeToggle component (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(github): integrate GitHub Actions workflows and runs management
+  - docs(agents): add command for building iOS app for Nikoemme
+  - refactor(git): improve styling and layout of ScopeToggle component
+  - fix(ci): register Actions endpoints in the compat map and resolve nikcli in autofix
+
 ## v1.358.0 (September 2026)
 
 - No notable changes
