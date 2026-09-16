@@ -301,6 +301,15 @@ describe("0.7.0: the assistant starts only from its shortcut", () => {
     expect(normalizeSettings({ version: 3, activation: "push-to-talk" }).migrations).toEqual([])
   })
 
+  test("a profile with no version and toggle goes back to the shortcut as well", () => {
+    const moved = normalizeSettings({ mode: "agent", activation: "toggle" })
+    expect(moved.activation).toBe("push-to-talk")
+    expect(moved.migrations).toEqual(["shortcut-only"])
+    expect(normalizeSettings(moved.settings).activation).toBe("push-to-talk")
+    // A caller that states the current version keeps what it asked for.
+    expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, activation: "toggle" }).activation).toBe("toggle")
+  })
+
   test("a saved toggle goes back to the shortcut too, never to the wake word", () => {
     for (const version of [1, 2, 3, 4]) {
       const moved = normalizeSettings({ version, activation: "toggle" })

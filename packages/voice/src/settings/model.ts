@@ -274,6 +274,12 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   let version = candidate.version
   if (typeof version !== "number" || Number.isNaN(version)) {
     corrections.push(t("vui.fix.noVersion"))
+    /* A profile with no version is older than any of them: a "toggle" in it
+       goes back to the shortcut like a versioned one. */
+    if (!wakeWordEnabled() && candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "push-to-talk" }
+      migrations.push("shortcut-only")
+    }
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -298,10 +304,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     if (wakeWordEnabled() && version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
       migrations.push("always-listen")
     }
-    /*
-     * Version 5: a stored "toggle" goes back to the shortcut too. Only a
-     * stored profile — one without a version is a caller's explicit choice.
-     */
+    /* Version 5: a stored "toggle" goes back to the shortcut too. */
     if (!wakeWordEnabled() && version < 5 && candidate.activation === "toggle") {
       candidate = { ...candidate, activation: "push-to-talk" }
       migrations.push("shortcut-only")

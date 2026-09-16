@@ -30,7 +30,7 @@ import {
   warmupParakeetModel,
   type ParakeetProgress,
 } from "./asr/parakeet-local"
-import { normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
+import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { firstWords } from "./dialog/while-thinking"
 
@@ -234,7 +234,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const drainTimeoutMs = options.drainTimeoutMs ?? DRAIN_TIMEOUT_MS
   const transcriberFactory = options.createTranscriber ?? createTranscriberFor
 
+  // Settings handed over in code are a current choice, not an old profile to migrate.
   const initialSettings = normalizeSettings({
+    version: CURRENT_SETTINGS_VERSION,
     ...(options.backend ? { backend: options.backend } : {}),
     ...options.settings,
   }).settings
