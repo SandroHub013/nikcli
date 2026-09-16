@@ -39,9 +39,11 @@ export function parseLocalePreference(raw: unknown): LocalePreference {
   return LOCALE_PREFERENCES.find((value) => value === raw) ?? "system"
 }
 
+/** Italian, ADE's own language, when the runtime says nothing (Bun, a worker). */
 function readSystemLocale(): Locale {
   if (typeof navigator === "undefined") return "it"
-  return systemLocaleFrom([...(navigator.languages ?? []), navigator.language])
+  const languages = [...(navigator.languages ?? []), navigator.language].filter(Boolean)
+  return languages.length > 0 ? systemLocaleFrom(languages) : "it"
 }
 
 function readStoredPreference(): LocalePreference {

@@ -82,6 +82,7 @@ import {
 } from "./shortcut-capture"
 import { NikMic } from "./nik-mic"
 import "./voice-settings.css"
+import { t } from "@nikcli-ai/ade/i18n"
 
 /**
  * A settings screen the host owns.
@@ -175,26 +176,26 @@ export interface VoiceSettingsPanelProps {
  */
 const SECTIONS: readonly {
   id: string
-  label: string
+  readonly label: string
   glyph: string
   value: (settings: VoiceSettings) => string
 }[] = [
   {
     id: "voice-sec-mode",
-    label: "Modalità",
+    get label() { return t("vui.rail.mode") },
     glyph: "◉",
-    value: (s) => (s.mode === "agent" ? "agente" : "trascrizione"),
+    value: (s) => (s.mode === "agent" ? t("vui.rail.mode.agent") : t("vui.rail.mode.transcription")),
   },
   {
     id: "voice-sec-activation",
-    label: "Attivazione",
+    get label() { return t("vui.rail.activation") },
     glyph: "⌁",
     value: (s) =>
-      s.activation === "push-to-talk" ? "premi" : s.activation === "toggle" ? "continuo" : "richiamo",
+      s.activation === "push-to-talk" ? t("vui.rail.activation.push") : s.activation === "toggle" ? t("vui.rail.activation.toggle") : t("vui.rail.activation.wake"),
   },
   {
     id: "voice-sec-shortcuts",
-    label: "Scorciatoie",
+    get label() { return t("vui.rail.shortcuts") },
     glyph: "⌨",
     // Two chords, always: the count is here to keep the column even, not to
     // report a number that varies.
@@ -202,7 +203,7 @@ const SECTIONS: readonly {
   },
   {
     id: "voice-sec-language",
-    label: "Lingua",
+    get label() { return t("vui.rail.language") },
     glyph: "✱",
     value: (s) => s.language,
   },
@@ -213,17 +214,17 @@ const SECTIONS: readonly {
     /* Which of the two has been moved off the default, rather than a device
        name: the rail is one short column and a device is called things like
        "Microfono (2- Realtek(R) Audio)". */
-    value: (s) => (s.inputDeviceId ? (s.outputDeviceId ? "2" : "1") : s.outputDeviceId ? "1" : "sistema"),
+    value: (s) => (s.inputDeviceId ? (s.outputDeviceId ? "2" : "1") : s.outputDeviceId ? "1" : t("vui.rail.devices.system")),
   },
   {
     id: "voice-sec-backend",
-    label: "Motore",
+    get label() { return t("vui.rail.engine") },
     glyph: "◆",
     value: (s) => (s.backend === "openrouter" ? "mai2" : s.backend),
   },
   {
     id: "voice-sec-commands",
-    label: "Comandi",
+    get label() { return t("vui.rail.commands") },
     glyph: "≡",
     value: () => String(VOCABULARY.length),
   },
@@ -250,36 +251,36 @@ interface StatusDescriptor {
 function describeStatus(status: DialogStatus, running: boolean): StatusDescriptor {
   if (!running) {
     return {
-      label: "Spento",
+      label: t("vui.status.off"),
       tone: "off",
-      detail: "Il microfono è chiuso. Avvia l'ascolto per provare i comandi.",
+      detail: t("vui.status.off.detail"),
     }
   }
   switch (status) {
     case "asleep":
       return {
-        label: "In attesa del richiamo",
+        label: t("vui.status.asleep"),
         tone: "warn",
-        detail: "Pronuncia la parola di richiamo per svegliare l'assistente.",
+        detail: t("vui.status.asleep.detail"),
       }
     case "idle":
-      return { label: "Pronto", tone: "ready", detail: "In ascolto, parla pure." }
+      return { label: t("vui.status.idle"), tone: "ready", detail: t("vui.status.idle.detail") }
     case "listening":
-      return { label: "In ascolto", tone: "live", detail: "Sto sentendo la tua voce." }
+      return { label: t("vui.status.listening"), tone: "live", detail: t("vui.status.listening.detail") }
     case "confirming":
       return {
-        label: "Attende conferma",
+        label: t("vui.status.confirming"),
         tone: "warn",
-        detail: "Rispondi «sì» o «no» per procedere.",
+        detail: t("vui.status.confirming.detail"),
       }
     case "dictating":
       return {
-        label: "Dettatura",
+        label: t("vui.status.dictating"),
         tone: "live",
-        detail: "Il testo finisce nel riquadro selezionato.",
+        detail: t("vui.status.dictating.detail"),
       }
     case "executing":
-      return { label: "Esecuzione", tone: "busy", detail: "Sto eseguendo il comando." }
+      return { label: t("vui.status.executing"), tone: "busy", detail: t("vui.status.executing.detail") }
   }
 }
 
@@ -291,12 +292,12 @@ function describeStatus(status: DialogStatus, running: boolean): StatusDescripto
  * group are excluded so the engine pills never steal the backend list's arrows.
  */
 /** The agent engines, as the panel offers them. */
-const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; title: string; desc: string }[] = [
-  { value: "auto", title: "Automatico", desc: "Il primo installato tra Claude Code e Codex" },
-  { value: "claude", title: "Claude Code", desc: "Con il tuo abbonamento Anthropic" },
-  { value: "codex", title: "Codex", desc: "Con il tuo abbonamento ChatGPT" },
-  { value: "nikcli", title: "nikcli", desc: "Non risponde alla voce: non si può tenere in sola lettura" },
-  { value: "off", title: "Solo comandi", desc: "Nessun agente: capisce solo le frasi note" },
+const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; readonly title: string; readonly desc: string }[] = [
+  { value: "auto", get title() { return t("vui.engine.auto") }, get desc() { return t("vui.engine.auto.desc") } },
+  { value: "claude", title: "Claude Code", get desc() { return t("vui.engine.claude.desc") } },
+  { value: "codex", title: "Codex", get desc() { return t("vui.engine.codex.desc") } },
+  { value: "nikcli", title: "nikcli", get desc() { return t("vui.engine.nikcli.desc") } },
+  { value: "off", get title() { return t("vui.engine.off") }, get desc() { return t("vui.engine.off.desc") } },
 ]
 
 function radioGroupKeys(apply: (value: string) => void) {
@@ -562,7 +563,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       loaded: 0,
       total: 670_488_135,
       percent: 0,
-      message: "Avvio download modello Parakeet (~640 MB)...",
+      message: t("vui.download.starting"),
     })
     try {
       const result = await downloadParakeetModel({
@@ -581,7 +582,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       setTimeout(() => setDownloadSuccess(false), 6000)
     } catch (err: any) {
       setDownloadError(
-        err?.message || "Errore durante il download del modello Parakeet"
+        err?.message || t("vui.download.failed")
       )
     } finally {
       setDownloading(false)
@@ -652,7 +653,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         await props.engine.start()
       }
       if (!props.engine.isRunning()) {
-        setTrialNote("Impossibile avviare il motore vocale: comando non inviato.")
+        setTrialNote(t("vui.trial.noEngine"))
         return
       }
       await props.engine.submitText(text)
@@ -806,7 +807,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     if (conflict.hasConflict) {
       // The recorder stays open so the next attempt needs no second click.
       setPendingModifiers([])
-      setFieldConflict(field, conflict.message ?? "Scorciatoia in conflitto.")
+      setFieldConflict(field, conflict.message ?? t("vui.shortcut.conflicting"))
       return
     }
 
@@ -868,7 +869,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       platform,
     )
     if (!verdict.hasConflict) return undefined
-    return `${verdict.message ?? "Scorciatoia in conflitto."} ADE ha la precedenza: questa scorciatoia non attiva la voce.`
+    return t("vui.shortcut.shadowed", verdict.message ?? t("vui.shortcut.conflicting"))
   }
 
   /** The recording attempt's complaint, or the saved chord's, in that order. */
@@ -883,7 +884,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
    */
   const recordingLabel = () => {
     const held = pendingModifiers()
-    if (held.length === 0) return "Premi tasti… (Esc annulla)"
+    if (held.length === 0) return t("vui.shortcut.recording")
     return `${held.join(platform === "mac" ? "" : "+")}…`
   }
 
@@ -958,13 +959,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               a panel that says "vocale" while showing the plugin list is
               telling the user they are in the wrong place. */}
           <h2 id="voice-panel-title" data-slot="title">
-            {props.title ?? "Pannello di controllo vocale"}
+            {props.title ?? t("vui.panel.title")}
           </h2>
           {/* The same reasoning as the title, for the line under it: it used
               to list the voice sections, which with six of the host's own
               beside them described a third of the panel. */}
           <p data-slot="subtitle">
-            {props.subtitle ?? "Modalità, attivazione, scorciatoie e motori di riconoscimento"}
+            {props.subtitle ?? t("vui.panel.subtitle")}
           </p>
         </div>
 
@@ -977,7 +978,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           <button
             type="button"
             data-slot="close-btn"
-            aria-label="Chiudi impostazioni (Esc)"
+            aria-label={t("vui.panel.close")}
             onClick={props.onClose}
           >
             <svg
@@ -1007,7 +1008,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         three screens of scrolling.
       */}
       <div data-slot="shell">
-        <nav data-slot="rail" aria-label="Sezioni delle impostazioni">
+        <nav data-slot="rail" aria-label={t("vui.panel.sections")}>
           {/*
             A heading above each run of rows, when the host asks for one.
             This panel began as the voice panel and its six screens were the
@@ -1104,7 +1105,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-mode-title" data-slot="section-title" tabIndex={-1}>
-              Modalità predefinita
+              {t("vui.mode.title")}
             </h3>
             {/*
               Not a switch between two features — both sono sempre disponibili,
@@ -1112,9 +1113,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               il microfono viene aperto senza specificare quale delle due.
             */}
             <p data-slot="section-desc">
-              L'assistente e la dettatura sono due cose distinte, entrambe attive: si scelgono
-              premendo l'orb o il microfono nella barra, o la rispettiva scorciatoia. Qui si decide
-              solo quale delle due parte quando il microfono viene aperto senza dirlo.
+              {t("vui.mode.desc")}
             </p>
           </div>
 
@@ -1139,12 +1138,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     <path d="m5 12 4 4 10-10" />
                   </svg>
                 </span>
-                <span data-slot="mode-card-title">Agente</span>
+                <span data-slot="mode-card-title">{t("vui.mode.agent")}</span>
                 <Show when={props.settings.mode === "agent"}>
-                  <span data-slot="mode-card-badge">Attiva</span>
+                  <span data-slot="mode-card-badge">{t("vui.mode.active")}</span>
                 </Show>
               </div>
-              <div data-slot="mode-card-desc">Parli e ADE esegue</div>
+              <div data-slot="mode-card-desc">{t("vui.mode.agent.desc")}</div>
               <div data-slot="mode-card-chord">
                 {describeShortcut(props.settings.agentChord, platform)}
               </div>
@@ -1165,13 +1164,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     <path d="M4 7h16M4 12h11M4 17h7" />
                   </svg>
                 </span>
-                <span data-slot="mode-card-title">Trascrizione</span>
+                <span data-slot="mode-card-title">{t("vui.mode.transcription")}</span>
                 <Show when={props.settings.mode === "transcription"}>
-                  <span data-slot="mode-card-badge">Attiva</span>
+                  <span data-slot="mode-card-badge">{t("vui.mode.active")}</span>
                 </Show>
               </div>
               <div data-slot="mode-card-desc">
-                Parli e il testo finisce nel pannello selezionato
+                {t("vui.mode.transcription.desc")}
               </div>
               <div data-slot="mode-card-chord">
                 {describeShortcut(props.settings.transcriptionChord, platform)}
@@ -1191,7 +1190,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           <Show when={props.settings.mode === "agent"}>
             <div data-slot="sub-choice-box">
               <span id="agent-reply-label" data-slot="sub-choice-label">
-                Risposte dell'agente
+                {t("vui.replies.title")}
               </span>
               <div
                 role="radiogroup"
@@ -1207,8 +1206,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-item"
                   onClick={() => updateSettings({ speakReplies: true })}
                 >
-                  <span data-slot="sub-item-title">Rispondi a voce</span>
-                  <span data-slot="sub-item-desc">Ti legge cosa ha risposto la sessione</span>
+                  <span data-slot="sub-item-title">{t("vui.replies.speak")}</span>
+                  <span data-slot="sub-item-desc">{t("vui.replies.speak.desc")}</span>
                 </div>
 
                 <div
@@ -1219,8 +1218,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-item"
                   onClick={() => updateSettings({ speakReplies: false })}
                 >
-                  <span data-slot="sub-item-title">Resta in silenzio</span>
-                  <span data-slot="sub-item-desc">La risposta la leggi tu nel pannello</span>
+                  <span data-slot="sub-item-title">{t("vui.replies.silent")}</span>
+                  <span data-slot="sub-item-desc">{t("vui.replies.silent.desc")}</span>
                 </div>
               </div>
             </div>
@@ -1228,7 +1227,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             <Show when={props.settings.speakReplies !== false}>
               <div data-slot="sub-choice-box">
                 <span id="reply-voice-label" data-slot="sub-choice-label">
-                  Voce delle risposte
+                  {t("vui.replies.voice")}
                 </span>
                 <div
                   role="radiogroup"
@@ -1261,7 +1260,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                                   props.onOpenVoiceSource?.(choice.value)
                                 }}
                               >
-                                Fonte
+                                {t("vui.replies.source")}
                               </button>
                             </Show>
                           </span>
@@ -1271,8 +1270,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   </For>
                 </div>
                 <p data-slot="sub-choice-note">
-                  Le voci naturali si scaricano la prima volta che servono (circa 85 MB, solo su Windows) e poi
-                  funzionano senza rete. Finché il download non finisce risponde la voce di sistema.
+                  {t("vui.replies.note")}
                 </p>
               </div>
             </Show>
@@ -1284,7 +1282,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             */}
             <div data-slot="sub-choice-box">
               <span id="agent-engine-label" data-slot="sub-choice-label">
-                Motore dell'agente
+                {t("vui.engine.title")}
               </span>
               <div
                 role="radiogroup"
@@ -1313,10 +1311,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 terms that come with it are said where the engine is chosen.
               */}
               <p data-slot="sub-choice-note">
-                L'agente usa il tuo account della CLI, per uso personale: ADE non legge le tue
-                credenziali, tiene pochi turni insieme e non riprova quando raggiungi il limite. Non
-                modifica file e non esegue comandi nel progetto: il lavoro lo affida alle sessioni.
-                Per un uso intensivo accedi alla CLI con una chiave API.
+                {t("vui.engine.note")}
               </p>
             </div>
           </Show>
@@ -1325,7 +1320,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           <Show when={props.settings.mode === "transcription"}>
             <div data-slot="sub-choice-box">
               <span id="transcription-send-label" data-slot="sub-choice-label">
-                Comportamento invio trascrizione
+                {t("vui.send.title")}
               </span>
               <div
                 role="radiogroup"
@@ -1341,8 +1336,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-item"
                   onClick={() => updateSettings({ transcriptionSend: "manual" })}
                 >
-                  <span data-slot="sub-item-title">Trascrivi e basta</span>
-                  <span data-slot="sub-item-desc">Il testo resta lì, lo invii tu</span>
+                  <span data-slot="sub-item-title">{t("vui.send.manual")}</span>
+                  <span data-slot="sub-item-desc">{t("vui.send.manual.desc")}</span>
                 </div>
 
                 <div
@@ -1353,9 +1348,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-item"
                   onClick={() => updateSettings({ transcriptionSend: "auto" })}
                 >
-                  <span data-slot="sub-item-title">Trascrivi e invia</span>
+                  <span data-slot="sub-item-title">{t("vui.send.auto")}</span>
                   <span data-slot="sub-item-desc">
-                    Il testo parte da solo a fine frase
+                    {t("vui.send.auto.desc")}
                   </span>
                 </div>
               </div>
@@ -1372,10 +1367,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-activation-title" data-slot="section-title" tabIndex={-1}>
-              Come si attiva
+              {t("vui.activation.title")}
             </h3>
             <p data-slot="section-desc">
-              Scegli come abilitare l'ascolto del microfono durante il lavoro
+              {t("vui.activation.desc")}
             </p>
           </div>
 
@@ -1395,8 +1390,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               onClick={() => selectActivation("push-to-talk")}
             >
               <div data-slot="item-text-group">
-                <span data-slot="item-title">Premi e parla (push to talk)</span>
-                <span data-slot="item-desc">Si ascolta finché tieni premuto</span>
+                <span data-slot="item-title">{t("vui.activation.push")}</span>
+                <span data-slot="item-desc">{t("vui.activation.push.desc")}</span>
               </div>
               <kbd data-slot="chord-chip">
                 {describeShortcut(
@@ -1418,8 +1413,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               onClick={() => selectActivation("toggle")}
             >
               <div data-slot="item-text-group">
-                <span data-slot="item-title">Acceso e spento (click continuo)</span>
-                <span data-slot="item-desc">Un comando accende, uno spegne</span>
+                <span data-slot="item-title">{t("vui.activation.toggle")}</span>
+                <span data-slot="item-desc">{t("vui.activation.toggle.desc")}</span>
               </div>
               <kbd data-slot="chord-chip">
                 {describeShortcut(
@@ -1466,9 +1461,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 onClick={() => selectActivation("wake-word")}
               >
                 <div data-slot="item-text-group">
-                  <span data-slot="item-title">Risponde solo se lo chiami per nome</span>
+                  <span data-slot="item-title">{t("vui.activation.wake")}</span>
                   <span data-slot="item-desc">
-                    Consigliato con il microfono aperto: quello che si dice in stanza, o alla televisione, resta fuori
+                    {t("vui.activation.wake.desc")}
                   </span>
                 </div>
                 <Show when={props.settings.mode === "agent"}>
@@ -1479,8 +1474,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               {/* Disabled reason in transcription mode */}
               <Show when={props.settings.mode === "transcription"}>
                 <div id="wake-word-disabled-reason" data-slot="reason-box" data-tone="muted">
-                  Disattivata: la parola di richiamo non è supportata in modalità
-                  trascrizione; è valida solo per eseguire comandi dell'agente.
+                  {t("vui.activation.wake.disabled")}
                 </div>
               </Show>
 
@@ -1493,7 +1487,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               >
                 <div data-slot="sub-choice-box">
                   <span id="listen-label" data-slot="sub-choice-label">
-                    Ascolto
+                    {t("vui.listen.title")}
                   </span>
                   <div
                     role="radiogroup"
@@ -1510,9 +1504,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       data-slot="sub-choice-item"
                       onClick={() => updateSettings({ alwaysListen: true })}
                     >
-                      <span data-slot="sub-item-title">Sempre attivo</span>
+                      <span data-slot="sub-item-title">{t("vui.listen.always")}</span>
                       <span data-slot="sub-item-desc">
-                        Il microfono si apre con ADE e aspetta «{props.settings.wakeWord}»
+                        {t("vui.listen.always.desc", props.settings.wakeWord)}
                       </span>
                     </div>
                     <div
@@ -1523,20 +1517,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       data-slot="sub-choice-item"
                       onClick={() => updateSettings({ alwaysListen: false })}
                     >
-                      <span data-slot="sub-item-title">Solo quando lo apri</span>
-                      <span data-slot="sub-item-desc">Con il pulsante in alto o la scorciatoia</span>
+                      <span data-slot="sub-item-title">{t("vui.listen.manual")}</span>
+                      <span data-slot="sub-item-desc">{t("vui.listen.manual.desc")}</span>
                     </div>
                   </div>
                   <p id="wake-word-hint" data-slot="hint">
-                    Inizia la frase con <em>&quot;{props.settings.wakeWord}&quot;</em> (va bene anche
-                    &quot;ehi nik&quot; o &quot;hey nick&quot;), per esempio{" "}
-                    <em>&quot;{props.settings.wakeWord}, apri il browser&quot;</em>. Il silenzio non costa niente. Mentre
-                    aspetta il nome, anche mentre sta lavorando, delle frasi più lunghe di due secondi manda al servizio
-                    di trascrizione solo il primo secondo e mezzo, e il resto solo se inizia con il nome; le frasi più
-                    corte, come «annulla», partono intere. Detto il nome da solo, o premuto il pulsante, ascolta senza
-                    nome per dieci secondi. Se in un'ora le richieste sono più di 120 te lo dice. Si mette in pausa
-                    solo con il PC bloccato o in sospensione e riprende da solo. Il pulsante in alto e la scorciatoia lo chiamano senza dire niente; mentre sta
-                    lavorando «annulla» lo ferma comunque.
+                    {t("vui.wake.hint", props.settings.wakeWord)}
                   </p>
                 </div>
               </Show>
@@ -1553,12 +1539,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-shortcuts-title" data-slot="section-title" tabIndex={-1}>
-              Scorciatoie da tastiera
+              {t("vui.shortcuts.title")}
             </h3>
             <p data-slot="section-desc">
-              Due combinazioni libere: fai clic su una scorciatoia e premi i tasti
-              che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a
-              scrivere
+              {t("vui.shortcuts.desc")}
             </p>
           </div>
 
@@ -1568,10 +1552,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               <div data-slot="shortcut-row">
                 <div data-slot="item-text-group">
                   <label for="agent-chord-btn" data-slot="item-title">
-                    Scorciatoia modalità agente
+                    {t("vui.shortcuts.agent")}
                   </label>
                   <span id="agent-chord-desc" data-slot="item-desc">
-                    Attiva l'ascolto dei comandi dell'agente
+                    {t("vui.shortcuts.agent.desc")}
                   </span>
                 </div>
                 <div data-slot="shortcut-controls">
@@ -1596,11 +1580,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   <button
                     type="button"
                     data-slot="ghost-btn"
-                    aria-label="Ripristina la scorciatoia predefinita per la modalità agente"
+                    aria-label={t("vui.shortcuts.agent.reset")}
                     disabled={props.settings.agentChord === DEFAULT_VOICE_SETTINGS.agentChord}
                     onClick={() => resetChord("agent")}
                   >
-                    Ripristina
+                    {t("vui.shortcuts.reset")}
                   </button>
                 </div>
               </div>
@@ -1614,7 +1598,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               <Show when={agentWarning()}>
                 {(warning) => (
                   <div role="status" data-slot="reason-box" data-tone="muted">
-                    Scorciatoia salvata. {warning()}
+                    {t("vui.shortcuts.saved", warning())}
                   </div>
                 )}
               </Show>
@@ -1625,10 +1609,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               <div data-slot="shortcut-row">
                 <div data-slot="item-text-group">
                   <label for="transcription-chord-btn" data-slot="item-title">
-                    Scorciatoia modalità trascrizione
+                    {t("vui.shortcuts.transcription")}
                   </label>
                   <span id="transcription-chord-desc" data-slot="item-desc">
-                    Attiva l'ascolto per dettatura testo nel riquadro selezionato
+                    {t("vui.shortcuts.transcription.desc")}
                   </span>
                 </div>
                 <div data-slot="shortcut-controls">
@@ -1655,14 +1639,14 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   <button
                     type="button"
                     data-slot="ghost-btn"
-                    aria-label="Ripristina la scorciatoia predefinita per la modalità trascrizione"
+                    aria-label={t("vui.shortcuts.transcription.reset")}
                     disabled={
                       props.settings.transcriptionChord ===
                       DEFAULT_VOICE_SETTINGS.transcriptionChord
                     }
                     onClick={() => resetChord("transcription")}
                   >
-                    Ripristina
+                    {t("vui.shortcuts.reset")}
                   </button>
                 </div>
               </div>
@@ -1676,7 +1660,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               <Show when={transcriptionWarning()}>
                 {(warning) => (
                   <div role="status" data-slot="reason-box" data-tone="muted">
-                    Scorciatoia salvata. {warning()}
+                    {t("vui.shortcuts.saved", warning())}
                   </div>
                 )}
               </Show>
@@ -1693,23 +1677,23 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-language-title" data-slot="section-title" tabIndex={-1}>
-              Lingua
+              {t("vui.language.title")}
             </h3>
             <p data-slot="section-desc">
-              Lingua attiva ricavata dalle capacità del motore selezionato
+              {t("vui.language.desc")}
             </p>
           </div>
 
           <div data-slot="stack">
             <label for="voice-language-filter" data-slot="label">
-              Cerca una lingua
+              {t("vui.language.search")}
             </label>
             <input
               id="voice-language-filter"
               data-slot="input"
               type="search"
               autocomplete="off"
-              placeholder="Scrivi per filtrare (es. ital, en, fr)…"
+              placeholder={t("vui.language.search.placeholder")}
               value={languageFilter()}
               aria-describedby="voice-language-count"
               onInput={(e) => setLanguageFilter(e.currentTarget.value)}
@@ -1731,7 +1715,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             />
 
             <label for="voice-language-select" data-slot="label">
-              Lingua di riconoscimento vocale
+              {t("vui.language.select")}
             </label>
             <select
               id="voice-language-select"
@@ -1748,9 +1732,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               </For>
             </select>
             <p id="voice-language-count" data-slot="hint">
-              {filteredLanguages().length} di {currentLanguages().length} lingue
-              disponibili per il motore <em>{props.settings.backend}</em>. Invio sul
-              campo di ricerca seleziona la prima corrispondenza.
+              {t("vui.language.count", filteredLanguages().length, currentLanguages().length, props.settings.backend)}
             </p>
           </div>
 
@@ -1758,8 +1740,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           <Show when={!isLangSupported()}>
             <div role="alert" data-slot="lang-warning">
               <div data-slot="lang-warning-msg">
-                La lingua attualmente impostata (&quot;{props.settings.language}&quot;)
-                non è supportata dal motore selezionato ({props.settings.backend}).
+                {t("vui.language.unsupported", props.settings.language, props.settings.backend)}
               </div>
               <Show when={langSuggestion()}>
                 <button
@@ -1769,8 +1750,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     updateSettings({ language: langSuggestion()!.code })
                   }
                 >
-                  Passa a {langSuggestion()?.label} (
-                  {langSuggestion()?.code.toUpperCase()})
+                  {t("vui.language.switch", `${langSuggestion()?.label} (${langSuggestion()?.code.toUpperCase()})`)}
                 </button>
               </Show>
             </div>
@@ -1786,16 +1766,16 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-devices-title" data-slot="section-title" tabIndex={-1}>
-              Audio
+              {t("vui.audio.title")}
             </h3>
             <p data-slot="section-desc">
-              Quale microfono ascolta, e dove va la voce dell'assistente
+              {t("vui.audio.desc")}
             </p>
           </div>
 
           <div data-slot="stack">
             <label for="voice-input-device" data-slot="label">
-              Microfono
+              {t("vui.audio.mic")}
             </label>
             <select
               id="voice-input-device"
@@ -1819,18 +1799,16 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 when={devices().labelled}
                 fallback={
                   <>
-                    I nomi dei dispositivi compaiono dopo la prima autorizzazione al microfono.
-                    Avvia l'ascolto una volta, poi riapri questa sezione.
+                    {t("vui.audio.unlabelled")}
                   </>
                 }
               >
-                Scelta attuale: {describeChoice(props.settings.inputDeviceId, devices().inputs)}. Se
-                il dispositivo non è collegato si usa quello di sistema, e la scelta resta salvata.
+                {t("vui.audio.current", describeChoice(props.settings.inputDeviceId, devices().inputs))}
               </Show>
             </p>
 
             <label for="voice-output-device" data-slot="label">
-              Uscita audio
+              {t("vui.audio.output")}
             </label>
             <select
               id="voice-output-device"
@@ -1851,30 +1829,28 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 does nothing, which is worse than one that says what it is
                 waiting for.
               */}
-              La voce dell'assistente usa il sintetizzatore del sistema, che esce sempre dal
-              dispositivo predefinito: questa scelta vale per le riproduzioni audio di ADE e sarà
-              applicata anche alla voce quando passerà a una sintesi riproducibile.
+              {t("vui.audio.output.note")}
             </p>
           </div>
 
           <div data-slot="stack">
-            <span data-slot="label">Modello locale</span>
+            <span data-slot="label">{t("vui.model.title")}</span>
             <p data-slot="hint">
               <Show
                 when={cached().files > 0 || cached().present}
-                fallback={<>Niente in cache: il modello quantizzato (~640 MB) non è presente in locale.</>}
+                fallback={<>{t("vui.model.none")}</>}
               >
                 {cached().source === "filesystem" ? (
                   <>
-                    Rilevato sul tuo computer: {(cached().bytes / (1024 * 1024)).toFixed(0)} MB ({cached().modelFormat?.toUpperCase() || "modello locale"}). Resta salvato in locale sul tuo disco.
+                    {t("vui.model.found", (cached().bytes / (1024 * 1024)).toFixed(0), cached().modelFormat?.toUpperCase() || t("vui.model.local"))}
                     {cached().localPath ? (
                       <span style={{ display: "block", "margin-top": "4px", "font-family": "monospace", "font-size": "11px", opacity: "0.8" }}>
-                        Percorso: {cached().localPath}
+                        {t("vui.model.path", cached().localPath ?? "")}
                       </span>
                     ) : null}
                   </>
                 ) : (
-                  <>{cached().files} file, {(cached().bytes / (1024 * 1024)).toFixed(0)} MB{cached().present ? "" : " — scaricamento incompleto"}. Resta installato tra un avvio e l'altro; ADE chiede al browser di non cancellarlo.</>
+                  <>{t(cached().present ? "vui.model.cached" : "vui.model.partial", cached().files, (cached().bytes / (1024 * 1024)).toFixed(0))}</>
                 )}
               </Show>
             </p>
@@ -1889,15 +1865,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       data-slot="solid-btn"
                       onClick={startDirectDownload}
                     >
-                      Scarica modello Parakeet (~640 MB)
+                      {t("vui.model.download")}
                     </button>
-                    <span data-slot="hint">Pronto all'uso appena finisce il download</span>
+                    <span data-slot="hint">{t("vui.model.download.hint")}</span>
                   </div>
                 }
               >
                 <div data-slot="progress-box">
                   <div data-slot="progress-meta">
-                    <span>{downloadProgress()?.message || "Download in corso..."}</span>
+                    <span>{downloadProgress()?.message || t("vui.model.downloading")}</span>
                     <span>
                       {((downloadProgress()?.loaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
                       {((downloadProgress()?.total || 670488135) / (1024 * 1024)).toFixed(1)} MB (
@@ -1927,7 +1903,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
             <Show when={downloadSuccess()}>
               <div data-slot="ready-tag" data-ready="true" style={{ "align-self": "flex-start", padding: "6px 12px" }}>
-                ✓ Modello scaricato con successo! Parakeet è ora attivo e pronto all'uso.
+                {t("vui.model.downloaded")}
               </div>
             </Show>
             <Show when={cached().source === "indexeddb" && cached().files > 0}>
@@ -1945,14 +1921,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     })
                 }}
               >
-                {clearingCache() ? "Eliminazione…" : "Elimina il modello scaricato"}
+                {clearingCache() ? t("vui.model.deleting") : t("vui.model.delete")}
               </button>
               <p data-slot="hint">
                 {/* The only cure for a file that arrived truncated: the download
                     returns 200 either way, so a short file is cached and served
                     forever, and nothing else in the application can throw it away. */}
-                Da usare se la trascrizione locale non parte: rimuove i file e li riscarica al
-                prossimo avvio.
+                {t("vui.model.delete.hint")}
               </p>
             </Show>
           </div>
@@ -1967,10 +1942,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-backend-title" data-slot="section-title" tabIndex={-1}>
-              Motore di riconoscimento
+              {t("vui.backend.title")}
             </h3>
             <p data-slot="section-desc">
-              I tre motori ASR supportati con stato di idoneità diagnostica
+              {t("vui.backend.desc")}
             </p>
           </div>
 
@@ -2005,9 +1980,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 }}
               >
                 <div data-slot="item-text-group">
-                  <span data-slot="item-title">Parakeet locale</span>
+                  <span data-slot="item-title">{t("vui.backend.parakeet")}</span>
                   <span data-slot="item-desc">
-                    Riconoscimento neurale NVIDIA Parakeet TDT 0.6B sul tuo computer
+                    {t("vui.backend.parakeet.desc")}
                   </span>
                 </div>
                 <span
@@ -2015,17 +1990,17 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-ready={backendStatuses().parakeet.usable || cached().present ? "true" : "false"}
                 >
                   {downloading()
-                    ? `Download in corso (${downloadProgress()?.percent ?? 0}%)`
+                    ? t("vui.backend.downloading", downloadProgress()?.percent ?? 0)
                     : cached().present
-                      ? "Pronto (in locale)"
+                      ? t("vui.backend.readyLocal")
                       : backendStatuses().parakeet.usable
-                        ? "Pronto"
-                        : (hasWebGpu() || hasWasm() ? "Disponibile (~640 MB)" : "Non supportato")}
+                        ? t("vui.backend.ready")
+                        : (hasWebGpu() || hasWasm() ? t("vui.backend.available") : t("vui.backend.unsupported"))}
                 </span>
               </div>
 
               <p data-slot="backend-warning">
-                Modello neurale quantizzato (~640 MB, INT8). Trascrizione vocale neurale sul tuo computer, privata e senza inviare audio a server esterni.
+                {t("vui.backend.parakeet.note")}
               </p>
 
               {/* Direct download when not available locally */}
@@ -2039,15 +2014,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         data-slot="solid-btn"
                         onClick={startDirectDownload}
                       >
-                        Scarica modello Parakeet (~640 MB)
+                        {t("vui.model.download")}
                       </button>
-                      <span data-slot="hint">Pronto all'uso appena finisce il download</span>
+                      <span data-slot="hint">{t("vui.model.download.hint")}</span>
                     </div>
                   }
                 >
                   <div data-slot="progress-box">
                     <div data-slot="progress-meta">
-                      <span>{downloadProgress()?.message || "Download in corso..."}</span>
+                      <span>{downloadProgress()?.message || t("vui.model.downloading")}</span>
                       <span>
                         {((downloadProgress()?.loaded || 0) / (1024 * 1024)).toFixed(1)} MB /{" "}
                         {((downloadProgress()?.total || 670488135) / (1024 * 1024)).toFixed(1)} MB (
@@ -2072,7 +2047,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
 
               <Show when={downloadSuccess()}>
                 <div data-slot="ready-tag" data-ready="true" style={{ "align-self": "flex-start", padding: "6px 12px" }}>
-                  ✓ Modello scaricato con successo! Parakeet è ora attivo e pronto all'uso.
+                  {t("vui.model.downloaded")}
                 </div>
               </Show>
 
@@ -2094,7 +2069,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 <div data-slot="backend-subfields">
                   <div data-slot="stack">
                     <span id="parakeet-backend-label" data-slot="label">
-                      Accelerazione hardware
+                      {t("vui.backend.accel")}
                     </span>
                     <div
                       role="radiogroup"
@@ -2103,25 +2078,25 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     >
                       {parakeetPill(
                         "auto",
-                        "Automatico",
+                        t("vui.engine.auto"),
                         true,
-                        "Sceglie WebGPU se disponibile, altrimenti WASM",
+                        t("vui.backend.accel.auto"),
                       )}
                       {parakeetPill(
                         "webgpu",
                         "WebGPU",
                         hasWebGpu(),
                         hasWebGpu()
-                          ? "Inferenza sulla GPU"
-                          : "WebGPU non è disponibile in questo browser",
+                          ? t("vui.backend.accel.gpu")
+                          : t("vui.backend.accel.noGpu"),
                       )}
                       {parakeetPill(
                         "wasm",
                         "WASM",
                         hasWasm(),
                         hasWasm()
-                          ? "Inferenza sulla CPU"
-                          : "WebAssembly non è disponibile in questo ambiente",
+                          ? t("vui.backend.accel.cpu")
+                          : t("vui.backend.accel.noWasm"),
                       )}
                     </div>
                   </div>
@@ -2139,7 +2114,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       return (
                         <div data-slot="progress-box">
                           <div data-slot="progress-meta">
-                            <span>Scaricamento pesi modello ({p.message || "download in corso"})</span>
+                            <span>{t("vui.backend.weights", p.message || t("vui.backend.weights.default"))}</span>
                             <span>
                               {loadedMb} MB / {totalMb} MB ({percent}%)
                             </span>
@@ -2186,14 +2161,14 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 <div data-slot="item-text-group">
                   <span data-slot="item-title">OpenRouter</span>
                   <span data-slot="item-desc">
-                    Trascrizione cloud ad alta accuratezza (microsoft/mai-transcribe-2)
+                    {t("vui.backend.openrouter.desc")}
                   </span>
                 </div>
                 <span
                   data-slot="ready-tag"
                   data-ready={backendStatuses().openrouter.usable ? "true" : "false"}
                 >
-                  {backendStatuses().openrouter.usable ? "Pronto" : "Serve la chiave"}
+                  {backendStatuses().openrouter.usable ? t("vui.backend.ready") : t("vui.backend.needsKey")}
                 </span>
               </div>
 
@@ -2209,21 +2184,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 <div data-slot="backend-subfields">
                   <div data-slot="stack">
                     <label for="openrouter-key-field" data-slot="label">
-                      Chiave API OpenRouter
+                      {t("vui.key.title")}
                     </label>
 
                     {/* Masked display when key already saved */}
                     <Show when={Boolean(props.settings.openRouterApiKey)}>
                       <div data-slot="key-status-badge">
                         <span>
-                          Chiave salvata: {formatMaskedApiKey(props.settings.openRouterApiKey)}
+                          {t("vui.key.saved", formatMaskedApiKey(props.settings.openRouterApiKey))}
                         </span>
                         <button
                           type="button"
                           data-slot="key-clear-btn"
                           onClick={() => updateSettings({ openRouterApiKey: undefined })}
                         >
-                          Rimuovi
+                          {t("vui.key.remove")}
                         </button>
                       </div>
                     </Show>
@@ -2238,7 +2213,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         spellcheck={false}
                         placeholder={
                           props.settings.openRouterApiKey
-                            ? "Inserisci una nuova chiave per sostituirla"
+                            ? t("vui.key.replace")
                             : "sk-or-v1-…"
                         }
                         value={apiKeyInput()}
@@ -2263,7 +2238,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         disabled={apiKeyInput().length === 0}
                         onClick={() => setApiKeyVisible((v) => !v)}
                       >
-                        {apiKeyVisible() ? "Nascondi" : "Mostra"}
+                        {apiKeyVisible() ? t("vui.key.hide") : t("vui.key.show")}
                       </button>
                       <button
                         type="button"
@@ -2271,28 +2246,25 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         disabled={apiKeyInput().trim().length === 0}
                         onClick={commitApiKey}
                       >
-                        Salva
+                        {t("vui.key.save")}
                       </button>
                     </div>
 
                     <Show when={apiKeyLooksWrong()}>
                       <div data-slot="reason-box" data-tone="muted">
-                        Le chiavi OpenRouter iniziano di norma con
-                        {" "}
-                        <em>sk-or-</em>: controlla di aver incollato quella giusta.
+                        {t("vui.key.looksWrong")}
                       </div>
                     </Show>
 
                     <p id="openrouter-key-hint" data-slot="hint">
-                      La chiave non viene mai mostrata in chiaro né registrata nei file di log.
-                      Invio salva, Esc svuota il campo.
+                      {t("vui.key.hint")}
                     </p>
                   </div>
 
                   {/* Cost of the last request if exposed */}
                   <Show when={resolvedCost() !== undefined}>
                     <div data-slot="cost-tag">
-                      Costo dell'ultima richiesta:{" "}
+                      {t("vui.key.cost")}{" "}
                       <strong>
                         ${resolvedCost()! < 0.01
                           ? resolvedCost()!.toFixed(5)
@@ -2316,10 +2288,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
         >
           <div data-slot="section-head">
             <h3 id="section-commands-title" data-slot="section-title" tabIndex={-1}>
-              Comandi vocali
+              {t("vui.commands.title")}
             </h3>
             <p data-slot="section-desc">
-              Il vocabolario riconosciuto. Scrivine uno per provarlo senza parlare
+              {t("vui.commands.desc")}
             </p>
           </div>
 
@@ -2329,8 +2301,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               data-slot="input"
               type="text"
               autocomplete="off"
-              placeholder="Es. «apri la tavolozza»"
-              aria-label="Prova un comando scrivendolo"
+              placeholder={t("vui.commands.trial.placeholder")}
+              aria-label={t("vui.commands.trial")}
               value={trialText()}
               disabled={trialBusy()}
               onInput={(e) => setTrialText(e.currentTarget.value)}
@@ -2351,7 +2323,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               disabled={trialText().trim().length === 0 || trialBusy()}
               onClick={() => void runTrial()}
             >
-              {trialBusy() ? "Invio…" : "Esegui"}
+              {trialBusy() ? t("vui.commands.sending") : t("vui.commands.run")}
             </button>
           </div>
           <Show when={trialNote()}>
@@ -2365,8 +2337,8 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             data-slot="input"
             type="search"
             autocomplete="off"
-            placeholder="Filtra i comandi…"
-            aria-label="Filtra l'elenco dei comandi vocali"
+            placeholder={t("vui.commands.filter")}
+            aria-label={t("vui.commands.filter.label")}
             aria-describedby="voice-command-count"
             value={commandFilter()}
             onInput={(e) => setCommandFilter(e.currentTarget.value)}
@@ -2383,7 +2355,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             <For
               each={filteredCommands()}
               fallback={
-                <p data-slot="hint">Nessun comando corrisponde a questo filtro.</p>
+                <p data-slot="hint">{t("vui.commands.none")}</p>
               }
             >
               {(spec) => (
@@ -2392,7 +2364,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                     <span data-slot="command-name">
                       {spec.intent}
                       <Show when={spec.destructive}>
-                        <span data-slot="command-flag">chiede conferma</span>
+                        <span data-slot="command-flag">{t("vui.commands.confirms")}</span>
                       </Show>
                     </span>
                     <span data-slot="command-readback">{spec.readback}</span>
@@ -2403,7 +2375,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                         <button
                           type="button"
                           data-slot="phrase-chip"
-                          title="Usa questa frase nel campo di prova"
+                          title={t("vui.commands.usePhrase")}
                           onClick={() => {
                             setTrialText(phrase)
                             document.getElementById("voice-trial-input")?.focus()
@@ -2419,8 +2391,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             </For>
           </div>
           <p id="voice-command-count" data-slot="hint">
-            {filteredCommands().length} comandi su {VOCABULARY.length}. Un clic su una
-            frase la copia nel campo di prova qui sopra.
+            {t("vui.commands.count", filteredCommands().length, VOCABULARY.length)}
           </p>
         </section>
         </div>
@@ -2466,9 +2437,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               type="button"
               data-slot="ghost-btn"
               onClick={() => void props.engine.cancel()}
-              title="Interrompe la frase in corso senza spegnere il microfono"
+              title={t("vui.live.cancel.tip")}
             >
-              Annulla
+              {t("vui.live.cancel")}
             </button>
           </Show>
           <button
@@ -2478,7 +2449,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
             onClick={toggleListening}
             aria-pressed={engineRunning()}
           >
-            {engineRunning() ? "Ferma ascolto" : "Avvia ascolto"}
+            {engineRunning() ? t("vui.live.stop") : t("vui.live.start")}
           </button>
         </div>
       </div>
@@ -2486,11 +2457,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       {/* Footer */}
       <div data-slot="footer">
         <span data-slot="footer-hint">
-          Frecce per scegliere · Invio per confermare · Esc per chiudere
+          {t("vui.footer.keys")}
         </span>
         <Show when={!props.inline && props.onClose}>
           <button type="button" data-slot="solid-btn" onClick={props.onClose}>
-            Fatto
+            {t("vui.footer.done")}
           </button>
         </Show>
       </div>

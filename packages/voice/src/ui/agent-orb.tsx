@@ -29,6 +29,7 @@ import {
   type OrbPhase,
 } from "./agent-orb-state"
 import "./agent-orb.css"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export interface AgentOrbProps {
   engine: VoiceEngine
@@ -202,7 +203,7 @@ export function AgentOrb(props: AgentOrbProps) {
         <button
           type="button"
           data-slot="agent-orb-sphere"
-          aria-label={shown() === "speak" ? "L'assistente sta parlando: premi per interrompere" : "L'assistente sta lavorando: premi per annullare"}
+          aria-label={shown() === "speak" ? t("vui.agentOrb.speaking") : t("vui.agentOrb.working")}
           onClick={() => void props.engine.cancel()}
         >
           <Sphere phase={shown} level={() => props.meter.level()} reduced={reduced} />

@@ -7,6 +7,7 @@
  */
 
 import type { VoiceMode, VoiceSettings } from "../settings/model"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export type ListeningState =
   | { kind: "hidden" }
@@ -24,15 +25,15 @@ export function listeningState(input: {
   if (input.running && input.mode === "agent") {
     return {
       kind: "listening",
-      text: `In ascolto · «${settings.wakeWord}»`,
-      title: `Il microfono è aperto e aspetta «${settings.wakeWord}». Premi per smettere di ascoltare.`,
+      text: t("vui.listening.text", settings.wakeWord),
+      title: t("vui.listening.title", settings.wakeWord),
     }
   }
   if (input.paused) {
     return {
       kind: "paused",
-      text: "Ascolto in pausa: PC bloccato",
-      title: "Riprende da solo quando sblocchi il PC. Premi per riprendere adesso.",
+      text: t("vui.paused.text"),
+      title: t("vui.paused.title"),
     }
   }
   return { kind: "hidden" }

@@ -14,6 +14,7 @@ import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
 import { OrbMark } from "./orb-mark"
 import "./voice-orb.css"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export interface VoiceOrbProps {
   /** The voice control engine instance. */
@@ -23,23 +24,23 @@ export interface VoiceOrbProps {
 }
 
 function labelFor(status: DialogStatus, isRunning: boolean, mode: VoiceMode, calls?: string): string {
-  if (!isRunning) return "Apri il microfono"
+  if (!isRunning) return t("vui.orb.open")
   // Always listening: pressing calls the assistant; the indicator beside it closes the microphone.
   if (calls && mode === "agent" && status !== "executing" && status !== "confirming") {
-    return `In ascolto: dì «${calls}» o premi per chiamarlo`
+    return t("vui.orb.call", calls)
   }
   if (mode === "transcription") {
-    return "Dettatura in corso: quello che dici finisce nel pannello (premi per chiudere)"
+    return t("vui.orb.dictating")
   }
   switch (status) {
     case "asleep":
-      return "Assistente in attesa della parola di attivazione (premi per chiudere)"
+      return t("vui.orb.asleep")
     case "confirming":
-      return "L'assistente attende una conferma (premi per chiudere)"
+      return t("vui.orb.confirming")
     case "executing":
-      return "L'assistente sta eseguendo un comando"
+      return t("vui.orb.executing")
     default:
-      return "Assistente in ascolto (premi per chiudere)"
+      return t("vui.orb.listening")
   }
 }
 

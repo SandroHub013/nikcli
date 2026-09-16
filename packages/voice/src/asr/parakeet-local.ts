@@ -23,6 +23,7 @@ import {
 } from "../audio/capture"
 import { requestPersistentStorage } from "./model-cache"
 import { bundledOrtPaths } from "./ort-assets"
+import { t } from "@nikcli-ai/ade/i18n"
 
 // ---------------------------------------------------------------------------
 // Availability Probes
@@ -62,14 +63,14 @@ export function describeParakeetReadiness(options?: {
   if (!hasGpu && !hasWasm) {
     return {
       usable: false,
-      reason: "Né WebGPU né WebAssembly sono supportati in questo browser o ambiente.",
+      reason: t("vui.asr.noRuntime"),
     }
   }
 
   if (options?.isModelDownloaded === false) {
     return {
       usable: false,
-      reason: "Il modello neurale Parakeet non è ancora stato scaricato in locale.",
+      reason: t("vui.asr.notDownloaded"),
     }
   }
 

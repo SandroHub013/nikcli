@@ -1,3 +1,4 @@
+import { t } from "@nikcli-ai/ade/i18n"
 /**
  * Which microphones and speakers this machine has, and what they are called.
  *
@@ -48,7 +49,9 @@ export interface AudioDevices {
 /** The row that means "whatever the system is set to". */
 export const SYSTEM_DEFAULT: AudioDevice = Object.freeze({
   id: "",
-  label: "Dispositivo di sistema",
+  get label() {
+    return t("vui.device.system")
+  },
   named: true,
 })
 
@@ -84,7 +87,7 @@ export function shapeDevices(raw: readonly MediaDeviceInfo[]): AudioDevices {
 
     const entry: AudioDevice = {
       id: device.deviceId,
-      label: label.length > 0 ? label : `${isInput ? "Microfono" : "Uscita audio"} ${position}`,
+      label: label.length > 0 ? label : t(isInput ? "vui.device.mic" : "vui.device.output", position),
       named: label.length > 0,
     }
     if (isInput) inputs.push(entry)
@@ -107,7 +110,7 @@ export function describeChoice(id: string | undefined, devices: readonly AudioDe
   if (!id) return SYSTEM_DEFAULT.label
   const found = devices.find((device) => device.id === id)
   if (found) return found.label
-  return "Dispositivo non collegato"
+  return t("vui.device.missing")
 }
 
 export interface EnumerateOptions {

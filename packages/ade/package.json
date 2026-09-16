@@ -9,6 +9,10 @@
       "types": "./src/index.ts"
     },
     "./index.css": "./src/index.css",
+    "./i18n": {
+      "import": "./src/i18n/index.ts",
+      "types": "./src/i18n/index.ts"
+    },
     "./command/match": {
       "import": "./src/command/match.ts",
       "types": "./src/command/match.ts"

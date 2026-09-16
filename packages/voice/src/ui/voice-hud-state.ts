@@ -12,6 +12,7 @@ import type { AgentEntry } from "../agent/log"
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceErrorKind } from "../effect/errors"
 import type { OrbRim } from "./orb-mark"
+import { t } from "@nikcli-ai/ade/i18n"
 
 /** How urgent the widget looks. Maps to one hairline colour, nothing more. */
 export type HudTone = "armed" | "listening" | "asking" | "working" | "done"
@@ -108,10 +109,10 @@ export function agentHudState(input: HudInput): HudState {
 
   switch (status) {
     case "asleep":
-      return { tone: "armed", label: "in attesa", line: `di' «${wakeWord}»`, quoted: false }
+      return { tone: "armed", label: t("vui.hud.waiting"), line: t("vui.hud.say", wakeWord), quoted: false }
 
     case "confirming":
-      return { tone: "asking", label: "conferma", line: readback ?? spoken, quoted: false }
+      return { tone: "asking", label: t("vui.hud.confirm"), line: readback ?? spoken, quoted: false }
 
     case "executing":
       /*
@@ -119,26 +120,26 @@ export function agentHudState(input: HudInput): HudState {
        * not know goes to the agent and has no readback: then the line is the
        * sentence itself, quoted — never the previous thing the assistant said.
        */
-      if (readback) return { tone: "working", label: "eseguo", line: readback, quoted: false }
-      if (utterance) return { tone: "working", label: "eseguo", line: utterance, quoted: true }
-      return { tone: "working", label: "eseguo", line: spoken, quoted: false }
+      if (readback) return { tone: "working", label: t("vui.hud.doing"), line: readback, quoted: false }
+      if (utterance) return { tone: "working", label: t("vui.hud.doing"), line: utterance, quoted: true }
+      return { tone: "working", label: t("vui.hud.doing"), line: spoken, quoted: false }
 
     case "dictating":
-      return { tone: "listening", label: "detto", line: partial || spoken, quoted: true }
+      return { tone: "listening", label: t("vui.hud.dictated"), line: partial || spoken, quoted: true }
 
     case "listening":
     case "idle":
       if (partial.length > 0) {
-        return { tone: "listening", label: "ascolto", line: partial, quoted: true }
+        return { tone: "listening", label: t("vui.hud.hearing"), line: partial, quoted: true }
       }
       if (readback) {
-        return { tone: "done", label: "capito", line: readback, quoted: false }
+        return { tone: "done", label: t("vui.hud.understood"), line: readback, quoted: false }
       }
       // An agent turn has no readback; its answer is what the user waited for.
       if (answer) {
-        return { tone: "done", label: "risposta", line: answer, quoted: false }
+        return { tone: "done", label: t("vui.hud.answer"), line: answer, quoted: false }
       }
-      return { tone: "listening", label: "ascolto", line: "parla pure", quoted: false }
+      return { tone: "listening", label: t("vui.hud.hearing"), line: t("vui.hud.goAhead"), quoted: false }
   }
 }
 
@@ -162,8 +163,8 @@ export function preparingHudState(progress: HudPreparation): HudState {
   const percent = known ? Math.max(0, Math.min(100, Math.round(progress.percent!))) : undefined
   return {
     tone: "working",
-    label: "preparo",
-    line: percent === undefined ? "modello vocale…" : `modello vocale · ${percent}%`,
+    label: t("vui.hud.preparing"),
+    line: percent === undefined ? t("vui.hud.model") : t("vui.hud.modelPercent", percent),
     quoted: false,
   }
 }

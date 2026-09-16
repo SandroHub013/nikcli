@@ -22,6 +22,7 @@ import {
 } from "@nikcli-ai/ade/keyboard/keymap"
 import { DEFAULT_BINDINGS } from "@nikcli-ai/ade/keyboard/bindings"
 import type { LanguageOption } from "../settings/languages"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export interface KeyInput {
   key: string
@@ -164,7 +165,7 @@ export function checkShortcutConflict(
   if (risk.level === "refuse") {
     return {
       hasConflict: true,
-      message: risk.message ?? "Scorciatoia non valida.",
+      message: risk.message ?? t("vui.shortcut.invalid"),
     }
   }
 
@@ -195,7 +196,7 @@ export function checkShortcutConflict(
     return {
       hasConflict: true,
       conflictingCommand,
-      message: `In conflitto con il comando '${describeCommandId(conflictingCommand)}'.`,
+      message: t("vui.shortcut.conflict", describeCommandId(conflictingCommand)),
     }
   }
 

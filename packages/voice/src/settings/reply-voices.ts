@@ -1,4 +1,5 @@
 import type { ReplyVoice } from "./model"
+import { t } from "@nikcli-ai/ade/i18n"
 
 /**
  * D19, in the user's words: «ugo per maschile, e piper per femminile,
@@ -14,15 +15,15 @@ export const REPLY_VOICE_CHOICES: readonly {
 }[] = [
   {
     value: "ugo",
-    title: "Maschile",
-    desc: "Ugo (Piper), naturale e offline",
-    licence: "Modello CC-BY-4.0, derivato dalla voce lessac, il cui dataset è concesso per sola ricerca.",
+    get title() { return t("vui.reply.male") },
+    get desc() { return t("vui.reply.ugo") },
+    get licence() { return t("vui.reply.ugo.licence") },
   },
   {
     value: "paola",
-    title: "Femminile",
-    desc: "Paola (Piper), naturale e offline",
-    licence: "Dataset CC0, modello derivato dalla voce lessac, il cui dataset è concesso per sola ricerca.",
+    get title() { return t("vui.reply.female") },
+    get desc() { return t("vui.reply.paola") },
+    get licence() { return t("vui.reply.paola.licence") },
   },
-  { value: "system", title: "Voce di sistema", desc: "Quella di Windows, senza scaricare nulla" },
+  { value: "system", get title() { return t("vui.reply.system") }, get desc() { return t("vui.reply.system.desc") } },
 ]

@@ -1,4 +1,5 @@
 import type { Messages } from "./it"
+import { voiceEn } from "./voice-en"
 
 /**
  * ADE's texts in English.
@@ -7,6 +8,7 @@ import type { Messages } from "./it"
  * in the words an English-language app would use for it.
  */
 export const en: Messages = {
+  ...voiceEn,
   "settings.language.label": "Language",
   "settings.language.title": "Language",
   "settings.language.desc":

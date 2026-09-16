@@ -27,6 +27,7 @@ import {
   createOpenRouterTranscriber,
   type OpenRouterTranscriberOptions,
 } from "./openrouter"
+import { t } from "@nikcli-ai/ade/i18n"
 
 // ---------------------------------------------------------------------------
 // Backend Identifier & Status Types
@@ -93,7 +94,7 @@ export function describeBackends(
       ? { usable: true }
       : {
           usable: false,
-          reason: "Chiave API OpenRouter mancante.",
+          reason: t("vui.asr.noKey"),
         }
 
     return {
@@ -104,11 +105,11 @@ export function describeBackends(
     return {
       parakeet: {
         usable: false,
-        reason: "Errore durante la verifica del supporto Parakeet.",
+        reason: t("vui.asr.parakeetCheck"),
       },
       openrouter: {
         usable: false,
-        reason: "Errore durante la verifica della chiave OpenRouter.",
+        reason: t("vui.asr.keyCheck"),
       },
     }
   }

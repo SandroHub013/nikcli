@@ -10,7 +10,10 @@
  * errors (agents read Italian as well as English), and the voice grammar,
  * which follows the speech-recognition language rather than the interface.
  */
+import { voiceIt } from "./voice-it"
+
 export const it = {
+  ...voiceIt,
   "settings.language.label": "Lingua",
   "settings.language.title": "Lingua",
   "settings.language.desc":
