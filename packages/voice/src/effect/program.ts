@@ -30,6 +30,7 @@ import { VOCABULARY } from "../intent/vocabulary"
 import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "../settings/model"
 import { matchesWakeWord } from "../settings/wake-word"
 import { replySpeech } from "../tts/reply"
+import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
@@ -140,6 +141,13 @@ export interface VoiceProgramOptions {
   onPartialTranscript?: (text: string) => void
   /** Notification hook fired when speech is synthesized. */
   onSpoken?: (text: string) => void
+  /**
+   * What is being said so far of a reply read in pieces, for the widget.
+   * `onSpoken` still comes once, with the whole reply, when it is complete.
+   */
+  onSpeaking?: (text: string) => void
+  /** A short sound: see `audio/cue.ts`. */
+  onCue?: (kind: CueKind) => void
   /** Notification hook fired when an ADE action finishes dispatching. */
   onOutcome?: (outcome: DispatchOutcome) => void
   /** Notification hook fired when an error occurs. */
@@ -250,12 +258,42 @@ export const WAKE_WINDOW_MS = 10_000
  * Creates and forks the resilient voice interaction loop inside the environment's Scope.
  * Returns a handle allowing external events (text submission, permissions, cancellations).
  */
+/** How long an agent may work before a sound says the request was taken. */
+export const AGENT_CUE_MS = 1_500
+
+/**
+ * Where the finished sentences of a reply still being written end.
+ *
+ * A sentence is finished when its stop is followed by a space, so "3.5" and a
+ * stop that may still become "..." are not; a blank line ends one too.
+ */
+export function finishedUpTo(text: string): number {
+  let end = 0
+  for (const match of text.matchAll(/[.!?;…]["»”’')\]]*(?=\s)|\n\s*\n/g)) {
+    end = (match.index ?? 0) + match[0].length
+  }
+  return end
+}
+
+const squash = (text: string) => text.replace(/\s+/g, " ").trim()
+
 export function makeVoiceProgram(
   options: VoiceProgramOptions = {},
 ): Effect.Effect<VoiceProgramHandle, VoiceError, TranscriberService | SpeakerService | VoiceHost | Scope.Scope> {
   return Effect.gen(function* () {
     const transcriber = yield* Transcriber
-    const speaker = yield* Speaker
+    const speakerService = yield* Speaker
+    /* How many times speech was cut, so a reply still arriving knows it was. */
+    let hushed = 0
+    const speaker: typeof speakerService = {
+      ...speakerService,
+      cancel: Effect.zipRight(
+        Effect.sync(() => {
+          hushed++
+        }),
+        speakerService.cancel,
+      ),
+    }
     const host = yield* VoiceHostService
     const programScope = yield* Effect.scope
 
@@ -734,6 +772,37 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
 
+        /*
+         * The answer is read as it is written: each finished sentence goes to
+         * the voice at once, and the rest follows it. Waiting for the whole
+         * turn kept the user in silence for the length of the answer.
+         */
+        const hushedAtStart = hushed
+        const quiet = () => abort.signal.aborted || hushed !== hushedAtStart
+        const append = speaker.append
+        let soFar = ""
+        let saidUpTo = 0
+        let streamed = false
+        const cue = setTimeout(() => {
+          if (!streamed && !quiet()) options.onCue?.("thinking")
+        }, AGENT_CUE_MS)
+        const onText = append
+          ? (text: string) => {
+              if (quiet()) return
+              soFar = text
+              const end = finishedUpTo(text)
+              if (end <= saidUpTo) return
+              const piece = text.slice(saidUpTo, end).trim()
+              saidUpTo = end
+              if (!piece) return
+              streamed = true
+              options.onSpeaking?.(text.slice(0, end).trim())
+              Effect.runFork(
+                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err))))),
+              )
+            }
+          : undefined
+
         const answer: { ok: boolean; text: string; ran?: boolean } = yield* Effect.tryPromise({
           /*
            * Interruption aborts the turn too. Without it, stopping the engine
@@ -742,7 +811,7 @@ export function makeVoiceProgram(
            */
           try: (interrupted) => {
             interrupted.addEventListener("abort", () => abort.abort(), { once: true })
-            return askAgent.call(host, { text: utterance, engine, signal: abort.signal })
+            return askAgent.call(host, { text: utterance, engine, signal: abort.signal, ...(onText ? { onText } : {}) })
           },
           catch: (err) => new HostActionFailed({ action: "askAgent", cause: err }),
         }).pipe(
@@ -755,6 +824,7 @@ export function makeVoiceProgram(
           ),
         )
         if (agentAbort === abort) agentAbort = null
+        clearTimeout(cue)
 
         // Cancelled while it worked: the user has moved on, so nothing is said.
         if (abort.signal.aborted) return "stopped"
@@ -774,6 +844,17 @@ export function makeVoiceProgram(
           // Only when no turn ran: one that started may already have opened
           // sessions before its error or timeout, and the planner would open them again.
           if (options.plan && answer.ran === false) return false
+        }
+        if (streamed && append) {
+          const said = squash(soFar.slice(0, saidUpTo))
+          const whole = squash(answer.text)
+          // What is left after what was already said; the whole of it if the two disagree.
+          const rest = !answer.ok ? whole : whole.startsWith(said) ? whole.slice(said.length).trim() : whole
+          options.onSpoken?.(answer.ok ? whole : `${said} ${whole}`)
+          yield* append(quiet() ? "" : rest).pipe(
+            Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
+          )
+          return true
         }
         yield* say(answer.text)
         return true

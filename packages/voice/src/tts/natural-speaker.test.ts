@@ -49,6 +49,28 @@ describe("tts/natural-speaker", () => {
     expect(h.fallback.spoken).toEqual([])
   })
 
+  test("text asked for ahead is synthesised once, before its turn", async () => {
+    const asked: string[] = []
+    const h = harness({
+      synthesize: async (_voice, text) => {
+        asked.push(text)
+        return wav(text)
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("Pronta la prima risposta.")
+    speaker.prefetch?.("Seconda frase lunga. Terza frase lunga.")
+    expect(asked).toEqual(["Pronta la prima risposta.", "Seconda frase lunga.", "Terza frase lunga."])
+    await speaker.speak("Seconda frase lunga. Terza frase lunga.")
+    expect(asked).toHaveLength(3)
+    expect(h.played.slice(1)).toEqual(["Seconda frase lunga.", "Terza frase lunga."])
+    // A cancel drops what was asked for ahead.
+    speaker.prefetch?.("Quarta frase lunga.")
+    speaker.cancel()
+    await speaker.speak("Quarta frase lunga.")
+    expect(asked.filter((t) => t === "Quarta frase lunga.")).toHaveLength(2)
+  })
+
   test("a voice not downloaded yet speaks with the old voice and starts the download once", async () => {
     const h = harness()
     h.setInstalled(false)

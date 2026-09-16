@@ -14,7 +14,8 @@
  */
 
 import type { AgentStatus } from "../session-new/availability"
-import type { RunnerId } from "../bots/runners"
+import { answerSoFar, type RunnerId } from "../bots/runners"
+import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
@@ -104,9 +105,26 @@ export interface VoiceAgentDeps {
 
 export interface VoiceAgent {
   /** `ran` is false only when no turn started: see `VoiceHost.askAgent`. */
-  ask(request: { text: string; engine: VoiceAgentEngine; signal?: AbortSignal }): Promise<{ ok: boolean; text: string; ran: boolean }>
+  ask(request: {
+    text: string
+    engine: VoiceAgentEngine
+    signal?: AbortSignal
+    /** The answer so far, each time it grows, so it can be read before it is finished. */
+    onText?: (soFar: string) => void
+  }): Promise<{ ok: boolean; text: string; ran: boolean }>
   /** Starts the next sentence in a new conversation. */
   forget(): void
+}
+
+/** Calls `onText` only when the answer so far has changed. */
+function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
+  let last = ""
+  return (talk) => {
+    const soFar = answerSoFar(talk)
+    if (!soFar || soFar === last) return
+    last = soFar
+    onText(soFar)
+  }
 }
 
 export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
@@ -126,7 +144,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   let latest = 0
 
   return {
-    async ask({ text, engine, signal }) {
+    async ask({ text, engine, signal, onText }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
@@ -147,6 +165,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         // the user's connectors, and loading them tripled the wait.
         lean: true,
         timeoutMs: VOICE_AGENT_TIMEOUT_MS,
+        ...(onText ? { partial: true, onUpdate: textFollower(onText) } : {}),
       })
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })

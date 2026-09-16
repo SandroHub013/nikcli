@@ -23,6 +23,7 @@ import { createInitialDialogState, type DialogState, type DialogStatus } from ".
 import type { ParseContext, ParseResult } from "./intent/parse"
 import type { Transcriber } from "./asr/transcriber"
 import type { Speaker } from "./tts/speaker"
+import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
 import {
@@ -67,6 +68,8 @@ export interface VoiceEngineOptions {
   backendOptions?: SelectTranscriberOptions
   /** Text-to-speech speaker implementation. */
   speaker: Speaker
+  /** Plays a short sound; Web Audio unless a test replaces it. */
+  cue?: (kind: CueKind) => void
   /** Injected time provider (epoch ms). Mandatory for deterministic execution. */
   now: () => number
   /** Optional audio level meter for microphone activity rings. */
@@ -593,7 +596,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       micMeter.stop()
     }
 
-    speaker.cancel()
+    cancelSpeech()
 
     await releaseSession()
 
@@ -739,6 +742,26 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     await releaseTextProgram()
   }
 
+  /*
+   * A reply read in pieces: each piece waits for the one before it, and a
+   * cancel drops whatever is still queued.
+   */
+  let speechGeneration = 0
+  let speechTail: Promise<void> = Promise.resolve()
+  function cancelSpeech(): void {
+    speechGeneration++
+    speechTail = Promise.resolve()
+    speaker.cancel()
+  }
+  function appendSpeech(text: string): Promise<void> {
+    if (!text.trim()) return speechTail
+    const mine = speechGeneration
+    speaker.prefetch?.(text)
+    const turn = speechTail.then(() => (mine === speechGeneration ? speaker.speak(text) : undefined))
+    speechTail = turn.catch(() => {})
+    return turn
+  }
+
   /** What the program says through: nothing in pure transcription mode. */
   const speakerService: SpeakerService = {
       speak: (text: string) => {
@@ -747,7 +770,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           return Effect.void
         }
         return Effect.tryPromise({
-          try: () => Promise.resolve(speaker.speak(text)),
+          try: () => {
+            // A whole reply replaces whatever was queued.
+            speechGeneration++
+            speechTail = Promise.resolve()
+            return Promise.resolve(speaker.speak(text))
+          },
           catch: (err) =>
             new HostActionFailed({
               action: "speak",
@@ -756,7 +784,19 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
             }),
         })
       },
-      cancel: Effect.sync(() => speaker.cancel()),
+      cancel: Effect.sync(() => cancelSpeech()),
+      append: (text: string) => {
+        if (activeMode() === "transcription") return Effect.void
+        return Effect.tryPromise({
+          try: () => appendSpeech(text),
+          catch: (err) =>
+            new HostActionFailed({
+              action: "speak",
+              cause: err,
+              message: "Errore durante la sintesi vocale.",
+            }),
+        })
+      },
   }
 
   const programOptions = (): Parameters<typeof makeVoiceProgram>[0] => ({
@@ -768,6 +808,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     isPushToTalkActive: () => chordHeld || openedWithoutChord,
     onStateChange: (state) => setDialogState(state),
     onPartialTranscript: (text) => setPartialTranscript(text),
+    onSpeaking: (text) => {
+      if (activeMode() !== "transcription") setLastSpoken(text)
+    },
+    onCue: (kind) => {
+      if (activeMode() !== "transcription") (options.cue ?? playCue)(kind)
+    },
     onSpoken: (text) => {
       if (activeMode() === "transcription") return
       setLastSpoken(text)
@@ -942,7 +988,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (stopping) await stopping
       if (mode !== undefined) setSessionMode(mode)
       if (activeMode() === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
       if (isRunning()) return
       /*
@@ -1085,7 +1131,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         mode === "transcription" && activeMode() === "agent" && currentSettings().alwaysListen
       setSessionMode(mode)
       if (mode === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
     },
 
@@ -1103,7 +1149,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     async cancel(): Promise<void> {
       setPartialTranscript("")
-      speaker.cancel()
+      cancelSpeech()
       if (programHandle) {
         await Effect.runPromise(programHandle.cancel)
       }
@@ -1119,7 +1165,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (latched && isRunning()) {
         if (mode !== undefined && mode !== activeMode()) {
           setSessionMode(mode)
-          if (mode === "transcription") speaker.cancel()
+          if (mode === "transcription") cancelSpeech()
           pressEndsLatch = true
           return
         }
@@ -1142,7 +1188,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          same way pressing the other button does. */
       if (mode !== undefined) setSessionMode(mode)
       if (activeMode() === "transcription") {
-        speaker.cancel()
+        cancelSpeech()
       }
       if (!isRunning()) {
         await this.start(mode)

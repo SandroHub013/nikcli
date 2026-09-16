@@ -1670,3 +1670,72 @@ describe("after 0.7.0: dictation is held on its key", () => {
     expect(engine.isRunning()).toBe(false)
   })
 })
+
+describe("the agent's answer is read as it is written", () => {
+  function agentWith(askAgent: VoiceHost["askAgent"]) {
+    const host = new MockVoiceHost()
+    ;(host as VoiceHost).askAgent = askAgent
+    const speaker = createFakeSpeaker()
+    const cues: string[] = []
+    const engine = createVoiceEngine({
+      host,
+      transcriber: createFakeTranscriber(),
+      speaker,
+      cue: (kind) => cues.push(kind),
+      now: () => 10_000,
+      settings: { agentEngine: "auto" },
+    })
+    return { engine, speaker, cues }
+  }
+  const settle = (ms = 20) => new Promise((r) => setTimeout(r, ms))
+
+  test("the first sentence is said before the turn ends, and nothing is said twice", async () => {
+    let finish!: () => void
+    const { engine, speaker, cues } = agentWith(async ({ onText }) => {
+      onText?.("La capitale")
+      onText?.("La capitale è Canberra. Non Syd")
+      await new Promise<void>((r) => (finish = r))
+      onText?.("La capitale è Canberra. Non Sydney, come si pensa.")
+      return { ok: true, text: "La capitale è Canberra. Non Sydney, come si pensa. Fine", ran: true }
+    })
+    const done = engine.submitText("qual è la capitale dell'Australia?")
+    await settle()
+    expect(speaker.spoken).toEqual(["La capitale è Canberra."])
+    expect(engine.lastSpoken()).toBe("La capitale è Canberra.")
+    finish()
+    await done
+    // The last sentence had no space after it yet: it goes with the rest.
+    expect(speaker.spoken).toEqual(["La capitale è Canberra.", "Non Sydney, come si pensa. Fine"])
+    // The console gets the answer once, whole.
+    expect(engine.history().filter((e) => e.kind === "assistant").map((e) => (e as { text: string }).text)).toEqual([
+      "La capitale è Canberra. Non Sydney, come si pensa. Fine",
+    ])
+    expect(cues).toEqual([])
+  })
+
+  test("a sound says the request was taken when nothing is ready after a second and a half", async () => {
+    const { engine, speaker, cues } = agentWith(async () => {
+      await settle(1_700)
+      return { ok: true, text: "Fatto adesso.", ran: true }
+    })
+    await engine.submitText("controlla le sessioni")
+    expect(cues).toEqual(["thinking"])
+    expect(speaker.spoken).toEqual(["Fatto adesso."])
+  })
+
+  test("a quick answer makes no sound", async () => {
+    const { engine, cues } = agentWith(async () => ({ ok: true, text: "Subito.", ran: true }))
+    await engine.submitText("ciao")
+    await settle(1_600)
+    expect(cues).toEqual([])
+  })
+
+  test("a failure after the first sentence is said after it", async () => {
+    const { engine, speaker } = agentWith(async ({ onText }) => {
+      onText?.("Apro la sessione. ")
+      return { ok: false, text: "Claude Code non ha finito in tempo.", ran: true }
+    })
+    await engine.submitText("raccontami la storia di Roma")
+    expect(speaker.spoken).toEqual(["Apro la sessione.", "Claude Code non ha finito in tempo."])
+  })
+})

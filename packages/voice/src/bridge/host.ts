@@ -174,6 +174,12 @@ export interface VoiceHost {
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
     signal?: AbortSignal
+    /**
+     * The answer so far, each time it grows. Each call extends the one
+     * before, and the returned `text` extends the last: the assistant reads
+     * the finished sentences while the rest is still being written.
+     */
+    onText?: (soFar: string) => void
   }): Promise<{
     ok: boolean
     text: string

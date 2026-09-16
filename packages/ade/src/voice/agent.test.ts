@@ -78,6 +78,29 @@ describe("voice/agent", () => {
     return { runTurn, requests, stops: () => stops }
   }
 
+  test("the answer is passed on as it is written, only when it grows", async () => {
+    const requests: TurnRequest[] = []
+    const talk = (streaming: string) => ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never
+    const runTurn = (request: TurnRequest) => {
+      requests.push(request)
+      request.onUpdate?.(talk("Ci sono"))
+      request.onUpdate?.(talk("Ci sono"))
+      request.onUpdate?.(talk("Ci sono due sessioni."))
+      return {
+        result: Promise.resolve({ status: "done", text: "Ci sono due sessioni.", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+        stop: () => {},
+      }
+    }
+    const agent = createVoiceAgent({ runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    const heard: string[] = []
+    await agent.ask({ text: "quante sessioni?", engine: "claude", onText: (soFar) => heard.push(soFar) })
+    expect(requests[0]!.partial).toBe(true)
+    expect(heard).toEqual(["Ci sono", "Ci sono due sessioni."])
+    // Without a listener, the turn is not asked for pieces.
+    await agent.ask({ text: "quante sessioni?", engine: "claude" })
+    expect(requests[1]!.partial).toBeUndefined()
+  })
+
   test("a turn carries the instructions, the project and an ade-msg identity, and continues the conversation", async () => {
     const runner = fakeRunner([
       { text: "Ci sono due sessioni.", sessionId: "s1" },

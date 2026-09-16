@@ -94,6 +94,18 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const ready = new Set<string>()
   const installing = new Map<string, Promise<void>>()
   let warmed: string | undefined
+  /* Sentences asked for ahead of their turn, by voice and text. */
+  const ahead = new Map<string, Promise<ArrayBuffer>>()
+  const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
+  function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+    const key = aheadKey(voice, sentence)
+    const early = ahead.get(key)
+    if (early) {
+      ahead.delete(key)
+      return early
+    }
+    return deps.synthesize(voice, sentence)
+  }
 
   function ensure(voice: string): void {
     if (ready.has(voice) || installing.has(voice)) return
@@ -133,11 +145,15 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     playing?.abort()
     playing = undefined
     deps.fallback.cancel()
+    ahead.clear()
   }
 
   return {
     async speak(text: string): Promise<void> {
+      // What was asked for ahead belongs to this reply: kept across the stop.
+      const early = new Map(ahead)
       stopAll()
+      for (const [key, pending] of early) ahead.set(key, pending)
       const mine = generation
       if (!text || text.trim().length === 0) return
       const voice = deps.voice()
@@ -149,7 +165,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
       const sentences = splitSentences(text)
       // Requested together, played in order: the host works through them while the first plays.
-      const audio = sentences.map((sentence) => deps.synthesize(voice, sentence))
+      const audio = sentences.map((sentence) => synthesize(voice, sentence))
       audio.forEach((pending) => pending.catch(() => {}))
       for (let i = 0; i < sentences.length; i++) {
         let wav: ArrayBuffer
@@ -178,6 +194,18 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
     cancel(): void {
       stopAll()
+    },
+
+    prefetch(text: string): void {
+      const voice = deps.voice()
+      if (voice === "system" || !ready.has(voice)) return
+      for (const sentence of splitSentences(text)) {
+        const key = aheadKey(voice, sentence)
+        if (ahead.has(key)) continue
+        const pending = deps.synthesize(voice, sentence)
+        pending.catch(() => {})
+        ahead.set(key, pending)
+      }
     },
 
     prepare(): void {
