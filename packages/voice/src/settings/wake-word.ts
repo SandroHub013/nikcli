@@ -55,6 +55,39 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
 const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "eh", "e"])
 
 /*
+ * «e» and «eh» are how the recogniser often writes «ei», and also how a
+ * sentence about someone called Nick begins: «E Nick ha detto che…» from the
+ * television. With these in front, the name only counts when a pause follows
+ * it, or when what follows is not the sentence going on about him.
+ */
+const WEAK_OPENERS: ReadonlySet<string> = new Set(["e", "eh"])
+
+/* Words that carry on a sentence about the name rather than address it. */
+const ABOUT_HIM: ReadonlySet<string> = new Set([
+  "ha", "hanno", "aveva", "avrà", "avrebbe", "è", "era", "sarà", "sarebbe", "sta", "stava",
+  "dice", "diceva", "disse", "dirà", "fa", "faceva", "fece", "va", "andava", "può", "poteva",
+  "deve", "doveva", "vuole", "voleva", "sa", "sapeva", "non", "che", "e", "di", "del", "della",
+  "lo", "la", "gli", "le", "si", "ci", "ne", "invece", "poi", "anche", "però", "ma", "quando",
+  "mentre", "sono", "stesso", "come",
+])
+
+/**
+ * Whether «e nik …» is a sentence about Nick: judged on the words as heard,
+ * accents and punctuation included, since both are what tells.
+ */
+function tellsAbout(utterance: string): boolean {
+  const heard = utterance.toLowerCase()
+  // A pause after the name, which the recogniser writes as punctuation.
+  if (/\bni(?:c?k|c)\s*[,.;:!?…]/u.test(heard)) return false
+  const words = heard.split(/[^\p{L}']+/u).filter(Boolean)
+  const at = words.findIndex((word) => /^(?:e|eh)?ni(?:c?k|c)$/.test(word))
+  const next = at >= 0 ? words[at + 1] : undefined
+  if (!next) return false
+  // «andò», «parlò»: the past of someone else.
+  return ABOUT_HIM.has(next) || next.endsWith("ò")
+}
+
+/*
  * «ei nik» written as one word, which the recogniser does when it is said
  * quickly: «einik», «heynick». Split back into greeting and name.
  */
@@ -114,6 +147,9 @@ export function matchesWakeWord(
 
     if (allMatched) {
       const remainder = uTokens.slice(i + wTokens.length).join(" ").trim()
+      if (i > 0 && WEAK_OPENERS.has(uTokens[i - 1]!) && remainder && tellsAbout(utterance)) {
+        return { matched: false, remainder: "" }
+      }
       return {
         matched: true,
         remainder,

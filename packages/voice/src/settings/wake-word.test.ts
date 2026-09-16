@@ -129,3 +129,26 @@ describe("only the name itself", () => {
     }
   })
 })
+
+describe("«e nik» and «eh nik» from a television", () => {
+  test("a sentence about Nick is not a call", () => {
+    for (const heard of [
+      "E Nick ha detto che domani piove",
+      "e nick è arrivato tardi",
+      "eh Nik non c'era",
+      "E Nick andò a casa",
+      "e nik che fa adesso",
+    ]) {
+      expect(matchesWakeWord(heard, "nik").matched).toBe(false)
+    }
+  })
+
+  test("a request, a pause after the name, or the name alone still call it", () => {
+    expect(matchesWakeWord("e nik apri il browser", "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    expect(matchesWakeWord("E Nick, ha detto qualcosa la sessione 2?", "nik").matched).toBe(true)
+    expect(matchesWakeWord("eh nik", "nik")).toEqual({ matched: true, remainder: "" })
+    // «ei» and the bare name are not in doubt.
+    expect(matchesWakeWord("ei nik ha finito la sessione 2?", "nik").matched).toBe(true)
+    expect(matchesWakeWord("nik è finita la sessione?", "nik").matched).toBe(true)
+  })
+})
