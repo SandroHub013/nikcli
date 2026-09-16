@@ -229,9 +229,19 @@ export function devConfig(port: number): string {
  * reaches a test window. That binary exists only where `Cargo.toml` declares
  * the `test-exe` feature, so the flags follow the manifest: on a branch that
  * predates it the dev build stays `ade-desktop`.
+ *
+ * `--no-watch` unless asked otherwise. `tauri dev` watches the Rust sources
+ * and, on a change, rebuilds and *restarts the app*: the window closes under
+ * whoever is using it. That is fine while writing Rust and wrong everywhere
+ * else — a session driving ADE Test, a person trying something, a measurement
+ * — and it happened in the middle of a live trial, taking the window away
+ * from the user mid-sentence. A rebuild is now asked for by stopping and
+ * starting again, which is one command and never a surprise.
  */
-export function tauriDevArgs(configPath: string, cargoToml: string): string[] {
+export function tauriDevArgs(configPath: string, cargoToml: string, options: { watch?: boolean } = {}): string[] {
   const args = ["x", "tauri", "dev", "--config", "src-tauri/tauri.test.conf.json", "--config", configPath]
+  if (!options.watch) args.push("--no-watch")
+  // Everything after `--` belongs to cargo, so the flag goes before it.
   if (/^\s*test-exe\s*=/m.test(cargoToml)) args.push("--features", "test-exe", "--", "--bin", "ade-test")
   return args
 }
