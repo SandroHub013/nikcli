@@ -1109,10 +1109,12 @@ pub fn run() {
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
-            let roots = match state.0.lock() {
+            let mut roots = match state.0.lock() {
                 Ok(guard) => guard.clone(),
                 Err(_) => Vec::new(),
             };
+            // The recent takes' own files, one by one: their folder is not a root.
+            roots.extend(ctx.app_handle().state::<record::Recorder>().playable());
             // The asking page's own origin, as the webview reports it: the
             // one origin that may read a take back into a canvas.
             let origin = ctx
@@ -1142,6 +1144,7 @@ pub fn run() {
             record::record_start,
             record::record_stop,
             record::record_state,
+            record::record_write,
             allow_write_root,
             git_run,
             bot_delete,

@@ -41,6 +41,8 @@ export interface CommandContext {
   recording?: boolean
   /** The chosen quality, written out with its size per minute. */
   recordQuality?: string
+  /** The microphone is on for the takes the user starts. */
+  recordMic?: boolean
   /** Commands contributed by loaded plugins. Empty when none are loaded. */
   pluginCommands?: PluginCommandEntry[]
 }
@@ -195,6 +197,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       title: "Esporta l'ultima registrazione con zoom e clic",
       group: "Vista",
       keywords: ["video", "esporta", "zoom", "clic", "pubblicità", "promo"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
+    },
+    {
+      id: "record.mic",
+      title: ctx.recordMic ? "Registrazioni senza microfono" : "Registrazioni con il microfono",
+      group: "Vista",
+      keywords: ["video", "registra", "microfono", "audio", "voce"],
       enabled: ctx.hasHost,
       disabledReason: ctx.hasHost ? undefined : "La registrazione funziona solo nell'app desktop",
     },

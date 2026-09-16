@@ -67,6 +67,8 @@ export interface Recording {
 export interface RecordingState {
   readonly recording: boolean
   readonly path: string | null
+  /** The window is minimised, so the capture is getting no frames. */
+  readonly minimized?: boolean
 }
 
 export type RecordState =

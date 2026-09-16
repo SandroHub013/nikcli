@@ -145,7 +145,9 @@ import { buildCommands, keepsPaletteOpen } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
-import { RECORD_VERBS, runRecordRequest } from "../record/record-panel"
+import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
+import { RecordConsentDialog } from "../record/consent-dialog"
+import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
   qualityLevel,
@@ -617,11 +619,28 @@ export function Workbench() {
       }
     })(),
   )
+  /** The microphone for takes the user starts: off until switched on (`record.mic`). */
+  const [recordMic, setRecordMic] = createSignal(
+    (() => {
+      try {
+        return localStorage.getItem("ade.record.mic") === "on"
+      } catch {
+        return false
+      }
+    })(),
+  )
   const recorder = createRecorder({
     start: async (target, dir, name, quality) => {
       const host = await getHost()
       if (!host?.recordStart) throw new Error("La registrazione funziona solo nell'app desktop.")
-      return host.recordStart(target, dir, name, quality)
+      // Covered before the first frame exists, uncovered only once the take is over.
+      coverSecrets(true)
+      try {
+        return await host.recordStart(target, dir, name, quality)
+      } catch (error) {
+        coverSecrets(false)
+        throw error
+      }
     },
     stop: async () => {
       const host = await getHost()
@@ -630,11 +649,11 @@ export function Workbench() {
     },
     writeText: async (path, text) => {
       const host = await getHost()
-      await host?.writeTextFile?.(path, text)
+      await host?.recordWrite?.(path, new TextEncoder().encode(text))
     },
     writeBytes: async (path, bytes) => {
       const host = await getHost()
-      await host?.writeBytes?.(path, bytes)
+      await host?.recordWrite?.(path, bytes)
     },
     startMic: () => startMicTake(voiceSettings().inputDeviceId),
     frame: (target) => ({
@@ -665,17 +684,55 @@ export function Workbench() {
     return chosen
   }
 
-  const startRecording = async (target: Parameters<typeof recorder.start>[0]) => {
+  /*
+   * The folder is not made a write root: Rust writes and serves only the
+   * files of the takes it started (`record_write`, `ade-media`).
+   */
+  const startRecording = async (target: Parameters<typeof recorder.start>[0], options: { mic: boolean }) => {
     if (!recordDir() && !(await pickRecordDir())) return "Nessuna cartella scelta: registrazione annullata."
-    const dir = recordDir()
-    /*
-     * The folder becomes a root the window may write to and play from: the
-     * tracks are written there, and the export reads the take back through
-     * the same `ade-media` scheme the video panel uses.
-     */
-    if (dir) await (await getHost())?.allowWriteRoot?.(dir).catch(() => {})
-    return recorder.start(target)
+    return recorder.start(target, options)
   }
+
+  createEffect(() => {
+    if (recordState().status === "idle") coverSecrets(false)
+  })
+
+  /*
+   * A minimised window ends the take: the capture gets no frames then, and a
+   * video frozen on the last one is not what anybody meant to record.
+   */
+  createEffect(() => {
+    if (recordState().status !== "recording") return
+    const watch = setInterval(() => {
+      void getHost()
+        .then((host) => host?.recordState?.())
+        .then(async (now) => {
+          if (!now?.minimized || recordState().status !== "recording") return
+          const problem = await recorder.stop()
+          report(problem ?? "Registrazione fermata: la finestra di ADE è stata ridotta a icona.", "info")
+        })
+        .catch(() => {})
+    }, 1000)
+    onCleanup(() => clearInterval(watch))
+  })
+
+  /** An agent's take waits here for the user's answer. */
+  const [recordAsk, setRecordAsk] = createSignal<{
+    target: Parameters<typeof recorder.start>[0]
+    answer: (consent: RecordConsent) => void
+  }>()
+  const confirmRecording = (target: Parameters<typeof recorder.start>[0]) =>
+    new Promise<RecordConsent>((resolve) => {
+      // One question at a time: a second agent asking meanwhile is refused.
+      if (recordAsk()) return resolve({ allowed: false, mic: false })
+      setRecordAsk({
+        target,
+        answer: (consent) => {
+          setRecordAsk(undefined)
+          resolve(consent)
+        },
+      })
+    })
 
   /** The last take, remembered so "esporta" knows which one. */
   const [lastTake, setLastTake] = createSignal<string | undefined>()
@@ -691,7 +748,7 @@ export function Workbench() {
     if (!video) return report("Nessuna registrazione da esportare in questa sessione.", "info")
     if (exporting()) return report("Un'esportazione è già in corso.", "info")
     const host = await getHost()
-    if (!host?.readTextFile || !host.writeBytes) return report("L'esportazione funziona solo nell'app desktop.")
+    if (!host?.readTextFile || !host.recordWrite) return report("L'esportazione funziona solo nell'app desktop.")
     setExporting(true)
     report("Esporto il video con zoom e clic: dura quanto la registrazione.", "info")
     try {
@@ -709,7 +766,7 @@ export function Workbench() {
         bitrate: level.bitrate,
       })
       const out = `${video.replace(/\.mp4$/i, "")}.promo.${result.extension}`
-      await host.writeBytes(out, result.bytes)
+      await host.recordWrite(out, result.bytes)
       report(`Video pronto: ${out}`, "info")
     } catch (failure) {
       report(`Esportazione non riuscita: ${failure instanceof Error ? failure.message : String(failure)}`)
@@ -745,7 +802,8 @@ export function Workbench() {
     verbs: RECORD_VERBS,
     run: (request) =>
       runRecordRequest(request, {
-        start: (target) => startRecording(target),
+        confirm: confirmRecording,
+        start: (target, options) => startRecording(target, { mic: options.mic === true }),
         stop: () => recorder.stop(),
         paneRect: (name) => {
           const pane = wb().panes.find((p, index) => p.id === name || p.title === name || String(index + 1) === name)
@@ -3224,8 +3282,19 @@ export function Workbench() {
       void voiceEngine.toggle()
     } else if (id === "record.toggle") {
       const problem =
-        recordState().status === "recording" ? await recorder.stop() : await startRecording({ kind: "window" })
+        recordState().status === "recording"
+          ? await recorder.stop()
+          : await startRecording({ kind: "window" }, { mic: recordMic() })
       if (problem) report(problem)
+    } else if (id === "record.mic") {
+      const next = !recordMic()
+      setRecordMic(next)
+      try {
+        localStorage.setItem("ade.record.mic", next ? "on" : "off")
+      } catch {
+        // Kept for this session only.
+      }
+      report(next ? "Le tue registrazioni includeranno il microfono." : "Le tue registrazioni saranno senza microfono.", "info")
     } else if (id === "record.quality") {
       /*
        * Cycled rather than a submenu: three levels, and the palette row
@@ -3279,6 +3348,7 @@ export function Workbench() {
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
       recording: recordState().status === "recording",
+      recordMic: recordMic(),
       recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
       // Read through the registry signal, so a plugin loading or being torn
       // down changes the palette without anything having to refresh it.
@@ -4978,6 +5048,10 @@ export function Workbench() {
         {/* The user must never be unsure whether ADE is filming: the badge
             stays on top of everything, says where the file is going, and
             stops the take when clicked. */}
+        <Show when={recordAsk()}>
+          {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+        </Show>
+
         <Show when={recordState().status !== "idle"}>
           <button
             type="button"

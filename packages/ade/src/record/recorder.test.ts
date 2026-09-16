@@ -145,7 +145,7 @@ describe("record/recorder tracks", () => {
 
   test("the voice, the microphone and the events each get a file beside the video", async () => {
     const { recorder, bytes, texts, advance } = withTracks({ extension: "webm", bytes: new Uint8Array([1, 2, 3]) })
-    await recorder.start({ kind: "window" })
+    await recorder.start({ kind: "window" }, { mic: true })
     advance(200)
     recorder.noteVoice(wav([100, 100]), "Ci sono due sessioni.")
     advance(800)
@@ -163,10 +163,32 @@ describe("record/recorder tracks", () => {
 
   test("a refused microphone records the take anyway, without that track", async () => {
     const { recorder, bytes } = withTracks({ extension: "webm", refuse: true })
-    expect(await recorder.start({ kind: "window" })).toBeUndefined()
+    expect(await recorder.start({ kind: "window" }, { mic: true })).toBeUndefined()
     expect(recorder.state().status).toBe("recording")
     await recorder.stop()
     expect(bytes).toEqual([])
+  })
+
+  test("the microphone stays closed unless the take asked for it", async () => {
+    let opened = 0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => ({ path: "C:/video/ADE.mp4" }),
+      writeText: async () => {},
+      writeBytes: async () => {},
+      startMic: async () => {
+        opened++
+        return { extension: "webm", stop: async () => new Uint8Array([1]) }
+      },
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: () => {},
+    })
+    await recorder.start({ kind: "window" })
+    await recorder.stop()
+    await recorder.start({ kind: "window" }, { mic: false })
+    await recorder.stop()
+    expect(opened).toBe(0)
   })
 
   test("a voice clip said outside a take is not kept for the next one", async () => {

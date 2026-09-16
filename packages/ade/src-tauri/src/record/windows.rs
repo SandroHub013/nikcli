@@ -27,7 +27,7 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use super::{crop_in, even, fit_in, Quality, Target};
+use super::{compose, crop_in, even, fit_in, Quality, Target};
 
 /// The pace the capture is throttled to, from the chosen frame rate.
 fn frame_interval(fps: u32) -> Duration {
@@ -47,6 +47,8 @@ const BITRATE: u32 = 8_000_000;
 struct Take {
     encoder: Option<VideoEncoder>,
     crop: Option<(u32, u32, u32, u32)>,
+    /// Reused between pane frames: a frame is several megabytes.
+    scratch: Vec<u8>,
     /// Kept so a failure mid-take is told to the user instead of a silent stop.
     problem: Arc<Mutex<Option<String>>>,
 }
@@ -88,17 +90,21 @@ impl GraphicsCaptureApiHandler for Take {
             ContainerSettingsBuilder::default().sub_type(ContainerSettingsSubType::MPEG4),
             &flags.path,
         )?;
-        Ok(Self { encoder: Some(encoder), crop: flags.crop, problem: flags.problem })
+        Ok(Self { encoder: Some(encoder), crop: flags.crop, scratch: Vec::new(), problem: flags.problem })
     }
 
     fn on_frame_arrived(&mut self, frame: &mut Frame<'_>, _control: InternalCaptureControl) -> Result<(), Self::Error> {
         let Some(encoder) = self.encoder.as_mut() else { return Ok(()) };
+        // Secret fields are never in a frame: the page covers them for as
+        // long as a take runs (`data-ade-recording` in index.css).
         match self.crop {
             None => encoder.send_frame(frame)?,
             Some((x, y, width, height)) => {
                 let timestamp = frame.timestamp().map_err(|error| error.to_string())?.Duration;
                 let mut buffer = frame.buffer_crop(x, y, x + width, y + height)?;
-                encoder.send_frame_buffer(buffer.as_raw_buffer(), timestamp)?;
+                let (width, height, pitch) = (buffer.width(), buffer.height(), buffer.row_pitch());
+                compose(buffer.as_raw_buffer(), width, height, pitch, &mut self.scratch);
+                encoder.send_frame_buffer(&self.scratch, timestamp)?;
             }
         }
         Ok(())

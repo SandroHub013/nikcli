@@ -62,8 +62,16 @@ export interface RecorderDeps {
   onState: (state: RecordState) => void
 }
 
+export interface StartOptions {
+  /**
+   * Records the microphone too. Off unless asked, take by take: a take an
+   * agent started must not also be a recording of the room.
+   */
+  readonly mic?: boolean
+}
+
 export interface Recorder {
-  start(target: RecordTarget): Promise<string | undefined>
+  start(target: RecordTarget, options?: StartOptions): Promise<string | undefined>
   stop(): Promise<string | undefined>
   /** Notes something worth keeping: ignored when nothing is being recorded. */
   note(event: RecordEvent): void
@@ -116,7 +124,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
   }
 
   return {
-    async start(target) {
+    async start(target, options = {}) {
       const problem = startProblem(state)
       if (problem) return problem
       const dir = deps.dir()
@@ -137,7 +145,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         const frame = deps.frame?.(target)
         if (frame) log.add({ kind: "frame", at: startedAt, ...frame })
         // The microphone is extra: a refusal records the take without it.
-        mic = await deps.startMic?.().catch(() => undefined)
+        mic = options.mic ? await deps.startMic?.().catch(() => undefined) : undefined
         settle({
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt },

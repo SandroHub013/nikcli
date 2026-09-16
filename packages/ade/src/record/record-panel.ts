@@ -7,6 +7,7 @@
  */
 
 import type { PanelOutcome, PanelRequest, PanelVerb } from "../panels/protocol"
+import type { StartOptions } from "./recorder"
 import type { RecordTarget } from "./recording"
 
 export const RECORD_VERBS: readonly PanelVerb[] = [
@@ -15,8 +16,21 @@ export const RECORD_VERBS: readonly PanelVerb[] = [
   { name: "state", usage: "state", summary: "dice se si sta registrando e dove" },
 ]
 
+/** What the user answered when an agent asked to record. */
+export interface RecordConsent {
+  readonly allowed: boolean
+  /** The microphone, only when the user switched it on for this take. */
+  readonly mic: boolean
+}
+
 export interface RecordPanelDeps {
-  start: (target: RecordTarget) => Promise<string | undefined>
+  /**
+   * Asks the user, every time. A take films the whole window and can hear
+   * the room: no agent starts one on its own, and no earlier yes carries
+   * over to the next take.
+   */
+  confirm: (target: RecordTarget) => Promise<RecordConsent>
+  start: (target: RecordTarget, options: StartOptions) => Promise<string | undefined>
   stop: () => Promise<string | undefined>
   /** The pane's rectangle in window pixels, or undefined when there is no such pane. */
   paneRect: (name: string) => { x: number; y: number; width: number; height: number } | undefined
@@ -34,8 +48,13 @@ export async function runRecordRequest(request: PanelRequest, deps: RecordPanelD
         // The rectangle travels with the target: the host crops each frame.
         target = { kind: "pane", paneId: pane, ...rect }
       }
-      const problem = await deps.start(target)
-      return problem ? { ok: false, reason: problem } : { ok: true, detail: pane ? `registro il pannello ${pane}` : "registro la finestra" }
+      if (deps.state().recording) return { ok: false, reason: "una registrazione è già in corso" }
+      const consent = await deps.confirm(target)
+      if (!consent.allowed) return { ok: false, reason: "l'utente non ha acconsentito alla registrazione" }
+      const problem = await deps.start(target, { mic: consent.mic })
+      if (problem) return { ok: false, reason: problem }
+      const what = pane ? `il pannello ${pane}` : "la finestra"
+      return { ok: true, detail: `registro ${what}${consent.mic ? " con il microfono" : ", senza microfono"}` }
     }
     case "stop": {
       const before = deps.state()

@@ -214,6 +214,13 @@ describe("surface commands", () => {
     expect(offered?.disabledReason).toContain("desktop")
   })
 
+  test("the microphone for recordings is a switch that says what it will do", () => {
+    const off = buildCommands(context({ workbench: createWorkbench() }))
+    expect(off.find((c) => c.id === "record.mic")?.title).toBe("Registrazioni con il microfono")
+    const on = buildCommands(context({ workbench: createWorkbench(), recordMic: true }))
+    expect(on.find((c) => c.id === "record.mic")?.title).toBe("Registrazioni senza microfono")
+  })
+
   test("offers voice.toggle, toggling title and disabling when voice unavailable", () => {
     const defaultCmds = buildCommands(context({ workbench: createWorkbench(), voiceAvailable: true }))
     const voiceCmd = defaultCmds.find((c) => c.id === "voice.toggle")

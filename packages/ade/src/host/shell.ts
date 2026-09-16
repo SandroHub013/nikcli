@@ -142,6 +142,11 @@ export interface Host {
   ) => Promise<RecordingState>
   recordStop?: () => Promise<RecordingState>
   recordState?: () => Promise<RecordingState>
+  /**
+   * Writes one track of a recent take (events, voice, microphone, promo).
+   * The take's folder is not a write root: this is the only way in.
+   */
+  recordWrite?: (path: string, contents: Uint8Array) => Promise<void>
   /** The mailbox folder (per worktree in ADE Test, see `ADE_MAILBOX_ROOT`). */
   mailboxDir?: () => Promise<string>
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
@@ -625,6 +630,11 @@ export async function getHost(): Promise<Host | undefined> {
     async recordStart(target, dir, name, quality) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<RecordingState>("record_start", { target, dir, name, quality: quality ?? null })
+    },
+
+    async recordWrite(path, contents) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("record_write", { path, contents: Array.from(contents) })
     },
 
     async recordStop() {
