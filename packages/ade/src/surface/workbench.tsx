@@ -1226,7 +1226,7 @@ export function Workbench() {
        */
       if (activity?.state === "busy") return
       session.write("\r")
-      appendLine(paneId, "Invio ripetuto: il messaggio non era partito", "note")
+      appendLine(paneId, t("note.resent"), "note")
     }
   }
 
@@ -1333,7 +1333,7 @@ export function Workbench() {
         entry.rings += 1
         entry.ringAt = now
         void typeLine(session, formatBell(entry, panes.find((pane) => pane.id === entry.from), entry.chars))
-        appendLine(entry.paneId, `Avviso ripetuto: messaggio non ancora letto (${entry.rings}/3)`, "note")
+        appendLine(entry.paneId, t("note.rang", entry.rings), "note")
       } else {
         inboxPending.splice(inboxPending.indexOf(entry), 1)
         if (action === "warn" && entry.from && running.has(entry.from)) {
@@ -1737,7 +1737,7 @@ export function Workbench() {
         request.rings = (request.rings ?? 0) + 1
         saveRequests()
         session.write("\r")
-        appendLine(request.to, `Invio ripetuto: la richiesta ${request.id} non era partita`, "note")
+        appendLine(request.to, t("note.resentRequest", request.id), "note")
         continue
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
@@ -1746,7 +1746,7 @@ export function Workbench() {
         request.nudgedAt = now
         saveRequests()
         void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)))
-        appendLine(request.to, `Promemoria inviato: la richiesta ${request.id} aspetta una risposta`, "note")
+        appendLine(request.to, t("note.nudged", request.id), "note")
       }
     }
 
@@ -1777,8 +1777,8 @@ export function Workbench() {
       }
       await settle(host, message.ref, message.text)
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
-      if (sender) appendLine(sender.id, `Risposta inviata${caller ? ` a ${caller.title}` : ""} (richiesta ${message.ref})`, "note")
-      if (caller) appendLine(caller.id, `Risposta ricevuta da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
+      if (sender) appendLine(sender.id, (caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref)), "note")
+      if (caller) appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note")
       await answer(
         `ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}` +
           (request?.autoClose ? " — se non ha lavoro da integrare questa sessione ora si chiude" : " — la sessione resta aperta per i seguiti"),
@@ -1799,7 +1799,7 @@ export function Workbench() {
       if (request?.autoClose) {
         setTimeout(() => {
           void closeTree(host, request.to, false).then((outcome) => {
-            const note = "error" in outcome ? `Resta aperta: ${outcome.error}` : `Chiusa dopo la risposta: ${outcome.closed.join(", ")}`
+            const note = "error" in outcome ? t("note.keptOpen", outcome.error) : t("note.closedAfterReply", outcome.closed.join(", "))
             appendLine(request.to, note, "note")
             if (caller) appendLine(caller.id, note, "note")
           })
@@ -1823,7 +1823,7 @@ export function Workbench() {
       const caller = panes.find((pane) => pane.id === request.from)
       const line = formatUpdate(request.id, message.state, message.text, sender)
       await host.mailboxState?.(request.id, line, "update").catch(() => {})
-      if (caller) appendLine(caller.id, `Aggiornamento da ${sender?.title ?? "una sessione"}: ${message.state} — ${message.text}`, "note")
+      if (caller) appendLine(caller.id, t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text), "note")
       await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta`)
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
@@ -1915,7 +1915,7 @@ export function Workbench() {
         return true
       }
       await excludeAdeResults(host, owner.root)
-      appendLine(sender.id, `Memoria: ${entry.line.trim()}`, "note")
+      appendLine(sender.id, t("note.memory", entry.line.trim()), "note")
       await answer(memoryAddReply(path, next.length))
       return true
     }
@@ -2130,7 +2130,7 @@ export function Workbench() {
         spawnedBy.set(created.id, message.from)
         saveSpawned()
       }
-      if (sender) appendLine(sender.id, `Subagent avviato: ${created.title}`, "note")
+      if (sender) appendLine(sender.id, t("note.subagent", created.title), "note")
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
@@ -2161,7 +2161,7 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
-      appendLine(target.pane.id, `Interrotta da ${sender?.title ?? "una sessione"}`, "note")
+      appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note")
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await answer(
@@ -2222,7 +2222,7 @@ export function Workbench() {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
         if (updated) void reopen(updated)
       }
-      appendLine(pane.id, `Riavviata da ${sender?.title ?? "una sessione"}${message.model ? ` con il modello ${message.model}` : ""}${message.fresh ? ", da zero" : ""}`, "note")
+      appendLine(pane.id, t(message.fresh ? "note.restartedFresh" : "note.restarted", sender?.title ?? t("note.someSession"), message.model ?? ""), "note")
       // The note is typed once the new process is up, like any held line; given up after a minute.
       const noteText = `[Nota di ripresa da ${sender?.title ?? "una sessione"}]: ${message.note.trim()}`
       const waitStart = Date.now()
@@ -2317,9 +2317,9 @@ export function Workbench() {
       openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text) })
       saveRequests()
     }
-    const what = message.kind === "ask" ? "Richiesta" : "Messaggio"
-    appendLine(target.pane.id, `${what} ricevuto da ${sender?.title ?? "una sessione"}: ${message.text}`, "note")
-    if (sender) appendLine(sender.id, `${what} inviato a ${target.pane.title}: ${message.text}`, "note")
+    const ask = message.kind === "ask"
+    appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
     // A held message's sender was answered when it was held, and has stopped listening since.
     if (held.delete(id)) return true
     await answer(`ok: consegnato a ${panes.indexOf(target.pane) + 1} "${target.pane.title}"`)
@@ -2346,7 +2346,7 @@ export function Workbench() {
         setNotices((list) =>
           addNotice(list, {
             kind: "info",
-            text: `ADE ${update.version} è disponibile`,
+            text: t("update.available", update.version),
             href: update.url,
             at: Date.now(),
           }),
@@ -2600,7 +2600,7 @@ export function Workbench() {
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
     migratedToWakeWord || migratedToAlwaysListen
-      ? `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${initialVoice.settings.wakeWord}». Per non farlo ascoltare da solo scegli «Solo quando lo apri» qui sotto; per il microfono aperto che risponde a tutto, «Acceso e spento».`
+      ? t("voice.alwaysListening", initialVoice.settings.wakeWord)
       : undefined,
   )
 
@@ -3938,7 +3938,7 @@ export function Workbench() {
 
     const error = await host.writeTextFile(buffer.path, written)
     if (error) {
-      report(`Salvataggio fallito: ${error}`)
+      report(t("editor.saveFailed", String(error)))
       return
     }
 
@@ -4271,7 +4271,7 @@ export function Workbench() {
         try {
           const assigned = await host.assignedSecrets(agent.command)
           secretNames = assigned.map((key) => key.name)
-          if (assigned.length > 0) appendLine(paneId, `Chiavi API passate: ${assigned.map((key) => key.env).join(", ")}`, "note")
+          if (assigned.length > 0) appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note")
         } catch (failure) {
           appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note")
         }

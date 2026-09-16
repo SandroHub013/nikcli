@@ -118,7 +118,7 @@ export function ModelPane(props: ModelPaneProps) {
   const loadNow = async (path: string) => {
     const mine = ++generation
     if (!props.readBytes) {
-      setError("questo host non può leggere file binari")
+      setError(t("media.noBinary"))
       return
     }
     const read = props.readBytes
@@ -138,7 +138,7 @@ export function ModelPane(props: ModelPaneProps) {
       if (mine !== generation) return
       framed = path
       setStats(result.stats)
-      setNote(result.missing.length > 0 ? `risorse non trovate: ${result.missing.join(", ")}` : undefined)
+      setNote(result.missing.length > 0 ? t("model.missing", result.missing.join(", ")) : undefined)
       watched = result.files
       // Files first seen in this load have no earlier stamp; one poll re-reads them.
       loadedStamp = sameFiles(expected, watched) ? before : ""
@@ -234,7 +234,7 @@ export function ModelPane(props: ModelPaneProps) {
     const chosen = await props.onPick?.()
     if (!chosen) return
     if (!isModel(chosen)) {
-      setNote(`formato non supportato; supportati: ${MODEL_EXTENSIONS.join(", ")}`)
+      setNote(t("media.unsupported", MODEL_EXTENSIONS.join(", ")))
       return
     }
     props.onOpen(chosen)
@@ -242,7 +242,7 @@ export function ModelPane(props: ModelPaneProps) {
 
   const captureNow = async () => {
     try {
-      setNote(`vista salvata in ${await controller.capture()}`)
+      setNote(t("model.captured", await controller.capture()))
     } catch (failure) {
       setNote(failure instanceof Error ? failure.message : String(failure))
     }

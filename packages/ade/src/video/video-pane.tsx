@@ -190,7 +190,7 @@ export function VideoPane(props: VideoPaneProps) {
     const chosen = await props.onPick?.()
     if (!chosen) return
     if (!isPlayable(chosen)) {
-      setNote(`formato non riproducibile; supportati: ${PLAYABLE_EXTENSIONS.join(", ")}`)
+      setNote(t("video.unplayable", PLAYABLE_EXTENSIONS.join(", ")))
       return
     }
     setNote(undefined)
@@ -202,7 +202,7 @@ export function VideoPane(props: VideoPaneProps) {
       const written = await controller.capture()
       // Said out loud, because a capture that lands somewhere the user cannot
       // guess is the same as no capture.
-      setNote(`fotogramma salvato in ${written}`)
+      setNote(t("video.captured", written))
     } catch (error) {
       setNote(error instanceof Error ? error.message : String(error))
     }

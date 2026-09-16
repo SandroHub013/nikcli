@@ -173,7 +173,7 @@ export function SimulatorPane(props: SimulatorPaneProps) {
   const submit = (text: string) => {
     const url = parseAppUrl(text)
     if (!url) {
-      setNote("URL non valido; es. 5173, localhost:8081 o http://127.0.0.1:3000")
+      setNote(t("sim.badUrl"))
       return
     }
     void load(url).catch((error: unknown) => setNote(error instanceof Error ? error.message : String(error)))

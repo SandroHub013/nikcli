@@ -252,9 +252,9 @@ describe("surface commands", () => {
 
   test("the microphone for recordings is a switch that says what it will do", () => {
     const off = buildCommands(context({ workbench: createWorkbench() }))
-    expect(off.find((c) => c.id === "record.mic")?.title).toBe("Registrazioni con il microfono")
+    expect(off.find((c) => c.id === "record.mic")?.title).toBe("Attiva il microfono nelle registrazioni")
     const on = buildCommands(context({ workbench: createWorkbench(), recordMic: true }))
-    expect(on.find((c) => c.id === "record.mic")?.title).toBe("Registrazioni senza microfono")
+    expect(on.find((c) => c.id === "record.mic")?.title).toBe("Disattiva il microfono nelle registrazioni")
   })
 
   test("offers voice.toggle, toggling title and disabling when voice unavailable", () => {

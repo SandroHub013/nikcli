@@ -38,7 +38,7 @@ export function FilePreview(props: FilePreviewProps) {
     getHost().then((host) => {
       if (cancelled) return
       if (!host?.readTextFile) {
-        setError("Impossibile leggere file in questo ambiente.")
+        setError(t("preview.noHost"))
         setLoading(false)
         return
       }
@@ -53,7 +53,7 @@ export function FilePreview(props: FilePreviewProps) {
         } else {
           setContent(res.text)
           if (res.truncated) {
-            setError("File troppo grande, mostrata solo l'anteprima.")
+            setError(t("preview.truncated"))
           }
         }
         setLoading(false)
