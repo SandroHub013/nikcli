@@ -1334,7 +1334,9 @@ describe("always-on listening", () => {
     expect(gate.active()).toBe(true)
     expect(gate.accepts("ehi nick apri")).toBe(true)
     expect(gate.accepts("nik apri")).toBe(true)
-    expect(gate.accepts("ok nik apri")).toBe(false)
+    expect(gate.accepts("ok nik apri")).toBe(true)
+    expect(gate.accepts("nì")).toBe(false)
+    expect(gate.accepts("Nike apri")).toBe(false)
 
     gate.onRejected("il governo ha approvato la legge di bilancio nella notte fonda")
     expect(engine.history().at(-1)).toMatchObject({ kind: "action", label: expect.stringContaining("Ignorata, non inizia con «nik»: «il governo") })
@@ -1546,7 +1548,11 @@ describe("after 0.7.0: only the name starts the assistant", () => {
       await new Promise((r) => setTimeout(r, 20))
     }
     await hear("raccontami la storia di Roma")
-    await hear("ok nik raccontami la storia di Roma")
+    await hear("senti nik raccontami la storia di Roma")
+    // «nì» alone is not the name, and the sentence after it is still the room's.
+    await hear("nì")
+    await hear("raccontami la storia di Roma")
+    await hear("niko raccontami la storia di Roma")
     expect(asked).toHaveLength(0)
     await hear("nik raccontami la storia di Roma")
     await hear("ei nik raccontami la storia di Grecia")

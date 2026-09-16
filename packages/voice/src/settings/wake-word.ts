@@ -1,12 +1,10 @@
 /**
  * Wake-word detection and extraction logic for partial and final ASR streams.
  *
- * Reuses existing canonical normalization (normalizeUtterance) and ADE fuzzy matching (fuzzyMatch)
- * to tolerate real-world speech recognition phonetic variations ("ehi nik", "hey nick", "ei nik")
- * without triggering on substrings embedded within longer words.
+ * Reuses the canonical normalization (normalizeUtterance). The name is matched
+ * exactly, in the spellings the recogniser writes it ("nik", "nick", "nic").
  */
 
-import { fuzzyMatch } from "@nikcli-ai/ade/command/match"
 import { normalizeUtterance } from "../intent/normalize"
 
 export interface WakeWordMatch {
@@ -39,16 +37,11 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
     return true
   }
 
-  // Safe fuzzy match: strictly restrict length difference to at most 1 character
-  // so embedded substrings in longer words (e.g. "nikopolis", "scheinik") never match.
-  if (Math.abs(utteranceToken.length - wakeToken.length) <= 1) {
-    const fwd = fuzzyMatch(utteranceToken, wakeToken)
-    const rev = fuzzyMatch(wakeToken, utteranceToken)
-    if ((fwd && fwd.score > 10) || (rev && rev.score > 10)) {
-      return true
-    }
-  }
-
+  /*
+   * Nothing approximate. The name is three letters, and one letter away from
+   * it are «ni», «nì», «Nike» and «niko»: said in a room, each of them woke
+   * the assistant and handed it the rest of the sentence.
+   */
   return false
 }
 
@@ -59,13 +52,13 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
  * Only these may come first: the name has to open the sentence, otherwise the
  * television saying "nick" halfway through a line would be an address.
  */
-const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei"])
+const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "eh", "e", "ok"])
 
 /*
  * «ei nik» written as one word, which the recogniser does when it is said
  * quickly: «einik», «heynick». Split back into greeting and name.
  */
-const JOINED = /^(hei|ehi|hey|ei)(nik|nick|nic)$/
+const JOINED = /^(hei|ehi|hey|ei|eh)(nik|nick|nic)$/
 
 function splitJoined(token: string): string[] {
   const joined = JOINED.exec(token)

@@ -90,7 +90,10 @@ describe("the name has to open the sentence", () => {
     for (const heard of ["ei nik", "hei nik", "hey nick", "ehi, Nick", "Nick,"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
     }
-    for (const heard of ["ok nick", "ciao nik", "senti nik", "scusa nik"]) {
+    for (const heard of ["e nik", "eh nik", "ok nik", "ehnik"]) {
+      expect(matchesWakeWord(`${heard} apri il browser`, "nik")).toEqual({ matched: true, remainder: "apri il browser" })
+    }
+    for (const heard of ["ciao nik", "senti nik", "scusa nik"]) {
       expect(matchesWakeWord(`${heard} apri il browser`, "nik").matched).toBe(false)
     }
     expect(matchesWakeWord("il mio amico nik apri il browser", "nik").matched).toBe(false)
@@ -116,5 +119,13 @@ describe("the fixed phrase, «ei nik», as the recogniser writes it", () => {
     expect(matchesWakeWord("ehi apri il browser", phrase).matched).toBe(false)
     expect(matchesWakeWord("il telegiornale ehi nik", phrase).matched).toBe(false)
     expect(matchesWakeWord("einikolaus", phrase).matched).toBe(false)
+  })
+})
+
+describe("only the name itself", () => {
+  test("words one letter away from it are not the name", () => {
+    for (const heard of ["nì", "ni", "Nike", "niko", "nico", "mik", "nike apri il browser", "niko apri il browser", "ni apri il browser"]) {
+      expect(matchesWakeWord(heard, "nik").matched).toBe(false)
+    }
   })
 })
