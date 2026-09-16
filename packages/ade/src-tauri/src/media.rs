@@ -205,9 +205,14 @@ pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>) -> Response<Vec<u8
         .header("Accept-Ranges", "bytes")
         .header("Content-Range", format!("bytes {start}-{last}/{length}"))
         .header("Content-Length", read.to_string())
-        // The window's own origin only; the browser pane's frame must not be
-        // able to fetch project files through this.
-        .header("Access-Control-Allow-Origin", "null")
+        /*
+         * No CORS header at all. A `<video>` plays without one; a script
+         * cannot read the bytes without one. `Access-Control-Allow-Origin:
+         * null` was the opposite of what it meant: the browser pane is a
+         * sandbox without `allow-same-origin`, every page in it sends
+         * `Origin: null`, and that answer let any site opened there read
+         * the files of the open projects.
+         */
         .body(body)
         .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR))
 }
@@ -341,6 +346,20 @@ mod tests {
             &request(&url_for(&path.to_string_lossy()), Some("bytes=7-")),
         );
         assert_eq!(response.body(), b"789");
+    }
+
+    #[test]
+    fn no_page_is_allowed_to_read_the_bytes() {
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let request = Request::builder()
+            .uri(url_for(&path.to_string_lossy()))
+            .header("origin", "null")
+            .body(Vec::new())
+            .expect("richiesta");
+        let response = respond(&roots, &request);
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 
     #[test]

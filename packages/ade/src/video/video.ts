@@ -71,14 +71,20 @@ export function parseTimecode(text: string): number | undefined {
  */
 export const MEDIA_SCHEME = "ade-media"
 
-export function mediaUrl(path: string): string {
+/**
+ * WebView2 (Windows) answers custom schemes only as `http://<scheme>.localhost`;
+ * the `<scheme>://localhost` form fails there with a format error.
+ */
+const isWindowsWebview = () => typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent)
+
+export function mediaUrl(path: string, windows = isWindowsWebview()): string {
   const encoded = [...new TextEncoder().encode(path.replace(/\\/g, "/"))]
     .map((byte) => {
       const character = String.fromCharCode(byte)
       return /[A-Za-z0-9\-_.~/]/.test(character) ? character : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`
     })
     .join("")
-  return `${MEDIA_SCHEME}://localhost/${encoded}`
+  return windows ? `http://${MEDIA_SCHEME}.localhost/${encoded}` : `${MEDIA_SCHEME}://localhost/${encoded}`
 }
 
 /**
