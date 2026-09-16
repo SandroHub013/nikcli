@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
-import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, type Pane, type Workbench } from "./state"
+import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
   return {
@@ -41,10 +41,16 @@ describe("section commands", () => {
    * a door into a room with no door out.
    */
   test("a hidden section has no palette entry, and the switch brings both back", () => {
-    const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
-    for (const view of ["chat", "bot"] as const) {
-      expect(ids.includes(`view.${view}`)).toBe(CHAT_AND_BOT_ENABLED)
+    for (const enabled of [false, true]) {
+      const views = visibleViews(enabled)
+      const cmds = buildCommands(context({ workbench: { ...createWorkbench(), view: "code" }, views }))
+      const ids = cmds.map((c) => c.id)
+      for (const view of ["chat", "bot"] as const) expect(ids.includes(`view.${view}`)).toBe(enabled)
+      // From Code the cycle goes on to Chat only when Chat can be reached.
+      expect(cmds.find((c) => c.id === "view.toggle")?.title).toContain(enabled ? "Chat" : "Agent")
     }
+    const ids = buildCommands(context({ workbench: createWorkbench() })).map((c) => c.id)
+    expect(ids.includes("view.chat")).toBe(CHAT_AND_BOT_ENABLED)
   })
 
   test("the section you are already in is offered as disabled, not hidden", () => {

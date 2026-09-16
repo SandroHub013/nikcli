@@ -40,7 +40,8 @@ import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan }
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import { BotSection, GridSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { refreshSystemLocale, syncDocumentLanguage, t } from "../i18n"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
@@ -1019,6 +1020,16 @@ export function Workbench() {
       saveDecisionsOutbox(enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDecisions()
     },
+  })
+
+  /*
+   * S41: <html lang> matches the interface, and under "System" a change of
+   * the OS language shows at once instead of at the next launch.
+   */
+  onMount(() => {
+    syncDocumentLanguage()
+    window.addEventListener("languagechange", refreshSystemLocale)
+    onCleanup(() => window.removeEventListener("languagechange", refreshSystemLocale))
   })
 
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
@@ -5451,6 +5462,12 @@ export function Workbench() {
           builtInGroup="Voce"
           extraGroup="ADE"
           extraSections={[
+            {
+              id: "set-sec-language",
+              label: t("settings.language.label"),
+              glyph: "文",
+              render: () => <LanguageSection />,
+            },
             {
               id: "set-sec-routine",
               label: "Routine",

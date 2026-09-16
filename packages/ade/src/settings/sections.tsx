@@ -4,6 +4,14 @@ import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
+import {
+  LOCALE_PREFERENCES,
+  locale,
+  localePreference,
+  setLocalePreference,
+  t,
+  type LocalePreference,
+} from "../i18n"
 import "./sections.css"
 
 /**
@@ -183,6 +191,58 @@ export function SkillsSection(props: SkillsSectionProps) {
           </For>
         </ul>
       </Show>
+    </>
+  )
+}
+
+export interface LanguageSectionProps {
+  /** Defaults to the app's own state; a test passes its own to watch the choice. */
+  value?: () => LocalePreference
+  onChange?: (next: LocalePreference) => void
+}
+
+/**
+ * Which language ADE's interface speaks (S41).
+ *
+ * Three choices rather than two: "System" is what a fresh install uses, and
+ * showing it with the language it resolves to answers "why is this English?"
+ * without a trip to the OS settings. Each language is named in itself, so a
+ * person who cannot read the current one still finds their own.
+ */
+export function LanguageSection(props: LanguageSectionProps) {
+  const value = () => (props.value ?? localePreference)()
+  const choose = (next: LocalePreference) => (props.onChange ?? setLocalePreference)(next)
+  const label = (choice: LocalePreference) =>
+    choice === "system"
+      ? t("settings.language.systemNow", t(locale() === "it" ? "settings.language.it" : "settings.language.en"))
+      : t(choice === "it" ? "settings.language.it" : "settings.language.en")
+
+  return (
+    <>
+      <div data-slot="section-head">
+        <h3 data-slot="section-title" tabIndex={-1}>
+          {t("settings.language.title")}
+        </h3>
+        <p data-slot="section-desc">{t("settings.language.desc")}</p>
+      </div>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.language.group")}>
+        <For each={LOCALE_PREFERENCES}>
+          {(choice) => (
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-locale={choice}
+              data-active={value() === choice ? "true" : undefined}
+              aria-pressed={value() === choice}
+              lang={choice === "system" ? undefined : choice}
+              onClick={() => choose(choice)}
+            >
+              {label(choice)}
+            </button>
+          )}
+        </For>
+      </div>
     </>
   )
 }

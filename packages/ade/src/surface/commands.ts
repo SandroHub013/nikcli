@@ -2,7 +2,7 @@ import type { Command } from "../command/registry"
 import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
 import type { RecentEntry } from "../host/recent"
-import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type Workbench } from "./state"
+import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type AdeView, type Workbench } from "./state"
 
 export interface SurfaceCommand extends Command {
   /** Why the command cannot run now. Shown instead of hiding the row. */
@@ -45,6 +45,8 @@ export interface CommandContext {
   recordMic?: boolean
   /** Commands contributed by loaded plugins. Empty when none are loaded. */
   pluginCommands?: PluginCommandEntry[]
+  /** The sections that can be reached. `VISIBLE_VIEWS` unless a test injects the other branch. */
+  views?: readonly AdeView[]
 }
 
 /**
@@ -92,6 +94,7 @@ export function keepsPaletteOpen(commandId: string): boolean {
  */
 export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
   const { workbench, recents, hasHost, running, platform } = ctx
+  const views = ctx.views ?? VISIBLE_VIEWS
   const focusedPane = workbench.focusedId
     ? workbench.panes.find((pane) => pane.id === workbench.focusedId)
     : undefined
@@ -140,7 +143,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     },
     {
       id: "view.toggle",
-      title: `Sezione successiva (${ADE_VIEW_LABELS[nextView(workbench.view)]})`,
+      title: `Sezione successiva (${ADE_VIEW_LABELS[nextView(workbench.view, views)]})`,
       group: "Vista",
       shortcut: shortcutFor("view.toggle", platform),
     },
@@ -153,7 +156,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
      * already open is offered as disabled rather than hidden, so the list does
      * not change shape as you move around it.
      */
-    ...VISIBLE_VIEWS.map((view) => ({
+    ...views.map((view) => ({
       id: `view.${view}`,
       title: `Vai a ${ADE_VIEW_LABELS[view]}`,
       group: "Vista",

@@ -59,13 +59,20 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
  */
 export const CHAT_AND_BOT_ENABLED = false
 
-/** The sections a person can get to: what the bar shows and the palette offers. */
-export const VISIBLE_VIEWS: readonly AdeView[] = ADE_VIEWS.filter(
-  (view) => CHAT_AND_BOT_ENABLED || (view !== "chat" && view !== "bot"),
-)
+/**
+ * The sections a person can get to: what the bar shows and the palette offers.
+ *
+ * Takes the switch as a parameter so the tests can check the "on" branch
+ * too; the app only ever calls it with the constant, through `VISIBLE_VIEWS`.
+ */
+export function visibleViews(enabled: boolean = CHAT_AND_BOT_ENABLED): readonly AdeView[] {
+  return ADE_VIEWS.filter((view) => enabled || (view !== "chat" && view !== "bot"))
+}
 
-export function isViewVisible(view: AdeView): boolean {
-  return VISIBLE_VIEWS.includes(view)
+export const VISIBLE_VIEWS: readonly AdeView[] = visibleViews()
+
+export function isViewVisible(view: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): boolean {
+  return views.includes(view)
 }
 
 /**
@@ -76,14 +83,14 @@ export function isViewVisible(view: AdeView): boolean {
  * a restored workbench, the voice command — so a stored `"chat"` does not
  * open a section with no way back to it in the bar.
  */
-export function reachableView(view: AdeView): AdeView {
-  return isViewVisible(view) ? view : "code"
+export function reachableView(view: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): AdeView {
+  return isViewVisible(view, views) ? view : "code"
 }
 
 /** Cycles forward through the sections a person can reach, wrapping at the end. */
-export function nextView(current: AdeView): AdeView {
-  const index = VISIBLE_VIEWS.indexOf(current)
-  return VISIBLE_VIEWS[(index + 1) % VISIBLE_VIEWS.length] ?? "code"
+export function nextView(current: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): AdeView {
+  const index = views.indexOf(current)
+  return views[(index + 1) % views.length] ?? "code"
 }
 
 /**
