@@ -3,6 +3,22 @@
 <!-- UNRELEASED:START -->
 <!-- UNRELEASED:END -->
 
+## v1.360.0 (September 2026)
+
+## Core
+
+- Streamline IP retrieval for mobile pairing (@nikomatt69)
+
+## Mobile
+
+- Build and publish iOS artifacts alongside Android (@nikomatt69)
+
+**Thank you to 1 community contributor:**
+
+- @nikomatt69:
+  - feat(ci): build and publish iOS artifacts alongside Android
+  - refactor(network): streamline IP retrieval for mobile pairing
+
 ## v1.359.0 (September 2026)
 
 ## Core

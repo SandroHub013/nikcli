@@ -8,12 +8,12 @@ and lets you follow and steer sessions from a phone.
 Every release on [nikomatt69/nikcli](https://github.com/nikomatt69/nikcli/releases)
 carries the mobile artifacts alongside the CLI and desktop ones:
 
-| File | Platform |
-| --- | --- |
-| `nikcli-<version>-<build>.apk` | Android, direct install |
-| `nikcli-<version>-<build>.aab` | Android, Play Store upload |
-| `nikcli-<version>-<build>-unsigned.ipa` | iOS, **needs re-signing** — see below |
-| `nikcli-<version>-<build>-simulator.app.zip` | iOS Simulator, macOS only |
+| File                                         | Platform                              |
+| -------------------------------------------- | ------------------------------------- |
+| `nikcli-<version>-<build>.apk`               | Android, direct install               |
+| `nikcli-<version>-<build>.aab`               | Android, Play Store upload            |
+| `nikcli-<version>-<build>-unsigned.ipa`      | iOS, **needs re-signing** — see below |
+| `nikcli-<version>-<build>-simulator.app.zip` | iOS Simulator, macOS only             |
 
 Android is straightforward: download the `.apk`, allow installation from your
 browser, open it.
@@ -32,11 +32,11 @@ signature lasts **seven days**, after which the app must be refreshed.
 
 Pick the first row that applies to you:
 
-| Path | Apple ID | Expires | Needs a computer |
-| --- | --- | --- | --- |
-| **[TrollStore](https://github.com/opa334/TrollStore)** | none | never | no |
-| **[SideStore](https://sidestore.io)** | free | 7 days, **renews on the phone** | first setup only |
-| **[Sideloadly](https://sideloadly.io)** / **[AltStore](https://altstore.io)** | free | 7 days, manual refresh | every refresh |
+| Path                                                                          | Apple ID | Expires                         | Needs a computer |
+| ----------------------------------------------------------------------------- | -------- | ------------------------------- | ---------------- |
+| **[TrollStore](https://github.com/opa334/TrollStore)**                        | none     | never                           | no               |
+| **[SideStore](https://sidestore.io)**                                         | free     | 7 days, **renews on the phone** | first setup only |
+| **[Sideloadly](https://sideloadly.io)** / **[AltStore](https://altstore.io)** | free     | 7 days, manual refresh          | every refresh    |
 
 TrollStore only works on a bounded set of iOS versions; if yours is supported it
 is strictly the best option, because nothing expires. Otherwise SideStore is
