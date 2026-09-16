@@ -49,12 +49,32 @@ pub struct Quality {
     /// Absent keeps the window's own size.
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// Bits a second. Absent asks for the heaviest level's rate.
+    pub bitrate: Option<u32>,
 }
 
 impl Default for Quality {
     fn default() -> Self {
-        Self { fps: 60, width: None, height: None }
+        Self { fps: 60, width: None, height: None, bitrate: None }
     }
+}
+
+/// The size a take is encoded at: inside the level's box, same shape.
+///
+/// A window is rarely the shape of the box. Stretching what was captured to
+/// fill it is the mistake that ruins a promo video quietly: the first pane
+/// take of 2026-09-16 was 900x1125 and came out 900x800, everything in it
+/// subtly squashed. So the frame is fitted, never stretched, and never
+/// enlarged: upscaling costs bytes and adds nothing.
+pub fn fit_in(frame: (u32, u32), limit: (Option<u32>, Option<u32>)) -> (u32, u32) {
+    let (width, height) = frame;
+    if width == 0 || height == 0 {
+        return (even(width), even(height));
+    }
+    let ratio = |side: u32, max: Option<u32>| f64::from(max.unwrap_or(side).min(side)) / f64::from(side);
+    let scale = ratio(width, limit.0).min(ratio(height, limit.1)).min(1.0);
+    let scaled = |side: u32| even((f64::from(side) * scale).round() as u32).max(2);
+    (scaled(width), scaled(height))
 }
 
 /// A take in progress, as the frontend sees it.
@@ -177,10 +197,21 @@ mod tests {
     }
 
     #[test]
+    fn a_lighter_take_is_fitted_in_its_box_and_never_stretched() {
+        assert_eq!(fit_in((900, 1125), (Some(1280), Some(800))), (640, 800));
+        assert_eq!(fit_in((1920, 1200), (Some(1280), Some(800))), (1280, 800));
+        // A window smaller than the box is left alone rather than blown up.
+        assert_eq!(fit_in((800, 600), (Some(1280), Some(800))), (800, 600));
+        assert_eq!(fit_in((1921, 1201), (None, None)), (1920, 1200));
+    }
+
+    #[test]
     fn a_quality_arrives_by_its_numbers_and_falls_back_to_the_heaviest() {
-        let light: Quality = serde_json::from_str(r#"{"fps":30,"width":1280,"height":800}"#).unwrap();
-        assert_eq!(light, Quality { fps: 30, width: Some(1280), height: Some(800) });
-        let full: Quality = serde_json::from_str(r#"{"fps":60,"width":null,"height":null}"#).unwrap();
+        let light: Quality =
+            serde_json::from_str(r#"{"fps":30,"width":1280,"height":800,"bitrate":2866667}"#).unwrap();
+        assert_eq!(light, Quality { fps: 30, width: Some(1280), height: Some(800), bitrate: Some(2_866_667) });
+        let full: Quality =
+            serde_json::from_str(r#"{"fps":60,"width":null,"height":null,"bitrate":null}"#).unwrap();
         assert_eq!(full, Quality::default());
         assert_eq!(Quality::default().fps, 60);
     }

@@ -14,6 +14,7 @@
  */
 
 import {
+  bitrateFor,
   createEventLog,
   qualityLevel,
   recordingName,
@@ -30,7 +31,7 @@ export interface RecorderDeps {
     target: RecordTarget,
     dir: string,
     name: string,
-    quality: { fps: number; width?: number; height?: number },
+    quality: { fps: number; width?: number; height?: number; bitrate: number },
   ) => Promise<{ path: string | null }>
   stop: () => Promise<{ path: string | null }>
   /** Writes the events file beside the video. */
@@ -78,6 +79,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         const level = deps.quality?.() ?? qualityLevel(undefined)
         const started = await deps.start(target, dir, name, {
           fps: level.fps,
+          bitrate: bitrateFor(level),
           ...(level.width ? { width: level.width } : {}),
           ...(level.height ? { height: level.height } : {}),
         })

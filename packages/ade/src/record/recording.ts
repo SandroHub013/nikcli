@@ -158,6 +158,17 @@ export const QUALITY_LEVELS: readonly QualityLevel[] = [
   { id: "leggera", label: "Leggera — 1280×800, 30 fps", width: 1280, height: 800, fps: 30, megabytesPerMinute: 21.5 },
 ]
 
+/**
+ * The bitrate that produces the size promised beside a level.
+ *
+ * The first live take asked for 20 Mbit/s against a label saying 66 MB a
+ * minute and wrote 150: the number the user reads has to be the number the
+ * encoder is given, so it is derived here rather than written twice.
+ */
+export function bitrateFor(level: QualityLevel): number {
+  return Math.round((level.megabytesPerMinute * 1_000_000 * 8) / 60)
+}
+
 export const DEFAULT_QUALITY: RecordQuality = "alta"
 
 export function qualityLevel(id: RecordQuality | undefined): QualityLevel {

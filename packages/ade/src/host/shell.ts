@@ -138,7 +138,7 @@ export interface Host {
     target: RecordTarget,
     dir: string,
     name: string,
-    quality?: { fps: number; width?: number; height?: number },
+    quality?: { fps: number; width?: number; height?: number; bitrate?: number },
   ) => Promise<RecordingState>
   recordStop?: () => Promise<RecordingState>
   recordState?: () => Promise<RecordingState>

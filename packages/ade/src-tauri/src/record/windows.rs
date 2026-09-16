@@ -27,16 +27,16 @@ use windows_capture::settings::{
 };
 use windows_capture::window::Window;
 
-use super::{crop_in, even, Quality, Target};
+use super::{crop_in, even, fit_in, Quality, Target};
 
 /// The pace the capture is throttled to, from the chosen frame rate.
 fn frame_interval(fps: u32) -> Duration {
     Duration::from_nanos(1_000_000_000 / u64::from(fps.max(1)))
 }
 
-/// Deliberately generous: a take is re-encoded when it is cut, and a starved
-/// bitrate shows first on exactly what we film, moving text.
-const BITRATE: u32 = 20_000_000;
+/// What the heaviest level costs when the frontend sends no rate: the measured
+/// 66 MB a minute (`results/agy-S36-misure.md`).
+const BITRATE: u32 = 8_800_000;
 
 struct Take {
     encoder: Option<VideoEncoder>,
@@ -68,16 +68,14 @@ impl GraphicsCaptureApiHandler for Take {
         /*
          * A lighter take is encoded smaller, not captured smaller: the capture
          * is the window as it is, and Media Foundation scales on the way into
-         * the file. Asked for an odd size, H.264 refuses, so both sides are
-         * rounded down.
+         * the file — fitted inside the level's box, never stretched to it.
          */
-        let width = super::even(flags.quality.width.unwrap_or(captured_width).min(captured_width));
-        let height = super::even(flags.quality.height.unwrap_or(captured_height).min(captured_height));
+        let (width, height) = fit_in((captured_width, captured_height), (flags.quality.width, flags.quality.height));
         let encoder = VideoEncoder::new(
             VideoSettingsBuilder::new(width, height)
                 .sub_type(VideoSettingsSubType::H264)
                 .frame_rate(flags.quality.fps)
-                .bitrate(BITRATE),
+                .bitrate(flags.quality.bitrate.unwrap_or(BITRATE)),
             // The assistant's voice and the microphone are written as their own
             // tracks by ADE, not mixed into the video here (S36, D33-D35).
             AudioSettingsBuilder::default().disabled(true),

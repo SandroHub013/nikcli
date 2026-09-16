@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  bitrateFor,
   DEFAULT_QUALITY,
   estimatedMegabytes,
   qualityLevel,
@@ -83,4 +84,10 @@ describe("record/quality", () => {
     expect(estimatedMegabytes(qualityLevel("alta"), 90)).toBe(99)
     expect(estimatedMegabytes(qualityLevel("leggera"), 30)).toBe(11)
   })
+})
+
+test("the bitrate is the size promised beside the level, not a separate guess", () => {
+  // 66 MB a minute is 8,8 Mbit/s: the first live take asked 20 and wrote 150.
+  expect(bitrateFor(qualityLevel("alta"))).toBe(8_800_000)
+  expect(bitrateFor(qualityLevel("leggera"))).toBe(2_866_667)
 })
