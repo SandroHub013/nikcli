@@ -19,6 +19,7 @@ import {
   type ProviderQuota,
 } from "./quota"
 import type { TokenUsage } from "./shared"
+import { resetLocaleForTests } from "../i18n"
 
 describe("cooldownRemainingMs", () => {
   test("returns 0 if resetAt is missing or invalid", () => {
@@ -546,6 +547,31 @@ describe("agy's quota from its status line (S30)", () => {
     expect(isQuotaUnavailable(quotaForAgent("agy", empty, captured))).toBe(true)
     expect(isQuotaUnavailable(quotaForAgent("agy", { providers: {} }, captured))).toBe(true)
     expect(isQuotaUnavailable(quotaForAgent("agy", undefined, captured))).toBe(true)
+  })
+
+  test("a file dated in the future is n/d, since it would never age", () => {
+    expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, captured - 60_000))).toBe(true)
+  })
+
+  test("labels and tooltip follow the interface language", () => {
+    resetLocaleForTests("en")
+    try {
+      const english = readAgyQuota(file)
+      const agy = quotaForAgent("agy", { providers: {}, agy: english }, captured + 60_000)
+      if (!agy || isQuotaUnavailable(agy)) throw new Error("expected a reading")
+      expect(agy.bindingKey).toBe("Gemini week")
+      expect(agy.tooltip).toContain("Gemini week: 94% left")
+      expect(agy.tooltip).toContain("Read from agy's status line")
+      const claude = quotaForAgent("claude-code", readQuotaAxiSnapshot({
+        generatedAt: "2026-09-16T13:05:00Z",
+        providers: [{ provider: "claude", windows: [{ id: "seven_day", kind: "weekly", percentRemaining: 57 }] }],
+      }), captured)
+      if (!claude || isQuotaUnavailable(claude)) throw new Error("expected a reading")
+      expect(claude.bindingKey).toBe("week")
+      expect(claude.tooltip).toContain("Read from quota-axi at")
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 
   test("a file from another provider, or not an object, is no reading", () => {

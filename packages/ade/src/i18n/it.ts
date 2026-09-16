@@ -613,6 +613,13 @@ export const it = {
   "quota.na.agy.noBuckets": "Il file di agy non riporta finestre di quota.",
   "quota.na.agy.noTime": "Il file di agy non dice quando è stato scritto.",
   "quota.readAgy": (time: string) => `Letto dalla statusLine di agy alle ${time}`,
+  "quota.na.agy.future": (time: string) => `Il file di agy è datato ${time}, dopo l'ora attuale: non è affidabile.`,
+  "quota.readAxi": (time: string) => `Letto da quota-axi alle ${time}`,
+  "quota.week": "sett.",
+  "quota.tip.title": (name: string) => `Quota ${name}`,
+  "quota.tip.window": (label: string, percent: number) => `${label}: ${percent}% rimasto`,
+  "quota.tip.windowResetOn": (label: string, percent: number, day: string) => `${label}: ${percent}% rimasto · reset il ${day}`,
+  "quota.tip.windowResetIn": (label: string, percent: number, wait: string) => `${label}: ${percent}% rimasto · reset tra ${wait}`,
 
   // Browser address
   "browser.address.placeholder": "localhost:3000 o porta :5173",

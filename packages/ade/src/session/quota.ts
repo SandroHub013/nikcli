@@ -7,7 +7,10 @@
  */
 
 import type { TokenUsage } from "./shared"
-import { t } from "../i18n"
+import { locale, t } from "../i18n"
+
+/** Dates and times in the interface language. */
+const dateLocale = () => (locale() === "en" ? "en-GB" : "it-IT")
 
 // ---------------------------------------------------------------------------
 // Tipi fondamentali
@@ -463,7 +466,7 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
       if (cd > 24 * 3600_000 && m.resetAt) {
         const d = new Date(m.resetAt)
         if (!isNaN(d.getTime())) {
-          resetText = d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+          resetText = d.toLocaleDateString(dateLocale(), { day: "2-digit", month: "2-digit" })
         } else {
           resetText = formatCountdown(cd)
         }
@@ -473,7 +476,7 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
     } else if (m.resetAt) {
       const d = new Date(m.resetAt)
       if (!isNaN(d.getTime())) {
-        resetText = d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+        resetText = d.toLocaleDateString(dateLocale(), { day: "2-digit", month: "2-digit" })
       } else {
         resetText = m.resetAt
       }
@@ -498,11 +501,13 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
   const countdown = binding.resetText ?? (readiness.cooldownMs > 0 ? formatCountdown(readiness.cooldownMs) : undefined)
 
   const tipLines = [
-    `Quota ${quota.name}`,
+    t("quota.tip.title", quota.name),
     ...windows.map((w) => {
-      const pct = `${Math.round(w.ratio * 100)}% rimasto`
-      const rst = w.resetText ? ` · reset ${w.resetText.includes("/") ? "il " + w.resetText : "tra " + w.resetText}` : ""
-      return `${w.label}: ${pct}${rst}`
+      const pct = Math.round(w.ratio * 100)
+      if (!w.resetText) return t("quota.tip.window", w.label, pct)
+      return w.resetText.includes("/")
+        ? t("quota.tip.windowResetOn", w.label, pct, w.resetText)
+        : t("quota.tip.windowResetIn", w.label, pct, w.resetText)
     }),
   ]
 
@@ -590,7 +595,7 @@ function agyBucketLabel(bucket: string): string {
   const match = /^(.*?)[-_](5h|weekly)$/i.exec(bucket)
   if (!match) return bucket
   const family = match[1]!.toLowerCase() === "gemini" ? "Gemini" : match[1]!
-  return `${family} ${match[2]!.toLowerCase() === "5h" ? "5h" : "sett."}`
+  return `${family} ${match[2]!.toLowerCase() === "5h" ? "5h" : t("quota.week")}`
 }
 
 /** agy's file as a reading, or nothing when the file is not antigravity's. */
@@ -673,7 +678,7 @@ export function readQuotaAxiSnapshot(raw: unknown): QuotaSnapshot {
 
       let shortLabel = windowLabel
       if (id === "five_hour" || kind === "session") shortLabel = "5h"
-      else if (id === "seven_day" || kind === "weekly") shortLabel = "sett."
+      else if (id === "seven_day" || kind === "weekly") shortLabel = t("quota.week")
       else if (id.startsWith("window:")) shortLabel = id.replace("window:", "")
       else if (windowLabel.endsWith(" window")) shortLabel = windowLabel.replace(" window", "")
 
@@ -716,7 +721,7 @@ export function readQuotaAxiSnapshot(raw: unknown): QuotaSnapshot {
 const VENDOR_NAMES: Record<string, string> = { claude: "Anthropic", codex: "OpenAI", agy: "Google", nikcli: "nikcli" }
 
 function clock(epoch: number): string {
-  return new Date(epoch).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+  return new Date(epoch).toLocaleString(dateLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
 /**
@@ -754,7 +759,7 @@ export function quotaForAgent(
   }
 
   const view = formatSessionQuota(quota, now)
-  return { ...view, tooltip: `${view.tooltip}\nLetto da quota-axi alle ${clock(snapshot.generatedAt)}` }
+  return { ...view, tooltip: `${view.tooltip}\n${t("quota.readAxi", clock(snapshot.generatedAt))}` }
 }
 
 /** agy's quota from its status line file: the same rules, with its own age limit. */
@@ -766,6 +771,8 @@ function agyQuota(
   if (!reading) return unavailable(t("quota.na.agy.noFile"))
   if (reading.quota.metrics.length === 0) return unavailable(t("quota.na.agy.noBuckets"))
   if (reading.capturedAt === undefined) return unavailable(t("quota.na.agy.noTime"))
+  // A date ahead of the clock would never age: the file cannot be trusted.
+  if (reading.capturedAt > now) return unavailable(t("quota.na.agy.future", clock(reading.capturedAt)))
   if (now - reading.capturedAt > AGY_QUOTA_STALE_MS) return unavailable(t("quota.na.old", clock(reading.capturedAt)))
   const view = formatSessionQuota(reading.quota, now)
   return { ...view, tooltip: `${view.tooltip}\n${t("quota.readAgy", clock(reading.capturedAt))}` }

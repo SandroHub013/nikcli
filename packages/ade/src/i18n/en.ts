@@ -608,6 +608,13 @@ export const en: Messages = {
   "quota.na.agy.noBuckets": "agy's file reports no quota windows.",
   "quota.na.agy.noTime": "agy's file doesn't say when it was written.",
   "quota.readAgy": (time) => `Read from agy's status line at ${time}`,
+  "quota.na.agy.future": (time) => `agy's file is dated ${time}, later than now: it can't be trusted.`,
+  "quota.readAxi": (time) => `Read from quota-axi at ${time}`,
+  "quota.week": "week",
+  "quota.tip.title": (name) => `${name} quota`,
+  "quota.tip.window": (label, percent) => `${label}: ${percent}% left`,
+  "quota.tip.windowResetOn": (label, percent, day) => `${label}: ${percent}% left · resets on ${day}`,
+  "quota.tip.windowResetIn": (label, percent, wait) => `${label}: ${percent}% left · resets in ${wait}`,
 
   // Browser address
   "browser.address.placeholder": "localhost:3000 or port :5173",
