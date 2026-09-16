@@ -292,7 +292,7 @@ import {
   type Notice,
   type NoticeKind,
 } from "./notifications"
-import { startUpdateWatch } from "../update/watch"
+import { checkMessage, createUpdateWatch, type UpdateWatch } from "../update/watch"
 import { isReleasePage } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
@@ -2058,9 +2058,16 @@ export function Workbench() {
    * on the fork is announced once, with a button that installs it. Desktop only,
    * since a browser tab of the dev server has no installed version to be behind.
    */
+  /*
+   * Kept so "Controlla aggiornamenti" asks the same watch the timer uses:
+   * one place counts the calls, so a person pressing the command cannot
+   * push the window past GitHub's hourly limit.
+   */
+  let updateWatch: UpdateWatch | undefined
+
   onMount(() => {
     if (!isTauriDesktop()) return
-    const stop = startUpdateWatch({
+    const watch = createUpdateWatch({
       currentVersion: async () => (await import("@tauri-apps/api/app")).getVersion(),
       onUpdate: (update) =>
         setNotices((list) =>
@@ -2071,9 +2078,59 @@ export function Workbench() {
             at: Date.now(),
           }),
         ),
+      // A window nobody is looking at does not poll: see `watch.ts`.
+      isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
+      /*
+       * Coming back to ADE is the moment to look: the release may have been
+       * published while the window sat behind something else. `focus` and
+       * `visibilitychange` both fire here — the check's own spacing decides
+       * whether either of them costs a call.
+       */
+      onForeground: (run) => {
+        const onVisible = () => {
+          if (document.visibilityState === "visible") run()
+        }
+        window.addEventListener("focus", run)
+        document.addEventListener("visibilitychange", onVisible)
+        return () => {
+          window.removeEventListener("focus", run)
+          document.removeEventListener("visibilitychange", onVisible)
+        }
+      },
     })
-    onCleanup(stop)
+    updateWatch = watch
+    watch.start()
+    onCleanup(() => {
+      watch.stop()
+      updateWatch = undefined
+    })
   })
+
+  const [checkingUpdate, setCheckingUpdate] = createSignal(false)
+
+  /** "Controlla aggiornamenti": the bell answers even when there is nothing new. */
+  const checkForUpdates = async () => {
+    if (checkingUpdate()) return
+    if (!updateWatch) {
+      setNotices((list) =>
+        addNotice(list, { kind: "info", text: "Gli aggiornamenti si controllano dall'app desktop.", at: Date.now() }),
+      )
+      return
+    }
+    setCheckingUpdate(true)
+    try {
+      const result = await updateWatch.check({ force: true })
+      // The watch has just posted this release's own notice; the same line
+      // twice is not an answer, and the first one is already the better one.
+      if (result.status === "update" && result.update && notices().some((notice) => notice.href === result.update?.url)) return
+      const message = checkMessage(result)
+      setNotices((list) =>
+        addNotice(list, { kind: message.kind, text: message.text, ...(message.href ? { href: message.href } : {}), at: Date.now() }),
+      )
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
 
   const openNoticeLink = async (href: string) => {
     if (!isReleasePage(href)) return
@@ -2995,6 +3052,8 @@ export function Workbench() {
         workspaceId: project()?.name ?? "workspace",
         lines: []
       }))
+    } else if (id === "update.check") {
+      void checkForUpdates()
     } else if (id === "decisions.open") {
       setDecisionsOpen(true)
     } else if (id === "decisions.pane") {
@@ -4748,6 +4807,18 @@ export function Workbench() {
 
                 <Show when={noticesOpen()}>
                   <div data-slot="ade-menu" data-wide="true" role="menu" aria-label="Notifiche">
+                    {/* The bell is where a release shows up, so it is also where
+                        asking for one belongs: the answer lands in this list,
+                        "nothing new" included. */}
+                    <button
+                      type="button"
+                      data-slot="ade-menu-action"
+                      data-action="update.check"
+                      disabled={checkingUpdate()}
+                      onClick={() => void checkForUpdates()}
+                    >
+                      {checkingUpdate() ? "Controllo…" : "Controlla aggiornamenti"}
+                    </button>
                     <Show
                       when={notices().length > 0}
                       fallback={<p data-slot="ade-menu-empty">Nessuna notifica.</p>}

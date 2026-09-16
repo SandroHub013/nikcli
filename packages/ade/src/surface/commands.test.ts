@@ -87,6 +87,18 @@ describe("surface commands", () => {
     expect(close?.disabledReason).toBe("Nessun pannello a fuoco")
   })
 
+  test("checking for updates is offered, and only where there is a version to update", () => {
+    const desktop = buildCommands(context({ workbench: createWorkbench() }))
+    const check = desktop.find((c) => c.id === "update.check")
+    expect(check?.title).toBe("Controlla aggiornamenti")
+    expect(check?.enabled).not.toBe(false)
+    expect(check?.keywords).toContain("aggiornamento")
+
+    // In a browser tab of the dev server there is no installed build to be behind.
+    const browser = buildCommands(context({ workbench: createWorkbench(), hasHost: false }))
+    expect(browser.find((c) => c.id === "update.check")?.enabled).toBe(false)
+  })
+
   test("a focused pane enables the pane commands", () => {
     const wb = createWorkbench()
     wb.panes.push(pane())
