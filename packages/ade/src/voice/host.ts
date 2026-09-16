@@ -9,7 +9,9 @@ import { asOneLine, asSubmittedLine } from "../session/typing"
 import { findByName } from "../search/find"
 import { walkProject } from "../search/walk"
 import {
+  VISIBLE_VIEWS,
   isPanelPane,
+  reachableView,
   setColumns as updateColumns,
   updatePane,
   type AdeView,
@@ -355,7 +357,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     setView(view: AdeView): void {
-      deps.setWb((w) => ({ ...w, view }))
+      // Chat and Bot may be hidden (S40); the dispatcher asks first, this is the backstop.
+      deps.setWb((w) => ({ ...w, view: reachableView(view) }))
+    },
+
+    availableViews(): readonly AdeView[] {
+      return VISIBLE_VIEWS
     },
 
     scrollTranscript(paneId: string, delta: number): void {

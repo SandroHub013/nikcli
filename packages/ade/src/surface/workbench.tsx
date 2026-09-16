@@ -126,8 +126,9 @@ import {
   fromWorkspaceState,
   sessionsToResume,
   nextView,
-  ADE_VIEWS,
   ADE_VIEW_LABELS,
+  VISIBLE_VIEWS,
+  isViewVisible,
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
@@ -3393,7 +3394,8 @@ export function Workbench() {
       // Matched against the list rather than parsed off the id, so a command
       // called "view.anything" cannot put the workbench in a view that has no
       // branch to render it.
-      const target = ADE_VIEWS.find((view) => `view.${view}` === id)
+      // Only a section the bar shows: a hidden one has no command to run (S40).
+      const target = VISIBLE_VIEWS.find((view) => `view.${view}` === id)
       if (target) setWb(w => ({ ...w, view: target }))
     } else if (id === "theme.set.light" || id === "theme.set.dark") {
       themeState.set(id === "theme.set.light" ? "light" : "dark")
@@ -4878,7 +4880,7 @@ export function Workbench() {
             the set is the navigation, and it has to read as one object with
             one selection — not as four independent toggles. */}
         <div data-slot="ade-views" role="tablist" aria-label="Sezioni">
-          <For each={ADE_VIEWS}>
+          <For each={VISIBLE_VIEWS}>
             {(view) => (
               <button
                 type="button"
@@ -5122,7 +5124,7 @@ export function Workbench() {
              and files are otherwise: one list on the left, not two. The foot
              stays: the screenshots are what a bot will be shown. */
           content={
-            wb().view === "bot" ? (
+            wb().view === "bot" && isViewVisible("bot") ? (
               <BotsRoster {...(project()?.root ? { projectRoot: project()!.root } : {})} />
             ) : undefined
           }
@@ -5326,7 +5328,7 @@ export function Workbench() {
             />
           </Show>
 
-          <Show when={wb().view === "chat"}>
+          <Show when={wb().view === "chat" && isViewVisible("chat")}>
             {/* The same credential the assistant uses. Asking for it twice is
                 a way to get one of the two wrong. */}
             <Chat
@@ -5335,7 +5337,7 @@ export function Workbench() {
             />
           </Show>
 
-          <Show when={wb().view === "bot"}>
+          <Show when={wb().view === "bot" && isViewVisible("bot")}>
             {/* A bot is a nikcli agent, so there is no key to ask for and no
                 roster of ADE's own: the section reads the files nikcli reads,
                 and starting one is the session the user would start. */}

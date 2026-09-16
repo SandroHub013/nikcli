@@ -233,6 +233,15 @@ export interface VoiceHost {
   setView(view: AdeView): void
 
   /**
+   * The sections a person can reach right now.
+   *
+   * Optional: a host without it offers all four. ADE hides some while they are
+   * not ready (Chat and Bot, S40), and a voice command naming one must be told
+   * so rather than land somewhere else and say it went there.
+   */
+  availableViews?(): readonly AdeView[]
+
+  /**
    * Scroll the transcript in a target pane up (negative delta) or down (positive delta).
    */
   scrollTranscript(paneId: string, delta: number): void

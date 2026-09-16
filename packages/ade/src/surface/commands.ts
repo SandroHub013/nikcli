@@ -2,7 +2,7 @@ import type { Command } from "../command/registry"
 import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
 import type { RecentEntry } from "../host/recent"
-import { ADE_VIEWS, ADE_VIEW_LABELS, nextView, type Workbench } from "./state"
+import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type Workbench } from "./state"
 
 export interface SurfaceCommand extends Command {
   /** Why the command cannot run now. Shown instead of hiding the row. */
@@ -153,7 +153,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
      * already open is offered as disabled rather than hidden, so the list does
      * not change shape as you move around it.
      */
-    ...ADE_VIEWS.map((view) => ({
+    ...VISIBLE_VIEWS.map((view) => ({
       id: `view.${view}`,
       title: `Vai a ${ADE_VIEW_LABELS[view]}`,
       group: "Vista",
