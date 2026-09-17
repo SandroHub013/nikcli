@@ -385,6 +385,10 @@ export const en: Messages = {
   "browser.edit.fontSize": "Size",
   "browser.edit.padding": "Padding",
   "browser.edit.radius": "Radius",
+  "devServer.region": "Dev servers started",
+  "devServer.found": (title, url) => `“${title}” started a server at ${url}`,
+  "devServer.open": "Open in a web pane",
+  "devServer.dismiss": "Dismiss",
   "note.browserRequest": (title) => `Request from the web pane “${title}” queued: it arrives when the turn ends.`,
 
   // Decisions

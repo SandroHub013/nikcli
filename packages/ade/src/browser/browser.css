@@ -821,3 +821,60 @@
 [data-slot="pane-grip"]:hover {
   color: var(--ade-text);
 }
+
+/* ── a dev server a session started (S46): offered, not opened ─────────── */
+
+[data-component="dev-server-offers"] {
+  position: fixed;
+  right: var(--ade-space-6);
+  bottom: var(--ade-space-6);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  max-width: min(420px, calc(100vw - 2 * var(--ade-space-6)));
+}
+
+[data-slot="dev-server-offer"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4);
+  background: var(--ade-overlay);
+  border: 1px solid var(--ade-accent);
+  border-radius: var(--ade-radius-md);
+  box-shadow: var(--ade-shadow-md);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text);
+}
+
+[data-slot="dev-server-offer-text"] {
+  overflow-wrap: anywhere;
+}
+
+[data-slot="dev-server-offer-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="dev-server-offer-open"],
+[data-slot="dev-server-offer-dismiss"] {
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border-radius: var(--ade-radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="dev-server-offer-open"] {
+  border: 1px solid var(--ade-accent);
+  background: var(--ade-accent);
+  color: var(--ade-accent-fg);
+}
+
+[data-slot="dev-server-offer-dismiss"] {
+  border: 1px solid var(--ade-border);
+  background: transparent;
+  color: var(--ade-text-weak);
+}

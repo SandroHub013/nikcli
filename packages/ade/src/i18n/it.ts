@@ -390,6 +390,10 @@ export const it = {
   "browser.edit.fontSize": "Dimensione",
   "browser.edit.padding": "Spaziatura",
   "browser.edit.radius": "Raggio",
+  "devServer.region": "Server di sviluppo avviati",
+  "devServer.found": (title: string, url: string) => `«${title}» ha avviato un server su ${url}`,
+  "devServer.open": "Apri nel pannello web",
+  "devServer.dismiss": "Ignora",
   "note.browserRequest": (title: string) => `Richiesta dal pannello web «${title}» in coda: arriva quando finisce il turno.`,
 
   // Decisions

@@ -244,6 +244,8 @@ import { createPanelRouter } from "../panels/router"
 import { panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
+import { devServerUrl, offerKey, shouldOffer, type DevServerOffer } from "../browser/dev-server"
+import { DevServerOffers } from "../browser/dev-server-offer"
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
@@ -606,6 +608,24 @@ export function Workbench() {
    * asks; each mounted pane leaves its controls in `browserControllers`.
    */
   const browserControllers = new Map<string, BrowserController>()
+  /** The web pane bound to session `ownerId`, the most recent if several. */
+  const ownedBrowser = (ownerId: string) => wb().panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId).at(-1)
+  /** A new web pane on `url`, bound to `owner`, in the owner's project. */
+  const openOwnedBrowser = (url: string, owner: { id: string; title: string }, focus: boolean): Pane => {
+    const pane: Pane = {
+      id: `b${Date.now()}`,
+      title: "Browser",
+      status: "working",
+      model: "—",
+      mode: "browser",
+      browserUrl: url,
+      browserOwner: owner,
+      workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
+      lines: [],
+    }
+    setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
+    return pane
+  }
   panels.register("browser", {
     verbs: BROWSER_VERBS,
     run: (request, from) =>
@@ -615,23 +635,9 @@ export function Workbench() {
             const pane = wb().panes.find((p) => p.id === id && !isPanelPane(p))
             return pane && isRunning(pane.id) ? { id: pane.id, title: pane.title } : undefined
           },
-          ownedPane: (ownerId) => wb().panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId).at(-1),
-          openPane: (url, owner) => {
-            const pane: Pane = {
-              id: `b${Date.now()}`,
-              title: "Browser",
-              status: "working",
-              model: "—",
-              mode: "browser",
-              browserUrl: url,
-              browserOwner: owner,
-              // In the owner's project, next to it; the user's focus stays where it is.
-              workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
-              lines: [],
-            }
-            setWb((w) => ({ ...addPane(w, pane), focusedId: w.focusedId }))
-            return pane
-          },
+          ownedPane: ownedBrowser,
+          // Next to the session; the user's focus stays where it is.
+          openPane: (url, owner) => openOwnedBrowser(url, owner, false),
           navigate: (paneId, url) => setWb((w) => updatePane(w, paneId, { browserUrl: url })),
           controller: (paneId) => browserControllers.get(paneId),
         },
@@ -639,6 +645,29 @@ export function Workbench() {
         from,
       ),
   })
+
+  /*
+   * A dev server a session started (S46 F4, D45): offered, not opened. The
+   * session that wants its pane asks with `@ade browser open`.
+   */
+  const [devOffers, setDevOffers] = createSignal<DevServerOffer[]>([])
+  const offersSeen = new Set<string>()
+  const noticeDevServer = (paneId: string, line: string) => {
+    const url = devServerUrl(line)
+    if (!url) return
+    const pane = wb().panes.find((p) => p.id === paneId && !isPanelPane(p))
+    if (!pane || !shouldOffer({ sessionId: paneId, url, seen: offersSeen, ownedUrl: ownedBrowser(paneId)?.browserUrl })) return
+    offersSeen.add(offerKey(paneId, url))
+    setDevOffers((list) => [...list.filter((offer) => offer.sessionId !== paneId), { sessionId: paneId, title: pane.title, url }].slice(-3))
+  }
+  const acceptDevOffer = (offer: DevServerOffer) => {
+    setDevOffers((list) => list.filter((item) => item !== offer))
+    const session = wb().panes.find((p) => p.id === offer.sessionId)
+    if (!session) return
+    const owned = ownedBrowser(session.id)
+    if (owned) setWb((w) => ({ ...updatePane(w, owned.id, { browserUrl: offer.url }), focusedId: owned.id }))
+    else openOwnedBrowser(offer.url, { id: session.id, title: session.title }, true)
+  }
 
   /*
    * Recording a video of ADE in use (S36).
@@ -4438,6 +4467,7 @@ export function Workbench() {
            * text, and this is text.
            */
           void handlePanelRequest(paneId, line)
+          noticeDevServer(paneId, line)
         },
         /*
          * Only this spawn's exit ends the pane. A relaunch kills the old process
@@ -5510,6 +5540,11 @@ export function Workbench() {
                   tileOf={(id) => wb().panes.find((pane) => pane.id === id)}
                   onMove={(order) => setWb((w) => reorderPanes(w, order))}
                   onResize={(id, span) => setWb((w) => resizePane(w, id, span))}
+                />
+                <DevServerOffers
+                  offers={devOffers().filter((offer) => gridPanes().some((pane) => pane.id === offer.sessionId))}
+                  onOpen={acceptDevOffer}
+                  onDismiss={(offer) => setDevOffers((list) => list.filter((item) => item !== offer))}
                 />
               </Show>
             </Show>
