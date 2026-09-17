@@ -351,6 +351,7 @@ export const it = {
   "browser.error.title": "Impossibile caricare l'URL",
   "browser.error.hint": "Verifica che il server sia avviato e raggiungibile.",
   "browser.retry": "Riprova",
+  "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.blocked.title": "Questo sito non si lascia mostrare dentro ADE",
   "browser.blocked.msg": "Il server vieta di incorporare la pagina in un'altra app (X-Frame-Options o CSP frame-ancestors) e non permette ad ADE di leggerne una copia.",
   "browser.openExternal": "Apri nel browser",

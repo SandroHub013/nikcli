@@ -71,6 +71,13 @@ fn describe(path: &Path) -> Option<Shot> {
 /// The folder's *display* name is translated — Italian Windows shows
 /// "Immagini\Schermate" — but the name on disk is not, which is why this looks
 /// for the English one and does not try to guess a localised spelling.
+///
+/// Which folders to look in is a question about the operating system, not
+/// about ADE: Windows saves under `Pictures\Screenshots` (or the OneDrive
+/// copy of it), while macOS saves on the Desktop unless the user moved it
+/// with `defaults write com.apple.screencapture location`. Only the Windows
+/// pair was ever looked at, so on a Mac there was no folder to watch and the
+/// tray stayed empty with no way to tell why.
 /*
  * `async` throughout, for the reason spelled out in `lib.rs`: a synchronous
  * command runs on the thread that draws the window, and every command here
@@ -86,15 +93,79 @@ pub async fn shots_dir() -> Option<String> {
 /// The same answer, callable from Rust: an `async` command is a future, and
 /// `check_shot` needs the folder now.
 fn default_dir() -> Option<String> {
-    let candidates = [
-        dirs::picture_dir().map(|p| p.join("Screenshots")),
-        dirs::home_dir().map(|p| p.join("OneDrive").join("Pictures").join("Screenshots")),
-    ];
-    candidates
-        .into_iter()
-        .flatten()
-        .find(|p| p.is_dir())
-        .map(|p| p.to_string_lossy().into_owned())
+    shot_dir_candidates(
+        std::env::consts::OS,
+        dirs::home_dir().as_deref(),
+        dirs::picture_dir().as_deref(),
+        configured_dir().as_deref(),
+    )
+    .into_iter()
+    .find(|p| p.is_dir())
+    .map(|p| p.to_string_lossy().into_owned())
+}
+
+/// The folders this platform may be saving screenshots in, likeliest first.
+///
+/// `os` is `std::env::consts::OS`, passed in rather than read here so the
+/// order for every platform can be tested from any of them.
+pub fn shot_dir_candidates(
+    os: &str,
+    home: Option<&Path>,
+    pictures: Option<&Path>,
+    configured: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = Vec::new();
+    // What the user told the operating system wins over any usual place.
+    found.extend(configured.map(PathBuf::from));
+    match os {
+        "macos" => {
+            found.extend(home.map(|h| h.join("Desktop")));
+            found.extend(pictures.map(|p| p.join("Screenshots")));
+        }
+        "windows" => {
+            found.extend(pictures.map(|p| p.join("Screenshots")));
+            found.extend(home.map(|h| h.join("OneDrive").join("Pictures").join("Screenshots")));
+        }
+        // GNOME and KDE both save under Pictures; a desktop that does not is
+        // covered by Pictures itself rather than by guessing further.
+        _ => {
+            found.extend(pictures.map(|p| p.join("Screenshots")));
+            found.extend(pictures.map(PathBuf::from));
+            found.extend(home.map(|h| h.join("Desktop")));
+        }
+    }
+    found
+}
+
+/// `~` at the start is the shell's, not the filesystem's: expanded here or the path does not exist.
+fn expand_tilde(raw: &str, home: Option<&Path>) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    match raw.strip_prefix('~') {
+        Some(rest) => home.map(|h| h.join(rest.trim_start_matches(['/', '\\']))),
+        None => Some(PathBuf::from(raw)),
+    }
+}
+
+/// The folder macOS was told to save screenshots in, when the user moved it.
+#[cfg(target_os = "macos")]
+fn configured_dir() -> Option<PathBuf> {
+    let output = std::process::Command::new("/usr/bin/defaults")
+        .args(["read", "com.apple.screencapture", "location"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        // Unset is the normal case, and it means the Desktop.
+        return None;
+    }
+    expand_tilde(&String::from_utf8_lossy(&output.stdout), dirs::home_dir().as_deref())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configured_dir() -> Option<PathBuf> {
+    None
 }
 
 /// The images already there, newest first, capped at `limit`.
@@ -536,5 +607,60 @@ mod tests {
 
         assert_ne!(again, first);
         assert!(is_current(&watch.generation, again));
+    }
+}
+
+#[cfg(test)]
+mod dir_tests {
+    use super::*;
+
+    fn home() -> PathBuf {
+        PathBuf::from("/Users/nik")
+    }
+
+    #[test]
+    fn macos_looks_on_the_desktop_first() {
+        let found = shot_dir_candidates("macos", Some(&home()), Some(&home().join("Pictures")), None);
+        assert_eq!(found[0], home().join("Desktop"));
+        assert!(found.contains(&home().join("Pictures").join("Screenshots")));
+    }
+
+    #[test]
+    fn a_folder_the_user_chose_comes_first() {
+        let chosen = PathBuf::from("/Volumes/SSD/Shots");
+        let found = shot_dir_candidates("macos", Some(&home()), None, Some(&chosen));
+        assert_eq!(found[0], chosen);
+    }
+
+    #[test]
+    fn windows_keeps_the_pictures_pair_it_had() {
+        let win = PathBuf::from("C:/Users/nik");
+        let found = shot_dir_candidates("windows", Some(&win), Some(&win.join("Pictures")), None);
+        assert_eq!(
+            found,
+            vec![
+                win.join("Pictures").join("Screenshots"),
+                win.join("OneDrive").join("Pictures").join("Screenshots"),
+            ]
+        );
+    }
+
+    #[test]
+    fn linux_falls_back_to_pictures_itself() {
+        let found = shot_dir_candidates("linux", Some(&home()), Some(&home().join("Pictures")), None);
+        assert_eq!(found[1], home().join("Pictures"));
+    }
+
+    #[test]
+    fn nothing_known_means_nowhere_to_look() {
+        assert!(shot_dir_candidates("macos", None, None, None).is_empty());
+    }
+
+    #[test]
+    fn a_tilde_path_is_expanded_against_home() {
+        // `defaults` prints a trailing newline, which is part of no path.
+        assert_eq!(expand_tilde("~/Desktop/Shots\n", Some(&home())), Some(home().join("Desktop/Shots")));
+        assert_eq!(expand_tilde("/Volumes/SSD/Shots", Some(&home())), Some(PathBuf::from("/Volumes/SSD/Shots")));
+        assert_eq!(expand_tilde("  ", Some(&home())), None);
     }
 }

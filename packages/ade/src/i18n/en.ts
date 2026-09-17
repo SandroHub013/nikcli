@@ -346,6 +346,7 @@ export const en: Messages = {
   "browser.error.title": "Couldn't load this URL",
   "browser.error.hint": "Make sure the server is running and reachable.",
   "browser.retry": "Try again",
+  "shots.noFolder": "No screenshots folder on this computer",
   "browser.blocked.title": "This site can't be shown inside ADE",
   "browser.blocked.msg": "The server forbids embedding the page in another app (X-Frame-Options or CSP frame-ancestors) and doesn't let ADE read a copy of it.",
   "browser.openExternal": "Open in browser",
