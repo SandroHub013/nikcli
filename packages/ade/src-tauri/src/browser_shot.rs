@@ -7,12 +7,18 @@
 //! exists — written into the project, next to the request's details, where
 //! the agent can read it without leaving its folder.
 //!
-//! The same rule as every capture: ADE Test only, until the consent review.
+//! Unlike the captures an agent asks for (`vision.rs`, ADE Test only until
+//! the consent review), this one runs in the official ADE too (D47): it is
+//! taken only because the user clicked Send in a browser pane, and only of
+//! that pane's rectangle, which the pane computes and the command refuses to
+//! take empty. No `@ade` verb reaches it, and a page in a frame cannot invoke
+//! anything (`browser/frame-script.ts`); the command also answers only ADE's
+//! own window.
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
-use crate::vision::{capture_allowed, capture_png, crop_and_redact, Rect};
+use crate::vision::{capture_png, crop_and_redact, Rect};
 use crate::{within_roots, WriteRoots};
 
 #[derive(Debug, Serialize)]
@@ -34,16 +40,29 @@ fn check_destination(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// What may be photographed: a real rectangle, never the whole window by default.
+fn check_crop(crop: &Rect) -> Result<(), String> {
+    let values = [crop.x, crop.y, crop.w, crop.h];
+    if values.iter().any(|value| !value.is_finite()) || crop.x < 0.0 || crop.y < 0.0 || crop.w < 1.0 || crop.h < 1.0 {
+        return Err("zona dello screenshot non valida".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn browser_shot(
     app: AppHandle,
+    caller: tauri::Webview,
     roots: tauri::State<'_, WriteRoots>,
     path: String,
     crop: Rect,
     redact: Vec<Rect>,
     scale: f64,
 ) -> Result<BrowserShot, String> {
-    capture_allowed(&app)?;
+    if caller.label() != "main" {
+        return Err("lo screenshot del pannello si chiede solo dalla finestra di ADE".into());
+    }
+    check_crop(&crop)?;
     check_destination(&path)?;
     let target = within_roots(&roots, &path)?;
     let window = app.get_webview_window("main").ok_or("finestra principale non trovata")?;
@@ -58,7 +77,8 @@ pub async fn browser_shot(
 
 #[cfg(test)]
 mod tests {
-    use super::check_destination;
+    use super::{check_crop, check_destination};
+    use crate::vision::Rect;
 
     #[test]
     fn a_picture_goes_only_into_the_projects_browser_folder() {
@@ -67,5 +87,16 @@ mod tests {
         assert!(check_destination("C:/work/app/.ade/browser/x.md").is_err());
         assert!(check_destination("C:/work/app/src/x.png").is_err());
         assert!(check_destination("C:/work/app/.ade/browser/../../.git/x.png").is_err());
+    }
+
+    #[test]
+    fn only_a_real_rectangle_is_photographed() {
+        let rect = |x: f64, y: f64, w: f64, h: f64| Rect { x, y, w, h };
+        assert!(check_crop(&rect(10.0, 20.0, 300.0, 200.0)).is_ok());
+        assert!(check_crop(&rect(0.0, 0.0, 0.0, 0.0)).is_err());
+        assert!(check_crop(&rect(10.0, 20.0, 0.5, 200.0)).is_err());
+        assert!(check_crop(&rect(-5.0, 20.0, 300.0, 200.0)).is_err());
+        assert!(check_crop(&rect(f64::NAN, 20.0, 300.0, 200.0)).is_err());
+        assert!(check_crop(&rect(10.0, 20.0, f64::INFINITY, 200.0)).is_err());
     }
 }
