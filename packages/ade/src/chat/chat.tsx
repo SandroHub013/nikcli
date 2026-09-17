@@ -13,6 +13,7 @@
  */
 
 import { createEffect, createSignal, on, For, Show, onCleanup, onMount } from "solid-js"
+import { t } from "../i18n"
 import {
   appendDelta,
   appendMessage,
@@ -154,7 +155,7 @@ export function Chat(props: ChatProps) {
         settleMessage(
           state(),
           answer.id,
-          aborted ? "Interrotto." : error instanceof Error ? error.message : "Qualcosa è andato storto.",
+          aborted ? t("chat.aborted") : error instanceof Error ? error.message : t("chat.error.fallback"),
         ),
       )
     } finally {
@@ -195,7 +196,7 @@ export function Chat(props: ChatProps) {
           data-slot="chat-model"
           value={model()}
           onChange={(event) => chooseModel(event.currentTarget.value)}
-          aria-label="Modello"
+          aria-label={t("chat.model.label")}
         >
           <For each={CHAT_MODELS}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
           {/* A model chosen in an earlier build, or typed into storage by
@@ -208,7 +209,7 @@ export function Chat(props: ChatProps) {
         <div data-slot="chat-head-actions">
           <Show when={state().messages.length > 0}>
             <button type="button" data-slot="chat-action" onClick={reset}>
-              Nuova conversazione
+              {t("chat.new")}
             </button>
           </Show>
         </div>
@@ -216,11 +217,11 @@ export function Chat(props: ChatProps) {
 
       <Show when={!props.apiKey}>
         <p data-slot="chat-notice">
-          Serve una chiave OpenRouter.{" "}
+          {t("chat.needKey")}{" "}
           <button type="button" data-slot="chat-link" onClick={() => props.onOpenSettings()}>
-            Aprila nelle impostazioni vocali
+            {t("chat.openSettings")}
           </button>{" "}
-          — è la stessa che usa l'assistente.
+          {t("chat.sameAsAssistant")}
         </p>
       </Show>
 
@@ -229,10 +230,9 @@ export function Chat(props: ChatProps) {
           when={state().messages.length > 0}
           fallback={
             <div data-slot="chat-empty">
-              <p data-slot="chat-empty-title">Chiedi qualcosa.</p>
+              <p data-slot="chat-empty-title">{t("chat.empty.title")}</p>
               <p data-slot="chat-empty-body">
-                Una conversazione normale con un modello, senza terminale dietro. Per far fare qualcosa ad ADE, usa
-                invece la sezione agent.
+                {t("chat.empty.body")}
               </p>
             </div>
           }
@@ -246,7 +246,7 @@ export function Chat(props: ChatProps) {
           ref={(el) => (composer = el)}
           data-slot="chat-input"
           rows="1"
-          placeholder="Scrivi un messaggio…"
+          placeholder={t("chat.input.placeholder")}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={onKeyDown}
@@ -255,12 +255,12 @@ export function Chat(props: ChatProps) {
           when={busy()}
           fallback={
             <button type="button" data-slot="chat-send" disabled={!draft().trim()} onClick={() => void send()}>
-              Invia
+              {t("chat.send")}
             </button>
           }
         >
           <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
-            Ferma
+            {t("chat.stop")}
           </button>
         </Show>
       </div>
@@ -289,7 +289,7 @@ function Bubble(props: { message: ChatMessage }) {
         {/* The cursor is the only signal that a silent model is still thinking
             rather than finished with nothing to say. */}
         <Show when={props.message.streaming && !props.message.text}>
-          <span data-slot="chat-caret" aria-label="In scrittura" />
+          <span data-slot="chat-caret" aria-label={t("chat.writing")} />
         </Show>
 
         <Show when={props.message.error}>{(error) => <p data-slot="chat-error">{error()}</p>}</Show>
@@ -320,9 +320,9 @@ function CodeBlock(props: { language?: string; text: string }) {
   return (
     <figure data-slot="chat-code">
       <figcaption data-slot="chat-code-head">
-        <span data-slot="chat-code-lang">{props.language ?? "testo"}</span>
+        <span data-slot="chat-code-lang">{props.language ?? t("chat.code.text")}</span>
         <button type="button" data-slot="chat-copy" onClick={() => void copy()}>
-          {copied() ? "Copiato" : "Copia"}
+          {copied() ? t("chat.code.copied") : t("chat.code.copy")}
         </button>
       </figcaption>
       <pre data-slot="chat-code-body">{props.text}</pre>
