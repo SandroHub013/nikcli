@@ -134,17 +134,37 @@ fn matches_shape(name: &str, lengths: &[usize; 3], separators: &[char]) -> bool 
 }
 
 /// An image this tray should show: in a screenshots folder any, on the Desktop one named like a shot.
-fn is_shot(dir: &Path, path: &Path) -> bool {
+///
+/// `root` is the folder being watched, never the file's own parent. Asking
+/// the parent let `~/Desktop/qualsiasi-cartella/foto.png` through: that
+/// folder is not called Desktop, so every image in it read as a screenshot.
+/// The tray only ever lists the root itself, so a file anywhere below it is
+/// not one of its screenshots either.
+fn is_shot(root: &Path, path: &Path) -> bool {
     if !is_image(path) {
         return false;
     }
-    if holds_only_shots(dir) {
+    if path.parent().map(|parent| parent != root).unwrap_or(true) {
+        return false;
+    }
+    if holds_only_shots(root) {
         return true;
     }
     path.file_name()
         .and_then(|name| name.to_str())
         .map(named_like_shot)
         .unwrap_or(false)
+}
+
+/// The screenshots in `entries`, at most `limit` of them.
+///
+/// The cap is on what is kept, not on what is looked at: capping the reading
+/// meant that in a folder of thousands of files — which a Desktop is — the
+/// limit could be spent entirely on things that are not screenshots, and the
+/// tray stayed empty. Names are cheap to judge; only what survives this is
+/// ever asked for its metadata.
+fn keep_shots(entries: impl Iterator<Item = PathBuf>, root: &Path, limit: usize) -> Vec<PathBuf> {
+    entries.filter(|path| is_shot(root, path)).take(limit).collect()
 }
 
 fn is_image(path: &Path) -> bool {
@@ -281,20 +301,9 @@ fn configured_dir() -> Option<PathBuf> {
 #[tauri::command]
 pub async fn shots_recent(dir: String, limit: usize) -> Vec<Shot> {
     let folder = PathBuf::from(&dir);
-    let mut found: Vec<Shot> = std::fs::read_dir(&folder)
+    let entries = std::fs::read_dir(&folder).into_iter().flatten().flatten().map(|entry| entry.path());
+    let mut found: Vec<Shot> = keep_shots(entries, &folder, MAX_KEPT)
         .into_iter()
-        .flatten()
-        .flatten()
-        /*
-         * Bounded: this reads a folder the user chose, not one ADE made, and
-         * a Desktop or a picture library can hold tens of thousands of files.
-         * The twelve newest are what the tray wants, and a folder that takes
-         * more than this many reads to look through is not a screenshots
-         * folder.
-         */
-        .take(MAX_SCANNED)
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file() && is_shot(&folder, path))
         .filter_map(|path| describe(&path))
         .collect();
     found.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
@@ -332,6 +341,8 @@ pub async fn shots_watch(
             .flatten()
             .flatten()
             .map(|entry| entry.path())
+            .filter(|entry| is_shot(&path, entry))
+            .take(MAX_KEPT)
             .collect();
         // An image found but not yet settled, which a skipped pass would strand.
         let mut unsettled = false;
@@ -357,7 +368,9 @@ pub async fn shots_watch(
             }
 
             let entries: HashSet<PathBuf> = match std::fs::read_dir(&path) {
-                Ok(read) => read.flatten().take(MAX_SCANNED).map(|entry| entry.path()).collect(),
+                Ok(read) => keep_shots(read.flatten().map(|entry| entry.path()), &path, MAX_KEPT)
+                    .into_iter()
+                    .collect(),
                 Err(_) => {
                     // Not listed, so nothing is known: the next pass tries again.
                     listed_mtime = None;
@@ -369,7 +382,7 @@ pub async fn shots_watch(
             unsettled = false;
 
             for entry in &entries {
-                if seen.contains(entry) || !entry.is_file() || !is_shot(&path, entry) {
+                if seen.contains(entry) || !entry.is_file() {
                     continue;
                 }
                 /*
@@ -409,8 +422,8 @@ pub async fn shots_watch(
  */
 const POLL_INTERVAL: Duration = Duration::from_millis(2500);
 
-/// How many directory entries one listing may look at. See `shots_recent`.
-const MAX_SCANNED: usize = 5_000;
+/// How many screenshots one listing may keep, before the newest are chosen. See `keep_shots`.
+const MAX_KEPT: usize = 5_000;
 const FULL_RELIST: Duration = Duration::from_secs(30);
 
 /// The folder's own modified time, which moves when a file is added, removed
@@ -512,13 +525,17 @@ fn settled(path: &Path) -> bool {
  * folder, so that folder — plus whichever one is being watched, if the user
  * pointed the tray elsewhere — is the entire legitimate range.
  */
-fn is_in_shots_dir(watch: &Watch, path: &Path) -> bool {
-    // Canonicalised on both sides: the point is to catch a link planted in the
-    // screenshots folder and aimed somewhere else, which a textual prefix
-    // check would wave straight through.
-    let Ok(resolved) = path.canonicalize() else {
-        return false;
-    };
+/// The watched folder this file is in, canonicalised, or nothing.
+///
+/// Canonicalised on both sides: the point is to catch a link planted in the
+/// screenshots folder and aimed somewhere else, which a textual prefix check
+/// would wave straight through.
+///
+/// The folder is returned rather than a yes: whether a file counts as a
+/// screenshot is a question about the folder being *watched*, and answering it
+/// from the file's own parent let `~/Desktop/una-cartella/foto.png` through.
+fn shots_root(watch: &Watch, path: &Path) -> Option<(PathBuf, PathBuf)> {
+    let resolved = path.canonicalize().ok()?;
 
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Some(dir) = default_dir() {
@@ -533,25 +550,27 @@ fn is_in_shots_dir(watch: &Watch, path: &Path) -> bool {
     roots
         .iter()
         .filter_map(|root| root.canonicalize().ok())
-        .any(|root| resolved.starts_with(root))
+        .find(|root| resolved.starts_with(root))
+        .map(|root| (root, resolved))
 }
 
 fn check_shot(watch: &Watch, path: &str) -> Result<PathBuf, String> {
     let file = PathBuf::from(path);
     /*
-     * Named like a screenshot as well as being in the folder.
+     * Named like a screenshot as well as being in the folder, judged by the
+     * folder being watched.
      *
      * On macOS that folder is the Desktop, so "an image in the watched
      * folder" is every picture the user has left lying about — and
      * `shot_delete` takes a path from the page. The tray never offers one of
      * those, and now it could not act on one either.
      */
-    let folder = file.parent().unwrap_or(Path::new(""));
-    if !is_shot(folder, &file) {
-        return Err("non è una schermata".into());
-    }
-    if !is_in_shots_dir(watch, &file) {
+    let Some((root, resolved)) = shots_root(watch, &file) else {
         return Err("non è nella cartella degli screenshot".into());
+    };
+    // The resolved path, so a link cannot borrow a screenshot's name.
+    if !is_shot(&root, &resolved) {
+        return Err("non è una schermata".into());
     }
     Ok(file)
 }
@@ -839,6 +858,34 @@ mod name_tests {
         assert!(!named_like_shot("2026-09-17.png"));
         assert!(!named_like_shot("20260917214313.png"));
         assert!(named_like_shot("2026-09-17 21.43.13.png"));
+    }
+
+    /// The watched folder decides, so nothing below it is one of its screenshots.
+    #[test]
+    fn a_folder_inside_the_desktop_is_not_the_desktop() {
+        let inside = desktop().join("vecchie foto");
+        assert!(!is_shot(&desktop(), &inside.join("foto.png")));
+        assert!(!is_shot(&desktop(), &inside.join("Screenshot 2026-09-17 at 21.43.13.png")));
+        assert!(!is_shot(&shots_folder(), &shots_folder().join("2025").join("a.png")));
+    }
+
+    /// The cap is on screenshots kept, not on entries read: a Desktop of
+    /// thousands of files used to spend the whole budget before reaching one.
+    #[test]
+    fn a_crowded_folder_still_yields_its_screenshots() {
+        let mut entries: Vec<PathBuf> = (0..8_000).map(|n| desktop().join(format!("foto-{n}.png"))).collect();
+        entries.push(desktop().join("Schermata 2026-09-17 alle 21.43.13.png"));
+
+        let kept = keep_shots(entries.into_iter(), &desktop(), MAX_KEPT);
+        assert_eq!(kept, vec![desktop().join("Schermata 2026-09-17 alle 21.43.13.png")]);
+    }
+
+    #[test]
+    fn what_is_kept_is_capped() {
+        let entries: Vec<PathBuf> = (0..MAX_KEPT + 10)
+            .map(|n| shots_folder().join(format!("{n}.png")))
+            .collect();
+        assert_eq!(keep_shots(entries.into_iter(), &shots_folder(), MAX_KEPT).len(), MAX_KEPT);
     }
 
     #[test]
