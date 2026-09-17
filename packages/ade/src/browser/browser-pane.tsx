@@ -29,11 +29,10 @@ import {
   type Fidelity,
   type HandshakeEvent,
 } from "./handshake"
-import {
-  INSPECTOR_BRIDGE_SCRIPT,
-  type BridgeMessage,
-  type InspectedElement,
-} from "./protocol"
+import { type BridgeMessage, type InspectedElement } from "./protocol"
+import { FRAME_ASK, FRAME_HELLO, FRAME_NAME, newFrameSecret, openEnvelope } from "./frame-script"
+// The same file the host runs in every frame; the mirror carries it inline.
+import FRAME_SCRIPT from "../../src-tauri/scripts/browser-frame.js?raw"
 import { escapeAttribute, withLoadToken } from "./frame-url"
 import {
   canStep,
@@ -145,6 +144,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   let pageCopy: { generation: number; target: string; html: string } | undefined
   /** The mirror is up only because the user chose Inspect: Browse brings the real page back. */
   let mirrorForInspect = false
+  /*
+   * What the bridge in this pane's frame signs its messages with.
+   *
+   * Handed to the frame script on request and taken by it before the page
+   * can see it (`frame-script.ts`). A page that posts `visual-editor:ready`
+   * or a selection on its own does not have it, and is not believed.
+   */
+  const frameSecret = newFrameSecret()
 
   /**
    * Messages to the frame go to `"*"`, for a page loaded by URL too.
@@ -153,9 +160,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * it — mirror or live page — has an opaque origin, and a target origin of
    * `http://localhost:3000` matches nothing: the message is dropped without an
    * error. That is why Design Mode never switched on for a page carrying the
-   * bridge itself. `"*"` gives nothing away: what goes out is the mode and
-   * selectors the page itself sent, and what comes back is accepted only from
-   * this frame's own window (`handleMessage`).
+   * bridge itself. `"*"` gives nothing away: what goes out is the mode, the
+   * selectors the page itself sent, and the frame secret, which the frame
+   * script takes before the page's listeners run; what comes back is accepted
+   * only from this frame's own window, signed (`handleMessage`).
    */
   const post = (message: unknown) => {
     try {
@@ -194,7 +202,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
      * closes the `href` and turns the rest into markup.
      */
     const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
-    const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${INSPECTOR_BRIDGE_SCRIPT}<\/script>`
+    const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${FRAME_SCRIPT}<\/script>`
 
     let injected = html
     if (injected.includes("<head>")) {
@@ -425,7 +433,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     // Untrusted source guard: ignore any message not originating from our iframe
     if (!iframeRef?.contentWindow || event.source !== iframeRef.contentWindow) return
 
-    const data = event.data as BridgeMessage
+    const raw = event.data as { type?: unknown } | null
+    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) {
+      // Whoever asks, the answer goes only to the frame's current document,
+      // where the frame script takes it first.
+      post({ type: FRAME_HELLO, secret: frameSecret })
+      return
+    }
+    const data = openEnvelope(raw, frameSecret) as BridgeMessage | undefined
     if (!data || typeof data !== "object" || typeof data.type !== "string") return
     if (!data.type.startsWith("visual-editor:")) return
 
@@ -787,6 +802,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
               sandbox="allow-scripts allow-forms allow-popups allow-modals"
+              name={FRAME_NAME}
               title={props.title || t("browser.preview")}
             />
           </div>

@@ -945,6 +945,9 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .min_inner_size(960.0, 600.0)
         .resizable(true)
         .disable_drag_drop_handler()
+        // In every frame: Tauri's IPC made inert, and the inspector bridge in
+        // a browser pane's frame. See `src/browser/frame-script.ts`.
+        .initialization_script_for_all_frames(include_str!("../scripts/browser-frame.js"))
         .center();
 
     #[cfg(target_os = "macos")]
