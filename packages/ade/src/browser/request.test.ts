@@ -5,6 +5,7 @@ import {
   elementSummary,
   formatRequestDetails,
   formatRequestLine,
+  genericName,
   mergeEdit,
   requestStem,
   type BrowserRequest,
@@ -79,9 +80,16 @@ describe("the line", () => {
   test("says what, where, and where the rest is", () => {
     expect(formatRequestLine(request(), ".ade/browser/x.md")).toBe(
       '[Richiesta dal browser "Anteprima" · http://localhost:5173/settings] rendilo più grande e verde — ' +
-        "2 elementi: button#buy in pricing «Plans», hero «Build faster»; 1 modifica fatta al volo. " +
+        "2 elementi: button, sezione div; 1 modifica fatta al volo. " +
         "Dettagli e screenshot: .ade/browser/x.md",
     )
+  })
+
+  test("carries nothing the page wrote: no ids, section names or headings", () => {
+    const line = formatRequestLine(request(), "f.md")
+    for (const pageText of ["buy", "pricing", "Plans", "hero", "Build faster"]) expect(line).not.toContain(pageText)
+    expect(genericName({ tagName: "x onclick=alert(1)" })).toBe("elemento")
+    expect(genericName({ tagName: "my-card", ownSection: "anything" })).toBe("sezione my-card")
   })
 
   test("is one line whatever the page put in its fields", () => {

@@ -89,6 +89,17 @@ export function elementSummary(element: Partial<InspectedElement>): string {
   return section ? `${name} in ${section}` : name
 }
 
+/**
+ * An element as the sent line names it: its tag, and whether it is a whole
+ * section. Nothing the page wrote (ids, section names, headings) goes into
+ * the line, which reaches the agent outside the details file's warning.
+ */
+export function genericName(element: Partial<InspectedElement>): string {
+  const raw = String(element.tagName ?? "").toLowerCase()
+  const tag = /^[a-z][a-z0-9-]{0,20}$/.test(raw) ? raw : "elemento"
+  return element.ownSection ? `sezione ${tag}` : tag
+}
+
 const PROPERTY_NAMES: Record<string, string> = {
   text: "testo",
   color: "colore del testo",
@@ -111,7 +122,7 @@ export function formatRequestLine(request: BrowserRequest, detailsPath: string):
   const url = field(request.url, 200)
   const instruction = field(request.instruction, 400)
   const count = request.elements.length
-  const names = request.elements.slice(0, 3).map(elementSummary)
+  const names = request.elements.slice(0, 3).map(genericName)
   const more = count > 3 ? ` e altri ${count - 3}` : ""
   const parts = [
     count === 0 ? "nessun elemento" : `${count === 1 ? "1 elemento" : `${count} elementi`}: ${names.join(", ")}${more}`,

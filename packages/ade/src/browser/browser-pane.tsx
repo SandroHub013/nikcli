@@ -56,6 +56,7 @@ import { canOpenExternally, openExternally, probeFraming, readHeaders } from "./
 import { normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
+import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
 export interface BrowserPaneProps {
   id?: string
@@ -633,7 +634,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     const frame: Rect = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : { x: 0, y: 0, w: 0, h: 0 }
     const scale = viewportFit().isResponsive ? 1 : viewportFit().scale
     const crop = captureArea(frame, scale, selection().map((element) => element.rect).filter(Boolean))
-    const redact = Array.from(document.querySelectorAll("[data-sensitive]"), (element) => {
+    const redact = Array.from(document.querySelectorAll(SENSITIVE_SELECTOR), (element) => {
       const r = element.getBoundingClientRect()
       return { x: r.left, y: r.top, w: r.width, h: r.height }
     }).filter((r) => r.w > 0 && r.h > 0)
