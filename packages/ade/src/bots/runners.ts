@@ -18,6 +18,7 @@
  * thread. Pure, in a `.ts`, and tested against lines the real CLIs printed.
  */
 
+import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
@@ -38,8 +39,6 @@ export interface Runner {
   readonly label: string
   /** The executable, as the pty allowlist names it. */
   readonly command: string
-  /** Whose subscription or key it uses, said to the user in one line. */
-  readonly account: string
   /**
    * Models to offer. Empty for nikcli, whose list is asked of nikcli itself.
    * The field stays free text for the others: these CLIs accept aliases and
@@ -58,7 +57,6 @@ export const RUNNERS: readonly Runner[] = [
     id: "nikcli",
     label: "nikcli",
     command: NIKCLI_COMMAND,
-    account: "I provider collegati a nikcli (nikcli auth).",
     models: [],
     efforts: ["minimal", "low", "medium", "high", "max"],
     login: ["auth", "login"],
@@ -68,7 +66,6 @@ export const RUNNERS: readonly Runner[] = [
     id: "claude",
     label: "Claude Code",
     command: "claude",
-    account: "L'abbonamento Anthropic o la chiave API di Claude Code.",
     models: [
       "fable",
       "opus",
@@ -87,13 +84,23 @@ export const RUNNERS: readonly Runner[] = [
     id: "codex",
     label: "Codex",
     command: "codex",
-    account: "L'abbonamento ChatGPT o la chiave API di Codex.",
     models: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
     efforts: ["low", "medium", "high", "xhigh", "max"],
     login: ["login"],
     status: ["login", "status"],
   },
 ]
+
+export function runnerAccount(id: RunnerId | string): string {
+  switch (id) {
+    case "claude":
+      return t("bots.runner.account.claude")
+    case "codex":
+      return t("bots.runner.account.codex")
+    default:
+      return t("bots.runner.account.nikcli")
+  }
+}
 
 export function runnerById(id: string | undefined): Runner {
   return RUNNERS.find((runner) => runner.id === id) ?? RUNNERS[0]!

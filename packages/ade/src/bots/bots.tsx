@@ -34,8 +34,8 @@ import { t } from "../i18n"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
-import { applyRunnerLine, runnerById, RUNNERS, type Runner } from "./runners"
-import { PLAN_RUNNERS, TERMS_NOTICE } from "./terms"
+import { applyRunnerLine, runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
+import { PLAN_RUNNERS } from "./terms"
 import { startTurn, type TurnHandle } from "./session"
 import {
   createBot,
@@ -1099,16 +1099,6 @@ function BotForm(props: {
  * suggestions: Claude Code and Codex accept aliases and new model names long
  * before a list here learns them, and refuse a wrong one in their own words.
  */
-function runnerAccount(id: string): string {
-  switch (id) {
-    case "claude":
-      return t("bots.runner.account.claude")
-    case "codex":
-      return t("bots.runner.account.codex")
-    default:
-      return t("bots.runner.account.nikcli")
-  }
-}
 
 function EngineFields(props: {
   listId: string

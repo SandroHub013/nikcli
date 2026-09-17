@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import type { AgentFile } from "../bots/nikcli"
 import { providerState, type ProviderState } from "../bots/providers"
-import { RUNNERS, type Runner } from "../bots/runners"
+import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
 import {
@@ -374,7 +374,7 @@ export function ProviderSection(props: ProviderSectionProps) {
                     </button>
                   </Show>
                 </div>
-                <span data-slot="provider-detail">{runner.account}</span>
+                <span data-slot="provider-detail">{runnerAccount(runner.id)}</span>
                 <Show when={state()?.login.detail}>
                   <span data-slot="settings-meta">{state()!.login.detail}</span>
                 </Show>
