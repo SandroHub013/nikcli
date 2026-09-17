@@ -33,6 +33,14 @@ import {
   type InspectedElement,
 } from "./protocol"
 import { escapeAttribute, withLoadToken } from "./frame-url"
+import {
+  canStep,
+  currentEntry,
+  restoreHistory,
+  step,
+  visit,
+  type BrowserHistory,
+} from "./history"
 import { normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
@@ -41,11 +49,20 @@ export interface BrowserPaneProps {
   id?: string
   title?: string
   initialUrl?: string
+  /** The back/forward list the pane had when it was last drawn. */
+  initialHistory?: BrowserHistory
   focused?: boolean
   onFocus?: () => void
   onClose?: () => void
   onExpand?: () => void
   onSendPrompt?: (prompt: string, context?: string) => void
+  /**
+   * Every page the pane loads, with the history that led to it.
+   *
+   * The owner keeps both: this component is rebuilt whenever the pane is
+   * drawn again, and without them it came back on the URL it was opened with.
+   */
+  onNavigate?: (url: string, history: BrowserHistory) => void
 }
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
@@ -89,6 +106,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   const [url, setUrl] = createSignal(defaultUrl)
   const [inputUrl, setInputUrl] = createSignal(url())
+  const [history, setHistory] = createSignal(restoreHistory(defaultUrl, props.initialHistory))
   const [srcdoc, setSrcdoc] = createSignal<string | null>(null)
   const [loadToken, setLoadToken] = createSignal(1)
   const [loadState, setLoadState] = createSignal<LoadState>("idle")
@@ -305,13 +323,46 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     ),
   )
 
+  const show = (target: string, next: BrowserHistory) => {
+    setUrl(target)
+    setInputUrl(target)
+    load(target)
+    if (next === history()) return
+    setHistory(next)
+    props.onNavigate?.(target, next)
+  }
+
   const navigateTo = (raw: string) => {
     const normalized = normalizeUrl(raw)
     if (!normalized) return
-    setUrl(normalized)
-    setInputUrl(normalized)
-    load(normalized)
+    show(normalized, visit(history(), normalized))
   }
+
+  /*
+   * Back and forward walk the pane's own list. They used to call the frame's
+   * `history`, which a frame sandboxed without `allow-same-origin` does not
+   * let ADE touch: the call threw and the buttons did nothing.
+   */
+  const go = (delta: -1 | 1) => {
+    const next = step(history(), delta)
+    if (next !== history()) show(currentEntry(next), next)
+  }
+
+  /*
+   * A URL set from outside (voice's `browserNavigate`) is a navigation too.
+   * The pane's own reports come back through here with the URL it already
+   * shows, and stop at the comparison.
+   */
+  createEffect(
+    on(
+      () => props.initialUrl,
+      (next) => {
+        const normalized = next ? normalizeUrl(next) : undefined
+        if (normalized && normalized !== url()) navigateTo(normalized)
+      },
+      { defer: true },
+    ),
+  )
 
   const onFrameLoad = () => {
     if (srcdoc() !== null) {
@@ -481,7 +532,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
-            onClick={() => iframeRef?.contentWindow?.history.back()}
+            disabled={!canStep(history(), -1)}
+            onClick={() => go(-1)}
             aria-label={t("browser.back")}
             title={t("browser.back")}
           >
@@ -492,7 +544,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
-            onClick={() => iframeRef?.contentWindow?.history.forward()}
+            disabled={!canStep(history(), 1)}
+            onClick={() => go(1)}
             aria-label={t("browser.forward")}
             title={t("browser.forward")}
           >

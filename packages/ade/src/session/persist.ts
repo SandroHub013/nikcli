@@ -13,6 +13,8 @@
  * on a v3 app runs two migrations in sequence.
  */
 
+import { restoreHistory } from "../browser/history"
+
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -81,9 +83,29 @@ export interface PaneState {
   span?: { columns: number; rows: number }
 }
 
+/**
+ * A browser pane, saved apart from the sessions.
+ *
+ * Apart, because `panes` is read by everything that counts and resumes
+ * sessions, and a browser pane is neither. Added without a version bump for
+ * the reason given on `PaneState.span`: optional, and skipped by readers
+ * that do not know it.
+ */
+export interface BrowserPaneState {
+  id: string
+  title: string
+  url: string
+  /** Back/forward list, see `browser/history.ts`. */
+  history?: { entries: string[]; index: number }
+  project?: string
+  span?: { columns: number; rows: number }
+}
+
 export interface WorkspaceState {
   version: number
   panes: PaneState[]
+  /** Absent in states saved before browser panes were kept. */
+  browsers?: BrowserPaneState[]
   focusedPaneId: string | undefined
   pinnedColumns: number | undefined
   currentView: string
@@ -217,6 +239,30 @@ function sanitiseSpan(raw: unknown): { columns: number; rows: number } | undefin
   return { columns: whole(columns), rows: whole(rows) }
 }
 
+/** A browser pane needs an id and a URL; without either there is nothing to reopen. */
+function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
+  if (!Array.isArray(raw)) return []
+  const browsers: BrowserPaneState[] = []
+  for (const entry of raw) {
+    if (!isObject(entry)) continue
+    const id = asOptionalString(entry.id)
+    const url = asOptionalString(entry.url)
+    if (!id || !url) continue
+    const history = isObject(entry.history) ? restoreHistory(url, entry.history) : undefined
+    const span = sanitiseSpan(entry.span)
+    const project = asOptionalString(entry.project)
+    browsers.push({
+      id,
+      title: asString(entry.title, ""),
+      url,
+      ...(history ? { history } : {}),
+      ...(project ? { project } : {}),
+      ...(span ? { span } : {}),
+    })
+  }
+  return browsers
+}
+
 function sanitisePanes(raw: unknown): PaneState[] {
   if (!Array.isArray(raw)) return []
   return raw.map(sanitisePane)
@@ -333,6 +379,7 @@ export function parseWorkspace(json: string): WorkspaceState | undefined {
   return {
     version: CURRENT_VERSION,
     panes: sanitisePanes(data.panes),
+    browsers: sanitiseBrowsers(data.browsers),
     focusedPaneId: asOptionalString(data.focusedPaneId),
     pinnedColumns: asOptionalNumber(data.pinnedColumns),
     currentView: asString(data.currentView, def.currentView),

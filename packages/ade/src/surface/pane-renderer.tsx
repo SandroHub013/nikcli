@@ -176,6 +176,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         initialUrl={current().browserUrl}
+        initialHistory={current().browserHistory}
+        onNavigate={(url, history) =>
+          setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
+        }
         focused={isFocused()}
         onFocus={focus}
         onClose={() => deps.close(current().id)}

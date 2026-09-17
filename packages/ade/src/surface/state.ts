@@ -1,3 +1,4 @@
+import type { BrowserHistory } from "../browser/history"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
@@ -128,6 +129,14 @@ export interface Pane {
   agent?: string
   lines: TranscriptLine[]
   browserUrl?: string
+  /**
+   * The browser pane's back/forward list; its current entry is `browserUrl`.
+   *
+   * Kept here and not in the pane component, because the component is
+   * rebuilt whenever the pane is drawn again — switching project and back
+   * rebuilt it on the URL the pane was opened with.
+   */
+  browserHistory?: BrowserHistory
   /**
    * The video panel's file, empty when the panel is open with nothing in it.
    *
@@ -429,9 +438,27 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       lines: boundPaneTranscript(cleanTranscript(p.lines.map((line) => ({ ...line })))),
     }))
 
+  /*
+   * Browser panes are saved as the page they show, so a restart reopens the
+   * same page rather than dropping the pane. A plugin tile is never one.
+   */
+  const browsers = workbench.panes
+    .filter((p) => p.browserUrl && !p.plugin)
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      url: p.browserUrl!,
+      ...(p.browserHistory
+        ? { history: { entries: [...p.browserHistory.entries], index: p.browserHistory.index } }
+        : {}),
+      ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
+    }))
+
   return {
     version: CURRENT_VERSION,
     panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
+    ...(browsers.length ? { browsers } : {}),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -567,7 +594,21 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
             }
           : undefined
       }
-    }),
+    }).concat(
+      (state.browsers ?? []).map((b): Pane => ({
+        id: b.id,
+        title: b.title,
+        // As `browser.new` creates it: a page is never a finished session.
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl: b.url,
+        ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
+        workspaceId: b.project || owner,
+        ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
+        lines: [],
+      })),
+    ),
     focusedId: state.focusedPaneId,
     pinnedColumns: state.pinnedColumns,
     expandedId: undefined,

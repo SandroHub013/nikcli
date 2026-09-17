@@ -76,7 +76,12 @@
   transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
 }
 
-[data-slot="browser-nav-btn"]:hover {
+[data-slot="browser-nav-btn"]:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+[data-slot="browser-nav-btn"]:hover:not(:disabled) {
   background: var(--ade-border);
   color: var(--ade-text);
 }

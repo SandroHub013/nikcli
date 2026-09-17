@@ -137,9 +137,10 @@ describe("saving and restoring a session", () => {
     expect(sessionsToResume(saved).map((pane) => pane.id)).toEqual(["live"])
   })
 
-  test("a browser pane is not saved at all", () => {
+  test("a browser pane is not saved as a session", () => {
     const { saved } = roundTrip([session({ id: "b", browserUrl: "http://localhost:3000" })])
     expect(saved.panes).toHaveLength(0)
+    expect(sessionsToResume(saved)).toHaveLength(0)
   })
 
   test("what is written is the current schema version", () => {
@@ -221,5 +222,77 @@ describe("a damaged store", () => {
       }),
     )
     expect(saved?.panes[0].lines).toEqual([])
+  })
+})
+
+/*
+ * The user's report: after switching project and back, and after a restart,
+ * the browser pane showed http://localhost:3000/ ("Server non raggiungibile")
+ * instead of the page they had opened. The pane has to come back on its own
+ * page, with the way back to the pages before it.
+ */
+describe("browser panes across a restart", () => {
+  const browser = (over: Partial<Pane> = {}): Pane => ({
+    id: "b1",
+    title: "Browser",
+    status: "working",
+    model: "—",
+    mode: "browser",
+    lines: [],
+    workspaceId: "sito",
+    browserUrl: "https://bastelli-cmp.vercel.app/#top",
+    browserHistory: {
+      entries: ["http://localhost:3000/", "https://bastelli-cmp.vercel.app/#top", "https://bastelli-cmp.vercel.app/catalogo"],
+      index: 1,
+    },
+    ...over,
+  })
+
+  test("comes back on the page it showed, in its own project, with its history", () => {
+    const { restored } = roundTrip([session(), browser({ span: { columns: 2, rows: 1 } })])
+    const pane = restored.panes.find((p) => p.id === "b1")
+    expect(pane?.browserUrl).toBe("https://bastelli-cmp.vercel.app/#top")
+    expect(pane?.browserHistory).toEqual(browser().browserHistory)
+    expect(pane?.workspaceId).toBe("sito")
+    expect(pane?.mode).toBe("browser")
+    expect(pane?.span).toEqual({ columns: 2, rows: 1 })
+    expect(restored.panes.map((p) => p.id)).toEqual(["p1", "b1"])
+  })
+
+  test("a pane that never navigated comes back on its URL, with no history to restore", () => {
+    const { restored } = roundTrip([browser({ browserUrl: "http://localhost:3000", browserHistory: undefined })])
+    expect(restored.panes[0].browserUrl).toBe("http://localhost:3000")
+    expect(restored.panes[0].browserHistory).toBeUndefined()
+  })
+
+  test("a damaged entry is dropped, and a history that does not match its URL starts over", () => {
+    const saved = parseWorkspace(
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        panes: [],
+        browsers: [
+          { id: "senza-url", title: "x" },
+          { title: "senza-id", url: "https://a.test/" },
+          { id: "b2", title: "B", url: "https://a.test/", history: { entries: ["https://z.test/"], index: 0 } },
+          { id: "b3", title: "C", url: "https://a.test/", history: { entries: ["https://a.test/"], index: 7 } },
+        ],
+        currentView: "code",
+        sidebarWidth: 260,
+      }),
+    )
+    expect(saved?.browsers?.map((b) => b.id)).toEqual(["b2", "b3"])
+    expect(saved?.browsers?.[0].history).toEqual({ entries: ["https://a.test/"], index: 0 })
+    expect(saved?.browsers?.[1].history).toEqual({ entries: ["https://a.test/"], index: 0 })
+  })
+
+  test("a state saved before browser panes were kept still reads, with none", () => {
+    const saved = parseWorkspace(JSON.stringify({ version: CURRENT_VERSION, panes: [], currentView: "code", sidebarWidth: 260 }))
+    expect(saved?.browsers).toEqual([])
+    expect(fromWorkspaceState(saved!, "proj").panes).toEqual([])
+  })
+
+  test("a plugin tile is not saved as a browser pane", () => {
+    const { saved } = roundTrip([browser({ plugin: { pluginId: "x", name: "X" } })])
+    expect(saved.browsers ?? []).toHaveLength(0)
   })
 })
