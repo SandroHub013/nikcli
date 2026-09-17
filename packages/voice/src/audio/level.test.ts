@@ -164,15 +164,15 @@ describe("audio/level speech and silence state machine", () => {
 })
 
 describe("the wait for the end of a sentence adapts to the speaker", () => {
-  test("0.8 s until enough pauses are heard, then the usual pause plus a margin, within 0.5-0.8 s", () => {
+  test("0.8 s until enough pauses are heard, then the usual pause plus a margin, within 0.7-0.8 s", () => {
     const learner = createPauseLearner()
     expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
     for (let i = 0; i < 5; i++) learner.heard(200)
     expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
     learner.heard(200)
     expect(learner.timeoutMs()).toBe(MIN_SILENCE_TIMEOUT_MS)
-    for (let i = 0; i < 30; i++) learner.heard(450)
-    expect(learner.timeoutMs()).toBe(650)
+    for (let i = 0; i < 30; i++) learner.heard(550)
+    expect(learner.timeoutMs()).toBe(750)
     for (let i = 0; i < 30; i++) learner.heard(700)
     expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
     // Syllable gaps and sentence ends teach nothing.
@@ -200,7 +200,7 @@ describe("the wait for the end of a sentence adapts to the speaker", () => {
       speak(300)
     }
     expect(learner.timeoutMs()).toBeLessThan(DEFAULT_SILENCE_TIMEOUT_MS)
-    expect(quiet(600)).toBe("speech_ended")
+    expect(quiet(720)).toBe("speech_ended")
 
     const fixed = createSpeechDetector({ silenceDurationMs: 800 }, learner)
     t = 100_000
@@ -208,5 +208,60 @@ describe("the wait for the end of a sentence adapts to the speaker", () => {
     let status = "speaking"
     for (const end = t + 600; t < end; t += 20) status = fixed.step(0, t)
     expect(status).toBe("speaking")
+  })
+})
+
+describe("a pause that ended a sentence the speaker went on with", () => {
+  const { createPauseLearner, createSpeechDetector, DEFAULT_SILENCE_TIMEOUT_MS, MIN_SILENCE_TIMEOUT_MS } = require("./level")
+
+  test("is not cut again, however many short pauses follow", () => {
+    const learner = createPauseLearner()
+    const detector = createSpeechDetector({}, learner)
+    let t = 0
+    let cuts = 0
+    const speak = (ms: number) => {
+      for (const end = t + ms; t < end; t += 20) detector.step(0.1, t)
+    }
+    const quiet = (ms: number) => {
+      for (const end = t + ms; t < end; t += 20) {
+        if (detector.step(0, t) === "speech_ended") {
+          cuts++
+          detector.reset()
+        }
+      }
+    }
+    const shortPauses = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        speak(300)
+        quiet(220)
+      }
+    }
+    shortPauses(10)
+    expect(learner.timeoutMs()).toBe(MIN_SILENCE_TIMEOUT_MS)
+
+    // Ten sentences, each with a 0.75 s pause to think in the middle.
+    for (let sentence = 0; sentence < 10; sentence++) {
+      speak(300)
+      quiet(760)
+      speak(300)
+      shortPauses(20)
+    }
+    expect(cuts).toBe(1)
+    expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
+  })
+
+  test("a sentence that really ended, with the next one long after, teaches nothing", () => {
+    const learner = createPauseLearner()
+    const detector = createSpeechDetector({}, learner)
+    let t = 0
+    for (let i = 0; i < 10; i++) {
+      for (const end = t + 300; t < end; t += 20) detector.step(0.1, t)
+      for (const end = t + 220; t < end; t += 20) detector.step(0, t)
+    }
+    for (const end = t + 3_000; t < end; t += 20) {
+      if (detector.step(0, t) === "speech_ended") detector.reset()
+    }
+    for (const end = t + 300; t < end; t += 20) detector.step(0.1, t)
+    expect(learner.timeoutMs()).toBe(MIN_SILENCE_TIMEOUT_MS)
   })
 })
