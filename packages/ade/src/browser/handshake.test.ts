@@ -5,6 +5,7 @@ import {
   bridgelessChoice,
   framingBlocked,
   handshakeReducer,
+  noticeWithoutCopy,
   reduceFidelity,
 } from "./handshake"
 
@@ -249,5 +250,17 @@ describe("reloading a page without the bridge", () => {
 
   test("uses the mirror only while inspecting", () => {
     expect(settle(true)).toEqual(["pending", "mirror"])
+  })
+})
+
+describe("noticeWithoutCopy", () => {
+  test("a site that refuses framing and copying says so, whatever the mode", () => {
+    expect(noticeWithoutCopy({ blocked: true, inspecting: false })).toBe("blocked")
+    expect(noticeWithoutCopy({ blocked: true, inspecting: true })).toBe("blocked")
+  })
+
+  test("Inspect without a copy explains itself; browsing needs no message", () => {
+    expect(noticeWithoutCopy({ blocked: false, inspecting: true })).toBe("no-copy")
+    expect(noticeWithoutCopy({ blocked: false, inspecting: false })).toBeUndefined()
   })
 })

@@ -348,6 +348,13 @@
   max-width: 280px;
 }
 
+[data-slot="browser-notice-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--ade-space-2);
+}
+
 [data-slot="browser-retry-btn"] {
   margin-top: var(--ade-space-2);
   padding: var(--ade-space-2) var(--ade-space-6);

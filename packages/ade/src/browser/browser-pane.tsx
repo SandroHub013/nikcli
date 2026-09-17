@@ -23,6 +23,8 @@ import {
   INITIAL_HANDSHAKE_STATE,
   bridgelessChoice,
   framingBlocked,
+  noticeWithoutCopy,
+  type PaneNotice,
   reduceFidelity,
   type Fidelity,
   type HandshakeEvent,
@@ -41,6 +43,7 @@ import {
   visit,
   type BrowserHistory,
 } from "./history"
+import { canOpenExternally, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
@@ -111,6 +114,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [loadToken, setLoadToken] = createSignal(1)
   const [loadState, setLoadState] = createSignal<LoadState>("idle")
   const [loadError, setLoadError] = createSignal<string>()
+  const [notice, setNotice] = createSignal<PaneNotice>()
+  const [openError, setOpenError] = createSignal<string>()
   /*
    * Fidelity is decided by the reducer in `handshake.ts`, not here.
    *
@@ -216,6 +221,13 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    */
   const settleWithoutBridge = async (target: string, generation: number) => {
     const isCurrent = () => generation === loadGeneration
+    /*
+     * The host reads the framing headers outside CORS, which a page's own
+     * fetch cannot: most servers that refuse framing do not expose the
+     * header that says so. Started now so it runs alongside the fetch.
+     */
+    const probe = probeFraming(target)
+    const hostSaysBlocked = async () => framingBlocked(readHeaders(await probe))
 
     try {
       const res = await fetch(target, { mode: "cors" })
@@ -223,10 +235,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       if (res.ok) {
         const html = await res.text()
+        const blocked = framingBlocked((name) => res.headers.get(name)) || (await hostSaysBlocked())
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
         pageCopy = { generation, target, html }
-        const blocked = framingBlocked((name) => res.headers.get(name))
         if (bridgelessChoice({ blocked, inspecting: mode() === "edit" }) === "keep-page") {
           handshake({ type: "no-bridge" })
           setLoadState("ready")
@@ -262,10 +274,13 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     try {
       await fetch(target, { mode: "no-cors" })
       if (!isCurrent()) return
-      // Server is reachable, but cross-origin without bridge
+      // Reachable, but with no copy to fall back on.
+      const blocked = await hostSaysBlocked()
+      if (!isCurrent()) return
       setLoadError(undefined)
       handshake({ type: "load-error" })
       setLoadState("ready")
+      setNotice(noticeWithoutCopy({ blocked, inspecting: mode() === "edit" }))
     } catch {
       if (!isCurrent()) return
       handshake({ type: "load-error", error: "Server non raggiungibile" })
@@ -291,6 +306,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (handshakeTimer) clearTimeout(handshakeTimer)
     pageCopy = undefined
     mirrorForInspect = false
+    setNotice(undefined)
+    setOpenError(undefined)
     setLoadState("loading")
     setLoadError(undefined)
     setSelection([])
@@ -310,13 +327,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       mode,
       (next) => {
         if (next === "edit") {
+          if (fidelity() !== "none" || srcdoc() !== null || notice() === "blocked") return
           const copy = pageCopy
-          if (!copy || copy.generation !== loadGeneration) return
-          if (fidelity() !== "none" || srcdoc() !== null) return
+          if (!copy || copy.generation !== loadGeneration) {
+            // Settled with no copy: say why Inspect has nothing to select.
+            if (loadState() === "ready") setNotice(noticeWithoutCopy({ blocked: false, inspecting: true }))
+            return
+          }
           mirrorForInspect = true
           showMirror(copy.target, copy.html)
           return
         }
+        if (notice() === "no-copy") setNotice(undefined)
         if (mirrorForInspect) load(url())
       },
       { defer: true },
@@ -783,6 +805,45 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             </div>
           </Show>
           
+          <Show when={notice()}>
+            {(kind) => (
+              <div data-slot="browser-error-overlay" data-notice={kind()}>
+                <span data-slot="browser-error-title">
+                  {kind() === "blocked" ? t("browser.blocked.title") : t("browser.noCopy.title")}
+                </span>
+                <span data-slot="browser-error-msg">
+                  {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
+                </span>
+                <Show when={openError()}>
+                  {(problem) => <span data-slot="browser-error-msg">{t("browser.openExternal.failed", problem())}</span>}
+                </Show>
+                <div data-slot="browser-notice-actions">
+                  <Show when={canOpenExternally()}>
+                    <button
+                      type="button"
+                      data-slot="browser-retry-btn"
+                      onClick={async () => setOpenError(await openExternally(url()))}
+                    >
+                      {t("browser.openExternal")}
+                    </button>
+                  </Show>
+                  <Show
+                    when={kind() === "no-copy"}
+                    fallback={
+                      <button type="button" data-slot="browser-retry-btn" onClick={() => load(url())}>
+                        {t("browser.retry")}
+                      </button>
+                    }
+                  >
+                    <button type="button" data-slot="browser-retry-btn" onClick={() => setMode("browse")}>
+                      {t("browser.noCopy.back")}
+                    </button>
+                  </Show>
+                </div>
+              </div>
+            )}
+          </Show>
+
           <Show when={mode() === "edit" || selection().length > 0}>
             <div data-slot="browser-prompt-popover">
               <Show when={selection().length > 0}>

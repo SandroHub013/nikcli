@@ -68,3 +68,63 @@ export function restoreHistory(url: string, saved: unknown): BrowserHistory {
   const keptIndex = index - (entries.length - kept.length)
   return keptIndex < 0 ? startHistory(url) : { entries: kept, index: keptIndex }
 }
+
+/*
+ * Query parameters that carry credentials: Jupyter's `?token=`, magic links,
+ * OAuth's `code=`, signed URLs. Matched on the parts of the name, so
+ * `access_token`, `api-key` and `X-Amz-Signature` are caught while `zipcode`
+ * or `monkey` are not.
+ */
+const SECRET_PARTS = new Set([
+  "token", "code", "key", "apikey", "secret", "password", "passwd", "pwd",
+  "auth", "session", "sessionid", "sid", "sig", "signature", "jwt", "credential", "credentials",
+])
+// Also inside a longer name (`sessionid`, `xsrftoken`); "auth" is not, or `author` would go too.
+const SECRET_WORDS = ["token", "secret", "password", "session"]
+
+function isSecretName(name: string): boolean {
+  const lower = name.toLowerCase()
+  if (SECRET_WORDS.some((word) => lower.includes(word))) return true
+  return lower.split(/[^a-z0-9]+/).some((part) => SECRET_PARTS.has(part))
+}
+
+/**
+ * The URL as it may be written to disk.
+ *
+ * The workbench is saved in plain text, and a URL is often the credential
+ * itself. Parameters that look like one are removed, and so is a fragment
+ * carrying an OAuth token (`#access_token=…`). What is shown on screen is
+ * not touched: only what is saved.
+ */
+export function redactUrl(url: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    // Unreadable: keep only what precedes a query or fragment.
+    return url.replace(/[?#].*$/, "")
+  }
+  let changed = false
+  for (const name of [...parsed.searchParams.keys()]) {
+    if (!isSecretName(name)) continue
+    parsed.searchParams.delete(name)
+    changed = true
+  }
+  if (parsed.username || parsed.password) {
+    parsed.username = ""
+    parsed.password = ""
+    changed = true
+  }
+  const fragment = parsed.hash.slice(1)
+  if (fragment.includes("=") && [...new URLSearchParams(fragment.replace(/^[/!?]+/, "")).keys()].some(isSecretName)) {
+    parsed.hash = ""
+    changed = true
+  }
+  // Untouched URLs are returned as written, so the saved history still matches the pane's URL.
+  return changed ? parsed.href : url
+}
+
+/** `redactUrl` over a whole history; its current entry stays the redacted URL. */
+export function redactHistory(history: BrowserHistory): BrowserHistory {
+  return { entries: history.entries.map(redactUrl), index: history.index }
+}

@@ -148,3 +148,18 @@ export type BridgelessChoice = "keep-page" | "mirror"
 export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean }): BridgelessChoice {
   return input.blocked || input.inspecting ? "mirror" : "keep-page"
 }
+
+/**
+ * What the pane says over the frame when it has no copy of the page to fall back on.
+ *
+ * - `blocked`: the site refuses to be framed and cannot be copied either, so
+ *   the frame is empty; the way to see it is the system browser.
+ * - `no-copy`: the page is on screen, but Inspect needs a copy and the site
+ *   does not allow one (no CORS).
+ */
+export type PaneNotice = "blocked" | "no-copy"
+
+export function noticeWithoutCopy(input: { blocked: boolean; inspecting: boolean }): PaneNotice | undefined {
+  if (input.blocked) return "blocked"
+  return input.inspecting ? "no-copy" : undefined
+}

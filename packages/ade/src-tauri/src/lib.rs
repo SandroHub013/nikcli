@@ -14,6 +14,7 @@
 /// variable and forwards it, which is what makes the escape hatch real.
 mod agent_link;
 mod append;
+mod browse;
 mod frontend;
 mod media;
 mod project_bytes;
@@ -1175,6 +1176,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
+            browse::ade_browser_framing,
+            browse::ade_open_in_browser,
             update::ade_update_install,
             record::record_start,
             record::record_stop,

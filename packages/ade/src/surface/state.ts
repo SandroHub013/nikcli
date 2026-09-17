@@ -1,4 +1,4 @@
-import type { BrowserHistory } from "../browser/history"
+import { redactHistory, redactUrl, type BrowserHistory } from "../browser/history"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
@@ -447,10 +447,9 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
     .map((p) => ({
       id: p.id,
       title: p.title,
-      url: p.browserUrl!,
-      ...(p.browserHistory
-        ? { history: { entries: [...p.browserHistory.entries], index: p.browserHistory.index } }
-        : {}),
+      // Saved without the parameters that carry credentials: see `redactUrl`.
+      url: redactUrl(p.browserUrl!),
+      ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))

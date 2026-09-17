@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { HISTORY_LIMIT, canStep, currentEntry, restoreHistory, startHistory, step, visit } from "./history"
+import {
+  HISTORY_LIMIT,
+  canStep,
+  currentEntry,
+  redactHistory,
+  redactUrl,
+  restoreHistory,
+  startHistory,
+  step,
+  visit,
+} from "./history"
 
 const A = "https://a.test/"
 const B = "https://b.test/"
@@ -69,5 +79,43 @@ describe("restoreHistory", () => {
       index: HISTORY_LIMIT - 1,
     })
     expect(restoreHistory(entries[0], { entries, index: 0 })).toEqual({ entries: [entries[0]], index: 0 })
+  })
+})
+
+describe("redactUrl", () => {
+  test("drops the query parameters that carry credentials", () => {
+    expect(redactUrl("http://localhost:8888/lab?token=abc123")).toBe("http://localhost:8888/lab")
+    expect(redactUrl("https://app.test/cb?code=xyz&state=s1")).toBe("https://app.test/cb?state=s1")
+    expect(redactUrl("https://a.test/?api_key=1&apiKey=2&X-Amz-Signature=3&sessionid=4&password=5&auth=6&page=2")).toBe(
+      "https://a.test/?page=2",
+    )
+    expect(redactUrl("https://a.test/?client_secret=1&xsrfToken=2&q=ok")).toBe("https://a.test/?q=ok")
+  })
+
+  test("keeps parameters that only resemble one", () => {
+    const url = "https://a.test/?zipcode=40127&monkey=1&author=x&keyword=y"
+    expect(redactUrl(url)).toBe(url)
+  })
+
+  test("drops a fragment carrying an OAuth token, keeps an ordinary anchor", () => {
+    expect(redactUrl("https://a.test/cb#access_token=t&token_type=bearer")).toBe("https://a.test/cb")
+    expect(redactUrl("https://a.test/#/cb?id_token=t")).toBe("https://a.test/")
+    expect(redactUrl("https://bastelli-cmp.vercel.app/#top")).toBe("https://bastelli-cmp.vercel.app/#top")
+    expect(redactUrl("https://a.test/#section=2")).toBe("https://a.test/#section=2")
+  })
+
+  test("drops credentials in the address itself", () => {
+    expect(redactUrl("https://user:pw@a.test/x")).toBe("https://a.test/x")
+  })
+
+  test("an unreadable URL keeps only what precedes its query", () => {
+    expect(redactUrl("not a url?token=1")).toBe("not a url")
+  })
+
+  test("a redacted history still restores on its redacted URL", () => {
+    const history = visit(startHistory("http://localhost:8888/?token=a"), "http://localhost:8888/tree?token=a")
+    const saved = redactHistory(history)
+    expect(saved.entries).toEqual(["http://localhost:8888/", "http://localhost:8888/tree"])
+    expect(restoreHistory(redactUrl(currentEntry(history)), saved)).toEqual(saved)
   })
 })

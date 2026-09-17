@@ -291,6 +291,22 @@ describe("browser panes across a restart", () => {
     expect(fromWorkspaceState(saved!, "proj").panes).toEqual([])
   })
 
+  test("what is saved carries no credentials from the URL or the history", () => {
+    const { saved, restored } = roundTrip([
+      browser({
+        browserUrl: "http://localhost:8888/lab?token=SECRET",
+        browserHistory: { entries: ["https://a.test/cb?code=C1&state=s", "http://localhost:8888/lab?token=SECRET"], index: 1 },
+      }),
+    ])
+    expect(JSON.stringify(saved)).not.toContain("SECRET")
+    expect(JSON.stringify(saved)).not.toContain("C1")
+    expect(restored.panes[0].browserUrl).toBe("http://localhost:8888/lab")
+    expect(restored.panes[0].browserHistory).toEqual({
+      entries: ["https://a.test/cb?state=s", "http://localhost:8888/lab"],
+      index: 1,
+    })
+  })
+
   test("a plugin tile is not saved as a browser pane", () => {
     const { saved } = roundTrip([browser({ plugin: { pluginId: "x", name: "X" } })])
     expect(saved.browsers ?? []).toHaveLength(0)
