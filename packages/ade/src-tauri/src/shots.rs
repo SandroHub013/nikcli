@@ -44,6 +44,109 @@ pub struct Shot {
     modified_ms: u64,
 }
 
+/// Folders that hold nothing but screenshots, where every image is one.
+///
+/// True everywhere except the Desktop, which on macOS is where screenshots
+/// land by default — and where everything else the user leaves lying around
+/// lands too. A tray listing every picture on the Desktop, and offering to
+/// delete them, would be answering a question nobody asked.
+fn holds_only_shots(dir: &Path) -> bool {
+    !dir.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case("Desktop"))
+        .unwrap_or(false)
+}
+
+/*
+ * What macOS calls a screenshot, in the languages it writes it in.
+ *
+ * The name follows the system language: "Screenshot 2026-09-17 at 21.43.13",
+ * "Schermata 2026-09-17 alle 21.43.13", "Bildschirmfoto …". The prefix can
+ * also be changed (`defaults write com.apple.screencapture name`), which is
+ * why a date with a time is accepted as evidence on its own below.
+ */
+const SHOT_PREFIXES: [&str; 14] = [
+    "screen shot",
+    "screenshot",
+    "schermata",
+    "immagine",
+    "bildschirmfoto",
+    "capture d",
+    "captura de pantalla",
+    "captura de ecra",
+    "schermafbeelding",
+    "skarmavbild",
+    "zrzut ekranu",
+    "ekran goruntusu",
+    "\u{441}\u{43d}\u{438}\u{43c}\u{43e}\u{43a} \u{44d}\u{43a}\u{440}\u{430}\u{43d}\u{430}",
+    "\u{30b9}\u{30af}\u{30ea}\u{30fc}\u{30f3}\u{30b7}\u{30e7}\u{30c3}\u{30c8}",
+];
+
+/// Whether a file name reads as a screenshot: a known prefix, or a date and a time.
+fn named_like_shot(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    if SHOT_PREFIXES.iter().any(|prefix| lower.starts_with(prefix)) {
+        return true;
+    }
+    /*
+     * 2026-09-17 … 21.43.13, whatever sits between them and whatever the
+     * prefix was renamed to. Both halves are required: a date alone is a
+     * holiday photo, a time alone is nothing.
+     */
+    has_date(&lower) && has_clock(&lower)
+}
+
+fn has_date(name: &str) -> bool {
+    matches_shape(name, &[4, 2, 2], &['-', '.', '_'])
+}
+
+fn has_clock(name: &str) -> bool {
+    matches_shape(name, &[2, 2, 2], &['.', '-', ':', '_'])
+}
+
+/// Three runs of digits of the given lengths, joined by one of `separators`,
+/// and not part of a longer run of digits on either side.
+fn matches_shape(name: &str, lengths: &[usize; 3], separators: &[char]) -> bool {
+    let chars: Vec<char> = name.chars().collect();
+    'start: for start in 0..chars.len() {
+        if start > 0 && chars[start - 1].is_ascii_digit() {
+            continue;
+        }
+        let mut at = start;
+        for (index, wanted) in lengths.iter().enumerate() {
+            let run = chars[at..].iter().take_while(|c| c.is_ascii_digit()).count();
+            if run != *wanted {
+                continue 'start;
+            }
+            at += run;
+            if index < lengths.len() - 1 {
+                match chars.get(at) {
+                    Some(c) if separators.contains(c) => at += 1,
+                    _ => continue 'start,
+                }
+            }
+        }
+        if chars.get(at).map(|c| !c.is_ascii_digit()).unwrap_or(true) {
+            return true;
+        }
+    }
+    false
+}
+
+/// An image this tray should show: in a screenshots folder any, on the Desktop one named like a shot.
+fn is_shot(dir: &Path, path: &Path) -> bool {
+    if !is_image(path) {
+        return false;
+    }
+    if holds_only_shots(dir) {
+        return true;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(named_like_shot)
+        .unwrap_or(false)
+}
+
 fn is_image(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -138,6 +241,8 @@ pub fn shot_dir_candidates(
 }
 
 /// `~` at the start is the shell's, not the filesystem's: expanded here or the path does not exist.
+// Only macOS reads a configured folder, but the rule is tested from every platform.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn expand_tilde(raw: &str, home: Option<&Path>) -> Option<PathBuf> {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -175,12 +280,21 @@ fn configured_dir() -> Option<PathBuf> {
 /// to use.
 #[tauri::command]
 pub async fn shots_recent(dir: String, limit: usize) -> Vec<Shot> {
-    let mut found: Vec<Shot> = std::fs::read_dir(&dir)
+    let folder = PathBuf::from(&dir);
+    let mut found: Vec<Shot> = std::fs::read_dir(&folder)
         .into_iter()
         .flatten()
         .flatten()
+        /*
+         * Bounded: this reads a folder the user chose, not one ADE made, and
+         * a Desktop or a picture library can hold tens of thousands of files.
+         * The twelve newest are what the tray wants, and a folder that takes
+         * more than this many reads to look through is not a screenshots
+         * folder.
+         */
+        .take(MAX_SCANNED)
         .map(|entry| entry.path())
-        .filter(|path| path.is_file() && is_image(path))
+        .filter(|path| path.is_file() && is_shot(&folder, path))
         .filter_map(|path| describe(&path))
         .collect();
     found.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
@@ -243,7 +357,7 @@ pub async fn shots_watch(
             }
 
             let entries: HashSet<PathBuf> = match std::fs::read_dir(&path) {
-                Ok(read) => read.flatten().map(|entry| entry.path()).collect(),
+                Ok(read) => read.flatten().take(MAX_SCANNED).map(|entry| entry.path()).collect(),
                 Err(_) => {
                     // Not listed, so nothing is known: the next pass tries again.
                     listed_mtime = None;
@@ -255,7 +369,7 @@ pub async fn shots_watch(
             unsettled = false;
 
             for entry in &entries {
-                if seen.contains(entry) || !entry.is_file() || !is_image(entry) {
+                if seen.contains(entry) || !entry.is_file() || !is_shot(&path, entry) {
                     continue;
                 }
                 /*
@@ -294,6 +408,9 @@ pub async fn shots_watch(
  * that. Most passes list nothing at all — see `needs_listing`.
  */
 const POLL_INTERVAL: Duration = Duration::from_millis(2500);
+
+/// How many directory entries one listing may look at. See `shots_recent`.
+const MAX_SCANNED: usize = 5_000;
 const FULL_RELIST: Duration = Duration::from_secs(30);
 
 /// The folder's own modified time, which moves when a file is added, removed
@@ -421,8 +538,17 @@ fn is_in_shots_dir(watch: &Watch, path: &Path) -> bool {
 
 fn check_shot(watch: &Watch, path: &str) -> Result<PathBuf, String> {
     let file = PathBuf::from(path);
-    if !is_image(&file) {
-        return Err("non è un'immagine".into());
+    /*
+     * Named like a screenshot as well as being in the folder.
+     *
+     * On macOS that folder is the Desktop, so "an image in the watched
+     * folder" is every picture the user has left lying about — and
+     * `shot_delete` takes a path from the page. The tray never offers one of
+     * those, and now it could not act on one either.
+     */
+    let folder = file.parent().unwrap_or(Path::new(""));
+    if !is_shot(folder, &file) {
+        return Err("non è una schermata".into());
     }
     if !is_in_shots_dir(watch, &file) {
         return Err("non è nella cartella degli screenshot".into());
@@ -662,5 +788,62 @@ mod dir_tests {
         assert_eq!(expand_tilde("~/Desktop/Shots\n", Some(&home())), Some(home().join("Desktop/Shots")));
         assert_eq!(expand_tilde("/Volumes/SSD/Shots", Some(&home())), Some(PathBuf::from("/Volumes/SSD/Shots")));
         assert_eq!(expand_tilde("  ", Some(&home())), None);
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    fn desktop() -> PathBuf {
+        PathBuf::from("/Users/nik/Desktop")
+    }
+
+    fn shots_folder() -> PathBuf {
+        PathBuf::from("C:/Users/nik/Pictures/Screenshots")
+    }
+
+    /// Windows watches a Screenshots folder, so nothing there is filtered by name.
+    #[test]
+    fn a_screenshots_folder_holds_only_screenshots() {
+        assert!(holds_only_shots(&shots_folder()));
+        assert!(is_shot(&shots_folder(), &shots_folder().join("una foto qualsiasi.png")));
+    }
+
+    #[test]
+    fn on_the_desktop_only_what_reads_as_a_screenshot() {
+        for name in [
+            "Screenshot 2026-09-17 at 21.43.13.png",
+            "Screen Shot 2026-09-17 at 09.02.55.png",
+            "Schermata 2026-09-17 alle 21.43.13.png",
+            "Bildschirmfoto 2026-09-17 um 21.43.13.png",
+            "Capture d'ecran 2026-09-17 a 21.43.13.png",
+            "Nome scelto da me 2026-09-17 alle 21.43.13.png",
+        ] {
+            assert!(is_shot(&desktop(), &desktop().join(name)), "{name}");
+        }
+
+        for name in [
+            "IMG_4821.jpeg",
+            "logo.png",
+            "vacanza 2026-08-14.png",
+            "CV 2026.pdf",
+            "appunti.txt",
+        ] {
+            assert!(!is_shot(&desktop(), &desktop().join(name)), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_date_alone_is_not_one_and_neither_is_a_long_number() {
+        assert!(!named_like_shot("2026-09-17.png"));
+        assert!(!named_like_shot("20260917214313.png"));
+        assert!(named_like_shot("2026-09-17 21.43.13.png"));
+    }
+
+    #[test]
+    fn a_screenshot_is_still_only_an_image() {
+        assert!(!is_shot(&desktop(), &desktop().join("Screenshot 2026-09-17 at 21.43.13.txt")));
+        assert!(!is_shot(&shots_folder(), &shots_folder().join("thumbs.db")));
     }
 }
