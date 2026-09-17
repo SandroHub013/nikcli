@@ -364,6 +364,16 @@ export const it = {
   "browser.prompt.empty": "Punta un elemento nella pagina o scrivi un'istruzione...",
   "browser.selection.none": "Nessun elemento selezionato",
   "browser.selection.count": (count: number) => count === 1 ? "1 elemento selezionato" : `${count} elementi selezionati`,
+  "browser.owner.none": "Non legato",
+  "browser.owner.ready": (title: string) => `↳ ${title}`,
+  "browser.owner.closed": (title: string) => `${title} (chiusa)`,
+  "browser.owner.tip": "La sessione a cui vanno le richieste dell'ispettore",
+  "browser.owner.focus": "Vai alla sessione",
+  "browser.owner.bind": "Lega a",
+  "browser.owner.unbind": "Slega",
+  "browser.send.ask": "A quale sessione mando la richiesta? Il pannello resterà legato a lei.",
+  "browser.send.closed": (title: string) => `«${title}» non è in esecuzione. A quale sessione mando la richiesta?`,
+  "browser.send.none": "Nessuna sessione in esecuzione in questo progetto.",
 
   // Decisions
   "date.today": "oggi",

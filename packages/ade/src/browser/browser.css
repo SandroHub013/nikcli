@@ -47,8 +47,9 @@
 
 /* Narrow panes: the URL bar drops to a deliberate full-width second row
    instead of being squeezed to a few characters between the button groups.
-   Row one then holds nav, mode, device and pane actions on a single line. */
-@container (max-width: 560px) {
+   Row one then holds nav, mode, device, the session chip and pane actions on
+   a single line; the chip is why the threshold is wider than the controls. */
+@container (max-width: 720px) {
   [data-slot="browser-url-bar"] {
     order: 10;
     flex-basis: 100%;
@@ -209,6 +210,124 @@
 
 [data-component="browser-pane"][data-mode="edit"] [data-slot="browser-mode-btn"][data-active] {
   color: var(--ade-accent);
+}
+
+/* ── the session this pane belongs to (S46) ─────────────────────────────── */
+
+/* Shrinks before the address bar does: the menu has the full name. */
+[data-slot="browser-owner-wrap"] {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 36px;
+}
+
+[data-slot="browser-owner"] {
+  display: block;
+  max-width: 120px;
+  min-width: 0;
+  line-height: 20px;
+  height: 22px;
+  padding: 0 var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+[data-slot="browser-owner"][data-state="ready"] {
+  border-color: var(--ade-accent);
+  color: var(--ade-accent);
+}
+
+[data-slot="browser-owner"][data-state="none"],
+[data-slot="browser-owner"][data-state="closed"] {
+  color: var(--ade-text-weak);
+  border-style: dashed;
+}
+
+[data-slot="browser-owner"]:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="browser-owner-menu"] {
+  position: absolute;
+  top: calc(100% + var(--ade-space-2));
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--ade-space-2);
+  background: var(--ade-overlay);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  box-shadow: var(--ade-shadow-md);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="browser-owner-menu"] button {
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="browser-owner-menu"] button:hover {
+  background: var(--ade-hover);
+}
+
+[data-slot="browser-owner-menu"] button[aria-checked="true"] {
+  color: var(--ade-accent);
+  font-weight: 600;
+}
+
+[data-slot="browser-owner-heading"],
+[data-slot="browser-owner-empty"] {
+  padding: var(--ade-space-2) var(--ade-space-3);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-send-picker"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-4);
+  border-bottom: 1px solid var(--ade-border);
+  background: var(--ade-surface);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text);
+}
+
+[data-slot="browser-send-choices"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="browser-send-choice"] {
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-accent);
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="browser-send-choice"]:hover {
+  background: var(--ade-hover);
 }
 
 [data-slot="browser-actions"] {

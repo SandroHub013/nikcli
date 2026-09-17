@@ -41,6 +41,21 @@ describe("createPanelRouter", () => {
     expect(replyOf(handled)).toBe(`${REPLY_PREFIX} video seek ok — 0:12.0 di 1:40.0, in riproduzione`)
   })
 
+  test("the panel is told which session asked", async () => {
+    const router = createPanelRouter()
+    const from: (string | undefined)[] = []
+    router.register("browser", {
+      verbs: VERBS,
+      run: async (_request, who) => {
+        from.push(who)
+        return { ok: true, detail: "" }
+      },
+    })
+    await router.handle("@ade browser reload", "n1-2")
+    await router.handle("@ade browser state")
+    expect(from).toEqual(["n1-2", undefined])
+  })
+
   test("a panel that is not open is told so, with the ones that are", async () => {
     const router = createPanelRouter()
     router.register("video", panel(async () => ({ ok: true, detail: "" })))

@@ -97,6 +97,8 @@ export interface BrowserPaneState {
   url: string
   /** Back/forward list, see `browser/history.ts`. */
   history?: { entries: string[]; index: number }
+  /** The session the pane is bound to, see `browser/binding.ts`. */
+  owner?: { id: string; title: string }
   project?: string
   span?: { columns: number; rows: number }
 }
@@ -251,11 +253,14 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
     const history = isObject(entry.history) ? restoreHistory(url, entry.history) : undefined
     const span = sanitiseSpan(entry.span)
     const project = asOptionalString(entry.project)
+    const ownerId = isObject(entry.owner) ? asOptionalString(entry.owner.id) : undefined
+    const owner = ownerId && isObject(entry.owner) ? { id: ownerId, title: asString(entry.owner.title, "") } : undefined
     browsers.push({
       id,
       title: asString(entry.title, ""),
       url,
       ...(history ? { history } : {}),
+      ...(owner ? { owner } : {}),
       ...(project ? { project } : {}),
       ...(span ? { span } : {}),
     })

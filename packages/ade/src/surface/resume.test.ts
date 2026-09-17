@@ -259,6 +259,29 @@ describe("browser panes across a restart", () => {
     expect(restored.panes.map((p) => p.id)).toEqual(["p1", "b1"])
   })
 
+  test("comes back bound to the same session (S46)", () => {
+    const { restored } = roundTrip([session(), browser({ browserOwner: { id: "p1", title: "agy · rifattorizza" } })])
+    expect(restored.panes.find((p) => p.id === "b1")?.browserOwner).toEqual({ id: "p1", title: "agy · rifattorizza" })
+    expect(roundTrip([browser()]).restored.panes[0].browserOwner).toBeUndefined()
+  })
+
+  test("a damaged binding is dropped, the pane is kept", () => {
+    const saved = parseWorkspace(
+      JSON.stringify({
+        version: CURRENT_VERSION,
+        panes: [],
+        browsers: [
+          { id: "b1", title: "B", url: "https://a.test/", owner: { title: "senza id" } },
+          { id: "b2", title: "B", url: "https://a.test/", owner: "n1-1" },
+          { id: "b3", title: "B", url: "https://a.test/", owner: { id: "n1-1" } },
+        ],
+        currentView: "code",
+        sidebarWidth: 260,
+      }),
+    )
+    expect(saved?.browsers?.map((b) => b.owner)).toEqual([undefined, undefined, { id: "n1-1", title: "" }])
+  })
+
   test("a pane that never navigated comes back on its URL, with no history to restore", () => {
     const { restored } = roundTrip([browser({ browserUrl: "http://localhost:3000", browserHistory: undefined })])
     expect(restored.panes[0].browserUrl).toBe("http://localhost:3000")

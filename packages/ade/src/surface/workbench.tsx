@@ -242,6 +242,7 @@ import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter } from "../panels/router"
 import { panelsHelp } from "../panels/protocol"
+import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
@@ -596,6 +597,46 @@ export function Workbench() {
         (failure: unknown) => ({ ok: false as const, reason: failure instanceof Error ? failure.message : String(failure) }),
       )
     },
+  })
+
+  /*
+   * `@ade browser …` (S46): a session opens a web pane bound to itself and
+   * drives it. One handler for every pane, since the answer depends on who
+   * asks; each mounted pane leaves its controls in `browserControllers`.
+   */
+  const browserControllers = new Map<string, BrowserController>()
+  panels.register("browser", {
+    verbs: BROWSER_VERBS,
+    run: (request, from) =>
+      runBrowserCommand(
+        {
+          session: (id) => {
+            const pane = wb().panes.find((p) => p.id === id && !isPanelPane(p))
+            return pane && isRunning(pane.id) ? { id: pane.id, title: pane.title } : undefined
+          },
+          ownedPane: (ownerId) => wb().panes.filter((p) => p.browserUrl && p.browserOwner?.id === ownerId).at(-1),
+          openPane: (url, owner) => {
+            const pane: Pane = {
+              id: `b${Date.now()}`,
+              title: "Browser",
+              status: "working",
+              model: "—",
+              mode: "browser",
+              browserUrl: url,
+              browserOwner: owner,
+              // In the owner's project, next to it; the user's focus stays where it is.
+              workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
+              lines: [],
+            }
+            setWb((w) => ({ ...addPane(w, pane), focusedId: w.focusedId }))
+            return pane
+          },
+          navigate: (paneId, url) => setWb((w) => updatePane(w, paneId, { browserUrl: url })),
+          controller: (paneId) => browserControllers.get(paneId),
+        },
+        request,
+        from,
+      ),
   })
 
   /*
@@ -2535,6 +2576,7 @@ export function Workbench() {
         { panel: "video", verbs: VIDEO_VERBS },
         { panel: "model", verbs: MODEL_VERBS },
         { panel: "app", verbs: SIMULATOR_VERBS },
+        { panel: "browser", verbs: BROWSER_VERBS },
       ]
       void host?.mailboxPublish?.(`${USAGE}${panelsHelp(panelVerbs)}`, "usage").catch(() => {})
     })
@@ -4856,6 +4898,7 @@ export function Workbench() {
     panels,
     announceToAll,
     pluginRuntime,
+    browserControllers,
   })
 
   const paletteChord = createMemo(() => {

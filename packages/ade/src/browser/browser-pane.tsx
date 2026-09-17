@@ -31,6 +31,7 @@ import {
 } from "./handshake"
 import { type BridgeMessage, type InspectedElement } from "./protocol"
 import { FRAME_ASK, FRAME_HELLO, FRAME_NAME, newFrameSecret, openEnvelope } from "./frame-script"
+import { planSend, type BrowserController, type OwnerStatus, type SessionChoice } from "./binding"
 // The same file the host runs in every frame; the mirror carries it inline.
 import FRAME_SCRIPT from "../../src-tauri/scripts/browser-frame.js?raw"
 import { escapeAttribute, withLoadToken } from "./frame-url"
@@ -57,7 +58,21 @@ export interface BrowserPaneProps {
   onFocus?: () => void
   onClose?: () => void
   onExpand?: () => void
-  onSendPrompt?: (prompt: string, context?: string) => void
+  /**
+   * Sends to session `to`; false when it could not (it stopped meanwhile).
+   * The pane decides `to`: the bound session, or the one the user picks.
+   */
+  onSendPrompt?: (prompt: string, context: string | undefined, to: string) => boolean
+  /** The session this pane is bound to (S46), see `binding.ts`. */
+  owner?: OwnerStatus
+  /** The running sessions a send can go to, for the chip's menu and the picker. */
+  sessions?: SessionChoice[]
+  /** Binds the pane to a session, or with `undefined` unbinds it. */
+  onBind?: (sessionId: string | undefined) => void
+  /** Brings the bound session into view. */
+  onFocusOwner?: () => void
+  /** What an agent's `@ade browser …` drives; `undefined` when the pane goes. */
+  onController?: (controller: BrowserController | undefined) => void
   /**
    * Every page the pane loads, with the history that led to it.
    *
@@ -135,6 +150,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [selection, setSelection] = createSignal<InspectedElement[]>([])
   const [promptText, setPromptText] = createSignal("")
   const [containerBox, setContainerBox] = createSignal({ width: 0, height: 0 })
+  const [ownerMenu, setOwnerMenu] = createSignal(false)
+  /** A send waiting for the user to say which session gets it. */
+  const [asking, setAsking] = createSignal(false)
 
   let iframeRef: HTMLIFrameElement | undefined
   let viewportContainerRef: HTMLDivElement | undefined
@@ -511,15 +529,54 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     post({ type: "visual-editor:clear-selection" })
   }
 
-  const sendPromptWithContext = () => {
+  const deliver = (to: string) => {
     const text = promptText().trim()
-    const elements = selection()
-    const context = formatSelectionContext(elements, { url: url(), instruction: text || undefined })
-
-    props.onSendPrompt?.(text, context)
+    const context = formatSelectionContext(selection(), { url: url(), instruction: text || undefined })
+    if (!props.onSendPrompt?.(text, context, to)) {
+      setAsking(true)
+      return
+    }
+    setAsking(false)
     setPromptText("")
     clearSelection()
   }
+
+  /*
+   * To the bound session, or ask. Never to whichever session happens to be
+   * running: see `planSend`. The text and the selection stay until it goes.
+   */
+  const sendPromptWithContext = () => {
+    if (!promptText().trim() && selection().length === 0) return
+    const plan = planSend(props.owner ?? { state: "none" })
+    if (plan.kind === "send") deliver(plan.to)
+    else setAsking(true)
+  }
+
+  const sendTo = (sessionId: string) => {
+    props.onBind?.(sessionId)
+    deliver(sessionId)
+  }
+
+  const ownerLabel = () => {
+    const owner = props.owner ?? { state: "none" as const }
+    if (owner.state === "ready") return t("browser.owner.ready", owner.title)
+    if (owner.state === "closed") return t("browser.owner.closed", owner.title)
+    return t("browser.owner.none")
+  }
+
+  onMount(() => {
+    props.onController?.({
+      reload: () => load(url()),
+      setInspect: (on) => setMode(on ? "edit" : "browse"),
+      state: () => ({
+        url: url(),
+        inspecting: mode() === "edit",
+        fidelity: fidelityLabel(),
+        selected: selection().length,
+      }),
+    })
+    onCleanup(() => props.onController?.(undefined))
+  })
 
   const viewportFit = createMemo(() =>
     fitViewport({
@@ -686,6 +743,72 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             </button>
           </Show>
         </div>
+
+        <Show when={props.onBind}>
+          <div
+            data-slot="browser-owner-wrap"
+            // A click anywhere else, the page included, closes the menu.
+            onFocusOut={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOwnerMenu(false)
+            }}
+          >
+            <button
+              type="button"
+              data-slot="browser-owner"
+              data-state={props.owner?.state ?? "none"}
+              aria-haspopup="menu"
+              aria-expanded={ownerMenu()}
+              title={t("browser.owner.tip")}
+              onClick={() => setOwnerMenu((open) => !open)}
+            >
+              {ownerLabel()}
+            </button>
+            <Show when={ownerMenu()}>
+              <div data-slot="browser-owner-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setOwnerMenu(false)}>
+                <Show when={props.owner?.state === "ready"}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOwnerMenu(false)
+                      props.onFocusOwner?.()
+                    }}
+                  >
+                    {t("browser.owner.focus")}
+                  </button>
+                </Show>
+                <span data-slot="browser-owner-heading">{t("browser.owner.bind")}</span>
+                <For each={props.sessions ?? []} fallback={<span data-slot="browser-owner-empty">{t("browser.send.none")}</span>}>
+                  {(session) => (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={props.owner?.state !== "none" && (props.owner as { id: string }).id === session.id}
+                      onClick={() => {
+                        setOwnerMenu(false)
+                        props.onBind?.(session.id)
+                      }}
+                    >
+                      {session.title}
+                    </button>
+                  )}
+                </For>
+                <Show when={props.owner && props.owner.state !== "none"}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOwnerMenu(false)
+                      props.onBind?.(undefined)
+                    }}
+                  >
+                    {t("browser.owner.unbind")}
+                  </button>
+                </Show>
+              </div>
+            </Show>
+          </div>
+        </Show>
 
         <div data-slot="browser-actions">
           <Show when={props.onExpand}>
@@ -909,6 +1032,28 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   >
                     {t("browser.clearSelection")}
                   </button>
+                </div>
+              </Show>
+
+              <Show when={asking()}>
+                <div data-slot="browser-send-picker" role="dialog" aria-label={t("browser.send.ask")}>
+                  <span data-slot="browser-send-question">
+                    {props.owner?.state === "closed"
+                      ? t("browser.send.closed", props.owner.title)
+                      : t("browser.send.ask")}
+                  </span>
+                  <div data-slot="browser-send-choices">
+                    <For each={props.sessions ?? []} fallback={<span data-slot="browser-owner-empty">{t("browser.send.none")}</span>}>
+                      {(session) => (
+                        <button type="button" data-slot="browser-send-choice" onClick={() => sendTo(session.id)}>
+                          {session.title}
+                        </button>
+                      )}
+                    </For>
+                    <button type="button" data-slot="browser-clear-selection" onClick={() => setAsking(false)}>
+                      {t("new.cancel")}
+                    </button>
+                  </div>
                 </div>
               </Show>
 

@@ -138,6 +138,12 @@ export interface Pane {
    */
   browserHistory?: BrowserHistory
   /**
+   * The session a browser pane belongs to (S46): what the inspector sends
+   * goes there. The title is the one it had when bound, for the chip once the
+   * session is gone. See `browser/binding.ts`.
+   */
+  browserOwner?: { id: string; title: string }
+  /**
    * The video panel's file, empty when the panel is open with nothing in it.
    *
    * Present rather than absent for an empty panel, because "" is what
@@ -450,6 +456,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       // Saved without the parameters that carry credentials: see `redactUrl`.
       url: redactUrl(p.browserUrl!),
       ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
+      ...(p.browserOwner ? { owner: { id: p.browserOwner.id, title: p.browserOwner.title } } : {}),
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
@@ -603,6 +610,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         mode: "browser",
         browserUrl: b.url,
         ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
+        ...(b.owner ? { browserOwner: { id: b.owner.id, title: b.owner.title } } : {}),
         workspaceId: b.project || owner,
         ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
         lines: [],

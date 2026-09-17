@@ -27,7 +27,8 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
-import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
 import { t } from "../i18n"
 
 /**
@@ -83,6 +84,8 @@ export interface PaneRendererDeps {
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
   pluginRuntime: AdePluginRuntime
+  /** Each mounted browser pane's controls, for `@ade browser …`. */
+  browserControllers: Map<string, BrowserController>
 }
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
@@ -151,6 +154,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     const focus = () => setWb((w) => ({ ...w, focusedId: current().id }))
     const expand = () => setWb((w) => expandPane(w, current().id))
     const isFocused = () => current().id === wb().focusedId
+    /** The agent sessions of this pane's project, running or not. */
+    const projectSessions = () =>
+      wb()
+        .panes.filter((pane) => pane.workspaceId === current().workspaceId && !isPanelPane(pane) && (pane.agent ?? pane.model))
+        .map((pane) => ({ id: pane.id, title: pane.title, running: deps.isRunning(pane.id) }))
 
     const filePane = () => (
       <FilePane
@@ -184,14 +192,32 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}
+        owner={ownerStatus(current().browserOwner, projectSessions())}
+        sessions={bindChoices(projectSessions())}
+        onBind={(sessionId) => {
+          const session = sessionId ? wb().panes.find((pane) => pane.id === sessionId) : undefined
+          setWb((w) =>
+            updatePane(w, current().id, {
+              browserOwner: session ? { id: session.id, title: session.title } : undefined,
+            }),
+          )
+        }}
+        onFocusOwner={() => {
+          const ownerId = current().browserOwner?.id
+          if (ownerId) setWb((w) => ({ ...w, focusedId: ownerId }))
+        }}
+        onController={(controller) => {
+          if (controller) deps.browserControllers.set(current().id, controller)
+          else deps.browserControllers.delete(current().id)
+        }}
         /*
-         * A browser pane has no agent of its own, so what it collects goes to
-         * the session the user was last in. With nothing running there is
-         * nowhere for it to land, and saying so beats swallowing it.
+         * Goes to the session the pane chose: the one it is bound to, or the
+         * one the user picked when asked (S46). A session that stopped
+         * meanwhile reaches nobody, and the pane asks again.
          */
-        onSendPrompt={(prompt, context) => {
-          const target = wb().panes.find((pane) => !pane.browserUrl && deps.isRunning(pane.id))
-          if (!target) return
+        onSendPrompt={(prompt, context, to) => {
+          const target = wb().panes.find((pane) => pane.id === to && !isPanelPane(pane))
+          if (!target || !deps.isRunning(target.id)) return false
           const text = asOneLine(context || prompt)
           deps.appendLine(target.id, `> ${text}`, "shell")
           /*
@@ -203,6 +229,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            */
           deps.sessionFor(target.id)?.write(text)
           setWb((w) => ({ ...w, focusedId: target.id }))
+          return true
         }}
       />
     )

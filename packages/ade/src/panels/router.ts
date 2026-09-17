@@ -26,7 +26,8 @@ import {
 export interface PanelHandler {
   /** What this panel can be asked, for the greeting typed into a session. */
   readonly verbs: readonly PanelVerb[]
-  run(request: PanelRequest): Promise<PanelOutcome>
+  /** `from` is the session that wrote the request, for a panel that answers each session apart. */
+  run(request: PanelRequest, from?: string): Promise<PanelOutcome>
 }
 
 export type HandledRequest =
@@ -114,7 +115,7 @@ export function createPanelRouter(clock: () => number = Date.now): PanelRouter {
     return seen
   }
 
-  const answer = async (request: PanelRequest): Promise<string> => {
+  const answer = async (request: PanelRequest, from: string): Promise<string> => {
     const handler = handlers.get(request.panel)
     if (!handler) {
       const open = [...handlers.keys()]
@@ -126,7 +127,7 @@ export function createPanelRouter(clock: () => number = Date.now): PanelRouter {
     }
 
     try {
-      return formatReply(request, await handler.run(request))
+      return formatReply(request, await handler.run(request, from || undefined))
     } catch (error) {
       /*
        * A handler that throws still gets an answer typed back.
@@ -183,7 +184,7 @@ export function createPanelRouter(clock: () => number = Date.now): PanelRouter {
       }
       seen.set(raw, { at: now, noted: false })
       const started = clock()
-      const reply = await answer(request)
+      const reply = await answer(request, from)
       // When the reply is typed, not when the request came: a capture can take
       // seconds, and the busy that the reply causes must still fall within the window.
       repliedAt.set(from, now + (clock() - started))

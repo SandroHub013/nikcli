@@ -359,6 +359,16 @@ export const en: Messages = {
   "browser.prompt.empty": "Point at an element on the page, or type an instruction…",
   "browser.selection.none": "No elements selected",
   "browser.selection.count": (count) => count === 1 ? "1 element selected" : `${count} elements selected`,
+  "browser.owner.none": "Not linked",
+  "browser.owner.ready": (title) => `↳ ${title}`,
+  "browser.owner.closed": (title) => `${title} (closed)`,
+  "browser.owner.tip": "The session that gets the inspector's requests",
+  "browser.owner.focus": "Go to session",
+  "browser.owner.bind": "Link to",
+  "browser.owner.unbind": "Unlink",
+  "browser.send.ask": "Which session should get this request? The pane will stay linked to it.",
+  "browser.send.closed": (title) => `“${title}” is not running. Which session should get this request?`,
+  "browser.send.none": "No session is running in this project.",
 
   // Decisions
   "date.today": "today",
