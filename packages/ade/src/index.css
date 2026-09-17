@@ -273,6 +273,11 @@ body,
   scrollbar-color: var(--ade-border-strong) transparent;
 }
 
+/* Themed text selection matching the ADE accent */
+::selection {
+  background: var(--ade-selection);
+}
+
 /* ── reduced motion ────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

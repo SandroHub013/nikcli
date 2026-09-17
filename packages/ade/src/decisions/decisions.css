@@ -176,6 +176,8 @@
   line-height: 1.5;
   color: var(--ade-text-soft);
   white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 [data-slot="decision-options"] {
@@ -326,6 +328,8 @@
   background: var(--ade-error-bg, var(--ade-hover));
   color: var(--ade-error, var(--ade-text));
   font-size: 11.5px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 [data-slot="decision-answer"] {
@@ -334,6 +338,8 @@
   border-radius: var(--ade-radius-sm);
   background: var(--ade-done-bg);
   font-size: 12px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 [data-slot="decision-answer"] b {

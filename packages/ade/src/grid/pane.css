@@ -349,10 +349,18 @@
   line-height: var(--ade-leading);
   display: flex;
   flex-direction: column;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Short output falls to the bottom, next to the prompt, the way a terminal
    behaves. Long output simply overflows upward and scrolls. */
+[data-slot="pane-lines"],
+[data-slot="pane-line"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 [data-slot="pane-lines"] {
   margin-top: auto;
   display: flex;
@@ -422,6 +430,9 @@
      into confetti, so it wraps at whitespace and scrolls only as a last resort. */
   overflow-wrap: break-word;
   white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* Progress bars emit the same line hundreds of times; the count is the whole

@@ -121,6 +121,104 @@ export function refreshTerminalThemes(): void {
   }
 }
 
+/**
+ * Copies text to the system clipboard.
+ * Uses navigator.clipboard when available, falling back to a hidden textarea execCommand.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false
+  if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      /* fallback below */
+    }
+  }
+
+  if (typeof document !== "undefined" && document.body) {
+    try {
+      const active = document.activeElement as HTMLElement | null
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.left = "-9999px"
+      textarea.style.top = "-9999px"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      const success = document.execCommand("copy")
+      textarea.remove()
+      active?.focus?.()
+      return success
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * Identifies if a keyboard event is a Copy shortcut (Ctrl+C, Cmd+C, or Ctrl+Shift+C).
+ */
+export function isCopyShortcut(event: KeyboardEvent): boolean {
+  const isMod = event.ctrlKey || event.metaKey
+  if (!isMod) return false
+  const key = event.key?.toLowerCase()
+  return key === "c" || event.code === "KeyC"
+}
+
+/**
+ * Configures the terminal emulator's selection behavior:
+ * - When in mouse events mode, holding Shift or Alt/Option bypasses mouse reporting
+ *   and forces normal text selection, matching standard terminal expectations.
+ * - Right clicks (button 2) are not swallowed as mouse reports, allowing word selection
+ *   and context menu copy.
+ */
+export function configureTerminalSelection(terminal: Terminal): void {
+  const core = (terminal as any)._core
+  const sel = core?._selectionService
+  if (sel && typeof sel.shouldForceSelection === "function") {
+    sel.shouldForceSelection = (event: MouseEvent) => {
+      // Right click prepares context menu and word selection for copy
+      if (event.button === 2) return true
+      // Standard modifier override: Shift (Windows/Linux/Mac) or Alt/Option (Mac/Windows/Linux)
+      return Boolean(event.shiftKey || event.altKey)
+    }
+  }
+}
+
+/**
+ * Key event handler for terminal emulator:
+ * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
+ * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT
+ * - When no text is selected, allows Ctrl+C to send SIGINT (\x03)
+ */
+export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEvent) => boolean {
+  return (event: KeyboardEvent) => {
+    const isMod = event.ctrlKey || event.metaKey
+    if (isMod && event.shiftKey) {
+      const k = event.key?.toLowerCase()
+      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
+        return false
+      }
+    }
+
+    if (isCopyShortcut(event)) {
+      if (terminal.hasSelection()) {
+        if (event.type === "keydown") {
+          void copyToClipboard(terminal.getSelection())
+        }
+        return false
+      }
+      return true
+    }
+
+    return true
+  }
+}
+
 export function getTerminal(id: string): SessionTerminal {
   const existing = terminals.get(id)
   if (existing) return existing
@@ -145,22 +243,14 @@ export function getTerminal(id: string): SessionTerminal {
     allowProposedApi: true,
     convertEol: false,
     theme: readTheme(),
+    macOptionClickForcesSelection: true,
+    rightClickSelectsWord: true,
   })
 
   const fit = new FitAddon()
   terminal.loadAddon(fit)
 
-  terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-    // Allow voice shortcuts (Mod+Shift+J / Mod+Shift+K) to bypass xterm and bubble to window
-    const isMod = event.ctrlKey || event.metaKey
-    if (isMod && event.shiftKey) {
-      const k = event.key.toLowerCase()
-      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
-        return false
-      }
-    }
-    return true
-  })
+  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal))
 
   const created: SessionTerminal = { terminal, fit }
   terminals.set(id, created)
@@ -259,6 +349,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     }
   }
   session.element = element
+  configureTerminalSelection(session.terminal)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 
