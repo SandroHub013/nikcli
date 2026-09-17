@@ -130,6 +130,11 @@ export interface TurnSpec {
   readonly outbox?: string
   /** Claude Code sends the answer as it is written (`stream_event`), not only when each message is complete. */
   readonly partial?: boolean
+  /**
+   * Claude Code reads its messages from stdin, one JSON line each, and stays
+   * up between them (`warm.ts`). `message` is then not passed.
+   */
+  readonly stdin?: boolean
 }
 
 /**
@@ -193,6 +198,7 @@ export function turnCommand(
        * write, and anything else refused and reported in the result.
        */
       const args = ["-p", "--output-format", "stream-json", "--verbose"]
+      if (spec.stdin) args.push("--input-format", "stream-json")
       if (spec.partial) args.push("--include-partial-messages")
       if (bot.model) args.push("--model", bot.model)
       if (bot.effort) args.push("--effort", bot.effort)
@@ -222,7 +228,7 @@ export function turnCommand(
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
-      args.push("--", message)
+      if (!spec.stdin) args.push("--", message)
       return { command: runner.command, args }
     }
     case "codex": {

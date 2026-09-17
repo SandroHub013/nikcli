@@ -35,6 +35,10 @@ class MockVoiceHost implements VoiceHost {
     this.calls.push({ method: "runCommand", args: [id] })
   }
 
+  releaseAgent(): void {
+    this.calls.push({ method: "releaseAgent", args: [] })
+  }
+
   listPanes(): PaneSummary[] {
     return this.panes
   }
@@ -146,6 +150,14 @@ describe("engine/createVoiceEngine", () => {
     // Outcome and status should reflect completion
     expect(engine.lastOutcome()?.success).toBe(true)
     expect(engine.status()).toBe("idle")
+  })
+
+  test("turning the voice off lets the agent kept ready go", async () => {
+    const { engine, host } = setupEngine()
+    await engine.start()
+    expect(host.calls.some((call) => call.method === "releaseAgent")).toBe(false)
+    await engine.stop()
+    expect(host.calls.some((call) => call.method === "releaseAgent")).toBe(true)
   })
 
   test("submitText allows keyboard or accessibility invocation", async () => {

@@ -173,11 +173,72 @@ export function stepSpeechDetector(
   return state
 }
 
+/** The shortest wait for the end of a sentence, however quick the speaker. */
+export const MIN_SILENCE_TIMEOUT_MS = 700
+
+/* Pauses shorter than this are between syllables, not between words. */
+const MIN_LEARNED_PAUSE_MS = 150
+const LEARNED_PAUSES = 30
+const PAUSES_BEFORE_ADAPTING = 6
+/** Speech this soon after a sentence was closed means the sentence had not ended. */
+export const RESUMED_WITHIN_MS = 1_000
+const REMEMBERED_CUTS = 10
+
+/**
+ * How long this speaker pauses inside a sentence, learned as they talk.
+ *
+ * A fixed 0.8 s wait after the last word is right for someone who stops to
+ * think mid-sentence and slow for someone who does not. The pauses a speaker
+ * makes and then carries on from are the ones that must not end a sentence:
+ * the wait is the longest of the usual ones (nine in ten) plus a margin,
+ * between 0.7 and 0.8 s. Until enough have been heard, 0.8 s.
+ *
+ * A pause that did end a sentence the speaker then went on with (`cut`) was
+ * a pause to think, and the wait must not cut it again: it stays above the
+ * last ones of those, however many short pauses come after. Only learning
+ * the pauses that did not close, the wait fell to its minimum and cut every
+ * thinking pause from then on.
+ *
+ * Kept for the whole app, so a microphone reopened keeps what it learned.
+ */
+export function createPauseLearner() {
+  let pauses: number[] = []
+  let cuts: number[] = []
+  return {
+    heard(pauseMs: number): void {
+      if (pauseMs < MIN_LEARNED_PAUSE_MS || pauseMs >= DEFAULT_SILENCE_TIMEOUT_MS) return
+      pauses = [...pauses, pauseMs].slice(-LEARNED_PAUSES)
+    },
+    cut(pauseMs: number): void {
+      cuts = [...cuts, pauseMs].slice(-REMEMBERED_CUTS)
+    },
+    timeoutMs(): number {
+      if (cuts.length > 0) {
+        const longest = Math.max(...cuts)
+        if (longest + 100 >= DEFAULT_SILENCE_TIMEOUT_MS) return DEFAULT_SILENCE_TIMEOUT_MS
+      }
+      if (pauses.length < PAUSES_BEFORE_ADAPTING) return DEFAULT_SILENCE_TIMEOUT_MS
+      const sorted = [...pauses].sort((a, b) => a - b)
+      const usual = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))]!
+      const floor = Math.max(MIN_SILENCE_TIMEOUT_MS, ...cuts.map((cut) => cut + 100))
+      return Math.min(DEFAULT_SILENCE_TIMEOUT_MS, Math.max(floor, usual + 200))
+    },
+  }
+}
+
+const sharedPauses = createPauseLearner()
+
 /**
  * State container wrapping stepSpeechDetector for stateful usage.
+ *
+ * Without a fixed `silenceDurationMs`, the wait adapts to the speaker: see
+ * `createPauseLearner`.
  */
-export function createSpeechDetector(config: SpeechDetectorConfig = {}) {
+export function createSpeechDetector(config: SpeechDetectorConfig = {}, pauses = sharedPauses) {
   let state = createInitialSpeechDetectorState()
+  const adaptive = config.silenceDurationMs === undefined
+  /* The last sentence end, to tell whether the speaker went on at once. */
+  let ended: { at: number; quietSince: number } | undefined
 
   return {
     getState(): Readonly<SpeechDetectorState> {
@@ -185,7 +246,20 @@ export function createSpeechDetector(config: SpeechDetectorConfig = {}) {
     },
 
     step(level: number, now: number): SpeechState {
-      state = stepSpeechDetector(state, level, now, config)
+      const before = state
+      const silenceDurationMs = adaptive ? pauses.timeoutMs() : config.silenceDurationMs
+      state = stepSpeechDetector(state, level, now, { ...config, silenceDurationMs })
+      // A pause the speaker carried on from.
+      if (adaptive && before.status === "speaking" && before.silenceStartTime !== undefined && state.silenceStartTime === undefined) {
+        pauses.heard(now - before.silenceStartTime)
+      }
+      if (state.status === "speech_ended" && before.status !== "speech_ended") {
+        ended = { at: now, quietSince: state.silenceStartTime ?? now }
+      } else if (state.status === "speaking" && before.status !== "speaking" && ended) {
+        const resumedAt = state.speechStartTime ?? now
+        if (adaptive && resumedAt - ended.at <= RESUMED_WITHIN_MS) pauses.cut(resumedAt - ended.quietSince)
+        ended = undefined
+      }
       return state.status
     },
 

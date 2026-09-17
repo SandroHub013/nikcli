@@ -177,3 +177,44 @@ describe("what cannot be cut, and when the sentence was said", () => {
     expect(events[0]).toMatchObject({ text: "annulla", spokenAt: 94_000 })
   })
 })
+
+describe("the start of a long sentence is heard before it ends", () => {
+  test("sent once, while the speaker goes on, and not again when the sentence closes", async () => {
+    let clock = 10_000
+    const sent: { bytes: number; at: number }[] = []
+    const answers = ["ei nik raccontami", "ei nik raccontami la storia di Roma"]
+    const finals: string[] = []
+    const capture = createMicCapture({
+      now: () => clock,
+      preferredFormat: "wav",
+      mediaStream: { getTracks: () => [] } as any,
+      isTypeSupported: () => true,
+      speechDetectorConfig: { silenceDurationMs: 800 },
+    })
+    const transcriber = createOpenRouterTranscriber({
+      apiKey: "k",
+      capture,
+      now: () => clock,
+      fetch: (async (_url: unknown, init: any) => {
+        sent.push({ bytes: Buffer.from(JSON.parse(init.body).input_audio.data, "base64").length - 44, at: clock })
+        return new Response(JSON.stringify({ text: answers.shift() ?? "" }), { status: 200 })
+      }) as any,
+      onFinal: (event) => finals.push(event.text),
+      nameGate: { active: () => true, accepts: (text) => matchesWakeWord(text, "ei nik").matched },
+    })
+    await transcriber.start()
+    const frame = (level: number) => {
+      clock += 20
+      capture.processAudioFrame(new Float32Array(320).fill(level))
+    }
+    for (let i = 0; i < 150; i++) frame(0.2) // three seconds of speech
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.bytes).toBe(bytesFor(NAME_PROBE_MS))
+    for (let i = 0; i < 50; i++) frame(0)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(sent).toHaveLength(2)
+    expect(sent[1]!.bytes).toBeGreaterThan(bytesFor(NAME_PROBE_MS))
+    expect(finals).toEqual(["ei nik raccontami la storia di Roma"])
+  })
+})

@@ -16,6 +16,7 @@
  * a sentence failed. A reply is never lost to the better voice being absent.
  */
 
+import { markVoice } from "../timing"
 import type { Speaker } from "./speaker"
 
 /**
@@ -180,6 +181,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (mine !== generation) return
         const controller = new AbortController()
         playing = controller
+        markVoice("audio-start", sentences[i])
         try {
           await deps.play(wav, controller.signal)
         } catch {

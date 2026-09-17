@@ -12,6 +12,7 @@
  *   translated via `spokenMessage`, spoken to the user, and listening continues.
  */
 
+import { markVoice } from "../timing"
 import { Clock, Duration, Effect, Fiber, Scope, Stream } from "effect"
 
 import type { VoiceHost } from "../bridge/host"
@@ -283,6 +284,27 @@ export function finishedUpTo(text: string): number {
     end = (match.index ?? 0) + match[0].length
   }
   return end
+}
+
+/** The shortest opening clause worth saying on its own; see `firstPieceUpTo`. */
+export const FIRST_PIECE_MIN_LENGTH = 24
+
+/**
+ * Where the first piece of a reply ends: its first sentence, or, while that
+ * is still being written, its first clause of some length.
+ *
+ * Only the first piece: the user is waiting in silence for it, and a clause
+ * is said half a second sooner than a sentence. Later pieces are cut at
+ * sentences, which sound better.
+ */
+export function firstPieceUpTo(text: string): number {
+  const end = finishedUpTo(text)
+  if (end > 0) return end
+  for (const match of text.matchAll(/[,:–—]["»”’')\]]*(?=\s)/g)) {
+    const at = (match.index ?? 0) + match[0].length
+    if (text.slice(0, at).trim().length >= FIRST_PIECE_MIN_LENGTH) return at
+  }
+  return 0
 }
 
 const squash = (text: string) => text.replace(/\s+/g, " ").trim()
@@ -782,6 +804,7 @@ export function makeVoiceProgram(
         agentAbort?.abort()
         const abort = new AbortController()
         agentAbort = abort
+        markVoice("agent-asked", utterance)
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -804,11 +827,12 @@ export function makeVoiceProgram(
           ? (text: string) => {
               if (quiet()) return
               soFar = text
-              const end = finishedUpTo(text)
+              const end = saidUpTo === 0 ? firstPieceUpTo(text) : finishedUpTo(text)
               if (end <= saidUpTo) return
               const piece = text.slice(saidUpTo, end).trim()
               saidUpTo = end
               if (!piece) return
+              if (!streamed) markVoice("agent-first-sentence", piece)
               streamed = true
               options.onSpeaking?.(text.slice(0, end).trim())
               Effect.runFork(

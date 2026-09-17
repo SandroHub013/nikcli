@@ -8,6 +8,7 @@
  * 3. Speech-bounded compressed audio Blobs via MediaRecorder for cloud OpenRouter transcription.
  */
 
+import { markVoice } from "../timing"
 import {
   calculateRms,
   createSpeechDetector,
@@ -167,6 +168,14 @@ export interface CapturedSegment {
   format: AudioFormat
   mimeType: string
   durationMs: number
+  /** Which segment this is, counted from 1: see `MicCapture.onHead`. */
+  sequence?: number
+}
+
+/** The start of a segment still being recorded: see `MicCapture.onHead`. */
+export interface SegmentHead {
+  blob: Blob
+  sequence: number
 }
 
 // ---------------------------------------------------------------------------
@@ -236,13 +245,20 @@ export interface MicCapture {
   /** Drops the segment being recorded; the detector can start a new one on the next speech. */
   cancelSegment?(): void
   /** Feed a PCM buffer directly (useful for testing or virtual audio pipelines). */
-  processAudioFrame(samples: Float32Array, inputSampleRate?: number): void
+  /** `at`: when the last sample of `samples` was heard; now, if not given. */
+  processAudioFrame(samples: Float32Array, inputSampleRate?: number, at?: number): void
   /** Register or update RMS level listener. */
   onLevel(callback: MicLevelCallback): void
   /** Register or update PCM chunk listener. */
   onPcmChunk(callback: PcmChunkCallback): void
   /** Register or update segment listener. */
   onSegment(callback: SegmentCallback): void
+  /**
+   * Once a segment has been recorded for `afterMs`, its first `headMs` as a
+   * WAV, while the speaker goes on: so its start can be transcribed before
+   * the sentence ends. The segment itself comes later with the same `sequence`.
+   */
+  onHead?(callback: (head: SegmentHead) => void, timing: { afterMs: number; headMs: number }): void
   /** Register or update speech start listener. */
   onSpeechStart(callback: SpeechLifecycleCallback): void
   /** Register or update speech end listener. */
@@ -292,6 +308,9 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   const preRollSamples = Math.round((PRE_ROLL_MS / 1000) * 16000)
   let segmentStartTime = 0
   let isRecordingSegment = false
+  let sequence = 0
+  let head: { callback: (head: SegmentHead) => void; afterMs: number; headMs: number } | undefined
+  let headSent = false
   /**
    * The segment that has been closed but not yet flushed.
    *
@@ -304,6 +323,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         pcmWavBlob?: Blob
         durationMs: number
         reason?: "silence" | "max_duration" | "stop" | "commit"
+        sequence: number
       }
     | undefined
 
@@ -364,15 +384,28 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
         // ScriptProcessorNode for raw PCM extraction
         if (typeof audioContext.createScriptProcessor === "function") {
-          const bufferSize = 4096
+          /*
+           * 2048 samples: a callback every ~43 ms at 48 kHz, so the end of a
+           * sentence is noticed at most that late.
+           */
+          const bufferSize = 2048
           processorNode = audioContext.createScriptProcessor(bufferSize, 1, 1)
           const sampleRate = audioContext.sampleRate
 
           processorNode.onaudioprocess = (event: any) => {
             if (!running) return
-            const inputChannel = event.inputBuffer.getChannelData(0)
-            const pcmCopy = new Float32Array(inputChannel)
-            processAudioFrame(pcmCopy, sampleRate)
+            const inputChannel: Float32Array = event.inputBuffer.getChannelData(0)
+            /*
+             * In 20 ms slices, each at the moment it was heard: a whole buffer
+             * averaged together hides where the voice stopped, and the wait
+             * for the end of the sentence started up to a buffer late.
+             */
+            const heardAt = nowFn()
+            const slice = Math.max(1, Math.round(sampleRate / 50))
+            for (let start = 0; start < inputChannel.length; start += slice) {
+              const end = Math.min(inputChannel.length, start + slice)
+              processAudioFrame(inputChannel.slice(start, end), sampleRate, heardAt - ((inputChannel.length - end) / sampleRate) * 1000)
+            }
             const outputBuffer = event.outputBuffer
             if (outputBuffer) {
               for (let i = 0; i < outputBuffer.numberOfChannels; i++) {
@@ -480,6 +513,8 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     preRoll = []
     segmentStartTime = nowFn()
     isRecordingSegment = true
+    sequence++
+    headSent = false
     if (recorder) {
       try {
         recorder.start(100)
@@ -497,10 +532,15 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   }
 
   function closeCurrentSegment(reason: "silence" | "max_duration" | "stop" | "commit"): void {
-    if (!isRecordingSegment) return
+    if (!isRecordingSegment) {
+      markVoice("segment-skipped", reason)
+      return
+    }
     isRecordingSegment = false
     const closeTime = nowFn()
     const duration = Math.max(0, closeTime - segmentStartTime)
+    const quietSince = detector.getState().silenceStartTime
+    markVoice("segment-closed", `${reason} ${Math.round(duration)}ms, silenzio ${quietSince === undefined ? "-" : Math.round(closeTime - quietSince)}ms`)
 
     let wavBlob: Blob | undefined
     if (recordedPcmChunks.length > 0) {
@@ -531,7 +571,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
      * Handing the array over here and pointing the recorder's own callbacks at
      * it until it has flushed is what keeps the two segments apart.
      */
-    pendingSegment = { chunks: recordedChunks, pcmWavBlob: wavBlob, durationMs: duration, reason }
+    pendingSegment = { chunks: recordedChunks, pcmWavBlob: wavBlob, durationMs: duration, reason, sequence }
     recordedChunks = []
     recordedPcmChunks = []
 
@@ -587,7 +627,10 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     // On explicit push-to-talk commit or session stop, allow short commands down to 150 ms.
     const isIntentional = segment.reason === "commit" || segment.reason === "stop"
     const threshold = isIntentional ? 150 : minDuration
-    if (segment.durationMs < threshold) return
+    if (segment.durationMs < threshold) {
+      markVoice("segment-dropped", `${Math.round(segment.durationMs)}ms`)
+      return
+    }
 
     if (options.preferredFormat === "wav" && segment.pcmWavBlob) {
       onSegmentCb({
@@ -595,6 +638,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         format: "wav",
         mimeType: "audio/wav",
         durationMs: segment.durationMs,
+        sequence: segment.sequence,
       })
     } else {
       onSegmentCb({
@@ -602,11 +646,12 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         format: chosenFormat,
         mimeType: chosenMimeType,
         durationMs: segment.durationMs,
+        sequence: segment.sequence,
       })
     }
   }
 
-  function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000): void {
+  function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000, at?: number): void {
     if (!running) return
 
     // Resample to 16 kHz mono Float32Array for Parakeet
@@ -622,7 +667,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     onLevelCb(rms)
 
     // Drive speech/silence detector state machine
-    const currentTime = nowFn()
+    const currentTime = at ?? nowFn()
     const prevStatus = detector.getState().status
     const currentStatus = detector.step(rms, currentTime)
 
@@ -653,6 +698,19 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     if (isRecordingSegment) {
       recordedPcmChunks.push(new Float32Array(pcm16k))
+      if (head && !headSent && currentTime - segmentStartTime >= head.afterMs) {
+        headSent = true
+        const wanted = Math.round((head.headMs / 1000) * 16000)
+        const samples = new Float32Array(wanted)
+        let filled = 0
+        for (const chunk of recordedPcmChunks) {
+          if (filled >= wanted) break
+          const part = chunk.subarray(0, wanted - filled)
+          samples.set(part, filled)
+          filled += part.length
+        }
+        head.callback({ blob: encodeWav(samples.subarray(0, filled), 16000), sequence })
+      }
     } else {
       preRoll.push(new Float32Array(pcm16k))
       let held = 0
@@ -805,6 +863,10 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     onPcmChunk(callback: PcmChunkCallback): void {
       onPcmChunkCb = callback
+    },
+
+    onHead(callback: (head: SegmentHead) => void, timing: { afterMs: number; headMs: number }): void {
+      head = { callback, ...timing }
     },
 
     onSegment(callback: SegmentCallback): void {

@@ -93,6 +93,9 @@ function paneElement(paneId: string): HTMLElement | null {
 /** Commands whose result is a pane or the launch form, both shown only in the Code view. */
 const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model.new", "app.new", "pane.expand"])
 
+/** How long a warm agent waits for the project before starting without one. */
+const PREPARE_WAIT_MS = 30_000
+
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
    * The agent that answers what the grammar cannot, built on first use.
@@ -102,10 +105,16 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * gets that far.
    */
   let agent: Promise<VoiceAgent> | undefined
+  /* Closed with the window: a process left waiting would outlive the app until its idle timer. */
+  const warmClaude = <T extends { close: () => void }>(warm: T): T => {
+    if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
+    return warm
+  }
   const voiceAgent = () =>
-    (agent ??= import("../bots/turn").then(({ runTurn }) =>
+    (agent ??= Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
       createVoiceAgent({
         runTurn,
+        warm: warmClaude(createWarmClaude()),
         statuses: () => deps.agentAvailability?.(),
         cwd: () => deps.project()?.root,
       }),
@@ -114,6 +123,24 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   return {
     async askAgent(request) {
       return (await voiceAgent()).ask(request)
+    },
+
+    prepareAgent(request) {
+      /*
+       * At start-up the project may not be open yet, and a process started
+       * without it would be replaced at the first sentence. Waited for, up to
+       * half a minute, then started where the turn will run.
+       */
+      void (async () => {
+        for (let waited = 0; !deps.project()?.root && waited < PREPARE_WAIT_MS; waited += 500) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+        ;(await voiceAgent()).prepare(request)
+      })()
+    },
+
+    releaseAgent() {
+      void agent?.then((ready) => ready.release())
     },
 
     async runCommand(id: string): Promise<void> {

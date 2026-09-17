@@ -22,7 +22,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// One live pseudo-terminal, kept only so later calls can reach it.
 struct Session {
-    master: Box<dyn MasterPty + Send>,
+    /// Absent for a piped process (`pipe`), which has no terminal to resize.
+    master: Option<Box<dyn MasterPty + Send>>,
     /*
      * Behind a lock of its own, so writing to one session never holds the lock
      * that every other session's spawn, resize and kill has to take. A write to
@@ -151,6 +152,82 @@ const SHELL_SWITCHES: &[(&str, &[&str])] = &[
     ("zsh", &["-l", "-i", "--login"]),
     ("fish", &["-l", "-i", "--login"]),
 ];
+
+/// The only CLI that may run without a terminal: see `pipe` in `pty_spawn`.
+fn is_pipe_command(command: &str) -> bool {
+    command_stem(command).eq_ignore_ascii_case("claude")
+}
+
+/// What a started process gives back, whichever way it was started.
+struct Spawned {
+    child: Box<dyn Child + Send + Sync>,
+    master: Option<Box<dyn MasterPty + Send>>,
+    reader: Result<Box<dyn Read + Send>, String>,
+    writer: Result<Box<dyn Write + Send>, String>,
+    errors: Option<Box<dyn Read + Send>>,
+}
+
+fn spawn_in_pty(builder: CommandBuilder, rows: u16, cols: u16) -> Result<Spawned, String> {
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows: rows.max(1),
+            cols: cols.max(1),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| format!("pty non creata: {e}"))?;
+    let child = pair.slave.spawn_command(builder).map_err(|e| e.to_string())?;
+    // The slave handle has done its job; holding it open would keep the pty
+    // alive after the child dies and the reader would never see EOF.
+    drop(pair.slave);
+    let reader = pair.master.try_clone_reader().map_err(|e| e.to_string());
+    let writer = pair.master.take_writer().map_err(|e| e.to_string());
+    Ok(Spawned {
+        child,
+        master: Some(pair.master),
+        reader,
+        writer,
+        errors: None,
+    })
+}
+
+/// The same command, environment and folder the terminal would have had, on pipes.
+fn spawn_piped(program: &str, builder: &CommandBuilder) -> Result<Spawned, String> {
+    use std::process::Stdio;
+    let mut command = std::process::Command::new(program);
+    command.args(builder.get_argv().iter().skip(1));
+    if let Some(dir) = builder.get_cwd() {
+        command.current_dir(dir);
+    }
+    command.env_clear();
+    command.envs(builder.iter_full_env_as_str());
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let writer = child
+        .stdin
+        .take()
+        .map(|stdin| Box::new(stdin) as Box<dyn Write + Send>)
+        .ok_or_else(|| "stdin assente".to_string());
+    let reader = child
+        .stdout
+        .take()
+        .map(|stdout| Box::new(stdout) as Box<dyn Read + Send>)
+        .ok_or_else(|| "stdout assente".to_string());
+    let errors = child.stderr.take().map(|stderr| Box::new(stderr) as Box<dyn Read + Send>);
+    Ok(Spawned {
+        child: Box::new(child),
+        master: None,
+        reader,
+        writer,
+        errors,
+    })
+}
 
 /// The name `command` is known by: no directory, one executable extension off.
 fn command_stem(command: &str) -> &str {
@@ -483,21 +560,24 @@ pub async fn pty_spawn(
      * against the agent the command starts; bot turns pass none.
      */
     secrets: Option<Vec<String>>,
+    /*
+     * Pipes instead of a terminal, for Claude Code only.
+     *
+     * The top of this file explains why agents get a terminal. The exception
+     * is a Claude Code kept running between spoken requests, which reads one
+     * JSON message per line on stdin (`--input-format stream-json`) and
+     * refuses to when stdin is a terminal. See `src/bots/warm.ts`.
+     */
+    pipe: Option<bool>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
     check_args(&command, &args)?;
-
-    let pty = native_pty_system();
-    let pair = pty
-        .openpty(PtySize {
-            rows: rows.max(1),
-            cols: cols.max(1),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("pty non creata: {e}"))?;
+    let pipe = pipe == Some(true);
+    if pipe && !is_pipe_command(&command) {
+        return Err(format!("{command} non si avvia senza terminale"));
+    }
 
     /*
      * Resolved here rather than left to the spawner, so the binary that starts
@@ -612,13 +692,12 @@ pub async fn pty_spawn(
         }
     }
 
-    let mut child = pair
-        .slave
-        .spawn_command(builder)
-        .map_err(|e| format!("{command} non parte: {e}"))?;
-    // The slave handle has done its job; holding it open would keep the pty
-    // alive after the child dies and the reader below would never see EOF.
-    drop(pair.slave);
+    let spawned = if pipe {
+        spawn_piped(&resolved, &builder).map_err(|e| format!("{command} non parte: {e}"))?
+    } else {
+        spawn_in_pty(builder, rows, cols).map_err(|e| format!("{command} non parte: {e}"))?
+    };
+    let Spawned { mut child, master, reader, writer, errors } = spawned;
 
     /*
      * The process is running now, so every failure below has to take it with
@@ -634,13 +713,10 @@ pub async fn pty_spawn(
         }};
     }
 
-    let mut reader = match pair.master.try_clone_reader() {
-        Ok(reader) => reader,
-        Err(e) => abort_with!(format!("pty non leggibile: {e}")),
-    };
-    let writer = match pair.master.take_writer() {
-        Ok(writer) => Arc::new(Mutex::new(writer)),
-        Err(e) => abort_with!(format!("pty non scrivibile: {e}")),
+    let (mut reader, writer) = match (reader, writer) {
+        (Ok(reader), Ok(writer)) => (reader, Arc::new(Mutex::new(writer))),
+        (Err(e), _) => abort_with!(format!("uscita non leggibile: {e}")),
+        (_, Err(e)) => abort_with!(format!("ingresso non scrivibile: {e}")),
     };
     // The reader answers ConPTY's startup questions with it: see `StartupQueries`.
     let answerer = Arc::clone(&writer);
@@ -654,7 +730,7 @@ pub async fn pty_spawn(
         sessions.insert(
             id.clone(),
             Session {
-                master: pair.master,
+                master,
                 writer,
                 child,
             },
@@ -680,6 +756,24 @@ pub async fn pty_spawn(
      * such problem: the wait ends on its own.
      */
     let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<String>();
+    // A piped process's errors go to the same stream: that is where a terminal would have shown them.
+    if let Some(mut errors) = errors {
+        let error_tx = chunk_tx.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 8192];
+            let mut tail: Vec<u8> = Vec::new();
+            while let Ok(n) = errors.read(&mut buffer) {
+                if n == 0 {
+                    break;
+                }
+                tail.extend_from_slice(&buffer[..n]);
+                let text = decode_stream_chunk(&mut tail);
+                if !text.is_empty() && error_tx.send(text).is_err() {
+                    break;
+                }
+            }
+        });
+    }
     std::thread::spawn(move || {
         // See `decode_stream_chunk`.
         let mut buffer = [0u8; 8192];
@@ -690,7 +784,8 @@ pub async fn pty_spawn(
          * completes. Carrying the tail over keeps the split invisible.
          */
         let mut tail: Vec<u8> = Vec::new();
-        let mut queries = StartupQueries::new(cfg!(windows));
+        // Only ConPTY asks its startup questions; a pipe has nobody to ask.
+        let mut queries = StartupQueries::new(cfg!(windows) && !pipe);
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
@@ -939,8 +1034,10 @@ pub async fn pty_resize(
 ) -> Result<(), String> {
     let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
     let session = sessions.get(&id).ok_or("sessione non trovata")?;
-    session
-        .master
+    let Some(master) = session.master.as_ref() else {
+        return Ok(());
+    };
+    master
         .resize(PtySize {
             rows: rows.max(1),
             cols: cols.max(1),
@@ -1111,6 +1208,16 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_claude_runs_on_pipes() {
+        assert!(is_pipe_command("claude"));
+        assert!(is_pipe_command("claude.exe"));
+        assert!(is_pipe_command("CLAUDE.cmd"));
+        assert!(!is_pipe_command("codex"));
+        assert!(!is_pipe_command("powershell"));
+        assert!(!is_pipe_command("claude-evil"));
+    }
 
     #[test]
     fn decodes_a_whole_chunk_and_keeps_nothing() {

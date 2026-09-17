@@ -109,9 +109,9 @@ describe("voice/agent", () => {
     await agent.ask({ text: "quante sessioni?", engine: "claude", onText: (soFar) => heard.push(soFar) })
     expect(requests[0]!.partial).toBe(true)
     expect(heard).toEqual(["Ci sono", "Ci sono due sessioni."])
-    // Without a listener, the turn is not asked for pieces.
-    await agent.ask({ text: "quante sessioni?", engine: "claude" })
-    expect(requests[1]!.partial).toBeUndefined()
+    // Claude Code is always asked for pieces: a warm process is started before anyone listens.
+    await agent.ask({ text: "quante sessioni?", engine: "codex" })
+    expect(requests[1]!.partial).toBe(false)
   })
 
   test("a turn carries the instructions, the project and an ade-msg identity, and continues the conversation", async () => {
@@ -197,5 +197,59 @@ describe("who answers", () => {
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("Sei nik")
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("dai del tu")
     expect(VOICE_AGENT_INSTRUCTIONS).toContain("prima una frase brevissima")
+  })
+})
+
+describe("the warm process", () => {
+  test("Claude turns go to it, with no session id; Codex turns do not; forgetting and releasing reach it", async () => {
+    const cold: TurnRequest[] = []
+    const warmRuns: TurnRequest[] = []
+    const prepared: TurnRequest[] = []
+    let forgotten = 0
+    let closed = 0
+    const done = (text: string) => ({
+      result: Promise.resolve({ status: "done", text, sessionId: "s1", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+      stop: () => {},
+    })
+    const agent = createVoiceAgent({
+      runTurn: (request) => (cold.push(request), done("freddo")),
+      warm: {
+        prepare: (request) => void prepared.push(request),
+        run: (request) => (warmRuns.push(request), done("caldo")),
+        forget: () => void forgotten++,
+        close: () => void closed++,
+      },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    agent.prepare({ engine: "auto", speed: "fast" })
+    agent.prepare({ engine: "codex", speed: "fast" })
+    expect(prepared).toHaveLength(1)
+    expect(prepared[0]).toMatchObject({ runner: "claude", cwd: "C:/p", model: "claude-sonnet-5", partial: true })
+
+    expect((await agent.ask({ text: "uno", engine: "claude", speed: "fast" })).text).toBe("caldo")
+    expect((await agent.ask({ text: "due", engine: "claude", speed: "fast" })).text).toBe("caldo")
+    expect(warmRuns.map((r) => r.sessionId)).toEqual([undefined, undefined])
+    expect((await agent.ask({ text: "tre", engine: "codex" })).text).toBe("freddo")
+    expect(cold).toHaveLength(1)
+    agent.forget()
+    expect(forgotten).toBe(1)
+    agent.release()
+    expect(closed).toBe(1)
+  })
+
+  test("a complete message is passed on with its end marked, so its last sentence is read at once", async () => {
+    const heard: string[] = []
+    const agent = createVoiceAgent({
+      runTurn: (request) => {
+        request.onUpdate?.({ messages: [{ role: "user", text: "q", at: 0 }], status: "running", tokens: 0, costUsd: 0, streaming: "Fa" } as never)
+        request.onUpdate?.({ messages: [{ role: "user", text: "q", at: 0 }, { role: "bot", text: "Fa 4", at: 0 }], status: "running", tokens: 0, costUsd: 0 } as never)
+        return { result: Promise.resolve({ status: "done", text: "Fa 4", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult), stop: () => {} }
+      },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    await agent.ask({ text: "q", engine: "claude", onText: (t) => heard.push(t) })
+    expect(heard).toEqual(["Fa", "Fa 4\n\n"])
   })
 })

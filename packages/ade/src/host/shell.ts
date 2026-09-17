@@ -100,6 +100,12 @@ export interface Host {
     /** Proves a message comes from `pane`: set as `ADE_PANE_TOKEN`, sent back by `ade-msg`. */
     paneToken?: string
     /**
+     * Pipes instead of a terminal: stdin is read as data, not keystrokes. Only
+     * Claude Code, for a process kept running between turns (`bots/warm.ts`).
+     * `resize` does nothing then.
+     */
+    pipe?: boolean
+    /**
      * API keys to put in the process's environment, by name. The host reads
      * the values from the system keychain; they never pass through here.
      */
@@ -393,7 +399,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -457,6 +463,7 @@ export async function getHost(): Promise<Host | undefined> {
           pane: pane ?? null,
           paneToken: paneToken ?? null,
           secrets: secrets && secrets.length > 0 ? secrets : null,
+          pipe: pipe === true,
         })
       } catch (error) {
         dead = true

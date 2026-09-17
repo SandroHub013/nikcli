@@ -195,6 +195,15 @@ export interface VoiceHost {
   }>
 
   /**
+   * Get the agent ready for a sentence that may come soon: started ahead, it
+   * answers the first one without the cost of starting. Optional.
+   */
+  prepareAgent?(request: { engine: "auto" | "claude" | "codex" | "nikcli"; speed?: "fast" | "cli" }): void
+
+  /** The voice is off: what `prepareAgent` started can go. Optional. */
+  releaseAgent?(): void
+
+  /**
    * Insert text into a pane's composer without submitting it.
    *
    * Why this exists alongside sendPrompt:

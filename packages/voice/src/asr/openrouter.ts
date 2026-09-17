@@ -13,6 +13,7 @@
  * - Tracks and exposes usage (cost and seconds) per transcription request.
  */
 
+import { markVoice } from "../timing"
 import { plainProblem } from "../effect/errors"
 import type {
   FinalTranscriptCallback,
@@ -364,6 +365,7 @@ export function createOpenRouterTranscriber(
       }
 
       let response: Response
+      markVoice("asr-sent", `${Math.round(segment.durationMs)}ms`)
       try {
         response = await fetchFn(OPENROUTER_ENDPOINT, {
           method: "POST",
@@ -552,6 +554,33 @@ export function createOpenRouterTranscriber(
     return wavHead(segment.blob, gate.probeMs ?? NAME_PROBE_MS)
   }
 
+  /*
+   * The start of a long sentence, sent while it is still being spoken: the
+   * same request `probeFor` would make once it ended, a second earlier. Only
+   * past `wholeUnderMs`, so a sentence that would have gone whole is not
+   * probed as well.
+   */
+  const earlyProbes = new Map<number, Promise<string>>()
+  const earlyGate = options.nameGate
+  if (earlyGate) {
+    micCapture.onHead?.(
+      ({ blob, sequence }) => {
+        const wholeUnderMs = earlyGate.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS
+        if (!earlyGate.active(now() - wholeUnderMs)) return
+        earlyGate.onRequest?.()
+        let heard = ""
+        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text))
+          .then(() => heard)
+          .catch(() => "")
+        earlyProbes.set(sequence, probe)
+      },
+      {
+        afterMs: earlyGate.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS,
+        headMs: earlyGate.probeMs ?? NAME_PROBE_MS,
+      },
+    )
+  }
+
   micCapture.onSegment(async (segment: CapturedSegment) => {
     // Held for the whole exchange: between the two requests nothing is in
     // flight, and a stop that looked then would drop the sentence.
@@ -560,19 +589,25 @@ export function createOpenRouterTranscriber(
       const spokenAt = now() - segment.durationMs
       const deliver = (text: string) => finalCb({ text, isFinal: true, confidence: 1.0, spokenAt })
       const gate = options.nameGate
-      const gated = gate?.active(spokenAt) === true
+      const early = segment.sequence === undefined ? undefined : earlyProbes.get(segment.sequence)
+      for (const sequence of earlyProbes.keys()) {
+        if (segment.sequence !== undefined && sequence <= segment.sequence) earlyProbes.delete(sequence)
+      }
+      const gated = early !== undefined || gate?.active(spokenAt) === true
       const long = segment.durationMs > (gate?.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)
-      const head = gated && long ? await probeFor(segment) : undefined
+      const head = early ? undefined : gated && long ? await probeFor(segment) : undefined
       /* Waiting for the name, a long sentence goes whole only once its start
          has called; one that cannot be cut is not sent at all. */
-      if (gated && long && !head) {
+      if (gated && long && !head && !early) {
         gate!.onUncut?.()
         return
       }
-      if (gated) gate!.onRequest?.()
-      if (head) {
+      if (gated && !early) gate!.onRequest?.()
+      if (head || early) {
         let heard = ""
-        await transcribeSegment({ ...segment, blob: head }, (text) => (heard = text))
+        if (early) heard = await early
+        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text))
+        markVoice("asr-probe-back", heard)
         if (!heard) return
         if (!options.nameGate!.accepts(heard)) {
           options.nameGate!.onRejected?.(heard)
@@ -582,6 +617,7 @@ export function createOpenRouterTranscriber(
         options.nameGate!.onRequest?.()
       }
       await transcribeSegment(segment, deliver)
+      markVoice("asr-back")
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
       errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`))
