@@ -70,6 +70,24 @@ const ALLOWED_AGENTS: &[&str] = &[
     "hermes",
 ];
 
+/// Environment ADE sets for one agent CLI, whatever the user's shell has.
+///
+/// nikcli attaches to a shared background server by default (`nikcli serve
+/// --service`), started by whichever nikcli ran first, even from another pane
+/// or another day. Its tools then run in that server's process, with that
+/// process's environment: `ade-msg` answered for the wrong pane (a reply was
+/// refused as "not made to this session"), read another pane's inbox (the
+/// reminders never stopped), or was not on PATH at all. `NIKCLI_SERVICE=0` is
+/// nikcli's own switch for a private in-process server, which is the pane's
+/// process and carries the pane's `ADE_PANE_ID`, token and PATH.
+fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
+    if command_stem(command.trim()).eq_ignore_ascii_case("nikcli") {
+        &[("NIKCLI_SERVICE", "0")]
+    } else {
+        &[]
+    }
+}
+
 /// Environment an agent must not inherit from whatever launched ADE.
 ///
 /// Prefixes, matched from the start of the name: a session marker set by one
@@ -682,6 +700,11 @@ pub async fn pty_spawn(
         if let Some(token) = pane_token.as_ref().filter(|t| !t.is_empty()) {
             builder.env("ADE_PANE_TOKEN", token);
         }
+    }
+    // After the scrub too: a `NIKCLI_SERVICE=1` in the user's shell would
+    // otherwise send this pane's tools back to the shared server.
+    for (key, value) in agent_env(&command) {
+        builder.env(key, value);
     }
 
     if let Some(link) = link.as_ref() {
@@ -1431,6 +1454,16 @@ mod tests {
         let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
         assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
         assert!(tree_of(999, &rows).is_empty());
+    }
+
+    #[test]
+    fn nikcli_runs_its_tools_in_the_pane_not_in_the_shared_server() {
+        for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
+            assert_eq!(agent_env(name), &[("NIKCLI_SERVICE", "0")], "{name}");
+        }
+        for name in ["claude", "codex", "opencode", "agy", "pwsh", "nikcli-island"] {
+            assert!(agent_env(name).is_empty(), "{name}");
+        }
     }
 
     #[test]
