@@ -13,6 +13,7 @@
  * - Tracks and exposes usage (cost and seconds) per transcription request.
  */
 
+import { markVoice } from "../timing"
 import { plainProblem } from "../effect/errors"
 import type {
   FinalTranscriptCallback,
@@ -364,6 +365,7 @@ export function createOpenRouterTranscriber(
       }
 
       let response: Response
+      markVoice("asr-sent", `${Math.round(segment.durationMs)}ms`)
       try {
         response = await fetchFn(OPENROUTER_ENDPOINT, {
           method: "POST",
@@ -573,6 +575,7 @@ export function createOpenRouterTranscriber(
       if (head) {
         let heard = ""
         await transcribeSegment({ ...segment, blob: head }, (text) => (heard = text))
+        markVoice("asr-probe-back", heard)
         if (!heard) return
         if (!options.nameGate!.accepts(heard)) {
           options.nameGate!.onRejected?.(heard)
@@ -582,6 +585,7 @@ export function createOpenRouterTranscriber(
         options.nameGate!.onRequest?.()
       }
       await transcribeSegment(segment, deliver)
+      markVoice("asr-back")
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
       errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`))

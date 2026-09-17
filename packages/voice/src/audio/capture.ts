@@ -8,6 +8,7 @@
  * 3. Speech-bounded compressed audio Blobs via MediaRecorder for cloud OpenRouter transcription.
  */
 
+import { markVoice } from "../timing"
 import {
   calculateRms,
   createSpeechDetector,
@@ -501,6 +502,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     isRecordingSegment = false
     const closeTime = nowFn()
     const duration = Math.max(0, closeTime - segmentStartTime)
+    markVoice("segment-closed", `${reason} ${Math.round(duration)}ms`)
 
     let wavBlob: Blob | undefined
     if (recordedPcmChunks.length > 0) {

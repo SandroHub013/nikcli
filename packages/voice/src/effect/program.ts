@@ -12,6 +12,7 @@
  *   translated via `spokenMessage`, spoken to the user, and listening continues.
  */
 
+import { markVoice } from "../timing"
 import { Clock, Duration, Effect, Fiber, Scope, Stream } from "effect"
 
 import type { VoiceHost } from "../bridge/host"
@@ -782,6 +783,7 @@ export function makeVoiceProgram(
         agentAbort?.abort()
         const abort = new AbortController()
         agentAbort = abort
+        markVoice("agent-asked", utterance)
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -809,6 +811,7 @@ export function makeVoiceProgram(
               const piece = text.slice(saidUpTo, end).trim()
               saidUpTo = end
               if (!piece) return
+              if (!streamed) markVoice("agent-first-sentence", piece)
               streamed = true
               options.onSpeaking?.(text.slice(0, end).trim())
               Effect.runFork(

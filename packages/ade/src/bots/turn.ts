@@ -109,6 +109,12 @@ export interface Turn {
   readonly stop: () => void
 }
 
+/* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */
+function markTurn(mark: string): void {
+  const timeline = (globalThis as { __adeVoiceTimeline?: Array<{ at: number; mark: string }> }).__adeVoiceTimeline
+  if (Array.isArray(timeline)) timeline.push({ at: Date.now(), mark })
+}
+
 export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
@@ -201,7 +207,11 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
             onLine: (line) => {
+              const before = talk
               update(applyRunnerLine(runner, talk, line, Date.now()))
+              if (!before.sessionId && talk.sessionId) markTurn("cli-init")
+              if (!before.streaming && talk.streaming) markTurn("cli-first-text")
+              if (!before.ended && talk.ended) markTurn("cli-result")
               /*
                * The answer is complete at the CLI's final event. Waiting for the
                * process to exit as well cost ~0.7 s of saving and shutting down
@@ -223,6 +233,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             },
           })
           .then((session) => {
+            markTurn("cli-spawned")
             kill = () => session.kill({ tree: true })
             if (stopped || timedOut) {
               kill()
