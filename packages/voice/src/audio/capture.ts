@@ -237,7 +237,8 @@ export interface MicCapture {
   /** Drops the segment being recorded; the detector can start a new one on the next speech. */
   cancelSegment?(): void
   /** Feed a PCM buffer directly (useful for testing or virtual audio pipelines). */
-  processAudioFrame(samples: Float32Array, inputSampleRate?: number): void
+  /** `at`: when the last sample of `samples` was heard; now, if not given. */
+  processAudioFrame(samples: Float32Array, inputSampleRate?: number, at?: number): void
   /** Register or update RMS level listener. */
   onLevel(callback: MicLevelCallback): void
   /** Register or update PCM chunk listener. */
@@ -365,15 +366,28 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
         // ScriptProcessorNode for raw PCM extraction
         if (typeof audioContext.createScriptProcessor === "function") {
-          const bufferSize = 4096
+          /*
+           * 2048 samples: a callback every ~43 ms at 48 kHz, so the end of a
+           * sentence is noticed at most that late.
+           */
+          const bufferSize = 2048
           processorNode = audioContext.createScriptProcessor(bufferSize, 1, 1)
           const sampleRate = audioContext.sampleRate
 
           processorNode.onaudioprocess = (event: any) => {
             if (!running) return
-            const inputChannel = event.inputBuffer.getChannelData(0)
-            const pcmCopy = new Float32Array(inputChannel)
-            processAudioFrame(pcmCopy, sampleRate)
+            const inputChannel: Float32Array = event.inputBuffer.getChannelData(0)
+            /*
+             * In 20 ms slices, each at the moment it was heard: a whole buffer
+             * averaged together hides where the voice stopped, and the wait
+             * for the end of the sentence started up to a buffer late.
+             */
+            const heardAt = nowFn()
+            const slice = Math.max(1, Math.round(sampleRate / 50))
+            for (let start = 0; start < inputChannel.length; start += slice) {
+              const end = Math.min(inputChannel.length, start + slice)
+              processAudioFrame(inputChannel.slice(start, end), sampleRate, heardAt - ((inputChannel.length - end) / sampleRate) * 1000)
+            }
             const outputBuffer = event.outputBuffer
             if (outputBuffer) {
               for (let i = 0; i < outputBuffer.numberOfChannels; i++) {
@@ -498,11 +512,15 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   }
 
   function closeCurrentSegment(reason: "silence" | "max_duration" | "stop" | "commit"): void {
-    if (!isRecordingSegment) return
+    if (!isRecordingSegment) {
+      markVoice("segment-skipped", reason)
+      return
+    }
     isRecordingSegment = false
     const closeTime = nowFn()
     const duration = Math.max(0, closeTime - segmentStartTime)
-    markVoice("segment-closed", `${reason} ${Math.round(duration)}ms`)
+    const quietSince = detector.getState().silenceStartTime
+    markVoice("segment-closed", `${reason} ${Math.round(duration)}ms, silenzio ${quietSince === undefined ? "-" : Math.round(closeTime - quietSince)}ms`)
 
     let wavBlob: Blob | undefined
     if (recordedPcmChunks.length > 0) {
@@ -589,7 +607,10 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     // On explicit push-to-talk commit or session stop, allow short commands down to 150 ms.
     const isIntentional = segment.reason === "commit" || segment.reason === "stop"
     const threshold = isIntentional ? 150 : minDuration
-    if (segment.durationMs < threshold) return
+    if (segment.durationMs < threshold) {
+      markVoice("segment-dropped", `${Math.round(segment.durationMs)}ms`)
+      return
+    }
 
     if (options.preferredFormat === "wav" && segment.pcmWavBlob) {
       onSegmentCb({
@@ -608,7 +629,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
   }
 
-  function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000): void {
+  function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000, at?: number): void {
     if (!running) return
 
     // Resample to 16 kHz mono Float32Array for Parakeet
@@ -624,7 +645,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     onLevelCb(rms)
 
     // Drive speech/silence detector state machine
-    const currentTime = nowFn()
+    const currentTime = at ?? nowFn()
     const prevStatus = detector.getState().status
     const currentStatus = detector.step(rms, currentTime)
 

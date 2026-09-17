@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test"
 import {
   calculateRms,
   createInitialSpeechDetectorState,
+  createPauseLearner,
   createSpeechDetector,
   DEFAULT_MIN_SPEECH_DURATION_MS,
   DEFAULT_SILENCE_TIMEOUT_MS,
   DEFAULT_SPEECH_THRESHOLD,
+  MIN_SILENCE_TIMEOUT_MS,
   stepSpeechDetector,
 } from "./level"
 
@@ -158,5 +160,53 @@ describe("audio/level speech and silence state machine", () => {
 
     detector.reset()
     expect(detector.getState().status).toBe("silent")
+  })
+})
+
+describe("the wait for the end of a sentence adapts to the speaker", () => {
+  test("0.8 s until enough pauses are heard, then the usual pause plus a margin, within 0.5-0.8 s", () => {
+    const learner = createPauseLearner()
+    expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
+    for (let i = 0; i < 5; i++) learner.heard(200)
+    expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
+    learner.heard(200)
+    expect(learner.timeoutMs()).toBe(MIN_SILENCE_TIMEOUT_MS)
+    for (let i = 0; i < 30; i++) learner.heard(450)
+    expect(learner.timeoutMs()).toBe(650)
+    for (let i = 0; i < 30; i++) learner.heard(700)
+    expect(learner.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
+    // Syllable gaps and sentence ends teach nothing.
+    const other = createPauseLearner()
+    for (let i = 0; i < 10; i++) other.heard(50)
+    for (let i = 0; i < 10; i++) other.heard(900)
+    expect(other.timeoutMs()).toBe(DEFAULT_SILENCE_TIMEOUT_MS)
+  })
+
+  test("a quick speaker's sentence ends sooner; a fixed wait stays fixed", () => {
+    const learner = createPauseLearner()
+    const detector = createSpeechDetector({}, learner)
+    let t = 0
+    const speak = (ms: number) => {
+      for (const end = t + ms; t < end; t += 20) detector.step(0.1, t)
+    }
+    const quiet = (ms: number) => {
+      let status = "speaking"
+      for (const end = t + ms; t < end; t += 20) status = detector.step(0, t)
+      return status
+    }
+    speak(300)
+    for (let i = 0; i < 8; i++) {
+      quiet(200)
+      speak(300)
+    }
+    expect(learner.timeoutMs()).toBeLessThan(DEFAULT_SILENCE_TIMEOUT_MS)
+    expect(quiet(600)).toBe("speech_ended")
+
+    const fixed = createSpeechDetector({ silenceDurationMs: 800 }, learner)
+    t = 100_000
+    for (const end = t + 300; t < end; t += 20) fixed.step(0.1, t)
+    let status = "speaking"
+    for (const end = t + 600; t < end; t += 20) status = fixed.step(0, t)
+    expect(status).toBe("speaking")
   })
 })

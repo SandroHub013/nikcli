@@ -173,11 +173,52 @@ export function stepSpeechDetector(
   return state
 }
 
+/** The shortest wait for the end of a sentence, however quick the speaker. */
+export const MIN_SILENCE_TIMEOUT_MS = 500
+
+/* Pauses shorter than this are between syllables, not between words. */
+const MIN_LEARNED_PAUSE_MS = 150
+const LEARNED_PAUSES = 30
+const PAUSES_BEFORE_ADAPTING = 6
+
+/**
+ * How long this speaker pauses inside a sentence, learned as they talk.
+ *
+ * A fixed 0.8 s wait after the last word is right for someone who stops to
+ * think mid-sentence and slow for someone who does not. The pauses a speaker
+ * makes and then carries on from are the ones that must not end a sentence:
+ * the wait is the longest of the usual ones (nine in ten) plus a margin,
+ * between 0.5 and 0.8 s. Until enough have been heard, 0.8 s.
+ *
+ * Kept for the whole app, so a microphone reopened keeps what it learned.
+ */
+export function createPauseLearner() {
+  let pauses: number[] = []
+  return {
+    heard(pauseMs: number): void {
+      if (pauseMs < MIN_LEARNED_PAUSE_MS || pauseMs >= DEFAULT_SILENCE_TIMEOUT_MS) return
+      pauses = [...pauses, pauseMs].slice(-LEARNED_PAUSES)
+    },
+    timeoutMs(): number {
+      if (pauses.length < PAUSES_BEFORE_ADAPTING) return DEFAULT_SILENCE_TIMEOUT_MS
+      const sorted = [...pauses].sort((a, b) => a - b)
+      const usual = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))]!
+      return Math.min(DEFAULT_SILENCE_TIMEOUT_MS, Math.max(MIN_SILENCE_TIMEOUT_MS, usual + 200))
+    },
+  }
+}
+
+const sharedPauses = createPauseLearner()
+
 /**
  * State container wrapping stepSpeechDetector for stateful usage.
+ *
+ * Without a fixed `silenceDurationMs`, the wait adapts to the speaker: see
+ * `createPauseLearner`.
  */
-export function createSpeechDetector(config: SpeechDetectorConfig = {}) {
+export function createSpeechDetector(config: SpeechDetectorConfig = {}, pauses = sharedPauses) {
   let state = createInitialSpeechDetectorState()
+  const adaptive = config.silenceDurationMs === undefined
 
   return {
     getState(): Readonly<SpeechDetectorState> {
@@ -185,7 +226,13 @@ export function createSpeechDetector(config: SpeechDetectorConfig = {}) {
     },
 
     step(level: number, now: number): SpeechState {
-      state = stepSpeechDetector(state, level, now, config)
+      const before = state
+      const silenceDurationMs = adaptive ? pauses.timeoutMs() : config.silenceDurationMs
+      state = stepSpeechDetector(state, level, now, { ...config, silenceDurationMs })
+      // A pause the speaker carried on from.
+      if (adaptive && before.status === "speaking" && before.silenceStartTime !== undefined && state.silenceStartTime === undefined) {
+        pauses.heard(now - before.silenceStartTime)
+      }
       return state.status
     },
 
