@@ -278,3 +278,12 @@ describe("la risposta mentre Claude Code la scrive", () => {
     expect(answerSoFar(talk)).toBe("Controllo.\n\nCi sono due")
   })
 })
+
+describe("Claude Code reading its messages from stdin", () => {
+  test("asks for stream-json input and passes no message", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot, message: "ignorato", stdin: true })
+    expect(args.slice(0, 6)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json"])
+    expect(args).not.toContain("--")
+    expect(args).not.toContain("ignorato")
+  })
+})

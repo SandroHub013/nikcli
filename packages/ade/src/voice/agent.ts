@@ -113,6 +113,15 @@ export const VOICE_AGENT_INSTRUCTIONS = [
 /** What `ask` needs from the app: a runner to call, and what is installed. */
 export interface VoiceAgentDeps {
   runTurn: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
+  /**
+   * Claude Code kept running between sentences (`bots/warm.ts`). When given,
+   * every Claude turn goes there, and the conversation lives in the process.
+   */
+  warm?: {
+    prepare: (request: TurnRequest) => void
+    run: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
+    forget: () => void
+  }
   statuses: () => readonly AgentStatus[] | undefined
   cwd: () => string | undefined
 }
@@ -130,13 +139,20 @@ export interface VoiceAgent {
   }): Promise<{ ok: boolean; text: string; ran: boolean }>
   /** Starts the next sentence in a new conversation. */
   forget(): void
+  /** Gets the agent ready for a sentence that may come soon. */
+  prepare(request: { engine: VoiceAgentEngine; speed?: "fast" | "cli" }): void
 }
 
-/** Calls `onText` only when the answer so far has changed. */
+/**
+ * Calls `onText` only when the answer so far has changed. A message that is
+ * complete ends with a blank line, so its last sentence is read at once
+ * rather than when the turn ends, stop or no stop.
+ */
 function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
   let last = ""
   return (talk) => {
-    const soFar = answerSoFar(talk)
+    const written = answerSoFar(talk)
+    const soFar = written && talk.streaming === undefined ? `${written}\n\n` : written
     if (!soFar || soFar === last) return
     last = soFar
     onText(soFar)
@@ -159,31 +175,49 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
    */
   let latest = 0
 
+  /* Everything but the sentence: the same for a turn and for the process that waits for one. */
+  const turnFor = (runner: RunnerId, cwd: string | undefined, speed: "fast" | "cli" | undefined): Omit<TurnRequest, "message"> => ({
+    runner,
+    instructions: VOICE_AGENT_INSTRUCTIONS,
+    ...(cwd ? { cwd } : {}),
+    disabledTools: VOICE_AGENT_DISABLED_TOOLS,
+    mailbox: { id: "voce" },
+    // No MCP servers or user settings: a spoken answer is worth more than
+    // the user's connectors, and loading them tripled the wait.
+    lean: true,
+    timeoutMs: VOICE_AGENT_TIMEOUT_MS,
+    // Always asked for: the warm process is started before anyone listens to it.
+    partial: runner === "claude",
+    ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
+  })
+
   return {
+    prepare({ engine, speed }) {
+      if (!deps.warm) return
+      const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
+      if ("problem" in resolved || resolved.runner !== "claude") return
+      deps.warm.prepare({ ...turnFor("claude", deps.cwd(), speed), message: "" })
+    },
+
     async ask({ text, engine, speed, signal, onText }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
       const generation = ++latest
       const cwd = deps.cwd()
+      const warm = resolved.runner === "claude" ? deps.warm : undefined
       const previous =
-        conversation && conversation.runner === resolved.runner && conversation.cwd === cwd ? conversation.sessionId : undefined
+        !warm && conversation && conversation.runner === resolved.runner && conversation.cwd === cwd
+          ? conversation.sessionId
+          : undefined
 
-      const turn = deps.runTurn({
-        runner: resolved.runner,
+      const request: TurnRequest = {
+        ...turnFor(resolved.runner, cwd, speed),
         message: text,
-        instructions: VOICE_AGENT_INSTRUCTIONS,
         ...(previous ? { sessionId: previous } : {}),
-        ...(cwd ? { cwd } : {}),
-        disabledTools: VOICE_AGENT_DISABLED_TOOLS,
-        mailbox: { id: "voce" },
-        // No MCP servers or user settings: a spoken answer is worth more than
-        // the user's connectors, and loading them tripled the wait.
-        lean: true,
-        timeoutMs: VOICE_AGENT_TIMEOUT_MS,
-        ...(speed === "fast" ? VOICE_AGENT_FAST[resolved.runner] : {}),
-        ...(onText ? { partial: true, onUpdate: textFollower(onText) } : {}),
-      })
+        ...(onText ? { onUpdate: textFollower(onText) } : {}),
+      }
+      const turn = warm ? warm.run(request) : deps.runTurn(request)
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
@@ -202,6 +236,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
     forget() {
       latest++
       conversation = undefined
+      deps.warm?.forget()
     },
   }
 }

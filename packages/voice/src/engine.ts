@@ -1056,6 +1056,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           setParakeetProgress(undefined)
 
           setListenPaused(false)
+          // The agent starts now, so the first sentence does not wait for it.
+          const agentSettings = currentSettings()
+          if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
+            host.prepareAgent?.({ engine: agentSettings.agentEngine, speed: agentSettings.agentSpeed })
+          }
           const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
           if (waitForName && programHandle) {
             await Effect.runPromise(programHandle.listenForName)
