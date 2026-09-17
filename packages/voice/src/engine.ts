@@ -33,6 +33,8 @@ import {
 } from "./asr/parakeet-local"
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
+import { voiceStorage } from "./settings/storage"
+import { createSpendTally, type DaySpend, type SpendTally } from "./settings/spend"
 import { firstWords } from "./dialog/while-thinking"
 
 import { errorKind, HostActionFailed, spokenMessage, type VoiceErrorKind } from "./effect/errors"
@@ -87,6 +89,8 @@ export interface VoiceEngineOptions {
   plannerModel?: string
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
+  /** Where what listening spends is counted; the browser's storage by default. */
+  readonly spendTally?: SpendTally
   /** Overrides `LISTEN_IDLE_MS`, for tests. */
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
@@ -167,11 +171,14 @@ export interface VoiceEngine {
   /** Until when the next sentence needs no name, after an answer; undefined otherwise. */
   readonly followUp: () => number | undefined
   /**
-   * Set when always-on listening has sent more than `LISTEN_REQUESTS_PER_HOUR`
-   * sentences to the cloud in the last hour: said on screen, and listening
-   * goes on. At most once an hour.
+   * Set when listening stopped by itself: past `LISTEN_REQUESTS_PER_HOUR`
+   * sentences in an hour, or `LISTEN_IDLE_MS` without being called. Says why,
+   * on screen, until listening starts again.
    */
   readonly listenWarning: () => string | undefined
+
+  /** What listening has spent today: requests sent, and what they cost. */
+  readonly listenSpend: () => DaySpend
 
   // Control methods
   /**
@@ -341,6 +348,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [listenPaused, setListenPaused] = createSignal(false)
   const [followUp, setFollowUp] = createSignal<number | undefined>(undefined)
   const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
+  /*
+   * What listening has cost today, kept where the settings are so it is still
+   * there tomorrow morning — and so the user sees it before the bill does.
+   */
+  const spendTally = options.spendTally ?? createSpendTally(voiceStorage(), now())
+  const [listenSpend, setListenSpend] = createSignal<DaySpend>(spendTally.today(now()))
 
   const record = (entry: AgentEntry) => setHistory((log) => appendEntry(log, entry))
 
@@ -578,8 +591,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }, after)
   }
 
+  /* Requests counted while waiting for the name, whose cost has not come back yet. */
+  let listenCostsDue = 0
+
   function countListenRequest(): void {
     const at = now()
+    listenCostsDue++
+    setListenSpend(spendTally.add(at, undefined))
     listenRequests = [...listenRequests.filter((t) => at - t < HOUR_MS), at]
     const cap = options.listenRequestsPerHour ?? LISTEN_REQUESTS_PER_HOUR
     if (listenRequests.length <= cap) return
@@ -709,6 +727,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       language: s.language,
       openRouterOptions: {
         now,
+        /*
+         * What each request cost, as the service reports it, put against the
+         * requests listening sent: they are answered one at a time, so the
+         * cost that comes back belongs to the oldest one still owed.
+         */
+        onUsage: (usage: { cost?: number }) => {
+          options.backendOptions?.openRouterOptions?.onUsage?.(usage)
+          if (listenCostsDue <= 0 || typeof usage?.cost !== "number" || usage.cost <= 0) return
+          listenCostsDue--
+          setListenSpend(spendTally.addCost(now(), usage.cost))
+        },
         nameGate: {
           active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
@@ -1044,6 +1073,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     held,
     listenPaused,
     listenWarning,
+    listenSpend,
     followUp,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {

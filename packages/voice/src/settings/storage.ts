@@ -33,6 +33,11 @@ export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
  */
 export const VOICE_API_KEY_STORAGE_KEY = "voice.openrouter.key"
 
+/** The browser's storage, or nothing where there is none: see `resolveStorage`. */
+export function voiceStorage(customStorage?: Storage): Storage | null {
+  return resolveStorage(customStorage)
+}
+
 function resolveStorage(customStorage?: Storage): Storage | null {
   if (customStorage) return customStorage
   try {

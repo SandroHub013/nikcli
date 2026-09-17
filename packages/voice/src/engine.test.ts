@@ -1359,6 +1359,39 @@ describe("always-on listening", () => {
     await engine.stop()
   })
 
+  test("what listening spent today is counted, with the cost the service reports", async () => {
+    let clock = new Date(2026, 8, 17, 9, 0, 0).getTime()
+    let gate: any
+    let usage: ((u: { cost?: number }) => void) | undefined
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => clock,
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        usage = options?.openRouterOptions?.onUsage
+        return createFakeTranscriber()
+      },
+    })
+    await engine.start("agent", { waitForName: true })
+    expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
+    gate.onRequest()
+    gate.onRequest()
+    usage?.({ cost: 0.0000556 })
+    usage?.({ cost: 0.0000556 })
+    // A request nobody asked for on behalf of listening is not counted twice.
+    usage?.({ cost: 0.5 })
+    expect(engine.listenSpend().calls).toBe(2)
+    expect(engine.listenSpend().cost).toBeCloseTo(0.0001112, 8)
+
+    // Tomorrow starts from nothing.
+    clock += 24 * 60 * 60_000
+    gate.onRequest()
+    expect(engine.listenSpend().calls).toBe(1)
+    await engine.stop()
+  })
+
   test("nobody has called it for a while: it stops rather than hold the microphone open", async () => {
     const engine = createVoiceEngine({
       host: new MockVoiceHost(),
