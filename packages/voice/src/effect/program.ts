@@ -286,6 +286,27 @@ export function finishedUpTo(text: string): number {
   return end
 }
 
+/** The shortest opening clause worth saying on its own; see `firstPieceUpTo`. */
+export const FIRST_PIECE_MIN_LENGTH = 24
+
+/**
+ * Where the first piece of a reply ends: its first sentence, or, while that
+ * is still being written, its first clause of some length.
+ *
+ * Only the first piece: the user is waiting in silence for it, and a clause
+ * is said half a second sooner than a sentence. Later pieces are cut at
+ * sentences, which sound better.
+ */
+export function firstPieceUpTo(text: string): number {
+  const end = finishedUpTo(text)
+  if (end > 0) return end
+  for (const match of text.matchAll(/[,:–—]["»”’')\]]*(?=\s)/g)) {
+    const at = (match.index ?? 0) + match[0].length
+    if (text.slice(0, at).trim().length >= FIRST_PIECE_MIN_LENGTH) return at
+  }
+  return 0
+}
+
 const squash = (text: string) => text.replace(/\s+/g, " ").trim()
 
 export function makeVoiceProgram(
@@ -806,7 +827,7 @@ export function makeVoiceProgram(
           ? (text: string) => {
               if (quiet()) return
               soFar = text
-              const end = finishedUpTo(text)
+              const end = saidUpTo === 0 ? firstPieceUpTo(text) : finishedUpTo(text)
               if (end <= saidUpTo) return
               const piece = text.slice(saidUpTo, end).trim()
               saidUpTo = end
