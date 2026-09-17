@@ -200,6 +200,9 @@ export interface VoiceHost {
    */
   prepareAgent?(request: { engine: "auto" | "claude" | "codex" | "nikcli"; speed?: "fast" | "cli" }): void
 
+  /** The voice is off: what `prepareAgent` started can go. Optional. */
+  releaseAgent?(): void
+
   /**
    * Insert text into a pane's composer without submitting it.
    *

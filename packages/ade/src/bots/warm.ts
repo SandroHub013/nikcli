@@ -12,7 +12,9 @@
  * One process at a time, for one configuration (project, model, effort,
  * instructions, refused tools). A turn that asks for another configuration
  * replaces it. A stopped or failed turn kills it, and the next one starts a
- * new process that resumes the same conversation. Left unused, it is closed.
+ * new process that resumes the same conversation, in the same project only:
+ * another project starts afresh, as a turn from nothing did. Left unused, it
+ * is closed.
  *
  * ```ts
  * const warm = createWarmClaude()
@@ -39,7 +41,7 @@ export interface WarmClaude {
   run(request: TurnRequest): Turn
   /** The next turn starts a new conversation. */
   forget(): void
-  /** Closes the process. */
+  /** Closes the process, unless a turn is running on it. */
   close(): void
 }
 
@@ -79,8 +81,12 @@ interface Live {
 export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): WarmClaude {
   const runner = runnerById("claude")
   let live: Live | undefined
-  /* The conversation to resume when a process has to be replaced. */
-  let resumeId: string | undefined
+  /*
+   * The conversation to resume when a process has to be replaced, and the
+   * project it belongs to: Claude Code keeps conversations per folder, and
+   * `--resume` with another one fails the turn.
+   */
+  let resume: { cwd: string; id: string } | undefined
 
   function kill(target: Live | undefined): void {
     if (!target) return
@@ -117,6 +123,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
       }
       const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
       const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
+      const resumeId = resume && resume.cwd === (request.cwd ?? "") ? resume.id : undefined
       const { command, args } = turnCommand(runner, {
         bot,
         message: "",
@@ -240,10 +247,10 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
           target.exit = undefined
           if (talk.sessionId) {
             target.sessionId = talk.sessionId
-            resumeId = talk.sessionId
+            resume = { cwd: request.cwd ?? "", id: talk.sessionId }
           } else if (talk.status === "error") {
             // Claude Code no longer has the conversation (see `applyClaudeEvent`).
-            resumeId = undefined
+            resume = undefined
           }
           switch (outcome) {
             case "stopped":
@@ -287,12 +294,13 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     },
 
     forget() {
-      resumeId = undefined
+      resume = undefined
       kill(live)
     },
 
     close() {
-      kill(live)
+      // A turn still answering ends on its own, and its process after it.
+      if (!live?.line) kill(live)
     },
   }
 }

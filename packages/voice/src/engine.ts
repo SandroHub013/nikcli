@@ -585,6 +585,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     setIsRunning(false)
     setFollowUp(undefined)
+    // A restart prepares it again (see `start`).
+    host.releaseAgent?.()
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */

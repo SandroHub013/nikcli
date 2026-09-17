@@ -105,11 +105,16 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * gets that far.
    */
   let agent: Promise<VoiceAgent> | undefined
+  /* Closed with the window: a process left waiting would outlive the app until its idle timer. */
+  const warmClaude = <T extends { close: () => void }>(warm: T): T => {
+    if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
+    return warm
+  }
   const voiceAgent = () =>
     (agent ??= Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
       createVoiceAgent({
         runTurn,
-        warm: createWarmClaude(),
+        warm: warmClaude(createWarmClaude()),
         statuses: () => deps.agentAvailability?.(),
         cwd: () => deps.project()?.root,
       }),
@@ -132,6 +137,10 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         }
         ;(await voiceAgent()).prepare(request)
       })()
+    },
+
+    releaseAgent() {
+      void agent?.then((ready) => ready.release())
     },
 
     async runCommand(id: string): Promise<void> {

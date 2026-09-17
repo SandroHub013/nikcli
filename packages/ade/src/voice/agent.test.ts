@@ -201,11 +201,12 @@ describe("who answers", () => {
 })
 
 describe("the warm process", () => {
-  test("Claude turns go to it, with no session id; Codex turns do not; forgetting reaches it", async () => {
+  test("Claude turns go to it, with no session id; Codex turns do not; forgetting and releasing reach it", async () => {
     const cold: TurnRequest[] = []
     const warmRuns: TurnRequest[] = []
     const prepared: TurnRequest[] = []
     let forgotten = 0
+    let closed = 0
     const done = (text: string) => ({
       result: Promise.resolve({ status: "done", text, sessionId: "s1", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
       stop: () => {},
@@ -216,6 +217,7 @@ describe("the warm process", () => {
         prepare: (request) => void prepared.push(request),
         run: (request) => (warmRuns.push(request), done("caldo")),
         forget: () => void forgotten++,
+        close: () => void closed++,
       },
       statuses: () => undefined,
       cwd: () => "C:/p",
@@ -232,6 +234,8 @@ describe("the warm process", () => {
     expect(cold).toHaveLength(1)
     agent.forget()
     expect(forgotten).toBe(1)
+    agent.release()
+    expect(closed).toBe(1)
   })
 
   test("a complete message is passed on with its end marked, so its last sentence is read at once", async () => {

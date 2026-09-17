@@ -121,6 +121,7 @@ export interface VoiceAgentDeps {
     prepare: (request: TurnRequest) => void
     run: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
     forget: () => void
+    close: () => void
   }
   statuses: () => readonly AgentStatus[] | undefined
   cwd: () => string | undefined
@@ -141,6 +142,8 @@ export interface VoiceAgent {
   forget(): void
   /** Gets the agent ready for a sentence that may come soon. */
   prepare(request: { engine: VoiceAgentEngine; speed?: "fast" | "cli" }): void
+  /** Lets go of what `prepare` started: the voice is off. */
+  release(): void
 }
 
 /**
@@ -237,6 +240,10 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       latest++
       conversation = undefined
       deps.warm?.forget()
+    },
+
+    release() {
+      deps.warm?.close()
     },
   }
 }
