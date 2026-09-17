@@ -119,3 +119,32 @@ describe("redactUrl", () => {
     expect(restoreHistory(redactUrl(currentEntry(history)), saved)).toEqual(saved)
   })
 })
+
+describe("redactUrl on the path", () => {
+  test("a token in the path leaves only the site", () => {
+    expect(redactUrl("https://app.test/reset/a8f3k2m9x1")).toBe("https://app.test/")
+    expect(redactUrl("https://app.test/auth/magic-link/Zx81Qm0pLr")).toBe("https://app.test/")
+    expect(redactUrl("https://files.test/s/k3J9dLq0PzX8vB2nR7tY5wQ1/report.pdf?x=1")).toBe("https://files.test/")
+    expect(redactUrl("http://localhost:3000/invite/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOjF9.c2ln")).toBe("http://localhost:3000/")
+  })
+
+  test("ordinary paths are kept as written", () => {
+    for (const url of [
+      "https://bastelli-cmp.vercel.app/#top",
+      "https://a.test/docs/getting-started/installation-guide",
+      "https://a.test/reset",
+      "https://a.test/share/settings",
+      "https://a.test/blog/2026/09/17/post",
+      "http://localhost:5173/users/42/edit",
+    ]) {
+      expect(redactUrl(url)).toBe(url)
+    }
+  })
+
+  test("a history keeps its shape when an entry is reduced to its site", () => {
+    const history = visit(startHistory("https://app.test/"), "https://app.test/reset/a8f3k2m9x1")
+    const saved = redactHistory(history)
+    expect(saved).toEqual({ entries: ["https://app.test/", "https://app.test/"], index: 1 })
+    expect(restoreHistory(redactUrl(currentEntry(history)), saved)).toEqual(saved)
+  })
+})

@@ -77,7 +77,9 @@ pub async fn ade_browser_framing(url: String) -> Result<FramingHeaders, String> 
         let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
         let mut command = std::process::Command::new(curl());
         command
-            .args(["-sS", "-L", "--max-redirs", "5", "--max-time", "6", "-o", null, "-D", "-", "--"])
+            // Web schemes only, on the first request and on every redirect.
+            .args(["-sS", "--proto", "=http,https", "--proto-redir", "=http,https"])
+            .args(["-L", "--max-redirs", "5", "--max-time", "6", "-o", null, "-D", "-", "--"])
             .arg(&url)
             .stdin(std::process::Stdio::null());
         #[cfg(windows)]

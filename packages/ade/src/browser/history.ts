@@ -88,12 +88,38 @@ function isSecretName(name: string): boolean {
   return lower.split(/[^a-z0-9]+/).some((part) => SECRET_PARTS.has(part))
 }
 
+/*
+ * Path segments that are credentials: `/reset/<token>`, `/magic/<token>`,
+ * signed share links. A segment after one of these words, or any long
+ * random-looking one, is treated as a secret. Long ids that are not secret
+ * (a commit hash, a UUID) are caught too, and lose only the path.
+ */
+const SECRET_PATH_WORDS = new Set([
+  "reset", "reset-password", "password-reset", "verify", "verification", "confirm", "confirmation",
+  "magic", "magic-link", "invite", "invitation", "activate", "activation", "token", "tokens",
+  "auth", "login", "signin", "sign-in", "unsubscribe", "share", "download",
+])
+
+function looksRandom(segment: string): boolean {
+  return segment.length >= 24 && /^[A-Za-z0-9_\-.~=+%]+$/.test(segment) && /[0-9]/.test(segment) && /[A-Za-z]/.test(segment)
+}
+
+function hasSecretPath(pathname: string): boolean {
+  const segments = pathname.split("/").filter(Boolean)
+  return segments.some((segment, index) => {
+    if (looksRandom(segment)) return true
+    const previous = segments[index - 1]?.toLowerCase()
+    return previous !== undefined && SECRET_PATH_WORDS.has(previous) && segment.length >= 8 && /[0-9]/.test(segment)
+  })
+}
+
 /**
  * The URL as it may be written to disk.
  *
  * The workbench is saved in plain text, and a URL is often the credential
  * itself. Parameters that look like one are removed, and so is a fragment
- * carrying an OAuth token (`#access_token=…`). What is shown on screen is
+ * carrying an OAuth token (`#access_token=…`); a secret in the path leaves
+ * only the site (`hasSecretPath`). What is shown on screen is
  * not touched: only what is saved.
  */
 export function redactUrl(url: string): string {
@@ -104,6 +130,8 @@ export function redactUrl(url: string): string {
     // Unreadable: keep only what precedes a query or fragment.
     return url.replace(/[?#].*$/, "")
   }
+  // A secret in the path cannot be cut out and leave a working address: only the site is kept.
+  if (hasSecretPath(parsed.pathname)) return `${parsed.origin}/`
   let changed = false
   for (const name of [...parsed.searchParams.keys()]) {
     if (!isSecretName(name)) continue

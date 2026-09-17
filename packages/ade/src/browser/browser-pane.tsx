@@ -235,19 +235,29 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       if (res.ok) {
         const html = await res.text()
-        const blocked = framingBlocked((name) => res.headers.get(name)) || (await hostSaysBlocked())
+        const blocked = framingBlocked((name) => res.headers.get(name))
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
         pageCopy = { generation, target, html }
-        if (bridgelessChoice({ blocked, inspecting: mode() === "edit" }) === "keep-page") {
+        const inspecting = mode() === "edit"
+        if (bridgelessChoice({ blocked, inspecting }) === "keep-page") {
           handshake({ type: "no-bridge" })
           setLoadState("ready")
           setLoadError(undefined)
-          return
+        } else {
+          mirrorForInspect = !blocked
+          handshake({ type: "timeout" })
+          showMirror(target, html)
         }
-        mirrorForInspect = !blocked
-        handshake({ type: "timeout" })
-        showMirror(target, html)
+        if (blocked) return
+        /*
+         * The host's answer is not waited for: the page is settled already,
+         * and the probe can take seconds. If it says the page refuses
+         * framing, the frame is empty, and the copy replaces it once.
+         */
+        if (!(await hostSaysBlocked()) || !isCurrent()) return
+        mirrorForInspect = false
+        if (srcdoc() === null && fidelity() === "none") showMirror(target, html)
         return
       }
       /*
@@ -274,13 +284,13 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     try {
       await fetch(target, { mode: "no-cors" })
       if (!isCurrent()) return
-      // Reachable, but with no copy to fall back on.
-      const blocked = await hostSaysBlocked()
-      if (!isCurrent()) return
+      // Reachable, but with no copy to fall back on. Settled now; the host's
+      // answer, when it comes, can only add the message about a refused frame.
       setLoadError(undefined)
       handshake({ type: "load-error" })
       setLoadState("ready")
-      setNotice(noticeWithoutCopy({ blocked, inspecting: mode() === "edit" }))
+      setNotice(noticeWithoutCopy({ blocked: false, inspecting: mode() === "edit" }))
+      if ((await hostSaysBlocked()) && isCurrent()) setNotice(noticeWithoutCopy({ blocked: true, inspecting: false }))
     } catch {
       if (!isCurrent()) return
       handshake({ type: "load-error", error: "Server non raggiungibile" })
