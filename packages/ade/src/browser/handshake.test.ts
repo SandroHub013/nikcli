@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
+  bridgelessChoice,
+  framingBlocked,
   handshakeReducer,
   reduceFidelity,
 } from "./handshake"
@@ -172,5 +174,80 @@ describe("handshakeReducer", () => {
       expect(reduceFidelity("mirror", { type: "navigate" })).toBe("pending")
       expect(reduceFidelity("none", { type: "navigate" })).toBe("pending")
     })
+  })
+})
+
+describe("no-bridge event", () => {
+  test("settles pending on the real page, without inspection", () => {
+    expect(handshakeReducer({ fidelity: "pending" }, { type: "no-bridge" })).toEqual({ fidelity: "none", error: undefined })
+  })
+
+  test("is a no-op once the handshake has settled", () => {
+    expect(reduceFidelity("native", { type: "no-bridge" })).toBe("native")
+    expect(reduceFidelity("mirror", { type: "no-bridge" })).toBe("mirror")
+    expect(handshakeReducer({ fidelity: "none", error: "404" }, { type: "no-bridge" }).error).toBe("404")
+  })
+})
+
+describe("framingBlocked", () => {
+  const headers = (map: Record<string, string>) => (name: string) => map[name] ?? null
+
+  test("nothing readable is not a block", () => {
+    expect(framingBlocked(headers({}))).toBe(false)
+  })
+
+  test("X-Frame-Options deny or sameorigin blocks", () => {
+    expect(framingBlocked(headers({ "x-frame-options": "DENY" }))).toBe(true)
+    expect(framingBlocked(headers({ "x-frame-options": " SameOrigin " }))).toBe(true)
+  })
+
+  test("frame-ancestors without * blocks, with * does not", () => {
+    expect(framingBlocked(headers({ "content-security-policy": "default-src 'self'; frame-ancestors 'none'" }))).toBe(true)
+    expect(framingBlocked(headers({ "content-security-policy": "frame-ancestors https://example.com" }))).toBe(true)
+    expect(framingBlocked(headers({ "content-security-policy": "frame-ancestors *" }))).toBe(false)
+  })
+
+  test("a policy without frame-ancestors does not block", () => {
+    expect(framingBlocked(headers({ "content-security-policy": "default-src 'self'; script-src 'self'" }))).toBe(false)
+  })
+})
+
+describe("bridgelessChoice", () => {
+  test("browsing a page that can be framed keeps it", () => {
+    expect(bridgelessChoice({ blocked: false, inspecting: false })).toBe("keep-page")
+  })
+
+  test("a page that cannot be framed, or a page being inspected, gets the mirror", () => {
+    expect(bridgelessChoice({ blocked: true, inspecting: false })).toBe("mirror")
+    expect(bridgelessChoice({ blocked: false, inspecting: true })).toBe("mirror")
+  })
+})
+
+/*
+ * The user's report: a page without the bridge (bastelli-cmp.vercel.app)
+ * flipped between the real page ("Connessione...") and an unstyled mirror.
+ * Every Reload showed the real page for the 1.5 s handshake window, then the
+ * timeout swapped it for the mirror. This replays that sequence the way the
+ * pane settles it.
+ */
+describe("reloading a page without the bridge", () => {
+  const settle = (inspecting: boolean) => {
+    let fidelity = reduceFidelity("none", { type: "navigate" })
+    const shown: string[] = [fidelity]
+    const choice = bridgelessChoice({ blocked: false, inspecting })
+    fidelity = reduceFidelity(fidelity, { type: choice === "keep-page" ? "no-bridge" : "timeout" })
+    if (choice === "mirror") fidelity = reduceFidelity(fidelity, { type: "ready", mode: "mirror" })
+    shown.push(fidelity)
+    return shown
+  }
+
+  test("keeps the real page on every reload and never shows the mirror", () => {
+    const history = [1, 2, 3, 4].flatMap(() => settle(false))
+    expect(history).not.toContain("mirror")
+    expect(history.filter((state, index) => index % 2 === 1)).toEqual(["none", "none", "none", "none"])
+  })
+
+  test("uses the mirror only while inspecting", () => {
+    expect(settle(true)).toEqual(["pending", "mirror"])
   })
 })

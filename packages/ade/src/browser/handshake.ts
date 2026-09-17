@@ -29,6 +29,7 @@ export type HandshakeEvent =
   | { type: "navigate"; url?: string }
   | { type: "ready"; mode?: "native" | "mirror" }
   | { type: "timeout" }
+  | { type: "no-bridge" }
   | { type: "load-error"; error?: string }
 
 export interface HandshakeState {
@@ -77,6 +78,18 @@ export function handshakeReducer(
       return state
     }
 
+    case "no-bridge": {
+      // The real page is on screen and stays there, without inspection.
+      // Like a timeout, it only settles a pending state.
+      if (state.fidelity === "pending") {
+        return {
+          fidelity: "none",
+          error: undefined,
+        }
+      }
+      return state
+    }
+
     case "load-error": {
       // When fetching or loading fails completely, inspection is unavailable.
       return {
@@ -95,4 +108,43 @@ export function handshakeReducer(
  */
 export function reduceFidelity(fidelity: Fidelity, event: HandshakeEvent): Fidelity {
   return handshakeReducer({ fidelity }, event).fidelity
+}
+
+/**
+ * Whether the page's own headers forbid showing it inside ADE's frame.
+ *
+ * `X-Frame-Options` of any value and a `frame-ancestors` directive without
+ * `*` both exclude ADE: the frame's parent is never the page's own origin.
+ * These headers are readable only when the server exposes them to CORS, so
+ * `false` means "not known to be blocked", not "known to be allowed".
+ */
+export function framingBlocked(header: (name: string) => string | null): boolean {
+  const frameOptions = header("x-frame-options")?.trim().toLowerCase()
+  if (frameOptions === "deny" || frameOptions === "sameorigin") return true
+
+  const policy = header("content-security-policy")
+  if (!policy) return false
+  for (const directive of policy.split(";")) {
+    const [name, ...sources] = directive.trim().toLowerCase().split(/\s+/)
+    if (name === "frame-ancestors") return !sources.includes("*")
+  }
+  return false
+}
+
+export type BridgelessChoice = "keep-page" | "mirror"
+
+/**
+ * What to show once the handshake window closes with no bridge.
+ *
+ * The real page used to be swapped for the mirror every time. On a page
+ * served from anywhere but ADE the mirror inherits ADE's content policy,
+ * which blocks the page's own stylesheets and scripts, so a working page was
+ * replaced by bare HTML 1.5 s after every load — and pressing Reload, the
+ * only way to see the page again, started the same swap over.
+ *
+ * The mirror is now for two cases only: the page cannot be shown in the
+ * frame, or the user asked to inspect it. Browsing keeps the real page.
+ */
+export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean }): BridgelessChoice {
+  return input.blocked || input.inspecting ? "mirror" : "keep-page"
 }

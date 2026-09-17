@@ -12,6 +12,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   onMount,
   type JSX,
@@ -20,6 +21,8 @@ import { formatSelectionContext } from "./element-context"
 import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
+  bridgelessChoice,
+  framingBlocked,
   reduceFidelity,
   type Fidelity,
   type HandshakeEvent,
@@ -115,6 +118,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   let viewportContainerRef: HTMLDivElement | undefined
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined
   let loadGeneration = 0
+  /** The page's HTML, fetched when the handshake window closed; the mirror is built from it. */
+  let pageCopy: { generation: number; target: string; html: string } | undefined
+  /** The mirror is up only because the user chose Inspect: Browse brings the real page back. */
+  let mirrorForInspect = false
 
   /**
    * Messages to the frame go to `"*"`, for a page loaded by URL too.
@@ -150,9 +157,46 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   })
 
   /**
-   * Loads a mirrored srcdoc copy when the native bridge does not announce itself.
+   * Replaces the frame with a srcdoc copy of the page, carrying the bridge.
    */
-  const loadMirror = async (target: string, generation: number) => {
+  const showMirror = (target: string, html: string) => {
+    // Inject base tag so relative asset URLs resolve against the target server,
+    // and inject the bridge script into the document head.
+    /*
+     * Escaped, because it goes into an attribute.
+     *
+     * `normalizeUrl` now returns the canonical form, in which a quote is
+     * already `%22`, so this is the belt to that braces: `target` also
+     * arrives here from a redirect the page chose, and one unescaped `"`
+     * closes the `href` and turns the rest into markup.
+     */
+    const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
+    const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${INSPECTOR_BRIDGE_SCRIPT}<\/script>`
+
+    let injected = html
+    if (injected.includes("<head>")) {
+      injected = injected.replace("<head>", `<head>${headInjection}\n`)
+    } else if (injected.includes("<html>")) {
+      injected = injected.replace("<html>", `<html>\n<head>${headInjection}\n</head>\n`)
+    } else {
+      injected = `${headInjection}\n${injected}`
+    }
+
+    handshake({ type: "ready", mode: "mirror" })
+    setSrcdoc(injected)
+    setLoadState("ready")
+    setLoadError(undefined)
+    setLoadToken((v) => v + 1)
+  }
+
+  /**
+   * Decides what the pane shows when the page did not announce the bridge.
+   *
+   * The real page stays unless it cannot be framed or the user is inspecting:
+   * see `bridgelessChoice`. The fetch still runs, because it is what tells a
+   * missing page (404) or an unreachable server apart from a working one.
+   */
+  const settleWithoutBridge = async (target: string, generation: number) => {
     const isCurrent = () => generation === loadGeneration
 
     try {
@@ -161,35 +205,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       if (res.ok) {
         const html = await res.text()
-        if (!isCurrent()) return
-
-        // Inject base tag so relative asset URLs resolve against the target server,
-        // and inject the bridge script into the document head.
-        /*
-         * Escaped, because it goes into an attribute.
-         *
-         * `normalizeUrl` now returns the canonical form, in which a quote is
-         * already `%22`, so this is the belt to that braces: `target` also
-         * arrives here from a redirect the page chose, and one unescaped `"`
-         * closes the `href` and turns the rest into markup.
-         */
-        const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
-        const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${INSPECTOR_BRIDGE_SCRIPT}<\/script>`
-
-        let injected = html
-        if (injected.includes("<head>")) {
-          injected = injected.replace("<head>", `<head>${headInjection}\n`)
-        } else if (injected.includes("<html>")) {
-          injected = injected.replace("<html>", `<html>\n<head>${headInjection}\n</head>\n`)
-        } else {
-          injected = `${headInjection}\n${injected}`
+        // A bridge that announced itself meanwhile has already settled it.
+        if (!isCurrent() || fidelity() !== "pending") return
+        pageCopy = { generation, target, html }
+        const blocked = framingBlocked((name) => res.headers.get(name))
+        if (bridgelessChoice({ blocked, inspecting: mode() === "edit" }) === "keep-page") {
+          handshake({ type: "no-bridge" })
+          setLoadState("ready")
+          setLoadError(undefined)
+          return
         }
-
-        handshake({ type: "ready", mode: "mirror" })
-        setSrcdoc(injected)
-        setLoadState("ready")
-        setLoadError(undefined)
-        setLoadToken((v) => v + 1)
+        mirrorForInspect = !blocked
+        handshake({ type: "timeout" })
+        showMirror(target, html)
         return
       }
       /*
@@ -232,14 +260,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (handshakeTimer) clearTimeout(handshakeTimer)
     handshakeTimer = setTimeout(() => {
       if (generation !== loadGeneration) return
-      if (fidelity() === "pending") {
-        // The reducer's own demotion: pending → mirror. Dispatched before the
-        // fetch because the decision to mirror is what the timeout *is*; the
-        // fetch only decides whether the mirror succeeds, and a failure comes
-        // back through `load-error`.
-        handshake({ type: "timeout" })
-        void loadMirror(target, generation)
-      }
+      // Still pending while the page is fetched: whether it becomes the
+      // mirror, stays as it is or fails is what that fetch decides.
+      if (fidelity() === "pending") void settleWithoutBridge(target, generation)
     }, HANDSHAKE_TIMEOUT_MS)
   }
 
@@ -248,6 +271,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     const generation = loadGeneration
 
     if (handshakeTimer) clearTimeout(handshakeTimer)
+    pageCopy = undefined
+    mirrorForInspect = false
     setLoadState("loading")
     setLoadError(undefined)
     setSelection([])
@@ -257,6 +282,28 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
     startHandshake(target, generation)
   }
+
+  /*
+   * Inspect needs the bridge, so a page kept without one is swapped for the
+   * mirror only when the user asks; Browse puts the real page back.
+   */
+  createEffect(
+    on(
+      mode,
+      (next) => {
+        if (next === "edit") {
+          const copy = pageCopy
+          if (!copy || copy.generation !== loadGeneration) return
+          if (fidelity() !== "none" || srcdoc() !== null) return
+          mirrorForInspect = true
+          showMirror(copy.target, copy.html)
+          return
+        }
+        if (mirrorForInspect) load(url())
+      },
+      { defer: true },
+    ),
+  )
 
   const navigateTo = (raw: string) => {
     const normalized = normalizeUrl(raw)
@@ -284,9 +331,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
      * sandbox denies it, and this frame is filled with HTML fetched from
      * whatever server the address bar names.
      *
-     * A page that does not ship the bridge itself still gets one: the handshake
-     * times out, `loadMirror` takes a copy, and the bridge is injected into that
-     * copy, where it belongs.
+     * A page that does not ship the bridge itself still gets one when the user
+     * inspects it: `settleWithoutBridge` keeps a copy, and the bridge is
+     * injected into that copy, where it belongs.
      */
     syncMode()
   }
