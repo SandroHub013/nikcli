@@ -21,6 +21,7 @@
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
 import type { VoiceMode, VoiceSettings } from "@nikcli-ai/voice/core"
+import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */
 export const GLOBAL_VOICE_EVENT = "nikcli-global-voice"
@@ -213,7 +214,11 @@ export async function registerVoiceShortcuts(
       const problem = err instanceof Error ? err.message : String(err)
       failed.push({ mode, chord, problem })
       deps.report?.(
-        `La scorciatoia ${chord} per ${VOICE_CHORD_FEATURE[mode]} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
+        t(
+          "voice.shortcut.busy",
+          chord,
+          t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription"),
+        ),
       )
     }
   }
