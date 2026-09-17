@@ -24,6 +24,26 @@ export const it = {
   "settings.language.it": "Italiano",
   "settings.language.en": "English",
 
+  "settings.theme.label": "Tema",
+  "settings.theme.title": "Tema",
+  "settings.theme.desc":
+    "Scegli l'aspetto dell'interfaccia di ADE: chiaro, scuro, oppure vetro trasparente con effetto nativo sul desktop.",
+  "settings.theme.group": "Tema dell'interfaccia",
+  "settings.theme.light": "Chiaro",
+  "settings.theme.dark": "Scuro",
+  "settings.theme.glass": "Vetro",
+  "settings.theme.system": "Sistema",
+  "settings.theme.opacity": "Opacità della trasparenza",
+  "settings.theme.opacityDesc":
+    "Regola il velo di fondo della finestra: un velo minimo garantisce sempre il contrasto e la leggibilità di testi e terminali.",
+  "settings.theme.unsupported":
+    "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
+  "settings.theme.desktopOnly":
+    "La trasparenza nativa della finestra è disponibile solo nell'applicazione desktop.",
+  "settings.theme.toLight": "Passa al tema chiaro",
+  "settings.theme.toDark": "Passa al tema scuro",
+  "settings.theme.toGlass": "Passa al tema vetro",
+
   // Command palette
   "palette.desktopOnly": "Richiede l'app desktop",
   "palette.group.session": "Sessione",

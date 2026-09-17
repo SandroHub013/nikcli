@@ -122,4 +122,45 @@ describe("createThemeState", () => {
       dispose()
     })
   })
+
+  test("explicit glass choice resolves to glass and writes to storage", () => {
+    createRoot((dispose) => {
+      const storage = storageWith()
+      const state = createThemeState({ storage, query: queryWith(true) })
+
+      state.set("glass")
+      expect(state.preference()).toBe("glass")
+      expect(state.theme()).toBe("glass")
+      expect(storage.written).toEqual(["glass"])
+
+      dispose()
+    })
+  })
+
+  test("glass opacity defaults to 75, can be updated, clamped and restored", () => {
+    createRoot((dispose) => {
+      const storage = storageWith()
+      const state = createThemeState({ storage })
+
+      expect(state.glassOpacity()).toBe(75)
+
+      state.setGlassOpacity(60)
+      expect(state.glassOpacity()).toBe(60)
+      expect(storage.getItem("ade.theme.glass-opacity")).toBe("60")
+
+      state.setGlassOpacity(150)
+      expect(state.glassOpacity()).toBe(100)
+
+      state.setGlassOpacity(-20)
+      expect(state.glassOpacity()).toBe(0)
+
+      // Test restoration
+      const state2 = createThemeState({ storage })
+      state2.restore()
+      expect(state2.glassOpacity()).toBe(0)
+
+      dispose()
+    })
+  })
 })
+

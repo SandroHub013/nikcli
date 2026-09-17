@@ -164,3 +164,70 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* ── theme slider & notices ────────────────────────────────────────────────── */
+
+[data-slot="settings-slider-group"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  margin-top: var(--ade-space-5);
+  padding: var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-surface);
+}
+
+[data-slot="settings-slider-header"] {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+[data-slot="settings-slider-label"] {
+  font-size: var(--ade-font-md);
+  color: var(--ade-text);
+  font-weight: var(--ade-weight-medium);
+}
+
+[data-slot="settings-slider-value"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="settings-slider"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ade-sunken);
+  accent-color: var(--ade-accent);
+  cursor: pointer;
+}
+
+[data-slot="settings-slider"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="settings-slider-desc"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+  line-height: 1.4;
+}
+
+[data-slot="settings-notice"] {
+  margin: var(--ade-space-3) 0 0;
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  font-size: var(--ade-font-sm);
+  line-height: 1.4;
+}
+
+[data-slot="settings-notice"][data-state="warning"] {
+  border: 1px solid var(--ade-working);
+  background: var(--ade-working-bg);
+  color: var(--ade-working);
+}

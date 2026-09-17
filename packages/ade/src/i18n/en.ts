@@ -19,6 +19,26 @@ export const en: Messages = {
   "settings.language.it": "Italiano",
   "settings.language.en": "English",
 
+  "settings.theme.label": "Theme",
+  "settings.theme.title": "Theme",
+  "settings.theme.desc":
+    "Choose the appearance of ADE's interface: light, dark, or transparent glass with native desktop window effect.",
+  "settings.theme.group": "Interface theme",
+  "settings.theme.light": "Light",
+  "settings.theme.dark": "Dark",
+  "settings.theme.glass": "Glass",
+  "settings.theme.system": "System",
+  "settings.theme.opacity": "Transparency opacity",
+  "settings.theme.opacityDesc":
+    "Adjusts the window background veil: a minimum veil always ensures contrast and readability for text and terminals.",
+  "settings.theme.unsupported":
+    "Glass theme is not supported on this operating system or window compositor.",
+  "settings.theme.desktopOnly":
+    "Native window transparency is only available in the desktop application.",
+  "settings.theme.toLight": "Switch to light theme",
+  "settings.theme.toDark": "Switch to dark theme",
+  "settings.theme.toGlass": "Switch to glass theme",
+
   // Command palette
   "palette.desktopOnly": "Needs the desktop app",
   "palette.group.session": "Session",

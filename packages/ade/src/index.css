@@ -42,6 +42,48 @@
   color-scheme: light dark;
 }
 
+[data-component="ade-shell"][data-theme="glass"],
+:root[data-theme="glass"] {
+  color-scheme: dark;
+  --ade-bg: rgba(19, 17, 17, calc(0.15 + 0.80 * var(--ade-glass-opacity, 0.75)));
+  --ade-sunken: rgba(14, 12, 12, calc(0.50 + 0.45 * var(--ade-glass-opacity, 0.75)));
+  --ade-surface: rgba(26, 24, 24, calc(0.42 + 0.53 * var(--ade-glass-opacity, 0.75)));
+  --ade-raised: rgba(33, 30, 30, calc(0.52 + 0.44 * var(--ade-glass-opacity, 0.75)));
+  --ade-overlay: rgba(36, 32, 32, calc(0.70 + 0.28 * var(--ade-glass-opacity, 0.75)));
+  --ade-terminal-bg: rgba(14, 12, 12, calc(0.52 + 0.44 * var(--ade-glass-opacity, 0.75)));
+  --ade-border-subtle: rgba(255, 255, 255, 0.08);
+  --ade-border: rgba(255, 255, 255, 0.12);
+  --ade-border-strong: rgba(255, 255, 255, 0.22);
+  --ade-highlight: rgba(255, 255, 255, 0.15);
+}
+
+html[data-theme="glass"],
+body[data-theme="glass"],
+body[data-theme="glass"] #root,
+:root[data-theme="glass"] {
+  background: transparent !important;
+}
+
+[data-component="ade-shell"][data-theme="glass"] {
+  background: var(--ade-bg);
+}
+
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"] {
+  background: var(--ade-raised);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component] {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"] {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
   /*
