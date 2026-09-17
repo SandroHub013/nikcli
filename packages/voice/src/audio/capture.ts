@@ -168,6 +168,14 @@ export interface CapturedSegment {
   format: AudioFormat
   mimeType: string
   durationMs: number
+  /** Which segment this is, counted from 1: see `MicCapture.onHead`. */
+  sequence?: number
+}
+
+/** The start of a segment still being recorded: see `MicCapture.onHead`. */
+export interface SegmentHead {
+  blob: Blob
+  sequence: number
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +253,12 @@ export interface MicCapture {
   onPcmChunk(callback: PcmChunkCallback): void
   /** Register or update segment listener. */
   onSegment(callback: SegmentCallback): void
+  /**
+   * Once a segment has been recorded for `afterMs`, its first `headMs` as a
+   * WAV, while the speaker goes on: so its start can be transcribed before
+   * the sentence ends. The segment itself comes later with the same `sequence`.
+   */
+  onHead?(callback: (head: SegmentHead) => void, timing: { afterMs: number; headMs: number }): void
   /** Register or update speech start listener. */
   onSpeechStart(callback: SpeechLifecycleCallback): void
   /** Register or update speech end listener. */
@@ -294,6 +308,9 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   const preRollSamples = Math.round((PRE_ROLL_MS / 1000) * 16000)
   let segmentStartTime = 0
   let isRecordingSegment = false
+  let sequence = 0
+  let head: { callback: (head: SegmentHead) => void; afterMs: number; headMs: number } | undefined
+  let headSent = false
   /**
    * The segment that has been closed but not yet flushed.
    *
@@ -306,6 +323,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         pcmWavBlob?: Blob
         durationMs: number
         reason?: "silence" | "max_duration" | "stop" | "commit"
+        sequence: number
       }
     | undefined
 
@@ -495,6 +513,8 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     preRoll = []
     segmentStartTime = nowFn()
     isRecordingSegment = true
+    sequence++
+    headSent = false
     if (recorder) {
       try {
         recorder.start(100)
@@ -551,7 +571,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
      * Handing the array over here and pointing the recorder's own callbacks at
      * it until it has flushed is what keeps the two segments apart.
      */
-    pendingSegment = { chunks: recordedChunks, pcmWavBlob: wavBlob, durationMs: duration, reason }
+    pendingSegment = { chunks: recordedChunks, pcmWavBlob: wavBlob, durationMs: duration, reason, sequence }
     recordedChunks = []
     recordedPcmChunks = []
 
@@ -618,6 +638,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         format: "wav",
         mimeType: "audio/wav",
         durationMs: segment.durationMs,
+        sequence: segment.sequence,
       })
     } else {
       onSegmentCb({
@@ -625,6 +646,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
         format: chosenFormat,
         mimeType: chosenMimeType,
         durationMs: segment.durationMs,
+        sequence: segment.sequence,
       })
     }
   }
@@ -676,6 +698,19 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     if (isRecordingSegment) {
       recordedPcmChunks.push(new Float32Array(pcm16k))
+      if (head && !headSent && currentTime - segmentStartTime >= head.afterMs) {
+        headSent = true
+        const wanted = Math.round((head.headMs / 1000) * 16000)
+        const samples = new Float32Array(wanted)
+        let filled = 0
+        for (const chunk of recordedPcmChunks) {
+          if (filled >= wanted) break
+          const part = chunk.subarray(0, wanted - filled)
+          samples.set(part, filled)
+          filled += part.length
+        }
+        head.callback({ blob: encodeWav(samples.subarray(0, filled), 16000), sequence })
+      }
     } else {
       preRoll.push(new Float32Array(pcm16k))
       let held = 0
@@ -828,6 +863,10 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     onPcmChunk(callback: PcmChunkCallback): void {
       onPcmChunkCb = callback
+    },
+
+    onHead(callback: (head: SegmentHead) => void, timing: { afterMs: number; headMs: number }): void {
+      head = { callback, ...timing }
     },
 
     onSegment(callback: SegmentCallback): void {
