@@ -77,6 +77,7 @@ interface Live {
   /** The turn this process is answering, if any. */
   line?: (line: string) => void
   exit?: (code: number | null) => void
+  cancel?: () => void
   token?: string
   mailbox?: string
   idle?: ReturnType<typeof setTimeout>
@@ -100,6 +101,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     if (!target) return
     clearTimeout(target.idle)
     target.exited = true
+    target.cancel?.()
     if (target.mailbox && target.token) unregisterSender(target.mailbox, target.token)
     target.session?.kill({ tree: true })
     void target.starting.then((session) => session?.kill({ tree: true }))
@@ -158,14 +160,15 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         onLine: (line) => target.line?.(line),
         onExit: (code) => {
           const wasLive = !target.exited
-          kill(target)
           if (wasLive) target.exit?.(code)
+          kill(target)
         },
       })
       target.session = session
       if (target.exited) session.kill({ tree: true })
       return session
     })().catch(() => {
+      target.exit?.(null)
       kill(target)
       return undefined
     })
@@ -240,14 +243,16 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         let timer: ReturnType<typeof setTimeout> | undefined
         try {
           const outcome = await new Promise<"done" | "exit" | "timeout" | "stopped" | "nohost">((resolve) => {
+            // A replaced process may never emit an exit event, but its turn must settle.
+            target.cancel = () => resolve("stopped")
             stopTarget = () => {
               kill(target)
               resolve("stopped")
             }
             if (stopped) return stopTarget()
             timer = setTimeout(() => {
-              kill(target)
               resolve("timeout")
+              kill(target)
             }, timeoutMs)
             target.exit = (code) => {
               update(applyExit(talk, code, Date.now(), runner.label))
@@ -272,6 +277,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
           })
           target.line = undefined
           target.exit = undefined
+          target.cancel = undefined
           if (talk.sessionId) {
             target.sessionId = talk.sessionId
             resumes.set(cwdOf(request), talk.sessionId)

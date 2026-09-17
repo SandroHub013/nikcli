@@ -209,6 +209,29 @@ describe("a Claude Code kept running between sentences", () => {
     await second.result
   })
 
+  test("a new turn cancels the busy turn without stop and releases its slot", async () => {
+    const m = machine()
+    const warm = warmOn(m)
+    const first = warm.run(request("ciao"))
+    await tick()
+    expect(turnsRunning("claude")).toBe(1)
+    const second = warm.run(request("ancora"))
+    try {
+      // Killing the process does not emit an exit event on this host.
+      const result = await Promise.race([first.result, tick().then(() => "pending")])
+      expect(result).toMatchObject({ status: "stopped" })
+      expect(m.spawns[0]!.killed).toBe(true)
+      expect(turnsRunning("claude")).toBe(1)
+      for (const line of answer("s2", "Eccomi.")) m.spawns[1]!.say(line)
+      expect((await second.result).status).toBe("done")
+      expect(turnsRunning("claude")).toBe(0)
+    } finally {
+      first.stop()
+      second.stop()
+      await Promise.all([first.result, second.result])
+    }
+  })
+
   test("a process that exits in the middle of a turn is an error, and the next turn starts another", async () => {
     const m = machine()
     const warm = warmOn(m)
