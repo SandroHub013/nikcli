@@ -28,6 +28,12 @@ describe("the catalogs", () => {
     const english = en["vui.wake.hint"]("nik")
     expect(english).toContain('Just say "nik"')
     expect(english).toContain('"ei nik" as separate words, with a pause after the name')
+    expect(english).toContain('for example "nik, open the browser"')
+    expect(english).not.toContain("apri il browser")
+  })
+
+  test("the English voice hint calls the configured name", () => {
+    expect(en["vui.wake.hint"]("jarvis")).toStartWith('Just say "jarvis" to call it.')
   })
 
   test("have the same keys", () => {
