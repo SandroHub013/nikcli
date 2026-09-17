@@ -151,7 +151,8 @@ export const voiceEn: VoiceMessages = {
   "vui.activation.wake.disabled": "Off: the wake word isn't supported in dictation mode; it only works for agent commands.",
   "vui.listen.title": "Listening",
   "vui.listen.always": "Always on",
-  "vui.listen.always.desc": (wakeWord) => `The microphone opens with ADE and waits for “${wakeWord}”`,
+  "vui.listen.always.desc": (wakeWord) =>
+    `The microphone opens with ADE and waits for “${wakeWord}”. It spends credits: every voice in the room is sent to the transcription service, about $0.02 an hour with a television on, nothing while the room is quiet. It stops by itself after 30 minutes without being called, or past 120 sentences in an hour.`,
   "vui.listen.manual": "Only when you open it",
   "vui.listen.manual.desc": "With the button at the top or the shortcut",
   "vui.shortcuts.title": "Keyboard shortcuts",

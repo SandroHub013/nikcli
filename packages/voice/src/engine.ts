@@ -87,6 +87,8 @@ export interface VoiceEngineOptions {
   plannerModel?: string
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
+  /** Overrides `LISTEN_IDLE_MS`, for tests. */
+  readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
 }
@@ -223,12 +225,23 @@ export const DRAIN_TIMEOUT_MS = 32_000
 
 /**
  * How many sentences always-on listening may send to the cloud in an hour
- * before the user is told. Silence costs nothing — the capture only sends
- * speech — so this is a room that talks a lot: a television, a call. Past it
- * listening goes on, and the screen says why the bill may grow.
+ * before it stops. Silence costs nothing — the capture only sends speech —
+ * so this is a room that talks a lot: a television, a call. Each one is paid
+ * for (about $0.000056 at the measured price), and the room is not talking to
+ * the assistant: past the cap listening stops and says so, and the button
+ * starts it again.
  */
 export const LISTEN_REQUESTS_PER_HOUR = 120
 const HOUR_MS = 60 * 60_000
+
+/**
+ * How long listening waits, unused, before it stops by itself.
+ *
+ * An open microphone nobody has called costs money in a room with voices in
+ * it and keeps a microphone open in a room without. Half an hour with nobody
+ * saying the name is a room that forgot it was listening.
+ */
+export const LISTEN_IDLE_MS = 30 * 60_000
 
 /**
  * A push-to-talk press shorter than this is a tap, and a tap latches.
@@ -535,17 +548,45 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * the user was last told there were too many.
    */
   let listenRequests: number[] = []
-  let listenWarnedAt: number | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** Stops listening and says why; the button in the bar starts it again. */
+  function stopListening(text: string): void {
+    setListenWarning(text)
+    record({ kind: "error", text, at: now() })
+    void (async () => {
+      if (!isRunning()) return
+      await stop()
+      setListenPaused(true)
+    })()
+  }
+
+  /*
+   * Nobody has called it for a while: listening stops rather than waiting on
+   * a microphone that costs money to hold open. Restarted by every sentence
+   * that reaches the assistant, and by every start of listening.
+   */
+  function keepListeningAwake(): void {
+    clearTimeout(idleTimer)
+    if (!currentSettings().alwaysListen) return
+    const after = options.listenIdleMs ?? LISTEN_IDLE_MS
+    idleTimer = setTimeout(() => {
+      if (!isRunning() || !currentSettings().alwaysListen) return
+      stopListening(
+        `Non ti sento da ${Math.round(after / 60_000)} minuti, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
+      )
+    }, after)
+  }
+
   function countListenRequest(): void {
     const at = now()
     listenRequests = [...listenRequests.filter((t) => at - t < HOUR_MS), at]
     const cap = options.listenRequestsPerHour ?? LISTEN_REQUESTS_PER_HOUR
     if (listenRequests.length <= cap) return
-    if (listenWarnedAt !== undefined && at - listenWarnedAt < HOUR_MS) return
-    listenWarnedAt = at
-    const text = `Nell'ultima ora l'ascolto sempre attivo ha mandato al servizio di trascrizione più di ${cap} frasi: c'è molto parlato intorno, per esempio la televisione. Continua ad ascoltare; per fermarlo premi «In ascolto» in alto.`
-    setListenWarning(text)
-    record({ kind: "error", text, at })
+    listenRequests = []
+    stopListening(
+      `Nell'ultima ora l'ascolto ha mandato al servizio di trascrizione più di ${cap} frasi, e ognuna si paga: c'è molto parlato intorno, per esempio la televisione. Ho smesso di ascoltare; premi «In ascolto» in alto per riprendere.`,
+    )
   }
 
   /*
@@ -591,6 +632,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     setIsRunning(false)
     setFollowUp(undefined)
+    clearTimeout(idleTimer)
     if (!keepAgent) host.releaseAgent?.()
 
     /* Drained before the mode is forgotten: a dictated sentence read after
@@ -671,7 +713,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           active: (spokenAt: number) => programHandle?.waitingForName(spokenAt) ?? false,
           accepts: (text: string) => matchesWakeWord(text, currentSettings().wakeWord).matched,
           onRequest: countListenRequest,
-          onAccepted: () => cancelSpeech(),
+          onAccepted: () => {
+            keepListeningAwake()
+            cancelSpeech()
+          },
           onUncut: () =>
             record({
               kind: "action",
@@ -1063,6 +1108,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           setParakeetProgress(undefined)
 
           setListenPaused(false)
+          keepListeningAwake()
           // The agent starts now, so the first sentence does not wait for it.
           const agentSettings = currentSettings()
           if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {

@@ -1324,7 +1324,7 @@ describe("always-on listening", () => {
     expect(engine.listenPaused()).toBe(false)
   })
 
-  test("past the hourly limit of cloud requests it warns once, on screen, and keeps listening", async () => {
+  test("past the hourly limit of paid requests it stops listening and says why", async () => {
     let clock = 0
     let gate: any
     const engine = createVoiceEngine({
@@ -1341,20 +1341,38 @@ describe("always-on listening", () => {
     await engine.start("agent", { waitForName: true })
     for (let i = 0; i < 3; i++) gate.onRequest()
     expect(engine.listenWarning()).toBeUndefined()
+    expect(engine.isRunning()).toBe(true)
+
     gate.onRequest()
     const warning = engine.listenWarning()
     expect(warning).toContain("più di 3 frasi")
     expect(engine.history().at(-1)).toMatchObject({ kind: "error", text: warning })
-    expect(engine.isRunning()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.listenPaused()).toBe(true)
 
-    // Not repeated within the hour...
-    gate.onRequest()
-    expect(engine.history().filter((entry) => entry.kind === "error")).toHaveLength(1)
-    // ...and the window slides: an hour later, a quiet room says nothing.
-    clock += 61 * 60_000
-    gate.onRequest()
-    expect(engine.history().filter((entry) => entry.kind === "error")).toHaveLength(1)
+    // Started again by hand, the count starts from nothing.
+    await engine.start("agent", { waitForName: true })
+    expect(engine.listenPaused()).toBe(false)
+    for (let i = 0; i < 3; i++) gate.onRequest()
+    expect(engine.isRunning()).toBe(true)
     await engine.stop()
+  })
+
+  test("nobody has called it for a while: it stops rather than hold the microphone open", async () => {
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      transcriber: createFakeTranscriber(),
+      now: () => Date.now(),
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true },
+      listenIdleMs: 100,
+    })
+    await engine.start("agent", { waitForName: true })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.listenPaused()).toBe(true)
+    expect(engine.listenWarning()).toContain("smesso di ascoltare")
   })
 
   test("the cloud transcriber is told when only the start of a sentence is needed", async () => {

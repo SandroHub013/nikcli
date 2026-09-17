@@ -152,7 +152,8 @@ export const voiceIt = {
   "vui.activation.wake.disabled": "Disattivata: la parola di richiamo non è supportata in modalità trascrizione; è valida solo per eseguire comandi dell'agente.",
   "vui.listen.title": "Ascolto",
   "vui.listen.always": "Sempre attivo",
-  "vui.listen.always.desc": (wakeWord: string) => `Il microfono si apre con ADE e aspetta «${wakeWord}»`,
+  "vui.listen.always.desc": (wakeWord: string) =>
+    `Il microfono si apre con ADE e aspetta «${wakeWord}». Consuma crediti: ogni voce in stanza viene mandata al servizio che trascrive, circa 0,02 $ l'ora con la televisione accesa, niente quando c'è silenzio. Si ferma da solo dopo 30 minuti senza che tu lo chiami o se supera 120 frasi in un'ora.`,
   "vui.listen.manual": "Solo quando lo apri",
   "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia",
   "vui.shortcuts.title": "Scorciatoie da tastiera",
