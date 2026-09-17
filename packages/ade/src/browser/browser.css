@@ -585,6 +585,97 @@
   color: var(--ade-text-soft);
 }
 
+/* What a person calls the element: its section, or the section it is. */
+[data-slot="browser-context-name"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+}
+
+[data-slot="browser-context-action"] {
+  flex: 0 0 auto;
+  padding: 1px var(--ade-space-2);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-bg);
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  cursor: pointer;
+}
+
+[data-slot="browser-context-action"]:hover,
+[data-slot="browser-context-action"][aria-expanded="true"] {
+  color: var(--ade-accent);
+  border-color: var(--ade-accent);
+}
+
+[data-slot="browser-section-hint"] {
+  margin-left: var(--ade-space-2);
+  color: var(--ade-text-weak);
+  font-weight: 400;
+}
+
+[data-slot="browser-edit-fields"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--ade-space-2);
+  padding: var(--ade-space-3);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+[data-slot="browser-edit-field"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-edit-field"] input {
+  min-width: 0;
+  padding: 2px var(--ade-space-2);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="browser-edit-field"] input:focus {
+  outline: 1px solid var(--ade-accent);
+}
+
+[data-slot="browser-edit-row"] {
+  padding: 2px var(--ade-space-3);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text);
+}
+
+[data-slot="browser-edit-row"] s {
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-send-note"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ade-accent);
+}
+
+[data-slot="browser-send-note"][data-ok="false"] {
+  color: var(--ade-error);
+}
+
 [data-slot="browser-context-remove"] {
   margin-left: auto;
   display: inline-flex;

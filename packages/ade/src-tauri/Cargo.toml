@@ -56,6 +56,8 @@ portable-pty = "0.9.0"
 # CPU, RAM and ADE's own memory for the sidebar footer, on every platform.
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
+# Cropping and blanking a capture before it reaches the disk (S35); PNG only.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 # Directory junctions need no elevation, unlike symlinks. One small crate is a
@@ -66,6 +68,8 @@ junction = "1"
 # grant ADE's own page the microphone without the browser-style prompt.
 webview2-com = "0.38"
 windows-core = "0.61"
+# IStream for the window capture, same version Tauri builds with.
+windows = { version = "0.61", features = ["Win32_System_Com", "Win32_System_Com_StructuredStorage"] }
 # Windows.Graphics.Capture for S36: captures a window's composed pixels, which
 # includes the WebView2 content that a GDI grab misses, and brings its own
 # hardware H.264 encoder. MIT.

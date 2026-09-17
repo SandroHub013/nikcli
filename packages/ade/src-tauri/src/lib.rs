@@ -15,6 +15,7 @@
 mod agent_link;
 mod append;
 mod browse;
+mod browser_shot;
 mod frontend;
 mod media;
 mod project_bytes;
@@ -27,6 +28,7 @@ mod mailbox;
 mod stats;
 mod tts;
 mod usage;
+mod vision;
 mod update;
 
 use serde::Serialize;
@@ -1181,6 +1183,9 @@ pub fn run() {
             ade_open_release,
             browse::ade_browser_framing,
             browse::ade_open_in_browser,
+            browser_shot::browser_shot,
+            vision::capture_window,
+            vision::vision_allowed,
             update::ade_update_install,
             record::record_start,
             record::record_stop,

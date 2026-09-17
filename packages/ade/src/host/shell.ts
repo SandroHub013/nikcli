@@ -124,6 +124,25 @@ export interface Host {
   mailboxReceipt?: (id: string, text: string) => Promise<void>
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
   mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage" | "stats") => Promise<void>
+  /**
+   * A PNG of ADE's own window, cropped and with the sensitive rectangles
+   * painted over before it reaches the disk (S35). ADE Test only for now.
+   */
+  /** Whether this build lets an agent see ADE at all (S35: ADE Test for now). */
+  visionAllowed?: () => Promise<boolean>
+  captureWindow?: (request: {
+    label: string
+    crop?: { x: number; y: number; w: number; h: number }
+    redact: { x: number; y: number; w: number; h: number }[]
+    scale: number
+  }) => Promise<{ path: string; width: number; height: number; bytes: number }>
+  /** The same capture, written to `path` in the project's `.ade/browser` (S46). */
+  browserShot?: (request: {
+    path: string
+    crop: { x: number; y: number; w: number; h: number }
+    redact: { x: number; y: number; w: number; h: number }[]
+    scale: number
+  }) => Promise<{ path: string; width: number; height: number }>
   /** Tokens a claude or codex session has spent so far, from its transcript; null when not found. */
   transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
@@ -608,6 +627,23 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_receipt", { id, text })
     },
 
+    async visionAllowed() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<boolean>("vision_allowed")
+    },
+    async captureWindow(request) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ path: string; width: number; height: number; bytes: number }>("capture_window", {
+        label: request.label,
+        crop: request.crop ?? null,
+        redact: request.redact,
+        scale: request.scale,
+      })
+    },
+    async browserShot(request) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ path: string; width: number; height: number }>("browser_shot", request)
+    },
     async mailboxPublish(text, name) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_publish", { text, name: name ?? null })

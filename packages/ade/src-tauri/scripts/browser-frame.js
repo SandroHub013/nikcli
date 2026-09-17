@@ -252,6 +252,90 @@
     return path.join(" > ");
   }
 
+  // Sections: what a person calls a part of a page, so "the hero" or "the
+  // footer" can be picked and named without knowing the markup.
+  var WORD_SECTIONS = {
+    hero: 'hero', jumbotron: 'hero', masthead: 'hero', splash: 'hero',
+    header: 'header', topbar: 'header', navbar: 'nav', nav: 'nav', navigation: 'nav',
+    menu: 'nav', menubar: 'nav', breadcrumb: 'nav', breadcrumbs: 'nav',
+    footer: 'footer', sidebar: 'sidebar', drawer: 'sidebar',
+    banner: 'banner', announcement: 'banner',
+    pricing: 'pricing', plans: 'pricing', features: 'features', feature: 'features', benefits: 'features',
+    testimonials: 'testimonials', testimonial: 'testimonials', reviews: 'testimonials',
+    faq: 'faq', faqs: 'faq', cta: 'cta', contact: 'contact', contacts: 'contact', contatti: 'contact',
+    gallery: 'gallery', team: 'team', about: 'about', services: 'services', servizi: 'services',
+    newsletter: 'newsletter', subscribe: 'newsletter', blog: 'blog', posts: 'blog',
+    products: 'products', catalog: 'products', catalogo: 'products', prodotti: 'products',
+    cart: 'cart', carrello: 'cart', checkout: 'checkout', search: 'search',
+    modal: 'modal', dialog: 'modal', stats: 'stats', logos: 'logos', partners: 'logos', clients: 'logos',
+    steps: 'steps', timeline: 'timeline', portfolio: 'portfolio', projects: 'portfolio',
+    login: 'login', signin: 'login', signup: 'signup', register: 'signup', card: 'card', form: 'form'
+  };
+  var ROLE_SECTIONS = {
+    banner: 'header', contentinfo: 'footer', navigation: 'nav', complementary: 'sidebar',
+    main: 'main', search: 'search', dialog: 'modal', form: 'form'
+  };
+  var TAG_SECTIONS = {
+    header: 'header', footer: 'footer', nav: 'nav', aside: 'sidebar', main: 'main',
+    form: 'form', dialog: 'modal', section: 'section', article: 'article'
+  };
+  // Too big or too vague to be the answer while something closer has a name.
+  var WEAK_SECTIONS = { main: true, section: true, article: true };
+
+  function has(table, key) {
+    return Object.prototype.hasOwnProperty.call(table, key);
+  }
+
+  function sectionWords(el) {
+    var text = [el.id || '', typeof el.className === 'string' ? el.className : '',
+      el.getAttribute('aria-label') || '', el.getAttribute('data-testid') || ''].join(' ');
+    return text.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/);
+  }
+
+  function looksLikeHero(el) {
+    var tag = el.tagName.toLowerCase();
+    if (tag !== 'section' && tag !== 'div' && tag !== 'header') return false;
+    if (!el.querySelector('h1')) return false;
+    var rect = el.getBoundingClientRect();
+    var top = rect.top + (window.scrollY || 0);
+    var vw = document.documentElement.clientWidth || 0;
+    var vh = document.documentElement.clientHeight || 0;
+    return vw > 0 && vh > 0 && top < vh && rect.width >= vw * 0.8 && rect.height >= vh * 0.3;
+  }
+
+  function sectionNameOf(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE || el === document.body || el === document.documentElement) return '';
+    var given = (el.getAttribute('data-section') || '').toLowerCase().replace(/[^a-z0-9 -]+/g, '').trim();
+    if (given) return given.slice(0, 30);
+    var words = sectionWords(el);
+    for (var i = 0; i < words.length; i++) {
+      if (has(WORD_SECTIONS, words[i])) return WORD_SECTIONS[words[i]];
+    }
+    var role = (el.getAttribute('role') || '').toLowerCase();
+    if (has(ROLE_SECTIONS, role)) return ROLE_SECTIONS[role];
+    if (looksLikeHero(el)) return 'hero';
+    var tag = el.tagName.toLowerCase();
+    return has(TAG_SECTIONS, tag) ? TAG_SECTIONS[tag] : '';
+  }
+
+  function sectionLabel(el, name) {
+    var heading = el.querySelector('h1, h2, h3');
+    var text = heading ? (heading.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+    return text ? name + ' «' + text + '»' : name;
+  }
+
+  // The nearest section at or above el; a vague one only when nothing closer is named.
+  function sectionOf(el) {
+    var weak = null;
+    for (var node = el; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+      var name = sectionNameOf(node);
+      if (!name) continue;
+      if (!WEAK_SECTIONS[name]) return { el: node, name: name };
+      if (!weak) weak = { el: node, name: name };
+    }
+    return weak;
+  }
+
   function getCleanOuterHTML(el) {
     if (!el) return '';
     var clone = el.cloneNode(false);
@@ -267,6 +351,8 @@
     var rect = el.getBoundingClientRect();
     var cs = window.getComputedStyle(el);
     var parent = el.parentElement;
+    var ownName = sectionNameOf(el);
+    var around = sectionOf(parent);
 
     return {
       selector: getUniqueSelector(el),
@@ -306,7 +392,10 @@
       },
       parentSelector: parent ? getUniqueSelector(parent) : undefined,
       siblingsCount: parent ? parent.children.length : 0,
-      indexInParent: parent ? Array.prototype.indexOf.call(parent.children, el) : 0
+      indexInParent: parent ? Array.prototype.indexOf.call(parent.children, el) : 0,
+      section: around ? { name: around.name, label: sectionLabel(around.el, around.name), selector: getUniqueSelector(around.el) } : undefined,
+      ownSection: ownName ? sectionLabel(el, ownName) : undefined,
+      textOnly: el.children.length === 0 && (el.textContent || '').trim().length > 0
     };
   }
 
@@ -324,7 +413,9 @@
     hoverOutline.style.width = rect.width + 'px';
     hoverOutline.style.height = rect.height + 'px';
 
-    hoverBadge.textContent = el.tagName.toLowerCase();
+    var ownName = sectionNameOf(el);
+    var around = ownName ? null : sectionOf(el.parentElement);
+    hoverBadge.textContent = ownName ? sectionLabel(el, ownName) : el.tagName.toLowerCase() + (around ? ' · ' + around.name : '');
     hoverBadge.style.display = 'block';
     // Flush against the top-left corner of the outline, like a tab on it.
     hoverBadge.style.top = Math.max(0, rect.top - 19) + 'px';
@@ -467,6 +558,11 @@
 
     var target = document.elementFromPoint(e.clientX, e.clientY);
     if (!target || target === hoverOutline || target === hoverBadge || target === dropIndicator) return;
+    // Alt+click: the whole section the element is in.
+    if (e.altKey) {
+      var whole = sectionOf(target);
+      if (whole) target = whole.el;
+    }
 
     var serialized = serializeElement(target);
     if (serialized) {
@@ -480,6 +576,24 @@
     hoverOutline.style.display = 'none';
     hoverBadge.style.display = 'none';
   }, true);
+
+  function query(selector) {
+    try {
+      return typeof selector === 'string' ? document.querySelector(selector) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function reportEdit(selector, property, before, after) {
+    window.parent.postMessage({
+      type: 'visual-editor:edit-applied',
+      selector: selector,
+      property: property,
+      before: String(before == null ? '' : before).slice(0, 500),
+      after: String(after == null ? '' : after).slice(0, 500)
+    }, '*');
+  }
 
   // Message listener from parent host
   window.addEventListener('message', function(e) {
@@ -504,9 +618,28 @@
       }
       renderSelection();
     } else if (e.data.type === 'visual-editor:apply-style') {
-      var el = document.querySelector(e.data.selector);
-      if (el) {
+      var el = query(e.data.selector);
+      if (el && typeof e.data.property === 'string') {
+        var before = window.getComputedStyle(el)[e.data.property];
         el.style[e.data.property] = e.data.value;
+        reportEdit(e.data.selector, e.data.property, before, window.getComputedStyle(el)[e.data.property]);
+        renderSelection();
+      }
+    } else if (e.data.type === 'visual-editor:apply-text') {
+      var textEl = query(e.data.selector);
+      if (textEl && textEl.children.length === 0 && typeof e.data.text === 'string') {
+        var oldText = textEl.textContent || '';
+        textEl.textContent = e.data.text;
+        reportEdit(e.data.selector, 'text', oldText, e.data.text);
+        renderSelection();
+      }
+    } else if (e.data.type === 'visual-editor:select-section') {
+      var inner = query(e.data.selector);
+      var outer = inner ? sectionOf(inner.parentElement) : null;
+      if (outer) {
+        if (selectedEls.indexOf(outer.el) === -1) selectedEls.push(outer.el);
+        renderSelection();
+        window.parent.postMessage({ type: 'visual-editor:element-selected', element: serializeElement(outer.el) }, '*');
       }
     }
   });

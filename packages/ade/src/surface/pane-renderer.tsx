@@ -10,7 +10,6 @@ import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
-import { asOneLine } from "../session/typing"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -29,6 +28,7 @@ import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
 import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
+import type { BrowserRequest, Rect } from "../browser/request"
 import { t } from "../i18n"
 
 /**
@@ -86,6 +86,12 @@ export interface PaneRendererDeps {
   pluginRuntime: AdePluginRuntime
   /** Each mounted browser pane's controls, for `@ade browser …`. */
   browserControllers: Map<string, BrowserController>
+  /** Writes a browser request's details and picture, and queues its line for session `to` (S46). */
+  sendBrowserRequest: (
+    to: string,
+    request: BrowserRequest,
+    capture: { crop: Rect; redact: Rect[]; scale: number },
+  ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
 }
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
@@ -212,25 +218,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         }}
         /*
          * Goes to the session the pane chose: the one it is bound to, or the
-         * one the user picked when asked (S46). A session that stopped
-         * meanwhile reaches nobody, and the pane asks again.
+         * one the user picked when asked (S46). It arrives as a message, at
+         * the end of the session's turn; a session that stopped meanwhile
+         * reaches nobody, and the pane asks again.
          */
-        onSendPrompt={(prompt, context, to) => {
-          const target = wb().panes.find((pane) => pane.id === to && !isPanelPane(pane))
-          if (!target || !deps.isRunning(target.id)) return false
-          const text = asOneLine(context || prompt)
-          deps.appendLine(target.id, `> ${text}`, "shell")
-          /*
-           * One line, and no terminator: the user still presses Enter
-           * themselves. `replace(/\n/g, " ")` used to stand here, which left
-           * carriage returns alone — and a CR is what a tty reads as Enter, so
-           * a page could put a second command in a style property and have it
-           * submitted along with the first.
-           */
-          deps.sessionFor(target.id)?.write(text)
-          setWb((w) => ({ ...w, focusedId: target.id }))
-          return true
-        }}
+        onSendRequest={(request, capture, to) => deps.sendBrowserRequest(to, request, capture)}
       />
     )
 

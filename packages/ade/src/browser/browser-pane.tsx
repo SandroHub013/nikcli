@@ -17,7 +17,16 @@ import {
   onMount,
   type JSX,
 } from "solid-js"
-import { formatSelectionContext } from "./element-context"
+import {
+  captureArea,
+  editsFor,
+  elementSummary,
+  mergeEdit,
+  propertyName,
+  type BrowserRequest,
+  type EditRecord,
+  type Rect,
+} from "./request"
 import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
@@ -59,10 +68,15 @@ export interface BrowserPaneProps {
   onClose?: () => void
   onExpand?: () => void
   /**
-   * Sends to session `to`; false when it could not (it stopped meanwhile).
-   * The pane decides `to`: the bound session, or the one the user picks.
+   * Sends the request to session `to`, with the area of the window to
+   * photograph. The pane decides `to`: the bound session, or the one the
+   * user picks. Resolves to why it could not, or nothing when it went.
    */
-  onSendPrompt?: (prompt: string, context: string | undefined, to: string) => boolean
+  onSendRequest?: (
+    request: BrowserRequest,
+    capture: { crop: Rect; redact: Rect[]; scale: number },
+    to: string,
+  ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
   /** The session this pane is bound to (S46), see `binding.ts`. */
   owner?: OwnerStatus
   /** The running sessions a send can go to, for the chip's menu and the picker. */
@@ -118,6 +132,56 @@ function DevicePresetIcon(props: { preset: DevicePreset }): JSX.Element {
   )
 }
 
+/** What a chip's edit fields change, in the order they are shown. */
+const EDIT_FIELDS: { property: string; styleKey?: keyof InspectedElement["styles"]; label: string }[] = [
+  { property: "text", label: "browser.edit.text" },
+  { property: "color", styleKey: "color", label: "browser.edit.color" },
+  { property: "backgroundColor", styleKey: "backgroundColor", label: "browser.edit.background" },
+  { property: "fontSize", styleKey: "fontSize", label: "browser.edit.fontSize" },
+  { property: "padding", styleKey: "padding", label: "browser.edit.padding" },
+  { property: "borderRadius", styleKey: "borderRadius", label: "browser.edit.radius" },
+]
+
+/**
+ * Change an element in the page, in place: its text when it has only text,
+ * and a few styles. Applied on Enter or when the field is left; the page
+ * reports what each change replaced, and that goes with the request.
+ */
+function EditFields(props: { element: InspectedElement; onApply: (property: string, value: string) => void }): JSX.Element {
+  const fields = () => EDIT_FIELDS.filter((entry) => entry.property !== "text" || props.element.textOnly)
+  return (
+    <div data-slot="browser-edit-fields">
+      <For each={fields()}>
+        {(entry) => {
+          const initial = () =>
+            entry.property === "text" ? props.element.innerText ?? "" : (entry.styleKey ? props.element.styles?.[entry.styleKey] : "") ?? ""
+          let last = initial()
+          const commit = (value: string) => {
+            if (value === last) return
+            last = value
+            props.onApply(entry.property, value)
+          }
+          return (
+            <label data-slot="browser-edit-field">
+              <span>{t(entry.label as never)}</span>
+              <input
+                type="text"
+                value={initial()}
+                spellcheck={false}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === "Enter") commit(e.currentTarget.value)
+                }}
+                onBlur={(e) => commit(e.currentTarget.value)}
+              />
+            </label>
+          )
+        }}
+      </For>
+    </div>
+  )
+}
+
 export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const defaultUrl = normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
 
@@ -153,6 +217,13 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [ownerMenu, setOwnerMenu] = createSignal(false)
   /** A send waiting for the user to say which session gets it. */
   const [asking, setAsking] = createSignal(false)
+  /** Edits made in the page from here, with the value each replaced. */
+  const [edits, setEdits] = createSignal<EditRecord[]>([])
+  /** The chip whose edit fields are open. */
+  const [editing, setEditing] = createSignal<string>()
+  const [sending, setSending] = createSignal(false)
+  /** What the last send did, in the footer. */
+  const [sendNote, setSendNote] = createSignal<{ ok: boolean; text: string }>()
 
   let iframeRef: HTMLIFrameElement | undefined
   let viewportContainerRef: HTMLDivElement | undefined
@@ -347,6 +418,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     setLoadState("loading")
     setLoadError(undefined)
     setSelection([])
+    // A new document: what was edited in the old one is gone with it.
+    setEdits([])
+    setEditing(undefined)
+    setSendNote(undefined)
     handshake({ type: "navigate", url: target })
     setSrcdoc(null)
     setLoadToken((v) => v + 1)
@@ -491,6 +566,20 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       return
     }
 
+    if (data.type === "visual-editor:edit-applied") {
+      const edit = data as unknown as Partial<EditRecord>
+      if (typeof edit.selector !== "string" || typeof edit.property !== "string") return
+      setEdits((current) =>
+        mergeEdit(current, {
+          selector: edit.selector!,
+          property: edit.property!,
+          before: String(edit.before ?? ""),
+          after: String(edit.after ?? ""),
+        }),
+      )
+      return
+    }
+
     if (data.type === "visual-editor:clear-selection") {
       if (Array.isArray(data.selectors)) {
         const keep = new Set(data.selectors)
@@ -529,15 +618,64 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     post({ type: "visual-editor:clear-selection" })
   }
 
-  const deliver = (to: string) => {
-    const text = promptText().trim()
-    const context = formatSelectionContext(selection(), { url: url(), instruction: text || undefined })
-    if (!props.onSendPrompt?.(text, context, to)) {
-      setAsking(true)
+  const selectSection = (selector: string) => post({ type: "visual-editor:select-section", selector })
+
+  /** An edit typed in a chip, applied to the page; the page reports it back. */
+  const applyEdit = (selector: string, property: string, value: string) => {
+    if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
+    else post({ type: "visual-editor:apply-style", selector, property, value })
+  }
+
+  const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  /** Where to photograph: the selected boxes in the frame, without ADE's own secret fields. */
+  const captureRequest = () => {
+    const box = iframeRef?.getBoundingClientRect()
+    const frame: Rect = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : { x: 0, y: 0, w: 0, h: 0 }
+    const scale = viewportFit().isResponsive ? 1 : viewportFit().scale
+    const crop = captureArea(frame, scale, selection().map((element) => element.rect).filter(Boolean))
+    const redact = Array.from(document.querySelectorAll("[data-sensitive]"), (element) => {
+      const r = element.getBoundingClientRect()
+      return { x: r.left, y: r.top, w: r.width, h: r.height }
+    }).filter((r) => r.w > 0 && r.h > 0)
+    return { crop, redact, scale: window.devicePixelRatio || 1 }
+  }
+
+  const deliver = async (to: string) => {
+    if (sending() || !props.onSendRequest) return
+    const elements = selection()
+    const request: BrowserRequest = {
+      paneTitle: props.title || t("browser.preview"),
+      url: url(),
+      instruction: promptText().trim(),
+      elements,
+      edits: editsFor(edits(), elements),
+      viewport: {
+        width: viewportFit().isResponsive ? containerBox().width : viewportFit().viewportWidth,
+        height: viewportFit().isResponsive ? containerBox().height : viewportFit().viewportHeight,
+        device: DEVICE_LABELS[device()],
+      },
+    }
+    setSending(true)
+    setSendNote(undefined)
+    // ADE's own popover is over the page: out of the picture while it is taken.
+    await nextFrame()
+    await nextFrame()
+    const outcome = await props.onSendRequest(request, captureRequest(), to).catch((error: unknown) => ({
+      ok: false as const,
+      reason: error instanceof Error ? error.message : String(error),
+    }))
+    setSending(false)
+    if (!outcome.ok) {
+      if ("stopped" in outcome && outcome.stopped) setAsking(true)
+      setSendNote({ ok: false, text: t("browser.send.failed", outcome.reason) })
       return
     }
+    const title = props.sessions?.find((session) => session.id === to)?.title ?? ""
+    setSendNote({ ok: true, text: t("browser.send.sent", title) })
     setAsking(false)
     setPromptText("")
+    setEditing(undefined)
     clearSelection()
   }
 
@@ -548,13 +686,13 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const sendPromptWithContext = () => {
     if (!promptText().trim() && selection().length === 0) return
     const plan = planSend(props.owner ?? { state: "none" })
-    if (plan.kind === "send") deliver(plan.to)
+    if (plan.kind === "send") void deliver(plan.to)
     else setAsking(true)
   }
 
   const sendTo = (sessionId: string) => {
     props.onBind?.(sessionId)
-    deliver(sessionId)
+    void deliver(sessionId)
   }
 
   const ownerLabel = () => {
@@ -993,20 +1131,38 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             )}
           </Show>
 
-          <Show when={mode() === "edit" || selection().length > 0}>
+          <Show when={!sending() && (mode() === "edit" || selection().length > 0)}>
             <div data-slot="browser-prompt-popover">
               <Show when={selection().length > 0}>
                 <div data-slot="browser-selection-list">
-                  <span data-slot="browser-selection-label">{t("browser.context")}</span>
+                  <span data-slot="browser-selection-label">
+                    {t("browser.context")} <span data-slot="browser-section-hint">{t("browser.section.hint")}</span>
+                  </span>
                   <div data-slot="browser-context-blocks">
                     <For each={selection()}>
                       {(el) => (
                         <div data-slot="browser-context-block">
                           <div data-slot="browser-context-header">
-                            <span data-slot="browser-context-tag">&lt;{el.tagName}&gt;</span>
-                            <Show when={el.id}>
-                              <span data-slot="browser-context-id">#{el.id}</span>
+                            <span data-slot="browser-context-tag">&lt;{el.tagName.toLowerCase()}&gt;</span>
+                            <span data-slot="browser-context-name">{elementSummary(el)}</span>
+                            <Show when={el.section && !el.ownSection}>
+                              <button
+                                type="button"
+                                data-slot="browser-context-action"
+                                title={t("browser.section.whole.tip", el.section!.label)}
+                                onClick={() => selectSection(el.selector)}
+                              >
+                                {t("browser.section.whole", el.section!.name)}
+                              </button>
                             </Show>
+                            <button
+                              type="button"
+                              data-slot="browser-context-action"
+                              aria-expanded={editing() === el.selector}
+                              onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
+                            >
+                              {t("browser.edit.toggle")}
+                            </button>
                             <button
                               type="button"
                               data-slot="browser-context-remove"
@@ -1018,6 +1174,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                               </svg>
                             </button>
                           </div>
+                          <Show when={editing() === el.selector}>
+                            <EditFields element={el} onApply={(property, value) => applyEdit(el.selector, property, value)} />
+                          </Show>
+                          <For each={edits().filter((edit) => edit.selector === el.selector)}>
+                            {(edit) => (
+                              <div data-slot="browser-edit-row">
+                                {propertyName(edit.property)}: <s>{edit.before}</s> → {edit.after}
+                              </div>
+                            )}
+                          </For>
                           <Show when={el.outerHTML}>
                             <pre data-slot="browser-context-code"><code>{el.outerHTML}</code></pre>
                           </Show>
@@ -1101,6 +1267,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
+        <Show when={sending() || sendNote()}>
+          <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">
+            {sending() ? t("browser.send.sending") : sendNote()?.text}
+          </span>
+        </Show>
         <span data-slot="browser-selection-count">
           {selection().length === 0
             ? t("browser.selection.none")

@@ -7,6 +7,7 @@ name = "ade-desktop"
 version = "0.0.0"
 dependencies = [
  "dirs",
+ "image",
  "junction",
  "keyring",
  "portable-pty",
@@ -21,6 +22,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-updater",
  "webview2-com",
+ "windows 0.61.3",
  "windows-capture",
  "windows-core 0.61.2",
 ]

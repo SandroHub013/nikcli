@@ -39,7 +39,7 @@ export interface FormatSelectionOptions {
 const CONTROL_CHARS = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+", "g")
 
 /** A page-supplied value, made safe to put in a line of prompt text. */
-function field(value: unknown, maxLen = 120): string {
+export function field(value: unknown, maxLen = 120): string {
   if (typeof value !== "string") return ""
   const flat = value.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim()
   if (flat.length <= maxLen) return flat

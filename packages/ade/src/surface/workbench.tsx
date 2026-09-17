@@ -243,6 +243,7 @@ import { Splash } from "../splash/splash"
 import { createPanelRouter } from "../panels/router"
 import { panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
+import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
 import { VIDEO_VERBS } from "../video/video"
 import { MODEL_VERBS } from "../model3d/model"
 import { SIMULATOR_VERBS } from "../simulator/simulator"
@@ -1157,6 +1158,44 @@ export function Workbench() {
     appendLine(paneId, handled.reply, "note")
     panels.typed(paneId, handled.reply)
     running.get(paneId)?.write(asSubmittedLine(handled.reply))
+  }
+
+  /*
+   * A request from a browser pane (S46): the details and the picture go in
+   * the project's `.ade/browser/`, and one line waits for the session's turn
+   * to end, like a message from another session.
+   */
+  const sendBrowserRequest = async (
+    to: string,
+    request: BrowserRequest,
+    capture: { crop: Rect; redact: Rect[]; scale: number },
+  ): Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }> => {
+    const target = wb().panes.find((pane) => pane.id === to && !isPanelPane(pane))
+    if (!target || !running.has(to)) return { ok: false, reason: t("browser.send.stopped"), stopped: true }
+    const host = await getHost()
+    const root = project()?.root?.replace(/\\/g, "/").replace(/\/+$/, "")
+    if (!host?.writeTextFile || !root) return { ok: false, reason: t("browser.send.noProject") }
+    const at = new Date()
+    const stem = requestStem(at, request.paneTitle)
+    const dir = `${root}/.ade/browser`
+    let shot: { path: string } | { error: string }
+    try {
+      shot = host.browserShot
+        ? { path: (await host.browserShot({ path: `${dir}/${stem}.png`, ...capture })).path }
+        : { error: t("browser.shot.unavailable") }
+    } catch (error) {
+      shot = { error: error instanceof Error ? error.message : String(error) }
+    }
+    // Requests are working notes, not project files.
+    if (host.exists && !(await host.exists(`${dir}/.gitignore`).catch(() => true))) {
+      await host.writeTextFile(`${dir}/.gitignore`, "*\n")
+    }
+    const details = `${dir}/${stem}.md`
+    const failure = await host.writeTextFile(details, formatRequestDetails(request, { at, shot }))
+    if (failure) return { ok: false, reason: failure }
+    heldLines.push({ paneId: to, text: formatRequestLine(request, details) })
+    appendLine(to, t("note.browserRequest", request.paneTitle), "note")
+    return { ok: true }
   }
 
   const running = new Map<string, SpawnedSession>()
@@ -4899,6 +4938,7 @@ export function Workbench() {
     announceToAll,
     pluginRuntime,
     browserControllers,
+    sendBrowserRequest,
   })
 
   const paletteChord = createMemo(() => {
