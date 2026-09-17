@@ -39,7 +39,7 @@ import {
   type HandshakeEvent,
 } from "./handshake"
 import { type BridgeMessage, type InspectedElement } from "./protocol"
-import { FRAME_ASK, FRAME_HELLO, FRAME_NAME, newFrameSecret, openEnvelope } from "./frame-script"
+import { FRAME_ASK, FRAME_NAME, FrameGate } from "./frame-script"
 import { planSend, type BrowserController, type OwnerStatus, type SessionChoice } from "./binding"
 // The same file the host runs in every frame; the mirror carries it inline.
 import FRAME_SCRIPT from "../../src-tauri/scripts/browser-frame.js?raw"
@@ -234,13 +234,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   /** The mirror is up only because the user chose Inspect: Browse brings the real page back. */
   let mirrorForInspect = false
   /*
-   * What the bridge in this pane's frame signs its messages with.
+   * The channel to the bridge in this pane's frame.
    *
-   * Handed to the frame script on request and taken by it before the page
-   * can see it (`frame-script.ts`). A page that posts `visual-editor:ready`
-   * or a selection on its own does not have it, and is not believed.
+   * The frame script asks for it with a port of its own, before the page
+   * runs; the bridge then speaks only on that port, signed (`frame-script.ts`).
+   * A page that posts `visual-editor:ready` or a selection on its own is not
+   * believed, and a page that asks for the secret itself gets it only if the
+   * document holding it is gone.
    */
-  const frameSecret = newFrameSecret()
+  const frameGate = new FrameGate({ onMessage: (message) => handleBridge(message as BridgeMessage) })
+  onCleanup(() => frameGate.dispose())
 
   /**
    * Messages to the frame go to `"*"`, for a page loaded by URL too.
@@ -250,9 +253,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * `http://localhost:3000` matches nothing: the message is dropped without an
    * error. That is why Design Mode never switched on for a page carrying the
    * bridge itself. `"*"` gives nothing away: what goes out is the mode, the
-   * selectors the page itself sent, and the frame secret, which the frame
-   * script takes before the page's listeners run; what comes back is accepted
-   * only from this frame's own window, signed (`handleMessage`).
+   * selectors the page itself sent; the secret goes on the frame script's own
+   * port, and what the bridge says comes back on it (`frameGate`).
    */
   const post = (message: unknown) => {
     try {
@@ -525,15 +527,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const handleMessage = (event: MessageEvent) => {
     // Untrusted source guard: ignore any message not originating from our iframe
     if (!iframeRef?.contentWindow || event.source !== iframeRef.contentWindow) return
-
     const raw = event.data as { type?: unknown } | null
-    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) {
-      // Whoever asks, the answer goes only to the frame's current document,
-      // where the frame script takes it first.
-      post({ type: FRAME_HELLO, secret: frameSecret })
-      return
-    }
-    const data = openEnvelope(raw, frameSecret) as BridgeMessage | undefined
+    // The only thing the frame's window may say: "here is my port".
+    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) frameGate.ask(event.ports[0])
+  }
+
+  const handleBridge = (data: BridgeMessage | undefined) => {
     if (!data || typeof data !== "object" || typeof data.type !== "string") return
     if (!data.type.startsWith("visual-editor:")) return
 

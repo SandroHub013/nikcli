@@ -42,24 +42,37 @@
   } catch {}
   if (win.parent !== win.top || win.name !== "ade-browser")
     return;
-  const location = win.location || {}, scheme = String(location.protocol), bridgeHere = scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc", eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), stop = uncurry(win.Event.prototype.stopImmediatePropagation), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift);
+  const location = win.location || {}, scheme = String(location.protocol);
+  if (!(scheme === "http:" || scheme === "https:" || scheme === "blob:" || String(location.href) === "about:srcdoc"))
+    return;
+  const eventProto = win.MessageEvent.prototype, getData = uncurry(Object.getOwnPropertyDescriptor(eventProto, "data").get), getSource = uncurry(Object.getOwnPropertyDescriptor(eventProto, "source").get), listen = uncurry(win.EventTarget.prototype.addEventListener), parent = win.parent, postToParent = uncurry(parent.postMessage), portProto = win.MessagePort.prototype, portPost = uncurry(portProto.postMessage), portStart = uncurry(portProto.start), computed = uncurry(win.getComputedStyle), push = uncurry(Array.prototype.push), shift = uncurry(Array.prototype.shift), trustedGetter = Object.getOwnPropertyDescriptor(new win.Event("ade"), "isTrusted"), isTrustedOf = trustedGetter && trustedGetter.get ? uncurry(trustedGetter.get) : void 0, trusted = (event) => {
+    try {
+      return isTrustedOf ? isTrustedOf(event) === !0 : !1;
+    } catch {
+      return !1;
+    }
+  };
   define(win, "__NIKCLI_INSPECTOR_ACTIVE__", { value: !0, writable: !1, configurable: !1 });
   let secret, started = !1;
-  const queue = [], send = (message) => {
+  const queue = [], channel = new win.MessageChannel, port = channel.port1, send = (message) => {
     if (secret === void 0) {
       push(queue, message);
       return;
     }
-    postToParent(parent, { type: "ade-browser:bridge", secret, message }, "*");
-  };
-  listen(win, "message", (event) => {
-    if (getSource(event) !== parent)
-      return;
+    portPost(port, { type: "ade-browser:bridge", secret, message });
+  }, listenTrusted = (target, type, handler, options) => listen(target, type, (event) => {
+    if (trusted(event))
+      handler(event);
+  }, options);
+  listen(port, "message", (event) => {
     const data = getData(event);
-    if (!data || typeof data !== "object" || data.type !== "ade-browser:hello")
+    if (!data || typeof data !== "object")
       return;
-    stop(event);
-    if (!bridgeHere || secret !== void 0 || typeof data.secret !== "string")
+    if (data.type === "ade-browser:ping") {
+      portPost(port, { type: "ade-browser:pong" });
+      return;
+    }
+    if (data.type !== "ade-browser:hello" || secret !== void 0 || typeof data.secret !== "string")
       return;
     secret = data.secret;
     while (queue.length)
@@ -69,6 +82,7 @@
     started = !0;
     bridge({
       __NIKCLI_INSPECTOR_ACTIVE__: !1,
+      __ADE_LISTEN__: listenTrusted,
       parent: { postMessage: (message) => send(message) },
       getComputedStyle: (element, pseudo) => computed(win, element, pseudo),
       addEventListener: (type, handler, options) => {
@@ -77,20 +91,26 @@
         return listen(win, "message", (event) => {
           if (getSource(event) !== parent)
             return;
-          const message = getData(event);
-          if (message && typeof message === "object" && message.type === "ade-browser:hello")
-            return;
-          handler({ data: message, source: parent });
+          handler({ data: getData(event), source: parent });
         }, options);
       }
     });
-  }, !0);
-  if (bridgeHere)
-    postToParent(parent, { type: "ade-browser:ask" }, "*");
+  });
+  portStart(port);
+  postToParent(parent, { type: "ade-browser:ask" }, "*", [channel.port2]);
 })(window, function (window) {
 (function() {
   if (window.__NIKCLI_INSPECTOR_ACTIVE__) return;
   window.__NIKCLI_INSPECTOR_ACTIVE__ = true;
+
+  // Only real input selects, drags or hovers: a page's dispatchEvent does not.
+  // ADE's frame script hands over a listener taken before the page could
+  // replace addEventListener; elsewhere the event's own flag is checked.
+  var listenInput = window.__ADE_LISTEN__ || function(target, type, handler, options) {
+    target.addEventListener(type, function(e) {
+      if (e.isTrusted) handler(e);
+    }, options);
+  };
 
   // Modes: 'browse' (normal browsing) | 'edit' (unified select-to-link & drag-and-drop)
   var currentMode = 'browse';
@@ -423,7 +443,7 @@
   }
 
   // Mousemove highlight in Edit mode
-  document.addEventListener('mousemove', function(e) {
+  listenInput(document, 'mousemove', function(e) {
     if (currentMode !== 'edit') {
       hoverOutline.style.display = 'none';
       hoverBadge.style.display = 'none';
@@ -445,7 +465,7 @@
   }, true);
 
   // Mousedown to prepare drag & drop in Edit mode
-  document.addEventListener('mousedown', function(e) {
+  listenInput(document, 'mousedown', function(e) {
     if (currentMode !== 'edit') return;
     var target = document.elementFromPoint(e.clientX, e.clientY);
     if (!target || target === document.body || target === document.documentElement) return;
@@ -456,11 +476,11 @@
 
   // A plain click never fires dragend, so the attribute would otherwise stay on
   // the host page's element after the editor is closed.
-  document.addEventListener('mouseup', function() {
+  listenInput(document, 'mouseup', function() {
     if (draggedEl && !isDragging) draggedEl.removeAttribute('draggable');
   }, true);
 
-  document.addEventListener('dragstart', function(e) {
+  listenInput(document, 'dragstart', function(e) {
     if (currentMode !== 'edit' || !draggedEl) return;
     isDragging = true;
     e.dataTransfer.setData('text/plain', getUniqueSelector(draggedEl));
@@ -470,7 +490,7 @@
     hoverBadge.style.display = 'none';
   }, true);
 
-  document.addEventListener('dragover', function(e) {
+  listenInput(document, 'dragover', function(e) {
     if (currentMode !== 'edit' || !draggedEl) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -499,7 +519,7 @@
     }
   }, true);
 
-  document.addEventListener('dragend', function(e) {
+  listenInput(document, 'dragend', function(e) {
     if (draggedEl) {
       draggedEl.style.opacity = '1';
       draggedEl.removeAttribute('draggable');
@@ -510,7 +530,7 @@
     }, 50);
   }, true);
 
-  document.addEventListener('drop', function(e) {
+  listenInput(document, 'drop', function(e) {
     if (currentMode !== 'edit' || !draggedEl || !dropTargetEl) return;
     e.preventDefault();
     e.stopPropagation();
@@ -550,7 +570,7 @@
   }, true);
 
   // Click handler (Select & Link on click if not dragging)
-  document.addEventListener('click', function(e) {
+  listenInput(document, 'click', function(e) {
     if (currentMode !== 'edit') return;
     if (isDragging) return; // ignore click if user just dropped an element
     e.preventDefault();

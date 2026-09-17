@@ -9,11 +9,15 @@ import { INSPECTOR_BRIDGE_SCRIPT } from "./protocol"
 const posted: any[] = []
 const listeners: ((event: { data: unknown }) => void)[] = []
 const tell = (data: unknown) => listeners.forEach((listener) => listener({ data }))
+/** Events the test calls user input; the frame script's listener lets only real input through. */
+const userInput = new WeakSet<Event>()
 const last = (type: string) => [...posted].reverse().find((message) => message.type === type)
 
 beforeAll(() => {
   const shim = {
     __NIKCLI_INSPECTOR_ACTIVE__: false,
+    __ADE_LISTEN__: (target: EventTarget, type: string, handler: (event: Event) => void, options?: boolean) =>
+      target.addEventListener(type, (event) => userInput.has(event) && handler(event), options),
     parent: { postMessage: (message: unknown) => posted.push(message) },
     getComputedStyle: (element: Element) => window.getComputedStyle(element),
     addEventListener: (type: string, handler: any) => {
@@ -36,19 +40,29 @@ function page(html: string) {
 }
 
 /** A click in edit mode on `selector`, as the bridge sees one. */
-function click(selector: string, altKey = false) {
+function click(selector: string, altKey = false, real = true) {
   const target = document.querySelector(selector)!
   const original = document.elementFromPoint
   document.elementFromPoint = () => target
   try {
     tell({ type: "visual-editor:set-mode", mode: "edit" })
-    document.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey }))
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true, altKey })
+    if (real) userInput.add(event)
+    document.dispatchEvent(event)
   } finally {
     document.elementFromPoint = original
     tell({ type: "visual-editor:set-mode", mode: "browse" })
   }
   return last("visual-editor:element-selected")?.element
 }
+
+describe("input", () => {
+  test("a click the page makes up selects nothing", () => {
+    page(`<button id="buy">Buy</button>`)
+    expect(click("#buy", false, false)).toBeUndefined()
+    expect(click("#buy")?.selector).toBe("#buy")
+  })
+})
 
 describe("sections", () => {
   test("named by class, id, role and tag, with the heading they carry", () => {

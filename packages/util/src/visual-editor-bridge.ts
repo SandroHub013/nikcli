@@ -93,6 +93,15 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
   if (window.__NIKCLI_INSPECTOR_ACTIVE__) return;
   window.__NIKCLI_INSPECTOR_ACTIVE__ = true;
 
+  // Only real input selects, drags or hovers: a page's dispatchEvent does not.
+  // ADE's frame script hands over a listener taken before the page could
+  // replace addEventListener; elsewhere the event's own flag is checked.
+  var listenInput = window.__ADE_LISTEN__ || function(target, type, handler, options) {
+    target.addEventListener(type, function(e) {
+      if (e.isTrusted) handler(e);
+    }, options);
+  };
+
   // Modes: 'browse' (normal browsing) | 'edit' (unified select-to-link & drag-and-drop)
   var currentMode = 'browse';
   var hoveredEl = null;
@@ -424,7 +433,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
   }
 
   // Mousemove highlight in Edit mode
-  document.addEventListener('mousemove', function(e) {
+  listenInput(document, 'mousemove', function(e) {
     if (currentMode !== 'edit') {
       hoverOutline.style.display = 'none';
       hoverBadge.style.display = 'none';
@@ -446,7 +455,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
   }, true);
 
   // Mousedown to prepare drag & drop in Edit mode
-  document.addEventListener('mousedown', function(e) {
+  listenInput(document, 'mousedown', function(e) {
     if (currentMode !== 'edit') return;
     var target = document.elementFromPoint(e.clientX, e.clientY);
     if (!target || target === document.body || target === document.documentElement) return;
@@ -457,11 +466,11 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
 
   // A plain click never fires dragend, so the attribute would otherwise stay on
   // the host page's element after the editor is closed.
-  document.addEventListener('mouseup', function() {
+  listenInput(document, 'mouseup', function() {
     if (draggedEl && !isDragging) draggedEl.removeAttribute('draggable');
   }, true);
 
-  document.addEventListener('dragstart', function(e) {
+  listenInput(document, 'dragstart', function(e) {
     if (currentMode !== 'edit' || !draggedEl) return;
     isDragging = true;
     e.dataTransfer.setData('text/plain', getUniqueSelector(draggedEl));
@@ -471,7 +480,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
     hoverBadge.style.display = 'none';
   }, true);
 
-  document.addEventListener('dragover', function(e) {
+  listenInput(document, 'dragover', function(e) {
     if (currentMode !== 'edit' || !draggedEl) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -500,7 +509,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
     }
   }, true);
 
-  document.addEventListener('dragend', function(e) {
+  listenInput(document, 'dragend', function(e) {
     if (draggedEl) {
       draggedEl.style.opacity = '1';
       draggedEl.removeAttribute('draggable');
@@ -511,7 +520,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
     }, 50);
   }, true);
 
-  document.addEventListener('drop', function(e) {
+  listenInput(document, 'drop', function(e) {
     if (currentMode !== 'edit' || !draggedEl || !dropTargetEl) return;
     e.preventDefault();
     e.stopPropagation();
@@ -551,7 +560,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
   }, true);
 
   // Click handler (Select & Link on click if not dragging)
-  document.addEventListener('click', function(e) {
+  listenInput(document, 'click', function(e) {
     if (currentMode !== 'edit') return;
     if (isDragging) return; // ignore click if user just dropped an element
     e.preventDefault();
