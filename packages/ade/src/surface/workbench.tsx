@@ -2727,16 +2727,19 @@ export function Workbench() {
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
+  const listeningOff = initialVoice.migrations.includes("listening-off")
   const movedToName = initialVoice.migrations.some((m) => m === "name-only" || m === "wake-word" || m === "always-listen")
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-      ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-      : movedToShortcut
-        ? t("voice.shortcutOnly", agentShortcut)
-        : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-          ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
-          : undefined,
+    listeningOff
+      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+        : movedToShortcut
+          ? t("voice.shortcutOnly", agentShortcut)
+          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+            ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
+            : undefined,
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(

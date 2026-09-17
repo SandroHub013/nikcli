@@ -60,8 +60,13 @@ export type ReplyVoice = (typeof REPLY_VOICES)[number]
  * voice, a sentence that begins with «ei nik» or «nik». A profile on the
  * shortcut or on toggle is moved to always-on listening for the name once,
  * and told. The shortcut and the button stay, as a manual way to call it.
+ *
+ * 7: the user's rule after 0.7.2 — listening for the name without being
+ * asked spends money in the background: every noise the detector takes for
+ * speech is a paid transcription. Listening on its own is now off unless it
+ * is chosen, and a profile that had it is turned off once, and told.
  */
-export const CURRENT_SETTINGS_VERSION = 6
+export const CURRENT_SETTINGS_VERSION = 7
 
 /**
  * Whether the wake word and always-on listening exist. The switch, like Chat
@@ -200,7 +205,14 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   transcriptionSend: "manual",
   language: "it",
   wakeWord: WAKE_PHRASE,
-  alwaysListen: WAKE_WORD_ENABLED,
+  /*
+   * Off: an open microphone that sends the start of every sentence it hears
+   * to the cloud costs the user money for a room they are not talking to.
+   * Measured in a room with a television on: about 330 paid requests an
+   * hour. It is a choice now, made in the voice settings, where what it
+   * costs is written.
+   */
+  alwaysListen: false,
   agentChord: "mod+shift+k",
   transcriptionChord: "mod+shift+j",
   /*
@@ -251,8 +263,9 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  * `always-listen`: a profile on the wake word now listens without being opened.
  * `shortcut-only`: a profile on the wake word is back on the shortcut.
  * `name-only`: a profile on the shortcut or toggle now listens for the name.
+ * `listening-off`: a profile that listened on its own no longer does.
  */
-export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only"
+export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only" | "listening-off"
 
 /**
  * A profile on the shortcut or toggle, moved to listening for the name: the
@@ -263,7 +276,8 @@ function toName(candidate: Record<string, unknown>, migrations: VoiceMigration[]
   if (!wakeWordEnabled() || shortcutActivationEnabled()) return candidate
   if (candidate.activation !== "push-to-talk" && candidate.activation !== "toggle") return candidate
   migrations.push("name-only")
-  return { ...candidate, activation: "wake-word", alwaysListen: true, mode: "agent" }
+  // Not `alwaysListen`: the name works in a microphone the user opened.
+  return { ...candidate, activation: "wake-word", mode: "agent" }
 }
 
 /**
@@ -323,6 +337,10 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       migrations.push("shortcut-only")
     }
     candidate = toName(candidate, migrations)
+    if (candidate.alwaysListen === true) {
+      candidate = { ...candidate, alwaysListen: false }
+      if (wakeWordEnabled()) migrations.push("listening-off")
+    }
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
     // Not a repair: a newer version is not something that went wrong, and
@@ -354,6 +372,16 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     }
     /* Version 6: the name is the only way to start it. */
     if (version < 6) candidate = toName(candidate, migrations)
+    /*
+     * Version 7: listening on its own is off until it is chosen. Every
+     * profile until now had it, by default or by choice, so it is turned off
+     * once and said where to turn it back on.
+     */
+    if (version < 7 && candidate.alwaysListen === true) {
+      candidate = { ...candidate, alwaysListen: false }
+      // Nothing to tell where listening for the name does not exist at all.
+      if (wakeWordEnabled()) migrations.push("listening-off")
+    }
     version = CURRENT_SETTINGS_VERSION
   }
 

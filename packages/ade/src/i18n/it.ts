@@ -735,6 +735,8 @@ export const it = {
   "voice.shortcutOnly": (shortcut: string) =>
     `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei nik».`,
   "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) => `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
+  "voice.listeningOff": (shortcut: string, always: string) =>
+    `Da questa versione ADE non ascolta più da sola: il microfono si apre con la scorciatoia ${shortcut} o con il tasto in alto, e il nome funziona lì dentro. Ascoltare sempre costa, perché ogni voce in stanza viene mandata al servizio che trascrive: se lo vuoi, riaccendilo con «${always}» nelle impostazioni della voce.`,
   "editor.saveFailed": (problem: string) => `Salvataggio fallito: ${problem}`,
   "keys.passed": (names: string) => `Chiavi API passate: ${names}`,
 

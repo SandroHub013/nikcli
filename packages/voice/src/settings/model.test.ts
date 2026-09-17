@@ -128,18 +128,19 @@ describe("settings/model - normalizeSettings", () => {
     expect(WAKE_PHRASE).toBe("nik")
   })
 
-  test("always-on listening is the default, and a profile on the wake word is told once", () => {
-    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(WAKE_WORD_ENABLED)
+  test("listening on its own is off unless it is chosen, and a profile that had it is turned off once", () => {
+    expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(false)
     const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const, alwaysListen: true })
-    expect(moved.alwaysListen).toBe(true)
-    expect(moved.migrations).toEqual(["always-listen"])
-    // Written back at version 3, it is not told again, and a choice of off is kept.
-    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).migrations).toEqual([])
-    expect(normalizeSettings({ ...moved.settings, alwaysListen: false }).alwaysListen).toBe(false)
-    // Dictation on the wake word is not told anything.
+    expect(moved.alwaysListen).toBe(false)
+    expect(moved.migrations).toEqual(["always-listen", "listening-off"])
+    // Written back, it is not told again, and turning it back on is kept.
+    expect(normalizeSettings(moved.settings).migrations).toEqual([])
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: true }).alwaysListen).toBe(true)
+    expect(normalizeSettings({ ...moved.settings, alwaysListen: true }).migrations).toEqual([])
+    // Dictation on the wake word is not told about the name.
     expect(normalizeSettings({ version: 2, mode: "transcription", activation: "wake-word" }).migrations).toEqual([])
     // Not a boolean: the default.
-    expect(normalizeSettings({ version: 3, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
+    expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
   })
 
   test("preserves valid configuration with zero corrections", () => {
@@ -288,7 +289,8 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     expect(SHORTCUT_ACTIVATION_ENABLED).toBe(false)
     const fresh = normalizeSettings({})
     expect(fresh.activation).toBe("wake-word")
-    expect(fresh.alwaysListen).toBe(true)
+    // It listens only in a microphone the user opened: see version 7.
+    expect(fresh.alwaysListen).toBe(false)
     expect(fresh.wakeWord).toBe("nik")
   })
 
@@ -296,8 +298,9 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     const saved = { ...DEFAULT_VOICE_SETTINGS, version: 5, mode: "transcription", activation: "push-to-talk", alwaysListen: false }
     const moved = normalizeSettings(saved)
     expect(moved.activation).toBe("wake-word")
-    expect(moved.alwaysListen).toBe(true)
+    expect(moved.alwaysListen).toBe(false)
     expect(moved.mode).toBe("agent")
+    // Already off: moved to the name, and nothing to say about listening.
     expect(moved.migrations).toEqual(["name-only"])
     expect(moved.corrections).toEqual([])
     // Written back, it is not moved or told again, and turning always-on off is kept.

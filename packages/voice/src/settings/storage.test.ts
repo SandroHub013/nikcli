@@ -266,7 +266,7 @@ describe("after 0.7.0: a profile saved on the shortcut", () => {
     store.setItem("voice.settings", JSON.stringify({ version: 5, activation: "push-to-talk", alwaysListen: false, mode: "agent" }))
     const first = loadVoiceSettings(store)
     expect(first.settings.activation).toBe("wake-word")
-    expect(first.settings.alwaysListen).toBe(true)
+    expect(first.settings.alwaysListen).toBe(false)
     expect(first.migrations).toEqual(["name-only"])
     expect(JSON.parse(store.getItem("voice.settings") ?? "{}").activation).toBe("wake-word")
     expect(loadVoiceSettings(store).migrations).toEqual([])

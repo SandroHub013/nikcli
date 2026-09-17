@@ -952,7 +952,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       }
       const transcriber = createFakeTranscriber()
       // No `activation` here: this is the default a new installation gets.
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
       const hear = async (text: string) => {
         transcriber.emit(text, true)
         await new Promise((r) => setTimeout(r, 20))
@@ -1006,7 +1006,7 @@ describe("engine/agent answers what the grammar does not know", () => {
           request.signal?.addEventListener("abort", () => resolve({ ok: false, text: "", ran: true }))
         })
       const transcriber = createFakeTranscriber()
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
       await engine.start("agent", { waitForName: true })
       transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
@@ -1036,7 +1036,7 @@ describe("engine/agent answers what the grammar does not know", () => {
           })
         })
       const transcriber = createFakeTranscriber()
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word" } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
       await engine.start()
       transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
@@ -1582,7 +1582,7 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     }
     const transcriber = createFakeTranscriber()
     let clock = 10_000
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto" } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true } })
     expect(engine.settings().activation).toBe("wake-word")
     expect(engine.settings().alwaysListen).toBe(true)
     await engine.start("agent", { waitForName: true })
@@ -1637,7 +1637,7 @@ describe("after 0.7.0: opened by hand, with listening by itself turned off", () 
     const host = new MockVoiceHost()
     ;(host as VoiceHost).askAgent = async () => ({ ok: true, text: "Fatto.", ran: true })
     const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", alwaysListen: true } })
     await engine.start("agent", { waitForName: true })
     transcriber.emit("nik raccontami la storia di Roma", true)
     await new Promise((r) => setTimeout(r, 60))
@@ -1656,7 +1656,7 @@ describe("after 0.7.0: dictation is held on its key", () => {
       return { ok: true, text: "Fatto.", ran: true }
     }
     const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto" } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true } })
     const settle = () => new Promise((r) => setTimeout(r, 40))
     return { host, asked, transcriber, engine, settle, advance: (ms: number) => (clock += ms) }
   }
@@ -1728,7 +1728,7 @@ describe("the agent's answer is read as it is written", () => {
       speaker,
       cue: (kind) => cues.push(kind),
       now: () => 10_000,
-      settings: { agentEngine: "auto" },
+      settings: { agentEngine: "auto", alwaysListen: true },
     })
     return { engine, speaker, cues }
   }
@@ -1802,7 +1802,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
       speaker: createFakeSpeaker(),
       cue: (kind) => cues.push(kind),
       now: () => clock,
-      settings: { agentEngine: "auto", ...settings },
+      settings: { agentEngine: "auto", alwaysListen: true, ...settings },
     })
     const hear = async (text: string) => {
       transcriber.emit(text, true)
@@ -1887,7 +1887,7 @@ describe("interrupted while it talks", () => {
       host,
       speaker,
       now: () => 10_000,
-      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1964,7 +1964,7 @@ describe("a television talking on does not keep the window open", () => {
       host,
       speaker: createFakeSpeaker(),
       now: () => clock,
-      settings: { agentEngine: "auto", backend: "openrouter", openRouterApiKey: "k" },
+      settings: { agentEngine: "auto", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
       createTranscriber: (_backend, options) => {
         gate = options?.openRouterOptions?.nameGate
         return transcriber
@@ -1998,7 +1998,7 @@ describe("a television talking on does not keep the window open", () => {
       return { ok: true, text: "Fatto.", ran: true }
     }
     const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto" } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", alwaysListen: true } })
     const hear = async (text: string) => {
       transcriber.emit(text, true)
       await new Promise((r) => setTimeout(r, 30))
