@@ -162,13 +162,7 @@ export function globalVoiceAction(
 
 /** What to say when the system reports a chord ADE cannot place. */
 export function unknownChordMessage(chord: string): string {
-  return `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`
-}
-
-/** What each chord is for, in the words the user reads. */
-export const VOICE_CHORD_FEATURE: Record<VoiceMode, string> = {
-  agent: "assistente vocale",
-  transcription: "dettatura",
+  return t("voice.shortcut.unknown", chord)
 }
 
 export interface RegisterVoiceShortcutsDeps {

@@ -328,6 +328,7 @@ export const it = {
   "voice.shortcut.feature.agent": "assistente vocale",
   "voice.shortcut.feature.transcription": "dettatura",
   "voice.shortcut.busy": (chord: string, feature: string) => `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
+  "voice.shortcut.unknown": (chord: string) => `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "voice.permission.notRefusal": "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
 
   // Bar, window, bell, panel actions
