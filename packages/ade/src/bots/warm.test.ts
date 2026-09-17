@@ -119,7 +119,7 @@ describe("a Claude Code kept running between sentences", () => {
     expect((await second.result).status).toBe("done")
   })
 
-  test("another project starts a new conversation: the old one is not there", async () => {
+  test("each project keeps its process and its conversation: back in one, the voice goes on with it", async () => {
     const m = machine()
     const warm = warmOn(m)
     const first = warm.run(request("ciao"))
@@ -130,17 +130,34 @@ describe("a Claude Code kept running between sentences", () => {
     const other = warm.run(request("e qui?", { cwd: "C:/altro" }))
     await tick()
     expect(m.spawns).toHaveLength(2)
+    expect(m.spawns[0]!.killed).toBe(false)
     expect(m.spawns[1]!.cwd).toBe("C:/altro")
     expect(m.spawns[1]!.args).not.toContain("--resume")
     for (const line of answer("s2", "Eccomi.")) m.spawns[1]!.say(line)
     await other.result
 
-    // Back in the first project: afresh too, never with the other project's conversation.
+    // Back in the first project: its own process, still waiting.
     const back = warm.run(request("e di nuovo?"))
     await tick()
-    expect(m.spawns[2]!.args).not.toContain("--resume")
-    back.stop()
-    await back.result
+    expect(m.spawns).toHaveLength(2)
+    expect(m.spawns[0]!.written).toHaveLength(2)
+    for (const line of answer("s1", "Sì.")) m.spawns[0]!.say(line)
+    expect((await back.result).status).toBe("done")
+
+    // A third project makes room: the one used least recently goes.
+    const third = warm.run(request("e là?", { cwd: "C:/terzo" }))
+    await tick()
+    expect(m.spawns[1]!.killed).toBe(true)
+    expect(m.spawns[0]!.killed).toBe(false)
+    for (const line of answer("s3", "Ok.")) m.spawns[2]!.say(line)
+    await third.result
+
+    // Coming back to it resumes its conversation in a new process.
+    const again = warm.run(request("e ancora qui?", { cwd: "C:/altro" }))
+    await tick()
+    expect(m.spawns[3]!.args.join(" ")).toContain("--resume s2")
+    again.stop()
+    await again.result
   })
 
   test("closed when the voice stops, but not under a turn still answering", async () => {
@@ -157,6 +174,21 @@ describe("a Claude Code kept running between sentences", () => {
     expect(m.spawns[1]!.killed).toBe(false)
     for (const line of answer("s1", "Ciao.")) m.spawns[1]!.say(line)
     expect((await turn.result).status).toBe("done")
+    // Closed as soon as the turn ended, not ten minutes later.
+    expect(m.spawns[1]!.killed).toBe(true)
+  })
+
+  test("a close followed by a new start keeps the process for it", async () => {
+    const m = machine()
+    const warm = warmOn(m)
+    const turn = warm.run(request("ciao"))
+    await tick()
+    warm.close()
+    warm.prepare(request(""))
+    for (const line of answer("s1", "Ciao.")) m.spawns[0]!.say(line)
+    await turn.result
+    expect(m.spawns).toHaveLength(1)
+    expect(m.spawns[0]!.killed).toBe(false)
   })
 
   test("a stopped turn takes its process with it; the next one resumes the conversation", async () => {

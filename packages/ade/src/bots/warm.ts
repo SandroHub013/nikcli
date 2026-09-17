@@ -9,12 +9,13 @@
  * conversation, so a process started ahead waits for the next sentence and
  * answers it in well under a second.
  *
- * One process at a time, for one configuration (project, model, effort,
- * instructions, refused tools). A turn that asks for another configuration
- * replaces it. A stopped or failed turn kills it, and the next one starts a
- * new process that resumes the same conversation, in the same project only:
- * another project starts afresh, as a turn from nothing did. Left unused, it
- * is closed.
+ * One process per project, for one configuration (model, effort,
+ * instructions, refused tools), and at most `WARM_PROJECTS` projects. A turn
+ * that asks for another configuration replaces its project's process. A
+ * stopped or failed turn kills it, and the next one starts a new process that
+ * resumes the same conversation. Each project keeps its own conversation:
+ * back in a project, the voice goes on with what was said there. Left unused,
+ * a process is closed.
  *
  * ```ts
  * const warm = createWarmClaude()
@@ -34,6 +35,9 @@ import { markTurn, TURN_TIMEOUT_MS, timeoutProblem, type Turn, type TurnDeps, ty
 /** How long a process may wait for a sentence before it is closed. */
 export const WARM_IDLE_MS = 10 * 60_000
 
+/** How many projects keep a process waiting; the least recently used goes first. */
+export const WARM_PROJECTS = 2
+
 export interface WarmClaude {
   /** Starts a process for this configuration now, if none is ready. */
   prepare(request: TurnRequest): void
@@ -41,7 +45,7 @@ export interface WarmClaude {
   run(request: TurnRequest): Turn
   /** The next turn starts a new conversation. */
   forget(): void
-  /** Closes the process, unless a turn is running on it. */
+  /** Closes the processes; one answering a turn is closed when the turn ends. */
   close(): void
 }
 
@@ -76,17 +80,21 @@ interface Live {
   token?: string
   mailbox?: string
   idle?: ReturnType<typeof setTimeout>
+  /** Closed as soon as its turn ends: see `close`. */
+  closeAfterTurn?: boolean
 }
 
 export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): WarmClaude {
   const runner = runnerById("claude")
-  let live: Live | undefined
+  /* By project, least recently used first. */
+  const lives = new Map<string, Live>()
   /*
-   * The conversation to resume when a process has to be replaced, and the
-   * project it belongs to: Claude Code keeps conversations per folder, and
-   * `--resume` with another one fails the turn.
+   * The conversation to resume when a project's process has to be replaced.
+   * By project: Claude Code keeps conversations per folder, and `--resume`
+   * with another folder's fails the turn.
    */
-  let resume: { cwd: string; id: string } | undefined
+  const resumes = new Map<string, string>()
+  const cwdOf = (request: TurnRequest) => request.cwd ?? ""
 
   function kill(target: Live | undefined): void {
     if (!target) return
@@ -95,11 +103,12 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     if (target.mailbox && target.token) unregisterSender(target.mailbox, target.token)
     target.session?.kill({ tree: true })
     void target.starting.then((session) => session?.kill({ tree: true }))
-    if (live === target) live = undefined
+    for (const [cwd, other] of lives) if (other === target) lives.delete(cwd)
   }
 
   function idleFrom(target: Live): void {
     clearTimeout(target.idle)
+    if (target.exited) return
     target.idle = setTimeout(() => kill(target), deps.idleMs ?? WARM_IDLE_MS)
   }
 
@@ -123,7 +132,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
       }
       const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
       const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
-      const resumeId = resume && resume.cwd === (request.cwd ?? "") ? resume.id : undefined
+      const resumeId = resumes.get(cwdOf(request))
       const { command, args } = turnCommand(runner, {
         bot,
         message: "",
@@ -166,18 +175,36 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
 
   function ready(request: TurnRequest): Live {
     const key = configKey(request)
+    const cwd = cwdOf(request)
+    let live = lives.get(cwd)
     if (live && (live.key !== key || live.exited)) {
       markTurn("cli-replaced", live.exited ? "uscito" : `${live.key} -> ${key}`)
       kill(live)
+      live = undefined
     }
-    if (!live) markTurn("cli-started")
-    live ??= start(request)
+    if (!live) {
+      markTurn("cli-started")
+      live = start(request)
+    }
+    live.closeAfterTurn = false
+    // Most recently used last; the oldest idle one makes room.
+    lives.delete(cwd)
+    lives.set(cwd, live)
+    for (const other of [...lives.values()]) {
+      if (lives.size <= WARM_PROJECTS) break
+      if (other !== live && !other.line) kill(other)
+    }
     return live
   }
 
   return {
     prepare(request) {
-      if (live?.line) return
+      const busy = lives.get(cwdOf(request))
+      if (busy?.line) {
+        // Wanted again: kept after its turn, whatever a close asked before.
+        busy.closeAfterTurn = false
+        return
+      }
       ready(request)
     },
 
@@ -206,7 +233,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
           return finish("error", slot.problem)
         }
         // A process busy with another turn is not this turn's to share.
-        if (live?.line) kill(live)
+        for (const busy of [...lives.values()]) if (busy.line) kill(busy)
         const target = ready(request)
         clearTimeout(target.idle)
         const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
@@ -247,11 +274,12 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
           target.exit = undefined
           if (talk.sessionId) {
             target.sessionId = talk.sessionId
-            resume = { cwd: request.cwd ?? "", id: talk.sessionId }
+            resumes.set(cwdOf(request), talk.sessionId)
           } else if (talk.status === "error") {
             // Claude Code no longer has the conversation (see `applyClaudeEvent`).
-            resume = undefined
+            resumes.delete(cwdOf(request))
           }
+          if (target.closeAfterTurn) kill(target)
           switch (outcome) {
             case "stopped":
               return finish("stopped")
@@ -294,13 +322,15 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     },
 
     forget() {
-      resume = undefined
-      kill(live)
+      resumes.clear()
+      for (const live of [...lives.values()]) kill(live)
     },
 
     close() {
-      // A turn still answering ends on its own, and its process after it.
-      if (!live?.line) kill(live)
+      for (const live of [...lives.values()]) {
+        if (live.line) live.closeAfterTurn = true
+        else kill(live)
+      }
     },
   }
 }

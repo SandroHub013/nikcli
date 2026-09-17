@@ -1179,6 +1179,28 @@ describe("always-on listening", () => {
     await engine.stop()
   })
 
+  test("ending a dictation that took over listening keeps the agent ready; closing the microphone lets it go", async () => {
+    const { host, engine } = listening()
+    const released = () => host.calls.filter((call) => call.method === "releaseAgent").length
+    await engine.start("agent", { waitForName: true })
+    await engine.toggle("transcription")
+    await engine.toggle("transcription")
+    expect(engine.activeMode()).toBe("agent")
+    expect(released()).toBe(0)
+
+    // Held, not toggled: released at once, it ends there.
+    await engine.pressToTalk("transcription")
+    expect(engine.activeMode()).toBe("transcription")
+    await engine.releaseToTalk()
+    await settle()
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.activeMode()).toBe("agent")
+    expect(released()).toBe(0)
+
+    await engine.stop()
+    expect(released()).toBe(1)
+  })
+
   test("dictation opened with the microphone closed does not reopen listening when it ends", async () => {
     const { engine } = listening()
     await engine.toggle("transcription")

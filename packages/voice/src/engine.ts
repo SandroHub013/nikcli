@@ -548,11 +548,16 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     record({ kind: "error", text, at })
   }
 
-  const stop = (): Promise<void> => {
+  /*
+   * `keepAgent`: the microphone is about to reopen for the name (the end of a
+   * dictation that took it over), so the agent kept ready stays. Released and
+   * prepared again, it would start its process over for nothing.
+   */
+  const stop = (options?: { keepAgent?: boolean }): Promise<void> => {
     if (stopping) return stopping
     stopping = (async () => {
       try {
-        await stopNow()
+        await stopNow(options?.keepAgent === true)
       } finally {
         stopping = null
       }
@@ -566,15 +571,16 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   const endPress = async (): Promise<void> => {
     const back = heldDictation && dictationInterruptedListening
-    await stop()
     const s = currentSettings()
-    if (back && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
+    const listenAgain = back && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
+    await stop({ keepAgent: listenAgain })
+    if (listenAgain) {
       await startListening("agent", { waitForName: true })
     }
   }
   let startListening: (mode: VoiceMode, o: { waitForName: boolean }) => Promise<void> = async () => {}
 
-  const stopNow = async (): Promise<void> => {
+  const stopNow = async (keepAgent = false): Promise<void> => {
     /* Before anything else: a start still in flight must find its number
        stale and free what it has built rather than install it. */
     sessionGeneration++
@@ -585,8 +591,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     setIsRunning(false)
     setFollowUp(undefined)
-    // A restart prepares it again (see `start`).
-    host.releaseAgent?.()
+    if (!keepAgent) host.releaseAgent?.()
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
@@ -1142,14 +1147,15 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
        * sentence goes.
        */
       if (mode === undefined || mode === activeMode()) {
-        const backToListening = dictationInterruptedListening && activeMode() === "transcription"
-        await stop()
         /* Closing dictation is not closing the house's microphone: once what
            was dictated has been delivered, it goes back to waiting for the
            phrase — if that is what dictation took over, and not a
            microphone the user had closed. */
+        const backToListening = dictationInterruptedListening && activeMode() === "transcription"
         const s = currentSettings()
-        if (backToListening && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent") {
+        const listenAgain = backToListening && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
+        await stop({ keepAgent: listenAgain })
+        if (listenAgain) {
           await this.start("agent", { waitForName: true })
         }
         return
