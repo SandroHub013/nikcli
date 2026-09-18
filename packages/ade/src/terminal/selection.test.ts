@@ -82,8 +82,12 @@ describe("terminal selection & copy (S50)", () => {
 
       try {
         // Mock selection active
-        term.hasSelection = () => true
+        let hasSel = true
+        term.hasSelection = () => hasSel
         term.getSelection = () => "selected output line"
+        term.clearSelection = () => {
+          hasSel = false
+        }
 
         const customHandler = createTerminalKeyHandler(term)
         const ctrlC = new KeyboardEvent("keydown", { key: "c", ctrlKey: true })
@@ -92,6 +96,45 @@ describe("terminal selection & copy (S50)", () => {
         // Returns false to prevent xterm from sending ETX (\x03, SIGINT) to the process
         expect(handled).toBe(false)
         expect(copiedText).toBe("selected output line")
+        // Selection must be cleared so subsequent keys don't treat it as selected
+        expect(hasSel).toBe(false)
+      } finally {
+        Object.defineProperty(navigator, "clipboard", {
+          value: origClipboard,
+          configurable: true,
+        })
+      }
+    })
+
+    it("second Ctrl+C after copying passes through to interrupt the agent (SIGINT)", async () => {
+      const session = getTerminal(testId)
+      const term = session.terminal
+
+      let hasSel = true
+      term.hasSelection = () => hasSel
+      term.getSelection = () => "selected line"
+      term.clearSelection = () => {
+        hasSel = false
+      }
+
+      const origClipboard = navigator.clipboard
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: async () => {},
+        },
+        configurable: true,
+      })
+
+      try {
+        const customHandler = createTerminalKeyHandler(term)
+        const ctrlC = new KeyboardEvent("keydown", { key: "c", ctrlKey: true })
+
+        // First Ctrl+C: intercepted to copy, selection is cleared
+        expect(customHandler(ctrlC)).toBe(false)
+        expect(hasSel).toBe(false)
+
+        // Second Ctrl+C on the same spot: selection is gone, passes through (returns true) for SIGINT
+        expect(customHandler(ctrlC)).toBe(true)
       } finally {
         Object.defineProperty(navigator, "clipboard", {
           value: origClipboard,
@@ -128,7 +171,7 @@ describe("terminal selection & copy (S50)", () => {
   })
 
   describe("configureTerminalSelection", () => {
-    it("configures shouldForceSelection on terminal selection service", () => {
+    it("configures shouldForceSelection on terminal selection service for left-click with modifiers only", () => {
       // Create mock terminal structure
       const mockSelectionService = {
         shouldForceSelection: (_e: MouseEvent) => false,
@@ -141,20 +184,25 @@ describe("terminal selection & copy (S50)", () => {
 
       configureTerminalSelection(mockTerminal as any)
 
-      // Shift forces selection
+      // Shift + Left click forces selection
       expect(
         mockSelectionService.shouldForceSelection({ shiftKey: true, altKey: false, button: 0 } as MouseEvent),
       ).toBe(true)
 
-      // Alt/Option forces selection
+      // Alt/Option + Left click forces selection
       expect(
         mockSelectionService.shouldForceSelection({ shiftKey: false, altKey: true, button: 0 } as MouseEvent),
       ).toBe(true)
 
-      // Right click (button 2) forces selection / opens context menu
+      // Right click (button 2) does NOT force selection, passes to application in mouse mode
       expect(
         mockSelectionService.shouldForceSelection({ shiftKey: false, altKey: false, button: 2 } as MouseEvent),
-      ).toBe(true)
+      ).toBe(false)
+
+      // Right click even with modifiers does NOT force selection
+      expect(
+        mockSelectionService.shouldForceSelection({ shiftKey: true, altKey: false, button: 2 } as MouseEvent),
+      ).toBe(false)
 
       // Plain left click without modifiers does not force selection (delegates to app in mouse mode)
       expect(

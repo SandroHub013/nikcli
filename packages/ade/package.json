@@ -27,7 +27,7 @@
     }
   },
   "scripts": {
-    "typecheck": "bun x tsc -b",
+    "typecheck": "tsc -b",
     "dev": "vite",
     "build": "vite build",
     "test": "bun run test:unit",

@@ -173,18 +173,16 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
  * Configures the terminal emulator's selection behavior:
  * - When in mouse events mode, holding Shift or Alt/Option bypasses mouse reporting
  *   and forces normal text selection, matching standard terminal expectations.
- * - Right clicks (button 2) are not swallowed as mouse reports, allowing word selection
- *   and context menu copy.
+ * - Right clicks (button 2) pass through to the application in mouse mode.
  */
 export function configureTerminalSelection(terminal: Terminal): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
     sel.shouldForceSelection = (event: MouseEvent) => {
-      // Right click prepares context menu and word selection for copy
-      if (event.button === 2) return true
-      // Standard modifier override: Shift (Windows/Linux/Mac) or Alt/Option (Mac/Windows/Linux)
-      return Boolean(event.shiftKey || event.altKey)
+      // Bypass mouse mode only on left click (button 0) when holding Shift or Alt/Option
+      const isLeft = event.button === 0 || event.button === undefined
+      return Boolean(isLeft && (event.shiftKey || event.altKey))
     }
   }
 }
@@ -192,8 +190,8 @@ export function configureTerminalSelection(terminal: Terminal): void {
 /**
  * Key event handler for terminal emulator:
  * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
- * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT
- * - When no text is selected, allows Ctrl+C to send SIGINT (\x03)
+ * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and clears selection
+ * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
  */
 export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEvent) => boolean {
   return (event: KeyboardEvent) => {
@@ -209,6 +207,7 @@ export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEv
       if (terminal.hasSelection()) {
         if (event.type === "keydown") {
           void copyToClipboard(terminal.getSelection())
+          terminal.clearSelection()
         }
         return false
       }
