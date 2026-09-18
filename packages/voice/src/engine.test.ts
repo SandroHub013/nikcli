@@ -1467,6 +1467,71 @@ describe("always-on listening", () => {
     await next.stop()
   })
 
+  test("the switch in the settings lifts a stop for spending; a dictation coming back does not", async () => {
+    const halt = { current: undefined as { reason: string; at: number } | undefined }
+    const haltStore = {
+      read: () => halt.current,
+      write: (next: { reason: string; at: number }) => void (halt.current = next),
+      clear: () => void (halt.current = undefined),
+    }
+    let gate: any
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => Date.now(),
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      haltStore,
+      listenRequestsPerHour: 1,
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return createFakeTranscriber()
+      },
+    })
+    await engine.start("agent", { waitForName: true })
+    gate.onRequest()
+    gate.onRequest()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(engine.listenHalted()).toBe(true)
+
+    // Off and on again on the switch: the user asking for it, so the stop goes.
+    await engine.updateSettings({ alwaysListen: false })
+    expect(engine.listenHalted()).toBe(true)
+    await engine.updateSettings({ alwaysListen: true })
+    expect(engine.listenHalted()).toBe(false)
+    expect(engine.listenWarning()).toBeUndefined()
+    expect(halt.current).toBeUndefined()
+    await engine.stop()
+
+    // A dictation handing the microphone back is not a hand on the switch:
+    // a stop that arrived while dictating still holds when it ends.
+    const back = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => Date.now(),
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      haltStore,
+      listenRequestsPerHour: 1,
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return createFakeTranscriber()
+      },
+    })
+    await back.start("agent", { waitForName: true })
+    // Dictation takes the microphone over: no new start, so nothing is lifted.
+    await back.pressToTalk("transcription")
+    expect(back.activeMode()).toBe("transcription")
+    gate.onRequest()
+    gate.onRequest()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(back.listenHalted()).toBe(true)
+
+    await back.releaseToTalk()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(back.isRunning()).toBe(false)
+    expect(back.listenHalted()).toBe(true)
+    expect(halt.current?.reason).toContain("smesso di ascoltare")
+  })
+
   test("what is left on the key is said when the microphone opens, and a refused key stops listening", async () => {
     const asked: string[] = []
     const engineWith = (credit: { left: number } | { refused: true } | undefined) =>

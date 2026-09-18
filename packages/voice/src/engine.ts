@@ -726,10 +726,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const listenAgain = back && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
     await stop({ keepAgent: listenAgain })
     if (listenAgain) {
-      await startListening("agent", { waitForName: true })
+      // Not a new start by hand: a stop that arrived meanwhile still holds.
+      await startListening("agent", { waitForName: true, automatic: true })
     }
   }
-  let startListening: (mode: VoiceMode, o: { waitForName: boolean }) => Promise<void> = async () => {}
+  let startListening: (mode: VoiceMode, o: { waitForName: boolean; automatic?: boolean }) => Promise<void> = async () => {}
 
   const stopNow = async (keepAgent = false): Promise<void> => {
     /* Before anything else: a start still in flight must find its number
@@ -1347,7 +1348,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         const listenAgain = backToListening && s.alwaysListen && s.activation === "wake-word" && s.mode === "agent"
         await stop({ keepAgent: listenAgain })
         if (listenAgain) {
-          await this.start("agent", { waitForName: true })
+          await this.start("agent", { waitForName: true, automatic: true })
         }
         return
       }
@@ -1528,6 +1529,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         normalized.parakeetBackend !== prev.parakeetBackend ||
         normalized.language !== prev.language ||
         normalized.inputDeviceId !== prev.inputDeviceId
+
+      /*
+       * Turning listening on is the user's hand on the switch, and the only
+       * place a stop for spending can be undone from the settings: without
+       * this the switch moved and nothing opened, which reads as broken.
+       */
+      if (normalized.alwaysListen && !prev.alwaysListen) {
+        setListenHalted(false)
+        halts.clear()
+        setListenWarning(undefined)
+      }
 
       setCurrentSettings(normalized)
 
