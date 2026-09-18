@@ -2942,7 +2942,8 @@ export function Workbench() {
     s.mode === "agent" &&
     (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
   const listenForName = () => {
-    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true })
+    // Not the user's hand: a stop for spending is not lifted by a launch.
+    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
   }
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
@@ -2981,10 +2982,10 @@ export function Workbench() {
       isPaused: () => voiceEngine.listenPaused(),
       isHalted: () => voiceEngine.listenHalted(),
       pause: () => voiceEngine.pauseListening(),
-      resume: () => voiceEngine.start("agent", { waitForName: true }),
+      resume: () => voiceEngine.start("agent", { waitForName: true, automatic: true }),
       restart: async () => {
         await voiceEngine.stop()
-        await voiceEngine.start("agent", { waitForName: true })
+        await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
     let ticking = false

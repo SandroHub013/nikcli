@@ -1414,6 +1414,59 @@ describe("always-on listening", () => {
     expect(engine.listenWarning()).toContain("smesso di ascoltare")
   })
 
+  test("a stop for spending is still there after ADE is closed and opened", async () => {
+    const halt = { current: undefined as { reason: string; at: number } | undefined }
+    const haltStore = {
+      read: () => halt.current,
+      write: (next: { reason: string; at: number }) => void (halt.current = next),
+      clear: () => void (halt.current = undefined),
+    }
+    const settings = { agentEngine: "off" as const, activation: "wake-word" as const, alwaysListen: true, backend: "openrouter" as const, openRouterApiKey: "k" }
+    let gate: any
+    const first = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => Date.now(),
+      settings,
+      haltStore,
+      listenRequestsPerHour: 1,
+      createTranscriber: (_backend, options) => {
+        gate = options?.openRouterOptions?.nameGate
+        return createFakeTranscriber()
+      },
+    })
+    await first.start("agent", { waitForName: true })
+    gate.onRequest()
+    gate.onRequest()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(first.listenHalted()).toBe(true)
+    expect(halt.current?.reason).toContain("smesso di ascoltare")
+
+    // ADE closed and opened: the microphone stays shut, and says why.
+    const next = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      transcriber: createFakeTranscriber(),
+      now: () => Date.now(),
+      settings,
+      haltStore,
+    })
+    expect(next.listenHalted()).toBe(true)
+    expect(next.listenWarning()).toContain("smesso di ascoltare")
+    // ADE opening it by itself does not lift it.
+    await next.start("agent", { waitForName: true, automatic: true })
+    expect(next.isRunning()).toBe(false)
+    expect(next.listenHalted()).toBe(true)
+
+    // The user's own hand does, and it is not there on the launch after that.
+    await next.start("agent", { waitForName: true })
+    expect(next.isRunning()).toBe(true)
+    expect(next.listenHalted()).toBe(false)
+    expect(next.listenWarning()).toBeUndefined()
+    expect(halt.current).toBeUndefined()
+    await next.stop()
+  })
+
   test("what is left on the key is said when the microphone opens, and a refused key stops listening", async () => {
     const asked: string[] = []
     const engineWith = (credit: { left: number } | { refused: true } | undefined) =>
@@ -1454,6 +1507,37 @@ describe("always-on listening", () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(unknown.listenWarning()).toBeUndefined()
     await unknown.stop()
+  })
+
+  test("the key is not asked about at every opening of the microphone", async () => {
+    let clock = 10_000
+    const asked: number[] = []
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      transcriber: createFakeTranscriber(),
+      now: () => clock,
+      settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+      creditCheckMs: 60_000,
+      creditLeft: async () => {
+        asked.push(clock)
+        return { left: 40 }
+      },
+    })
+    const openAndClose = async () => {
+      await engine.start("agent", { waitForName: true })
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await engine.stop()
+    }
+    await openAndClose()
+    await openAndClose()
+    await openAndClose()
+    expect(asked).toHaveLength(1)
+
+    // Later, it asks again.
+    clock += 61_000
+    await openAndClose()
+    expect(asked).toHaveLength(2)
   })
 
   test("the cloud transcriber is told when only the start of a sentence is needed", async () => {
