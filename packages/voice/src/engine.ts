@@ -34,7 +34,8 @@ import {
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { voiceStorage } from "./settings/storage"
-import { createSpendTally, type DaySpend, type SpendTally } from "./settings/spend"
+import { createSpendTally, formatSpendCost, type DaySpend, type SpendTally } from "./settings/spend"
+import { openRouterCreditLeft } from "./asr/openrouter"
 import { firstWords } from "./dialog/while-thinking"
 
 import { errorKind, HostActionFailed, spokenMessage, type VoiceErrorKind } from "./effect/errors"
@@ -89,8 +90,12 @@ export interface VoiceEngineOptions {
   plannerModel?: string
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
+  /** How much credit is left on the key; asks OpenRouter by default. */
+  readonly creditLeft?: (apiKey: string) => Promise<{ left: number } | { refused: true } | undefined>
   /** Where what listening spends is counted; the browser's storage by default. */
   readonly spendTally?: SpendTally
+  /** Overrides `LOW_CREDIT_USD`, for tests. */
+  readonly lowCreditUsd?: number
   /** Overrides `LISTEN_IDLE_MS`, for tests. */
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
@@ -180,6 +185,15 @@ export interface VoiceEngine {
   /** What listening has spent today: requests sent, and what they cost. */
   readonly listenSpend: () => DaySpend
 
+  /**
+   * Whether listening stopped itself and must not come back on its own.
+   *
+   * A pause for a locked PC ends at the unlock; a stop for spending does not,
+   * or the cap and the idle timer would be a five-second interruption of the
+   * same bill. Only the user starts it again.
+   */
+  readonly listenHalted: () => boolean
+
   // Control methods
   /**
    * Opens the microphone. With a mode, opens it for that mode only.
@@ -249,6 +263,14 @@ const HOUR_MS = 60 * 60_000
  * saying the name is a room that forgot it was listening.
  */
 export const LISTEN_IDLE_MS = 30 * 60_000
+
+/**
+ * Below this much credit left, in dollars, the user is told before the voice
+ * starts spending it. At the measured price it is some tens of thousands of
+ * sentences, or a few days of a room with a television in it: enough warning
+ * to top up before the voice stops mid-sentence.
+ */
+export const LOW_CREDIT_USD = 2
 
 /**
  * A push-to-talk press shorter than this is a tap, and a tap latches.
@@ -348,6 +370,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   const [listenPaused, setListenPaused] = createSignal(false)
   const [followUp, setFollowUp] = createSignal<number | undefined>(undefined)
   const [listenWarning, setListenWarning] = createSignal<string | undefined>(undefined)
+  const [listenHalted, setListenHalted] = createSignal(false)
   /*
    * What listening has cost today, kept where the settings are so it is still
    * there tomorrow morning — and so the user sees it before the bill does.
@@ -563,10 +586,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let listenRequests: number[] = []
   let idleTimer: ReturnType<typeof setTimeout> | undefined
 
-  /** Stops listening and says why; the button in the bar starts it again. */
+  /**
+   * Stops listening and says why; only the user starts it again.
+   *
+   * `listenHalted` is what keeps it stopped: the guard that brings listening
+   * back after a locked PC would otherwise resume within five seconds, and
+   * the cap on spending would stop nothing at all.
+   */
   function stopListening(text: string): void {
     setListenWarning(text)
     record({ kind: "error", text, at: now() })
+    setListenHalted(true)
     void (async () => {
       if (!isRunning()) return
       await stop()
@@ -593,6 +623,30 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
   /* Requests counted while waiting for the name, whose cost has not come back yet. */
   let listenCostsDue = 0
+
+  /*
+   * What is left on the key, said once per start of the microphone.
+   *
+   * A key that is refused, or nearly spent, used to show up as a sentence
+   * that got no answer: the user heard nothing and had to go and look at
+   * their OpenRouter page to find out why.
+   */
+  async function warnAboutCredit(s: VoiceSettings): Promise<void> {
+    const key = s.openRouterApiKey
+    if (s.backend !== "openrouter" || !key) return
+    const credit = await (options.creditLeft ?? ((apiKey: string) => openRouterCreditLeft(apiKey)))(key)
+    if (!credit) return
+    if ("refused" in credit) {
+      setListenWarning("La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.")
+      return
+    }
+    if (credit.left > (options.lowCreditUsd ?? LOW_CREDIT_USD)) return
+    setListenWarning(
+      credit.left <= 0
+        ? "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente."
+        : `Sul credito OpenRouter restano ${formatSpendCost(credit.left)}: ricaricalo prima che la voce si fermi a metà frase.`,
+    )
+  }
 
   function countListenRequest(): void {
     const at = now()
@@ -732,8 +786,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
          * requests listening sent: they are answered one at a time, so the
          * cost that comes back belongs to the oldest one still owed.
          */
-        onUsage: (usage: { cost?: number }) => {
-          options.backendOptions?.openRouterOptions?.onUsage?.(usage)
+        onUsage: (usage: { cost?: number }, context: { gated: boolean } = { gated: false }) => {
+          options.backendOptions?.openRouterOptions?.onUsage?.(usage, context)
+          // A dictation is not listening: it costs the user what they asked for.
+          if (!context.gated) return
           if (listenCostsDue <= 0 || typeof usage?.cost !== "number" || usage.cost <= 0) return
           listenCostsDue--
           setListenSpend(spendTally.addCost(now(), usage.cost))
@@ -812,6 +868,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         bridgeTranscriber(transcriber, undefined, (err) => {
           const msg = spokenMessage(err) || err.message
           noteError(err, msg)
+          /* A key that is refused or spent answers nothing, and listening
+             would go on opening the microphone and asking for the rest of
+             the day. It stops, and says so, until the user has seen it. */
+          const tag = (err as { _tag?: string })?._tag
+          if (tag === "ApiKeyInvalid" || tag === "QuotaExhausted") stopListening(msg)
           setPartialTranscript("")
           if (dialogState().status === "executing") {
             setDialogState((prev) => ({ ...prev, status: "idle" }))
@@ -1074,6 +1135,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     listenPaused,
     listenWarning,
     listenSpend,
+    listenHalted,
     followUp,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean }): Promise<void> {
@@ -1139,6 +1201,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
           setListenPaused(false)
           keepListeningAwake()
+          void warnAboutCredit(currentSettings())
           // The agent starts now, so the first sentence does not wait for it.
           const agentSettings = currentSettings()
           if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
@@ -1176,6 +1239,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         }
       }
 
+      // Asked for by hand: whatever stopped it by itself is spent.
+      setListenHalted(false)
       startInFlight = attempt()
       try {
         await startInFlight

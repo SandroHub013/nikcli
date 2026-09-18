@@ -1350,10 +1350,13 @@ describe("always-on listening", () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(engine.isRunning()).toBe(false)
     expect(engine.listenPaused()).toBe(true)
+    // Held stopped: the guard that brings listening back after a lock must not.
+    expect(engine.listenHalted()).toBe(true)
 
-    // Started again by hand, the count starts from nothing.
+    // Started again by hand, the halt is lifted and the count starts from nothing.
     await engine.start("agent", { waitForName: true })
     expect(engine.listenPaused()).toBe(false)
+    expect(engine.listenHalted()).toBe(false)
     for (let i = 0; i < 3; i++) gate.onRequest()
     expect(engine.isRunning()).toBe(true)
     await engine.stop()
@@ -1362,7 +1365,7 @@ describe("always-on listening", () => {
   test("what listening spent today is counted, with the cost the service reports", async () => {
     let clock = new Date(2026, 8, 17, 9, 0, 0).getTime()
     let gate: any
-    let usage: ((u: { cost?: number }) => void) | undefined
+    let usage: ((u: { cost?: number }, context: { gated: boolean }) => void) | undefined
     const engine = createVoiceEngine({
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
@@ -1378,10 +1381,12 @@ describe("always-on listening", () => {
     expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
     gate.onRequest()
     gate.onRequest()
-    usage?.({ cost: 0.0000556 })
-    usage?.({ cost: 0.0000556 })
-    // A request nobody asked for on behalf of listening is not counted twice.
-    usage?.({ cost: 0.5 })
+    usage?.({ cost: 0.0000556 }, { gated: true })
+    usage?.({ cost: 0.0000556 }, { gated: true })
+    // A sentence the user dictated is theirs, not listening's, however many are owed.
+    usage?.({ cost: 0.5 }, { gated: false })
+    // And a third answer to two requests is not counted either.
+    usage?.({ cost: 0.5 }, { gated: true })
     expect(engine.listenSpend().calls).toBe(2)
     expect(engine.listenSpend().cost).toBeCloseTo(0.0001112, 8)
 
@@ -1405,7 +1410,50 @@ describe("always-on listening", () => {
     await new Promise((resolve) => setTimeout(resolve, 400))
     expect(engine.isRunning()).toBe(false)
     expect(engine.listenPaused()).toBe(true)
+    expect(engine.listenHalted()).toBe(true)
     expect(engine.listenWarning()).toContain("smesso di ascoltare")
+  })
+
+  test("what is left on the key is said when the microphone opens, and a refused key stops listening", async () => {
+    const asked: string[] = []
+    const engineWith = (credit: { left: number } | { refused: true } | undefined) =>
+      createVoiceEngine({
+        host: new MockVoiceHost(),
+        speaker: createFakeSpeaker(),
+        transcriber: createFakeTranscriber(),
+        now: () => Date.now(),
+        settings: { agentEngine: "off", activation: "wake-word", alwaysListen: true, backend: "openrouter", openRouterApiKey: "k" },
+        creditLeft: async (key) => {
+          asked.push(key)
+          return credit
+        },
+      })
+
+    const plenty = engineWith({ left: 40 })
+    await plenty.start("agent", { waitForName: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(asked).toEqual(["k"])
+    expect(plenty.listenWarning()).toBeUndefined()
+    await plenty.stop()
+
+    const nearly = engineWith({ left: 1.21 })
+    await nearly.start("agent", { waitForName: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(nearly.listenWarning()).toContain("1,21")
+    await nearly.stop()
+
+    const refused = engineWith({ refused: true })
+    await refused.start("agent", { waitForName: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(refused.listenWarning()).toContain("non viene accettata")
+    await refused.stop()
+
+    // Not knowing is not a reason to warn.
+    const unknown = engineWith(undefined)
+    await unknown.start("agent", { waitForName: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(unknown.listenWarning()).toBeUndefined()
+    await unknown.stop()
   })
 
   test("the cloud transcriber is told when only the start of a sentence is needed", async () => {

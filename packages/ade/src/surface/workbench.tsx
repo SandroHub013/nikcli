@@ -2979,6 +2979,7 @@ export function Workbench() {
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
+      isHalted: () => voiceEngine.listenHalted(),
       pause: () => voiceEngine.pauseListening(),
       resume: () => voiceEngine.start("agent", { waitForName: true }),
       restart: async () => {
