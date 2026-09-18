@@ -682,7 +682,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     setListenWarning(
       credit.left <= 0
         ? "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente."
-        : `Sul credito OpenRouter restano ${formatSpendCost(credit.left)}: ricaricalo prima che la voce si fermi a metà frase.`,
+        // The sentence is Italian, so the sum in it is written the Italian way.
+        // Without the locale the machine's own decided: «1,21 USD» here and
+        // «$1.21» on CI, which is what turned this test red there and not here.
+        : `Sul credito OpenRouter restano ${formatSpendCost(credit.left, "it-IT")}: ricaricalo prima che la voce si fermi a metà frase.`,
     )
   }
 
