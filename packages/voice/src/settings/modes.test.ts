@@ -211,6 +211,7 @@ describe("Voice Modes & Settings Interaction", () => {
       settings: {
         mode: "agent",
         activation: "wake-word",
+        alwaysListen: true,
         wakeWord: "hei nik",
       },
     })

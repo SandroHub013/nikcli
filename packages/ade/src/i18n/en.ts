@@ -730,6 +730,8 @@ export const en: Messages = {
   "voice.shortcutOnly": (shortcut) =>
     `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
   "voice.alwaysListening": (wakeWord, manual, toggle) => `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
+  "voice.listeningOff": (shortcut, always) =>
+    `Starting with this version ADE no longer listens by itself: the microphone opens with ${shortcut} or the button at the top, and the name works inside it. Listening all the time costs money, because every voice in the room is sent to the transcription service: to have it back, turn on “${always}” in the voice settings.`,
   "editor.saveFailed": (problem) => `Save failed: ${problem}`,
   "keys.passed": (names) => `API keys passed: ${names}`,
 

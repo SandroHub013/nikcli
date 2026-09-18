@@ -45,6 +45,36 @@ import {
 // ---------------------------------------------------------------------------
 
 export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/audio/transcriptions"
+
+/** Where OpenRouter says how much of the account's credit is left. */
+export const OPENROUTER_CREDITS_ENDPOINT = "https://openrouter.ai/api/v1/credits"
+
+/**
+ * What is left on the key, in dollars, or why it cannot be said.
+ *
+ * `refused` is a key the service will not take: the voice would fail at the
+ * first sentence, and saying so before that is the difference between "it
+ * does not answer" and "the key is wrong". Anything else — no network, an
+ * answer in a shape we do not know — is `undefined`: not knowing is not a
+ * reason to warn anybody.
+ */
+export async function openRouterCreditLeft(
+  apiKey: string,
+  fetchFn: typeof fetch = globalThis.fetch.bind(globalThis),
+): Promise<{ left: number } | { refused: true } | undefined> {
+  try {
+    const response = await fetchFn(OPENROUTER_CREDITS_ENDPOINT, { headers: { Authorization: `Bearer ${apiKey}` } })
+    if (response.status === 401 || response.status === 403) return { refused: true }
+    if (!response.ok) return undefined
+    const data = (await response.json()) as { data?: { total_credits?: unknown; total_usage?: unknown } }
+    const total = data?.data?.total_credits
+    const used = data?.data?.total_usage
+    if (typeof total !== "number" || typeof used !== "number") return undefined
+    return { left: total - used }
+  } catch {
+    return undefined
+  }
+}
 export const OPENROUTER_MODEL = "microsoft/mai-transcribe-2"
 export const OPENROUTER_FALLBACK_MODEL = "openai/whisper-large-v3"
 export const OPENROUTER_TIMEOUT_MS = 30_000
@@ -152,7 +182,8 @@ export interface OpenRouterUsage {
   cost?: number
 }
 
-export type OpenRouterUsageCallback = (usage: OpenRouterUsage) => void
+/** `gated`: the request was one sent while waiting for the name, not a turn the user asked for. */
+export type OpenRouterUsageCallback = (usage: OpenRouterUsage, context: { gated: boolean }) => void
 
 export interface OpenRouterTranscriberOptions extends TranscriberOptions {
   /** OpenRouter Bearer API key. Required; caller must provide it. */
@@ -285,7 +316,7 @@ export function createOpenRouterTranscriber(
 
   const now = options.now ?? Date.now
 
-  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void): Promise<void> {
+  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void, gated = false): Promise<void> {
     if (!segment.blob || segment.blob.size === 0) return
 
     inFlightRequests++
@@ -515,7 +546,7 @@ export function createOpenRouterTranscriber(
 
       if (data?.usage) {
         lastUsage = data.usage
-        usageCb(data.usage)
+        usageCb(data.usage, { gated })
       }
 
       const text = (
@@ -569,7 +600,7 @@ export function createOpenRouterTranscriber(
         if (!earlyGate.active(now() - wholeUnderMs)) return
         earlyGate.onRequest?.()
         let heard = ""
-        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text))
+        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text), true)
           .then(() => heard)
           .catch(() => "")
         earlyProbes.set(sequence, probe)
@@ -606,7 +637,7 @@ export function createOpenRouterTranscriber(
       if (head || early) {
         let heard = ""
         if (early) heard = await early
-        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text))
+        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text), true)
         markVoice("asr-probe-back", heard)
         if (!heard) return
         if (!options.nameGate!.accepts(heard)) {
@@ -616,7 +647,7 @@ export function createOpenRouterTranscriber(
         options.nameGate!.onAccepted?.()
         options.nameGate!.onRequest?.()
       }
-      await transcribeSegment(segment, deliver)
+      await transcribeSegment(segment, deliver, gated)
       markVoice("asr-back")
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)

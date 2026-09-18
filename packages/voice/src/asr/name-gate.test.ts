@@ -218,3 +218,24 @@ describe("the start of a long sentence is heard before it ends", () => {
     expect(finals).toEqual(["ei nik raccontami la storia di Roma"])
   })
 })
+
+describe("what is left on the key", () => {
+  const { openRouterCreditLeft } = require("./openrouter")
+  const answering = (status: number, body: unknown) => (async () =>
+    new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch
+
+  test("the credit left, a refused key, and everything else as not knowing", async () => {
+    expect(await openRouterCreditLeft("k", answering(200, { data: { total_credits: 101, total_usage: 99.79 } }))).toEqual({
+      left: 101 - 99.79,
+    })
+    expect(await openRouterCreditLeft("k", answering(401, { error: "no" }))).toEqual({ refused: true })
+    expect(await openRouterCreditLeft("k", answering(403, { error: "no" }))).toEqual({ refused: true })
+    expect(await openRouterCreditLeft("k", answering(500, "boom"))).toBeUndefined()
+    expect(await openRouterCreditLeft("k", answering(200, { data: { total_credits: "molti" } }))).toBeUndefined()
+    expect(
+      await openRouterCreditLeft("k", (async () => {
+        throw new Error("no network")
+      }) as unknown as typeof fetch),
+    ).toBeUndefined()
+  })
+})

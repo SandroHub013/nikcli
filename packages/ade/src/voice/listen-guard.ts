@@ -1,12 +1,16 @@
 /**
  * When always-on listening pauses and comes back by itself.
  *
- * The user's rule: it listens all the time and is switched off only by its
- * switch. The one exception is a PC nobody can be talking to — locked, or
- * asleep — where it pauses, and it comes back on its own at the unlock.
- * Nothing announces a lock to the page, so it asks every few seconds; a sleep
- * shows up as a tick that arrives far later than it should, and after one the
- * microphone stream may be dead, so it is opened again.
+ * Listening pauses on a PC nobody can be talking to — locked, or asleep —
+ * and comes back on its own at the unlock. Nothing announces a lock to the
+ * page, so it asks every few seconds; a sleep shows up as a tick that arrives
+ * far later than it should, and after one the microphone stream may be dead,
+ * so it is opened again.
+ *
+ * What it does not bring back is listening that stopped itself to stop
+ * spending — the cap on requests an hour, or half an hour with nobody calling
+ * it. That is `isHalted`, and only the user lifts it; without it the two
+ * brakes were a five-second pause in the same bill.
  */
 
 export const LOCK_POLL_MS = 5_000
@@ -22,6 +26,8 @@ export interface ListenGuardDeps {
   /** Whether any microphone is open, dictation included. */
   isListening(): boolean
   isPaused(): boolean
+  /** Whether listening stopped itself and must stay stopped: see the top of this file. */
+  isHalted(): boolean
   pause(): Promise<void>
   resume(): Promise<void>
   restart(): Promise<void>
@@ -43,7 +49,7 @@ export function createListenGuard(deps: ListenGuardDeps) {
         if (deps.isListening()) await deps.pause()
         return
       }
-      if (!deps.shouldListen()) return
+      if (!deps.shouldListen() || deps.isHalted()) return
       if (slept && deps.isListening()) {
         await deps.restart()
         return

@@ -86,6 +86,7 @@ import {
 import { NikMic } from "./nik-mic"
 import "./voice-settings.css"
 import { t } from "@nikcli-ai/ade/i18n"
+import { formatSpendCost } from "../settings/spend"
 
 /**
  * A settings screen the host owns.
@@ -1570,6 +1571,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   </div>
                   <p id="wake-word-hint" data-slot="hint">
                     {t("vui.wake.hint", props.settings.wakeWord)}
+                  </p>
+                  {/* What listening has spent today, where the switch that spends it is. */}
+                  <p data-slot="hint" data-testid="listen-spend">
+                    {t("vui.listen.spend", props.engine.listenSpend().calls, formatSpendCost(props.engine.listenSpend().cost))}
                   </p>
                 </div>
               </Show>

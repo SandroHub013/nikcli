@@ -2727,16 +2727,19 @@ export function Workbench() {
   const migratedToWakeWord = initialVoice.migrations.includes("wake-word")
   const migratedToAlwaysListen = initialVoice.migrations.includes("always-listen")
   const movedToShortcut = initialVoice.migrations.includes("shortcut-only")
+  const listeningOff = initialVoice.migrations.includes("listening-off")
   const movedToName = initialVoice.migrations.some((m) => m === "name-only" || m === "wake-word" || m === "always-listen")
   const agentShortcut = describeShortcut(initialVoice.settings.agentChord, platform)
   const [voiceSettingsNotice, setVoiceSettingsNotice] = createSignal<string | undefined>(
-    wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
-      ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
-      : movedToShortcut
-        ? t("voice.shortcutOnly", agentShortcut)
-        : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
-          ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
-          : undefined,
+    listeningOff
+      ? t("voice.listeningOff", agentShortcut, t("vui.listen.always"))
+      : wakeWordEnabled() && !shortcutActivationEnabled() && movedToName
+        ? t("voice.nameOnly", agentShortcut, t("vui.listen.manual"))
+        : movedToShortcut
+          ? t("voice.shortcutOnly", agentShortcut)
+          : wakeWordEnabled() && (migratedToWakeWord || migratedToAlwaysListen)
+            ? t("voice.alwaysListening", initialVoice.settings.wakeWord, t("vui.listen.manual"), t("vui.activation.toggle"))
+            : undefined,
   )
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
@@ -2939,7 +2942,8 @@ export function Workbench() {
     s.mode === "agent" &&
     (s.backend === "parakeet" || Boolean(s.openRouterApiKey))
   const listenForName = () => {
-    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true })
+    // Not the user's hand: a stop for spending is not lifted by a launch.
+    if (!voiceEngine.isRunning()) void voiceEngine.start("agent", { waitForName: true, automatic: true })
   }
 
   const handleVoiceSettingsChange = async (next: VoiceSettings) => {
@@ -2976,11 +2980,12 @@ export function Workbench() {
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
+      isHalted: () => voiceEngine.listenHalted(),
       pause: () => voiceEngine.pauseListening(),
-      resume: () => voiceEngine.start("agent", { waitForName: true }),
+      resume: () => voiceEngine.start("agent", { waitForName: true, automatic: true }),
       restart: async () => {
         await voiceEngine.stop()
-        await voiceEngine.start("agent", { waitForName: true })
+        await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
     let ticking = false

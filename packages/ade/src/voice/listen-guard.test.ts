@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { createListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
 
 function world() {
-  const state = { at: 0, locked: false, wanted: true, listening: true, paused: false, calls: [] as string[] }
+  const state = { at: 0, locked: false, wanted: true, listening: true, paused: false, halted: false, calls: [] as string[] }
   const guard = createListenGuard({
     now: () => state.at,
     isLocked: async () => state.locked,
     shouldListen: () => state.wanted,
     isListening: () => state.listening,
     isPaused: () => state.paused,
+    isHalted: () => state.halted,
     pause: async () => {
       state.calls.push("pause")
       state.listening = false
@@ -84,6 +85,7 @@ describe("always-on listening and the state of the PC", () => {
       shouldListen: () => true,
       isListening: () => true,
       isPaused: () => false,
+      isHalted: () => false,
       pause: async () => void calls.push("pause"),
       resume: async () => void calls.push("resume"),
       restart: async () => {},
@@ -101,5 +103,30 @@ describe("always-on listening and the state of the PC", () => {
     state.locked = false
     await tick()
     expect(state.calls).toEqual(["pause"])
+  })
+})
+
+describe("listening that stopped itself to stop spending", () => {
+  test("is not brought back by the guard, at a tick or at an unlock", async () => {
+    const { state, tick } = world()
+    // The cap on requests, or half an hour with nobody calling it: stopped and held.
+    state.halted = true
+    state.listening = false
+    state.paused = true
+    await tick()
+    await tick()
+    expect(state.calls).toEqual([])
+
+    // A lock and an unlock do not lift it either.
+    state.locked = true
+    await tick()
+    state.locked = false
+    await tick()
+    expect(state.calls).toEqual([])
+
+    // The user starts it again: the halt is lifted, and the guard goes back to its job.
+    state.halted = false
+    await tick()
+    expect(state.calls).toEqual(["resume"])
   })
 })
