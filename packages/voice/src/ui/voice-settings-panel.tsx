@@ -162,6 +162,8 @@ export interface VoiceSettingsPanelProps {
   inline?: boolean
   /** Optional additional CSS class names. */
   class?: string
+  /** Optional initial section ID to activate when opening the panel. */
+  initialSection?: string
 }
 
 /**
@@ -401,7 +403,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [trialBusy, setTrialBusy] = createSignal(false)
   const [trialNote, setTrialNote] = createSignal<string | undefined>(undefined)
   const [resetArmed, setResetArmed] = createSignal(false)
-  const [activeSection, setActiveSection] = createSignal(SECTIONS[0].id)
+  const [activeSection, setActiveSection] = createSignal(props.initialSection ?? SECTIONS[0].id)
+  createEffect(() => {
+    if (props.initialSection) {
+      setActiveSection(props.initialSection)
+    }
+  })
 
   /*
    * The machine's audio hardware, and what is cached of the local model.

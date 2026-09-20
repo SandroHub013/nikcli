@@ -2672,6 +2672,11 @@ export function Workbench() {
   const initialVoice = loadVoiceSettings()
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceSettings>(initialVoice.settings)
   const [voiceSettingsOpen, setVoiceSettingsOpen] = createSignal(false)
+  const [voiceSettingsSection, setVoiceSettingsSection] = createSignal<string | undefined>(undefined)
+  const openVoiceSettings = (section?: string) => {
+    setVoiceSettingsSection(section)
+    setVoiceSettingsOpen(true)
+  }
 
   /*
    * Which CLIs are set up to report their own session id.
@@ -2827,20 +2832,44 @@ export function Workbench() {
     },
     cancel: () => webSpeaker.cancel(),
   }
+  const [voiceInstalled, setVoiceInstalled] = createSignal(false)
+  const [voiceDownloading, setVoiceDownloading] = createSignal(false)
+
+  const activePiperVoice = () => {
+    const chosen = voiceSettings().replyVoice
+    if (chosen === "system") return "system"
+    if (locale() === "en") {
+      return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
+    }
+    return chosen === "lessac" ? "ugo" : chosen
+  }
+
+  const checkVoiceInstalled = async () => {
+    const v = activePiperVoice()
+    if (v === "system") {
+      setVoiceInstalled(true)
+      return
+    }
+    try {
+      const host = await getHost()
+      if (!host?.ttsPiperStatus) {
+        setVoiceInstalled(true)
+        return
+      }
+      const st = await host.ttsPiperStatus(v)
+      setVoiceInstalled(Boolean(st.installed))
+    } catch {
+      setVoiceInstalled(false)
+    }
+  }
+
   /*
    * S15: replies in Piper's voice where the desktop host has it, with the
    * system voice underneath while it downloads or when it fails. The host is
    * looked up per call, so the browser harness simply never gets past status.
    */
   const naturalSpeaker = createNaturalSpeaker({
-    voice: () => {
-      const chosen = voiceSettings().replyVoice
-      if (chosen === "system") return "system"
-      if (locale() === "en") {
-        return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
-      }
-      return chosen === "lessac" ? "ugo" : chosen
-    },
+    voice: () => activePiperVoice(),
     status: async (voice) => {
       const host = await getHost()
       return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
@@ -2863,7 +2892,15 @@ export function Workbench() {
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
-      if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+      if (state === "ready") {
+        setVoiceInstalled(true)
+        setVoiceDownloading(false)
+      } else if (state === "downloading") {
+        setVoiceDownloading(true)
+      } else if (state === "failed") {
+        setVoiceDownloading(false)
+        console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+      }
     },
   })
   /*
@@ -2923,12 +2960,76 @@ export function Workbench() {
     }),
   })
 
+  const downloadNaturalVoice = async () => {
+    setVoiceDownloading(true)
+    speaker.prepare()
+    const v = activePiperVoice()
+    if (v === "system") {
+      setVoiceInstalled(true)
+      setVoiceDownloading(false)
+      return
+    }
+    try {
+      const host = await getHost()
+      if (host?.ttsPiperInstall) {
+        await host.ttsPiperInstall(v)
+        setVoiceInstalled(true)
+      }
+    } catch (e) {
+      console.warn(e)
+    } finally {
+      setVoiceDownloading(false)
+    }
+  }
+
+  const hasVoiceAgent = createMemo(() => {
+    const statuses = agentStatuses()
+    if (!statuses) return true
+    const engine = voiceSettings().agentEngine
+    if (engine === "claude") {
+      return statuses.find((s) => s.agent.id === "claude-code")?.availability !== "assente"
+    }
+    if (engine === "codex") {
+      return statuses.find((s) => s.agent.id === "codex")?.availability !== "assente"
+    }
+    return statuses.some(
+      (s) => (s.agent.id === "claude-code" || s.agent.id === "codex") && s.availability !== "assente",
+    )
+  })
+
+  // A4: Preload/download natural voice at startup, on section visit, or when mic wakes
+  const preloadNaturalVoice = () => {
+    void checkVoiceInstalled()
+    if (voiceSettings().speakReplies !== false) speaker.prepare()
+  }
+
   // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
   createEffect(
     on(
       () => voiceEngine.isRunning(),
       (running) => {
-        if (running && voiceSettings().speakReplies !== false) speaker.prepare()
+        if (running) preloadNaturalVoice()
+      },
+      { defer: true },
+    ),
+  )
+
+  // A4: La voce naturale va scaricata all'apertura di ADE o al primo passaggio alla sezione Voce
+  createEffect(
+    on(
+      () => wb().view === "agent",
+      (isAgent) => {
+        if (isAgent) preloadNaturalVoice()
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => voiceSettingsOpen(),
+      (open) => {
+        if (open) preloadNaturalVoice()
       },
       { defer: true },
     ),
@@ -2970,6 +3071,7 @@ export function Workbench() {
   }
 
   onMount(() => {
+    preloadNaturalVoice()
     if (listensByItself(voiceSettings())) listenForName()
     /* Paused only while the PC is locked or asleep; see `voice/listen-guard.ts`. */
     const guard = createListenGuard({
@@ -3290,6 +3392,12 @@ export function Workbench() {
         e.preventDefault()
         e.stopPropagation()
         const mode = resolution.type === "voice-agent" ? "agent" : "transcription"
+        if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+          if (wb().view !== "agent") {
+            setWb((w) => ({ ...w, view: "agent" }))
+            return
+          }
+        }
         if (holdsToTalk(voiceSettings(), mode)) {
           const chord = mode === "agent" ? voiceSettings().agentChord : voiceSettings().transcriptionChord
           void pttHandler.onKeyDown(parseChord(chord, platform), e, mode)
@@ -3639,6 +3747,12 @@ export function Workbench() {
         setWb(w => updatePane(w, w.focusedId!, { status: "error", activity: "killed", lines: [...(w.panes.find(p=>p.id===w.focusedId)?.lines||[]), {kind:"note", text:t("pane.killed")}] }))
       }
     } else if (id === "voice.toggle") {
+      if (!voiceSettings().openRouterApiKey && voiceSettings().backend !== "parakeet") {
+        if (wb().view !== "agent") {
+          setWb((w) => ({ ...w, view: "agent" }))
+          return
+        }
+      }
       void voiceEngine.toggle()
     } else if (id === "record.toggle") {
       const problem =
@@ -5494,10 +5608,17 @@ export function Workbench() {
               status={voiceEngine.status()}
               partial={voiceEngine.partialTranscript()}
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
+              hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
+              hasAgent={hasVoiceAgent()}
+              hasVoice={voiceInstalled()}
+              isVoiceDownloading={voiceDownloading()}
+              onDownloadVoice={() => void downloadNaturalVoice()}
+              onOpenKeySettings={() => openVoiceSettings("voice-sec-backend")}
+              onOpenAgentSettings={() => openVoiceSettings("set-sec-provider")}
               held={voiceEngine.held()}
               onSubmit={(text) => void voiceEngine.submitText(text)}
               onToggleMic={() => void (voiceEngine.isRunning() ? voiceEngine.stop() : voiceEngine.toggle())}
-              onOpenSettings={() => setVoiceSettingsOpen(true)}
+              onOpenSettings={(sec) => openVoiceSettings(sec)}
             />
           </Show>
 
@@ -5614,8 +5735,12 @@ export function Workbench() {
         <VoiceSettingsPanel
           engine={voiceEngine}
           settings={voiceSettings()}
+          initialSection={voiceSettingsSection()}
           onChange={handleVoiceSettingsChange}
-          onClose={() => setVoiceSettingsOpen(false)}
+          onClose={() => {
+            setVoiceSettingsSection(undefined)
+            setVoiceSettingsOpen(false)
+          }}
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
           existingBindings={bindings}
           settingsNotice={voiceSettingsNotice()}
