@@ -128,14 +128,20 @@ export function createThemeState(options: ThemeStateOptions = {}): ThemeState {
     },
     toggle() {
       /*
-       * Resolved and then flipped, rather than cycling the preference.
+       * Full theme cycle: chiaro -> scuro -> vetro -> chiaro.
        *
-       * From "system" the user is looking at one of the two concrete themes,
-       * and the button says which one it will switch to. Cycling would send
-       * "system" to "dark" for someone already looking at dark, so the first
-       * press of a button labelled "light theme" would change nothing.
+       * Based on what is currently resolved on screen, so from "system" it
+       * immediately advances to the next distinct theme rather than sticking.
        */
-      const next: Theme = theme() === "dark" ? "light" : "dark"
+      const current = theme()
+      let next: Theme = "dark"
+      if (current === "light") {
+        next = "dark"
+      } else if (current === "dark") {
+        next = "glass"
+      } else if (current === "glass") {
+        next = "light"
+      }
       setPreference(next)
       storage?.setItem(THEME_STORAGE_KEY, serializeTheme(next))
     },

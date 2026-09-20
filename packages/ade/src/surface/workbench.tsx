@@ -506,12 +506,21 @@ export function Workbench() {
   createEffect(() => {
     const currentTheme = theme()
     const isGlass = currentTheme === "glass"
-    void applyNativeGlass(isGlass)
+    void applyNativeGlass(isGlass).then((err) => {
+      if (err && isGlass) {
+        setGlassStatus({ supported: false, effect: "none", reason: err })
+      }
+    })
 
     const opacity = themeState.glassOpacity() / 100
     if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", currentTheme)
-      document.documentElement.style.setProperty("--ade-glass-opacity", String(opacity))
+      if (isGlass) {
+        document.documentElement.setAttribute("data-theme", "glass")
+        document.documentElement.style.setProperty("--ade-glass-opacity", String(opacity))
+      } else {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
       const shell = document.querySelector<HTMLElement>('[data-component="ade-shell"]')
       if (shell) {
         shell.style.setProperty("--ade-glass-opacity", String(opacity))
@@ -519,7 +528,13 @@ export function Workbench() {
     }
 
     const frame = requestAnimationFrame(() => refreshTerminalThemes())
-    onCleanup(() => cancelAnimationFrame(frame))
+    onCleanup(() => {
+      cancelAnimationFrame(frame)
+      if (typeof document !== "undefined") {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
+    })
   })
 
   /*
@@ -5359,17 +5374,18 @@ export function Workbench() {
                 type="button"
                 data-slot="ade-icon"
                 onClick={() => runCommand("theme.toggle")}
-                aria-label={theme() === "dark" ? t("settings.theme.toLight") : t("settings.theme.toDark")}
-                title={theme() === "dark" ? t("settings.theme.light") : theme() === "glass" ? t("settings.theme.glass") : t("settings.theme.dark")}
+                aria-label={theme() === "light" ? t("settings.theme.toDark") : theme() === "dark" ? t("settings.theme.toGlass") : t("settings.theme.toLight")}
+                title={theme() === "light" ? t("settings.theme.toDark") : theme() === "dark" ? t("settings.theme.toGlass") : t("settings.theme.toLight")}
               >
                 <Show
-                  when={theme() === "dark"}
+                  when={theme() === "light"}
                   fallback={
                     <Show
-                      when={theme() === "glass"}
+                      when={theme() === "dark"}
                       fallback={
                         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
-                          <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
+                          <circle cx="8" cy="8" r="3.2" />
+                          <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" stroke-linecap="round" />
                         </svg>
                       }
                     >
@@ -5381,8 +5397,7 @@ export function Workbench() {
                   }
                 >
                   <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
-                    <circle cx="8" cy="8" r="3.2" />
-                    <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" stroke-linecap="round" />
+                    <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
                   </svg>
                 </Show>
               </button>

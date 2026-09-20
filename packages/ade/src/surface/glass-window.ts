@@ -31,12 +31,14 @@ export async function checkNativeGlassStatus(): Promise<GlassStatus> {
 
 /**
  * Enable or disable OS-level window transparency and blur (Acrylic / Mica / Vibrancy).
+ * Returns null on success or an error message if native effects failed.
  */
-export async function applyNativeGlass(enabled: boolean): Promise<void> {
+export async function applyNativeGlass(enabled: boolean): Promise<string | null> {
   try {
     const { invoke } = await import("@tauri-apps/api/core")
     await invoke("ade_window_set_glass", { enabled })
-  } catch {
-    // Graceful fallback for non-desktop environments
+    return null
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err)
   }
 }

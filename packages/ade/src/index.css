@@ -45,12 +45,12 @@
 [data-component="ade-shell"][data-theme="glass"],
 :root[data-theme="glass"] {
   color-scheme: dark;
-  --ade-bg: rgba(19, 17, 17, calc(0.15 + 0.80 * var(--ade-glass-opacity, 0.75)));
-  --ade-sunken: rgba(14, 12, 12, calc(0.50 + 0.45 * var(--ade-glass-opacity, 0.75)));
-  --ade-surface: rgba(26, 24, 24, calc(0.42 + 0.53 * var(--ade-glass-opacity, 0.75)));
-  --ade-raised: rgba(33, 30, 30, calc(0.52 + 0.44 * var(--ade-glass-opacity, 0.75)));
-  --ade-overlay: rgba(36, 32, 32, calc(0.70 + 0.28 * var(--ade-glass-opacity, 0.75)));
-  --ade-terminal-bg: rgba(14, 12, 12, calc(0.52 + 0.44 * var(--ade-glass-opacity, 0.75)));
+  --ade-bg: rgba(19, 17, 17, calc(0.64 + 0.32 * var(--ade-glass-opacity, 0.75)));
+  --ade-sunken: rgba(14, 12, 12, calc(0.64 + 0.32 * var(--ade-glass-opacity, 0.75)));
+  --ade-surface: rgba(26, 24, 24, calc(0.66 + 0.30 * var(--ade-glass-opacity, 0.75)));
+  --ade-raised: rgba(33, 30, 30, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
+  --ade-overlay: rgba(36, 32, 32, calc(0.78 + 0.20 * var(--ade-glass-opacity, 0.75)));
+  --ade-terminal-bg: rgba(14, 12, 12, calc(0.64 + 0.32 * var(--ade-glass-opacity, 0.75)));
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
   --ade-border-strong: rgba(255, 255, 255, 0.22);

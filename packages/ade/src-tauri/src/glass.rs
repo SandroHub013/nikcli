@@ -89,9 +89,16 @@ pub fn ade_window_set_glass(window: tauri::WebviewWindow, enabled: bool) -> Resu
     #[cfg(target_os = "windows")]
     {
         if enabled {
-            // Apply acrylic effect with subtle dark tint; if that fails or on Win11, also try mica
-            if window_vibrancy::apply_acrylic(&window, Some((18, 18, 18, 40))).is_err() {
-                let _ = window_vibrancy::apply_mica(&window, Some(true));
+            // Apply acrylic effect with subtle dark tint; if that fails, try mica
+            let acrylic_res = window_vibrancy::apply_acrylic(&window, Some((18, 18, 18, 40)));
+            if let Err(acrylic_err) = acrylic_res {
+                let mica_res = window_vibrancy::apply_mica(&window, Some(true));
+                if let Err(mica_err) = mica_res {
+                    return Err(format!(
+                        "Effetto vetro non disponibile (acrylic: {:?}, mica: {:?})",
+                        acrylic_err, mica_err
+                    ));
+                }
             }
         } else {
             let _ = window_vibrancy::clear_acrylic(&window);
@@ -102,21 +109,34 @@ pub fn ade_window_set_glass(window: tauri::WebviewWindow, enabled: bool) -> Resu
     #[cfg(target_os = "macos")]
     {
         if enabled {
-            let _ = window_vibrancy::apply_vibrancy(
+            window_vibrancy::apply_vibrancy(
                 &window,
                 window_vibrancy::NSVisualEffectMaterial::UnderWindowBackground,
                 None,
                 None,
-            );
+            )
+            .map_err(|e| format!("Errore vibrancy macOS: {:?}", e))?;
         } else {
             let _ = window_vibrancy::clear_vibrancy(&window);
         }
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     {
-        let _ = window;
-        let _ = enabled;
+        if enabled {
+            let has_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
+            let has_x11 = std::env::var("DISPLAY").is_ok();
+            if !has_wayland && !has_x11 {
+                return Err("Nessun compositore grafico rilevato (WAYLAND_DISPLAY / DISPLAY assente)".to_string());
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        if enabled {
+            return Err("Piattaforma non supportata per l'effetto vetro".to_string());
+        }
     }
 
     Ok(())

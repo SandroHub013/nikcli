@@ -93,18 +93,23 @@ describe("createThemeState", () => {
   test("the first toggle from system flips what is on screen, not the preference name", () => {
     createRoot((dispose) => {
       // On "system" with a dark OS the user is looking at dark, and the button
-      // says "light theme". Cycling the preference instead would have gone
-      // system → dark and changed nothing.
+      // cycles dark -> glass -> light -> dark.
       const storage = storageWith()
       const state = createThemeState({ storage, query: queryWith(true) })
 
+      expect(state.theme()).toBe("dark")
+
+      state.toggle()
+      expect(state.theme()).toBe("glass")
+      expect(storage.written).toEqual(["glass"])
+
       state.toggle()
       expect(state.theme()).toBe("light")
-      expect(storage.written).toEqual(["light"])
+      expect(storage.written).toEqual(["glass", "light"])
 
       state.toggle()
       expect(state.theme()).toBe("dark")
-      expect(storage.written).toEqual(["light", "dark"])
+      expect(storage.written).toEqual(["glass", "light", "dark"])
 
       dispose()
     })
@@ -117,6 +122,8 @@ describe("createThemeState", () => {
       expect(state.theme()).toBe("dark")
       state.restore()
       expect(state.preference()).toBe("system")
+      state.toggle()
+      expect(state.theme()).toBe("glass")
       state.toggle()
       expect(state.theme()).toBe("light")
       dispose()
