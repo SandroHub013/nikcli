@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { framingBlocked } from "./handshake"
-import { canOpenExternally, probeFraming, readHeaders } from "./host-bridge"
+import { canOpenExternally, forgetSite, probeFraming, readHeaders } from "./host-bridge"
 
 describe("host bridge", () => {
   test("the host's headers are read the way framingBlocked reads a response", () => {
@@ -13,5 +13,6 @@ describe("host bridge", () => {
   test("outside the desktop app there is no probe and no system browser", async () => {
     expect(await probeFraming("https://a.test/")).toBeUndefined()
     expect(canOpenExternally()).toBe(false)
+    expect(await forgetSite("https://a.test/")).toBe("non disponibile fuori dall'app")
   })
 })

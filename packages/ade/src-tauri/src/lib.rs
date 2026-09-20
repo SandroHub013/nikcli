@@ -1190,6 +1190,7 @@ pub fn run() {
             ade_open_release,
             browse::ade_browser_framing,
             browse::ade_open_in_browser,
+            browse::ade_forget_site,
             browser_shot::browser_shot,
             vision::capture_window,
             vision::vision_allowed,

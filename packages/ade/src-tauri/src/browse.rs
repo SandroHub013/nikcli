@@ -156,6 +156,91 @@ pub async fn ade_open_in_browser(app: tauri::AppHandle, url: String) -> Result<(
         .map_err(|e| e.to_string())
 }
 
+/// The origin whose cookies and storage «Dimentica questo sito» will wipe.
+pub fn site_origin(url: &str) -> Result<String, String> {
+    let url = web_url(url)?;
+    let parsed = tauri::Url::parse(url).map_err(|e| e.to_string())?;
+    let origin = parsed.origin().ascii_serialization();
+    if origin == "null" {
+        return Err("origine non valida".into());
+    }
+    Ok(origin)
+}
+
+/// Deletes cookies and site storage for `url` from ADE's WebView2 profile.
+///
+/// With `allow-same-origin` a visit leaves cookies, localStorage and cache in
+/// the profile ADE itself uses. This is the way to drop them for one origin
+/// without wiping ADE's own data (`clear_all_browsing_data` would).
+#[tauri::command]
+pub async fn ade_forget_site(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri::Manager;
+
+    let origin = site_origin(&url)?;
+    let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "finestra non disponibile".to_string())?;
+
+    #[cfg(debug_assertions)]
+    let host = crate::own_origin(tauri::Manager::config(&app).build.dev_url.as_ref());
+    #[cfg(not(debug_assertions))]
+    let host = crate::own_origin(None);
+    if is_ade_origin(&url, &host) {
+        return Err("non si dimentica ADE stessa".into());
+    }
+
+    if let Ok(cookies) = window.cookies_for_url(parsed) {
+        for cookie in cookies {
+            let _ = window.delete_cookie(cookie);
+        }
+    }
+
+    #[cfg(windows)]
+    forget_origin_storage(&window, &origin)?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+fn forget_origin_storage(window: &tauri::WebviewWindow, origin: &str) -> Result<(), String> {
+    use std::sync::mpsc;
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use windows_core::HSTRING;
+
+    let (sender, receiver) = mpsc::channel::<Result<(), String>>();
+    let payload = format!(r#"{{"origin":{origin:?},"storageTypes":"all"}}"#);
+    let scheduled = window.with_webview(move |webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else {
+            let _ = sender.send(Err("WebView2 non disponibile".into()));
+            return;
+        };
+        let told = sender.clone();
+        let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
+            match result {
+                Ok(()) => {
+                    let _ = told.send(Ok(()));
+                }
+                Err(error) => {
+                    let _ = told.send(Err(format!("dati del sito non cancellati: {error}")));
+                }
+            }
+            Ok(())
+        }));
+        if let Err(error) = core.CallDevToolsProtocolMethod(
+            &HSTRING::from("Storage.clearDataForOrigin"),
+            &HSTRING::from(payload.as_str()),
+            &handler,
+        ) {
+            let _ = sender.send(Err(format!("dati del sito non cancellati: {error}")));
+        }
+    });
+    scheduled.map_err(|error| format!("finestra non raggiungibile: {error}"))?;
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .map_err(|_| "la cancellazione non ha risposto entro 5 secondi".to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,5 +281,15 @@ mod tests {
         assert!(!is_ade_origin("https://bastelli-cmp.vercel.app/", "http://tauri.localhost"));
         assert!(!is_ade_origin("http://localhost:5173/", "http://localhost:5177"));
         assert!(!is_ade_origin("not a url", "http://tauri.localhost"));
+    }
+
+    #[test]
+    fn forget_site_takes_the_origin_and_refuses_the_rest() {
+        assert_eq!(
+            site_origin("https://bastelli-cmp.vercel.app/path").as_deref(),
+            Ok("https://bastelli-cmp.vercel.app")
+        );
+        assert!(site_origin("file:///C:/x").is_err());
+        assert!(site_origin("javascript:alert(1)").is_err());
     }
 }

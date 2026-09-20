@@ -48,3 +48,15 @@ export async function openExternally(url: string): Promise<string | undefined> {
     return String(error)
   }
 }
+
+/** Drops cookies and site storage for `url` from ADE's profile. */
+export async function forgetSite(url: string): Promise<string | undefined> {
+  if (!isDesktop()) return "non disponibile fuori dall'app"
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    await invoke("ade_forget_site", { url })
+    return undefined
+  } catch (error) {
+    return String(error)
+  }
+}

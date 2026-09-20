@@ -52,7 +52,7 @@ import {
   visit,
   type BrowserHistory,
 } from "./history"
-import { canOpenExternally, openExternally, probeFraming, readHeaders } from "./host-bridge"
+import { canOpenExternally, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
@@ -225,6 +225,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [sending, setSending] = createSignal(false)
   /** What the last send did, in the footer. */
   const [sendNote, setSendNote] = createSignal<{ ok: boolean; text: string }>()
+  const [forgetNote, setForgetNote] = createSignal<{ ok: boolean; text: string }>()
 
   let iframeRef: HTMLIFrameElement | undefined
   let viewportContainerRef: HTMLDivElement | undefined
@@ -633,6 +634,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const applyEdit = (selector: string, property: string, value: string) => {
     if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
     else post({ type: "visual-editor:apply-style", selector, property, value })
+  }
+
+  const forgetThisSite = async () => {
+    setForgetNote(undefined)
+    const problem = await forgetSite(url())
+    setForgetNote(problem ? { ok: false, text: t("browser.forget.failed", problem) } : { ok: true, text: t("browser.forget.done") })
   }
 
   const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -1282,6 +1289,17 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
+        <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
+          {t("browser.storage.note")}
+        </span>
+        <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
+          {t("browser.forget")}
+        </button>
+        <Show when={forgetNote()}>
+          <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
+            {forgetNote()?.text}
+          </span>
+        </Show>
         <Show when={sending() || sendNote()}>
           <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">
             {sending() ? t("browser.send.sending") : sendNote()?.text}
