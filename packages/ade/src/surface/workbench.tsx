@@ -283,6 +283,7 @@ import {
   createWebSpeechSpeaker,
   createFakeSpeaker,
   createNaturalSpeaker,
+  activeReplyVoice,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -2835,14 +2836,7 @@ export function Workbench() {
   const [voiceInstalled, setVoiceInstalled] = createSignal(false)
   const [voiceDownloading, setVoiceDownloading] = createSignal(false)
 
-  const activePiperVoice = () => {
-    const chosen = voiceSettings().replyVoice
-    if (chosen === "system") return "system"
-    if (locale() === "en") {
-      return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
-    }
-    return chosen === "lessac" ? "ugo" : chosen
-  }
+  const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
 
   const checkVoiceInstalled = async () => {
     const v = activePiperVoice()
@@ -2997,10 +2991,10 @@ export function Workbench() {
     )
   })
 
-  // A4: Preload/download natural voice at startup, on section visit, or when mic wakes
+  // Status only: never starts a download. Looking at Agent or Voice must not
+  // pull 63 MB; that happens from the checklist button or when the voice speaks.
   const preloadNaturalVoice = () => {
     void checkVoiceInstalled()
-    if (voiceSettings().speakReplies !== false) speaker.prepare()
   }
 
   // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
@@ -3008,13 +3002,15 @@ export function Workbench() {
     on(
       () => voiceEngine.isRunning(),
       (running) => {
-        if (running) preloadNaturalVoice()
+        if (running) {
+          preloadNaturalVoice()
+          if (voiceSettings().speakReplies !== false) speaker.prepare()
+        }
       },
       { defer: true },
     ),
   )
 
-  // A4: La voce naturale va scaricata all'apertura di ADE o al primo passaggio alla sezione Voce
   createEffect(
     on(
       () => wb().view === "agent",

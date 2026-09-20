@@ -123,6 +123,14 @@ export function AgentConsole(props: AgentConsoleProps) {
         </div>
       </header>
 
+      {/* Said once, at the top, rather than as a failure on the first sentence
+          the grammar cannot match: without a key the assistant still works,
+          it just cannot plan. That is a setup fact, not an error. Shown even
+          when the checklist is hidden (someone who skipped first-run). */}
+      <Show when={!props.canPlan}>
+        <p data-slot="agent-notice">{t("agent.noPlanner")}</p>
+      </Show>
+
       {/* A4: Guided onboarding checklist: shown if any prerequisite is missing */}
       <Show when={!isVoiceReady({
         hasKey: props.hasKey ?? props.canPlan,

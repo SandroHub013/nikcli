@@ -335,6 +335,12 @@ export {
 } from "./settings/model"
 
 export {
+  REPLY_VOICE_CHOICES,
+  activeReplyVoice,
+  replyVoiceChoicesForLocale,
+} from "./settings/reply-voices"
+
+export {
   VOICE_API_KEY_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
   clearVoiceSettings,
