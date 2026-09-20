@@ -46,8 +46,8 @@
 :root[data-theme="glass"] {
   color-scheme: dark;
   --ade-text: #ffffff;
-  --ade-text-soft: #dcd8d6;
-  --ade-text-weak: #b8b4b2;
+  --ade-text-soft: #f0ece9;
+  --ade-text-weak: #dedad8;
   --ade-bg: rgba(19, 17, 17, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
   --ade-sunken: rgba(14, 12, 12, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
   --ade-surface: rgba(26, 24, 24, calc(0.70 + 0.26 * var(--ade-glass-opacity, 0.75)));
@@ -61,9 +61,20 @@
 }
 
 html[data-theme="glass"],
+html[data-theme="glass"] body,
+html[data-theme="glass"] #root,
 body[data-theme="glass"],
 body[data-theme="glass"] #root,
-:root[data-theme="glass"] {
+:root[data-theme="glass"],
+:root[data-theme="glass"] body,
+:root[data-theme="glass"] #root,
+[data-component="ade-shell"][data-theme="glass"] [data-component="session-grid"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="session-new"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="agent-console"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="bots-main"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="chat"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="empty-project"],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] {
   background: transparent !important;
 }
 
