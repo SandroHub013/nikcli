@@ -41,9 +41,7 @@ import {
 import { type BridgeMessage, type InspectedElement } from "./protocol"
 import { FRAME_ASK, FRAME_NAME, FrameGate } from "./frame-script"
 import { planSend, type BrowserController, type OwnerStatus, type SessionChoice } from "./binding"
-// The same file the host runs in every frame; the mirror carries it inline.
-import FRAME_SCRIPT from "../../src-tauri/scripts/browser-frame.js?raw"
-import { escapeAttribute, withLoadToken } from "./frame-url"
+import { withLoadToken } from "./frame-url"
 import {
   canStep,
   currentEntry,
@@ -231,10 +229,6 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   let viewportContainerRef: HTMLDivElement | undefined
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined
   let loadGeneration = 0
-  /** The page's HTML, fetched when the handshake window closed; the mirror is built from it. */
-  let pageCopy: { generation: number; target: string; html: string } | undefined
-  /** The mirror is up only because the user chose Inspect: Browse brings the real page back. */
-  let mirrorForInspect = false
   /*
    * The channel to the bridge in this pane's frame.
    *
@@ -281,39 +275,6 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   })
 
   /**
-   * Replaces the frame with a srcdoc copy of the page, carrying the bridge.
-   */
-  const showMirror = (target: string, html: string) => {
-    // Inject base tag so relative asset URLs resolve against the target server,
-    // and inject the bridge script into the document head.
-    /*
-     * Escaped, because it goes into an attribute.
-     *
-     * `normalizeUrl` now returns the canonical form, in which a quote is
-     * already `%22`, so this is the belt to that braces: `target` also
-     * arrives here from a redirect the page chose, and one unescaped `"`
-     * closes the `href` and turns the rest into markup.
-     */
-    const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
-    const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${FRAME_SCRIPT}<\/script>`
-
-    let injected = html
-    if (injected.includes("<head>")) {
-      injected = injected.replace("<head>", `<head>${headInjection}\n`)
-    } else if (injected.includes("<html>")) {
-      injected = injected.replace("<html>", `<html>\n<head>${headInjection}\n</head>\n`)
-    } else {
-      injected = `${headInjection}\n${injected}`
-    }
-
-    handshake({ type: "ready", mode: "mirror" })
-    setSrcdoc(injected)
-    setLoadState("ready")
-    setLoadError(undefined)
-    setLoadToken((v) => v + 1)
-  }
-
-  /**
    * Decides what the pane shows when the page did not announce the bridge.
    *
    * The real page stays unless it cannot be framed or the user is inspecting:
@@ -339,26 +300,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         const blocked = framingBlocked((name) => res.headers.get(name))
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
-        pageCopy = { generation, target, html }
         const inspecting = mode() === "edit"
-        if (bridgelessChoice({ blocked, inspecting }) === "keep-page") {
-          handshake({ type: "no-bridge" })
-          setLoadState("ready")
-          setLoadError(undefined)
-        } else {
-          mirrorForInspect = !blocked
-          handshake({ type: "timeout" })
-          showMirror(target, html)
+        handshake({ type: "no-bridge" })
+        setLoadState("ready")
+        setLoadError(undefined)
+        if (blocked || bridgelessChoice({ blocked, inspecting }) !== "keep-page") {
+          setNotice("blocked")
         }
         if (blocked) return
-        /*
-         * The host's answer is not waited for: the page is settled already,
-         * and the probe can take seconds. If it says the page refuses
-         * framing, the frame is empty, and the copy replaces it once.
-         */
         if (!(await hostSaysBlocked()) || !isCurrent()) return
-        mirrorForInspect = false
-        if (srcdoc() === null && fidelity() === "none") showMirror(target, html)
+        setNotice("blocked")
         return
       }
       /*
@@ -420,8 +371,6 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     const generation = loadGeneration
 
     if (handshakeTimer) clearTimeout(handshakeTimer)
-    pageCopy = undefined
-    mirrorForInspect = false
     setNotice(undefined)
     setOpenError(undefined)
     setLoadState("loading")
@@ -439,27 +388,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   /*
-   * Inspect needs the bridge, so a page kept without one is swapped for the
-   * mirror only when the user asks; Browse puts the real page back.
+   * Inspect stays on the real page. A srcdoc copy with allow-same-origin
+   * would run as ADE; S46 already injects the bridge into the live frame.
    */
   createEffect(
     on(
       mode,
       (next) => {
-        if (next === "edit") {
-          if (fidelity() !== "none" || srcdoc() !== null || notice() === "blocked") return
-          const copy = pageCopy
-          if (!copy || copy.generation !== loadGeneration) {
-            // Settled with no copy: say why Inspect has nothing to select.
-            if (loadState() === "ready") setNotice(noticeWithoutCopy({ blocked: false, inspecting: true }))
-            return
-          }
-          mirrorForInspect = true
-          showMirror(copy.target, copy.html)
-          return
-        }
-        if (notice() === "no-copy") setNotice(undefined)
-        if (mirrorForInspect) load(url())
+        if (next !== "edit" && notice() === "no-copy") setNotice(undefined)
       },
       { defer: true },
     ),
@@ -1078,7 +1014,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
-              sandbox="allow-scripts allow-forms allow-popups allow-modals"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               name={FRAME_NAME}
               title={props.title || t("browser.preview")}
             />

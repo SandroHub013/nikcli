@@ -142,11 +142,13 @@ export type BridgelessChoice = "keep-page" | "mirror"
  * replaced by bare HTML 1.5 s after every load — and pressing Reload, the
  * only way to see the page again, started the same swap over.
  *
- * The mirror is now for two cases only: the page cannot be shown in the
- * frame, or the user asked to inspect it. Browsing keeps the real page.
+ * Inspect stays on the real page (S46 injects the bridge). A srcdoc mirror
+ * under allow-same-origin would inherit ADE's origin, which is the hole
+ * S52 closes. A page that refuses framing is an overlay, not a copy.
  */
 export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean }): BridgelessChoice {
-  return input.blocked || input.inspecting ? "mirror" : "keep-page"
+  void input.inspecting
+  return input.blocked ? "mirror" : "keep-page"
 }
 
 /**
