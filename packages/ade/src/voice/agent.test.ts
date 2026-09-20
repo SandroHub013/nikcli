@@ -4,6 +4,7 @@ import { createWorkbench } from "../surface/state"
 import { createAdeVoiceHost } from "./host"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { limitNotice } from "../bots/terms"
+import { setLocalePreference, resetLocaleForTests } from "../i18n/locale"
 import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS, VOICE_AGENT_TIMEOUT_MS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
@@ -272,6 +273,26 @@ describe("voice/agent", () => {
         "Claude è al limite: rispondo con Codex. Ci sono",
         "Claude è al limite: rispondo con Codex. Ci sono due sessioni.",
       ])
+    })
+
+    test("in auto mode fallback uses English messages when locale is en", async () => {
+      setLocalePreference("en")
+      try {
+        const runner = fakeRunner([
+          { status: "error", problem: limitNotice("Claude Code"), text: "", tokens: 0, costUsd: 0, talk: {} as never },
+          { status: "done", text: "Two active sessions.", tokens: 0, costUsd: 0, talk: {} as never },
+        ])
+        const agent = createVoiceAgent({
+          runTurn: runner.runTurn,
+          statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+          cwd: () => "C:/p",
+        })
+
+        const answer = await agent.ask({ text: "how many sessions?", engine: "auto" })
+        expect(answer.text).toBe("Claude is at its limit: answering with Codex. Two active sessions.")
+      } finally {
+        resetLocaleForTests()
+      }
     })
   })
 

@@ -736,6 +736,12 @@ export const en: Messages = {
   "voice.alert.completed": (pane, details) => `${pane} has finished: ${details}.`,
   "voice.alert.completedSimple": (pane) => `${pane} has finished the work.`,
   "voice.alert.decision": (title) => `There is an open decision in the register: ${title}.`,
+  "voice.alert.testsPassed": (count) => `${count} passed tests`,
+  "voice.alert.testsFailed": (count) => `${count} failed tests`,
+  "voice.alert.capReached": (cap) => `I have reached the limit of ${cap} alerts for this hour: pausing spoken alerts.`,
+  "voice.fallback.prefix": "Claude is at its limit: answering with Codex.",
+  "voice.fallback.codexUnavailable": "Claude has reached its plan limit and Codex is not available.",
+  "voice.fallback.codexFailed": (detail) => `Claude is at its limit and Codex also failed to answer: ${detail}`,
   "editor.saveFailed": (problem) => `Save failed: ${problem}`,
   "keys.passed": (names) => `API keys passed: ${names}`,
 

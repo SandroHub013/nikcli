@@ -741,6 +741,12 @@ export const it = {
   "voice.alert.completed": (pane: string, details: string) => `${pane} ha finito: ${details}.`,
   "voice.alert.completedSimple": (pane: string) => `${pane} ha finito il lavoro.`,
   "voice.alert.decision": (title: string) => `C'è una decisione aperta nel registro: ${title}.`,
+  "voice.alert.testsPassed": (count: string) => `${count} test verdi`,
+  "voice.alert.testsFailed": (count: string) => `${count} test falliti`,
+  "voice.alert.capReached": (cap: number) => `Ho raggiunto il limite di ${cap} avvisi per quest'ora: mi fermo qui.`,
+  "voice.fallback.prefix": "Claude è al limite: rispondo con Codex.",
+  "voice.fallback.codexUnavailable": "Claude è al limite del piano e Codex non è disponibile.",
+  "voice.fallback.codexFailed": (detail: string) => `Claude è al limite e anche Codex non è riuscito a rispondere: ${detail}`,
   "editor.saveFailed": (problem: string) => `Salvataggio fallito: ${problem}`,
   "keys.passed": (names: string) => `Chiavi API passate: ${names}`,
 

@@ -18,6 +18,7 @@ import { limitReached } from "../bots/terms"
 import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
+import { t } from "../i18n"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
 
@@ -260,11 +261,11 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
           if (!isCodexAvailable(statuses)) {
             return {
               ok: false,
-              text: "Claude è al limite del piano e Codex non è disponibile.",
+              text: t("voice.fallback.codexUnavailable"),
               ran: true,
             }
           }
-          const noticePrefix = "Claude è al limite: rispondo con Codex."
+          const noticePrefix = t("voice.fallback.prefix")
           const codexPrevious =
             conversation && conversation.runner === "codex" && conversation.cwd === cwd
               ? conversation.sessionId
@@ -296,7 +297,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
             const failDetail = codexResult.problem || codexResult.text || "nessuna risposta."
             return {
               ok: false,
-              text: `Claude è al limite e anche Codex non è riuscito a rispondere: ${failDetail}`,
+              text: t("voice.fallback.codexFailed", failDetail),
               ran: true,
             }
           } finally {

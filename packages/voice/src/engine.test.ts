@@ -2034,14 +2034,14 @@ describe("the agent's answer is read as it is written", () => {
 })
 
 describe("a conversation: after an answer the name is not needed for a few seconds", () => {
-  function talking(settings: Record<string, unknown> = {}) {
+  function talking(settings: Record<string, unknown> = {}, customAskAgent?: VoiceHost["askAgent"]) {
     let clock = 10_000
     const host = new MockVoiceHost()
     const asked: string[] = []
-    ;(host as VoiceHost).askAgent = async (request) => {
+    ;(host as VoiceHost).askAgent = customAskAgent ?? (async (request) => {
       asked.push(request.text)
       return { ok: true, text: "Fatto.", ran: true }
-    }
+    })
     const transcriber = createFakeTranscriber()
     const cues: string[] = []
     const engine = createVoiceEngine({
@@ -2069,29 +2069,30 @@ describe("a conversation: after an answer the name is not needed for a few secon
     advance(3_000)
     await hear("e quella della Spagna")
     expect(asked).toHaveLength(2)
-    // One follow-up only: its answer does not open another window.
-    expect(engine.followUp()).toBeUndefined()
-    await hear("il telegiornale di stasera")
+    advance(FOLLOW_UP_MS + 100)
+    await hear("e quella dell'Italia")
+    // Past the window, without the name: ignored.
     expect(asked).toHaveLength(2)
     await engine.stop()
-    expect(engine.followUp()).toBeUndefined()
   })
 
   test("a sentence ignored for lack of the name opens nothing", async () => {
-    const { engine, cues, hear } = talking()
+    const { engine, asked, hear } = talking()
     await engine.start("agent", { waitForName: true })
-    await hear("il telegiornale di stasera")
+    await hear("qual è la capitale della Francia")
+    expect(asked).toHaveLength(0)
     expect(engine.followUp()).toBeUndefined()
-    expect(cues).toEqual([])
     await engine.stop()
   })
 
   test("a typed question opens nothing, and typing closes an open window", async () => {
     const { engine, asked, hear } = talking()
     await engine.start("agent", { waitForName: true })
-    await engine.submitText("qual è la capitale della Francia")
+    await engine.submitText("uno")
+    expect(asked).toHaveLength(1)
     expect(engine.followUp()).toBeUndefined()
-    await hear("nik e quella della Spagna")
+    await hear("nik due")
+    expect(asked).toHaveLength(2)
     expect(engine.followUp()).toBeDefined()
     await engine.submitText("grazie")
     expect(engine.followUp()).toBeUndefined()
@@ -2119,6 +2120,48 @@ describe("a conversation: after an answer the name is not needed for a few secon
     await new Promise((r) => setTimeout(r, 80))
     expect(engine.isRunning()).toBe(false)
     expect(engine.followUp()).toBeUndefined()
+  })
+
+  test("openResponseWindow reschedules timer when executing and closes after execution finishes", async () => {
+    let resolveTurn: () => void = () => {}
+    const { engine, hear } = talking(
+      { activation: "wake-word", alwaysListen: false },
+      async () => {
+        await new Promise<void>((r) => { resolveTurn = r })
+        return { ok: true, text: "Fatto.", ran: true }
+      },
+    )
+
+    await engine.openResponseWindow({ durationMs: 200, rescheduleMs: 50 })
+    expect(engine.isRunning()).toBe(true)
+
+    void hear("nik raccontami la storia di Roma")
+    await new Promise((r) => setTimeout(r, 60))
+    expect(engine.dialogState().status).toBe("executing")
+
+    // Past initial 200ms duration: still executing, so mic is NOT closed
+    await new Promise((r) => setTimeout(r, 200))
+    expect(engine.isRunning()).toBe(true)
+
+    // Turn completes -> state returns to idle -> next reschedule check closes the mic
+    resolveTurn()
+    await new Promise((r) => setTimeout(r, 120))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.followUp()).toBeUndefined()
+  })
+
+  test("openResponseWindow with alwaysListen keeps continuous listening open for wake word instead of stopping", async () => {
+    const { engine } = talking({ activation: "wake-word", alwaysListen: true })
+    await engine.openResponseWindow({ durationMs: 40 })
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.followUp()).toBeDefined()
+
+    await new Promise((r) => setTimeout(r, 60))
+    // Engine remains running for always-on wake word
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.followUp()).toBeUndefined()
+    expect(engine.dialogState().status).toBe("idle")
+    await engine.stop()
   })
 })
 
