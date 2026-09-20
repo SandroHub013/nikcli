@@ -12,19 +12,13 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' blob: ade-media: http://ade-media.localhost; connect-src 'self' ipc: http://ipc.localhost http: https: ws: wss: blob: data:; worker-src 'self' blob:; frame-src http: https: blob:"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' blob: ade-media: http://ade-media.localhost; connect-src 'self' ipc: http://ipc.localhost http: https: ws: wss: blob: data:; worker-src 'self' blob:; frame-src http: https: blob:; frame-ancestors 'none'"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
   },
   "plugins": {
     "updater": {
