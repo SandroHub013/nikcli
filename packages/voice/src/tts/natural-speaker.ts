@@ -53,6 +53,8 @@ export interface NaturalSpeakerDeps {
   fallback: Speaker
   /** Told once when a download starts, ends or fails, for the settings panel. */
   onInstall?: (voice: string, state: "downloading" | "ready" | "failed", problem?: string) => void
+  /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
+  fallbackNotice?: () => string
 }
 
 /**
@@ -96,6 +98,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const ready = new Set<string>()
   const installing = new Map<string, Promise<void>>()
   let warmed: string | undefined
+  let fallbackNotified = false
+
+  async function announceFallbackOnce(voice: string): Promise<void> {
+    if (voice === "system" || fallbackNotified || !deps.fallbackNotice) return
+    fallbackNotified = true
+    const notice = deps.fallbackNotice()
+    if (notice && notice.trim().length > 0) {
+      await deps.fallback.speak(notice)
+    }
+  }
+
   /* Sentences asked for ahead of their turn, by voice and text. */
   const ahead = new Map<string, Promise<ArrayBuffer>>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
@@ -162,9 +175,13 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       if (!clean || clean.trim().length === 0) return
       const voice = deps.voice()
       if (!(await usable(voice))) {
-        if (mine === generation) await deps.fallback.speak(clean)
+        if (mine === generation) {
+          await announceFallbackOnce(voice)
+          await deps.fallback.speak(clean)
+        }
         return
       }
+      fallbackNotified = false
       if (mine !== generation) return
 
       const sentences = splitSentences(clean)
@@ -178,7 +195,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
           wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
         } catch {
           // The rest of the reply goes out in the old voice rather than not at all.
-          if (mine === generation) await deps.fallback.speak(sentences.slice(i).join(" "))
+          if (mine === generation) {
+            await announceFallbackOnce(voice)
+            await deps.fallback.speak(sentences.slice(i).join(" "))
+          }
           return
         }
         if (mine !== generation) return
@@ -189,7 +209,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
           await deps.play(wav, controller.signal)
         } catch {
           // Synthesised but not playable: the old voice still gets the words out.
-          if (mine === generation) await deps.fallback.speak(sentences.slice(i).join(" "))
+          if (mine === generation) {
+            await announceFallbackOnce(voice)
+            await deps.fallback.speak(sentences.slice(i).join(" "))
+          }
           return
         }
         if (mine !== generation) return

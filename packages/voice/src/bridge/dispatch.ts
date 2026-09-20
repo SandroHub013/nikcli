@@ -19,6 +19,8 @@ const VIEWS: readonly AdeView[] = ["agent", "code", "chat", "bot"]
 export interface DispatchContext {
   /** ID of the currently focused pane in ADE, if any. */
   focusedPaneId?: string
+  /** Interface language for spoken readbacks ('it' or 'en'). Defaults to 'it'. */
+  lang?: "it" | "en"
 }
 
 export interface DispatchOutcome {
@@ -44,10 +46,11 @@ export function resolveTargetPane(
    * processo, nega un permesso. Per queste il pannello va nominato o messo a
    * fuoco — non indovinato. Vedi il commento sul passo 5.
    */
-  destructive = false
+  destructive = false,
+  lang: "it" | "en" = "it",
 ): { pane?: PaneSummary; error?: string } {
   if (panes.length === 0) {
-    return { error: "Nessun pannello attualmente aperto su ADE." }
+    return { error: lang === "en" ? "No panels currently open in ADE." : "Nessun pannello attualmente aperto su ADE." }
   }
 
   // 1. By 1-based index
@@ -55,7 +58,7 @@ export function resolveTargetPane(
     const targetIdx = Number(slots.paneIndex)
     const found = panes.find((p) => p.index === targetIdx)
     if (!found) {
-      return { error: `Pannello numero ${targetIdx} non trovato.` }
+      return { error: lang === "en" ? `Panel number ${targetIdx} not found.` : `Pannello numero ${targetIdx} non trovato.` }
     }
     return { pane: found }
   }
@@ -77,7 +80,12 @@ export function resolveTargetPane(
     }
 
     if (!bestPane || bestScore <= 0) {
-      return { error: `Nessun pannello corrispondente a '${slots.paneTitle}' trovato.` }
+      return {
+        error:
+          lang === "en"
+            ? `No panel matching '${slots.paneTitle}' found.`
+            : `Nessun pannello corrispondente a '${slots.paneTitle}' trovato.`,
+      }
     }
     return { pane: bestPane }
   }
@@ -111,7 +119,9 @@ export function resolveTargetPane(
       error:
         panes.length === 1
           ? undefined
-          : "Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.",
+          : lang === "en"
+            ? "Unsure which panel: specify number or name, or focus it."
+            : "Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.",
       // Con un solo pannello non c'è ambiguità da risolvere.
       pane: panes.length === 1 ? panes[0] : undefined,
     }
@@ -128,10 +138,11 @@ export async function dispatch(
   host: VoiceHost,
   ctx: DispatchContext = {}
 ): Promise<DispatchOutcome> {
+  const lang = ctx.lang ?? "it"
   if (result.outcome !== "matched" || !result.intent) {
     return {
       success: false,
-      spoken: "Non è stato possibile eseguire il comando vocale.",
+      spoken: lang === "en" ? "Could not execute voice command." : "Non è stato possibile eseguire il comando vocale.",
       error: "unmatched_intent",
     }
   }
@@ -155,7 +166,7 @@ export async function dispatch(
       case "session.new": {
         // It opens the form that starts one; nothing is running yet.
         await host.runCommand("session.new")
-        return { success: true, spoken: "Apro la schermata per avviare una nuova sessione." }
+        return { success: true, spoken: lang === "en" ? "Opening new session screen." : "Apro la schermata per avviare una nuova sessione." }
       }
 
       case "video.new":
@@ -168,12 +179,12 @@ export async function dispatch(
 
       case "palette.open": {
         await host.runCommand("palette.open")
-        return { success: true, spoken: "Tavolozza dei comandi aperta." }
+        return { success: true, spoken: lang === "en" ? "Command palette opened." : "Tavolozza dei comandi aperta." }
       }
 
       case "project.open": {
         await host.runCommand("project.open")
-        return { success: true, spoken: "Apro la selezione del progetto." }
+        return { success: true, spoken: lang === "en" ? "Opening project selection." : "Apro la selezione del progetto." }
       }
 
       case "project.recent": {
@@ -181,15 +192,15 @@ export async function dispatch(
         // a bare `project.recent`: the project picker is where that choice is made.
         if (!slots.path) {
           await host.runCommand("project.open")
-          return { success: true, spoken: "Apro la scelta del progetto." }
+          return { success: true, spoken: lang === "en" ? "Opening project picker." : "Apro la scelta del progetto." }
         }
         await host.runCommand(`project.recent.${slots.path}`)
-        return { success: true, spoken: "Apro il progetto recente richiesto." }
+        return { success: true, spoken: lang === "en" ? "Opening requested recent project." : "Apro il progetto recente richiesto." }
       }
 
       case "pane.close": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
@@ -197,13 +208,13 @@ export async function dispatch(
         await host.runCommand("pane.close")
         return {
           success: true,
-          spoken: `Pannello ${resolved.pane!.index} chiuso.`,
+          spoken: lang === "en" ? `Panel ${resolved.pane!.index} closed.` : `Pannello ${resolved.pane!.index} chiuso.`,
         }
       }
 
       case "pane.expand": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
@@ -211,13 +222,13 @@ export async function dispatch(
         await host.runCommand("pane.expand")
         return {
           success: true,
-          spoken: `Dimensione del pannello ${resolved.pane!.index} modificata.`,
+          spoken: lang === "en" ? `Panel ${resolved.pane!.index} size changed.` : `Dimensione del pannello ${resolved.pane!.index} modificata.`,
         }
       }
 
       case "view.toggle": {
         await host.runCommand("view.toggle")
-        return { success: true, spoken: "Vista cambiata." }
+        return { success: true, spoken: lang === "en" ? "View toggled." : "Vista cambiata." }
       }
 
       case "theme.toggle": {
@@ -227,27 +238,36 @@ export async function dispatch(
          */
         if (slots.text === "light" || slots.text === "dark") {
           await host.runCommand(`theme.set.${slots.text}`)
-          return { success: true, spoken: `Tema ${slots.text === "light" ? "chiaro" : "scuro"} impostato.` }
+          return {
+            success: true,
+            spoken:
+              lang === "en"
+                ? `${slots.text === "light" ? "Light" : "Dark"} theme set.`
+                : `Tema ${slots.text === "light" ? "chiaro" : "scuro"} impostato.`,
+          }
         }
         await host.runCommand("theme.toggle")
-        return { success: true, spoken: "Tema visivo aggiornato." }
+        return { success: true, spoken: lang === "en" ? "Visual theme updated." : "Tema visivo aggiornato." }
       }
 
       case "browser.new": {
         await host.runCommand("browser.new")
-        return { success: true, spoken: "Nuovo browser aperto." }
+        return { success: true, spoken: lang === "en" ? "New browser opened." : "Nuovo browser aperto." }
       }
 
       case "process.kill": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         if (!resolved.pane!.hasLiveProcess) {
           return {
             success: false,
-            spoken: `Il pannello ${resolved.pane!.index} non ha un processo attivo da terminare.`,
+            spoken:
+              lang === "en"
+                ? `Panel ${resolved.pane!.index} has no active process to terminate.`
+                : `Il pannello ${resolved.pane!.index} non ha un processo attivo da terminare.`,
             error: "no_process",
           }
         }
@@ -255,7 +275,7 @@ export async function dispatch(
         await host.runCommand("process.kill")
         return {
           success: true,
-          spoken: `Processo del pannello ${resolved.pane!.index} terminato.`,
+          spoken: lang === "en" ? `Process in panel ${resolved.pane!.index} terminated.` : `Processo del pannello ${resolved.pane!.index} terminato.`,
         }
       }
 
@@ -265,42 +285,48 @@ export async function dispatch(
         if (panes.length === 0) {
           return {
             success: true,
-            spoken: "Non ci sono pannelli attualmente aperti.",
+            spoken: lang === "en" ? "No panels currently open." : "Non ci sono pannelli attualmente aperti.",
             data: panes,
           }
         }
         const summaries = panes.map((p) => `${p.index}: ${p.title}`).join(", ")
         return {
           success: true,
-          spoken: `Ci sono ${panes.length} pannelli aperti: ${summaries}.`,
+          spoken: lang === "en" ? `There are ${panes.length} open panels: ${summaries}.` : `Ci sono ${panes.length} pannelli aperti: ${summaries}.`,
           data: panes,
         }
       }
 
       case "pane.focus": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         host.focusPane(resolved.pane!.id)
         return {
           success: true,
-          spoken: `Portato il fuoco sul pannello ${resolved.pane!.index}: ${resolved.pane!.title}.`,
+          spoken:
+            lang === "en"
+              ? `Focused panel ${resolved.pane!.index}: ${resolved.pane!.title}.`
+              : `Portato il fuoco sul pannello ${resolved.pane!.index}: ${resolved.pane!.title}.`,
         }
       }
 
       case "prompt.send": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        const text = slots.text || "continua"
+        const text = slots.text || (lang === "en" ? "continue" : "continua")
         await host.sendPrompt(resolved.pane!.id, text)
         return {
           success: true,
-          spoken: `Istruzione inviata al pannello ${resolved.pane!.index}.`,
+          spoken:
+            lang === "en"
+              ? `Instruction sent to panel ${resolved.pane!.index}.`
+              : `Istruzione inviata al pannello ${resolved.pane!.index}.`,
         }
       }
 
@@ -308,14 +334,14 @@ export async function dispatch(
         if (!slots.path) {
           return {
             success: false,
-            spoken: "Specificare il percorso del file da aprire.",
+            spoken: lang === "en" ? "Specify the path of the file to open." : "Specificare il percorso del file da aprire.",
             error: "missing_path",
           }
         }
         await host.openFile(slots.path)
         return {
           success: true,
-          spoken: `File ${slots.path} aperto.`,
+          spoken: lang === "en" ? `File ${slots.path} opened.` : `File ${slots.path} aperto.`,
         }
       }
 
@@ -324,24 +350,34 @@ export async function dispatch(
         const hits = await host.searchProject(query)
         return {
           success: true,
-          spoken: `Trovati ${hits.length} risultati per '${query}'.`,
+          spoken:
+            lang === "en"
+              ? `Found ${hits.length} results for '${query}'.`
+              : `Trovati ${hits.length} risultati per '${query}'.`,
           data: hits,
         }
       }
 
       case "pane.view.set": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         const viewMode = slots.text === "diff" ? "diff" : "transcript"
         if (host.setPaneView(resolved.pane!.id, viewMode) === false) {
-          return { success: false, spoken: "Questo pannello non ha una vista da cambiare.", error: "unsupported" }
+          return {
+            success: false,
+            spoken: lang === "en" ? "This panel has no view to change." : "Questo pannello non ha una vista da cambiare.",
+            error: "unsupported",
+          }
         }
         return {
           success: true,
-          spoken: `Visualizzazione del pannello ${resolved.pane!.index} impostata su ${viewMode}.`,
+          spoken:
+            lang === "en"
+              ? `View of panel ${resolved.pane!.index} set to ${viewMode}.`
+              : `Visualizzazione del pannello ${resolved.pane!.index} impostata su ${viewMode}.`,
         }
       }
 
@@ -353,51 +389,62 @@ export async function dispatch(
           hasExplicitPane || panes.filter((p) => p.isBrowser).length === 0
             ? panes
             : panes.filter((p) => p.isBrowser)
-        const resolved = resolveTargetPane(slots, candidatePanes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, candidatePanes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         const url = slots.url || "http://localhost:3000"
         if (host.browserNavigate(resolved.pane!.id, url) === false) {
-          return { success: false, spoken: "Non ho trovato il pannello browser da far navigare.", error: "pane_not_found" }
+          return {
+            success: false,
+            spoken: lang === "en" ? "Could not find browser panel to navigate." : "Non ho trovato il pannello browser da far navigare.",
+            error: "pane_not_found",
+          }
         }
         return {
           success: true,
-          spoken: `Browser navigato verso ${url}.`,
+          spoken: lang === "en" ? `Browser navigated to ${url}.` : `Browser navigato verso ${url}.`,
         }
       }
 
       case "permission.allow": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         if (host.answerPermission(resolved.pane!.id, "allow") === false) {
-          return { success: false, spoken: "Non c'è nessuna richiesta di permesso in attesa.", error: "no_permission" }
+          return {
+            success: false,
+            spoken: lang === "en" ? "No permission request is pending." : "Non c'è nessuna richiesta di permesso in attesa.",
+            error: "no_permission",
+          }
         }
         return {
           success: true,
-          spoken: "Permesso concesso all'agente.",
+          spoken: lang === "en" ? "Permission granted to the agent." : "Permesso concesso all'agente.",
         }
       }
 
       case "permission.deny": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
         if (host.answerPermission(resolved.pane!.id, "deny") === false) {
           return {
             success: false,
-            spoken: "Non ho negato nulla: nessuna richiesta in attesa, o nessuna risposta che sia un rifiuto.",
+            spoken:
+              lang === "en"
+                ? "Did not deny anything: no pending request, or no response that is a denial."
+                : "Non ho negato nulla: nessuna richiesta in attesa, o nessuna risposta che sia un rifiuto.",
             error: "no_permission",
           }
         }
         return {
           success: true,
-          spoken: "Permesso negato all'agente.",
+          spoken: lang === "en" ? "Permission denied to the agent." : "Permesso negato all'agente.",
         }
       }
 
@@ -406,7 +453,9 @@ export async function dispatch(
         host.setColumns(cols)
         return {
           success: true,
-          spoken: cols ? `Disposta la griglia su ${cols} colonne.` : "Disposizione colonne reimpostata.",
+          spoken: cols
+            ? (lang === "en" ? `Grid set to ${cols} columns.` : `Disposta la griglia su ${cols} colonne.`)
+            : (lang === "en" ? "Column layout reset." : "Disposizione colonne reimpostata."),
         }
       }
 
@@ -422,20 +471,20 @@ export async function dispatch(
         if (!available.includes(targetView)) {
           return {
             success: false,
-            spoken: `La sezione ${targetView} non è disponibile per ora.`,
+            spoken: lang === "en" ? `The ${targetView} section is not available right now.` : `La sezione ${targetView} non è disponibile per ora.`,
             error: "view_unavailable",
           }
         }
         host.setView(targetView)
         return {
           success: true,
-          spoken: `Vista impostata su ${targetView}.`,
+          spoken: lang === "en" ? `View set to ${targetView}.` : `Vista impostata su ${targetView}.`,
         }
       }
 
       case "transcript.scroll": {
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
@@ -443,7 +492,7 @@ export async function dispatch(
         host.scrollTranscript(resolved.pane!.id, delta)
         return {
           success: true,
-          spoken: `Trascrizione del pannello ${resolved.pane!.index} scorsa.`,
+          spoken: lang === "en" ? `Panel ${resolved.pane!.index} transcript scrolled.` : `Trascrizione del pannello ${resolved.pane!.index} scorsa.`,
         }
       }
 
@@ -461,22 +510,23 @@ export async function dispatch(
         return {
           success: true,
           spoken:
-            "Puoi chiedermi di aprire nuove sessioni, cambiare vista, terminare processi, " +
-            "cercare nel progetto, aprire file e dettare istruzioni per gli agenti.",
+            lang === "en"
+              ? "You can ask me to open new sessions, change view, terminate processes, search the project, open files, and dictate instructions for agents."
+              : "Puoi chiedermi di aprire nuove sessioni, cambiare vista, terminare processi, cercare nel progetto, aprire file e dettare istruzioni per gli agenti.",
         }
       }
 
       case "voice.sleep": {
         return {
           success: true,
-          spoken: "Ascolto vocale sospeso.",
+          spoken: lang === "en" ? "Voice listening suspended." : "Ascolto vocale sospeso.",
         }
       }
 
       case "voice.wake": {
         return {
           success: true,
-          spoken: "Ascolto vocale attivo e pronto.",
+          spoken: lang === "en" ? "Voice listening active and ready." : "Ascolto vocale attivo e pronto.",
         }
       }
 
@@ -486,35 +536,35 @@ export async function dispatch(
        * «Confermato» for an action that never ran.
        */
       case "dialog.confirm": {
-        return { success: false, spoken: "Non c'è niente da confermare.", error: "nothing_pending" }
+        return { success: false, spoken: lang === "en" ? "Nothing to confirm." : "Non c'è niente da confermare.", error: "nothing_pending" }
       }
 
       case "dialog.cancel": {
-        return { success: false, spoken: "Non c'è niente da annullare.", error: "nothing_pending" }
+        return { success: false, spoken: lang === "en" ? "Nothing to cancel." : "Non c'è niente da annullare.", error: "nothing_pending" }
       }
 
       case "dialog.repeat": {
         return {
           success: true,
-          spoken: "Ripeto l'ultimo messaggio.",
+          spoken: lang === "en" ? "Repeating last message." : "Ripeto l'ultimo messaggio.",
         }
       }
 
       case "dictation.start": {
         return {
           success: true,
-          spoken: "Modalità dettatura avviata.",
+          spoken: lang === "en" ? "Dictation mode started." : "Modalità dettatura avviata.",
         }
       }
 
       case "dictation.finish": {
-        return { success: false, spoken: "Non c'è una dettatura in corso da inviare.", error: "nothing_pending" }
+        return { success: false, spoken: lang === "en" ? "No ongoing dictation to send." : "Non c'è una dettatura in corso da inviare.", error: "nothing_pending" }
       }
 
       default:
         return {
           success: false,
-          spoken: `Intento '${intentId}' non gestito dal dispatcher.`,
+          spoken: lang === "en" ? `Intent '${intentId}' not handled by dispatcher.` : `Intento '${intentId}' non gestito dal dispatcher.`,
           error: "unhandled_intent",
         }
     }
@@ -522,15 +572,20 @@ export async function dispatch(
     return {
       success: false,
       // Said in plain words; the error itself stays written in `error`.
-      spoken: plainFailure(err?.message),
+      spoken: plainFailure(err?.message, lang),
       error: String(err),
     }
   }
 }
 
 /** What to say when a command threw: the cause in plain words, never the raw message. */
-export function plainFailure(message: string | undefined): string {
-  const plain = plainProblem(message)
+export function plainFailure(message: string | undefined, lang: "it" | "en" = "it"): string {
+  const plain = plainProblem(message, lang)
+  if (lang === "en") {
+    if (plain) return `Could not complete action. ${plain}`
+    if (message && writtenForPeople(message)) return `Could not complete action: ${message.trim()}`
+    return "Could not complete action in ADE: see console for details."
+  }
   if (plain) return `Non sono riuscito a farlo. ${plain}`
   // A host that threw a sentence meant for the user («non c'è nessun progetto aperto») is read as it is.
   if (message && writtenForPeople(message)) return `Non sono riuscito a farlo: ${message.trim()}`

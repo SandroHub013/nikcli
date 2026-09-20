@@ -32,6 +32,8 @@ export interface ReplySummaryOptions {
    * as long as anyone wants to be read at before they look at the screen.
    */
   maxChars?: number
+  /** Spoken language: 'it' or 'en'. Defaults to 'it'. */
+  lang?: "it" | "en"
 }
 
 const DEFAULT_MAX_CHARS = 320
@@ -87,7 +89,7 @@ export function summariseForSpeech(
     const collapsed = text.replace(/\s+/g, " ").trim()
     if (!collapsed || !HAS_WORDS.test(collapsed)) continue
 
-    kept.push(line.kind === "error" ? `Errore: ${collapsed}` : collapsed)
+    kept.push(line.kind === "error" ? (options.lang === "en" ? `Error: ${collapsed}` : `Errore: ${collapsed}`) : collapsed)
   }
 
   if (kept.length === 0) return undefined
@@ -116,16 +118,19 @@ export function replySpeech(
   options: ReplySummaryOptions = {},
 ): string | undefined {
   if (result.reason === "aborted" || result.reason === "gone") return undefined
-  if (result.reason === "silent") return "Non ho ricevuto risposta."
+  const lang = options.lang ?? "it"
+  if (result.reason === "silent") return lang === "en" ? "I didn't receive a reply." : "Non ho ricevuto risposta."
 
   const summary = summariseForSpeech(result.lines, options)
   if (summary) {
-    return result.reason === "timeout" ? `${summary} Sta ancora lavorando.` : summary
+    return result.reason === "timeout"
+      ? `${summary} ${lang === "en" ? "It is still working." : "Sta ancora lavorando."}`
+      : summary
   }
 
-  if (result.reason === "timeout") return "Sta ancora lavorando."
-  if (result.reason === "error") return "La sessione ha segnalato un errore."
-  return "Ha finito, ma non ha lasciato una risposta da leggere."
+  if (result.reason === "timeout") return lang === "en" ? "It is still working." : "Sta ancora lavorando."
+  if (result.reason === "error") return lang === "en" ? "The session reported an error." : "La sessione ha segnalato un errore."
+  return lang === "en" ? "It finished, but left no reply to read out." : "Ha finito, ma non ha lasciato una risposta da leggere."
 }
 
 /**

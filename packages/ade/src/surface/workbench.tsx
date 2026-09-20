@@ -2813,7 +2813,7 @@ export function Workbench() {
   const playbackMeter = createPlaybackMeter()
   const webSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
-      ? createWebSpeechSpeaker({ lang: "it-IT" })
+      ? createWebSpeechSpeaker({ lang: () => (locale() === "en" ? "en-US" : "it-IT") })
       : createFakeSpeaker()
   const systemSpeaker = {
     ...webSpeaker,
@@ -2833,7 +2833,14 @@ export function Workbench() {
    * looked up per call, so the browser harness simply never gets past status.
    */
   const naturalSpeaker = createNaturalSpeaker({
-    voice: () => voiceSettings().replyVoice,
+    voice: () => {
+      const chosen = voiceSettings().replyVoice
+      if (chosen === "system") return "system"
+      if (locale() === "en") {
+        return chosen === "ugo" || chosen === "paola" ? "lessac" : chosen
+      }
+      return chosen === "lessac" ? "ugo" : chosen
+    },
     status: async (voice) => {
       const host = await getHost()
       return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
@@ -2854,6 +2861,7 @@ export function Workbench() {
       return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
     },
     fallback: systemSpeaker,
+    fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
       if (state === "failed") console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
     },

@@ -34,7 +34,7 @@ export type AgentSpeed = (typeof AGENT_SPEEDS)[number]
  * maschile, e piper per femminile, selezionabile dalle impostazioni» — Ugo,
  * the default, and Paola.
  */
-export const REPLY_VOICES = ["ugo", "paola", "system"] as const
+export const REPLY_VOICES = ["ugo", "paola", "lessac", "system"] as const
 export type ReplyVoice = (typeof REPLY_VOICES)[number]
 
 /**

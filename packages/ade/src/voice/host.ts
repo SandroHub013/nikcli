@@ -20,7 +20,7 @@ import {
 import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
-import { t } from "../i18n"
+import { locale, t } from "../i18n"
 
 /**
  * External dependencies provided by Workbench to avoid direct global state coupling.
@@ -57,6 +57,8 @@ export interface AdeVoiceHostDeps {
    * implementation of it grow here.
    */
   openAgentSession?: (input: { agentId: string; task: string }) => { paneId: string; title: string }
+  /** Explicit app locale resolver, defaults to global locale() */
+  locale?: () => "it" | "en"
 }
 
 const ITALIAN_NUMBERS: Record<number, string> = {
@@ -71,6 +73,20 @@ const ITALIAN_NUMBERS: Record<number, string> = {
   8: "otto",
   9: "nove",
   10: "dieci",
+}
+
+const ENGLISH_NUMBERS: Record<number, string> = {
+  0: "zero",
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+  10: "ten",
 }
 
 /**
@@ -439,12 +455,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         return
       }
 
+      const currentLocale = deps.locale ? deps.locale() : locale()
       const session = deps.getRunningSession(paneId)
       if (!session) {
         throw new Error(
-          field
-            ? "Il pannello selezionato non ha un processo in ascolto."
-            : "Il pannello selezionato non ha dove ricevere il testo."
+          currentLocale === "en"
+            ? (field ? "The selected panel has no listening process." : "The selected panel cannot receive text.")
+            : (field ? "Il pannello selezionato non ha un processo in ascolto." : "Il pannello selezionato non ha dove ricevere il testo.")
         )
       }
       // A trailing space, not a carriage return: the next dictated phrase must
@@ -481,45 +498,73 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       const currentView = deps.wb().view
 
       let spokenSummary: string
-      if (totalSessions === 0) {
-        spokenSummary = "Al momento non c'è nessuna sessione aperta."
-      } else if (totalSessions === 1) {
-        const detail =
-          workingSessions > 0
-            ? " in esecuzione"
-            : waitingSessions > 0
-              ? " in attesa"
-              : doneSessions > 0
-                ? " completata"
-                : errorSessions > 0
-                  ? " in errore"
-                  : ""
-        spokenSummary = `C'è una sessione${detail}.`
+      const currentLocale = deps.locale ? deps.locale() : locale()
+      if (currentLocale === "en") {
+        if (totalSessions === 0) {
+          spokenSummary = "There are currently no open sessions."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " running"
+              : waitingSessions > 0
+                ? " waiting"
+                : doneSessions > 0
+                  ? " completed"
+                  : errorSessions > 0
+                    ? " in error"
+                    : ""
+          spokenSummary = `There is one session${detail}.`
+        } else {
+          const countWord = ENGLISH_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) details.push(`${workingSessions} running`)
+          if (waitingSessions > 0) details.push(`${waitingSessions} waiting`)
+          if (doneSessions > 0) details.push(`${doneSessions} completed`)
+          if (errorSessions > 0) details.push(`${errorSessions} in error`)
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `There are ${countWord} open sessions${detailsStr}`
+        }
       } else {
-        const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
-        const details: string[] = []
-        if (workingSessions > 0) {
-          details.push(
-            `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
-          )
+        if (totalSessions === 0) {
+          spokenSummary = "Al momento non c'è nessuna sessione aperta."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " in esecuzione"
+              : waitingSessions > 0
+                ? " in attesa"
+                : doneSessions > 0
+                  ? " completata"
+                  : errorSessions > 0
+                    ? " in errore"
+                    : ""
+          spokenSummary = `C'è una sessione${detail}.`
+        } else {
+          const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) {
+            details.push(
+              `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
+            )
+          }
+          if (waitingSessions > 0) {
+            details.push(
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+            )
+          }
+          if (doneSessions > 0) {
+            const w =
+              doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
+            details.push(w)
+          }
+          if (errorSessions > 0) {
+            details.push(
+              `${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`,
+            )
+          }
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
         }
-        if (waitingSessions > 0) {
-          details.push(
-            `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
-          )
-        }
-        if (doneSessions > 0) {
-          const w =
-            doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
-          details.push(w)
-        }
-        if (errorSessions > 0) {
-          details.push(
-            `${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`,
-          )
-        }
-        const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
-        spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
       }
 
       return {

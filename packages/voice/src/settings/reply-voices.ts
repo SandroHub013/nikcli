@@ -25,5 +25,11 @@ export const REPLY_VOICE_CHOICES: readonly {
     get desc() { return t("vui.reply.paola") },
     get licence() { return t("vui.reply.paola.licence") },
   },
+  {
+    value: "lessac",
+    get title() { return t("vui.reply.lessac.title") },
+    get desc() { return t("vui.reply.lessac.desc") },
+    get licence() { return t("vui.reply.lessac.licence") },
+  },
   { value: "system", get title() { return t("vui.reply.system") }, get desc() { return t("vui.reply.system.desc") } },
 ]
