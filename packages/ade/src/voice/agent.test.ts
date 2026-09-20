@@ -169,7 +169,45 @@ describe("voice/agent", () => {
   })
 
   describe("M4: fallback to Codex on limit in auto mode", () => {
-    test("in auto mode when Claude hits limit, repeats once with Codex and announces it", async () => {
+    test("when codexFallback is off (default), reports limit and does not call Codex", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: limitNotice("Claude Code") },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
+      expect(runner.requests).toHaveLength(1)
+      expect(runner.requests[0].runner).toBe("claude")
+      expect(answer.ok).toBe(false)
+      expect(answer.text).toBe(limitNotice("Claude Code"))
+      expect(answer.text).toContain("ADE non riprova")
+      expect(answer.ran).toBe(true)
+    })
+
+    test("when codexFallback is explicitly false, reports limit and does not call Codex", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: limitNotice("Claude Code") },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+        codexFallback: () => false,
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
+      expect(runner.requests).toHaveLength(1)
+      expect(runner.requests[0].runner).toBe("claude")
+      expect(answer.ok).toBe(false)
+      expect(answer.text).toBe(limitNotice("Claude Code"))
+      expect(answer.ran).toBe(true)
+    })
+
+    test("in auto mode when codexFallback is on and Claude hits limit, repeats once with Codex and announces it", async () => {
       const runner = fakeRunner([
         { status: "error", problem: limitNotice("Claude Code") },
         { status: "done", text: "Ci sono due sessioni attive." },
@@ -178,6 +216,7 @@ describe("voice/agent", () => {
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
         cwd: () => "C:/p",
+        codexFallback: () => true,
       })
 
       const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
@@ -199,6 +238,7 @@ describe("voice/agent", () => {
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "assente")],
         cwd: () => "C:/p",
+        codexFallback: () => true,
       })
 
       const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
@@ -219,6 +259,7 @@ describe("voice/agent", () => {
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
         cwd: () => "C:/p",
+        codexFallback: () => true,
       })
 
       const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
@@ -237,6 +278,7 @@ describe("voice/agent", () => {
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
         cwd: () => "C:/p",
+        codexFallback: () => true,
       })
 
       const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })
@@ -265,6 +307,7 @@ describe("voice/agent", () => {
         runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
         cwd: () => "C:/p",
+        codexFallback: () => true,
       })
 
       const heard: string[] = []
@@ -286,6 +329,7 @@ describe("voice/agent", () => {
           runTurn: runner.runTurn,
           statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
           cwd: () => "C:/p",
+          codexFallback: () => true,
         })
 
         const answer = await agent.ask({ text: "how many sessions?", engine: "auto" })

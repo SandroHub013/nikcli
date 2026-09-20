@@ -922,6 +922,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
+  const fallbackKeys = radioGroupKeys((value) => updateSettings({ codexFallback: value === "on" }))
   const activationKeys = radioGroupKeys((value) =>
     selectActivation(value as VoiceActivation),
   )
@@ -1402,6 +1403,45 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                       </div>
                     )}
                   </For>
+                </div>
+              </div>
+            </Show>
+
+            {/* Ricaduta su Codex al limite di Claude: facoltativa, di default disattivata. */}
+            <Show when={props.settings.agentEngine !== "off"}>
+              <div data-slot="sub-choice-box">
+                <span id="agent-codex-fallback-label" data-slot="sub-choice-label">
+                  {t("vui.codexFallback.title")}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="agent-codex-fallback-label"
+                  data-slot="sub-choice-row"
+                  onKeyDown={fallbackKeys}
+                >
+                  <div
+                    role="radio"
+                    data-value="on"
+                    aria-checked={props.settings.codexFallback === true}
+                    tabIndex={props.settings.codexFallback === true ? 0 : -1}
+                    data-slot="sub-choice-item"
+                    onClick={() => updateSettings({ codexFallback: true })}
+                  >
+                    <span data-slot="sub-item-title">{t("vui.codexFallback.on")}</span>
+                    <span data-slot="sub-item-desc">{t("vui.codexFallback.on.desc")}</span>
+                  </div>
+
+                  <div
+                    role="radio"
+                    data-value="off"
+                    aria-checked={props.settings.codexFallback !== true}
+                    tabIndex={props.settings.codexFallback !== true ? 0 : -1}
+                    data-slot="sub-choice-item"
+                    onClick={() => updateSettings({ codexFallback: false })}
+                  >
+                    <span data-slot="sub-item-title">{t("vui.codexFallback.off")}</span>
+                    <span data-slot="sub-item-desc">{t("vui.codexFallback.off.desc")}</span>
+                  </div>
                 </div>
               </div>
             </Show>

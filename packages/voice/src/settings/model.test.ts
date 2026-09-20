@@ -153,6 +153,24 @@ describe("settings/model - normalizeSettings", () => {
     expect(invalid.corrections.length).toBeGreaterThan(0)
   })
 
+  test("codex fallback on Claude limit is off by default and can be turned on", () => {
+    expect(DEFAULT_VOICE_SETTINGS.codexFallback).toBe(false)
+    const def = normalizeSettings({})
+    expect(def.settings.codexFallback).toBe(false)
+
+    const enabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: true })
+    expect(enabled.settings.codexFallback).toBe(true)
+    expect(enabled.corrections).toEqual([])
+
+    const disabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: false })
+    expect(disabled.settings.codexFallback).toBe(false)
+    expect(disabled.corrections).toEqual([])
+
+    const invalid = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, codexFallback: "yes" as any })
+    expect(invalid.settings.codexFallback).toBe(false)
+    expect(invalid.corrections.some((c) => c.includes("Codex"))).toBe(true)
+  })
+
   test("preserves valid configuration with zero corrections", () => {
     const valid = {
       version: CURRENT_SETTINGS_VERSION,

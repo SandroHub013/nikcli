@@ -2823,6 +2823,7 @@ export function Workbench() {
     getHost,
     recents,
     agentAvailability: () => agentStatuses(),
+    codexFallback: () => voiceSettings().codexFallback === true,
     switchProject: (root) => switchProjectTo(root),
     openAgentSession: (input) => openVoiceSession(input),
   })

@@ -185,6 +185,13 @@ export interface VoiceSettings {
   /** See `AGENT_SPEEDS`. */
   readonly agentSpeed: AgentSpeed
   /**
+   * Whether to retry a request on Codex if Claude Code hits its plan rate limit.
+   *
+   * Off by default. When on, if agentEngine is "auto" and Claude Code returns a plan
+   * rate limit error, the request is retried once on Codex after announcing the switch.
+   */
+  readonly codexFallback: boolean
+  /**
    * Which microphone to listen on. Absent means the system default.
    *
    * A `MediaDeviceInfo.deviceId`, which is an opaque hash scoped to this
@@ -250,6 +257,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   replyVoice: "ugo",
   agentEngine: "auto",
   agentSpeed: "fast",
+  codexFallback: false,
 })
 
 export interface NormalizedVoiceSettings extends VoiceSettings {
@@ -618,6 +626,14 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)))
   }
 
+  // 17. The fallback to Codex on Claude plan limit: absent in older profiles, which get the default (false).
+  let codexFallback = DEFAULT_VOICE_SETTINGS.codexFallback
+  if (typeof candidate.codexFallback === "boolean") {
+    codexFallback = candidate.codexFallback
+  } else if (candidate.codexFallback !== undefined) {
+    corrections.push(t("vui.fix.codexFallback"))
+  }
+
   const cleanSettings: VoiceSettings = {
     version: Number(version),
     mode,
@@ -637,6 +653,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     replyVoice,
     agentEngine,
     agentSpeed,
+    codexFallback,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),
   }

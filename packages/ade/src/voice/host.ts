@@ -47,6 +47,8 @@ export interface AdeVoiceHostDeps {
    * absent, see `listAgents`.
    */
   agentAvailability?: () => AgentStatus[] | undefined
+  /** Whether to retry on Codex when Claude hits its plan rate limit. */
+  codexFallback?: () => boolean
   /** Opens a project already on disk, keeping the panes of the one being left. */
   switchProject?: (root: string) => Promise<void>
   /**
@@ -134,6 +136,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         warm: warmClaude(createWarmClaude()),
         statuses: () => deps.agentAvailability?.(),
         cwd: () => deps.project()?.root,
+        codexFallback: () => deps.codexFallback?.() ?? false,
       }),
     ))
 
