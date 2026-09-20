@@ -76,7 +76,7 @@ export type DialogEvent =
   | { type: "wake" }
   | { type: "sleep" }
   | { type: "utterance"; text: string }
-  | { type: "permission_requested"; paneId: string; what: string }
+  | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
@@ -160,21 +160,27 @@ export function transition(
     const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
     const prompt = `L'agente richiede il permesso per: ${event.what}. Vuoi consentire?`
 
-    return withSpoken(
-      {
-        ...state,
-        status: "confirming",
-        timeoutAt,
-        pendingAction: {
-          intent: permAllowSpec,
-          slots: { paneId: event.paneId },
-          confirmPrompt: prompt,
-          isPermission: true,
-          paneId: event.paneId,
-        },
+    const nextState: DialogState = {
+      ...state,
+      status: "confirming",
+      timeoutAt,
+      pendingAction: {
+        intent: permAllowSpec,
+        slots: { paneId: event.paneId },
+        confirmPrompt: prompt,
+        isPermission: true,
+        paneId: event.paneId,
       },
-      prompt
-    )
+    }
+
+    if (event.silent) {
+      return {
+        state: nextState,
+        effects,
+      }
+    }
+
+    return withSpoken(nextState, prompt)
   }
 
   // 2. State: ASLEEP

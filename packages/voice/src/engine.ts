@@ -233,7 +233,8 @@ export interface VoiceEngine {
    */
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
-  handlePermissionRequest(paneId: string, what: string): Promise<void>
+  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  openResponseWindow(options?: { durationMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
   cancel(): Promise<void>
   /**
    * A tap while the assistant talks or works: it stops, and the next sentence
@@ -1369,10 +1370,27 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await Effect.runPromise(handle.submitText(text))
     },
 
-    async handlePermissionRequest(paneId: string, what: string): Promise<void> {
+    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void> {
       if (programHandle) {
-        await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what))
+        await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
+    },
+
+    async openResponseWindow(options?: { durationMs?: number; permission?: { paneId: string; what: string } }): Promise<void> {
+      const durationMs = options?.durationMs ?? 8_000
+      await this.start("agent", { waitForName: false, automatic: true })
+      const until = now() + durationMs
+      setFollowUp(until)
+      if (options?.permission && programHandle) {
+        await Effect.runPromise(programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, { silent: true }))
+      }
+      setTimeout(() => {
+        if (!isRunning()) return
+        const status = dialogState().status
+        if (status === "executing" || status === "dictating") return
+        setFollowUp(undefined)
+        void stop()
+      }, durationMs)
     },
 
     async cancel(): Promise<void> {

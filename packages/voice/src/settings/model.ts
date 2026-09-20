@@ -160,6 +160,14 @@ export interface VoiceSettings {
    * watching the pane anyway, who wants the microphone and not the voice.
    */
   readonly speakReplies: boolean
+  /**
+   * Whether the assistant announces session events on its own: permissions,
+   * task completions, or open decisions.
+   *
+   * Off by default to avoid unexpected speech or consumption (S48). When on,
+   * it speaks a brief announcement and opens a single 6-8s response window.
+   */
+  readonly spokenAlerts: boolean
   /** Which voice reads them; see `REPLY_VOICES`. */
   readonly replyVoice: ReplyVoice
   /**
@@ -238,6 +246,7 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
    */
   customWords: Object.freeze([]),
   speakReplies: true,
+  spokenAlerts: false,
   replyVoice: "ugo",
   agentEngine: "auto",
   agentSpeed: "fast",
@@ -550,6 +559,12 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   } else if (candidate.speakReplies !== undefined) {
     corrections.push(t("vui.fix.speakReplies"))
   }
+  let spokenAlerts = DEFAULT_VOICE_SETTINGS.spokenAlerts
+  if (typeof candidate.spokenAlerts === "boolean") {
+    spokenAlerts = candidate.spokenAlerts
+  } else if (candidate.spokenAlerts !== undefined) {
+    corrections.push(t("vui.fix.spokenAlerts"))
+  }
   let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
   if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
     replyVoice = candidate.replyVoice as ReplyVoice
@@ -618,6 +633,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend,
     customWords,
     speakReplies,
+    spokenAlerts,
     replyVoice,
     agentEngine,
     agentSpeed,

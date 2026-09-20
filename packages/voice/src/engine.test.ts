@@ -2107,6 +2107,19 @@ describe("a conversation: after an answer the name is not needed for a few secon
     expect(engine.followUp()).toBeUndefined()
     await engine.stop()
   })
+
+  test("openResponseWindow starts in agent mode, sets followUp, and closes on timeout", async () => {
+    const { engine } = talking({ activation: "push-to-talk", alwaysListen: false })
+    await engine.openResponseWindow({ durationMs: 50, permission: { paneId: "pane-1", what: "npm test" } })
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.followUp()).toBeDefined()
+    expect(engine.dialogState().status).toBe("confirming")
+    expect(engine.dialogState().pendingAction?.paneId).toBe("pane-1")
+
+    await new Promise((r) => setTimeout(r, 80))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.followUp()).toBeUndefined()
+  })
 })
 
 describe("interrupted while it talks", () => {

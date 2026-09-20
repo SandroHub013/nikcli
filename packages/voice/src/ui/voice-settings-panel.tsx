@@ -911,6 +911,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   )
   const listenKeys = radioGroupKeys((value) => updateSettings({ alwaysListen: value === "always" }))
   const replyKeys = radioGroupKeys((value) => updateSettings({ speakReplies: value === "speak" }))
+  const alertsKeys = radioGroupKeys((value) => updateSettings({ spokenAlerts: value === "on" }))
   const replyVoiceKeys = radioGroupKeys((value) => updateSettings({ replyVoice: value as ReplyVoice }))
   const engineKeys = radioGroupKeys((value) => updateSettings({ agentEngine: value as AgentEngine }))
   const speedKeys = radioGroupKeys((value) => updateSettings({ agentSpeed: value as AgentSpeed }))
@@ -1286,6 +1287,46 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 </p>
               </div>
             </Show>
+
+            {/*
+              Proactive alerts: nik speaks on its own for permissions, completions, or decisions.
+              Off by default to avoid unexpected speech or consumption (S48).
+            */}
+            <div data-slot="sub-choice-box">
+              <span id="agent-alerts-label" data-slot="sub-choice-label">
+                {t("vui.alerts.title")}
+              </span>
+              <div
+                role="radiogroup"
+                aria-labelledby="agent-alerts-label"
+                data-slot="sub-choice-row"
+                onKeyDown={alertsKeys}
+              >
+                <div
+                  role="radio"
+                  data-value="on"
+                  aria-checked={props.settings.spokenAlerts === true}
+                  tabIndex={props.settings.spokenAlerts === true ? 0 : -1}
+                  data-slot="sub-choice-item"
+                  onClick={() => updateSettings({ spokenAlerts: true })}
+                >
+                  <span data-slot="sub-item-title">{t("vui.alerts.on")}</span>
+                  <span data-slot="sub-item-desc">{t("vui.alerts.on.desc")}</span>
+                </div>
+
+                <div
+                  role="radio"
+                  data-value="off"
+                  aria-checked={props.settings.spokenAlerts !== true}
+                  tabIndex={props.settings.spokenAlerts !== true ? 0 : -1}
+                  data-slot="sub-choice-item"
+                  onClick={() => updateSettings({ spokenAlerts: false })}
+                >
+                  <span data-slot="sub-item-title">{t("vui.alerts.off")}</span>
+                  <span data-slot="sub-item-desc">{t("vui.alerts.off.desc")}</span>
+                </div>
+              </div>
+            </div>
 
             {/*
               What answers what the grammar does not know. A CLI the user is
