@@ -127,6 +127,7 @@ export interface VoiceAgentDeps {
   }
   statuses: () => readonly AgentStatus[] | undefined
   cwd: () => string | undefined
+  codexFallback?: () => boolean
 }
 
 export interface VoiceAgent {
@@ -136,6 +137,7 @@ export interface VoiceAgent {
     engine: VoiceAgentEngine
     /** `fast` uses `VOICE_AGENT_FAST`; absent or `cli` leaves the CLI's own model. */
     speed?: "fast" | "cli"
+    codexFallback?: boolean
     signal?: AbortSignal
     /** The answer so far, each time it grows, so it can be read before it is finished. */
     onText?: (soFar: string) => void
@@ -226,7 +228,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       deps.warm.prepare({ ...turnFor("claude", deps.cwd(), speed), message: "" })
     },
 
-    async ask({ text, engine, speed, signal, onText }) {
+    async ask({ text, engine, speed, codexFallback, signal, onText }) {
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
@@ -249,7 +251,9 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
         const result = await turn.result
+        const fallbackAllowed = codexFallback ?? deps.codexFallback?.() ?? false
         if (
+          fallbackAllowed &&
           engine === "auto" &&
           resolved.runner === "claude" &&
           !signal?.aborted &&
