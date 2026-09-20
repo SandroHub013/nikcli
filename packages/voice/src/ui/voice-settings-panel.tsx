@@ -15,7 +15,7 @@
  * - Strictly typed without type assertions or compiler suppression annotations.
  */
 
-import { REPLY_VOICE_CHOICES } from "../settings/reply-voices"
+import { activeReplyVoice, replyVoiceChoicesForLocale } from "../settings/reply-voices"
 import {
   createEffect,
   createMemo,
@@ -85,7 +85,7 @@ import {
 } from "./shortcut-capture"
 import { NikMic } from "./nik-mic"
 import "./voice-settings.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { locale, t } from "@nikcli-ai/ade/i18n"
 import { formatSpendCost } from "../settings/spend"
 
 /**
@@ -162,6 +162,8 @@ export interface VoiceSettingsPanelProps {
   inline?: boolean
   /** Optional additional CSS class names. */
   class?: string
+  /** Optional initial section ID to activate when opening the panel. */
+  initialSection?: string
 }
 
 /**
@@ -401,7 +403,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [trialBusy, setTrialBusy] = createSignal(false)
   const [trialNote, setTrialNote] = createSignal<string | undefined>(undefined)
   const [resetArmed, setResetArmed] = createSignal(false)
-  const [activeSection, setActiveSection] = createSignal(SECTIONS[0].id)
+  const [activeSection, setActiveSection] = createSignal(props.initialSection ?? SECTIONS[0].id)
+  createEffect(() => {
+    if (props.initialSection) {
+      setActiveSection(props.initialSection)
+    }
+  })
 
   /*
    * The machine's audio hardware, and what is cached of the local model.
@@ -1247,13 +1254,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   data-slot="sub-choice-row"
                   onKeyDown={replyVoiceKeys}
                 >
-                  <For each={REPLY_VOICE_CHOICES}>
+                  <For each={replyVoiceChoicesForLocale(locale())}>
                     {(choice) => (
                       <div
                         role="radio"
                         data-value={choice.value}
-                        aria-checked={props.settings.replyVoice === choice.value}
-                        tabIndex={props.settings.replyVoice === choice.value ? 0 : -1}
+                        aria-checked={activeReplyVoice(props.settings.replyVoice, locale()) === choice.value}
+                        tabIndex={activeReplyVoice(props.settings.replyVoice, locale()) === choice.value ? 0 : -1}
                         data-slot="sub-choice-item"
                         onClick={() => updateSettings({ replyVoice: choice.value })}
                       >

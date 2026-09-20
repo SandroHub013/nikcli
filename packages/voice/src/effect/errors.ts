@@ -189,7 +189,7 @@ export function errorKind(error: unknown): VoiceErrorKind {
  * Translates a typed voice error into an Italian phrase suitable for text-to-speech output.
  * Guarantees that sensitive secrets (e.g. API keys) are never spoken or returned.
  */
-export function spokenMessage(error: unknown): string {
+export function spokenMessage(error: unknown, lang: "it" | "en" = "it"): string {
   if (typeof error === "string" && error.trim().length > 0) {
     return error.trim()
   }
@@ -197,38 +197,65 @@ export function spokenMessage(error: unknown): string {
   const tagged = findTagged(error)
   if (tagged) {
     const tag = tagged._tag
-    switch (tag) {
-      /* The sentence says where the fix is, because for these two there is
-         one and it is not in this window. */
-      case "MicPermissionDenied":
-        return "Non ho il permesso di usare il microfono: consentilo in Impostazioni di Windows, Privacy e sicurezza, Microfono, per le app desktop."
-      case "MicUnavailable":
-        return "Non trovo un microfono: collegane uno e riprova."
-      case "AudioFormatUnsupported":
-        return "Su questo computer non riesco a registrare l'audio."
-      case "SpeechRecognitionUnavailable":
-        return "Qui non riesco a riconoscere la voce."
-      case "ModelLoadFailed":
-        return "Non riesco a caricare il riconoscimento vocale sul computer."
-      case "TranscriptionFailed":
-        return plainProblem(messageOf(tagged)) ?? "Non sono riuscito a capire l'audio: riprova."
-      case "ApiKeyMissing":
-        return "Mi manca la chiave OpenRouter: aggiungila nelle impostazioni della voce."
-      case "ApiKeyInvalid":
-        return "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce."
-      case "QuotaExhausted":
-        return "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo."
-      case "RequestTimeout":
-        return "Il servizio che trascrive la voce non risponde: riprova tra poco."
-      case "HostActionFailed":
-        // Its message can carry anything, a key included: never said.
-        return "Non sono riuscito a farlo in ADE."
+    if (lang === "en") {
+      switch (tag) {
+        case "MicPermissionDenied":
+          return "Microphone permission denied: allow it in Windows Settings > Privacy & security > Microphone."
+        case "MicUnavailable":
+          return "No microphone found: connect one and try again."
+        case "AudioFormatUnsupported":
+          return "Audio recording is not supported on this computer."
+        case "SpeechRecognitionUnavailable":
+          return "Speech recognition is not available here."
+        case "ModelLoadFailed":
+          return "Could not load speech recognition on this computer."
+        case "TranscriptionFailed":
+          return plainProblem(messageOf(tagged), lang) ?? "Could not understand audio: please try again."
+        case "ApiKeyMissing":
+          return "Missing OpenRouter API key: please add it in voice settings."
+        case "ApiKeyInvalid":
+          return "OpenRouter API key is invalid: please check voice settings."
+        case "QuotaExhausted":
+          return "OpenRouter credits exhausted: please top up."
+        case "RequestTimeout":
+          return "Speech transcription service timed out: please try again shortly."
+        case "HostActionFailed":
+          return "Could not perform action in ADE."
+      }
+    } else {
+      switch (tag) {
+        /* The sentence says where the fix is, because for these two there is
+           one and it is not in this window. */
+        case "MicPermissionDenied":
+          return "Non ho il permesso di usare il microfono: consentilo in Impostazioni di Windows, Privacy e sicurezza, Microfono, per le app desktop."
+        case "MicUnavailable":
+          return "Non trovo un microfono: collegane uno e riprova."
+        case "AudioFormatUnsupported":
+          return "Su questo computer non riesco a registrare l'audio."
+        case "SpeechRecognitionUnavailable":
+          return "Qui non riesco a riconoscere la voce."
+        case "ModelLoadFailed":
+          return "Non riesco a caricare il riconoscimento vocale sul computer."
+        case "TranscriptionFailed":
+          return plainProblem(messageOf(tagged), lang) ?? "Non sono riuscito a capire l'audio: riprova."
+        case "ApiKeyMissing":
+          return "Mi manca la chiave OpenRouter: aggiungila nelle impostazioni della voce."
+        case "ApiKeyInvalid":
+          return "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce."
+        case "QuotaExhausted":
+          return "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo."
+        case "RequestTimeout":
+          return "Il servizio che trascrive la voce non risponde: riprova tra poco."
+        case "HostActionFailed":
+          // Its message can carry anything, a key included: never said.
+          return "Non sono riuscito a farlo in ADE."
+      }
     }
   }
 
   if (error instanceof Error && error.message) {
     const msg = error.message.trim()
-    const plain = plainProblem(msg)
+    const plain = plainProblem(msg, lang)
     if (plain) return plain
     const lower = msg.toLowerCase()
     if (
@@ -243,10 +270,12 @@ export function spokenMessage(error: unknown): string {
     ) {
       return msg
     }
-    return "Qualcosa non ha funzionato: riprova."
+    return lang === "en" ? "Something went wrong: please try again." : "Qualcosa non ha funzionato: riprova."
   }
 
-  return "Qualcosa non ha funzionato mentre ti ascoltavo: riprova."
+  return lang === "en"
+    ? "Something went wrong while listening: please try again."
+    : "Qualcosa non ha funzionato mentre ti ascoltavo: riprova."
 }
 
 /* Only read through `plainProblem`, which answers with fixed sentences. */
@@ -260,17 +289,23 @@ function messageOf(error: object): string | undefined {
  * The browser's and the service's own text ("Could not start audio source",
  * "Failed to fetch") says nothing to someone who only wanted to talk.
  */
-export function plainProblem(message: string | undefined): string | undefined {
+export function plainProblem(message: string | undefined, lang: "it" | "en" = "it"): string | undefined {
   if (!message) return undefined
   const lower = message.toLowerCase()
   if (/could not start audio source|notreadable|device in use|in uso|occupato/.test(lower)) {
-    return "Il microfono è usato da un'altra app: chiudila e riprova."
+    return lang === "en"
+      ? "The microphone is in use by another app: close it and try again."
+      : "Il microfono è usato da un'altra app: chiudila e riprova."
   }
   if (/failed to fetch|networkerror|network error|errore di rete|err_internet|offline/.test(lower)) {
-    return "Non ho rete in questo momento: ti sento appena torna."
+    return lang === "en"
+      ? "No network connection right now: I'll listen as soon as it returns."
+      : "Non ho rete in questo momento: ti sento appena torna."
   }
   if (/\(429\)|troppe richieste/.test(lower)) {
-    return "Il servizio che trascrive la voce è occupato: riprova tra qualche secondo."
+    return lang === "en"
+      ? "The speech transcription service is busy: try again in a few seconds."
+      : "Il servizio che trascrive la voce è occupato: riprova tra qualche secondo."
   }
   return undefined
 }

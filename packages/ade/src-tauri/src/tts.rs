@@ -72,6 +72,18 @@ const VOICES: &[Voice] = &[
             sha256: "aea19c0a7fce29fbc359b93f10e7902854401e4c95ae2ea328ae516b15d296cf",
         },
     },
+    Voice {
+        id: "lessac",
+        source: "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/lessac/medium",
+        model: Download {
+            url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/en/en_US/lessac/medium/en_US-lessac-medium.onnx",
+            sha256: "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
+        },
+        config: Download {
+            url: "https://huggingface.co/rhasspy/piper-voices/resolve/1162a9173d0ce503555aed757976b7a9912eae4c/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json",
+            sha256: "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0",
+        },
+    },
 ];
 
 fn voice(id: &str) -> Result<&'static Voice, String> {
@@ -402,6 +414,7 @@ mod tests {
     fn only_known_voices_and_pinned_urls() {
         assert!(voice("ugo").is_ok());
         assert!(voice("paola").is_ok());
+        assert!(voice("lessac").is_ok());
         assert!(voice("giorgio").is_err());
         assert!(voice("../../evil").is_err());
         for v in VOICES {

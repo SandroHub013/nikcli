@@ -446,5 +446,14 @@ describe("a command that threw", () => {
     expect(plainFailure(undefined)).not.toContain("undefined")
     expect(plainFailure("ENOENT: no such file, open 'C:/x'")).toBe("Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.")
     expect(plainFailure("non c'è nessun progetto aperto")).toBe("Non sono riuscito a farlo: non c'è nessun progetto aperto")
+
+    // English
+    expect(plainFailure("TypeError: Cannot read properties of undefined", "en")).toBe(
+      "Could not complete action in ADE: see console for details.",
+    )
+    expect(plainFailure("Failed to fetch", "en")).toBe(
+      "Could not complete action. No network connection right now: I'll listen as soon as it returns.",
+    )
+    expect(plainFailure("no project open", "en")).toBe("Could not complete action: no project open")
   })
 })

@@ -418,6 +418,45 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("completata")
   })
 
+  test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
+    // 0 sessions
+    const { deps: deps0 } = createMockDeps({ locale: () => "en" })
+    const host0 = createAdeVoiceHost(deps0)
+    const state0 = host0.describeState()
+    expect(state0.totalSessions).toBe(0)
+    expect(state0.spokenSummary.toLowerCase()).toContain("no open sessions")
+
+    // 1 session
+    const { deps: deps1 } = createMockDeps({ locale: () => "en" })
+    deps1.setWb((w) => ({
+      ...w,
+      panes: [makePane({ id: "p1", status: "working" })],
+    }))
+    const host1 = createAdeVoiceHost(deps1)
+    const state1 = host1.describeState()
+    expect(state1.totalSessions).toBe(1)
+    expect(state1.spokenSummary.toLowerCase()).toContain("one session")
+    expect(state1.spokenSummary).toContain("running")
+
+    // 3 sessions
+    const { deps: deps3 } = createMockDeps({ locale: () => "en" })
+    deps3.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", status: "working" }),
+        makePane({ id: "p2", status: "waiting" }),
+        makePane({ id: "p3", status: "done" }),
+      ],
+    }))
+    const host3 = createAdeVoiceHost(deps3)
+    const state3 = host3.describeState()
+    expect(state3.totalSessions).toBe(3)
+    expect(state3.spokenSummary.toLowerCase()).toContain("three open sessions")
+    expect(state3.spokenSummary).toContain("running")
+    expect(state3.spokenSummary).toContain("waiting")
+    expect(state3.spokenSummary).toContain("completed")
+  })
+
   test("focusPane and browserNavigate update workbench state", () => {
     const { deps, currentWb } = createMockDeps()
     deps.setWb((w) => ({

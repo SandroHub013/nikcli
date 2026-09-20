@@ -24,8 +24,8 @@ export interface Speaker {
 // ---------------------------------------------------------------------------
 
 export interface WebSpeechSpeakerOptions {
-  /** Target BCP-47 language tag (default: 'it-IT'). */
-  lang?: string
+  /** Target BCP-47 language tag or dynamic getter (default: 'it-IT'). */
+  lang?: string | (() => string)
   /** Preferred voice name or substring (e.g. 'diego', 'natural', 'isabella'). */
   preferredVoice?: string
   /** Speaking rate multiplier [0.1 - 10] (default: 1.02). */
@@ -87,7 +87,7 @@ export function pickBestVoice(
 export function createWebSpeechSpeaker(
   options: WebSpeechSpeakerOptions = {}
 ): Speaker {
-  const lang = options.lang ?? "it-IT"
+  const getLang = () => (typeof options.lang === "function" ? options.lang() : (options.lang ?? "it-IT"))
   const rate = options.rate ?? 1.02
 
   function getSynthesis(): SpeechSynthesis | null {
@@ -166,15 +166,16 @@ export function createWebSpeechSpeaker(
           return
         }
 
+        const currentLang = getLang()
         const utterance = new UtteranceCtor(clean)
-        utterance.lang = lang
+        utterance.lang = currentLang
         utterance.rate = rate
         if (options.pitch !== undefined) utterance.pitch = options.pitch
         if (options.volume !== undefined) utterance.volume = options.volume
 
         // Best natural neural voice available for the language
         primeVoices()
-        const match = pickBestVoice(voices, lang, options.preferredVoice)
+        const match = pickBestVoice(voices, currentLang, options.preferredVoice)
         if (match) {
           utterance.voice = match
         }

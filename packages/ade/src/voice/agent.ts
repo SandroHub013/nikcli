@@ -17,6 +17,7 @@ import type { AgentStatus } from "../session-new/availability"
 import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
+import { locale as currentAppLocale } from "../i18n"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
 
@@ -70,9 +71,15 @@ export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "
 export function resolveVoiceAgentRunner(
   engine: VoiceAgentEngine,
   statuses: readonly AgentStatus[] | undefined,
+  lang: "it" | "en" = "it",
 ): { runner: RunnerId } | { problem: string } {
   if (engine === "nikcli") {
-    return { problem: "nikcli non può rispondere alla voce in sola lettura: scegli Claude Code o Codex." }
+    return {
+      problem:
+        lang === "en"
+          ? "nikcli cannot answer voice in read-only mode: choose Claude Code or Codex."
+          : "nikcli non può rispondere alla voce in sola lettura: scegli Claude Code o Codex.",
+    }
   }
   if (engine !== "auto") return { runner: engine }
   if (!statuses) return { runner: AUTO_ORDER[0] }
@@ -81,7 +88,12 @@ export function resolveVoiceAgentRunner(
   )
   return found
     ? { runner: found }
-    : { problem: "Per rispondere mi serve Claude Code o Codex, e non ne trovo nessuno installato." }
+    : {
+        problem:
+          lang === "en"
+            ? "To answer I need Claude Code or Codex, and neither is installed."
+            : "Per rispondere mi serve Claude Code o Codex, e non ne trovo nessuno installato.",
+      }
 }
 
 /**
@@ -93,7 +105,7 @@ export function resolveVoiceAgentRunner(
  * nobody; and it runs in the user's project, so an agent that edited files
  * itself would be doing, unseen, the work the sessions exist to do in view.
  */
-export const VOICE_AGENT_INSTRUCTIONS = [
+export const VOICE_AGENT_INSTRUCTIONS_IT = [
   "Sei nik, l'assistente vocale di ADE, un ambiente in cui più sessioni di agenti di programmazione lavorano in pannelli affiancati.",
   "Parli con l'utente come un collega: gli dai del tu e parli in prima persona («Chiedo a Prova-voce.», «Ho aperto la sessione.»).",
   "Quello che scrivi viene letto ad alta voce mentre lo scrivi: rispondi in italiano, in una o due frasi brevi, senza markdown, elenchi, codice o percorsi lunghi.",
@@ -110,6 +122,25 @@ export const VOICE_AGENT_INSTRUCTIONS = [
   "Se la richiesta è ambigua, o chiudere o fermare qualcosa farebbe perdere lavoro, chiedi conferma invece di agire.",
 ].join("\n")
 
+export const VOICE_AGENT_INSTRUCTIONS_EN = [
+  "You are nik, the voice assistant for ADE, an environment where multiple programming agent sessions work side by side in panels.",
+  "Talk to the user like a colleague: speak in the first person («Asking Test-Voice.», «I opened the session.»).",
+  "What you write is read out loud as you write it: respond in English, in one or two short sentences, without markdown, lists, code, or long paths.",
+  "If you need time, for example to ask a session or search the web, write a very short sentence first about what you are doing, ending with a period; then the result.",
+  "When reporting work from another session, state its name and result. End with a question only when a decision is needed.",
+  "If something fails, say so in simple words without error codes, and say what the user can do.",
+  "To manage sessions use the ade-msg command from the shell:",
+  "- ade-msg list: list open sessions;",
+  "- ade-msg ask SESSION \"REQUEST\": asks and waits for the reply; always use it blocking like this, because you don't have a terminal to receive later replies;",
+  "- ade-msg spawn AGENT \"TASK\" --no-wait: launches a session for long work; then tell the user it started, without waiting for it;",
+  "- ade-msg send SESSION \"TEXT\": a note; ade-msg close SESSION: closes a session you started.",
+  "Do not modify files and do not run commands that change the project: sessions do the work where the user can see it.",
+  "You cannot open panels and never write lines starting with @ade: here they would be read out loud. If the user wants a panel, tell them to say «open browser», «open video», «open 3D model», «open simulator», or «open decisions».",
+  "If the request is ambiguous, or closing/stopping something would lose work, ask for confirmation instead of acting.",
+].join("\n")
+
+export const VOICE_AGENT_INSTRUCTIONS = VOICE_AGENT_INSTRUCTIONS_IT
+
 /** What `ask` needs from the app: a runner to call, and what is installed. */
 export interface VoiceAgentDeps {
   runTurn: (request: TurnRequest) => { result: Promise<TurnResult>; stop: () => void }
@@ -125,6 +156,7 @@ export interface VoiceAgentDeps {
   }
   statuses: () => readonly AgentStatus[] | undefined
   cwd: () => string | undefined
+  locale?: () => "it" | "en"
 }
 
 export interface VoiceAgent {
@@ -163,6 +195,8 @@ function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
 }
 
 export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
+  const currentLocale = (): "it" | "en" => (deps.locale ? deps.locale() : currentAppLocale())
+
   /*
    * One conversation per runner and project. A follow-up ("e la seconda?")
    * only makes sense to the agent that heard the first question, so the
@@ -179,31 +213,35 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   let latest = 0
 
   /* Everything but the sentence: the same for a turn and for the process that waits for one. */
-  const turnFor = (runner: RunnerId, cwd: string | undefined, speed: "fast" | "cli" | undefined): Omit<TurnRequest, "message"> => ({
-    runner,
-    instructions: VOICE_AGENT_INSTRUCTIONS,
-    ...(cwd ? { cwd } : {}),
-    disabledTools: VOICE_AGENT_DISABLED_TOOLS,
-    mailbox: { id: "voce" },
-    // No MCP servers or user settings: a spoken answer is worth more than
-    // the user's connectors, and loading them tripled the wait.
-    lean: true,
-    timeoutMs: VOICE_AGENT_TIMEOUT_MS,
-    // Always asked for: the warm process is started before anyone listens to it.
-    partial: runner === "claude",
-    ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
-  })
+  const turnFor = (runner: RunnerId, cwd: string | undefined, speed: "fast" | "cli" | undefined): Omit<TurnRequest, "message"> => {
+    const loc = currentLocale()
+    return {
+      runner,
+      instructions: loc === "en" ? VOICE_AGENT_INSTRUCTIONS_EN : VOICE_AGENT_INSTRUCTIONS_IT,
+      ...(cwd ? { cwd } : {}),
+      disabledTools: VOICE_AGENT_DISABLED_TOOLS,
+      mailbox: { id: "voce" },
+      // No MCP servers or user settings: a spoken answer is worth more than
+      // the user's connectors, and loading them tripled the wait.
+      lean: true,
+      timeoutMs: VOICE_AGENT_TIMEOUT_MS,
+      // Always asked for: the warm process is started before anyone listens to it.
+      partial: runner === "claude",
+      ...(speed === "fast" ? VOICE_AGENT_FAST[runner] : {}),
+    }
+  }
 
   return {
     prepare({ engine, speed }) {
       if (!deps.warm) return
-      const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
+      const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
       if ("problem" in resolved || resolved.runner !== "claude") return
       deps.warm.prepare({ ...turnFor("claude", deps.cwd(), speed), message: "" })
     },
 
     async ask({ text, engine, speed, signal, onText }) {
-      const resolved = resolveVoiceAgentRunner(engine, deps.statuses())
+      const loc = currentLocale()
+      const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), loc)
       if ("problem" in resolved) return { ok: false, text: resolved.problem, ran: false }
 
       const generation = ++latest
@@ -227,10 +265,18 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         const result = await turn.result
         if (result.sessionId && generation === latest) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
         if (result.status === "done") {
-          return { ok: true, text: result.text || "Fatto.", ran: true }
+          return { ok: true, text: result.text || (loc === "en" ? "Done." : "Fatto."), ran: true }
         }
         if (result.status === "stopped") return { ok: false, text: "", ran: true }
-        return { ok: false, text: result.problem || "Non sono riuscito a risponderti: l'agente non ha detto niente.", ran: true }
+        return {
+          ok: false,
+          text:
+            result.problem ||
+            (loc === "en"
+              ? "Could not answer you: agent gave no output."
+              : "Non sono riuscito a risponderti: l'agente non ha detto niente."),
+          ran: true,
+        }
       } finally {
         signal?.removeEventListener("abort", onAbort)
       }

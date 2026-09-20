@@ -328,7 +328,9 @@ export function createOpenRouterTranscriber(
         errorCb(
           new ApiKeyMissing({
             message:
-              "Chiave API OpenRouter mancante. Specificare una chiave API valida nelle opzioni.",
+              options.language?.startsWith("en")
+                ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
+                : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
           }) as unknown as Error
         )
         return
@@ -706,7 +708,9 @@ export function createOpenRouterTranscriber(
       if (!apiKey || apiKey.trim().length === 0) {
         const missing = new ApiKeyMissing({
           message:
-            "Chiave API OpenRouter mancante. Specificare una chiave API valida nelle opzioni.",
+            options.language?.startsWith("en")
+              ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
+              : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
         })
         errorCb(missing as unknown as Error)
         throw missing
