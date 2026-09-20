@@ -37,9 +37,10 @@ export function cleanForSpeech(text: string): string {
   )
 
   // Trailing list of links or footnote definitions at the end of the text
+  // Only strips genuine lists of sources (bulleted or numbered items on new lines)
   // e.g. "\n- https://..." or "\n[1] https://..."
   result = result.replace(
-    /(?:(?:\r?\n|\s+)(?:\[\^?\d+\]:?\s*|[-*•]\s+|\d+\.\s+)?(?:https?:\/\/|www\.)[^\s]+)+$/i,
+    /(?:\r?\n\s*(?:[-*•]\s+|\d+\.\s+|\[\^?\d+\]:?\s*)(?:https?:\/\/|www\.)\S+\s*)+$/i,
     "",
   )
 
@@ -48,13 +49,13 @@ export function cleanForSpeech(text: string): string {
 
   // 3. Unwrap Markdown links: [label](url)
   // If label is descriptive (e.g. [documentazione](url)), keep the label.
-  // If label is itself an URL, replace with "il link".
+  // If label is itself an URL, unwrap to the URL so subsequent rules format it with context.
   result = result.replace(
-    /\[([^\]]+)\]\((?:https?:\/\/|www\.)[^\)]+\)/gi,
-    (_match, label: string) => {
+    /\[([^\]]+)\]\(((?:https?:\/\/|www\.)[^\)]+)\)/gi,
+    (_match, label: string, url: string) => {
       const trimmed = label.trim()
       if (/^(?:https?:\/\/|www\.)/i.test(trimmed)) {
-        return "il link"
+        return url
       }
       return trimmed
     },
@@ -80,11 +81,12 @@ export function cleanForSpeech(text: string): string {
       }
 
       if (!prevWord) {
-        const replacement = prefix === "" ? "Il link" : "il link"
+        const replacement = prefix === "" ? "Il link" : prefix.endsWith(" ") ? "il link" : " il link"
         return `${prefix}${replacement}${punct}`
       }
 
       const lower = prevWord.toLowerCase()
+      const isCap = prevWord[0] === prevWord[0].toUpperCase()
 
       // If the preceding word already names the link, keep the noun and drop the raw URL
       if (
@@ -100,6 +102,17 @@ export function cleanForSpeech(text: string): string {
         ].includes(lower)
       ) {
         return `${prefix}${prevWord}${punct}`
+      }
+
+      // Articles: (il, lo, la, i, gli, le, un, uno, una)
+      if (["il", "lo", "la", "l'"].includes(lower)) {
+        return `${prefix}${isCap ? "Il link" : "il link"}${punct}`
+      }
+      if (["i", "gli", "le"].includes(lower)) {
+        return `${prefix}${isCap ? "I link" : "i link"}${punct}`
+      }
+      if (["un", "uno", "una", "un'"].includes(lower)) {
+        return `${prefix}${isCap ? "Un link" : "un link"}${punct}`
       }
 
       // Preposition combinations
@@ -170,14 +183,26 @@ export function cleanForSpeech(text: string): string {
       }
 
       if (!prevWord) {
-        const replacement = prefix === "" ? "Il file" : "il file"
+        const replacement = prefix === "" ? "Il file" : prefix.endsWith(" ") ? "il file" : " il file"
         return `${prefix}${replacement}${punct}`
       }
 
       const lower = prevWord.toLowerCase()
+      const isCap = prevWord[0] === prevWord[0].toUpperCase()
 
       if (["file", "cartella", "directory", "percorso"].includes(lower)) {
         return `${prefix}${prevWord}${punct}`
+      }
+
+      // Articles before file paths
+      if (["il", "lo", "la", "l'"].includes(lower)) {
+        return `${prefix}${isCap ? "Il file" : "il file"}${punct}`
+      }
+      if (["i", "gli", "le"].includes(lower)) {
+        return `${prefix}${isCap ? "I file" : "i file"}${punct}`
+      }
+      if (["un", "uno", "una", "un'"].includes(lower)) {
+        return `${prefix}${isCap ? "Un file" : "un file"}${punct}`
       }
 
       if (["in", "nel", "nello", "nella"].includes(lower)) {
@@ -216,20 +241,7 @@ export function cleanForSpeech(text: string): string {
     },
   )
 
-  // 7. Italian preposition + article contractions
-  result = result
-    .replace(/\bsu il link\b/gi, "sul link")
-    .replace(/\ba il link\b/gi, "al link")
-    .replace(/\bda il link\b/gi, "dal link")
-    .replace(/\bin il link\b/gi, "nel link")
-    .replace(/\bdi il link\b/gi, "del link")
-    .replace(/\bsu il file\b/gi, "sul file")
-    .replace(/\ba il file\b/gi, "al file")
-    .replace(/\bda il file\b/gi, "dal file")
-    .replace(/\bin il file\b/gi, "nel file")
-    .replace(/\bdi il file\b/gi, "del file")
-
-  // 8. Cleanup whitespace, empty parens/brackets, and punctuation spacing
+  // 7. Cleanup whitespace, empty parens/brackets, and punctuation spacing
   result = result
     .replace(/\(\s*\)/g, "")
     .replace(/\[\s*\]/g, "")

@@ -115,8 +115,51 @@ Sources:
     ).toBe("Il modulo audio è stato aggiornato secondo le indicazioni.")
   })
 
+  test("link a fine frase come oggetto non viene troncato", () => {
+    // 1. Oggetto diretto con verbo essere
+    expect(
+      cleanForSpeech("Il repository è https://github.com/x/y."),
+    ).toBe("Il repository è il link.")
+
+    // 2. Dopo due punti
+    expect(
+      cleanForSpeech("Trovi tutto qui: https://example.com/api."),
+    ).toBe("Trovi tutto qui: il link.")
+
+    // 3. Oggetto diretto con verbo transitivo
+    expect(
+      cleanForSpeech("Ho configurato https://example.com."),
+    ).toBe("Ho configurato il link.")
+  })
+
+  test("articolo prima del link non viene duplicato", () => {
+    // 1. Articolo determinativo femminile "la"
+    expect(
+      cleanForSpeech("Guarda la https://esempio.com."),
+    ).toBe("Guarda il link.")
+
+    // 2. Articolo determinativo maschile "il"
+    expect(
+      cleanForSpeech("Apri il https://esempio.com."),
+    ).toBe("Apri il link.")
+
+    // 3. Articolo indeterminativo "una" / "un"
+    expect(
+      cleanForSpeech("Ho trovato una https://esempio.com per te."),
+    ).toBe("Ho trovato un link per te.")
+    expect(
+      cleanForSpeech("Crea un https://esempio.com."),
+    ).toBe("Crea un link.")
+
+    // 4. Articolo plurale "i" / "le"
+    expect(
+      cleanForSpeech("Consulta i https://esempio.com."),
+    ).toBe("Consulta i link.")
+  })
+
   test("risposta contenente solo un URL o solo una fonte", () => {
     expect(cleanForSpeech("https://example.com")).toBe("Il link.")
     expect(cleanForSpeech("Fonti: https://example.com")).toBe("La fonte.")
   })
 })
+
