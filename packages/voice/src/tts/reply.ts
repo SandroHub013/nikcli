@@ -11,6 +11,8 @@
  * conclusion, and the conclusion is the part you would have read.
  */
 
+import { cleanForSpeech } from "./clean"
+
 /**
  * One transcript line, in the shape ADE's panes already store.
  *
@@ -89,7 +91,9 @@ export function summariseForSpeech(
   }
 
   if (kept.length === 0) return undefined
-  return lastSentencesWithin(kept.join(" "), maxChars)
+  const summary = lastSentencesWithin(kept.join(" "), maxChars)
+  const cleaned = cleanForSpeech(summary)
+  return cleaned.length > 0 ? cleaned : undefined
 }
 
 /** Why a reply watch ended, as `VoiceHost.awaitReply` reports it. */

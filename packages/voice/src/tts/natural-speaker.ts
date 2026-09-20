@@ -17,6 +17,7 @@
  */
 
 import { markVoice } from "../timing"
+import { cleanForSpeech } from "./clean"
 import type { Speaker } from "./speaker"
 
 /**
@@ -157,14 +158,16 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       for (const [key, pending] of early) ahead.set(key, pending)
       const mine = generation
       if (!text || text.trim().length === 0) return
+      const clean = cleanForSpeech(text)
+      if (!clean || clean.trim().length === 0) return
       const voice = deps.voice()
       if (!(await usable(voice))) {
-        if (mine === generation) await deps.fallback.speak(text)
+        if (mine === generation) await deps.fallback.speak(clean)
         return
       }
       if (mine !== generation) return
 
-      const sentences = splitSentences(text)
+      const sentences = splitSentences(clean)
       // Requested together, played in order: the host works through them while the first plays.
       const audio = sentences.map((sentence) => synthesize(voice, sentence))
       audio.forEach((pending) => pending.catch(() => {}))
@@ -199,9 +202,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     },
 
     prefetch(text: string): void {
+      if (!text || text.trim().length === 0) return
+      const clean = cleanForSpeech(text)
+      if (!clean || clean.trim().length === 0) return
       const voice = deps.voice()
       if (voice === "system" || !ready.has(voice)) return
-      for (const sentence of splitSentences(text)) {
+      for (const sentence of splitSentences(clean)) {
         const key = aheadKey(voice, sentence)
         if (ahead.has(key)) continue
         const pending = deps.synthesize(voice, sentence)

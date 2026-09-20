@@ -6,6 +6,8 @@
  * new ones start to prevent overlapping voices.
  */
 
+import { cleanForSpeech } from "./clean"
+
 export interface Speaker {
   /** Synthesizes and speaks the given text aloud. */
   speak(text: string): Promise<void> | void
@@ -149,6 +151,11 @@ export function createWebSpeechSpeaker(
         return Promise.resolve()
       }
 
+      const clean = cleanForSpeech(text)
+      if (!clean || clean.trim().length === 0) {
+        return Promise.resolve()
+      }
+
       return new Promise<void>((resolve) => {
         const UtteranceCtor =
           (typeof window !== "undefined" && window.SpeechSynthesisUtterance) ||
@@ -159,7 +166,7 @@ export function createWebSpeechSpeaker(
           return
         }
 
-        const utterance = new UtteranceCtor(text)
+        const utterance = new UtteranceCtor(clean)
         utterance.lang = lang
         utterance.rate = rate
         if (options.pitch !== undefined) utterance.pitch = options.pitch

@@ -127,6 +127,7 @@ export {
   type NaturalSpeaker,
   type NaturalSpeakerDeps,
 } from "./tts/natural-speaker"
+export { cleanForSpeech } from "./tts/clean"
 export {
   createPlaybackMeter,
   levelAt,

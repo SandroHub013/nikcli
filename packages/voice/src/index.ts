@@ -130,6 +130,7 @@ export {
   type ReplySummaryOptions,
   type SpeakableLine,
 } from "./tts/reply"
+export { cleanForSpeech } from "./tts/clean"
 
 // Planning: what the hand-written grammar cannot match
 export { announceExecution, executePlan, type PlanExecution } from "./plan/execute"
