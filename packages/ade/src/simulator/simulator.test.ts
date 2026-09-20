@@ -126,6 +126,11 @@ describe("app URLs", () => {
     expect(isLoadableAppUrl("http://localhost:5173/", "http://localhost:5177")).toBe(true)
     expect(isLoadableAppUrl("data:text/html,hi", "http://tauri.localhost")).toBe(false)
   })
+
+  test("a page cannot sneak onto ADE by navigating to tauri.localhost from elsewhere", () => {
+    expect(isLoadableAppUrl("http://tauri.localhost/", "http://localhost:5177")).toBe(false)
+    expect(isLoadableAppUrl("https://tauri.localhost/index.html", "http://localhost:5270")).toBe(false)
+  })
 })
 
 describe("runSimulatorCommand", () => {

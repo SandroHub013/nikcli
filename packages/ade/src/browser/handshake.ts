@@ -157,7 +157,7 @@ export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean 
  * - `no-copy`: the page is on screen, but Inspect needs a copy and the site
  *   does not allow one (no CORS).
  */
-export type PaneNotice = "blocked" | "no-copy"
+export type PaneNotice = "blocked" | "no-copy" | "ade-origin"
 
 export function noticeWithoutCopy(input: { blocked: boolean; inspecting: boolean }): PaneNotice | undefined {
   if (input.blocked) return "blocked"

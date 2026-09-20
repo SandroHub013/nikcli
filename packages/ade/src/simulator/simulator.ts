@@ -273,13 +273,16 @@ export function parseAppUrl(text: string): string | undefined {
  * a device. That is safe only while the app's origin is not ADE's own: a
  * same-origin frame with scripts could reach into the window that hosts it.
  * So ADE's origin is refused — which in development is the Vite server ADE
- * itself runs on.
+ * itself runs on, and in a release is `tauri.localhost`. The typed address
+ * is only the second barrier: the host also cancels a frame that navigates
+ * itself there (S52).
  */
 export function isLoadableAppUrl(url: string, hostOrigin: string): boolean {
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
-    return parsed.origin !== hostOrigin
+    if (parsed.origin === hostOrigin) return false
+    return parsed.hostname.toLowerCase() !== "tauri.localhost"
   } catch {
     return false
   }

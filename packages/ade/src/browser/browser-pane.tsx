@@ -53,7 +53,7 @@ import {
   type BrowserHistory,
 } from "./history"
 import { canOpenExternally, openExternally, probeFraming, readHeaders } from "./host-bridge"
-import { normalizeUrl } from "./url"
+import { isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
@@ -410,6 +410,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const load = (target: string) => {
+    if (isAdeOrigin(target, window.location.origin)) {
+      setNotice("ade-origin")
+      setLoadState("ready")
+      return
+    }
     loadGeneration += 1
     const generation = loadGeneration
 
@@ -471,6 +476,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const navigateTo = (raw: string) => {
     const normalized = normalizeUrl(raw)
     if (!normalized) return
+    if (isAdeOrigin(normalized, window.location.origin)) {
+      setNotice("ade-origin")
+      return
+    }
     show(normalized, visit(history(), normalized))
   }
 
@@ -1096,11 +1105,17 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             {(kind) => (
               <div data-slot="browser-error-overlay" data-notice={kind()}>
                 <span data-slot="browser-error-title">
-                  {kind() === "blocked" ? t("browser.blocked.title") : t("browser.noCopy.title")}
+                  {kind() === "blocked"
+                    ? t("browser.blocked.title")
+                    : kind() === "ade-origin"
+                      ? t("browser.adeOrigin")
+                      : t("browser.noCopy.title")}
                 </span>
-                <span data-slot="browser-error-msg">
-                  {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
-                </span>
+                <Show when={kind() !== "ade-origin"}>
+                  <span data-slot="browser-error-msg">
+                    {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
+                  </span>
+                </Show>
                 <Show when={openError()}>
                   {(problem) => <span data-slot="browser-error-msg">{t("browser.openExternal.failed", problem())}</span>}
                 </Show>

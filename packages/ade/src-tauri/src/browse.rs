@@ -5,6 +5,11 @@
 //! Whether a site forbids being framed (`X-Frame-Options`, CSP
 //! `frame-ancestors`) is exactly what servers do not expose, so without this
 //! a refused frame was an empty box with no explanation.
+//!
+//! A same-origin frame that loads ADE's own origin can read the window.
+//! The typed URL is refused in the pane; this module also cancels a frame
+//! that navigates itself (or a nested frame) there, which wry's top-level
+//! `on_navigation` does not see.
 
 use serde::Serialize;
 
@@ -26,6 +31,49 @@ fn web_url(url: &str) -> Result<&str, String> {
         return Err("indirizzo non valido".into());
     }
     Ok(url)
+}
+
+/// Whether `url` is ADE itself and must not load in a same-origin frame.
+///
+/// `host_origin` is the window (Vite in development, `http://tauri.localhost`
+/// in a release). `tauri.localhost` is always ADE on Windows. The top-level
+/// page *is* that origin and must still load: this check is for frames.
+pub fn is_ade_origin(url: &str, host_origin: &str) -> bool {
+    let Ok(parsed) = tauri::Url::parse(url) else {
+        return false;
+    };
+    if parsed.origin().ascii_serialization() == host_origin {
+        return true;
+    }
+    parsed.host_str().is_some_and(|host| host.eq_ignore_ascii_case("tauri.localhost"))
+}
+
+/// Cancels a subframe that tries to become ADE. Top-level stays on ADE.
+#[cfg(windows)]
+pub fn refuse_ade_in_frames(window: &tauri::WebviewWindow, host_origin: String) {
+    use webview2_com::{take_pwstr, NavigationStartingEventHandler};
+
+    let origin = host_origin;
+    let result = window.with_webview(move |webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        let handler = NavigationStartingEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut uri = windows_core::PWSTR::null();
+            args.Uri(&mut uri)?;
+            let uri = take_pwstr(uri);
+            if is_ade_origin(&uri, &origin) {
+                args.SetCancel(true)?;
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        if let Err(error) = core.add_FrameNavigationStarting(&handler, &mut token) {
+            eprintln!("ADE: blocco origine nei frame non collegato: {error}");
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("ADE: blocco origine nei frame non collegato: {error}");
+    }
 }
 
 /// Reads the headers of the last response in `curl -D -` output (one block per redirect).
@@ -137,5 +185,16 @@ mod tests {
     #[test]
     fn no_headers_is_nothing() {
         assert_eq!(last_block_headers("HTTP/2 200\r\ncontent-type: text/html\r\n\r\n"), FramingHeaders::default());
+    }
+
+    #[test]
+    fn ade_origin_is_the_window_and_tauri_localhost() {
+        assert!(is_ade_origin("http://localhost:5177/", "http://localhost:5177"));
+        assert!(is_ade_origin("http://localhost:5177/index.html", "http://localhost:5177"));
+        assert!(is_ade_origin("http://tauri.localhost/x", "http://tauri.localhost"));
+        assert!(is_ade_origin("http://tauri.localhost/", "http://localhost:5177"));
+        assert!(!is_ade_origin("https://bastelli-cmp.vercel.app/", "http://tauri.localhost"));
+        assert!(!is_ade_origin("http://localhost:5173/", "http://localhost:5177"));
+        assert!(!is_ade_origin("not a url", "http://tauri.localhost"));
     }
 }

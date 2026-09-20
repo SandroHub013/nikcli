@@ -998,7 +998,14 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     let window = builder.build()?;
 
     #[cfg(windows)]
-    allow_own_microphone(&window);
+    {
+        #[cfg(debug_assertions)]
+        let origin = own_origin(tauri::Manager::config(&window).build.dev_url.as_ref());
+        #[cfg(not(debug_assertions))]
+        let origin = own_origin(None);
+        browse::refuse_ade_in_frames(&window, origin);
+        allow_own_microphone(&window);
+    }
 
     window.show()?;
     window.set_focus()?;
@@ -1024,7 +1031,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
  * useHttpsScheme).
  */
 #[cfg_attr(not(windows), allow(dead_code))]
-fn own_origin(dev_url: Option<&tauri::Url>) -> String {
+pub(crate) fn own_origin(dev_url: Option<&tauri::Url>) -> String {
     dev_url
         .map(|url| url.origin().ascii_serialization())
         .filter(|origin| origin != "null")
