@@ -167,6 +167,114 @@ describe("voice/agent", () => {
     expect(runner.requests).toHaveLength(1)
   })
 
+  describe("M4: fallback to Codex on limit in auto mode", () => {
+    test("in auto mode when Claude hits limit, repeats once with Codex and announces it", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: limitNotice("Claude Code") },
+        { status: "done", text: "Ci sono due sessioni attive." },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
+      expect(runner.requests).toHaveLength(2)
+      expect(runner.requests[0].runner).toBe("claude")
+      expect(runner.requests[1].runner).toBe("codex")
+      expect(answer).toEqual({
+        ok: true,
+        text: "Claude è al limite: rispondo con Codex. Ci sono due sessioni attive.",
+        ran: true,
+      })
+    })
+
+    test("in auto mode when Claude hits limit and Codex is missing, says so clearly without retrying", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: "Claude AI usage limit reached|1757880000" },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "assente")],
+        cwd: () => "C:/p",
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
+      expect(runner.requests).toHaveLength(1)
+      expect(answer).toEqual({
+        ok: false,
+        text: "Claude è al limite del piano e Codex non è disponibile.",
+        ran: true,
+      })
+    })
+
+    test("in auto mode when Claude hits limit and Codex also fails, reports failure and does not retry", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: limitNotice("Claude Code") },
+        { status: "error", problem: "Codex non si avvia: ENOENT" },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "auto" })
+      expect(runner.requests).toHaveLength(2)
+      expect(answer.ok).toBe(false)
+      expect(answer.text).toContain("Claude è al limite e anche Codex non è riuscito a rispondere")
+      expect(answer.text).toContain("Codex non si avvia")
+      expect(answer.ran).toBe(true)
+    })
+
+    test("manual agent choice does not fallback on limit", async () => {
+      const runner = fakeRunner([
+        { status: "error", problem: limitNotice("Claude Code") },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+      })
+
+      const answer = await agent.ask({ text: "quante sessioni ci sono?", engine: "claude" })
+      expect(runner.requests).toHaveLength(1)
+      expect(answer.ok).toBe(false)
+      expect(answer.text).toContain("ADE non riprova")
+    })
+
+    test("in auto mode fallback streams updates with prefix", async () => {
+      const talk = (streaming: string) => ({ messages: [], status: "running", tokens: 0, costUsd: 0, streaming }) as never
+      const runTurn = (request: TurnRequest) => {
+        if (request.runner === "claude") {
+          return {
+            result: Promise.resolve({ status: "error", problem: limitNotice("Claude Code"), text: "", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+            stop: () => {},
+          }
+        }
+        request.onUpdate?.(talk("Ci sono"))
+        request.onUpdate?.(talk("Ci sono due sessioni."))
+        return {
+          result: Promise.resolve({ status: "done", text: "Ci sono due sessioni.", tokens: 0, costUsd: 0, talk: {} as never } as TurnResult),
+          stop: () => {},
+        }
+      }
+      const agent = createVoiceAgent({
+        runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+      })
+
+      const heard: string[] = []
+      await agent.ask({ text: "quante sessioni?", engine: "auto", onText: (s) => heard.push(s) })
+      expect(heard).toEqual([
+        "Claude è al limite: rispondo con Codex. Ci sono",
+        "Claude è al limite: rispondo con Codex. Ci sono due sessioni.",
+      ])
+    })
+  })
+
   test("the voice host's sentences run through the bots' runTurn, where the plan's cap is held", async () => {
     // S13: the cap on parallel turns is taken inside runTurn (bots/terms.ts
     // acquireTurn), shared by bots and the voice agent. Without the desktop

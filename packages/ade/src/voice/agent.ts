@@ -14,6 +14,7 @@
  */
 
 import type { AgentStatus } from "../session-new/availability"
+import { limitReached } from "../bots/terms"
 import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
@@ -162,6 +163,28 @@ function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
   }
 }
 
+/** Whether a turn's outcome indicates Claude reached the plan's usage/quota limit. */
+function isLimitTurn(result: TurnResult): boolean {
+  const check = (s?: string) => {
+    if (!s) return false
+    return (
+      limitReached(s) ||
+      s.includes("raggiunto il limite") ||
+      s.includes("al limite del") ||
+      s.includes("limite del tuo piano")
+    )
+  }
+  if (check(result.problem) || check(result.text)) return true
+  return result.talk?.messages?.some((m) => check(m.text)) ?? false
+}
+
+/** Whether Codex is installed and available to be run as fallback. */
+function isCodexAvailable(statuses: readonly AgentStatus[] | undefined): boolean {
+  if (!statuses) return true
+  const st = statuses.find((s) => s.agent.id === CATALOGUE_ID.codex)
+  return st !== undefined && st.availability !== "assente"
+}
+
 export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
   /*
    * One conversation per runner and project. A follow-up ("e la seconda?")
@@ -225,6 +248,61 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
         const result = await turn.result
+        if (
+          engine === "auto" &&
+          resolved.runner === "claude" &&
+          !signal?.aborted &&
+          result.status !== "stopped" &&
+          isLimitTurn(result)
+        ) {
+          signal?.removeEventListener("abort", onAbort)
+          const statuses = deps.statuses()
+          if (!isCodexAvailable(statuses)) {
+            return {
+              ok: false,
+              text: "Claude è al limite del piano e Codex non è disponibile.",
+              ran: true,
+            }
+          }
+          const noticePrefix = "Claude è al limite: rispondo con Codex."
+          const codexPrevious =
+            conversation && conversation.runner === "codex" && conversation.cwd === cwd
+              ? conversation.sessionId
+              : undefined
+          const codexFollower = onText
+            ? textFollower((soFar) => onText(`${noticePrefix} ${soFar}`))
+            : undefined
+          const codexRequest: TurnRequest = {
+            ...turnFor("codex", cwd, speed),
+            message: text,
+            ...(codexPrevious ? { sessionId: codexPrevious } : {}),
+            ...(codexFollower ? { onUpdate: codexFollower } : {}),
+          }
+          const codexTurn = deps.runTurn(codexRequest)
+          const onCodexAbort = () => codexTurn.stop()
+          signal?.addEventListener("abort", onCodexAbort, { once: true })
+          try {
+            const codexResult = await codexTurn.result
+            if (codexResult.sessionId && generation === latest) {
+              conversation = { runner: "codex", cwd, sessionId: codexResult.sessionId }
+            }
+            if (codexResult.status === "done") {
+              const answerText = codexResult.text
+                ? `${noticePrefix} ${codexResult.text}`
+                : `${noticePrefix} Fatto.`
+              return { ok: true, text: answerText, ran: true }
+            }
+            if (codexResult.status === "stopped") return { ok: false, text: "", ran: true }
+            const failDetail = codexResult.problem || codexResult.text || "nessuna risposta."
+            return {
+              ok: false,
+              text: `Claude è al limite e anche Codex non è riuscito a rispondere: ${failDetail}`,
+              ran: true,
+            }
+          } finally {
+            signal?.removeEventListener("abort", onCodexAbort)
+          }
+        }
         if (result.sessionId && generation === latest) conversation = { runner: resolved.runner, cwd, sessionId: result.sessionId }
         if (result.status === "done") {
           return { ok: true, text: result.text || "Fatto.", ran: true }
