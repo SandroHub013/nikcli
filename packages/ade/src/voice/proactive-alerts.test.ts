@@ -276,4 +276,54 @@ describe("proactive-alerts", () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(spoken).toHaveLength(2)
   })
+
+  test("does not speak cap announcement when screen is locked", async () => {
+    let clock = 100_000
+    let locked = false
+    const spoken: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => locked,
+      isEnabled: () => true,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async () => {},
+    })
+
+    // Emit 14 alerts while unlocked
+    for (let i = 1; i <= 14; i++) {
+      clock += 25_000
+      alerts.notifyDecision(`D${i}`, `Decision ${i}`)
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    expect(spoken).toHaveLength(14)
+
+    // Lock screen
+    locked = true
+
+    // An event attempts to enqueue/process while locked
+    clock += 25_000
+    alerts.notifyDecision("D15", "Decision 15")
+    await new Promise((r) => setTimeout(r, 20))
+    // Nothing spoken while locked
+    expect(spoken).toHaveLength(14)
+
+    // Unlock screen -> next event can now be processed
+    locked = false
+    clock += 25_000
+    alerts.notifyDecision("D15_unlocked", "Decision 15 unlocked")
+    await new Promise((r) => setTimeout(r, 20))
+    // 15th alert spoken + cap announcement spoken = 16 items
+    expect(spoken).toHaveLength(16)
+    expect(spoken[15]).toContain("Ho raggiunto il limite di 15 avvisi")
+
+    // Now screen locks again while capped
+    locked = true
+    clock += 25_000
+    alerts.notifyDecision("D16_locked", "Decision 16 locked")
+    await new Promise((r) => setTimeout(r, 20))
+    // Nothing further spoken while locked
+    expect(spoken).toHaveLength(16)
+  })
 })

@@ -152,6 +152,8 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
 
   async function announceCap(): Promise<void> {
     if (capAnnounced) return
+    const locked = await deps.isLocked().catch(() => true)
+    if (locked) return
     capAnnounced = true
     queue.length = 0
     await deps.speak(t("voice.alert.capReached", MAX_ALERTS_PER_HOUR)).catch(() => {})
@@ -176,6 +178,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         pruneHourlyTimestamps(nowMs)
 
         if (alertTimestamps.length >= MAX_ALERTS_PER_HOUR) {
+          queue.length = 0
           await announceCap()
           break
         }
@@ -224,6 +227,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
 
         // Check if this alert hit the hourly cap
         if (alertTimestamps.length >= MAX_ALERTS_PER_HOUR) {
+          queue.length = 0
           await announceCap()
           break
         }
