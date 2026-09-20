@@ -160,10 +160,11 @@ fn deny(status: StatusCode) -> Response<Vec<u8>> {
 /// a canvas and still record the canvas: a frame drawn without CORS leaves the
 /// canvas unclean and `MediaRecorder` writes nothing.
 ///
-/// Any other origin gets no CORS header at all. Not `null`: the browser pane
-/// is a sandbox without `allow-same-origin`, so every page in it sends
-/// `Origin: null`, and `Access-Control-Allow-Origin: null` is exactly the
-/// answer that lets such a page read the file.
+/// Any other origin gets no CORS header at all. Not `null`: answering
+/// `Access-Control-Allow-Origin: null` would let a sandboxed page without
+/// `allow-same-origin` read the file. With `allow-same-origin` (S52) the
+/// pane sends the site's own origin (`https://example.com`), which still
+/// must not match ADE's window, so the same filter keeps the file out.
 pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option<&str>) -> Response<Vec<u8>> {
     let raw = request.uri().path().trim_start_matches('/');
     if raw.is_empty() {
@@ -437,8 +438,9 @@ mod tests {
     }
 
     #[test]
-    fn the_sandboxed_browser_pane_is_not_allowed_to_read() {
-        // Its pages send `Origin: null`; answering `null` would let them in.
+    fn a_null_origin_is_not_allowed_to_read() {
+        // A sandbox without allow-same-origin sends `Origin: null`; answering
+        // `null` would let those pages in. Kept refused after S52.
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let url = url_for(&path.to_string_lossy());
@@ -446,6 +448,20 @@ mod tests {
             let response = respond(&roots, &with_origin(&url, "null"), app);
             assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
         }
+    }
+
+    #[test]
+    fn a_same_origin_browser_pane_is_not_allowed_to_read() {
+        // With allow-same-origin the pane sends the site's origin, not null.
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        let response = respond(
+            &roots,
+            &with_origin(&url, "https://bastelli-cmp.vercel.app"),
+            Some("http://tauri.localhost"),
+        );
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 
     #[test]
