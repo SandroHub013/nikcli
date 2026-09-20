@@ -168,7 +168,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       id: "theme.toggle",
       title: t("palette.theme.toggle"),
       group: t("palette.group.view"),
-      keywords: ["chiaro", "scuro", "light", "dark", "theme"],
+      keywords: ["chiaro", "scuro", "vetro", "light", "dark", "glass", "theme"],
       shortcut: shortcutFor("theme.toggle", platform),
     },
     {

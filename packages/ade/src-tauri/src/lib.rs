@@ -30,6 +30,7 @@ mod tts;
 mod usage;
 mod vision;
 mod update;
+mod glass;
 
 use serde::Serialize;
 use std::ffi::OsStr;
@@ -946,6 +947,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
+        .transparent(true)
         .disable_drag_drop_handler()
         // In every frame: Tauri's IPC made inert, and the inspector bridge in
         // a browser pane's frame. See `src/browser/frame-script.ts`.
@@ -1250,6 +1252,8 @@ pub fn run() {
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
             session_locked,
+            glass::ade_glass_status,
+            glass::ade_window_set_glass,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ADE")

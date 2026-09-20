@@ -40,7 +40,8 @@ import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan }
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
-import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
+import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
+import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
 import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
 import { exitedActivity } from "../grid/activity"
 import { ExtensionsPage } from "../extensions/extensions-page"
@@ -492,6 +493,8 @@ export function Workbench() {
   const [remoteOpen, setRemoteOpen] = createSignal(false)
   const themeState = createThemeState()
   const theme = themeState.theme
+  const [glassStatus, setGlassStatus] = createSignal<GlassStatus>()
+  onMount(() => void checkNativeGlassStatus().then(setGlassStatus))
 
   /*
    * xterm is handed concrete colours, so it cannot follow the theme on its own.
@@ -502,9 +505,37 @@ export function Workbench() {
    * committed to the DOM, and the probe reads the cascade as it stands.
    */
   createEffect(() => {
-    theme()
+    const currentTheme = theme()
+    const isGlass = currentTheme === "glass"
+    void applyNativeGlass(isGlass).then((err) => {
+      if (err && isGlass) {
+        setGlassStatus({ supported: false, effect: "none", reason: err })
+      }
+    })
+
+    const opacity = themeState.glassOpacity() / 100
+    if (typeof document !== "undefined") {
+      if (isGlass) {
+        document.documentElement.setAttribute("data-theme", "glass")
+        document.documentElement.style.setProperty("--ade-glass-opacity", String(opacity))
+      } else {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
+      const shell = document.querySelector<HTMLElement>('[data-component="ade-shell"]')
+      if (shell) {
+        shell.style.setProperty("--ade-glass-opacity", String(opacity))
+      }
+    }
+
     const frame = requestAnimationFrame(() => refreshTerminalThemes())
-    onCleanup(() => cancelAnimationFrame(frame))
+    onCleanup(() => {
+      cancelAnimationFrame(frame)
+      if (typeof document !== "undefined") {
+        document.documentElement.removeAttribute("data-theme")
+        document.documentElement.style.removeProperty("--ade-glass-opacity")
+      }
+    })
   })
 
   /*
@@ -3663,8 +3694,8 @@ export function Workbench() {
       // Only a section the bar shows: a hidden one has no command to run (S40).
       const target = VISIBLE_VIEWS.find((view) => `view.${view}` === id)
       if (target) setWb(w => ({ ...w, view: target }))
-    } else if (id === "theme.set.light" || id === "theme.set.dark") {
-      themeState.set(id === "theme.set.light" ? "light" : "dark")
+    } else if (id === "theme.set.light" || id === "theme.set.dark" || id === "theme.set.glass") {
+      themeState.set(id === "theme.set.light" ? "light" : id === "theme.set.dark" ? "dark" : "glass")
     } else if (id === "theme.toggle") {
       // The attribute goes on ADE's own root, not the document's: ADE is mounted
       // inside another application and must not restyle its host.
@@ -5466,20 +5497,30 @@ export function Workbench() {
                 type="button"
                 data-slot="ade-icon"
                 onClick={() => runCommand("theme.toggle")}
-                aria-label={theme() === "dark" ? "Passa al tema chiaro" : "Passa al tema scuro"}
-                title={theme() === "dark" ? "Tema chiaro" : "Tema scuro"}
+                aria-label={theme() === "light" ? t("settings.theme.toDark") : theme() === "dark" ? t("settings.theme.toGlass") : t("settings.theme.toLight")}
+                title={theme() === "light" ? t("settings.theme.toDark") : theme() === "dark" ? t("settings.theme.toGlass") : t("settings.theme.toLight")}
               >
                 <Show
-                  when={theme() === "dark"}
+                  when={theme() === "light"}
                   fallback={
-                    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
-                      <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
-                    </svg>
+                    <Show
+                      when={theme() === "dark"}
+                      fallback={
+                        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
+                          <circle cx="8" cy="8" r="3.2" />
+                          <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" stroke-linecap="round" />
+                        </svg>
+                      }
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
+                        <path d="M4 2h8l3 5-7 7-7-7 3-5z" stroke-linejoin="round" />
+                        <path d="M1 7h14M7.5 2l-2 5 2 7M8.5 2l2 5-2 7" stroke-linejoin="round" />
+                      </svg>
+                    </Show>
                   }
                 >
                   <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3">
-                    <circle cx="8" cy="8" r="3.2" />
-                    <path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1" stroke-linecap="round" />
+                    <path d="M13 9.5A5.2 5.2 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z" stroke-linejoin="round" />
                   </svg>
                 </Show>
               </button>
@@ -5750,6 +5791,20 @@ export function Workbench() {
           builtInGroup={t("settings.group.voice")}
           extraGroup="ADE"
           extraSections={[
+            {
+              id: "set-sec-theme",
+              label: t("settings.theme.title"),
+              glyph: "◐",
+              render: () => (
+                <ThemeSection
+                  value={themeState.preference}
+                  onChange={(next) => themeState.set(next)}
+                  opacity={themeState.glassOpacity}
+                  onOpacityChange={(val) => themeState.setGlassOpacity(val)}
+                  glassStatus={glassStatus}
+                />
+              ),
+            },
             {
               id: "set-sec-language",
               label: t("settings.language.label"),

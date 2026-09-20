@@ -12,6 +12,8 @@ import {
   t,
   type LocalePreference,
 } from "../i18n"
+import { DEFAULT_GLASS_OPACITY, THEME_CHOICES, type Theme } from "../theme"
+import type { GlassStatus } from "../surface/glass-window"
 import "./sections.css"
 
 /**
@@ -188,6 +190,103 @@ export function SkillsSection(props: SkillsSectionProps) {
             )}
           </For>
         </ul>
+      </Show>
+    </>
+  )
+}
+
+export interface ThemeSectionProps {
+  /** Defaults to the app's own state; a test passes its own to watch the choice. */
+  value?: () => Theme
+  onChange?: (next: Theme) => void
+  opacity?: () => number
+  onOpacityChange?: (next: number) => void
+  glassStatus?: () => GlassStatus | undefined
+}
+
+/**
+ * Which theme ADE's interface renders (S49).
+ *
+ * Light, dark, or transparent glass with native blur effect, plus system fallback.
+ * When glass is active, an opacity slider controls transparency while keeping
+ * text contrast legible.
+ */
+export function ThemeSection(props: ThemeSectionProps) {
+  const value = () => (props.value ? props.value() : "system")
+  const choose = (next: Theme) => props.onChange?.(next)
+  const opacity = () => (props.opacity ? props.opacity() : DEFAULT_GLASS_OPACITY)
+  const status = () => props.glassStatus?.()
+
+  const label = (choice: Theme) => {
+    switch (choice) {
+      case "light":
+        return t("settings.theme.light")
+      case "dark":
+        return t("settings.theme.dark")
+      case "glass":
+        return t("settings.theme.glass")
+      case "system":
+        return t("settings.theme.system")
+    }
+  }
+
+  return (
+    <>
+      <div data-slot="section-head">
+        <h3 data-slot="section-title" tabIndex={-1}>
+          {t("settings.theme.title")}
+        </h3>
+        <p data-slot="section-desc">{t("settings.theme.desc")}</p>
+      </div>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.theme.group")}>
+        <For each={THEME_CHOICES}>
+          {(choice) => (
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-theme-choice={choice}
+              data-active={value() === choice ? "true" : undefined}
+              aria-pressed={value() === choice}
+              onClick={() => choose(choice)}
+            >
+              {label(choice)}
+            </button>
+          )}
+        </For>
+      </div>
+
+      <Show when={status() && status()!.supported === false}>
+        <p data-slot="settings-notice" data-state="warning">
+          {status()!.reason ?? t("settings.theme.unsupported")}
+        </p>
+      </Show>
+
+      <Show when={value() === "glass"}>
+        <div data-slot="settings-slider-group">
+          <div data-slot="settings-slider-header">
+            <label for="glass-opacity-slider" data-slot="settings-slider-label">
+              {t("settings.theme.opacity")}
+            </label>
+            <span data-slot="settings-slider-value">{opacity()}%</span>
+          </div>
+          <input
+            id="glass-opacity-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={opacity()}
+            data-slot="settings-slider"
+            aria-label={t("settings.theme.opacity")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={opacity()}
+            aria-valuetext={`${opacity()}%`}
+            onInput={(e) => props.onOpacityChange?.(Number(e.currentTarget.value))}
+          />
+          <p data-slot="settings-slider-desc">{t("settings.theme.opacityDesc")}</p>
+        </div>
       </Show>
     </>
   )

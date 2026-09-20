@@ -93,18 +93,23 @@ describe("createThemeState", () => {
   test("the first toggle from system flips what is on screen, not the preference name", () => {
     createRoot((dispose) => {
       // On "system" with a dark OS the user is looking at dark, and the button
-      // says "light theme". Cycling the preference instead would have gone
-      // system → dark and changed nothing.
+      // cycles dark -> glass -> light -> dark.
       const storage = storageWith()
       const state = createThemeState({ storage, query: queryWith(true) })
 
+      expect(state.theme()).toBe("dark")
+
+      state.toggle()
+      expect(state.theme()).toBe("glass")
+      expect(storage.written).toEqual(["glass"])
+
       state.toggle()
       expect(state.theme()).toBe("light")
-      expect(storage.written).toEqual(["light"])
+      expect(storage.written).toEqual(["glass", "light"])
 
       state.toggle()
       expect(state.theme()).toBe("dark")
-      expect(storage.written).toEqual(["light", "dark"])
+      expect(storage.written).toEqual(["glass", "light", "dark"])
 
       dispose()
     })
@@ -118,8 +123,51 @@ describe("createThemeState", () => {
       state.restore()
       expect(state.preference()).toBe("system")
       state.toggle()
+      expect(state.theme()).toBe("glass")
+      state.toggle()
       expect(state.theme()).toBe("light")
       dispose()
     })
   })
+
+  test("explicit glass choice resolves to glass and writes to storage", () => {
+    createRoot((dispose) => {
+      const storage = storageWith()
+      const state = createThemeState({ storage, query: queryWith(true) })
+
+      state.set("glass")
+      expect(state.preference()).toBe("glass")
+      expect(state.theme()).toBe("glass")
+      expect(storage.written).toEqual(["glass"])
+
+      dispose()
+    })
+  })
+
+  test("glass opacity defaults to 75, can be updated, clamped and restored", () => {
+    createRoot((dispose) => {
+      const storage = storageWith()
+      const state = createThemeState({ storage })
+
+      expect(state.glassOpacity()).toBe(75)
+
+      state.setGlassOpacity(60)
+      expect(state.glassOpacity()).toBe(60)
+      expect(storage.getItem("ade.theme.glass-opacity")).toBe("60")
+
+      state.setGlassOpacity(150)
+      expect(state.glassOpacity()).toBe(100)
+
+      state.setGlassOpacity(-20)
+      expect(state.glassOpacity()).toBe(0)
+
+      // Test restoration
+      const state2 = createThemeState({ storage })
+      state2.restore()
+      expect(state2.glassOpacity()).toBe(0)
+
+      dispose()
+    })
+  })
 })
+
