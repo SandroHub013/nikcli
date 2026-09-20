@@ -143,6 +143,16 @@ describe("settings/model - normalizeSettings", () => {
     expect(normalizeSettings({ version: CURRENT_SETTINGS_VERSION, alwaysListen: "si" }).alwaysListen).toBe(DEFAULT_VOICE_SETTINGS.alwaysListen)
   })
 
+  test("spoken alerts are off by default and can be turned on", () => {
+    expect(DEFAULT_VOICE_SETTINGS.spokenAlerts).toBe(false)
+    const enabled = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: true })
+    expect(enabled.settings.spokenAlerts).toBe(true)
+    expect(enabled.corrections).toEqual([])
+    const invalid = normalizeSettings({ ...DEFAULT_VOICE_SETTINGS, spokenAlerts: "yes" as any })
+    expect(invalid.settings.spokenAlerts).toBe(false)
+    expect(invalid.corrections.length).toBeGreaterThan(0)
+  })
+
   test("preserves valid configuration with zero corrections", () => {
     const valid = {
       version: CURRENT_SETTINGS_VERSION,

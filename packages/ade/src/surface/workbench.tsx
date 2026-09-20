@@ -326,6 +326,7 @@ import {
   unknownChordMessage,
 } from "../voice/global-shortcut"
 import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
+import { createProactiveAlerts } from "../voice/proactive-alerts"
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000"
 
@@ -3097,23 +3098,42 @@ export function Workbench() {
     else if (before && !after && voiceEngine.isRunning()) void voiceEngine.stop()
   }
 
+  const isScreenLocked = async () => {
+    // Set from a test driving the page, in a dev build only: a lock cannot be
+    // staged on the user's PC, and a release must not read it.
+    const staged = import.meta.env.DEV
+      ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
+      : undefined
+    if (typeof staged === "boolean") return staged
+    if (!isTauriDesktop()) return false
+    const { invoke } = await import("@tauri-apps/api/core")
+    return (await invoke("session_locked")) === true
+  }
+
+  const proactiveAlerts = createProactiveAlerts({
+    now: () => Date.now(),
+    isLocked: isScreenLocked,
+    isEnabled: () => voiceSettings().spokenAlerts === true,
+    speak: async (text) => {
+      await speaker.speak(text)
+    },
+    openResponseWindow: async (options) => {
+      await voiceEngine.openResponseWindow(options)
+    },
+    isPermissionPending: (paneId) => Boolean(permissions()[paneId]),
+    isDecisionOpen: (k) => {
+      const decs = decisionsRegister.state()?.decisions
+      return Boolean(decs?.some((d) => d.k === k && d.status === "aperta"))
+    },
+  })
+
   onMount(() => {
     preloadNaturalVoice()
     if (listensByItself(voiceSettings())) listenForName()
     /* Paused only while the PC is locked or asleep; see `voice/listen-guard.ts`. */
     const guard = createListenGuard({
       now: () => Date.now(),
-      isLocked: async () => {
-        // Set from a test driving the page, in a dev build only: a lock cannot be
-        // staged on the user's PC, and a release must not read it.
-        const staged = import.meta.env.DEV
-          ? (window as unknown as { __adeSessionLockedForTest?: unknown }).__adeSessionLockedForTest
-          : undefined
-        if (typeof staged === "boolean") return staged
-        if (!isTauriDesktop()) return false
-        const { invoke } = await import("@tauri-apps/api/core")
-        return (await invoke("session_locked")) === true
-      },
+      isLocked: isScreenLocked,
       shouldListen: () => listensByItself(voiceSettings()),
       isListening: () => voiceEngine.isRunning(),
       isPaused: () => voiceEngine.listenPaused(),
@@ -3133,6 +3153,39 @@ export function Workbench() {
     }, LOCK_POLL_MS)
     onCleanup(() => clearInterval(timer))
   })
+
+  // Proactive alerts: session completed work
+  createEffect(
+    on(
+      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status, lines: p.lines })),
+      (currentPanes, previousPanes) => {
+        if (!previousPanes) return
+        for (const pane of currentPanes) {
+          const prev = previousPanes.find((p) => p.id === pane.id)
+          if (prev && prev.status === "working" && pane.status === "idle") {
+            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines)
+          }
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  // Proactive alerts: open decision awaiting in register
+  createEffect(
+    on(
+      () => decisionsRegister.state()?.decisions,
+      (decisions) => {
+        if (!decisions) return
+        for (const dec of decisions) {
+          if (dec.status === "aperta") {
+            proactiveAlerts.notifyDecision(dec.k, dec.title)
+          }
+        }
+      },
+      { defer: true },
+    ),
+  )
 
   // Too many sentences sent in an hour: said on screen, listening goes on.
   createEffect(
@@ -4337,6 +4390,9 @@ export function Workbench() {
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
       void voiceEngine.handlePermissionRequest(paneId, request.what)
+    } else {
+      const pane = wb().panes.find((p) => p.id === paneId)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what)
     }
   }
 

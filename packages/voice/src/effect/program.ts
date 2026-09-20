@@ -212,7 +212,7 @@ export interface VoiceProgramOptions {
 
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
-  readonly handlePermissionRequest: (paneId: string, what: string) => Effect.Effect<void>
+  readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -1458,8 +1458,8 @@ export function makeVoiceProgram(
     return {
       submitText: (text: string) => processUtterance(text, false, true).pipe(Effect.ensuring(turnEnded)),
 
-      handlePermissionRequest: (paneId: string, what: string) =>
-        applyDialogEvent({ type: "permission_requested", paneId, what }),
+      handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) =>
+        applyDialogEvent({ type: "permission_requested", paneId, what, silent: options?.silent }),
 
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer

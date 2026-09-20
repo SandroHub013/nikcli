@@ -224,6 +224,19 @@ describe("dialog state machine", () => {
       }
     })
 
+    test("permission request with silent: true enters confirming without speak effect", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects: e1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "bun test", silent: true },
+        5000
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.isPermission).toBe(true)
+      expect(e1.some((e) => e.type === "speak")).toBe(false)
+    })
+
     test("denying permission sends deny answer", () => {
       const s0 = createInitialDialogState("idle")
       const { state: s1 } = transition(
