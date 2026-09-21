@@ -126,6 +126,36 @@ describe("il tema vetro vale per default", () => {
     expect(line).not.toContain("session-grid")
   })
 
+  test("quello che galleggia sopra il contenuto ha un fondo suo", () => {
+    /*
+     * The new-pane menu painted `--ade-raised`, a 6% lift, and opened as clear
+     * glass over the panes: the user's screenshot has terminal lines running
+     * through the words of the menu. Measured over a live terminal at the
+     * slider's minimum, the menu's ground was alpha 0.14 and its items read
+     * 1.18:1; with the rule below, 0.93 and 13.97:1.
+     *
+     * The roles are the shape of "this floats over other content", so a menu
+     * written next week is covered for being a menu.
+     */
+    const floating = glassRules().filter(({ body }) => /background:[^;]*--ade-overlay/.test(body))
+    const selectors = floating.flatMap((rule) => rule.selector.split(",").map((part) => part.trim()))
+    for (const role of ["menu", "dialog", "listbox", "tooltip"]) {
+      expect([role, selectors.some((one) => one.endsWith(`[role="${role}"]`))]).toEqual([role, true])
+    }
+    expect(selectors.some((one) => one.endsWith("[popover]"))).toBe(true)
+  })
+
+  test("il fondo dei menu non segue il cursore", () => {
+    /*
+     * A menu is opened to be read, over whatever is underneath. Dragging the
+     * glass to its most extreme may take the window's own veil away; it may
+     * not take that.
+     */
+    expect(token("--ade-overlay")).not.toContain("--ade-glass-opacity")
+    const alpha = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(token("--ade-overlay"))![1])
+    expect(alpha).toBeGreaterThanOrEqual(0.9)
+  })
+
   test("il pavimento parte abbastanza in basso da lasciar vedere la scrivania", () => {
     /*
      * Fabio, trying it live: at 0.68 there is no position of the slider that
@@ -165,7 +195,8 @@ describe("il tema vetro vale per default", () => {
      * has to say why before this list grows.
      */
     expect(token("--ade-raised")).toBe("rgba(255, 255, 255, 0.06)")
-    expect(token("--ade-overlay")).toMatch(/^rgba\(36, 32, 32, calc\(/)
+    // Fixed, not a curve: see «il fondo dei menu non segue il cursore».
+    expect(token("--ade-overlay")).toMatch(/^rgba\(\d+, \d+, \d+, 0\.9\d*\)$/)
     expect(glassTokens).toContain("--ade-glass-veil")
   })
 

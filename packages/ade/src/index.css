@@ -138,9 +138,20 @@
   --ade-surface: transparent;
   --ade-terminal-bg: transparent;
 
-  /* The two written exceptions. */
+  /*
+   * The two written exceptions.
+   *
+   * `raised` is a lift, not a veil: chrome that must read as raised brightens
+   * the glass instead of darkening the desktop behind it.
+   *
+   * `overlay` is the ground for anything that floats over content, and it is
+   * the one value here that does NOT follow the slider. A menu is opened to be
+   * read, over whatever happens to be underneath — a terminal mid-scroll, a
+   * transcript — and dragging the glass to its most extreme must not take that
+   * away. 0.92 keeps a hint of translucency and still hides what is below.
+   */
   --ade-raised: rgba(255, 255, 255, 0.06);
-  --ade-overlay: rgba(36, 32, 32, calc(0.80 + 0.18 * var(--ade-glass-opacity, 0.75)));
+  --ade-overlay: rgba(28, 25, 25, 0.92);
 
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
@@ -224,6 +235,33 @@ body[data-theme="glass"] #root,
 
 [data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"] {
   background: linear-gradient(var(--ade-raised), var(--ade-raised)), var(--ade-glass-read);
+}
+
+/*
+ * Anything that floats over content carries its own ground.
+ *
+ * The new-pane menu used `--ade-raised`, which in this theme is a 6% lift, so
+ * it opened as a sheet of nearly clear glass over the panes: the user's
+ * screenshot has terminal lines and session titles running straight through
+ * the words «Sessione», «Browser», «Decisioni». Measured over a full terminal,
+ * the menu's own ground was alpha 0.06 and its items read 1.4:1 against what
+ * showed through.
+ *
+ * The rule is written as a shape, not as a list of menus: an element that
+ * floats over other content announces itself, because it has to be reachable —
+ * a menu says `role="menu"`, a dialog `role="dialog"`, a picker
+ * `role="listbox"`, a tip `role="tooltip"`, and the platform's own layer is
+ * `[popover]`. A menu written next week is covered because it is a menu, not
+ * because someone remembered this file.
+ *
+ * `--ade-overlay` deliberately ignores the glass slider: see the token block.
+ */
+[data-component="ade-shell"][data-theme="glass"] [role="menu"],
+[data-component="ade-shell"][data-theme="glass"] [role="dialog"],
+[data-component="ade-shell"][data-theme="glass"] [role="listbox"],
+[data-component="ade-shell"][data-theme="glass"] [role="tooltip"],
+[data-component="ade-shell"][data-theme="glass"] [popover] {
+  background: var(--ade-overlay);
 }
 
 /*
