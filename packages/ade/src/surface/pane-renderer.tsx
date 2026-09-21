@@ -10,6 +10,7 @@ import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
+import { typedAfter } from "../session/typed-line"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -85,6 +86,10 @@ export interface PaneRendererDeps {
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
   panels: PanelRouter
+  /** How many messages ADE is holding for each pane, for the header badge. */
+  mailWaiting: () => Record<string, number>
+  /** Shows a pane what is waiting for it, without typing anything. */
+  showMail: (id: string) => void
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
   pluginRuntime: AdePluginRuntime
@@ -368,10 +373,19 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         agent={current().agent}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
+        mail={deps.mailWaiting()[current().id]}
+        onMail={() => deps.showMail(current().id)}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
         onInput={(data) => {
           const session = deps.sessionFor(current().id)
           if (!session) return
+          /*
+           * What the user has begun and not sent, counted here because here
+           * is where every keystroke passes on its way to the PTY. It holds
+           * for every agent in the catalogue and for a plain shell, since it
+           * never asks what is running: see `session/typing.ts`.
+           */
+          deps.records.typed.update(current().id, (pending) => typedAfter(pending ?? 0, data) || undefined)
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.

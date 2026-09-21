@@ -412,10 +412,21 @@ export function formatNudge(id: string, caller: MailPane | undefined): string {
 export const INLINE_MAX = 600
 /** A bell nobody answered, in a session free to answer, rings again after this long. */
 export const REBELL_AFTER_MS = 120_000
+
+/**
+ * How long mail waits on a half-written line before the sender is told.
+ *
+ * Only the sender is told. The bell itself still needs a free session *and* a
+ * clean line: the wait is one more condition, never one that overrules the
+ * other two.
+ */
+export const HELD_TELL_MS = 10 * 60_000
 /** Rings after the first; then the sender is told the message was not read. */
 export const MAX_REBELLS = 3
 
 export interface InboxEntry {
+  /** The sender has been told, once, that ADE is holding this back. */
+  told?: boolean
   /** The message or request id, as the sender knows it. */
   id: string
   paneId: string
@@ -464,12 +475,32 @@ export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailP
  */
 export function inboxAction(
   entry: InboxEntry,
-  target: { running: boolean; free: boolean; read: boolean },
+  target: { running: boolean; free: boolean; read: boolean; typing?: boolean },
   now: number,
-): "done" | "wait" | "ring" | "warn" {
+): "done" | "wait" | "ring" | "warn" | "tell" {
   if (target.read || !target.running) return "done"
-  if (!target.free || now - entry.ringAt < REBELL_AFTER_MS) return "wait"
+  if (!target.free) {
+    /*
+     * Held, not ignored. A pane whose line the user began keeps the mail for
+     * as long as it takes — the wait is never turned into a delivery, because
+     * time does not make a half-written line any cleaner. What it does turn
+     * into, once, is a word to the sender, so nobody sits on `ade-msg wait`
+     * believing the other session is refusing to answer.
+     */
+    return target.typing && !entry.told && now - entry.at >= HELD_TELL_MS ? "tell" : "wait"
+  }
+  if (now - entry.ringAt < REBELL_AFTER_MS) return "wait"
   return entry.rings < MAX_REBELLS ? "ring" : "warn"
+}
+
+/** Told to the sender, once, while ADE holds mail back from a half-written line. */
+export function formatHeld(entry: InboxEntry, reader: MailPane | undefined): string {
+  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+  return (
+    `[ade-msg] ADE ha ${what} per ${who(reader)} ma non l'ha ancora consegnata: ` +
+    `in quella sessione c'è una riga iniziata e non inviata, e consegnare ora la rovinerebbe. ` +
+    `Resta in attesa e arriva da sola appena la riga è libera: la sessione non ti sta ignorando.`
+  )
 }
 
 /** Told to the sender when a long message was never read. */
@@ -598,12 +629,20 @@ export const STALE_BUSY_MS = 30 * 60_000
  * working TUI keeps repainting its spinner, and a few quiet seconds are the
  * end of the turn. A standing permission prompt would take the Enter as its
  * answer, so it is never free.
+ *
+ * `typing` is the other half, and it has nothing to do with the agent: the
+ * user has begun a line in this pane and not sent it. Free meant "the agent
+ * is not busy", which is not the same as "ready to be typed into" — a
+ * delivery there lands inside the user's sentence and submits it. It is a
+ * property of the pane, not of the CLI running in it, so it holds for every
+ * agent ADE can start and for a plain shell, including whatever is added to
+ * the catalogue next.
  */
 export function isFree(
-  target: { hooked: boolean; permissionPending: boolean; activity?: Activity; lastOutputAt?: number },
+  target: { hooked: boolean; permissionPending: boolean; typing?: boolean; activity?: Activity; lastOutputAt?: number },
   now: number,
 ): boolean {
-  if (target.permissionPending) return false
+  if (target.permissionPending || target.typing) return false
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
     // Nothing known at all, neither a turn nor a byte of output: not a reason to type.

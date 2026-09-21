@@ -20,6 +20,8 @@ import {
   formatBell,
   formatUnread,
   goesToInbox,
+  formatHeld,
+  HELD_TELL_MS,
   inboxAction,
   inboxName,
   parseInbox,
@@ -560,5 +562,59 @@ describe("quietOutcome: what silence means for a pane marked working", () => {
     const asked = (now: number) => quietOutcome({ hooked: false, busy: false, owesAnswer: owesAnswer(now) })
     expect(asked(1_000 + ANSWER_HOLD_MS - 1)).toBe("recheck")
     expect(asked(1_000 + ANSWER_HOLD_MS)).toBe("settle")
+  })
+})
+
+describe("una riga iniziata dall'utente", () => {
+  const entry = (over: Partial<Parameters<typeof inboxAction>[0]> = {}) => ({
+    id: "1790000000000-aaaa",
+    paneId: "p1",
+    name: "1790000000000-1790000000000-aaaa.msg",
+    from: "p2",
+    kind: "send" as const,
+    chars: 42,
+    at: 1_000,
+    ringAt: 1_000,
+    rings: 0,
+    ...over,
+  })
+
+  /** Non e' una questione di agente: vale per qualunque pannello. */
+  test("una sessione ferma con del digitato non e' libera", () => {
+    const now = 100_000
+    const idle = { hooked: true, permissionPending: false, activity: { state: "idle" as const, at: now - 5 } }
+    expect(isFree(idle, now)).toBe(true)
+    expect(isFree({ ...idle, typing: true }, now)).toBe(false)
+    // Anche senza hook, dove la quiete dello schermo basterebbe.
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 5000, typing: true }, now)).toBe(false)
+  })
+
+  test("la posta aspetta, e non viene mai consegnata a forza", () => {
+    const held = { running: true, free: false, read: false, typing: true }
+    expect(inboxAction(entry(), held, 1_000)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS - 1)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS)).toBe("tell")
+    // Detto una volta sola, e dopo si torna ad aspettare, non a consegnare.
+    expect(inboxAction(entry({ told: true }), held, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  /** Il ritardo e' una condizione in piu, mai un permesso che scavalca le altre. */
+  test("il campanello di riserva vuole sessione libera e riga pulita", () => {
+    const late = 1_000 + 10 * HELD_TELL_MS
+    expect(inboxAction(entry(), { running: true, free: false, read: false }, late)).toBe("wait")
+    expect(inboxAction(entry(), { running: true, free: false, read: false, typing: true }, late)).toBe("tell")
+    expect(inboxAction(entry(), { running: true, free: true, read: false }, late)).toBe("ring")
+  })
+
+  test("occupata non e' lo stesso di riga sporca: al mittente non si dice niente", () => {
+    const busy = { running: true, free: false, read: false, typing: false }
+    expect(inboxAction(entry(), busy, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  test("l'avviso dice che ADE non ha consegnato, non che l'altra non risponde", () => {
+    const text = formatHeld(entry(), { id: "p1", title: "Dario", agent: "claude-code" })
+    expect(text).toContain("non l'ha ancora consegnata")
+    expect(text).toContain("non ti sta ignorando")
+    expect(text).not.toContain("non ha letto")
   })
 })

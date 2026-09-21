@@ -91,12 +91,15 @@ describe("createPaneRecords", () => {
       const records = createPaneRecords()
       /*
        * The defect this guards against: `forgetPane` used to name each map by
-       * hand, so adding an eighth one left it leaking entries for closed
-       * panes with nothing to notice it. Anything callable on the bundle is a
+       * hand, so adding one more left it leaking entries for closed panes
+       * with nothing to notice it. Anything callable on the bundle is a
        * record, and after `forget` none of them may still hold the pane.
+       *
+       * `typed` made this concrete: a counter left behind on a closed pane
+       * would make the pane that reuses the id refuse mail for ever.
        */
       const every = Object.entries(records).filter(([name]) => name !== "forget")
-      expect(every.length).toBe(7)
+      expect(every.length).toBe(8)
 
       for (const [, record] of every) {
         ;(record as ReturnType<typeof createPaneRecord>).set("p1", true as never)
