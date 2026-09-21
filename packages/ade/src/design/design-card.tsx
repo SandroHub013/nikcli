@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js"
 import { formatDay } from "./answer"
-import { DesignPreview } from "./design-preview"
+import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
 import type { DesignVariant } from "./log"
 import { t } from "../i18n"
@@ -75,6 +75,15 @@ export function DesignCard(props: {
                     projectRoot={props.projectRoot}
                     onToggleFullScreen={() => props.onOpenFullPreview?.(variant)}
                   />
+                  <div
+                    data-slot="variant-preview-source"
+                    title={resolvePreviewPath(variant.preview, props.projectRoot)}
+                  >
+                    <span data-slot="variant-preview-source-label">{t("design.preview.source")}:</span>
+                    <span data-slot="variant-preview-source-path">
+                      {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
+                    </span>
+                  </div>
                 </div>
               </Show>
             </div>

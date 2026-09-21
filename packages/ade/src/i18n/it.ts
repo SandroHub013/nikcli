@@ -545,6 +545,7 @@ export const it = {
   "design.needChoice": "scegli una variante o scrivi una nota",
   "design.variants": "Varianti",
   "design.preview": "Anteprima",
+  "design.preview.source": "Fonte",
   "design.preview.full": "Schermo intero",
   "design.preview.close": "Chiudi anteprima",
   "design.submit": "Registra scelta",

@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { sheetKey } from "./answer"
 import { DesignCard } from "./design-card"
-import { DesignPreview } from "./design-preview"
+import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals } from "./state"
@@ -155,9 +155,17 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
         <Show when={props.hub.fullPreview().open && props.hub.fullPreview().variant}>
           <div data-slot="design-full-preview-overlay" role="dialog" aria-modal="true">
             <header data-slot="full-preview-header">
-              <span data-slot="full-preview-title">
-                {props.hub.fullPreview().title} · <b>{props.hub.fullPreview().variant?.name}</b>
-              </span>
+              <div data-slot="full-preview-title-wrap">
+                <span data-slot="full-preview-title">
+                  {props.hub.fullPreview().title} · <b>{props.hub.fullPreview().variant?.name}</b>
+                </span>
+                <span
+                  data-slot="full-preview-source"
+                  title={resolvePreviewPath(props.hub.fullPreview().variant!.preview, root())}
+                >
+                  {shortenPath(resolvePreviewPath(props.hub.fullPreview().variant!.preview, root()))}
+                </span>
+              </div>
               <button
                 type="button"
                 data-slot="full-preview-close"

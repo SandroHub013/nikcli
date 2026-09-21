@@ -540,6 +540,7 @@ export const en: Messages = {
   "design.needChoice": "choose a variant or write a note",
   "design.variants": "Variants",
   "design.preview": "Preview",
+  "design.preview.source": "Source",
   "design.preview.full": "Full screen",
   "design.preview.close": "Close preview",
   "design.submit": "Record choice",

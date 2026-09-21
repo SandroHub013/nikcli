@@ -650,6 +650,21 @@
   color: var(--ade-text);
 }
 
+@media (max-width: 640px) {
+  [data-slot="ade-bar"] {
+    padding: 0 var(--ade-space-3);
+    gap: var(--ade-space-2);
+  }
+  [data-slot="ade-bar-center"] {
+    gap: 2px;
+    max-width: calc(100% - 16px);
+  }
+  [data-slot="ade-view-tab"] {
+    padding: 0 var(--ade-space-3);
+    font-size: 11px;
+  }
+}
+
 
 /* ── bar actions ──────────────────────────────────────────────────────────── */
 /*

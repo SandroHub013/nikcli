@@ -35,6 +35,17 @@ export function resolvePreviewPath(path: string, projectRoot?: string): string {
   return `${root}${separator}${relative}`
 }
 
+export function shortenPath(fullPath: string, maxLen = 45): string {
+  const clean = fullPath.replace(/[?#].*$/, "").trim()
+  if (clean.length <= maxLen) return clean
+  const separator = clean.includes("\\") && !clean.includes("/") ? "\\" : "/"
+  const parts = clean.split(/[\\/]/)
+  if (parts.length <= 2) return clean
+  const filename = parts[parts.length - 1]
+  const parent = parts[parts.length - 2]
+  return `…${separator}${parent}${separator}${filename}`
+}
+
 export function isHtmlPreview(preview: string): boolean {
   const trimmed = preview.trim()
   if (/\.html?([?#].*)?$/i.test(trimmed)) return true
