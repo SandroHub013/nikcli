@@ -167,11 +167,48 @@ pub fn site_origin(url: &str) -> Result<String, String> {
     Ok(origin)
 }
 
+/// Frame ids in a `Page.getFrameTree` result whose URL is `origin`.
+fn frame_ids_for_origin(json: &str, origin: &str) -> Vec<String> {
+    let value: serde_json::Value = match serde_json::from_str(json) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+    let tree = value.get("frameTree").unwrap_or(&value);
+    let mut ids = Vec::new();
+    collect_frame_ids(tree, origin, &mut ids);
+    ids
+}
+
+fn collect_frame_ids(node: &serde_json::Value, origin: &str, ids: &mut Vec<String>) {
+    if let Some(frame) = node.get("frame") {
+        if let (Some(id), Some(url)) = (frame.get("id").and_then(|v| v.as_str()), frame.get("url").and_then(|v| v.as_str())) {
+            if site_origin(url).ok().as_deref() == Some(origin) {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    if let Some(children) = node.get("childFrames").and_then(|v| v.as_array()) {
+        for child in children {
+            collect_frame_ids(child, origin, ids);
+        }
+    }
+}
+
+fn storage_key_from_json(json: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(json)
+        .ok()?
+        .get("storageKey")?
+        .as_str()
+        .map(str::to_string)
+}
+
 /// Deletes cookies and site storage for `url` from ADE's WebView2 profile.
 ///
 /// With `allow-same-origin` a visit leaves cookies, localStorage and cache in
-/// the profile ADE itself uses. This is the way to drop them for one origin
-/// without wiping ADE's own data (`clear_all_browsing_data` would).
+/// the profile ADE itself uses. `Storage.clearDataForOrigin` only sees
+/// unpartitioned data; a third-party frame is stored under a storage key that
+/// includes ADE as the top-level site, so this also walks the frame tree and
+/// calls `Storage.clearDataForStorageKey`. ADE's own origin is refused above.
 #[tauri::command]
 pub async fn ade_forget_site(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri::Manager;
@@ -197,29 +234,30 @@ pub async fn ade_forget_site(app: tauri::AppHandle, url: String) -> Result<(), S
     }
 
     #[cfg(windows)]
-    forget_origin_storage(&window, &origin)?;
+    forget_origin_storage(&window, &origin, &host)?;
 
     Ok(())
 }
 
 #[cfg(windows)]
-fn forget_origin_storage(window: &tauri::WebviewWindow, origin: &str) -> Result<(), String> {
+fn cdp_method(window: &tauri::WebviewWindow, method: &str, params: &str) -> Result<String, String> {
     use std::sync::mpsc;
     use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
     use windows_core::HSTRING;
 
-    let (sender, receiver) = mpsc::channel::<Result<(), String>>();
-    let payload = format!(r#"{{"origin":{origin:?},"storageTypes":"all"}}"#);
+    let (sender, receiver) = mpsc::channel::<Result<String, String>>();
+    let method = method.to_string();
+    let params = params.to_string();
     let scheduled = window.with_webview(move |webview| unsafe {
         let Ok(core) = webview.controller().CoreWebView2() else {
             let _ = sender.send(Err("WebView2 non disponibile".into()));
             return;
         };
         let told = sender.clone();
-        let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, _| {
+        let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, json| {
             match result {
                 Ok(()) => {
-                    let _ = told.send(Ok(()));
+                    let _ = told.send(Ok(json));
                 }
                 Err(error) => {
                     let _ = told.send(Err(format!("dati del sito non cancellati: {error}")));
@@ -228,8 +266,8 @@ fn forget_origin_storage(window: &tauri::WebviewWindow, origin: &str) -> Result<
             Ok(())
         }));
         if let Err(error) = core.CallDevToolsProtocolMethod(
-            &HSTRING::from("Storage.clearDataForOrigin"),
-            &HSTRING::from(payload.as_str()),
+            &HSTRING::from(method.as_str()),
+            &HSTRING::from(params.as_str()),
             &handler,
         ) {
             let _ = sender.send(Err(format!("dati del sito non cancellati: {error}")));
@@ -239,6 +277,71 @@ fn forget_origin_storage(window: &tauri::WebviewWindow, origin: &str) -> Result<
     receiver
         .recv_timeout(std::time::Duration::from_secs(5))
         .map_err(|_| "la cancellazione non ha risposto entro 5 secondi".to_string())?
+}
+
+#[cfg(windows)]
+fn forget_cookies_for_origin(window: &tauri::WebviewWindow, origin: &str) {
+    let _ = cdp_method(window, "Network.enable", "{}");
+    let urls = format!(r#"{{"urls":[{:?}]}}"#, format!("{origin}/"));
+    let Ok(json) = cdp_method(window, "Network.getCookies", &urls) else {
+        return;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else {
+        return;
+    };
+    let Some(cookies) = value.get("cookies").and_then(|v| v.as_array()) else {
+        return;
+    };
+    for cookie in cookies {
+        let Some(name) = cookie.get("name").and_then(|v| v.as_str()) else { continue };
+        if name.is_empty() {
+            continue;
+        }
+        let domain = cookie.get("domain").and_then(|v| v.as_str()).unwrap_or("");
+        let path = cookie.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+        let params = format!(r#"{{"name":{name:?},"domain":{domain:?},"path":{path:?}}}"#);
+        let _ = cdp_method(window, "Network.deleteCookies", &params);
+    }
+}
+
+#[cfg(windows)]
+fn forget_origin_storage(window: &tauri::WebviewWindow, origin: &str, host: &str) -> Result<(), String> {
+    let payload = format!(r#"{{"origin":{origin:?},"storageTypes":"all"}}"#);
+    cdp_method(window, "Storage.clearDataForOrigin", &payload)?;
+    forget_cookies_for_origin(window, origin);
+
+    let mut keys = Vec::new();
+    let mut from_frames = false;
+    if let Ok(tree) = cdp_method(window, "Page.getFrameTree", "{}") {
+        for frame_id in frame_ids_for_origin(&tree, origin) {
+            let params = format!(r#"{{"frameId":{frame_id:?}}}"#);
+            if let Ok(json) = cdp_method(window, "Storage.getStorageKeyForFrame", &params) {
+                if let Some(key) = storage_key_from_json(&json) {
+                    keys.push(key);
+                    from_frames = true;
+                }
+            }
+        }
+    }
+    if keys.is_empty() {
+        keys.push(origin.to_string());
+        keys.push(format!("{origin}^{host}"));
+        keys.push(format!("{origin}^0{host}"));
+    }
+
+    let mut last_err = None;
+    let mut cleared = false;
+    for key in keys {
+        let params = format!(r#"{{"storageKey":{key:?},"storageTypes":"all"}}"#);
+        match cdp_method(window, "Storage.clearDataForStorageKey", &params) {
+            Ok(_) => cleared = true,
+            Err(error) => last_err = Some(error),
+        }
+    }
+    if from_frames && !cleared {
+        return Err(last_err.unwrap_or_else(|| "dati del sito non cancellati".into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -291,5 +394,27 @@ mod tests {
         );
         assert!(site_origin("file:///C:/x").is_err());
         assert!(site_origin("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn a_nested_frame_of_the_site_is_found_and_ade_is_not() {
+        let tree = r#"{
+            "frameTree": {
+                "frame": {"id": "ade", "url": "http://tauri.localhost/"},
+                "childFrames": [
+                    {"frame": {"id": "site", "url": "https://hostile.test/app"}},
+                    {"frame": {"id": "other", "url": "https://cdn.test/"}}
+                ]
+            }
+        }"#;
+        assert_eq!(
+            frame_ids_for_origin(tree, "https://hostile.test"),
+            vec!["site".to_string()]
+        );
+        assert!(frame_ids_for_origin(tree, "http://tauri.localhost").contains(&"ade".to_string()));
+        assert!(storage_key_from_json(r#"{"storageKey":"https://hostile.test^http://tauri.localhost"}"#)
+            .as_deref()
+            == Some("https://hostile.test^http://tauri.localhost"));
+        assert!(storage_key_from_json("not json").is_none());
     }
 }
