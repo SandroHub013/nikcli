@@ -561,6 +561,15 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         agent: p.agent,
         cwd: p.cwd,
         task: p.task,
+        /*
+         * The conversation the pane was in, carried across the restart.
+         *
+         * Forgotten here, the pane came back looking right and then opened a
+         * new conversation at the *next* start: the id lived only in the
+         * saved state, so the first restore used it and the save after that
+         * had none. That is the second half of the bug the user reported.
+         */
+        ...(p.resumeId ? { resumeId: p.resumeId } : {}),
         lines: [
           ...history,
           {

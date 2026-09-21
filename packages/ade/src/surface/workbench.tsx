@@ -4641,11 +4641,20 @@ export function Workbench() {
      * conversation ADE can name, which the pane then says out loud rather
      * than discovering at the next restart.
      */
-    if (!resumed && !opening.resumeId && RESUME[agentId]?.mint) {
-      const title = launched?.title || agent.label || agentId
+    const recipe = RESUME[agentId]
+    if (!resumed && !opening.resumeId && launched?.resumeId && recipe?.byId) {
+      // Already has one: a restart reopens it. Minting here is what made the
+      // pane lose its conversation on the second start.
+      opening = { args: recipe.byId(launched.resumeId), resumeId: launched.resumeId }
+    } else if (!resumed && !opening.resumeId && recipe?.mint) {
+      /*
+       * A title that tells the conversations apart inside the CLI, where they
+       * are listed together: panes are often all called "Sessione 1 — nikcli".
+       */
+      const title = `${launched?.title || agent.label || agentId} · ${paneId.slice(-8)}`
+      appendLine(paneId, t("resume.asking", agent.label || agentId), "note")
       const minted = await mintConversation(agentId, agent.command, workDir, title)
-      const byId = RESUME[agentId]?.byId
-      if (minted && byId) opening = { args: byId(minted), resumeId: minted }
+      if (minted && recipe.byId) opening = { args: recipe.byId(minted), resumeId: minted }
       else appendLine(paneId, t("resume.noMint", agent.label || agentId), "note")
     }
 
@@ -4663,10 +4672,14 @@ export function Workbench() {
     const others = wb().panes.some(
       (pane) => pane.id !== paneId && (pane.agent ?? pane.model) === agentId && (pane.cwd || p.root) === workDir,
     )
+    /*
+     * Said only where there is something to say: "the most recent one here" is
+     * what these CLIs have always done and it is usually right, so announcing
+     * it on every start of codex, agy or opencode would be noise. Two panes in
+     * one directory is the case that is not right, and that one is said.
+     */
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
-    if (!resumed && promise !== "exact") {
-      appendLine(paneId, promise === "last" ? t("resume.onlyLast") : t("resume.none"), "note")
-    }
+    if (!resumed && promise === "none") appendLine(paneId, t("resume.none"), "note")
 
     /*
      * And the other direction: the CLI telling ADE which conversation it

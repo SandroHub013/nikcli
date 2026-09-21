@@ -126,6 +126,21 @@ describe("saving and restoring a session", () => {
     expect(restored.panes[0].lines.at(-1)?.text).toContain("riprendo")
   })
 
+  test("the conversation survives the restart, and the one after it", () => {
+    /*
+     * The bug the user reported, in one test: the pane came back on its own
+     * conversation once and then opened a new one, because the id lived only
+     * in the saved state and the restored pane had forgotten it.
+     */
+    const first = roundTrip([session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno" })])
+    expect(first.restored.panes[0].resumeId).toBe("ses_uno")
+    expect(first.restored.panes[0].lines.at(-1)?.text).toContain("Riapro")
+
+    const again = roundTrip([first.restored.panes[0]!])
+    expect(again.saved.panes[0].resumeId).toBe("ses_uno")
+    expect(again.restored.panes[0].resumeId).toBe("ses_uno")
+  })
+
   test("sessionsToResume names exactly the ones that were live and have a task", () => {
     const { saved } = roundTrip([
       session({ id: "live" }),

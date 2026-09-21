@@ -4,7 +4,6 @@ import {
   RESUME,
   mintedNikcliId,
   newSessionId,
-  pinsSessionId,
   planMint,
   planRestore,
   planResume,
@@ -164,7 +163,6 @@ describe("the table and the catalogue", () => {
     for (const [id, recipe] of Object.entries(RESUME)) {
       if (!recipe.start) continue
       expect([id, recipe.byId !== undefined]).toEqual([id, true])
-      expect([id, pinsSessionId(id)]).toEqual([id, true])
     }
   })
 })
@@ -203,7 +201,6 @@ describe("asking nikcli for a conversation", () => {
   })
 
   test("with an id of its own, nikcli is pinned like Claude Code", () => {
-    expect(pinsSessionId("nikcli")).toBe(true)
     expect(planResume({ agentId: "nikcli", resumeId: "ses_one" })).toEqual({
       kind: "resume",
       via: "id",

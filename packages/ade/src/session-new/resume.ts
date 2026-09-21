@@ -228,12 +228,6 @@ export const RESUME: Record<string, ResumeRecipe> = {
   },
 }
 
-/** True when ADE can have the conversation id before the agent starts. */
-export function pinsSessionId(agentId: string): boolean {
-  const recipe = RESUME[agentId]
-  return recipe?.start !== undefined || recipe?.mint !== undefined
-}
-
 /**
  * How to ask this agent's CLI for a conversation id, when that is the way.
  *
