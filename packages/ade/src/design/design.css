@@ -10,19 +10,21 @@
 [data-slot="design-badge"] {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 24px;
+  gap: var(--ade-space-3);
+  /* `md`, like every other button of its weight. */
+  height: 26px;
   margin-left: var(--ade-space-2);
-  padding: 0 8px;
+  padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-accent);
   border-radius: 999px;
   background: var(--ade-accent-soft);
   color: var(--ade-accent);
   font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
   white-space: nowrap;
   cursor: pointer;
+  transition: var(--ade-btn-transition);
   line-height: 1;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -46,13 +48,19 @@
   line-height: 1;
 }
 
+/* The ground, not a `filter`: see the note on the decisions badge. */
 [data-slot="design-badge"]:hover {
-  filter: brightness(1.1);
+  background: color-mix(in srgb, var(--ade-accent) 22%, transparent);
+}
+
+[data-slot="design-badge"]:active {
+  background: color-mix(in srgb, var(--ade-accent) 22%, transparent);
+  transform: var(--ade-press);
 }
 
 [data-slot="design-badge"]:focus-visible {
-  outline: 2px solid var(--ade-accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* Glass theme adjustments */
@@ -460,20 +468,27 @@
 }
 
 [data-slot="design-submit"] {
-  height: 28px;
-  padding: 0 12px;
+  /* `lg`: it is the confirm of its panel. */
+  height: 32px;
+  padding: 0 var(--ade-space-7);
   border: 0;
   border-radius: var(--ade-radius-sm);
   background: var(--ade-accent);
   color: var(--ade-accent-fg, #fff);
   font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
   cursor: pointer;
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="design-submit"]:hover {
-  filter: brightness(1.08);
+  background: var(--ade-accent-strong);
+}
+
+[data-slot="design-submit"]:active {
+  background: var(--ade-accent-strong);
+  transform: var(--ade-press);
 }
 
 [data-slot="design-submit"]:disabled {

@@ -157,7 +157,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-4);
-  padding: var(--ade-space-3) var(--ade-space-6);
+  height: 32px;
+  padding: 0 var(--ade-space-7);
   border: 0;
   border-radius: var(--ade-radius-md);
   background: var(--ade-accent);
@@ -167,11 +168,16 @@
   font-weight: var(--ade-weight-semibold);
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="new-launch-btn"]:hover {
   background: var(--ade-accent-strong);
+}
+
+[data-slot="new-launch-btn"]:active {
+  background: var(--ade-accent-strong);
+  transform: var(--ade-press);
 }
 
 [data-slot="new-launch-hint"] {

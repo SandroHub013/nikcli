@@ -53,6 +53,11 @@
   background: var(--ade-hover);
 }
 
+[data-component="remote-space"] [data-slot="host"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
 [data-component="remote-space"] [data-slot="alias"] {
   font-weight: var(--ade-weight-semibold);
   overflow: hidden;

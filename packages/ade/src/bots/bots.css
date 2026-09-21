@@ -694,7 +694,10 @@
 }
 
 [data-slot="bots-btn"] {
-  padding: var(--ade-space-2) var(--ade-space-5);
+  /* `md`, the in-panel size. It used to be padding alone, which made it about
+     26px here and something else wherever the font changed. */
+  height: 26px;
+  padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-raised);
@@ -703,9 +706,11 @@
   font-size: var(--ade-font-md);
   cursor: pointer;
   white-space: nowrap;
+  transition: var(--ade-btn-transition);
 }
 
 [data-slot="bots-btn"]:hover { background: var(--ade-hover); }
+[data-slot="bots-btn"]:active { background: var(--ade-active); transform: var(--ade-press); }
 [data-slot="bots-btn"][data-active="true"] { background: var(--ade-active); }
 
 [data-slot="bots-btn"][data-tone="primary"] {

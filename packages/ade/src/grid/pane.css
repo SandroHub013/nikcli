@@ -1367,6 +1367,8 @@
 .hA .act:focus-visible {
   border-radius: var(--ade-radius-full);
   color: var(--ade-text);
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 .hA .more {

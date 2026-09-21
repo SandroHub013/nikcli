@@ -179,6 +179,8 @@
 [data-slot="shot"]:hover [data-slot="shot-dismiss"],
 [data-slot="shot-dismiss"]:focus-visible {
   opacity: 1;
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* ── the opened screenshot ─────────────────────────────────────────────────── */
