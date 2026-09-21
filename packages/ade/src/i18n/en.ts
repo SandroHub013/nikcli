@@ -388,7 +388,16 @@ export const en: Messages = {
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
   "browser.forget": "Forget this site",
   "browser.forget.tip": "Clear cookies and data this site left in ADE's profile.",
-  "browser.forget.done": "Site data cleared.",
+  "browser.forget.done.all": (cookies) =>
+    `The site's storage is gone, and ${cookies === 1 ? "one cookie was deleted" : `${cookies} cookies were deleted`}.`,
+  "browser.forget.done.storage": "The site's storage is gone; no cookies to delete.",
+  "browser.forget.done.storage.noCookies": "The site's storage is gone; its cookies cannot be read from here.",
+  "browser.forget.done.cookies": (cookies) =>
+    `${cookies === 1 ? "One cookie was deleted" : `${cookies} cookies were deleted`}; the site's storage was not found.`,
+  "browser.forget.unsure": "The deletion was asked for but could not be checked: the data may still be there.",
+  "browser.forget.unsure.cookies": (cookies) =>
+    `${cookies === 1 ? "One cookie was deleted" : `${cookies} cookies were deleted`}; clearing the storage could not be checked: the data may still be there.`,
+  "browser.forget.done.none": "Nothing was cleared — the site may not have stored data, or ADE could not reach it.",
   "browser.forget.failed": (problem) => `Not cleared: ${problem}`,
   "browser.storage.note": "Cookies and data stay in ADE's profile.",
   "browser.blocked.title": "This site can't be shown inside ADE",

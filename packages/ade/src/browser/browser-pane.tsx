@@ -50,7 +50,7 @@ import {
   visit,
   type BrowserHistory,
 } from "./history"
-import { canOpenExternally, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
+import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
@@ -573,8 +573,19 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   const forgetThisSite = async () => {
     setForgetNote(undefined)
-    const problem = await forgetSite(url())
-    setForgetNote(problem ? { ok: false, text: t("browser.forget.failed", problem) } : { ok: true, text: t("browser.forget.done") })
+    const result = await forgetSite(url())
+    if (result.error || !result.report) {
+      setForgetNote({ ok: false, text: t("browser.forget.failed", result.error ?? "") })
+      return
+    }
+    const said = forgetMessage(result.report)
+    const text =
+      said.key === "browser.forget.done.all" ||
+      said.key === "browser.forget.done.cookies" ||
+      said.key === "browser.forget.unsure.cookies"
+        ? t(said.key, said.cookies)
+        : t(said.key)
+    setForgetNote({ ok: said.ok, text })
   }
 
   const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
