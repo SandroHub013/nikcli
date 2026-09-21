@@ -164,14 +164,26 @@ body[data-theme="glass"] #root,
 }
 
 /*
- * The reading ground, added once by the shell's structural slots.
+ * The reading ground, added once, by the shell's structural slots.
  *
- * These are places in the shell, not components: whatever a grid cell holds
- * is legible without this file knowing its name, and nothing inside it paints
- * again, because the container tokens are transparent.
+ * These are places in the shell, not components: whatever a grid cell holds is
+ * legible without this file knowing its name.
+ *
+ * The main area needs its own line, because not everything that fills it is a
+ * grid cell: the agent console, the chat, the bots view, the new-session
+ * screen and the empty-project screen are children of `ade-main` directly, and
+ * with only the grid-cell line they sat on the bare floor — 1.2:1 at the
+ * slider's minimum, which is text you cannot read.
+ *
+ * `:not(:has([data-slot="grid-cell"]))` is what keeps that from becoming a
+ * second ground: a component that holds cells (the session grid) is a
+ * container, and lets its cells do the painting; one that holds content paints
+ * for itself. Written as a shape rather than as a name, so a new full-area
+ * view is legible and a new kind of grid does not double up.
  */
 [data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"],
-[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component] {
+[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] > [data-component]:not(:has([data-slot="grid-cell"])) {
   background: var(--ade-glass-read);
 }
 

@@ -90,8 +90,39 @@ describe("il tema vetro vale per default", () => {
     expect(selectors).toEqual([
       '[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"]',
       '[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component]',
+      '[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] > [data-component]:not(:has([data-slot="grid-cell"]))',
       '[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"]',
     ])
+  })
+
+  test("anche una vista che riempie l'area centrale ha il suo fondo", () => {
+    /*
+     * The reviewer's catch. Not everything in `ade-main` is a grid cell: the
+     * agent console, the chat, the bots view, the new-session and
+     * empty-project screens are its children directly, and with only the
+     * grid-cell line they sat on the bare floor — 1.23:1 at the minimum.
+     * Measured after the fix, the agent console reads alpha 0.67 and its three
+     * text levels 6.27 / 5.34 / 5.10:1.
+     */
+    const main = glassRules().find(({ selector }) => selector.includes('[data-slot="ade-main"] > [data-component]'))
+    expect(main).toBeDefined()
+    expect(main!.body).toMatch(/--ade-glass-read/)
+  })
+
+  test("chi ospita celle lascia dipingere le celle, così non ci sono due fondi", () => {
+    /*
+     * The session grid fills the main area too. If it took the ground as well,
+     * every pane would sit on two of them — 0.88 at the slider's minimum,
+     * which is the opacity this whole change exists to get rid of. The shape,
+     * not a name, is what keeps it out.
+     */
+    const main = glassRules().find(({ selector }) => selector.includes('[data-slot="ade-main"] > [data-component]'))
+    const line = main!.selector
+      .split(",")
+      .map((part) => part.trim())
+      .find((part) => part.includes('[data-slot="ade-main"]'))
+    expect(line).toContain(':not(:has([data-slot="grid-cell"]))')
+    expect(line).not.toContain("session-grid")
   })
 
   test("il pavimento parte abbastanza in basso da lasciar vedere la scrivania", () => {
