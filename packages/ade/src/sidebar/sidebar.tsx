@@ -1448,7 +1448,7 @@ export function Sidebar(props: SidebarProps) {
                   {/* Marks instead of words: three labels were most of the
                       row's width. The words stay in the tooltip and in
                       aria-label for whoever does not read the marks. */}
-                  <span data-slot="sidebar-stat" data-load={view().cpu.load} title={view().cpu.title} aria-label={view().cpu.title}>
+                  <span data-slot="sidebar-stat" data-kind="cpu" data-load={view().cpu.load} title={view().cpu.title} aria-label={view().cpu.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="4" y="4" width="8" height="8" rx="1.2" />
                       <rect x="6.5" y="6.5" width="3" height="3" rx="0.4" />
@@ -1456,14 +1456,14 @@ export function Sidebar(props: SidebarProps) {
                     </svg>
                     {view().cpu.text}
                   </span>
-                  <span data-slot="sidebar-stat" data-load={view().ram.load} title={view().ram.title} aria-label={view().ram.title}>
+                  <span data-slot="sidebar-stat" data-kind="ram" data-load={view().ram.load} title={view().ram.title} aria-label={view().ram.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="1.5" y="4.5" width="13" height="6" rx="1" />
                       <path d="M4.5 6.8v1.4M7 6.8v1.4M9.5 6.8v1.4M12 6.8v1.4M3.5 10.5v2M6.5 10.5v2M9.5 10.5v2M12.5 10.5v2" />
                     </svg>
                     {view().ram.text}
                   </span>
-                  <span data-slot="sidebar-stat" data-load={view().mem.load} title={view().mem.title} aria-label={view().mem.title}>
+                  <span data-slot="sidebar-stat" data-kind="mem" data-load={view().mem.load} title={view().mem.title} aria-label={view().mem.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="8" cy="8" r="6" />
                       <path d="M8 2v6h6" />

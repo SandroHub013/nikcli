@@ -86,22 +86,36 @@
  * thumbnails across and as many rows as fit, capped so a burst of screenshots
  * cannot push the file tree off the bottom of the window.
  */
+/*
+ * One row, scrolling sideways.
+ *
+ * It was two columns by three rows — up to 168px of a column that is 180 at
+ * its narrowest, spent on pictures of what already happened. A row is what a
+ * tray is: the last few screenshots, in the order they were taken, with the
+ * newest where the eye lands first.
+ *
+ * The columns are a fixed 76px rather than a fraction of the width, so a
+ * thumbnail is the same size at every sidebar width and the one that does not
+ * fit shows a sliver of itself at the edge — which is what says the row
+ * continues, now that there is no scrollbar and no second line to fall onto.
+ * At the minimum width two fit whole and the third is that sliver.
+ */
 [data-slot="shot-tray-strip"] {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 56px;
+  grid-auto-flow: column;
+  grid-auto-columns: 76px;
+  grid-template-rows: 52px;
   gap: var(--ade-space-2);
   padding: 0 var(--ade-space-4) var(--ade-space-1);
-  max-height: 184px;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
   /*
    * Scrolls, and says nothing about it.
    *
-   * The strip is two columns wide in a sidebar that is already narrow, and a
-   * scrollbar took a visible bite out of the second column — the thumbnails
-   * beside it ended up a different size from the ones above. The wheel, the
-   * trackpad and the keyboard all still work; only the bar is gone.
+   * A scrollbar under a 52px row is a fifth of its height, and it would sit
+   * between the thumbnails and the buttons below. The wheel, the trackpad and
+   * the keyboard all still work; only the bar is gone.
    */
   scrollbar-width: none;
 }
@@ -114,7 +128,7 @@
   position: relative;
   margin: 0;
   min-width: 0;
-  height: 56px;
+  height: 52px;
   border-radius: var(--ade-radius-sm);
   overflow: hidden;
   background: var(--ade-sunken);

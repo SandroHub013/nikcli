@@ -1668,12 +1668,27 @@ aside[data-component="ade-sidebar"] {
   gap: 1px;
 }
 
+/*
+ * The readings give way; the buttons never do.
+ *
+ * This row was `flex: 0 0 auto` with `nowrap`, so at the column's minimum
+ * width — 180px, where the gear, the theme, the bell and three readings want
+ * 173 of the 164 available — it simply ran past the rounded edge of the
+ * sidebar and the last reading was cut in half. Measured in ADE Test: the
+ * strip overflowed by 15px and `sidebar-stats` stuck 7px out of the column.
+ *
+ * What yields is decided below rather than by the order the browser happens to
+ * reach: a reading is something you can also find in the panel, a button is
+ * the only way to reach what it opens.
+ */
 [data-slot="sidebar-stats"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   margin-left: auto;
   font-family: var(--ade-mono);
   font-size: 10px;
@@ -1717,6 +1732,27 @@ aside[data-component="ade-sidebar"] {
 
   [data-slot="sidebar-stats"] {
     gap: 5px;
+  }
+}
+
+/*
+ * Below these two widths a reading leaves, one at a time, from the right.
+ *
+ * Disk first, then memory, so the one that keeps its place is the one that
+ * changes moment to moment and says whether the machine is busy. Both keep
+ * their tooltip and their accessible name in the panel; nothing about the
+ * machine becomes unknowable, it stops being on this row. The thresholds are
+ * the measured widths at which the row stops fitting, not round numbers.
+ */
+@container (max-width: 215px) {
+  [data-slot="sidebar-stat"][data-kind="mem"] {
+    display: none;
+  }
+}
+
+@container (max-width: 192px) {
+  [data-slot="sidebar-stat"][data-kind="ram"] {
+    display: none;
   }
 }
 
