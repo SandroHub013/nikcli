@@ -205,21 +205,21 @@ describe("when a session can be written to", () => {
 describe("what lands in the terminal", () => {
   test("a note arrives on one line, with the way to answer", () => {
     expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(
-      '[Messaggio da "Sessione 2 — codex" (codex)]: riga uno riga due — per rispondere: ade-msg send n2-1 "<testo>"',
+      '[Messaggio da "Sessione 2 — codex"]: riga uno riga due — rispondi: ade-msg send n2-1 "<testo>"',
     )
   })
 
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
-    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
+    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code"]: trova i test lenti')).toBe(true)
     expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
-    expect(line.length).toBeLessThan(300)
+    expect(line.length).toBeLessThan(260)
     expect(line).toContain("ade-msg update 171-ab")
   })
 
   test("a late reply names the request it answers", () => {
     expect(formatLateReply("171-ab", "fatto", panes[1])).toBe(
-      '[Risposta alla richiesta 171-ab da "Sessione 2 — codex" (codex)]: fatto',
+      '[Risposta a 171-ab da "Sessione 2 — codex"]: fatto',
     )
   })
 
@@ -346,11 +346,11 @@ describe("spawn options, updates and the request contract", () => {
       depth: 1,
       maxDepth: 2,
     })
-    expect(line).toContain("worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
-    expect(line).toContain("ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO")
+    expect(line).toContain("Worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
+    expect(line).toContain("ESITO, FILE, PROBLEMI, PROSSIMO PASSO")
     expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
     expect(line).not.toContain("livello 1 di 2")
-    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare altre sessioni")
+    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare sessioni")
   })
 
   test("an update tells the caller how to unblock and resume waiting", () => {
@@ -423,7 +423,7 @@ describe("long messages travel through the inbox", () => {
     expect(goesToInbox("x".repeat(20_000))).toBe(true)
     const bell = formatBell(entry, sender, 20_000)
     expect(bell).toContain("ade-msg inbox")
-    expect(bell.length).toBeLessThan(120)
+    expect(bell.length).toBeLessThan(80)
     expect(inboxName("a/b", 5)).toBe("0000000000005-a_b")
   })
 

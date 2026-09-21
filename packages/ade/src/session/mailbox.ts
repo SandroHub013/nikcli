@@ -324,7 +324,7 @@ function oneLine(text: string): string {
 }
 
 function who(sender: MailPane | undefined): string {
-  return sender ? `"${sender.title}"${sender.agent ? ` (${sender.agent})` : ""}` : "una sessione ADE"
+  return sender ? `"${sender.title}"` : "una sessione ADE"
 }
 
 /**
@@ -335,7 +335,7 @@ function who(sender: MailPane | undefined): string {
  * because Enter is what submits the line and a message must arrive whole.
  */
 export function formatDelivery(message: { text: string }, sender: MailPane | undefined): string {
-  const reply = sender ? ` — per rispondere: ade-msg send ${sender.id} "<testo>"` : ""
+  const reply = sender ? ` — rispondi: ade-msg send ${sender.id} "<testo>"` : ""
   return `[Messaggio da ${who(sender)}]: ${oneLine(message.text)}${reply}`
 }
 
@@ -353,7 +353,7 @@ export function formatRequest(
   context: RequestContext = {},
 ): string {
   const where = context.worktree
-    ? ` Lavori nella worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica solo lì, fai commit sul branch, non toccare il progetto principale.`
+    ? ` Worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica e committa solo lì.`
     : ""
   const results = context.resultsDir ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md` : undefined
   /*
@@ -363,13 +363,13 @@ export function formatRequest(
    */
   const delegate =
     context.depth !== undefined && context.maxDepth !== undefined && context.depth >= context.maxDepth
-      ? " Non avviare altre sessioni: sei all'ultimo livello consentito."
+      ? " Non avviare sessioni (ultimo livello)."
       : ""
   return (
     `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} —${where}${delegate} ` +
-    `Rispondi con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO` +
+    `Rispondi solo con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
-    `); se sei bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
+    `); se bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
   )
 }
 
@@ -386,14 +386,14 @@ export interface RequestContext {
 export function formatUpdate(id: string, state: UpdateState, text: string, replier: MailPane | undefined): string {
   const what = state === "bloccata" ? "è bloccata" : "chiede una decisione"
   return (
-    `[Aggiornamento richiesta ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
-    `La richiesta resta aperta. Rispondi alla sessione con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi riprendi con ade-msg wait ${id}.`
+    `[Aggiornamento ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
+    `Resta aperta: rispondi con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi ade-msg wait ${id}.`
   )
 }
 
 /** Typed into a session that went quiet with a request still unanswered. */
 export function formatNudge(id: string, caller: MailPane | undefined): string {
-  return `[Promemoria] ${who(caller)} aspetta la richiesta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
+  return `[Promemoria] ${who(caller)} aspetta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
 }
 
 // ---------------------------------------------------------------------------
@@ -447,11 +447,11 @@ export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailP
     entry.kind === "ask" || entry.kind === "spawn"
       ? `Richiesta ${entry.id} da ${who(sender)}`
       : entry.kind === "reply"
-        ? `Risposta alla richiesta ${entry.id} da ${who(sender)}`
+        ? `Risposta a ${entry.id} da ${who(sender)}`
         : entry.kind === "update"
-          ? `Aggiornamento della richiesta ${entry.id} da ${who(sender)}`
+          ? `Aggiornamento ${entry.id} da ${who(sender)}`
           : `Messaggio da ${who(sender)}`
-  return `[${what}, ${chars} caratteri] in attesa: leggilo con ade-msg inbox`
+  return `[${what}, ${chars}c] leggi: ade-msg inbox`
 }
 
 /**
@@ -891,7 +891,7 @@ export function briefOf(text: string, length = 60): string {
 
 /** The answer to a request, typed into the caller when nothing was waiting for it any more. */
 export function formatLateReply(ref: string, text: string, replier: MailPane | undefined): string {
-  return `[Risposta alla richiesta ${ref} da ${who(replier)}]: ${oneLine(text)}`
+  return `[Risposta a ${ref} da ${who(replier)}]: ${oneLine(text)}`
 }
 
 /**
