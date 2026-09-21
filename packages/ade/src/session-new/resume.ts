@@ -11,10 +11,11 @@
  * pick one up again. Two different shapes, and the difference decides what
  * ADE can promise:
  *
- *   pinned  — ADE chooses the id before the agent starts, hands it over on
- *             the command line, writes it down, and asks for that exact
+ *   pinned  — ADE has the id before the agent starts, hands it over on the
+ *             command line, writes it down, and asks for that exact
  *             conversation back. Two sessions in one directory stay two
- *             conversations.
+ *             conversations. The id is either one ADE invented (`start`) or
+ *             one the CLI was asked for first (`mint`).
  *   last    — the agent will only offer "the most recent one here". Good
  *             enough for the common case of one session per project, and
  *             wrong the moment there are two, so only the first pane in a
@@ -39,6 +40,25 @@ export interface ResumeRecipe {
   readonly byId?: (id: string) => string[]
   /** Arguments that reopen the most recent conversation in this directory. */
   readonly last?: () => string[]
+  /**
+   * A command that asks the CLI itself for a new conversation, for a CLI that
+   * refuses an id ADE invented.
+   *
+   * nikcli is the case this exists for: `--session <id>` only *continues* a
+   * conversation and fails on an id it has never seen, so ADE cannot make one
+   * up. It can ask: `nikcli api session.create` writes the new conversation —
+   * with the directory it was run in — and prints it, id first. ADE reads the
+   * id, kills that short-lived command and starts the real session with
+   * `--session <id>`. From then on the pane is pinned like Claude Code's.
+   *
+   * The command is run under a pty like any other, so `read` is given
+   * whatever reached the screen, not a clean stdout.
+   */
+  readonly mint?: {
+    readonly args: (title: string) => string[]
+    /** The id in what the command printed, or undefined when it printed none. */
+    readonly read: (output: string) => string | undefined
+  }
   /**
    * Arguments that start a new conversation as a copy of `parent`, under
    * `child` where the CLI takes an id. The copy's prompt is the parent's, so a
@@ -100,6 +120,19 @@ function agyLatest(text: string, cwd: string): string | undefined {
     if (typeof id === "string" && id && sameDir(dir, cwd)) return id
   }
   return undefined
+}
+
+/**
+ * The id `nikcli api session.create` printed.
+ *
+ * Read with a pattern rather than `JSON.parse`: the command runs under a pty,
+ * so what comes back can carry escape sequences, carriage returns and a
+ * warning line above the JSON. The id's own shape (`ses_` and base62) is
+ * distinctive enough to be found in that, and anything else is refused.
+ */
+export function mintedNikcliId(output: string): string | undefined {
+  const match = /"id"\s*:\s*"(ses_[A-Za-z0-9]{8,64})"/.exec(output)
+  return match?.[1]
 }
 
 /**
@@ -167,6 +200,10 @@ export const RESUME: Record<string, ResumeRecipe> = {
   nikcli: {
     byId: (id) => ["--session", id],
     last: () => ["--continue"],
+    mint: {
+      args: (title) => ["api", "session.create", "--log-level", "warn", "-d", JSON.stringify({ title })],
+      read: mintedNikcliId,
+    },
   },
   hermes: {
     byId: (id) => ["--resume", id],
@@ -191,9 +228,41 @@ export const RESUME: Record<string, ResumeRecipe> = {
   },
 }
 
-/** True when ADE can pick the conversation id for this agent. */
-export function pinsSessionId(agentId: string): boolean {
-  return RESUME[agentId]?.start !== undefined
+/**
+ * How to ask this agent's CLI for a conversation id, when that is the way.
+ *
+ * Pure, like the rest of this module: the caller runs the command and hands
+ * the output back to `read`.
+ */
+export function planMint(
+  agentId: string,
+  title: string,
+): { args: string[]; read: (output: string) => string | undefined } | undefined {
+  const mint = RESUME[agentId]?.mint
+  return mint ? { args: mint.args(title), read: mint.read } : undefined
+}
+
+/**
+ * What ADE can promise about bringing this session back, for the pane to say.
+ *
+ * `exact` — its own conversation, by id.
+ * `last`  — whatever turns out to be the most recent one in that directory;
+ *           true enough with one session there, a coin toss with two.
+ * `none`  — nothing: the agent starts again and the task is typed in.
+ *
+ * `sameDirectory` is how many other sessions of the same agent share the
+ * directory, which is what turns `last` from a promise into a guess.
+ */
+export function resumePromise(input: {
+  agentId: string
+  resumeId?: string
+  sharedDirectory?: boolean
+}): "exact" | "last" | "none" {
+  const recipe = RESUME[input.agentId]
+  if (!recipe) return "none"
+  if (input.resumeId && recipe.byId) return "exact"
+  if (recipe.last && !input.sharedDirectory) return "last"
+  return "none"
 }
 
 /**

@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { AGENTS } from "./agents"
-import { RESUME, newSessionId, pinsSessionId, planRestore, planResume, planStart } from "./resume"
+import {
+  RESUME,
+  mintedNikcliId,
+  newSessionId,
+  planMint,
+  planRestore,
+  planResume,
+  planStart,
+  resumePromise,
+} from "./resume"
 
 describe("planStart", () => {
   test("an agent that takes an id is started under one, and the id comes back", () => {
@@ -154,7 +163,83 @@ describe("the table and the catalogue", () => {
     for (const [id, recipe] of Object.entries(RESUME)) {
       if (!recipe.start) continue
       expect([id, recipe.byId !== undefined]).toEqual([id, true])
-      expect([id, pinsSessionId(id)]).toEqual([id, true])
     }
+  })
+})
+
+describe("asking nikcli for a conversation", () => {
+  test("the id is read out of what the command printed, noise and all", () => {
+    const printed = [
+      "\u001b[33mwarn\u001b[0m service starting",
+      "{",
+      '  "id": "ses_f3bdf150dffey1rNNrCSDNsBKu",',
+      '  "slug": "neon-mountain",',
+      '  "directory": "C:\\\\Users\\\\39349\\\\Favorites\\\\nikcli-ade-s60"',
+      "}",
+    ].join("\r\n")
+    expect(mintedNikcliId(printed)).toBe("ses_f3bdf150dffey1rNNrCSDNsBKu")
+  })
+
+  test("half a line is not an id, and neither is somebody else's", () => {
+    expect(mintedNikcliId('{ "id": "ses_f3bdf1')).toBeUndefined()
+    expect(mintedNikcliId('{ "id": "msg_0c3e73d64001c352ZyUcYJ9leU" }')).toBeUndefined()
+    expect(mintedNikcliId("")).toBeUndefined()
+  })
+
+  test("the command writes the conversation where the session will run", () => {
+    const plan = planMint("nikcli", "Sessione 2 — nikcli")!
+    expect(plan.args.slice(0, 2)).toEqual(["api", "session.create"])
+    expect(plan.args.at(-1)).toBe(JSON.stringify({ title: "Sessione 2 — nikcli" }))
+    expect(plan.read('{ "id": "ses_aaaaaaaaaaaa" }')).toBe("ses_aaaaaaaaaaaa")
+  })
+
+  test("only the CLIs that need it are asked; the others are not started twice", () => {
+    expect(planMint("nikcli", "t")).toBeDefined()
+    for (const id of ["claude-code", "codex", "agy", "opencode", "terminal"]) {
+      expect([id, planMint(id, "t")]).toEqual([id, undefined])
+    }
+  })
+
+  test("with an id of its own, nikcli is pinned like Claude Code", () => {
+    expect(planResume({ agentId: "nikcli", resumeId: "ses_one" })).toEqual({
+      kind: "resume",
+      via: "id",
+      args: ["--session", "ses_one"],
+    })
+  })
+
+  test("the bug this fixes: two nikcli sessions in one directory come back as two", () => {
+    const plans = planRestore([
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "nikcli", cwd: "/p", resumeId: "ses_two" },
+    ])
+    expect(plans[0]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_one"] })
+    expect(plans[1]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_two"] })
+  })
+
+  test("and without ids it is still the old story, which is why the pane says so", () => {
+    const plans = planRestore([
+      { agentId: "nikcli", cwd: "/p" },
+      { agentId: "nikcli", cwd: "/p" },
+    ])
+    expect(plans[0]!.plan).toEqual({ kind: "resume", via: "last", args: ["--continue"] })
+    expect(plans[1]!.plan).toEqual({ kind: "fresh" })
+  })
+})
+
+describe("resumePromise", () => {
+  test("an id of its own is the only exact promise", () => {
+    expect(resumePromise({ agentId: "nikcli", resumeId: "ses_one" })).toBe("exact")
+    expect(resumePromise({ agentId: "claude-code", resumeId: "abc", sharedDirectory: true })).toBe("exact")
+  })
+
+  test("without one, the most recent here — and not even that with company", () => {
+    expect(resumePromise({ agentId: "nikcli" })).toBe("last")
+    expect(resumePromise({ agentId: "nikcli", sharedDirectory: true })).toBe("none")
+  })
+
+  test("an agent ADE knows nothing about promises nothing", () => {
+    expect(resumePromise({ agentId: "terminal" })).toBe("none")
+    expect(resumePromise({ agentId: "gemini", resumeId: "x" })).toBe("none")
   })
 })
