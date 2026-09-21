@@ -56,10 +56,18 @@ describe("the button tokens", () => {
     expect(recipe).toContain("transform var(--ade-dur-fast)")
   })
 
-  test("the glass theme raises hover and press, and nothing else does", () => {
+  /*
+   * The glass theme is the one place hover and press darken instead of
+   * lightening, and the reason is arithmetic rather than taste: chrome there
+   * already carries a 6% white lift that leaves weak text at 4.51:1, so any
+   * white wash on top takes it under the line — measured, 3.72:1 at 9%. A
+   * white value here is a regression even when it looks fine on the desktop
+   * whoever changed it happened to have open.
+   */
+  test("hover and press darken in the glass theme, because white is spent", () => {
     const glass = rules(index.text, ':root[data-theme="glass"]').join("\n")
-    expect(glass).toContain("--ade-hover: rgba(255, 255, 255, 0.09)")
-    expect(glass).toContain("--ade-active: rgba(255, 255, 255, 0.15)")
+    expect(glass).toContain("--ade-hover: rgba(0, 0, 0, 0.10)")
+    expect(glass).toContain("--ade-active: rgba(0, 0, 0, 0.18)")
   })
 })
 

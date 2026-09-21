@@ -131,16 +131,24 @@
   --ade-border-strong: rgba(255, 255, 255, 0.22);
   --ade-highlight: rgba(255, 255, 255, 0.15);
   /*
-   * Hover and press have to be louder here than anywhere else.
+   * Here hover and press darken. Everywhere else they lighten.
    *
-   * The dark theme's 4.5% white sits on an opaque ground. Glass surfaces are
-   * `rgba(...)` at 70-72%, so the same wash lands on something already washed
-   * out and all but disappears — about a third of the contrast it has in the
-   * dark theme. These two values are the only ones the glass theme changes for
-   * S62, and they change nowhere else.
+   * White is spent. Chrome already carries the 6% lift, and on the bar that
+   * puts weak text at 4.51:1 — above the line by a hundredth. Measured on a
+   * white desktop with the slider at its floor, adding the 9% white wash this
+   * theme used to inherit drops that text to 3.72:1, and 15% to 3.27:1: the
+   * hover state would have been the one place the type failed.
+   *
+   * Darkening spends nothing, because the text here is light: the same ground
+   * goes 4.53 → 5.31 → 6.04:1 through rest, hover and press. And the amount
+   * lands where the eye already expects it — at the slider's top the hover
+   * moves the ground by 0.82 of a point of luminance against the dark theme's
+   * 0.85, so it feels like the hover everyone knows. Toward the floor it grows
+   * to 2.75, which is right: there the desktop shows through and a quieter
+   * wash would be lost in it.
    */
-  --ade-hover: rgba(255, 255, 255, 0.09);
-  --ade-active: rgba(255, 255, 255, 0.15);
+  --ade-hover: rgba(0, 0, 0, 0.10);
+  --ade-active: rgba(0, 0, 0, 0.18);
 }
 
 /*
