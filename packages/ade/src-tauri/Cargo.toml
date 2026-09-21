@@ -41,7 +41,12 @@ devtools = ["tauri/devtools"]
 test-exe = []
 
 [dependencies]
-tauri = { version = "2.9.5", features = [] }
+# `macos-private-api`: the glass theme asks for a transparent window, and on
+# macOS `WebviewWindowBuilder::transparent` exists only behind this feature —
+# without it the release build failed with E0599 and 0.7.3 never shipped. It
+# is also what `window-vibrancy` asks for, together with `macOSPrivateApi` in
+# `tauri.conf.json`; Tauri refuses to build if only one of the two is set.
+tauri = { version = "2.9.5", features = ["macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
