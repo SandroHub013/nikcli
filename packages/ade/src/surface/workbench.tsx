@@ -36,7 +36,16 @@ import {
   worktreeAddArgs,
 } from "../session/orchestra"
 import { detectAgents } from "../session-new/availability"
-import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
+import {
+  RESUME,
+  planFork,
+  planMint,
+  planRestore,
+  planResume,
+  planStart,
+  resumePromise,
+  type ResumePlan,
+} from "../session-new/resume"
 import { followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
@@ -4474,6 +4483,65 @@ export function Workbench() {
   }
 
   /**
+   * How long to wait for a CLI asked to open a conversation for ADE.
+   *
+   * `nikcli api session.create` answers in a couple of seconds warm, and
+   * takes longer the first time it looks at a large repository. Past this the
+   * session starts anyway without an id: a pane that opens late is worse than
+   * a pane that says it cannot promise to come back.
+   */
+  const MINT_MS = 15_000
+
+  /**
+   * Asking a CLI for a conversation, for the ones that refuse an invented id.
+   *
+   * The command prints the new conversation and then stays up — it holds the
+   * CLI's background service open — so this reads until the id appears and
+   * kills it, rather than waiting for an exit that is not coming.
+   */
+  const mintConversation = async (agentId: string, command: string, cwd: string, title: string) => {
+    const plan = planMint(agentId, title)
+    const host = await getHost()
+    if (!plan || !host) return undefined
+    return await new Promise<string | undefined>((resolve) => {
+      let text = ""
+      let settled = false
+      let child: SpawnedSession | undefined
+      const finish = (id?: string) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        child?.kill({ tree: true })
+        resolve(id)
+      }
+      const timer = setTimeout(() => finish(undefined), MINT_MS)
+      const read = (line: string) => {
+        text += `${stripAnsi(line)}\n`
+        const id = plan.read(text)
+        if (id) finish(id)
+      }
+      host
+        .spawn({
+          command,
+          args: plan.args,
+          cwd,
+          // A terminal, like every other agent: pipes are Claude Code's alone
+          // (`pty.rs`). Wide enough that the printed JSON is not wrapped
+          // through the middle of the id.
+          cols: 400,
+          rows: 12,
+          onLine: read,
+          onExit: () => finish(plan.read(text)),
+        })
+        .then((spawned) => {
+          child = spawned
+          if (settled) spawned.kill({ tree: true })
+        })
+        .catch(() => finish(undefined))
+    })
+  }
+
+  /**
    * Brings a session with no process back from its own pane.
    *
    * A restored session whose agent had already exited — or one that exited
@@ -4548,7 +4616,8 @@ export function Workbench() {
      * a session that cannot be resumed and looks like one that can.
      */
     const resumed = resume?.kind === "resume"
-    const opening = resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
+    let opening: { args: string[]; resumeId?: string } =
+      resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
     /*
      * The `ade-msg` notice first: `codex -c …` has to precede a `resume`
      * subcommand, and for the rest the order does not matter. The shell has
@@ -4562,8 +4631,42 @@ export function Workbench() {
      */
     const launched = wb().panes.find((pane) => pane.id === paneId)
     const workDir = launched?.worktree || p.root
+
+    /*
+     * And the id asked of the CLI, when that is the only way to have one.
+     *
+     * Before the real session starts, so it can be started *as* that
+     * conversation: nikcli's `--session` continues one, it does not open one.
+     * When the ask fails the session still starts — just without a
+     * conversation ADE can name, which the pane then says out loud rather
+     * than discovering at the next restart.
+     */
+    if (!resumed && !opening.resumeId && RESUME[agentId]?.mint) {
+      const title = launched?.title || agent.label || agentId
+      const minted = await mintConversation(agentId, agent.command, workDir, title)
+      const byId = RESUME[agentId]?.byId
+      if (minted && byId) opening = { args: byId(minted), resumeId: minted }
+      else appendLine(paneId, t("resume.noMint", agent.label || agentId), "note")
+    }
+
     const extraArgs = [...introArgs(agentId), ...(launched?.spawnArgs ?? []), ...opening.args, ...(extra ?? [])]
-    const mintedId = "resumeId" in opening ? opening.resumeId : undefined
+    const mintedId = opening.resumeId
+
+    /*
+     * What ADE can promise about this session coming back, said once, here.
+     *
+     * A pane that cannot be reopened by id looks exactly like one that can
+     * until the day ADE is restarted — which is the bug this was written for:
+     * two nikcli sessions in one directory, and the second one came back as a
+     * new conversation with the old title.
+     */
+    const others = wb().panes.some(
+      (pane) => pane.id !== paneId && (pane.agent ?? pane.model) === agentId && (pane.cwd || p.root) === workDir,
+    )
+    const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
+    if (!resumed && promise !== "exact") {
+      appendLine(paneId, promise === "last" ? t("resume.onlyLast") : t("resume.none"), "note")
+    }
 
     /*
      * And the other direction: the CLI telling ADE which conversation it

@@ -741,6 +741,9 @@ export const en: Messages = {
 
   // Notes in panels (what the user reads; the agents get their own Italian text)
   "note.someSession": "a session",
+  "resume.noMint": (agent) => `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
+  "resume.onlyLast": "On a restart ADE can only reopen the most recent conversation in this directory",
+  "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,

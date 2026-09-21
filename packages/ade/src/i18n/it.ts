@@ -746,6 +746,11 @@ export const it = {
 
   // Notes in panels (what the user reads; the agents get their own Italian text)
   "note.someSession": "una sessione",
+  "resume.noMint": (agent: string) =>
+    `${agent} non ha aperto una conversazione da ritrovare: se ADE si chiude, questa sessione riparte da zero`,
+  "resume.onlyLast": "Al riavvio ADE potrà riaprire solo l'ultima conversazione di questa cartella",
+  "resume.none":
+    "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
