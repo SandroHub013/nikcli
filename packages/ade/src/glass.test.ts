@@ -9,8 +9,10 @@ import { join } from "node:path"
  * components excused from it, so only what was on the list read as glass:
  * measured in ADE Test on a white desktop with the slider at its minimum, the
  * shell read alpha 0.73 while the sidebar and the shot tray read 0.99 — opaque.
- * The fix is that transparency is the default and opacity lives in one
- * declaration, which is what these tests hold in place.
+ * Removing the list was not enough, because the veil itself started at 0.68:
+ * no position of the slider let the desktop through. So there are two layers
+ * now — a low floor for the window, a reading ground where the text is — and
+ * these tests hold both the floor and the readability in place.
  */
 const css = readFileSync(join(import.meta.dir, "index.css"), "utf8")
 /* Comments carry braces and prose; they are not rules. */
@@ -69,11 +71,41 @@ describe("il tema vetro vale per default", () => {
     }
   })
 
-  test("il velo è dipinto una volta sola", () => {
+  test("il fondo della finestra è dipinto una volta sola", () => {
     const painters = glassRules().filter(({ body }) => /background:[^;]*--ade-glass-veil/.test(body))
     expect(painters.map((rule) => rule.selector)).toEqual([
       '[data-component="ade-shell"][data-theme="glass"]',
     ])
+  })
+
+  test("il fondo di lettura lo aggiungono gli slot del guscio, non i componenti", () => {
+    /*
+     * The second layer is what makes text legible over a floor this low, so
+     * it may be added once, by places in the shell — a grid cell's child, the
+     * sidebar, the bar. If a component's name ever appears here, a panel written
+     * next week is illegible until someone remembers to add it.
+     */
+    const grounds = glassRules().filter(({ body }) => /background:[^;]*--ade-glass-read/.test(body))
+    const selectors = grounds.flatMap((rule) => rule.selector.split(",").map((part) => part.trim()))
+    expect(selectors).toEqual([
+      '[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"]',
+      '[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component]',
+      '[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"]',
+    ])
+  })
+
+  test("il pavimento parte abbastanza in basso da lasciar vedere la scrivania", () => {
+    /*
+     * Fabio, trying it live: at 0.68 there is no position of the slider that
+     * is not two thirds paint. A floor is only a floor if you can see through
+     * it; a third of the desktop is the least that reads as glass at all.
+     */
+    const veil = /calc\(([\d.]+) \+ ([\d.]+) \*/.exec(token("--ade-glass-veil"))
+    expect(veil).not.toBeNull()
+    const floor = Number(veil![1])
+    const ceiling = floor + Number(veil![2])
+    expect(floor).toBeLessThanOrEqual(0.2)
+    expect(ceiling).toBeLessThanOrEqual(0.9)
   })
 
   test("non c'è un elenco di componenti da ricordare", () => {
@@ -121,16 +153,21 @@ describe("il tema vetro vale per default", () => {
 describe("leggibilità del vetro al minimo", () => {
   /*
    * The worst case S49 fixed and this must not undo: the slider at 0 over a
-   * white desktop. The veil is the only thing between the text and that white.
+   * white desktop. Between the text and that white there is the floor plus
+   * the reading ground, and nothing else — so this is where the reading
+   * ground earns its 0.64.
    */
   const veil = /rgba\((\d+), (\d+), (\d+), calc\(([\d.]+)/.exec(token("--ade-glass-veil"))
   const base = veil ? [Number(veil[1]), Number(veil[2]), Number(veil[3])] : []
-  const alpha = veil ? Number(veil[4]) : 0
+  const floor = veil ? Number(veil[4]) : 0
+  const read = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(token("--ade-glass-read"))?.[1] ?? 0)
+  // What text actually sits on: the floor with the reading ground over it.
+  const readingAlpha = floor + read * (1 - floor)
   const over = (background: number[], alphaOf: number) =>
     background.map((channel, i) => Math.round(255 * (1 - alphaOf) + channel * alphaOf))
 
   test("i tre livelli di testo stanno sopra 4,5:1 su scrivania bianca", () => {
-    const ground = over(base, alpha)
+    const ground = over(base, readingAlpha)
     for (const name of ["--ade-text", "--ade-text-soft", "--ade-text-weak"]) {
       expect([name, contrast(channels(token(name)), ground) >= 4.5]).toEqual([name, true])
     }
@@ -138,7 +175,7 @@ describe("leggibilità del vetro al minimo", () => {
 
   test("valgono anche sul rialzo del 6%", () => {
     // The lift brightens the glass, which is the direction that costs contrast.
-    const lift = over(base, alpha).map((channel) => Math.round(channel * 0.94 + 255 * 0.06))
+    const lift = over(base, readingAlpha).map((channel) => Math.round(channel * 0.94 + 255 * 0.06))
     for (const name of ["--ade-text", "--ade-text-soft", "--ade-text-weak"]) {
       expect([name, contrast(channels(token(name)), lift) >= 4.5]).toEqual([name, true])
     }
