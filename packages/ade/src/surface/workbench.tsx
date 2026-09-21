@@ -2782,6 +2782,13 @@ export function Workbench() {
 
   const [voiceNotice, setVoiceNotice] = createSignal<string | undefined>(
     [
+      /*
+       * Listening turned off under the user goes in the strip at the top, not
+       * only next to the switch: it is their money and their microphone, and
+       * a note that waits for someone to open the voice settings is a note
+       * nobody reads.
+       */
+      listeningOff ? t("voice.listeningOff", agentShortcut, t("vui.listen.always")) : undefined,
       initialVoice.corrections.filter((c) => !c.includes("assenti")).length > 0
         ? initialVoice.corrections.filter((c) => !c.includes("assenti")).join(" ")
         : rawSavedVoice !== null && initialVoice.corrections.length > 0

@@ -128,6 +128,34 @@ describe("settings/model - normalizeSettings", () => {
     expect(WAKE_PHRASE).toBe("nik")
   })
 
+  test("a 0.7.2 profile, which listened all the time, opens no microphone after the update", () => {
+    // What ADE 0.7.2 wrote for a user who had listening on: version 6, and
+    // always-on listening, which was the default then. It is the profile the
+    // user was running when the microphone spent an hour on the room.
+    const saved = {
+      version: 6,
+      mode: "agent",
+      activation: "wake-word",
+      alwaysListen: true,
+      wakeWord: "nik",
+      transcriptionSend: "manual",
+      language: "it",
+      backend: "openrouter",
+      agentChord: DEFAULT_VOICE_SETTINGS.agentChord,
+      transcriptionChord: DEFAULT_VOICE_SETTINGS.transcriptionChord,
+      parakeetBackend: DEFAULT_VOICE_SETTINGS.parakeetBackend,
+    }
+    const after = normalizeSettings(saved)
+    expect(after.alwaysListen).toBe(false)
+    expect(after.activation).toBe("wake-word")
+    expect(after.migrations).toEqual(["listening-off"])
+    // Nothing went wrong: it is a rule that changed, not a broken profile.
+    expect(after.corrections).toEqual([])
+    // Written back, it is not turned off or told again, and turning it on is kept.
+    expect(normalizeSettings(after.settings).migrations).toEqual([])
+    expect(normalizeSettings({ ...after.settings, alwaysListen: true }).alwaysListen).toBe(true)
+  })
+
   test("listening on its own is off unless it is chosen, and a profile that had it is turned off once", () => {
     expect(DEFAULT_VOICE_SETTINGS.alwaysListen).toBe(false)
     const moved = normalizeSettings({ version: 2, mode: "agent", activation: "wake-word" as const, alwaysListen: true })
