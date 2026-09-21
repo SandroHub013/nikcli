@@ -24,6 +24,8 @@ import { SimulatorPane } from "../simulator/simulator-pane"
 import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
+import { DesignPane } from "../design/design-pane"
+import type { DesignHub } from "../design/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
@@ -77,6 +79,8 @@ export interface PaneRendererDeps {
   guessServers: () => Promise<DevServerGuess[]>
   /** The project's decisions register, shared with the bar's badge and window. */
   decisions: DecisionsHub
+  /** The project's design proposals register, shared with the bar's badge and window. */
+  design: DesignHub
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
@@ -299,6 +303,16 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    const designPane = () => (
+      <DesignPane
+        hub={deps.design}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -486,7 +500,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
             <Show when={current().mode === "video"} fallback={
               <Show when={current().mode === "model"} fallback={
                 <Show when={current().mode === "app"} fallback={
-                  <Show when={current().mode === "decisions"} fallback={sessionPane()}>
+                  <Show when={current().mode === "decisions"} fallback={
+                    <Show when={current().mode === "design"} fallback={sessionPane()}>
+                      {designPane()}
+                    </Show>
+                  }>
                     {decisionsPane()}
                   </Show>
                 }>

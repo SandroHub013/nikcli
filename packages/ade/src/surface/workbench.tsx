@@ -285,6 +285,25 @@ import {
 import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
 import { decisionsPath } from "../decisions/store"
+import { countLabel as designCountLabel } from "../design/answer"
+import { DesignSheet } from "../design/design-sheet"
+import {
+  OUTBOX_KEY as DESIGN_OUTBOX_KEY,
+  RECIPIENT_KEY as DESIGN_RECIPIENT_KEY,
+  chooseRecipient as chooseDesignRecipient,
+  deliveryLine as designDeliveryLine,
+  deliveryState as designDeliveryState,
+  enqueue as enqueueDesign,
+  markDelivered as markDesignDelivered,
+  parseOutbox as parseDesignOutbox,
+  parseRecipients as parseDesignRecipients,
+  pendingFor as pendingForDesign,
+  pruneOutbox as pruneDesignOutbox,
+  resolveRecipient as resolveDesignRecipient,
+} from "../design/delivery"
+import { createDesignHub } from "../design/hub"
+import { createDesignRegister } from "../design/register"
+import { designPath } from "../design/store"
 import {
   AgentOrb,
   createMicMeter,
@@ -1155,6 +1174,114 @@ export function Workbench() {
   })
 
   /*
+   * Design: the register in `.ade/design.jsonl`, a badge in the bar
+   * while any proposal waits for the user, the window that goes through them one at a
+   * time, and the panel with all of them. See `design/`.
+   */
+  const designRegister = createDesignRegister({
+    path: () => {
+      const root = project()?.root
+      return root ? designPath(root) : undefined
+    },
+    io: async () => {
+      const host = await getHost()
+      if (!host?.readTextFile || !host.writeTextFile) return undefined
+      return {
+        readTextFile: (path: string, maxBytes?: number) => host.readTextFile!(path, maxBytes),
+        writeTextFile: (path: string, contents: string) => host.writeTextFile!(path, contents),
+        ...(host.appendTextFile ? { appendTextFile: (path: string, text: string) => host.appendTextFile!(path, text) } : {}),
+        ...(host.readDir ? { readDir: (path: string) => host.readDir!(path) } : {}),
+      }
+    },
+  })
+
+  const [designOutbox, setDesignOutbox] = createSignal<OutboxItem[]>(
+    (() => {
+      try {
+        return parseDesignOutbox(localStorage.getItem(DESIGN_OUTBOX_KEY))
+      } catch {
+        return []
+      }
+    })(),
+  )
+  const saveDesignOutbox = (items: OutboxItem[]) => {
+    setDesignOutbox(items)
+    try {
+      localStorage.setItem(DESIGN_OUTBOX_KEY, JSON.stringify(items))
+    } catch {}
+  }
+
+  const [designRecipients, setDesignRecipients] = createSignal<Record<string, RecipientChoice>>(
+    (() => {
+      try {
+        return parseDesignRecipients(localStorage.getItem(DESIGN_RECIPIENT_KEY))
+      } catch {
+        return {}
+      }
+    })(),
+  )
+  const designCandidates = () =>
+    mailPanes().map((pane) => ({ id: pane.id, title: pane.title, project: pane.project, running: isRunning(pane.id) }))
+  const designRecipient = () => {
+    const path = designRegister.path()
+    return resolveDesignRecipient(designCandidates(), path ? designRecipients()[path] : undefined)
+  }
+  const chooseDesignRecipientAction = (id: string | undefined) => {
+    const path = designRegister.path()
+    if (!path) return
+    const pane = id ? designCandidates().find((candidate) => candidate.id === id) : undefined
+    const next = chooseDesignRecipient(designRecipients(), path, pane ? { id: pane.id, title: pane.title } : undefined)
+    setDesignRecipients(next)
+    try {
+      localStorage.setItem(DESIGN_RECIPIENT_KEY, JSON.stringify(next))
+    } catch {}
+    void deliverDesign()
+  }
+
+  let deliveringDesign = false
+  const deliverDesign = async () => {
+    const path = designRegister.path()
+    const state = designRegister.state()
+    if (!path || !state || deliveringDesign) return
+    const kept = pruneDesignOutbox(designOutbox(), path, state.proposals)
+    if (kept.length !== designOutbox().length) saveDesignOutbox(kept)
+    const pending = pendingForDesign(kept, path)
+    if (pending.length === 0) return
+    const target = designRecipient()
+    if (target.state !== "pronta") return
+    const host = await getHost()
+    if (!host) return
+    deliveringDesign = true
+    try {
+      for (const item of pending) {
+        const proposal = state.proposals.find((entry) => entry.k === item.k)
+        if (!proposal || !running.has(target.id) || !(await freeNow(host, target.id))) continue
+        if (!(await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" }))) continue
+        const stored = designOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
+        if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, target.title, Date.now()))
+        appendLine(target.id, t("design.delivery.done", target.title, "adesso"), "note")
+      }
+    } finally {
+      deliveringDesign = false
+    }
+  }
+
+  const designHub = createDesignHub({
+    register: designRegister,
+    projectRoot: () => project()?.root,
+    recipient: designRecipient,
+    sessions: designCandidates,
+    choose: chooseDesignRecipientAction,
+    delivery: (proposal) => designDeliveryState(designOutbox(), designRegister.path() ?? "", proposal),
+    onAnswered: (proposal, event) => {
+      const path = designRegister.path()
+      if (!path) return
+      saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
+      void deliverDesign()
+    },
+  })
+
+  /*
    * S41: <html lang> matches the interface, and under "System" a change of
    * the OS language shows at once instead of at the next launch.
    */
@@ -1167,11 +1294,39 @@ export function Workbench() {
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(() => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "aperta").length ?? 0)
 
+  const [designOpen, setDesignOpen] = createSignal(false)
+  const designWaiting = createMemo(() => designRegister.state()?.proposals.filter((proposal) => proposal.status === "aperta").length ?? 0)
+
   onMount(() => {
     onCleanup(decisionsRegister.watch())
+    onCleanup(designRegister.watch())
     // Only does work while an answer is waiting to go out.
-    onCleanup(every(3000, () => deliverDecisions(), { whenHidden: 15_000 }))
+    onCleanup(every(3000, () => {
+      void deliverDecisions()
+      void deliverDesign()
+    }, { whenHidden: 15_000 }))
   })
+
+  /** Opens the Design panel, or focuses the one already open. */
+  const openDesignPane = () => {
+    const existing = wb().panes.find((pane) => pane.mode === "design")
+    if (existing) {
+      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
+      return
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: `des${Date.now()}`,
+        title: "Design",
+        status: "working",
+        model: "—",
+        mode: "design",
+        workspaceId: project()?.name ?? "workspace",
+        lines: [],
+      }),
+      view: "code",
+    }))
+  }
 
   /** Opens the Decisions panel, or focuses the one already open. */
   const openDecisionsPane = () => {
@@ -3793,6 +3948,10 @@ export function Workbench() {
       setDecisionsOpen(true)
     } else if (id === "decisions.pane") {
       openDecisionsPane()
+    } else if (id === "design.open") {
+      setDesignOpen(true)
+    } else if (id === "design.pane") {
+      openDesignPane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -5298,6 +5457,7 @@ export function Workbench() {
     captureFrame,
     guessServers,
     decisions: decisionsHub,
+    design: designHub,
     panels,
     announceToAll,
     pluginRuntime,
@@ -5413,6 +5573,25 @@ export function Workbench() {
             title={t("decisions.waiting")}
           >
             {countLabel(decisionsWaiting())}
+          </button>
+        </Show>
+        {/* Design proposals waiting for the user. Hidden at zero; opens only when pressed. */}
+        <Show when={designWaiting() > 0}>
+          <button
+            type="button"
+            data-slot="design-badge"
+            onClick={() => setDesignOpen(true)}
+            title={t("design.waiting")}
+            aria-label={designCountLabel(designWaiting())}
+          >
+            <span data-slot="design-badge-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M10 4l2 2" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span data-slot="design-badge-count">{designWaiting()}</span>
+            <span data-slot="design-badge-label">{t("design.title")}</span>
           </button>
         </Show>
         </div>
@@ -5921,6 +6100,17 @@ export function Workbench() {
         />
       </Show>
 
+      <Show when={designOpen()}>
+        <DesignSheet
+          hub={designHub}
+          onClose={() => setDesignOpen(false)}
+          onOpenPanel={() => {
+            setDesignOpen(false)
+            openDesignPane()
+          }}
+        />
+      </Show>
+
       <Show when={keyRequest() && keysHost()}>
         <KeyRequestDialog
           host={keysHost()!}
@@ -6152,6 +6342,10 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
         <path d="M8 1.8v3.4M8 5.2L3.2 9.4M8 5.2l4.8 4.2" stroke-linecap="round" stroke-linejoin="round" />
         <circle cx="3.2" cy="11.6" r="2.2" />
         <circle cx="12.8" cy="11.6" r="2.2" />
+      </Show>
+      <Show when={props.kind === "design"}>
+        <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M10 4l2 2" stroke-linecap="round" />
       </Show>
     </svg>
   )

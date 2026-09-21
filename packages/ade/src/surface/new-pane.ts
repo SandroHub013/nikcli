@@ -21,7 +21,7 @@ export interface NewPaneItem {
   /** One line under the label: what this pane is actually for. */
   readonly hint: string
   /** Drawn by the component; named here so the order and the icon agree. */
-  readonly glyph: "session" | "browser" | "video" | "model" | "app" | "decisions"
+  readonly glyph: "session" | "browser" | "video" | "model" | "app" | "decisions" | "design"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -70,6 +70,12 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
     get label() { return t("newPane.decisions") },
     get hint() { return t("newPane.decisions.hint") },
     glyph: "decisions",
+  },
+  {
+    commandId: "design.pane",
+    get label() { return t("newPane.design") },
+    get hint() { return t("newPane.design.hint") },
+    glyph: "design",
   },
 ]
 

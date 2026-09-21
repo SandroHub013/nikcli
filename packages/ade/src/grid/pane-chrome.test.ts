@@ -41,7 +41,7 @@ const panes = [...renderer.matchAll(/const (\w+Pane) = \(\) => \(\s*<(\w+)([\s\S
 describe("pane chrome", () => {
   test("the renderer's panes are all found", () => {
     expect(panes.map((pane) => pane.name).sort()).toEqual(
-      ["browserPane", "decisionsPane", "filePane", "modelPane", "pluginPane", "sessionPane", "simulatorPane", "videoPane"].sort(),
+      ["browserPane", "decisionsPane", "designPane", "filePane", "modelPane", "pluginPane", "sessionPane", "simulatorPane", "videoPane"].sort(),
     )
   })
 

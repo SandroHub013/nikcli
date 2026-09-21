@@ -263,6 +263,18 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["decisioni", "registro", "risposte", "rimandate", "chiuse", "bearings", "decisions", "log", "answers"],
     },
     {
+      id: "design.open",
+      title: t("palette.design.open"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "proposte", "varianti", "anteprima", "mockup", "bozza", "proposals", "preview", "variants"],
+    },
+    {
+      id: "design.pane",
+      title: t("palette.design.pane"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "pannello", "registro", "varianti", "anteprime", "panel", "log"],
+    },
+    {
       id: "update.check",
       title: t("palette.update.check"),
       group: "ADE",
