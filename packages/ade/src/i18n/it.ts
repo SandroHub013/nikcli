@@ -34,8 +34,10 @@ export const it = {
   "settings.theme.glass": "Vetro",
   "settings.theme.system": "Sistema",
   "settings.theme.opacity": "Opacità della trasparenza",
-  "settings.theme.opacityDesc":
-    "Regola il velo di fondo della finestra: un velo minimo garantisce sempre il contrasto e la leggibilità di testi e terminali.",
+  "settings.theme.opacityDesc": (min: number) =>
+    `Regola quanto la scrivania si vede attraverso la finestra. Dal ${min}% in su il testo resta sopra il contrasto minimo.`,
+  "settings.theme.opacityLow": (min: number) =>
+    `Sotto il ${min}% il vetro è più spinto e il testo perde contrasto sulle scrivanie chiare.`,
   "settings.theme.unsupported":
     "Il tema Vetro non è supportato su questo sistema o compositore grafico.",
   "settings.theme.desktopOnly":

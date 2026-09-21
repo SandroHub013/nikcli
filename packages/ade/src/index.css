@@ -103,18 +103,34 @@
   --ade-text-weak: #ebe7e5;
 
   /*
-   * The floor and the reading ground. Opacity is tuned in these two
-   * declarations and nowhere else.
+   * The floor and the reading ground. Both follow the slider, and opacity is
+   * tuned in these two declarations and nowhere else.
    *
-   * Veil:    0.10 → 0.65 across the slider, so the minimum is a window you
-   *          can see through rather than a dark pane.
-   * Reading: a fixed 0.64 on top of it. Composited, the ground under text is
-   *          0.68 at the minimum — the readability floor — and 0.87 at the
-   *          maximum, which is where someone who wants an opaque window puts
-   *          the slider anyway.
+   * The reading ground used to be fixed at 0.64, which made the slider a
+   * choice between a legible window and a slightly more legible one: the
+   * ground under text never went below 0.68 however far down it was dragged.
+   * The user had seen the version where those areas were still on the bare
+   * floor and wanted it back — beautiful, and unreadable at 1.23:1. So the
+   * ground follows the slider too, and how readable the window is becomes
+   * the thing the slider chooses.
+   *
+   * Veil:    0.06 → 0.40, the window's own floor.
+   * Reading: 0.05 → 0.90, on a fourth root — it climbs fast over the first
+   *          few percent and then slowly, which is what puts the 4.5:1 line
+   *          at 20% of the slider instead of halfway up it.
+   *
+   * Composited on a white desktop, the ground under text is alpha 0.11 at 0
+   * (1.25:1 — the glass the user asked for), 0.67 at 20% (5.39 / 4.59 / 4.39
+   * on the lift, the worst ground in the theme), 0.89 at the default 75% and
+   * 0.94 at the top. Below 20% the settings panel says so, and lets the user
+   * carry on.
+   *
+   * The linear line is a fallback: an engine without `pow()` gets a
+   * reasonable ground rather than no declaration at all.
    */
-  --ade-glass-veil: rgba(19, 17, 17, calc(0.10 + 0.55 * var(--ade-glass-opacity, 0.75)));
-  --ade-glass-read: rgba(19, 17, 17, 0.64);
+  --ade-glass-veil: rgba(19, 17, 17, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
 
   /* Containers hold; they do not paint. */
   --ade-bg: transparent;
