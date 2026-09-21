@@ -655,6 +655,9 @@
     padding: 0 var(--ade-space-3);
     gap: var(--ade-space-2);
   }
+  [data-slot="ade-window-controls"] {
+    margin-right: calc(-1 * var(--ade-space-3));
+  }
   [data-slot="ade-bar-center"] {
     gap: 2px;
     max-width: calc(100% - 16px);

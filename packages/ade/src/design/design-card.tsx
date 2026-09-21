@@ -75,15 +75,15 @@ export function DesignCard(props: {
                     projectRoot={props.projectRoot}
                     onToggleFullScreen={() => props.onOpenFullPreview?.(variant)}
                   />
-                  <div
-                    data-slot="variant-preview-source"
-                    title={resolvePreviewPath(variant.preview, props.projectRoot)}
-                  >
-                    <span data-slot="variant-preview-source-label">{t("design.preview.source")}:</span>
-                    <span data-slot="variant-preview-source-path">
-                      {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
-                    </span>
-                  </div>
+                </div>
+                <div
+                  data-slot="variant-preview-source"
+                  title={resolvePreviewPath(variant.preview, props.projectRoot)}
+                >
+                  <span data-slot="variant-preview-source-label">{t("design.preview.source")}:</span>
+                  <span data-slot="variant-preview-source-path">
+                    {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
+                  </span>
                 </div>
               </Show>
             </div>

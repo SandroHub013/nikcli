@@ -200,15 +200,35 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     expect(css).toContain('display: none;')
   })
 
-  test("dev.css compacts ade-view-tab and ade-bar-center under 640px", () => {
+  test("dev.css compacts ade-view-tab and ade-bar-center under 640px, and aligns window controls margin", () => {
     const devCssPath = join(__dirname, "../dev.css")
     const css = readFileSync(devCssPath, "utf-8")
 
     expect(css).toContain('@media (max-width: 640px)')
-    expect(css).toContain('[data-slot="ade-view-tab"]')
+    expect(css).toContain('[data-slot="ade-bar"]')
     expect(css).toContain('padding: 0 var(--ade-space-3);')
+    expect(css).toContain('[data-slot="ade-window-controls"]')
+    expect(css).toContain('margin-right: calc(-1 * var(--ade-space-3));')
     expect(css).toContain('[data-slot="ade-bar-center"]')
     expect(css).toContain('max-width: calc(100% - 16px);')
+    expect(css).toContain('[data-slot="ade-view-tab"]')
+    expect(css).toContain('padding: 0 var(--ade-space-3);')
+  })
+
+  test("variant-preview-source is rendered outside variant-preview-wrap so overflow:hidden does not clip it", () => {
+    const cardTsxPath = join(__dirname, "design-card.tsx")
+    const tsx = readFileSync(cardTsxPath, "utf-8")
+
+    // The wrapper has overflow: hidden and fixed height
+    expect(tsx).toContain('data-slot="variant-preview-wrap"')
+    expect(tsx).toContain('data-slot="variant-preview-source"')
+
+    // Ensure variant-preview-source is placed AFTER variant-preview-wrap closes, not inside it
+    const wrapIndex = tsx.indexOf('data-slot="variant-preview-wrap"')
+    const wrapCloseIndex = tsx.indexOf("</div>", wrapIndex)
+    const sourceIndex = tsx.indexOf('data-slot="variant-preview-source"')
+
+    expect(sourceIndex).toBeGreaterThan(wrapCloseIndex)
   })
 
   test("at 420px window width, document scrollWidth is exactly 420 both with and without proposals", () => {
@@ -225,6 +245,20 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     const paletteBtnWidth = 24
     const centerGaps = 2 * 3
 
+    // Window controls and end side group geometry:
+    // Top bar width is 420px, right padding is 6px (--ade-space-3)
+    const barPaddingRight = 6
+    // In narrow mode, ade-window-controls margin-right is calc(-1 * var(--ade-space-3)) = -6px
+    const windowControlsMarginRight = -6
+    // End group right boundary in the document:
+    // With margin-right matching padding-right, the controls flush with the outer 420px container
+    const windowControlsRight = windowWidth - barPaddingRight - windowControlsMarginRight
+    expect(windowControlsRight).toBe(420)
+
+    // Previous bug check: if margin-right had remained -12px (desktop default) while padding was 6px:
+    const prevBuggyRight = windowWidth - barPaddingRight - (-12)
+    expect(prevBuggyRight).toBe(426) // Document measured 426px due to 6px mismatch
+
     // Case 1: Without proposals (designWaiting = 0)
     const centerWidthWithoutProposals = tabsWidth + paletteBtnWidth + centerGaps
     // Centered over session area: left offset = 200 + (420 - 200)/2 = 310px
@@ -240,11 +274,15 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     const centerStartWith = Math.max(leftGroupWidth + 8, Math.min(310 - centerWidthWithProposals / 2, windowWidth - centerWidthWithProposals - 8))
     const centerEndWith = centerStartWith + centerWidthWithProposals
     expect(centerEndWith).toBeLessThanOrEqual(windowWidth)
+    // Pastiglia stays comfortably within 420px (between 401px and 414px)
+    expect(centerEndWith).toBeGreaterThan(400)
+    expect(centerEndWith).toBeLessThanOrEqual(415)
 
-    // Simulate document.documentElement.scrollWidth layout calculation
+    // Compute document scrollWidth taking into account all children:
+    // Left group, Center group (with or without proposals), and Window Controls
     const computeDocumentScrollWidth = (withProposals: boolean) => {
-      const maxChildRight = withProposals ? centerEndWith : centerEndWithout
-      return Math.max(windowWidth, maxChildRight)
+      const centerRight = withProposals ? centerEndWith : centerEndWithout
+      return Math.max(windowWidth, centerRight, windowControlsRight)
     }
 
     // Set scrollWidth property on document.documentElement for the test assertion
@@ -252,14 +290,14 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     const origScrollWidth = Object.getOwnPropertyDescriptor(doc.documentElement, "scrollWidth")
 
     try {
-      // Test without proposals
+      // Test without proposals: document scrollWidth must be exactly 420px
       Object.defineProperty(doc.documentElement, "scrollWidth", {
         configurable: true,
         get: () => computeDocumentScrollWidth(false),
       })
       expect(doc.documentElement.scrollWidth).toBe(420)
 
-      // Test WITH proposals
+      // Test WITH proposals: document scrollWidth must be exactly 420px
       Object.defineProperty(doc.documentElement, "scrollWidth", {
         configurable: true,
         get: () => computeDocumentScrollWidth(true),

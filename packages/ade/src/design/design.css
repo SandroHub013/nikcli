@@ -110,7 +110,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: var(--ade-space-2);
+  margin-top: -2px;
   font-size: 11px;
   color: var(--ade-text-weak);
   line-height: 1.3;
