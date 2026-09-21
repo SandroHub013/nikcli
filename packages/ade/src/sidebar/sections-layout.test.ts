@@ -74,3 +74,45 @@ describe("the screenshot tray", () => {
     }
   })
 })
+
+/**
+ * When space is constrained (e.g. short or narrow windows with "File" open),
+ * the sections box must scroll rather than clip its children. Open sections
+ * must remain scrollable, section headers must never be clipped, and no visible
+ * scrollbars should appear.
+ */
+describe("sidebar section scrolling and scrollbars", () => {
+  test("scrolls rather than clipping content when height runs short", () => {
+    const body = ruleBody('[data-slot="sidebar-sections"]')
+    expect(body).toContain("overflow-y: auto")
+    expect(body).not.toMatch(/overflow:\s*hidden/)
+    expect(body).not.toMatch(/overflow-y:\s*hidden/)
+  })
+
+  test("hides visible scrollbar on the sections container", () => {
+    const body = ruleBody('[data-slot="sidebar-sections"]')
+    expect(body).toContain("scrollbar-width: none")
+  })
+
+  test("every open section stays scrollable without showing a visible scrollbar", () => {
+    const nonScrolls = ruleBodies('[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]')
+    for (const body of nonScrolls) {
+      expect(body).toContain("overflow-y: auto")
+      expect(body).toContain("scrollbar-width: none")
+      expect(body).not.toMatch(/scrollbar-width:\s*thin/)
+    }
+
+    const scrolls = ruleBodies('[data-slot="sidebar-section"][data-scrolls] [data-slot="section-content"]')
+    for (const body of scrolls) {
+      expect(body).toContain("overflow-y: auto")
+      expect(body).toContain("scrollbar-width: none")
+      expect(body).not.toMatch(/scrollbar-width:\s*thin/)
+    }
+  })
+
+  test("never clips section headers below their minimum content height", () => {
+    const body = ruleBody('[data-slot="sidebar-section"]')
+    expect(body).toContain("min-height: fit-content")
+  })
+})
+
