@@ -113,11 +113,26 @@ function readTheme(): ITheme {
  * except the part of it the user is actually reading, until the launch screen
  * happened to unmount the grid.
  */
+/**
+ * Whether the resolved background lets what is behind it through.
+ *
+ * In the glass theme the background token is `transparent`, and xterm draws
+ * an opaque cell layer unless it is told otherwise — a terminal painted black
+ * over a window the user asked to see through.
+ */
+function isTranslucent(theme: ITheme): boolean {
+  const background = theme.background
+  if (!background) return false
+  const alpha = /rgba?\([^)]*,\s*([\d.]+)\s*\)/.exec(background)
+  return alpha ? Number(alpha[1]) < 1 : false
+}
+
 export function refreshTerminalThemes(): void {
   if (terminals.size === 0) return
   const theme = readTheme()
   for (const session of terminals.values()) {
     session.terminal.options.theme = theme
+    session.terminal.options.allowTransparency = isTranslucent(theme)
   }
 }
 
@@ -222,6 +237,7 @@ export function getTerminal(id: string): SessionTerminal {
   const existing = terminals.get(id)
   if (existing) return existing
 
+  const initialTheme = readTheme()
   const terminal = new Terminal({
     /*
      * Scrollback is what makes a session reviewable after the fact. Agents are
@@ -241,7 +257,8 @@ export function getTerminal(id: string): SessionTerminal {
     cursorStyle: "block",
     allowProposedApi: true,
     convertEol: false,
-    theme: readTheme(),
+    theme: initialTheme,
+    allowTransparency: isTranslucent(initialTheme),
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
   })
@@ -330,7 +347,9 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const session = getTerminal(id)
   session.detach?.()
 
-  session.terminal.options.theme = readTheme()
+  const current = readTheme()
+  session.terminal.options.theme = current
+  session.terminal.options.allowTransparency = isTranslucent(current)
 
   const drawn = session.terminal.element
   const placement = placementFor(drawn, element)

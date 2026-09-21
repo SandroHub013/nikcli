@@ -42,24 +42,73 @@
   color-scheme: light dark;
 }
 
+/*
+ * Glass: one veil, painted once.
+ *
+ * The veil used to be a property of every container — each one painted
+ * `--ade-bg`, and a closed list of components was excused from it with
+ * `background: transparent !important`. Anything not on that list painted a
+ * second veil over the first: measured on a white desktop with the slider at
+ * its minimum, the shell alone read rgb(85,84,84), while the sidebar and the
+ * bar read rgb(35,32,32) and the shot tray rgb(20,18,18). A panel written
+ * next week would have been born opaque, because being transparent meant
+ * being remembered in this file.
+ *
+ * So the veil is not a container property any more. The shell paints
+ * `--ade-glass-veil` and nothing else does: the container tokens are
+ * transparent in this theme, which makes transparency what a new panel gets
+ * for free. Opacity lives in one declaration, the one below.
+ *
+ * Two written exceptions, both for readability and both of things that float
+ * over other content rather than holding it:
+ *
+ *   --ade-overlay   menus, the command palette, dialogs — they cover the
+ *                   content they sit on, so they keep a real veil.
+ *   --ade-raised    a 6% white lift, not a veil: chrome that must read as
+ *                   lifted (the bar, cards, buttons) brightens the glass
+ *                   instead of darkening the desktop behind it.
+ *
+ * The session pane's header pill is the third, written below: it floats over
+ * the terminal's own scrolling lines, so in glass it takes the overlay level.
+ */
 [data-component="ade-shell"][data-theme="glass"],
 :root[data-theme="glass"] {
   color-scheme: dark;
   --ade-text: #ffffff;
   --ade-text-soft: #f0ece9;
-  --ade-text-weak: #dedad8;
-  --ade-bg: rgba(19, 17, 17, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
-  --ade-sunken: rgba(14, 12, 12, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
-  --ade-surface: rgba(26, 24, 24, calc(0.70 + 0.26 * var(--ade-glass-opacity, 0.75)));
-  --ade-raised: rgba(33, 30, 30, calc(0.72 + 0.24 * var(--ade-glass-opacity, 0.75)));
+  /*
+   * Lighter than the other palettes' weak step, because here it is measured
+   * against the brightest ground in the theme: the veil at the slider's
+   * minimum over a white desktop, plus the 6% lift. At #dedad8 that came to
+   * 4.11:1 — under the line S49 drew. This is 4.57:1 there, and 5.3:1 on the
+   * veil alone.
+   */
+  --ade-text-weak: #ebe7e5;
+
+  /* The single veil. Opacity is tuned here and nowhere else. */
+  --ade-glass-veil: rgba(19, 17, 17, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
+
+  /* Containers hold; they do not paint. */
+  --ade-bg: transparent;
+  --ade-sunken: transparent;
+  --ade-surface: transparent;
+  --ade-terminal-bg: transparent;
+
+  /* The two written exceptions. */
+  --ade-raised: rgba(255, 255, 255, 0.06);
   --ade-overlay: rgba(36, 32, 32, calc(0.80 + 0.18 * var(--ade-glass-opacity, 0.75)));
-  --ade-terminal-bg: rgba(14, 12, 12, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
+
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
   --ade-border-strong: rgba(255, 255, 255, 0.22);
   --ade-highlight: rgba(255, 255, 255, 0.15);
 }
 
+/*
+ * The document around the shell has no tokens to make transparent, so it is
+ * still named here — and only it. This is not the old exception list: nothing
+ * below `ade-shell` appears, and nothing needs to.
+ */
 html[data-theme="glass"],
 html[data-theme="glass"] body,
 html[data-theme="glass"] #root,
@@ -67,36 +116,38 @@ body[data-theme="glass"],
 body[data-theme="glass"] #root,
 :root[data-theme="glass"],
 :root[data-theme="glass"] body,
-:root[data-theme="glass"] #root,
-[data-component="ade-shell"][data-theme="glass"] [data-component="session-grid"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="session-new"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="agent-console"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="bots-main"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="chat"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="empty-project"],
-[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] {
+:root[data-theme="glass"] #root {
   background: transparent !important;
 }
 
+/*
+ * The one place the veil is painted — and the one place it is blurred.
+ *
+ * The blur used to sit on the bar, the sidebar and every grid cell. A
+ * `backdrop-filter` samples what is behind the element, and behind these there
+ * is now nothing but the window itself: measured on white, blurring an empty
+ * backdrop came back as rgb(53,51,51) against the rgb(80,79,79) of the glass
+ * beside it — the blur was painting its own grey. It belongs to the veil, so
+ * it lives with the veil.
+ */
 [data-component="ade-shell"][data-theme="glass"] {
-  background: var(--ade-bg);
+  background: var(--ade-glass-veil);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 [data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"] {
   background: var(--ade-raised);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
-[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component] {
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+/*
+ * Written exception: the header pill floats over the terminal's own lines, so
+ * a 6% lift would leave text over text. In glass it takes the overlay level.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
+  background: color-mix(in srgb, var(--ade-overlay) 88%, transparent);
 }
 
-[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"] {
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
 
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
