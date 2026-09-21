@@ -4,12 +4,13 @@ import { sheetKey } from "./answer"
 import { DesignCard } from "./design-card"
 import { DesignPreview } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
-import type { DesignHub } from "./hub"
+import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals } from "./state"
 import "./design.css"
 import { t } from "../i18n"
 
 export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpenPanel: () => void }) {
+  const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
@@ -127,6 +128,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 submitLabel={open().length > 1 ? t("design.submitNext") : t("design.submit")}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={new Date()}
+                projectRoot={root()}
                 onPick={(picked) => pick(proposal.k, picked)}
                 onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
                 onSubmit={() => void submit()}
@@ -171,6 +173,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
               <DesignPreview
                 preview={props.hub.fullPreview().variant!.preview}
                 name={props.hub.fullPreview().variant!.name}
+                projectRoot={root()}
                 fullScreen
                 onToggleFullScreen={() => props.hub.closeFullPreview()}
               />

@@ -1259,6 +1259,7 @@ export function Workbench() {
 
   const designHub = createDesignHub({
     register: designRegister,
+    projectRoot: () => project()?.root,
     recipient: designRecipient,
     sessions: designCandidates,
     choose: chooseDesignRecipientAction,
@@ -5458,8 +5459,16 @@ export function Workbench() {
             data-slot="design-badge"
             onClick={() => setDesignOpen(true)}
             title={t("design.waiting")}
+            aria-label={designCountLabel(designWaiting())}
           >
-            {designCountLabel(designWaiting())}
+            <span data-slot="design-badge-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M10 4l2 2" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span data-slot="design-badge-count">{designWaiting()}</span>
+            <span data-slot="design-badge-label">{t("design.title")}</span>
           </button>
         </Show>
         </div>

@@ -14,6 +14,7 @@ export function DesignCard(props: {
   submitLabel: string
   recipientHint: string
   now: Date
+  projectRoot?: string
   onPick: (index: number) => void
   onNote: (note: string) => void
   onSubmit: () => void
@@ -71,6 +72,7 @@ export function DesignCard(props: {
                   <DesignPreview
                     preview={variant.preview}
                     name={variant.name}
+                    projectRoot={props.projectRoot}
                     onToggleFullScreen={() => props.onOpenFullPreview?.(variant)}
                   />
                 </div>

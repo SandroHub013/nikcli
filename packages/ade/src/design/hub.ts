@@ -16,8 +16,14 @@ export interface FullPreviewState {
   readonly title?: string
 }
 
+export function projectRootFromRegisterPath(registerPath: string | undefined): string | undefined {
+  if (!registerPath) return undefined
+  return registerPath.replace(/[\\/]\.ade[\\/]design\.jsonl$/i, "")
+}
+
 export interface DesignHub {
   readonly register: DesignRegister
+  projectRoot?: () => string | undefined
   recipient: () => RecipientStatus
   sessions: () => readonly DeliveryCandidate[]
   choose: (id: string | undefined) => void
@@ -34,6 +40,7 @@ export interface DesignHub {
 
 export function createDesignHub(deps: {
   register: DesignRegister
+  projectRoot?: () => string | undefined
   recipient: () => RecipientStatus
   sessions: () => readonly DeliveryCandidate[]
   choose: (id: string | undefined) => void
@@ -80,6 +87,7 @@ export function createDesignHub(deps: {
 
   return {
     register: deps.register,
+    projectRoot: deps.projectRoot,
     recipient: deps.recipient,
     sessions: deps.sessions,
     choose: deps.choose,

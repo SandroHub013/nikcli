@@ -4,7 +4,7 @@ import { DesignCard } from "./design-card"
 import { DesignPreview } from "./design-preview"
 import { recipientHint } from "./design-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
-import type { DesignHub } from "./hub"
+import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, describeProblems, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
@@ -16,6 +16,7 @@ export function DesignPane(props: {
   onClose?: () => void
   onExpand?: () => void
 }) {
+  const root = () => props.hub.projectRoot?.() ?? projectRootFromRegisterPath(props.hub.register.path())
   const state = () => props.hub.register.state()
   const buckets = createMemo(() => bucketProposals(state()?.proposals ?? []))
   const [expanded, setExpanded] = createSignal<string>()
@@ -42,6 +43,7 @@ export function DesignPane(props: {
       submitLabel={t("design.submit")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
+      projectRoot={root()}
       onPick={(picked) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), picked })}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.answer(proposal)}
@@ -205,6 +207,7 @@ export function DesignPane(props: {
             <DesignPreview
               preview={props.hub.fullPreview().variant!.preview}
               name={props.hub.fullPreview().variant!.name}
+              projectRoot={root()}
               fullScreen
               onToggleFullScreen={() => props.hub.closeFullPreview()}
             />

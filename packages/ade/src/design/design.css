@@ -10,10 +10,10 @@
 [data-slot="design-badge"] {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 24px;
   margin-left: var(--ade-space-2);
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px solid var(--ade-accent);
   border-radius: 999px;
   background: var(--ade-accent-soft);
@@ -24,14 +24,26 @@
   white-space: nowrap;
   cursor: pointer;
   line-height: 1;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-[data-slot="design-badge"]::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+[data-slot="design-badge-icon"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+[data-slot="design-badge-count"] {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+[data-slot="design-badge-label"] {
+  line-height: 1;
 }
 
 [data-slot="design-badge"]:hover {
@@ -46,6 +58,23 @@
 /* Glass theme adjustments */
 :root[data-theme="glass"] [data-slot="design-badge"] {
   backdrop-filter: blur(8px);
+}
+
+/*
+ * Narrow window (e.g. 420px):
+ * The top bar must never overflow horizontally. Under 640px we drop the text
+ * label and keep only the glyph and the counter pill, compacting padding.
+ * At 420px this keeps the bar well within 420px with zero scrollWidth blowout.
+ */
+@media (max-width: 640px) {
+  [data-slot="design-badge"] {
+    padding: 0 6px;
+    gap: 3px;
+    margin-left: 2px;
+  }
+  [data-slot="design-badge-label"] {
+    display: none;
+  }
 }
 
 /* The window / sheet */

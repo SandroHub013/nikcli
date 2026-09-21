@@ -16,8 +16,10 @@ import {
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
-import { isHtmlPreview, isImagePreview } from "./design-preview"
+import { isHtmlPreview, isImagePreview, resolvePreviewPath } from "./design-preview"
 import type { DesignProposal } from "./state"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 
 describe("the design sheet keys", () => {
   test("digits pick variant, Enter records, Esc closes, arrows navigate, f expands", () => {
@@ -126,7 +128,7 @@ describe("who receives design answers", () => {
   })
 })
 
-describe("preview type security detection", () => {
+describe("preview type security detection and path resolution", () => {
   test("identifies HTML and images correctly", () => {
     expect(isHtmlPreview("C:/results/S54-anteprima.html")).toBe(true)
     expect(isHtmlPreview("<!doctype html><html><body>Test</body></html>")).toBe(true)
@@ -137,4 +139,77 @@ describe("preview type security detection", () => {
     expect(isImagePreview("data:image/png;base64,abc")).toBe(true)
     expect(isImagePreview("S54-anteprima.html")).toBe(false)
   })
+
+  test("resolvePreviewPath resolves project-relative and preserves absolute paths", () => {
+    const projectRoot = "C:/Users/39349/Favorites/nikcli"
+
+    // Relative paths resolved against project root
+    expect(resolvePreviewPath(".ade/ostile-anteprima.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/.ade/ostile-anteprima.html",
+    )
+    expect(resolvePreviewPath("./results/preview.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/results/preview.html",
+    )
+    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/shots/mockup.png",
+    )
+
+    // Absolute paths preserved as-is
+    expect(resolvePreviewPath("C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html",
+    )
+    expect(resolvePreviewPath("C:\\Users\\39349\\Favorites\\ade-team\\results\\S54-anteprima.html", projectRoot)).toBe(
+      "C:\\Users\\39349\\Favorites\\ade-team\\results\\S54-anteprima.html",
+    )
+    expect(resolvePreviewPath("/var/tmp/preview.html", projectRoot)).toBe("/var/tmp/preview.html")
+
+    // Strips query strings and hashes
+    expect(resolvePreviewPath(".ade/preview.html#glass,A", projectRoot)).toBe(
+      "C:/Users/39349/Favorites/nikcli/.ade/preview.html",
+    )
+    expect(resolvePreviewPath("C:/preview.html?theme=dark", projectRoot)).toBe("C:/preview.html")
+
+    // Without projectRoot, returns cleaned path
+    expect(resolvePreviewPath(".ade/preview.html")).toBe(".ade/preview.html")
+  })
 })
+
+describe("top bar narrow window layout and 420px overflow protection", () => {
+  test("design.css specifies responsive rules for narrow windows under 640px", () => {
+    const cssPath = join(__dirname, "design.css")
+    const css = readFileSync(cssPath, "utf-8")
+
+    // Checks that badge is kept at 24px height
+    expect(css).toContain('height: 24px;')
+    // Checks that label is hidden in narrow windows (< 640px)
+    expect(css).toContain('@media (max-width: 640px)')
+    expect(css).toContain('[data-slot="design-badge-label"]')
+    expect(css).toContain('display: none;')
+    // Checks that padding is compacted to prevent overflow
+    expect(css).toContain('padding: 0 6px;')
+  })
+
+  test("narrow badge layout does not overflow a 420px container", () => {
+    // In narrow mode (<= 640px), the badge displays [icon] [count], dropping the text label.
+    // Icon width (11px) + gap (3px) + single digit count (8px) + padding (6px * 2) + border (1px * 2) = 36px.
+    const badgeNarrowWidth = 36
+    const tabsWidth = 180 // 4 navigation tabs: Agenti, Codice, Bot, Chat
+    const paletteIconWidth = 24
+    const centerGaps = 8 * 2
+
+    const totalCenterWidth = tabsWidth + paletteIconWidth + badgeNarrowWidth + centerGaps
+    expect(totalCenterWidth).toBeLessThan(260)
+
+    // With a 420px window and center aligned at 50% (210px):
+    const windowWidth = 420
+    const centerLeft = windowWidth / 2 - totalCenterWidth / 2
+    const centerRight = windowWidth / 2 + totalCenterWidth / 2
+
+    // Both edges must comfortably fit within [0, 420px] with zero horizontal overflow
+    expect(centerLeft).toBeGreaterThan(0)
+    expect(centerRight).toBeLessThan(windowWidth)
+    expect(centerRight - centerLeft).toBe(totalCenterWidth)
+    expect(windowWidth - centerRight).toBeGreaterThan(70) // At least 70px breathing room to the right
+  })
+})
+

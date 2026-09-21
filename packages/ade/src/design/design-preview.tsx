@@ -1,24 +1,39 @@
 /**
  * Design preview component for images and standalone HTML pages.
  *
- * Security architecture and rationale (S57):
- * Previews must execute arbitrary HTML pages (e.g. S54-anteprima.html) while strictly
- * preserving ADE application security:
+ * Security architecture and path handling (S57):
+ * Previews execute arbitrary HTML pages (e.g. S54-anteprima.html) or render images
+ * while strictly preserving ADE application security:
  * 1. Sandboxed iframe: `sandbox="allow-scripts allow-forms"`.
  *    The absence of `allow-same-origin` ensures the document has an opaque unique origin ('null').
  *    It cannot access ADE's window or DOM (`window.parent.document` throws SecurityError).
  *    It cannot access cookies, localStorage, IndexedDB, or Tauri IPC bindings (`__TAURI_INTERNALS__`).
  * 2. Communication isolation: No `message` event listener is installed on ADE's window for
  *    preview frames, ensuring scripts running in the preview cannot send commands or trigger actions in ADE.
- * 3. Local content loading: HTML files from disk are read through host `readTextFile` (project-confined)
- *    and rendered into the sandboxed frame via `srcdoc`.
- * 4. Image previews: Local images are loaded via safe `mediaUrl` custom protocol without script execution.
+ * 3. Path resolution: Supports both project-relative paths (resolved against the active project
+ *    root, e.g. `.ade/preview.html` or `shots/mockup.png`) and absolute paths anywhere on disk
+ *    (e.g. `C:/Users/.../ade-team/results/S54-anteprima.html`). Security is enforced by the
+ *    opaque null-origin sandbox boundary rather than filesystem confinement.
+ * 4. Image previews: Local images are loaded via safe `mediaUrl` custom protocol with path resolution.
  */
 
 import { Show, createEffect, createSignal, onMount } from "solid-js"
 import { getHost } from "../host/shell"
 import { mediaUrl } from "../video/video"
 import { t } from "../i18n"
+
+export function isAbsolute(path: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
+}
+
+export function resolvePreviewPath(path: string, projectRoot?: string): string {
+  const clean = path.trim().replace(/[?#].*$/, "")
+  if (isAbsolute(clean) || !projectRoot) return clean
+  const separator = projectRoot.includes("\\") && !projectRoot.includes("/") ? "\\" : "/"
+  const root = projectRoot.replace(/[\\/]+$/, "")
+  const relative = clean.replace(/^\.[\\/]/, "").replace(/[\\/]/g, separator)
+  return `${root}${separator}${relative}`
+}
 
 export function isHtmlPreview(preview: string): boolean {
   const trimmed = preview.trim()
@@ -37,6 +52,7 @@ export function isImagePreview(preview: string): boolean {
 export function DesignPreview(props: {
   preview: string
   name?: string
+  projectRoot?: string
   fullScreen?: boolean
   onToggleFullScreen?: () => void
 }) {
@@ -65,7 +81,7 @@ export function DesignPreview(props: {
       setLoadError(undefined)
       void (async () => {
         try {
-          const filePath = raw.replace(/[?#].*$/, "")
+          const filePath = resolvePreviewPath(raw, props.projectRoot)
           const host = await getHost()
           if (host?.readTextFile) {
             const res = await host.readTextFile(filePath)
@@ -93,7 +109,7 @@ export function DesignPreview(props: {
     if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("data:") || raw.startsWith("ade-media:")) {
       return raw
     }
-    return mediaUrl(raw)
+    return mediaUrl(resolvePreviewPath(raw, props.projectRoot))
   }
 
   return (

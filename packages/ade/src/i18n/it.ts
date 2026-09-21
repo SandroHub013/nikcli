@@ -540,7 +540,7 @@ export const it = {
 
   "design.title": "Design",
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
-  "design.count": (count: number) => count === 1 ? "1 proposta di design" : `${count} proposte di design`,
+  "design.count": (count: number) => count === 1 ? "1 proposta design" : `${count} proposte design`,
   "design.waiting": "Proposte di design in attesa",
   "design.needChoice": "scegli una variante o scrivi una nota",
   "design.variants": "Varianti",
