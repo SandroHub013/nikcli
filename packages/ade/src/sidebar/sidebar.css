@@ -120,7 +120,13 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-sections"]::-webkit-scrollbar {
+  display: none;
 }
 
 /*
@@ -145,12 +151,13 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: fit-content;
   border-bottom: 1px solid var(--ade-border-subtle);
 }
 
 [data-slot="sidebar-section"][data-scrolls] {
   flex: 0 1 auto;
+  min-height: fit-content;
   overflow: hidden;
 }
 
@@ -176,8 +183,11 @@
 [data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"] {
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── project search results ───────────────────────────────────────────────── */
@@ -186,6 +196,11 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+[data-component="file-results"]::-webkit-scrollbar {
+  display: none;
 }
 
 [data-slot="file-result"] {
@@ -459,8 +474,11 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* A closed section is a header and nothing else, with no border doubling up
