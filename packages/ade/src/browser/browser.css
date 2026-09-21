@@ -88,8 +88,8 @@
 }
 
 [data-slot="browser-nav-btn"]:focus-visible {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="browser-url-bar"] {

@@ -130,6 +130,17 @@
   --ade-border: rgba(255, 255, 255, 0.12);
   --ade-border-strong: rgba(255, 255, 255, 0.22);
   --ade-highlight: rgba(255, 255, 255, 0.15);
+  /*
+   * Hover and press have to be louder here than anywhere else.
+   *
+   * The dark theme's 4.5% white sits on an opaque ground. Glass surfaces are
+   * `rgba(...)` at 70-72%, so the same wash lands on something already washed
+   * out and all but disappears — about a third of the contrast it has in the
+   * dark theme. These two values are the only ones the glass theme changes for
+   * S62, and they change nowhere else.
+   */
+  --ade-hover: rgba(255, 255, 255, 0.09);
+  --ade-active: rgba(255, 255, 255, 0.15);
 }
 
 /*
@@ -292,6 +303,34 @@ body[data-theme="glass"] #root,
   --ade-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ade-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ade-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── buttons ────────────────────────────────────────────────────────────── */
+  /*
+   * What a press looks like, everywhere, in one value.
+   *
+   * There were seven `:active` rules in the whole app and not one of them moved
+   * anything: pressing a button changed nothing until the result arrived. A
+   * scale rather than a lift with a shadow, because a shadow is unreadable in
+   * the glass theme — the surfaces are translucent, so it stacks with the
+   * panel's own and the desktop shows through it. Geometry reads the same in
+   * all three themes.
+   *
+   * Chrome buttons under 24px do not take it: at 18px three per cent is half a
+   * pixel, which reads as a flicker rather than a press. They answer with the
+   * ground alone.
+   */
+  --ade-press: scale(0.97);
+
+  /*
+   * The one transition a button gets. Every sheet was writing its own — nine
+   * said `background 120ms`, four forgot `color`, and `bots-btn` had none at
+   * all, so its hover snapped.
+   */
+  --ade-btn-transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
   /* One ring, applied everywhere through :focus-visible. The second, softer
@@ -576,6 +615,16 @@ body,
 [data-slot="grid-cell"][data-focused] > [data-slot="tile-resize"],
 [data-component="session-grid"][data-arranging] [data-slot="tile-resize"] {
   opacity: 1;
+}
+
+/*
+ * A press still says something when movement is turned down: the ground
+ * changes, only the geometry stops. One token, so no button has to remember.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ade-press: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -687,10 +687,7 @@
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
   white-space: nowrap;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition), box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-add"]:hover {
@@ -712,7 +709,8 @@
 }
 
 [data-slot="ade-add"]:active {
-  filter: brightness(0.9);
+  background: var(--ade-active);
+  transform: var(--ade-press);
 }
 
 [data-slot="ade-add"]:focus-visible {
