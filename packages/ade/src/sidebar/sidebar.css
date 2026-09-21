@@ -818,6 +818,19 @@
   align-items: stretch;
   gap: var(--ade-space-2);
   flex: 0 0 auto;
+  /*
+   * In fondo alla colonna, non sotto l'ultima sezione.
+   *
+   * Finché il riquadro delle sezioni era `flex: 1` il fondo ci finiva per
+   * conseguenza: le sezioni si prendevano tutto l'avanzo e spingevano giù il
+   * piede. Quando quel `flex: 1` è stato tolto — perché con "File" chiusa il
+   * riquadro diventava mezza colonna di carta vuota — nessuno spingeva più
+   * niente, e il vassoio risaliva fin sotto l'ultima sezione, con l'avanzo
+   * sotto di lui. Il margine automatico si prende l'avanzo senza darlo a
+   * nessuno: le sezioni restano alte quanto il loro contenuto e il piede
+   * resta in fondo in ogni combinazione di sezioni aperte e chiuse.
+   */
+  margin-top: auto;
   padding: var(--ade-space-3) var(--ade-space-4);
   border-top: 1px solid var(--ade-border);
   background: var(--ade-sunken);
