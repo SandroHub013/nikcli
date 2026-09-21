@@ -42,24 +42,101 @@
   color-scheme: light dark;
 }
 
+/*
+ * Glass: a low floor for the window, a reading ground where the text is.
+ *
+ * Two mistakes, one after the other.
+ *
+ * The first: the veil was a property of every container — each painted
+ * `--ade-bg` — and a closed list of components was excused from it with
+ * `background: transparent !important`. Anything off that list painted a
+ * second veil over the first: measured in ADE Test at the slider's minimum,
+ * the shell read alpha 0.73 while the sidebar and the shot tray read 0.99.
+ * A panel written next week would have been born opaque, because being
+ * transparent meant being remembered in this file.
+ *
+ * The second: with that fixed, the window still could not read as glass,
+ * because the veil ran from 0.68 to 0.96. There is no position of the slider
+ * at which two thirds of the desktop is not painted over. But dropping the
+ * floor on a single uniform veil breaks the rule S49 drew — the three text
+ * levels above 4.5:1 on a white desktop — and the numbers are unforgiving:
+ * on a uniform veil that line needs alpha 0.68, exactly where the floor was.
+ *
+ * So the veil stops being uniform. The window gets a floor low enough to see
+ * through (`--ade-glass-veil`, 0.10 at the minimum); where text lives, the
+ * shell's own slots add `--ade-glass-read` once, which brings that ground
+ * back to the 0.68 readability needs. Empty space is glass, text is legible,
+ * and no zone carries more than those two layers.
+ *
+ * `--ade-glass-read` is added by the shell's structural slots — the sidebar,
+ * the bar, whatever a grid cell holds — never by components. A new panel
+ * dropped into a cell is legible without being named here, and a panel inside
+ * a panel cannot stack a third layer, because the container tokens stay
+ * transparent.
+ *
+ * Two written exceptions:
+ *
+ *   --ade-overlay   menus, the command palette, dialogs — they cover the
+ *                   content they sit on, so they keep a veil of their own.
+ *   --ade-raised    a 6% white lift, not a veil: chrome that must read as
+ *                   lifted brightens the glass instead of darkening the
+ *                   desktop behind it.
+ *
+ * The session pane's header pill is the third, written below: it floats over
+ * the terminal's own scrolling lines, so in glass it takes the overlay level.
+ *
+ * What this cannot do is blur the desktop. A `backdrop-filter` only sees what
+ * is behind the element inside the page, and in WebView2 the desktop is not
+ * in that tree: from CSS the honest ceiling is translucency, not frost. The
+ * real blur is a window effect (Acrylic or Mica) and belongs to the Rust side.
+ */
 [data-component="ade-shell"][data-theme="glass"],
 :root[data-theme="glass"] {
   color-scheme: dark;
   --ade-text: #ffffff;
   --ade-text-soft: #f0ece9;
-  --ade-text-weak: #dedad8;
-  --ade-bg: rgba(19, 17, 17, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
-  --ade-sunken: rgba(14, 12, 12, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
-  --ade-surface: rgba(26, 24, 24, calc(0.70 + 0.26 * var(--ade-glass-opacity, 0.75)));
-  --ade-raised: rgba(33, 30, 30, calc(0.72 + 0.24 * var(--ade-glass-opacity, 0.75)));
+  /*
+   * Lighter than the other palettes' weak step, because here it is measured
+   * against the brightest ground in the theme: the reading ground plus the 6%
+   * lift. At #dedad8 that came to 4.11:1 — under the line S49 drew.
+   */
+  --ade-text-weak: #ebe7e5;
+
+  /*
+   * The floor and the reading ground. Opacity is tuned in these two
+   * declarations and nowhere else.
+   *
+   * Veil:    0.10 → 0.65 across the slider, so the minimum is a window you
+   *          can see through rather than a dark pane.
+   * Reading: a fixed 0.64 on top of it. Composited, the ground under text is
+   *          0.68 at the minimum — the readability floor — and 0.87 at the
+   *          maximum, which is where someone who wants an opaque window puts
+   *          the slider anyway.
+   */
+  --ade-glass-veil: rgba(19, 17, 17, calc(0.10 + 0.55 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(19, 17, 17, 0.64);
+
+  /* Containers hold; they do not paint. */
+  --ade-bg: transparent;
+  --ade-sunken: transparent;
+  --ade-surface: transparent;
+  --ade-terminal-bg: transparent;
+
+  /* The two written exceptions. */
+  --ade-raised: rgba(255, 255, 255, 0.06);
   --ade-overlay: rgba(36, 32, 32, calc(0.80 + 0.18 * var(--ade-glass-opacity, 0.75)));
-  --ade-terminal-bg: rgba(14, 12, 12, calc(0.68 + 0.28 * var(--ade-glass-opacity, 0.75)));
+
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
   --ade-border-strong: rgba(255, 255, 255, 0.22);
   --ade-highlight: rgba(255, 255, 255, 0.15);
 }
 
+/*
+ * The document around the shell has no tokens to make transparent, so it is
+ * still named here — and only it. This is not the old exception list: nothing
+ * below `ade-shell` appears, and nothing needs to.
+ */
 html[data-theme="glass"],
 html[data-theme="glass"] body,
 html[data-theme="glass"] #root,
@@ -67,36 +144,61 @@ body[data-theme="glass"],
 body[data-theme="glass"] #root,
 :root[data-theme="glass"],
 :root[data-theme="glass"] body,
-:root[data-theme="glass"] #root,
-[data-component="ade-shell"][data-theme="glass"] [data-component="session-grid"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="session-new"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="agent-console"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="bots-main"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="chat"],
-[data-component="ade-shell"][data-theme="glass"] [data-component="empty-project"],
-[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] {
+:root[data-theme="glass"] #root {
   background: transparent !important;
 }
 
+/*
+ * The one place the floor is painted — and the one place it is blurred.
+ *
+ * The blur used to sit on the bar, the sidebar and every grid cell. A
+ * `backdrop-filter` samples what is behind the element, and behind these there
+ * is nothing but the window itself: measured on white, blurring an empty
+ * backdrop came back as rgb(53,51,51) against the rgb(80,79,79) of the glass
+ * beside it — the blur was painting its own grey. It belongs to the veil.
+ */
 [data-component="ade-shell"][data-theme="glass"] {
-  background: var(--ade-bg);
+  background: var(--ade-glass-veil);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/*
+ * The reading ground, added once, by the shell's structural slots.
+ *
+ * These are places in the shell, not components: whatever a grid cell holds is
+ * legible without this file knowing its name.
+ *
+ * The main area needs its own line, because not everything that fills it is a
+ * grid cell: the agent console, the chat, the bots view, the new-session
+ * screen and the empty-project screen are children of `ade-main` directly, and
+ * with only the grid-cell line they sat on the bare floor — 1.2:1 at the
+ * slider's minimum, which is text you cannot read.
+ *
+ * `:not(:has([data-slot="grid-cell"]))` is what keeps that from becoming a
+ * second ground: a component that holds cells (the session grid) is a
+ * container, and lets its cells do the painting; one that holds content paints
+ * for itself. Written as a shape rather than as a name, so a new full-area
+ * view is legible and a new kind of grid does not double up.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] > [data-component]:not(:has([data-slot="grid-cell"])) {
+  background: var(--ade-glass-read);
 }
 
 [data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"] {
-  background: var(--ade-raised);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: linear-gradient(var(--ade-raised), var(--ade-raised)), var(--ade-glass-read);
 }
 
-[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component] {
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+/*
+ * Written exception: the header pill floats over the terminal's own lines, so
+ * a 6% lift would leave text over text. In glass it takes the overlay level.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
+  background: color-mix(in srgb, var(--ade-overlay) 88%, transparent);
 }
 
-[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"] {
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
 
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
