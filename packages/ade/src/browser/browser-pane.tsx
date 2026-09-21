@@ -277,9 +277,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   /**
    * Decides what the pane shows when the page did not announce the bridge.
    *
-   * The real page stays unless it cannot be framed or the user is inspecting:
-   * see `bridgelessChoice`. The fetch still runs, because it is what tells a
-   * missing page (404) or an unreachable server apart from a working one.
+   * The real page stays unless it cannot be framed: see `bridgelessChoice`.
+   * The fetch still runs, because it is what tells a missing page (404) or
+   * an unreachable server apart from a working one.
    */
   const settleWithoutBridge = async (target: string, generation: number) => {
     const isCurrent = () => generation === loadGeneration
@@ -300,11 +300,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         const blocked = framingBlocked((name) => res.headers.get(name))
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
-        const inspecting = mode() === "edit"
         handshake({ type: "no-bridge" })
         setLoadState("ready")
         setLoadError(undefined)
-        if (blocked || bridgelessChoice({ blocked, inspecting }) !== "keep-page") {
+        if (blocked || bridgelessChoice({ blocked }) !== "keep-page") {
           setNotice("blocked")
         }
         if (blocked) return

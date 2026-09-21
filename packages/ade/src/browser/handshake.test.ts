@@ -215,12 +215,12 @@ describe("framingBlocked", () => {
 
 describe("bridgelessChoice", () => {
   test("browsing a page that can be framed keeps it", () => {
-    expect(bridgelessChoice({ blocked: false, inspecting: false })).toBe("keep-page")
+    expect(bridgelessChoice({ blocked: false })).toBe("keep-page")
   })
 
   test("a page that cannot be framed is still the blocked case; inspect keeps the page", () => {
-    expect(bridgelessChoice({ blocked: true, inspecting: false })).toBe("mirror")
-    expect(bridgelessChoice({ blocked: false, inspecting: true })).toBe("keep-page")
+    expect(bridgelessChoice({ blocked: true })).toBe("mirror")
+    expect(bridgelessChoice({ blocked: false })).toBe("keep-page")
   })
 })
 
@@ -235,7 +235,7 @@ describe("reloading a page without the bridge", () => {
   const settle = (inspecting: boolean) => {
     let fidelity = reduceFidelity("none", { type: "navigate" })
     const shown: string[] = [fidelity]
-    const choice = bridgelessChoice({ blocked: false, inspecting })
+    const choice = bridgelessChoice({ blocked: false })
     fidelity = reduceFidelity(fidelity, { type: choice === "keep-page" ? "no-bridge" : "timeout" })
     if (choice === "mirror") fidelity = reduceFidelity(fidelity, { type: "ready", mode: "mirror" })
     shown.push(fidelity)

@@ -146,8 +146,7 @@ export type BridgelessChoice = "keep-page" | "mirror"
  * under allow-same-origin would inherit ADE's origin, which is the hole
  * S52 closes. A page that refuses framing is an overlay, not a copy.
  */
-export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean }): BridgelessChoice {
-  void input.inspecting
+export function bridgelessChoice(input: { blocked: boolean }): BridgelessChoice {
   return input.blocked ? "mirror" : "keep-page"
 }
 
