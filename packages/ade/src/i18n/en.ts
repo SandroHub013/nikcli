@@ -29,8 +29,10 @@ export const en: Messages = {
   "settings.theme.glass": "Glass",
   "settings.theme.system": "System",
   "settings.theme.opacity": "Transparency opacity",
-  "settings.theme.opacityDesc":
-    "Adjusts the window background veil: a minimum veil always ensures contrast and readability for text and terminals.",
+  "settings.theme.opacityDesc": (min) =>
+    `Sets how much of the desktop shows through the window. From ${min}% up, text stays above the minimum contrast.`,
+  "settings.theme.opacityLow": (min) =>
+    `Below ${min}% the glass goes further and text loses contrast on pale desktops.`,
   "settings.theme.unsupported":
     "Glass theme is not supported on this operating system or window compositor.",
   "settings.theme.desktopOnly":

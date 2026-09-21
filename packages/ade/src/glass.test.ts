@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { GLASS_READABLE_MIN } from "./theme"
 
 /*
  * The glass theme, as a rule rather than as a list.
@@ -125,6 +126,36 @@ describe("il tema vetro vale per default", () => {
     expect(line).not.toContain("session-grid")
   })
 
+  test("quello che galleggia sopra il contenuto ha un fondo suo", () => {
+    /*
+     * The new-pane menu painted `--ade-raised`, a 6% lift, and opened as clear
+     * glass over the panes: the user's screenshot has terminal lines running
+     * through the words of the menu. Measured over a live terminal at the
+     * slider's minimum, the menu's ground was alpha 0.14 and its items read
+     * 1.18:1; with the rule below, 0.93 and 13.97:1.
+     *
+     * The roles are the shape of "this floats over other content", so a menu
+     * written next week is covered for being a menu.
+     */
+    const floating = glassRules().filter(({ body }) => /background:[^;]*--ade-overlay/.test(body))
+    const selectors = floating.flatMap((rule) => rule.selector.split(",").map((part) => part.trim()))
+    for (const role of ["menu", "dialog", "listbox", "tooltip"]) {
+      expect([role, selectors.some((one) => one.endsWith(`[role="${role}"]`))]).toEqual([role, true])
+    }
+    expect(selectors.some((one) => one.endsWith("[popover]"))).toBe(true)
+  })
+
+  test("il fondo dei menu non segue il cursore", () => {
+    /*
+     * A menu is opened to be read, over whatever is underneath. Dragging the
+     * glass to its most extreme may take the window's own veil away; it may
+     * not take that.
+     */
+    expect(token("--ade-overlay")).not.toContain("--ade-glass-opacity")
+    const alpha = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(token("--ade-overlay"))![1])
+    expect(alpha).toBeGreaterThanOrEqual(0.9)
+  })
+
   test("il pavimento parte abbastanza in basso da lasciar vedere la scrivania", () => {
     /*
      * Fabio, trying it live: at 0.68 there is no position of the slider that
@@ -164,7 +195,8 @@ describe("il tema vetro vale per default", () => {
      * has to say why before this list grows.
      */
     expect(token("--ade-raised")).toBe("rgba(255, 255, 255, 0.06)")
-    expect(token("--ade-overlay")).toMatch(/^rgba\(36, 32, 32, calc\(/)
+    // Fixed, not a curve: see «il fondo dei menu non segue il cursore».
+    expect(token("--ade-overlay")).toMatch(/^rgba\(\d+, \d+, \d+, 0\.9\d*\)$/)
     expect(glassTokens).toContain("--ade-glass-veil")
   })
 
@@ -181,34 +213,68 @@ describe("il tema vetro vale per default", () => {
   })
 })
 
-describe("leggibilità del vetro al minimo", () => {
+describe("leggibilità lungo il cursore", () => {
   /*
-   * The worst case S49 fixed and this must not undo: the slider at 0 over a
-   * white desktop. Between the text and that white there is the floor plus
-   * the reading ground, and nothing else — so this is where the reading
-   * ground earns its 0.64.
+   * Both layers follow the slider now, so readability is not one number but a
+   * curve, and the question is where it crosses 4.5:1. That crossing is what
+   * the settings panel promises, so it is checked here against the curves
+   * themselves rather than written down twice.
    */
-  const veil = /rgba\((\d+), (\d+), (\d+), calc\(([\d.]+)/.exec(token("--ade-glass-veil"))
-  const base = veil ? [Number(veil[1]), Number(veil[2]), Number(veil[3])] : []
-  const floor = veil ? Number(veil[4]) : 0
-  const read = Number(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/.exec(token("--ade-glass-read"))?.[1] ?? 0)
-  // What text actually sits on: the floor with the reading ground over it.
-  const readingAlpha = floor + read * (1 - floor)
-  const over = (background: number[], alphaOf: number) =>
-    background.map((channel, i) => Math.round(255 * (1 - alphaOf) + channel * alphaOf))
+  const veil = /rgba\((\d+), (\d+), (\d+), calc\(([\d.]+) \+ ([\d.]+) \*/.exec(token("--ade-glass-veil"))
+  const base = [Number(veil![1]), Number(veil![2]), Number(veil![3])]
+  const veilAt = (slider: number) => Number(veil![4]) + Number(veil![5]) * slider
 
-  test("i tre livelli di testo stanno sopra 4,5:1 su scrivania bianca", () => {
-    const ground = over(base, readingAlpha)
-    for (const name of ["--ade-text", "--ade-text-soft", "--ade-text-weak"]) {
-      expect([name, contrast(channels(token(name)), ground) >= 4.5]).toEqual([name, true])
+  // The `pow()` line wins the cascade; the linear one above it is the fallback.
+  const readDecl = [...glassTokens.matchAll(/--ade-glass-read:\s*([^;]+);/g)].pop()![1]
+  const readCurve = /calc\(([\d.]+) \+ ([\d.]+) \* pow\(var\([^)]+\), ([\d.]+)\)\)/.exec(readDecl)
+  const readAt = (slider: number) =>
+    Number(readCurve![1]) + Number(readCurve![2]) * slider ** Number(readCurve![3])
+
+  /** The ground text sits on: floor, reading ground, and the 6% lift over it. */
+  function ground(slider: number, lift: boolean): number[] {
+    const alpha = veilAt(slider) + readAt(slider) * (1 - veilAt(slider))
+    const composed = base.map((channel) => 255 * (1 - alpha) + channel * alpha)
+    return (lift ? composed.map((channel) => channel * 0.94 + 255 * 0.06) : composed).map(Math.round)
+  }
+
+  const worst = (slider: number) =>
+    Math.min(
+      ...["--ade-text", "--ade-text-soft", "--ade-text-weak"].map((name) =>
+        contrast(channels(token(name)), ground(slider, true)),
+      ),
+    )
+
+  test("il pannello promette il punto giusto: da GLASS_READABLE_MIN in su si legge", () => {
+    /*
+     * `settings.theme.opacityDesc` says text stays above the minimum contrast
+     * from GLASS_READABLE_MIN up. If the curves move and this is not checked,
+     * the panel starts lying — which is the failure this whole spec began with.
+     */
+    expect(worst(GLASS_READABLE_MIN / 100)).toBeGreaterThanOrEqual(4.5)
+    for (const percent of [GLASS_READABLE_MIN, 30, 50, 75, 100]) {
+      expect([percent, worst(percent / 100) >= 4.5]).toEqual([percent, true])
     }
   })
 
-  test("valgono anche sul rialzo del 6%", () => {
-    // The lift brightens the glass, which is the direction that costs contrast.
-    const lift = over(base, readingAlpha).map((channel) => Math.round(channel * 0.94 + 255 * 0.06))
-    for (const name of ["--ade-text", "--ade-text-soft", "--ade-text-weak"]) {
-      expect([name, contrast(channels(token(name)), lift) >= 4.5]).toEqual([name, true])
-    }
+  test("e appena sotto non si legge: la soglia è dove dice di essere", () => {
+    // Otherwise the number could be set anywhere above the real crossing and
+    // the test would still pass, while the slider lost usable positions.
+    expect(worst((GLASS_READABLE_MIN - 1) / 100)).toBeLessThan(4.5)
+  })
+
+  test("in fondo il vetro è davvero spinto", () => {
+    /*
+     * The state the user asked to have back: at 0 the desktop is essentially
+     * unpainted — alpha around 0.11, contrast around 1.2:1. A reading ground
+     * that stayed high down there would make the slider a choice between
+     * legible and slightly-more-legible, which is what it used to be.
+     */
+    const alpha = veilAt(0) + readAt(0) * (1 - veilAt(0))
+    expect(alpha).toBeLessThan(0.2)
+    expect(worst(0)).toBeLessThan(1.5)
+  })
+
+  test("in cima si legge benissimo", () => {
+    expect(worst(1)).toBeGreaterThan(9)
   })
 })

@@ -12,7 +12,7 @@ import {
   t,
   type LocalePreference,
 } from "../i18n"
-import { DEFAULT_GLASS_OPACITY, THEME_CHOICES, type Theme } from "../theme"
+import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
 import "./sections.css"
 
@@ -285,7 +285,16 @@ export function ThemeSection(props: ThemeSectionProps) {
             aria-valuetext={`${opacity()}%`}
             onInput={(e) => props.onOpacityChange?.(Number(e.currentTarget.value))}
           />
-          <p data-slot="settings-slider-desc">{t("settings.theme.opacityDesc")}</p>
+          {/*
+            * One line, which changes rather than accumulating: under the
+            * readable minimum it says what the user is trading away, and does
+            * not stop them doing it.
+            */}
+          <p data-slot="settings-slider-desc">
+            {isGlassReadable(opacity())
+              ? t("settings.theme.opacityDesc", GLASS_READABLE_MIN)
+              : t("settings.theme.opacityLow", GLASS_READABLE_MIN)}
+          </p>
         </div>
       </Show>
     </>
