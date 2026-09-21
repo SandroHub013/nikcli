@@ -157,3 +157,21 @@ function hasCredentials(parsed: URL): boolean {
 export function isValidBrowserUrl(raw: string): boolean {
   return normalizeUrl(raw) !== undefined
 }
+
+/**
+ * Whether `url` is ADE's own origin, and must not load in a same-origin frame.
+ *
+ * A page that navigates its frame onto ADE becomes same-origin with the
+ * window and can read `localStorage` and call Tauri. `hostOrigin` is the
+ * window's origin (Vite in development, `http://tauri.localhost` in a
+ * release). `tauri.localhost` is always ADE on Windows, even during `test:app`.
+ */
+export function isAdeOrigin(url: string, hostOrigin: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.origin === hostOrigin) return true
+    return parsed.hostname.toLowerCase() === "tauri.localhost"
+  } catch {
+    return false
+  }
+}

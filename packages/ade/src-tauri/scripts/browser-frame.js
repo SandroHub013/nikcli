@@ -7,6 +7,15 @@
     return;
   define(win, "__ADE_FRAME__", { value: !0 });
   try {
+    const here = String(win.location && win.location.origin || ""), topOrigin = String(win.top && win.top.location && win.top.location.origin || "");
+    if (String(win.location && win.location.hostname || "").toLowerCase() === "tauri.localhost" || here && topOrigin && here === topOrigin) {
+      try {
+        win.location.replace("about:blank");
+      } catch {}
+      return;
+    }
+  } catch {}
+  try {
     const Base = win.Headers;
     if (typeof Base === "function") {
       const test = uncurry(RegExp.prototype.test), tauriHeader = /^\s*tauri-/i, isTauri = (name) => typeof name === "string" && test(tauriHeader, name), refuse = () => {

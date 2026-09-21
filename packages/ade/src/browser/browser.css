@@ -791,6 +791,30 @@
   flex: 0 0 auto;
 }
 
+[data-slot="browser-storage-note"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="browser-forget"] {
+  flex: 0 0 auto;
+  padding: 0 var(--ade-space-2);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-weak);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="browser-forget"]:hover {
+  color: var(--ade-text);
+  background: var(--ade-hover);
+}
+
 [data-slot="browser-fidelity"] {
   color: var(--ade-text-soft);
 }

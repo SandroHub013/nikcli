@@ -142,11 +142,12 @@ export type BridgelessChoice = "keep-page" | "mirror"
  * replaced by bare HTML 1.5 s after every load — and pressing Reload, the
  * only way to see the page again, started the same swap over.
  *
- * The mirror is now for two cases only: the page cannot be shown in the
- * frame, or the user asked to inspect it. Browsing keeps the real page.
+ * Inspect stays on the real page (S46 injects the bridge). A srcdoc mirror
+ * under allow-same-origin would inherit ADE's origin, which is the hole
+ * S52 closes. A page that refuses framing is an overlay, not a copy.
  */
-export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean }): BridgelessChoice {
-  return input.blocked || input.inspecting ? "mirror" : "keep-page"
+export function bridgelessChoice(input: { blocked: boolean }): BridgelessChoice {
+  return input.blocked ? "mirror" : "keep-page"
 }
 
 /**
@@ -157,7 +158,7 @@ export function bridgelessChoice(input: { blocked: boolean; inspecting: boolean 
  * - `no-copy`: the page is on screen, but Inspect needs a copy and the site
  *   does not allow one (no CORS).
  */
-export type PaneNotice = "blocked" | "no-copy"
+export type PaneNotice = "blocked" | "no-copy" | "ade-origin"
 
 export function noticeWithoutCopy(input: { blocked: boolean; inspecting: boolean }): PaneNotice | undefined {
   if (input.blocked) return "blocked"

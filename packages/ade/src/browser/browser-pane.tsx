@@ -41,9 +41,7 @@ import {
 import { type BridgeMessage, type InspectedElement } from "./protocol"
 import { FRAME_ASK, FRAME_NAME, FrameGate } from "./frame-script"
 import { planSend, type BrowserController, type OwnerStatus, type SessionChoice } from "./binding"
-// The same file the host runs in every frame; the mirror carries it inline.
-import FRAME_SCRIPT from "../../src-tauri/scripts/browser-frame.js?raw"
-import { escapeAttribute, withLoadToken } from "./frame-url"
+import { withLoadToken } from "./frame-url"
 import {
   canStep,
   currentEntry,
@@ -52,8 +50,8 @@ import {
   visit,
   type BrowserHistory,
 } from "./history"
-import { canOpenExternally, openExternally, probeFraming, readHeaders } from "./host-bridge"
-import { normalizeUrl } from "./url"
+import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
+import { isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
@@ -225,15 +223,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [sending, setSending] = createSignal(false)
   /** What the last send did, in the footer. */
   const [sendNote, setSendNote] = createSignal<{ ok: boolean; text: string }>()
+  const [forgetNote, setForgetNote] = createSignal<{ ok: boolean; text: string }>()
 
   let iframeRef: HTMLIFrameElement | undefined
   let viewportContainerRef: HTMLDivElement | undefined
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined
   let loadGeneration = 0
-  /** The page's HTML, fetched when the handshake window closed; the mirror is built from it. */
-  let pageCopy: { generation: number; target: string; html: string } | undefined
-  /** The mirror is up only because the user chose Inspect: Browse brings the real page back. */
-  let mirrorForInspect = false
   /*
    * The channel to the bridge in this pane's frame.
    *
@@ -280,44 +275,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   })
 
   /**
-   * Replaces the frame with a srcdoc copy of the page, carrying the bridge.
-   */
-  const showMirror = (target: string, html: string) => {
-    // Inject base tag so relative asset URLs resolve against the target server,
-    // and inject the bridge script into the document head.
-    /*
-     * Escaped, because it goes into an attribute.
-     *
-     * `normalizeUrl` now returns the canonical form, in which a quote is
-     * already `%22`, so this is the belt to that braces: `target` also
-     * arrives here from a redirect the page chose, and one unescaped `"`
-     * closes the `href` and turns the rest into markup.
-     */
-    const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
-    const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${FRAME_SCRIPT}<\/script>`
-
-    let injected = html
-    if (injected.includes("<head>")) {
-      injected = injected.replace("<head>", `<head>${headInjection}\n`)
-    } else if (injected.includes("<html>")) {
-      injected = injected.replace("<html>", `<html>\n<head>${headInjection}\n</head>\n`)
-    } else {
-      injected = `${headInjection}\n${injected}`
-    }
-
-    handshake({ type: "ready", mode: "mirror" })
-    setSrcdoc(injected)
-    setLoadState("ready")
-    setLoadError(undefined)
-    setLoadToken((v) => v + 1)
-  }
-
-  /**
    * Decides what the pane shows when the page did not announce the bridge.
    *
-   * The real page stays unless it cannot be framed or the user is inspecting:
-   * see `bridgelessChoice`. The fetch still runs, because it is what tells a
-   * missing page (404) or an unreachable server apart from a working one.
+   * The real page stays unless it cannot be framed: see `bridgelessChoice`.
+   * The fetch still runs, because it is what tells a missing page (404) or
+   * an unreachable server apart from a working one.
    */
   const settleWithoutBridge = async (target: string, generation: number) => {
     const isCurrent = () => generation === loadGeneration
@@ -338,26 +300,15 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
         const blocked = framingBlocked((name) => res.headers.get(name))
         // A bridge that announced itself meanwhile has already settled it.
         if (!isCurrent() || fidelity() !== "pending") return
-        pageCopy = { generation, target, html }
-        const inspecting = mode() === "edit"
-        if (bridgelessChoice({ blocked, inspecting }) === "keep-page") {
-          handshake({ type: "no-bridge" })
-          setLoadState("ready")
-          setLoadError(undefined)
-        } else {
-          mirrorForInspect = !blocked
-          handshake({ type: "timeout" })
-          showMirror(target, html)
+        handshake({ type: "no-bridge" })
+        setLoadState("ready")
+        setLoadError(undefined)
+        if (blocked || bridgelessChoice({ blocked }) !== "keep-page") {
+          setNotice("blocked")
         }
         if (blocked) return
-        /*
-         * The host's answer is not waited for: the page is settled already,
-         * and the probe can take seconds. If it says the page refuses
-         * framing, the frame is empty, and the copy replaces it once.
-         */
         if (!(await hostSaysBlocked()) || !isCurrent()) return
-        mirrorForInspect = false
-        if (srcdoc() === null && fidelity() === "none") showMirror(target, html)
+        setNotice("blocked")
         return
       }
       /*
@@ -410,12 +361,15 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const load = (target: string) => {
+    if (isAdeOrigin(target, window.location.origin)) {
+      setNotice("ade-origin")
+      setLoadState("ready")
+      return
+    }
     loadGeneration += 1
     const generation = loadGeneration
 
     if (handshakeTimer) clearTimeout(handshakeTimer)
-    pageCopy = undefined
-    mirrorForInspect = false
     setNotice(undefined)
     setOpenError(undefined)
     setLoadState("loading")
@@ -433,27 +387,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   /*
-   * Inspect needs the bridge, so a page kept without one is swapped for the
-   * mirror only when the user asks; Browse puts the real page back.
+   * Inspect stays on the real page. A srcdoc copy with allow-same-origin
+   * would run as ADE; S46 already injects the bridge into the live frame.
    */
   createEffect(
     on(
       mode,
       (next) => {
-        if (next === "edit") {
-          if (fidelity() !== "none" || srcdoc() !== null || notice() === "blocked") return
-          const copy = pageCopy
-          if (!copy || copy.generation !== loadGeneration) {
-            // Settled with no copy: say why Inspect has nothing to select.
-            if (loadState() === "ready") setNotice(noticeWithoutCopy({ blocked: false, inspecting: true }))
-            return
-          }
-          mirrorForInspect = true
-          showMirror(copy.target, copy.html)
-          return
-        }
-        if (notice() === "no-copy") setNotice(undefined)
-        if (mirrorForInspect) load(url())
+        if (next !== "edit" && notice() === "no-copy") setNotice(undefined)
       },
       { defer: true },
     ),
@@ -471,6 +412,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const navigateTo = (raw: string) => {
     const normalized = normalizeUrl(raw)
     if (!normalized) return
+    if (isAdeOrigin(normalized, window.location.origin)) {
+      setNotice("ade-origin")
+      return
+    }
     show(normalized, visit(history(), normalized))
   }
 
@@ -624,6 +569,23 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const applyEdit = (selector: string, property: string, value: string) => {
     if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
     else post({ type: "visual-editor:apply-style", selector, property, value })
+  }
+
+  const forgetThisSite = async () => {
+    setForgetNote(undefined)
+    const result = await forgetSite(url())
+    if (result.error || !result.report) {
+      setForgetNote({ ok: false, text: t("browser.forget.failed", result.error ?? "") })
+      return
+    }
+    const said = forgetMessage(result.report)
+    const text =
+      said.key === "browser.forget.done.all" ||
+      said.key === "browser.forget.done.cookies" ||
+      said.key === "browser.forget.unsure.cookies"
+        ? t(said.key, said.cookies)
+        : t(said.key)
+    setForgetNote({ ok: said.ok, text })
   }
 
   const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -1062,7 +1024,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
-              sandbox="allow-scripts allow-forms allow-popups allow-modals"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
               name={FRAME_NAME}
               title={props.title || t("browser.preview")}
             />
@@ -1096,11 +1058,17 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             {(kind) => (
               <div data-slot="browser-error-overlay" data-notice={kind()}>
                 <span data-slot="browser-error-title">
-                  {kind() === "blocked" ? t("browser.blocked.title") : t("browser.noCopy.title")}
+                  {kind() === "blocked"
+                    ? t("browser.blocked.title")
+                    : kind() === "ade-origin"
+                      ? t("browser.adeOrigin")
+                      : t("browser.noCopy.title")}
                 </span>
-                <span data-slot="browser-error-msg">
-                  {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
-                </span>
+                <Show when={kind() !== "ade-origin"}>
+                  <span data-slot="browser-error-msg">
+                    {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
+                  </span>
+                </Show>
                 <Show when={openError()}>
                   {(problem) => <span data-slot="browser-error-msg">{t("browser.openExternal.failed", problem())}</span>}
                 </Show>
@@ -1267,6 +1235,17 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
+        <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
+          {t("browser.storage.note")}
+        </span>
+        <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
+          {t("browser.forget")}
+        </button>
+        <Show when={forgetNote()}>
+          <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
+            {forgetNote()?.text}
+          </span>
+        </Show>
         <Show when={sending() || sendNote()}>
           <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">
             {sending() ? t("browser.send.sending") : sendNote()?.text}

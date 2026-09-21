@@ -82,6 +82,22 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
   const uncurry = Function.prototype.bind.bind(Function.prototype.call)
   if (win.__ADE_FRAME__) return
   define(win, "__ADE_FRAME__", { value: true })
+  /*
+   * A frame that has become ADE itself (navigated onto the window's origin
+   * or tauri.localhost) can read the window. Blank it. A cross-origin page
+   * cannot read `top.location`, and that throw is the all-clear.
+   */
+  try {
+    const here = String((win.location && win.location.origin) || "")
+    const topOrigin = String((win.top && win.top.location && win.top.location.origin) || "")
+    const host = String((win.location && win.location.hostname) || "").toLowerCase()
+    if (host === "tauri.localhost" || (here && topOrigin && here === topOrigin)) {
+      try {
+        win.location.replace("about:blank")
+      } catch {}
+      return
+    }
+  } catch {}
 
   // 1. IPC: no Tauri-* header can be set in a frame.
   try {

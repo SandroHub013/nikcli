@@ -112,6 +112,9 @@ function makeWindow(input: { name?: string; nested?: boolean; top?: boolean; hre
     chrome: { webview },
     location: new URL(input.href ?? "http://localhost:5173/"),
   })
+  win.location.replace = (href: string) => {
+    win.location = new URL(href, "http://localhost/")
+  }
   const fromParent = (data: unknown) => win.dispatchEvent(new BrowserMessageEvent("message", { data, source: win.parent }))
   const fromPage = (data: unknown) => win.dispatchEvent(new BrowserMessageEvent("message", { data, source: win }))
   return { win, topPosted, transfers, seen, webview, fromParent, fromPage, wipeListeners: () => win.wipe() }
@@ -200,6 +203,16 @@ describe("frameGuard: any frame", () => {
     const guarded = win.Headers
     frameGuard(win, () => {})
     expect(win.Headers).toBe(guarded)
+  })
+
+  test("a frame that has become ADE is blanked and gets no bridge", () => {
+    const { win, topPosted } = makeWindow({ name: "ade-browser", href: "http://tauri.localhost/" })
+    let started = false
+    frameGuard(win, () => (started = true))
+    expect(String(win.location.href)).toBe("about:blank")
+    expect(topPosted).toEqual([])
+    expect(started).toBe(false)
+    expect(() => tauriRequest(win)).not.toThrow()
   })
 
   test("a frame that is not a pane gets no bridge", () => {

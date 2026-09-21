@@ -429,6 +429,21 @@ export const it = {
   "browser.error.hint": "Verifica che il server sia avviato e raggiungibile.",
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
+  "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
+  "browser.forget": "Dimentica questo sito",
+  "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
+  "browser.forget.done.all": (cookies: number) =>
+    `Storage del sito cancellato, e ${cookies === 1 ? "un cookie eliminato" : `${cookies} cookie eliminati`}.`,
+  "browser.forget.done.storage": "Storage del sito cancellato; nessun cookie da eliminare.",
+  "browser.forget.done.storage.noCookies": "Storage del sito cancellato; i cookie non sono leggibili da qui.",
+  "browser.forget.done.cookies": (cookies: number) =>
+    `${cookies === 1 ? "Un cookie eliminato" : `${cookies} cookie eliminati`}; lo storage del sito non è stato trovato.`,
+  "browser.forget.unsure": "Ho chiesto la cancellazione, ma non ho potuto verificarla: il dato potrebbe essere ancora lì.",
+  "browser.forget.unsure.cookies": (cookies: number) =>
+    `${cookies === 1 ? "Un cookie eliminato" : `${cookies} cookie eliminati`}; la cancellazione dello storage non è verificabile: il dato potrebbe essere ancora lì.`,
+  "browser.forget.done.none": "Niente è stato cancellato — il sito potrebbe non aver salvato dati, oppure ADE non è riuscita a raggiungerli.",
+  "browser.forget.failed": (problem: string) => `Non cancellati: ${problem}`,
+  "browser.storage.note": "Cookie e dati restano nel profilo di ADE.",
   "browser.blocked.title": "Questo sito non si lascia mostrare dentro ADE",
   "browser.blocked.msg": "Il server vieta di incorporare la pagina in un'altra app (X-Frame-Options o CSP frame-ancestors) e non permette ad ADE di leggerne una copia.",
   "browser.openExternal": "Apri nel browser",
