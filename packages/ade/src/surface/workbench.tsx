@@ -235,6 +235,16 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import {
+  formatFallbackLine,
+  formatHandoff,
+  handoffOutcome,
+  nativeLaunchArgs,
+  parseNativeSessions,
+  routeFor,
+  type Handoff,
+  type NativeSession,
+} from "../session/native-mail"
 
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
@@ -1562,6 +1572,74 @@ export function Workbench() {
   const held = new Set<string>()
   /** The state last written for a queued request, so a waiter hears about changes only. */
   const heldStates = new Map<string, string>()
+
+  /*
+   * The sessions Claude Code lists (`claude agents --json`, documented), so a
+   * pane can be addressed by the name the CLI actually kept. Asked at most
+   * every few seconds and never waited on for long: a CLI that hangs, is too
+   * old to list, or is not installed answers "nobody", and the message is
+   * typed as it always was.
+   */
+  /**
+   * Native handoffs waiting for the sender's word. Booked when the receipt
+   * goes out, closed by `ade-msg delivered`, by the target's turn hook, or by
+   * the clock — the last two so a sender that forgets never leaves the other
+   * session without its mail.
+   */
+  const handoffs = new Map<string, Handoff & { failed?: string; acked?: boolean }>()
+
+  /** Types what a handoff did not deliver, and says so on both sides. */
+  const fallBackToTyping = (handoff: Handoff, reason: string) => {
+    handoffs.delete(handoff.id)
+    const request = openRequests.get(handoff.id)
+    if (request) {
+      request.via = "digitata"
+      delete request.acked
+      saveRequests()
+    }
+    heldLines.push({ paneId: handoff.paneId, text: formatFallbackLine(handoff.line, reason), inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from } })
+    appendLine(handoff.paneId, t("note.viaFallback", reason), "note")
+    if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note")
+  }
+
+  /** Closes the handoffs the sender confirmed, the hook showed, or the clock ran out on. */
+  const settleHandoffs = (now: number) => {
+    for (const handoff of [...handoffs.values()]) {
+      const turn = activityOf.get(handoff.paneId)
+      const outcome = handoffOutcome(
+        handoff,
+        { ...(handoff.acked ? { acked: true } : {}), ...(handoff.failed !== undefined ? { failed: true } : {}), ...(turn?.state === "busy" ? { turnBeganAt: turn.at } : {}) },
+        now,
+      )
+      if (outcome === "wait") continue
+      if (outcome === "fallback") {
+        fallBackToTyping(handoff, handoff.failed || "nessuna conferma dal mittente")
+        continue
+      }
+      handoffs.delete(handoff.id)
+      const request = openRequests.get(handoff.id)
+      if (request) {
+        request.acked = true
+        saveRequests()
+      }
+      appendLine(handoff.paneId, t("note.viaNativeAck"), "note")
+    }
+  }
+
+  const NATIVE_LIST_TTL_MS = 5_000
+  const NATIVE_LIST_TIMEOUT_MS = 3_000
+  let nativeList: { at: number; sessions: NativeSession[] | undefined } | undefined
+  const listNativeSessions = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>): Promise<NativeSession[] | undefined> => {
+    const now = Date.now()
+    if (nativeList && now - nativeList.at < NATIVE_LIST_TTL_MS) return nativeList.sessions
+    const listing = host.run("claude", ["agents", "--json"], project()?.root)
+      .then((result) => (result.code === 0 ? parseNativeSessions(result.stdout) : undefined))
+      .catch(() => undefined)
+    const late = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), NATIVE_LIST_TIMEOUT_MS))
+    const sessions = await Promise.race([listing, late])
+    nativeList = { at: Date.now(), sessions }
+    return sessions
+  }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
   const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
 
@@ -2163,6 +2241,7 @@ export function Workbench() {
     }
 
     await followInbox(host, now)
+    settleHandoffs(now)
     refreshMailWaiting()
 
     const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now, decisions)
@@ -2249,6 +2328,22 @@ export function Workbench() {
       return true
     }
 
+    if (message.kind === "delivered") {
+      const handoff = handoffs.get(message.ref)
+      if (!handoff) {
+        await answer(`errore: nessuna consegna nativa in attesa con id ${message.ref}`)
+        return true
+      }
+      if (!message.from || handoff.from !== message.from) {
+        await answer("errore: solo chi ha ricevuto la consegna può confermarla")
+        return true
+      }
+      if (message.ok) handoff.acked = true
+      else handoff.failed = message.text.trim() || "SendMessage non riuscito"
+      settleHandoffs(Date.now())
+      await answer(message.ok ? `ok: consegna ${message.ref} confermata` : `ok: ADE digita ${message.ref} nella sessione, con la protezione della riga`)
+      return true
+    }
     if (message.kind === "cancel") {
       const request = openRequests.get(message.ref)
       if (!request) {
@@ -2690,6 +2785,51 @@ export function Workbench() {
       await answer(`errore: la sessione "${target.pane.title}" non è attiva`)
       return true
     }
+    /*
+     * Which way. Two Claude sessions talk over the CLI's own channel: the
+     * caller sends, with `SendMessage`, the very line ADE would have typed,
+     * and the message lands in the other's context without a keystroke —
+     * between two tool calls if it is working, as a new turn if it is idle.
+     * So nothing below about turns, permissions or half-written lines
+     * applies to it. Every other pairing is typed, protected, as before,
+     * and the reason is written where the user can read it.
+     */
+    const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
+    const route = routeFor({
+      senderAgent: sender?.agent,
+      targetAgent: target.pane.agent,
+      targetSessionId: targetPane?.resumeId,
+      listed: sender?.agent === "claude-code" && target.pane.agent === "claude-code" && !message.via && !held.has(id) ? await listNativeSessions(host) : undefined,
+      typedRequested: message.via === "typed",
+      alreadyQueued: held.has(id),
+    })
+    if (route.via === "nativa") {
+      const line =
+        message.kind === "ask"
+          ? formatRequest(id, message.text, sender, {
+              ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+              depth: depthOf(target.pane.id, parentOf),
+              maxDepth: maxDepth(),
+            })
+          : formatDelivery(message, sender)
+      if (message.kind === "ask") {
+        const at = Date.now()
+        openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa" })
+        saveRequests()
+      }
+      const ask = message.kind === "ask"
+      appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+      appendLine(target.pane.id, t("note.viaNative", route.name), "note")
+      if (sender) {
+        appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
+        appendLine(sender.id, t("note.viaNative", route.name), "note")
+      }
+      held.delete(id)
+      handoffs.set(id, { paneId: target.pane.id, line, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
+      await answer(formatHandoff(route.name, id, line))
+      return true
+    }
+
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
     if (permissions()[target.pane.id]) return false
 
@@ -2720,7 +2860,6 @@ export function Workbench() {
     }
     heldStates.delete(id)
 
-    const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
     const targetDepth = depthOf(target.pane.id, parentOf)
     const line =
       message.kind === "ask"
@@ -2743,11 +2882,14 @@ export function Workbench() {
     }
     if (message.kind === "ask") {
       const at = Date.now()
-      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text) })
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "digitata" })
       saveRequests()
     }
     const ask = message.kind === "ask"
     appendLine(target.pane.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+    // Typed: say so, and why the CLI's channel was not used, so a message that
+    // went missing can be looked for where it actually went.
+    appendLine(target.pane.id, t("note.viaTyped", route.reason), "note")
     if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
     // A held message's sender was answered when it was held, and has stopped listening since.
     if (held.delete(id)) return true
@@ -4936,7 +5078,14 @@ export function Workbench() {
       else appendLine(paneId, t("resume.noMint", agent.label || agentId), "note")
     }
 
-    const extraArgs = [...introArgs(agentId), ...(launched?.spawnArgs ?? []), ...opening.args, ...(extra ?? [])]
+    const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
+    const extraArgs = [
+      ...introArgs(agentId),
+      ...nativeLaunchArgs(agentId, paneTitle),
+      ...(launched?.spawnArgs ?? []),
+      ...opening.args,
+      ...(extra ?? []),
+    ]
     const mintedId = opening.resumeId
 
     /*

@@ -64,6 +64,10 @@ describe("parseMessage", () => {
 
   test("ask, spawn and reply carry what each needs", () => {
     expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x"}')).toMatchObject({ kind: "ask", to: "2" })
+    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x","via":"typed"}')).toMatchObject({ kind: "ask", via: "typed" })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":true,"text":""}')).toMatchObject({ kind: "delivered", ok: true })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":false,"text":"trattenuto"}')).toMatchObject({ kind: "delivered", ok: false, text: "trattenuto" })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"","ok":true}')).toBeUndefined()
     expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"fai x"}')).toMatchObject({
       kind: "spawn",
       agent: "codex",

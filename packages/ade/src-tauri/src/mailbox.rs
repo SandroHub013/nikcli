@@ -355,6 +355,7 @@ $note = $null
 $effort = $null
 $profile = $null
 $file = $null
+$via = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
@@ -378,6 +379,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--force') { $force = $true; continue }
     elseif ($a -eq '--fresh') { $fresh = $true; continue }
     elseif ($a -eq '--fork') { $fork = $true; continue }
+    elseif ($a -eq '--digita') { $via = 'typed'; continue }
     elseif ($a -eq '--ttl' -and $hasNext) { try { $ttl = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
   }
   $pos.Add($a)
@@ -569,7 +571,9 @@ switch ($cmd) {
   }
   'send' {
     if (-not $head -or -not $text) { Usage }
-    PostAndConfirm ([ordered]@{ kind = 'send'; to = $head; text = $text })
+    $fields = [ordered]@{ kind = 'send'; to = $head; text = $text }
+    if ($via) { $fields['via'] = $via }
+    PostAndConfirm $fields
   }
   'reply' {
     if (-not $head -or -not $text) { Usage }
@@ -578,6 +582,13 @@ switch ($cmd) {
   'cancel' {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
     PostAndConfirm ([ordered]@{ kind = 'cancel'; ref = $head })
+  }
+  'delivered' {
+    if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$') { Usage }
+    # `delivered <id>` means sent; `delivered <id> no [motivo]` means ADE has to type it.
+    $ok = -not ($second -eq 'no')
+    $why = if ($ok) { '' } elseif ($pos.Count -gt 2) { ($pos.GetRange(2, $pos.Count - 2)) -join ' ' } else { '' }
+    PostAndConfirm ([ordered]@{ kind = 'delivered'; ref = $head; ok = $ok; text = $why })
   }
   'update' {
     if ($head -notmatch '^[A-Za-z0-9_-]{1,80}$' -or ($second -ne 'bloccata' -and $second -ne 'decisione') -or -not $text) { Usage }
@@ -603,6 +614,7 @@ switch ($cmd) {
     if ($cmd -eq 'ask') {
       $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
       if ($effort) { $fields['effort'] = $effort }
+      if ($via) { $fields['via'] = $via }
     } else {
       $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
@@ -616,6 +628,8 @@ switch ($cmd) {
     $r = Receipt $id
     if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
     $said = if ($null -eq $r) { 'in coda, ADE non l''ha ancora consegnata' } else { $r }
+    # The delivery is the caller's own SendMessage: waiting here first would wait for a reply to a request nobody has received yet.
+    if ($null -ne $r -and $r.StartsWith('ok: consegna tu')) { Write-Output "id: $id - $r`nDopo averla mandata attendi con: ade-msg wait $id"; exit 0 }
     if ($noWait) { Write-Output "id: $id - $said - attendi con: ade-msg wait $id"; exit 0 }
     [Console]::Error.WriteLine("ade-msg: $said (richiesta $id), in attesa della risposta...")
     AwaitIds @($id)
@@ -648,7 +662,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""
 lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -671,6 +685,7 @@ while [ $# -gt 0 ]; do
       --force) force=true; shift; continue ;;
       --fresh) fresh=true; shift; continue ;;
       --fork) fork=true; shift; continue ;;
+      --digita) via=typed; shift; continue ;;
       --ttl) [ $# -ge 2 ] && { ttl="$2"; shift 2; continue; } ;;
     esac
   fi
@@ -806,9 +821,17 @@ case "$cmd" in
       show) show "\"kind\":\"memory\",\"op\":\"show\"" ;;
       *) usage ;;
     esac ;;
-  send) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"" ;;
+  send)
+    [ -n "$head" ] && [ -n "$text" ] || usage
+    extra=""; [ -n "$via" ] && extra=",\"via\":\"$via\""
+    confirm "\"kind\":\"send\",\"to\":\"$(esc "$head")\"$extra" ;;
   reply) [ -n "$head" ] && [ -n "$text" ] || usage; confirm "\"kind\":\"reply\",\"ref\":\"$(esc "$head")\"" ;;
   cancel) valid_id "$head" || usage; confirm "\"kind\":\"cancel\",\"ref\":\"$head\"" ;;
+  delivered)
+    valid_id "$head" || usage
+    # `delivered <id>` means sent; `delivered <id> no [motivo]` means ADE has to type it.
+    if [ "$second" = no ]; then ok=false; text="$(printf '%s' "$text" | sed 's/^no *//')"; else ok=true; text=""; fi
+    confirm "\"kind\":\"delivered\",\"ref\":\"$head\",\"ok\":$ok" ;;
   update)
     valid_id "$head" || usage
     case "$second" in bloccata|decisione) ;; *) usage ;; esac
@@ -826,6 +849,7 @@ case "$cmd" in
     [ -n "$head" ] && [ -n "$text" ] || usage
     if [ "$cmd" = ask ]; then
       extra=""; [ -n "$effort" ] && extra=",\"effort\":\"$(esc "$effort")\""
+      [ -n "$via" ] && extra="$extra,\"via\":\"$via\""
       post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\"$extra"
     else
       extra=""
@@ -841,6 +865,8 @@ case "$cmd" in
     else
       said="in coda, ADE non l'ha ancora consegnata"
     fi
+    # The delivery is the caller's own SendMessage: waiting here first would wait for a reply to a request nobody has received yet.
+    case "$said" in "ok: consegna tu"*) printf '%s\n' "id: $id - $said" "Dopo averla mandata attendi con: ade-msg wait $id"; exit 0 ;; esac
     if [ $nowait = 1 ]; then echo "id: $id - $said - attendi con: ade-msg wait $id"; exit 0; fi
     echo "ade-msg: $said (richiesta $id), in attesa della risposta..." >&2
     await "$id" ;;

@@ -839,6 +839,10 @@ export const it = {
   "note.messageFrom": (from: string, text: string) => `Messaggio ricevuto da ${from}: ${text}`,
   "note.askTo": (to: string, text: string) => `Richiesta inviata a ${to}: ${text}`,
   "note.messageTo": (to: string, text: string) => `Messaggio inviato a ${to}: ${text}`,
+  "note.viaNative": (name: string) => `Consegna nativa: il mittente lo manda con SendMessage alla sessione "${name}"`,
+  "note.viaTyped": (reason: string) => `Consegna digitata (${reason})`,
+  "note.viaNativeAck": () => `Consegna nativa confermata`,
+  "note.viaFallback": (reason: string) => `Consegna nativa non confermata (${reason}): ADE la digita`,
   "voice.nameOnly": (shortcut: string, manual: string) =>
     `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei nik» o «nik». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
   "voice.shortcutOnly": (shortcut: string) =>
