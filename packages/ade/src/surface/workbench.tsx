@@ -36,7 +36,7 @@ import {
 import { detectAgents } from "../session-new/availability"
 import { RESUME, planFork, planRestore, planResume, planStart, type ResumePlan } from "../session-new/resume"
 import { followReports, newNonce } from "../session-new/agent-link"
-import { HOOK_TARGETS, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
+import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, McpSection, ProviderSection, RoutineSection, SkillsSection } from "../settings/sections"
 import { willLaunch, type LaunchEntry } from "../session-new/launch"
@@ -152,7 +152,7 @@ import {
   type PermissionAnswer,
 } from "../session/permission"
 import { readReportLine } from "../session/report"
-import { asOneLine, asSubmittedLine, pasteSettled } from "../session/typing"
+import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
 import {
   DEFAULT_MAX_SPAWNED,
@@ -652,32 +652,43 @@ export function Workbench() {
   /**
    * Makes sure a typed line became a turn, where the CLI's hooks can say so.
    *
-   * `UserPromptSubmit` runs the moment a prompt is sent. If it has not run
-   * within a few seconds the line is still in the input box, and Enter goes
-   * again — twice at most, never over a permission prompt, and not at all for
-   * a CLI without the hook, where no answer is not evidence of anything.
+   * `UserPromptSubmit` runs the moment a prompt is sent. The confirmation
+   * window is `HOOK_TIMEOUT` plus 2 s because under load the hook can take
+   * several seconds, and an Enter sent before the hook writes lands inside a
+   * turn that has already started. We do not use pane output to detect
+   * submission: `confirmSubmitted` exists for when CR gets swallowed into a
+   * paste, where Claude Code redraws the input box with an extra newline and
+   * produces output even though the line was never submitted.
    */
   const confirmSubmitted = async (paneId: string, session: SpawnedSession, typedAt: number) => {
     const host = await getHost()
     const nonce = paneNonces.get(paneId)
     if (!host?.readAgentActivity || !nonce || !hooked(paneId)) return
     for (let attempt = 0; attempt < 2; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      if (running.get(paneId) !== session || permissions()[paneId]) return
-      const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
-      if (activity && activity.at >= typedAt) {
-        activityOf.set(paneId, activity)
-        return
+      const sentAt = Date.now()
+      const deadline = confirmDeadline(sentAt, HOOK_TIMEOUT)
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        if (running.get(paneId) !== session || permissions()[paneId]) return
+        const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
+        const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
+        const check = submitCheck({ typedAt, activity, now: Date.now(), deadline })
+        if (check === "confirmed") {
+          activityOf.set(paneId, activity!)
+          return
+        }
+        if (check === "queued") {
+          return
+        }
+        if (check === "wait") {
+          continue
+        }
+        if (check === "resend") {
+          session.write("\r")
+          appendLine(paneId, "Invio ripetuto: il messaggio non era partito", "note")
+          break
+        }
       }
-      /*
-       * Busy from before the line was typed: the CLI queued it behind the
-       * current turn, and it will be submitted when that turn ends. An Enter
-       * now would land in whatever the turn is doing.
-       */
-      if (activity?.state === "busy") return
-      session.write("\r")
-      appendLine(paneId, "Invio ripetuto: il messaggio non era partito", "note")
     }
   }
 

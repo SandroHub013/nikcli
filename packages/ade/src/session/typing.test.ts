@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { PASTE_QUIET_MS, PASTE_SETTLE_MAX_MS, asOneLine, asSubmittedLine, pasteSettled } from "./typing"
+import {
+  PASTE_QUIET_MS,
+  PASTE_SETTLE_MAX_MS,
+  asOneLine,
+  asSubmittedLine,
+  confirmDeadline,
+  pasteSettled,
+  submitCheck,
+} from "./typing"
 
 const CR = String.fromCharCode(13)
 const LF = String.fromCharCode(10)
@@ -66,3 +74,41 @@ describe("the Enter after a paste", () => {
     expect(pasteSettled({ typedAt: 1000, lastOutputAt: 8990, now: 1000 + PASTE_SETTLE_MAX_MS })).toBe(true)
   })
 })
+
+describe("submitCheck", () => {
+  const typedAt = 1000
+  const deadline = 13000
+
+  test("attività { state: 'busy', at: 1500 }, now: 2000 → 'confirmed'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "busy", at: 1500 }, now: 2000, deadline })).toBe("confirmed")
+  })
+
+  test("attività { state: 'idle', at: 1500 }, now: 2000 → 'confirmed' (un turno brevissimo già finito)", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 1500 }, now: 2000, deadline })).toBe("confirmed")
+  })
+
+  test("attività { state: 'busy', at: 500 }, now: 2000 → 'queued'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "busy", at: 500 }, now: 2000, deadline })).toBe("queued")
+  })
+
+  test("attività { state: 'idle', at: 500 }, now: 4000 → 'wait' (questo è il caso del difetto: a 3 s oggi si rimandava Invio)", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 500 }, now: 4000, deadline })).toBe("wait")
+  })
+
+  test("attività undefined, now: 12999 → 'wait'", () => {
+    expect(submitCheck({ typedAt, activity: undefined, now: 12999, deadline })).toBe("wait")
+  })
+
+  test("attività { state: 'idle', at: 500 }, now: 13000 → 'resend'", () => {
+    expect(submitCheck({ typedAt, activity: { state: "idle", at: 500 }, now: 13000, deadline })).toBe("resend")
+  })
+
+  test("attività undefined, now: 13000 → 'resend'", () => {
+    expect(submitCheck({ typedAt, activity: undefined, now: 13000, deadline })).toBe("resend")
+  })
+
+  test("confirmDeadline(1000, 10) → 13000", () => {
+    expect(confirmDeadline(1000, 10)).toBe(13000)
+  })
+})
+

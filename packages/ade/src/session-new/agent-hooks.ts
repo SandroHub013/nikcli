@@ -112,8 +112,8 @@ export function isAdeCommand(command: unknown): boolean {
   return typeof command === "string" && command.includes(HOOK_MARKER)
 }
 
-/** How long the CLI waits for the hook, in seconds. Writing a file is instant. */
-const HOOK_TIMEOUT = 5
+/** How long the CLI waits for the hook, in seconds. */
+export const HOOK_TIMEOUT = 10
 
 /**
  * A JSON object, as far as anything here is concerned.
