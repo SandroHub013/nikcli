@@ -230,17 +230,6 @@
   background: var(--ade-active);
 }
 
-[data-slot="file-result"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--ade-space-1);
-  bottom: var(--ade-space-1);
-  width: 2px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
-}
-
 [data-slot="file-result"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
@@ -721,9 +710,6 @@
   color: var(--ade-text);
   box-shadow: none;
 }
-[data-slot="tree-row"][data-selected]::before {
-  content: none;
-}
 [data-slot="tree-guide"]::before {
   background: var(--ade-border-subtle);
 }
@@ -733,12 +719,8 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
 }
-/* Anche la riga di un risultato di ricerca perde la striscia colorata. */
 [data-slot="file-result"] {
   border-radius: 6px;
-}
-[data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 /* Il pezzo che corrisponde a quanto è stato digitato: in grassetto e in
    inchiostro pieno, non in tinta. Su una riga tenue il contrasto basta a
@@ -982,11 +964,6 @@
   flex: 1 1 auto;
   min-width: 0;
   gap: 1px;
-}
-
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected]::before {
-  display: none !important;
-  content: none !important;
 }
 
 [data-slot="session-row"],
@@ -1483,33 +1460,27 @@ aside[data-component="ade-sidebar"] {
   gap: 0;
 }
 
-[data-component="ade-sidebar"] [data-slot="workspace-header"]:hover,
-[data-component="ade-sidebar"] [data-slot="tree-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="session-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="active-agent-card"]:hover {
+/*
+ * L'hover e la selezione si agganciano alla forma che la riga dichiara dove
+ * nasce (`data-selectable`), non al suo slot: una riga nuova entra
+ * abilitandosi una volta nel markup, senza che un elenco di nomi vada
+ * cercato e aggiornato di nuovo nella busta. Il prefisso del componente
+ * resta: vale un punto di specificità in più su index.css, che altrimenti
+ * vince il pari e rimetterebbe i vecchi fondi sopra questo velo.
+ */
+[data-component="ade-sidebar"] [data-selectable]:hover {
   background: var(--ade-hover);
   border-color: transparent;
 }
 
 /* La selezione è un velo, non un anello: il colore dice già quale riga è
-   quella, e il contorno lo direbbe una seconda volta. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected],
-[data-component="ade-sidebar"] [data-slot="workspace-header"][data-active],
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="active-agent-card"][data-selected] {
+   quella, e il contorno lo direbbe una seconda volta. La stessa forma
+   dell'hover porta lo stato: `data-selectable` con `data-selected`. */
+[data-component="ade-sidebar"] [data-selectable][data-selected] {
   background: var(--ade-accent-soft);
   border-color: transparent;
   box-shadow: none;
   color: var(--ade-text);
-}
-
-/* E niente barretta sul bordo sinistro: era il segno della selezione quando
-   la riga non cambiava fondo, e sopra il velo diventa una seconda risposta
-   alla stessa domanda. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected]::before,
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 
 /* Il segno dell'agente è tondo come tutto il resto, e senza contorno: il

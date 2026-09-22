@@ -171,8 +171,10 @@ function WorkspaceHeaderRow(props: {
       role="treeitem"
       aria-level={1}
       data-slot="workspace-header"
+      data-selectable="true"
       data-expanded={props.row.isExpanded ? "true" : undefined}
       data-active={props.isActive ? "true" : undefined}
+      data-selected={props.isActive ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
     >
@@ -257,6 +259,7 @@ function SessionChildRow(props: {
       role="treeitem"
       aria-level={2}
       data-slot="session-row"
+      data-selectable="true"
       data-status={props.row.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.row.isSelected ? "true" : undefined}
@@ -331,6 +334,7 @@ function ActiveAgentRow(props: {
       type="button"
       role="listitem"
       data-slot="active-agent-card"
+      data-selectable="true"
       data-status={props.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.isSelected ? "true" : undefined}
@@ -434,6 +438,7 @@ function FileTreeRow(props: {
       tabindex={0}
       aria-level={props.item.depth + 1}
       data-slot="tree-row"
+      data-selectable="true"
       data-kind={props.item.kind}
       data-expanded={props.item.isExpanded ? "true" : undefined}
       data-selected={props.item.isSelected ? "true" : undefined}
@@ -1301,6 +1306,7 @@ export function Sidebar(props: SidebarProps) {
                         role="option"
                         tabindex={-1}
                         data-slot="file-result"
+                        data-selectable="true"
                         data-kind={hit.kind}
                         data-index={index()}
                         data-active={activeHit() === index() ? "true" : undefined}
