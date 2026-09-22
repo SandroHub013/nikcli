@@ -46,8 +46,8 @@ describe("parseNativeSessions", () => {
 
   test("keeps every row that can be addressed", () => {
     expect(parseNativeSessions(listing)).toEqual([
-      { sessionId: "s-1", name: "Fabio", kind: "interactive" },
-      { sessionId: "s-2", name: "PLAN.md analysis", kind: "background" },
+      { sessionId: "s-1", name: "Fabio" },
+      { sessionId: "s-2", name: "PLAN.md analysis" },
     ])
   })
 
@@ -60,7 +60,7 @@ describe("parseNativeSessions", () => {
 })
 
 describe("routeFor", () => {
-  const listed = [{ sessionId: "s-1", name: "Fabio", kind: "interactive" }]
+  const listed = [{ sessionId: "s-1", name: "Fabio" }]
   const both = { senderAgent: "claude-code", targetAgent: "claude-code", targetSessionId: "s-1", listed }
 
   test("two Claude sessions, the target listed: native, by the name the CLI kept", () => {
@@ -82,7 +82,7 @@ describe("routeFor", () => {
 
   /** A pane renamed by the CLI (its title was taken) is still found: by conversation, not by name. */
   test("the name comes from the listing, not from the pane", () => {
-    const renamed = [{ sessionId: "s-1", name: "Fabio-2", kind: "interactive" }]
+    const renamed = [{ sessionId: "s-1", name: "Fabio-2" }]
     expect(routeFor({ ...both, listed: renamed })).toEqual({ via: "nativa", name: "Fabio-2" })
   })
 })

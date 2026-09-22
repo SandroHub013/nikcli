@@ -1620,6 +1620,21 @@ export function Workbench() {
       const outcome = handoffOutcome(handoff, { ...(handoff.acked ? { acked: true } : {}), ...(handoff.failed !== undefined ? { failed: true } : {}) }, now)
       if (outcome === "wait") continue
       if (outcome === "fallback") {
+        /*
+         * Deleted after the work, not before. A held line for a pane that is
+         * not running is discarded, and at a restart the panes come back a
+         * moment after the handoffs are loaded: the review found an expired
+         * handoff lost in the very pass that was recovering it. The handoff
+         * stays saved until its pane is alive; only a pane that no longer
+         * exists lets it go.
+         */
+        if (!running.has(handoff.paneId)) {
+          if (!wb().panes.some((pane) => pane.id === handoff.paneId)) {
+            handoffs.delete(handoff.id)
+            saveHandoffs()
+          }
+          continue
+        }
         fallBackToTyping(handoff, handoff.failed || "nessuna conferma dal mittente")
         continue
       }
@@ -2096,7 +2111,20 @@ export function Workbench() {
   let publishedRequests = ""
 
   /** Ends a request: its waiter gets `result`, and nothing about it is kept. */
-  const settle = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, result?: string) => {
+  const settle = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, result?: string): Promise<boolean> => {
+    /*
+     * The answer first, the closing after. Closing first meant a result that
+     * failed to be written left a closed request and, since a closed request
+     * takes no second answer, no way to send it again. Now a failed write
+     * leaves the request open, and the replier is told to try again.
+     */
+    if (result !== undefined && host.mailboxResult) {
+      try {
+        await host.mailboxResult(id, result)
+      } catch {
+        return false
+      }
+    }
     const answering = openRequests.get(id)?.to
     openRequests.delete(id)
     saveRequests()
@@ -2108,7 +2136,7 @@ export function Workbench() {
     if (answering) settleWhenQuiet(answering)
     statesWritten.delete(id)
     await host.mailboxState?.(id, "").catch(() => {})
-    if (result !== undefined) await host.mailboxResult?.(id, result).catch(() => {})
+    return true
   }
 
   /** How deep sessions may start sessions; `ade.mailbox.maxDepth` in localStorage overrides it. */
@@ -2349,7 +2377,10 @@ export function Workbench() {
         handoff.acked = true
         settleHandoffs(Date.now())
       }
-      await settle(host, message.ref, message.text)
+      if (!(await settle(host, message.ref, message.text))) {
+        await answer(`errore: risposta non scritta, la richiesta ${message.ref} resta aperta: riprova ade-msg reply ${message.ref}`)
+        return true
+      }
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
       if (sender) appendLine(sender.id, (caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref)), "note")
       if (caller) appendLine(caller.id, t("note.replyFrom", sender?.title ?? t("note.someSession"), message.text), "note")
