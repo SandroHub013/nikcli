@@ -588,7 +588,9 @@ body:has([data-component="agent-console"]) [data-component="voice-hud"] {
 
 [data-slot="agent-send"] {
   flex: 0 0 auto;
-  height: 36px;
+  /* 32 is the `lg` of the button scale — a composer confirm button, the same
+     weight as `chat-send`, which sat at 40 for the same lining-up reason. */
+  height: 32px;
   padding: 0 var(--ade-space-7);
   border: 1px solid transparent;
   border-radius: var(--ade-radius-lg);
@@ -598,7 +600,11 @@ body:has([data-component="agent-console"]) [data-component="voice-hud"] {
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="agent-send"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="agent-send"]:hover:not(:disabled) {
