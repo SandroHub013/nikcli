@@ -1,8 +1,9 @@
 {
-  "$comment": "The one place the brand lives. `bun run brand` writes it into tauri.conf.json and tauri.test.conf.json; the release workflow reads it with jq; a unit test fails when they drift. Provisional until the user settles the name: change it here, run `bun run brand`, done. What does NOT derive from it, on purpose: the bundle identifier (ai.nikcli.ade: the data directory, the WebView2 profile and the secrets of every installed copy hang off it), the executable name (ade-desktop: an update closes the running copy by that name), the ade-v tag prefix and the updater endpoint.",
+  "$comment": "The one place the brand lives. `bun run brand` writes it into tauri.conf.json and tauri.test.conf.json; the release workflow reads it with jq; the app imports it for the few places the name shows outside the catalogs; a unit test fails when the configs drift. Provisional until the user settles the name: change it here, run `bun run brand`, done. `since`/`until` are the copyright years: `until` is bumped by hand when a release is cut in a new year, never read from the clock, so nothing goes red on its own on the first of January. What does NOT derive from it, on purpose: the bundle identifier (ai.nikcli.ade: the data directory, the WebView2 profile and the secrets of every installed copy hang off it), the executable name (ade-desktop: an update closes the running copy by that name), the ade-v tag prefix and the updater endpoint.",
   "name": "ADE",
   "publisher": "nikcli",
   "since": 2025,
+  "until": 2026,
   "tagline": "Agent Development Environment",
   "description": "ADE runs coding agents side by side in one window: sessions, files, browser and voice.",
   "homepage": "https://github.com/SandroHub013/nikcli/releases"

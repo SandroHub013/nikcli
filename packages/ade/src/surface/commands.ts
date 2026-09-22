@@ -1,3 +1,4 @@
+import { BRAND } from "../brand"
 import type { Command } from "../command/registry"
 import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
@@ -277,7 +278,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     {
       id: "update.check",
       title: t("palette.update.check"),
-      group: "ADE",
+      group: BRAND.name,
       keywords: ["aggiornamento", "versione", "release", "novità", "installa", "update", "version", "install"],
       enabled: hasHost,
       disabledReason: desktopOnly,

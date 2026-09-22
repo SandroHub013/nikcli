@@ -157,6 +157,7 @@ import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
 import { RecordConsentDialog } from "../record/consent-dialog"
 import { UpdateDialog } from "../update/update-dialog"
+import { BRAND } from "../brand"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
@@ -5995,7 +5996,7 @@ export function Workbench() {
             and the label is on the box around it.
           */}
           <Show when={!(isTauriDesktop() && isMacOS())}>
-            <span data-slot="ade-brand" role="img" aria-label="ADE">
+            <span data-slot="ade-brand" role="img" aria-label={BRAND.name}>
               {/*
                 Concept 03: Molten Chrome Mercury (N).
                 Continuous liquid metal ribbon with animated caustic sheen
@@ -6195,7 +6196,7 @@ export function Workbench() {
         {/* On macOS the traffic lights hold the left edge, so the mark takes
             the place the window controls have elsewhere. */}
         <Show when={isTauriDesktop() && isMacOS()}>
-          <span data-slot="ade-brand" data-place="end" role="img" aria-label="ADE">
+          <span data-slot="ade-brand" data-place="end" role="img" aria-label={BRAND.name}>
             <NikChromeLogo size={30} />
           </span>
         </Show>
@@ -6691,7 +6692,7 @@ export function Workbench() {
            * no clue where the microphone stopped and the application began.
            */
           builtInGroup={t("settings.group.voice")}
-          extraGroup="ADE"
+          extraGroup={BRAND.name}
           extraSections={[
             {
               id: "set-sec-theme",

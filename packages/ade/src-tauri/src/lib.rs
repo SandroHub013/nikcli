@@ -968,7 +968,14 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// nothing but its event-target window, and neither the log nor the exit code
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let mut title = app.config().product_name.clone().unwrap_or_else(|| "ADE".into());
+    // The config always names the product (`bun run brand` writes it); the
+    // fallback reads the same brand.json at compile time, so no name is typed here.
+    let mut title = app.config().product_name.clone().unwrap_or_else(|| {
+        serde_json::from_str::<serde_json::Value>(include_str!("../../brand.json"))
+            .ok()
+            .and_then(|brand| brand["name"].as_str().map(str::to_owned))
+            .unwrap_or_default()
+    });
     // `bun run test:app` names the worktree and branch, so with several test
     // instances open the taskbar says which is which.
     if is_test_build(app) {

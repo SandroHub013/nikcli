@@ -72,6 +72,14 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
      * the moment the last byte is in. The plugin calls that callback before
      * it verifies the signature and before the installer runs, so neither the
      * verification nor the install is ever timed.
+     *
+     * Nor could they be: from there on the plugin runs synchronously inside
+     * this future (a minisign check of the bytes in memory, then a write to
+     * the temp folder and the launch of the setup), and `select!` can only
+     * drop a future at a point where it yields. A watch would have to abandon
+     * the thread mid-install, which is worse than the wait: the verification
+     * is milliseconds, and the write is a few megabytes that an antivirus can
+     * slow down but not hold forever.
      */
     let idle = Arc::new(AtomicU32::new(0));
     let started = Arc::new(AtomicBool::new(false));
