@@ -360,6 +360,15 @@ describe("spawn options, updates and the request contract", () => {
     expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare sessioni")
   })
 
+  /** The typed line is one line; the copy read with `ade-msg inbox` keeps the sender's structure. */
+  test("keeps the sender's line breaks only for the inbox copy", () => {
+    const text = "Due cose:\n(1) la prima\r\n(2) la seconda\u0007"
+    expect(formatRequest("x", text, undefined)).toContain("Due cose: (1) la prima (2) la seconda —")
+    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda —")
+    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda")
+    expect(formatDelivery({ text }, undefined)).not.toContain("\n")
+  })
+
   test("an update tells the caller how to unblock and resume waiting", () => {
     const text = formatUpdate("171-ab", "decisione", "uso A o B?", panes[1])
     expect(text).toContain("chiede una decisione: uso A o B?")

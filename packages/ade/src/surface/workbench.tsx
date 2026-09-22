@@ -1828,13 +1828,15 @@ export function Workbench() {
     paneId: string,
     line: string,
     meta: InboxMeta,
+    /** What the inbox file holds when it differs from the typed line: the same text with its line breaks. */
+    full: string = line,
   ): Promise<boolean> => {
     const session = running.get(paneId)
     if (!session) return false
     if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return typeLine(session, line)
     const at = Date.now()
-    const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: line.length, at, ringAt: at, rings: 0 }
-    const stored = await host.mailboxInboxPut(paneId, entry.name, line).then(
+    const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: full.length, at, ringAt: at, rings: 0 }
+    const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
       () => false,
     )
@@ -2990,15 +2992,15 @@ export function Workbench() {
     heldStates.delete(id)
 
     const targetDepth = depthOf(target.pane.id, parentOf)
-    const line =
-      message.kind === "ask"
-        ? formatRequest(id, message.text, sender, {
-            ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
-            depth: targetDepth,
-            maxDepth: maxDepth(),
-          })
-        : formatDelivery(message, sender)
-    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }))) {
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: targetDepth,
+      maxDepth: maxDepth(),
+    }
+    const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    // The inbox copy, read and never typed, keeps the sender's line breaks.
+    const stored = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
+    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored))) {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
