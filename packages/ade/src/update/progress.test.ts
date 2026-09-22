@@ -21,6 +21,8 @@ describe("update progress", () => {
     expect(parseUpdateProgress({ phase: "download", downloaded: 5 })).toEqual({ phase: "download", downloaded: 5, total: null })
     expect(parseUpdateProgress({ phase: "install" })).toEqual({ phase: "install" })
     expect(parseUpdateProgress({ phase: "download" })).toBeUndefined()
+    expect(parseUpdateProgress({ phase: "download", downloaded: -1, total: 9 })).toBeUndefined()
+    expect(parseUpdateProgress({ phase: "download", downloaded: 5, total: 0 })).toEqual({ phase: "download", downloaded: 5, total: null })
     expect(parseUpdateProgress("install")).toBeUndefined()
     expect(parseUpdateProgress(null)).toBeUndefined()
   })

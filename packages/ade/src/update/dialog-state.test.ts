@@ -10,12 +10,18 @@ describe("update dialog", () => {
     expect(view.dismissable).toBe(true)
   })
 
-  test("nothing moves while the download runs, because it cannot be stopped", () => {
+  test("while the download runs it cannot be stopped, but the dialog can be put away", () => {
     const view = updateDialogView({ updating: true, progress: { phase: "download", downloaded: 1, total: 9 }, error: undefined })
     expect(view.stage).toBe("download")
-    expect(view.ghost.enabled).toBe(false)
+    expect(view.ghost).toEqual({ label: "hide", enabled: true })
     expect(view.submit.enabled).toBe(false)
-    expect(view.dismissable).toBe(false)
+    expect(view.dismissable).toBe(true)
+  })
+
+  test("the hand-over to the installer keeps the same way out", () => {
+    const view = updateDialogView({ updating: true, progress: { phase: "install" }, error: undefined })
+    expect(view.ghost).toEqual({ label: "hide", enabled: true })
+    expect(view.submit.enabled).toBe(false)
   })
 
   test("updating with no news yet is still the download", () => {

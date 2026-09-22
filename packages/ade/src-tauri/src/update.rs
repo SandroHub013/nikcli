@@ -20,6 +20,16 @@ pub enum Progress {
 pub const PROGRESS_EVENT: &str = "ade-update-progress";
 const PROGRESS_STEP: u64 = 256 * 1024;
 
+/// How long the download may go without a single byte before it is given up.
+///
+/// Measured from the last byte, not from the start: a slow line that keeps
+/// trickling (nine megabytes at 50 kB/s take three minutes) is fine, a line
+/// that went dead is not. A minute is longer than the retransmission stalls
+/// of a flaky Wi-Fi (tens of seconds) and shorter than what a person will
+/// stare at a bar that does not move. Without this a half-dead connection
+/// never rejected, and the window had no way out of "downloading".
+pub const STALL_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// Downloads the newest signed ADE release, installs it and restarts into it.
 ///
 /// Everything happens here rather than through the updater plugin's JavaScript
@@ -39,27 +49,54 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "nessun aggiornamento installabile per questa piattaforma".to_string())?;
+    use std::sync::{Arc, Mutex};
+    use std::time::Instant;
     use tauri::Emitter;
     let on_chunk = app.clone();
     let on_finish = app.clone();
     let mut downloaded: u64 = 0;
     let mut reported: u64 = 0;
-    update
-        .download_and_install(
-            move |chunk, total| {
-                downloaded += chunk as u64;
-                if downloaded / PROGRESS_STEP == reported / PROGRESS_STEP && Some(downloaded) != total {
-                    return;
-                }
-                reported = downloaded;
-                let _ = on_chunk.emit(PROGRESS_EVENT, Progress::Download { downloaded, total });
-            },
-            move || {
-                let _ = on_finish.emit(PROGRESS_EVENT, Progress::Install);
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+    // When the last byte came in, and whether the download is over (the
+    // install that follows must not be timed).
+    let pulse = Arc::new(Mutex::new((Instant::now(), false)));
+    let chunk_pulse = pulse.clone();
+    let finish_pulse = pulse.clone();
+    let download = update.download_and_install(
+        move |chunk, total| {
+            downloaded += chunk as u64;
+            if let Ok(mut p) = chunk_pulse.lock() {
+                p.0 = Instant::now();
+            }
+            if downloaded / PROGRESS_STEP == reported / PROGRESS_STEP && Some(downloaded) != total {
+                return;
+            }
+            reported = downloaded;
+            let _ = on_chunk.emit(PROGRESS_EVENT, Progress::Download { downloaded, total });
+        },
+        move || {
+            if let Ok(mut p) = finish_pulse.lock() {
+                p.1 = true;
+            }
+            let _ = on_finish.emit(PROGRESS_EVENT, Progress::Install);
+        },
+    );
+    let stalled = async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let (last, finished) = pulse.lock().map(|p| *p).unwrap_or((Instant::now(), true));
+            if !finished && last.elapsed() >= STALL_AFTER {
+                return;
+            }
+        }
+    };
+    // Dropping the download future closes its connection: a download given
+    // up here cannot finish later and run the installer unasked.
+    tokio::select! {
+        result = download => result.map_err(|e| e.to_string())?,
+        _ = stalled => {
+            return Err(format!("nessun dato ricevuto per {} secondi", STALL_AFTER.as_secs()));
+        }
+    }
     app.restart()
 }
 

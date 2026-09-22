@@ -19,7 +19,7 @@ export function progressPercent(progress: UpdateProgress | undefined): number | 
   if (!progress) return undefined
   if (progress.phase === "install") return 100
   if (!progress.total || progress.total <= 0) return undefined
-  return Math.min(100, Math.floor((progress.downloaded / progress.total) * 100))
+  return Math.max(0, Math.min(100, Math.floor((progress.downloaded / progress.total) * 100)))
 }
 
 /** Reads one event payload; anything shaped differently is ignored rather than drawn. */
@@ -27,8 +27,9 @@ export function parseUpdateProgress(payload: unknown): UpdateProgress | undefine
   if (!payload || typeof payload !== "object") return undefined
   const value = payload as { phase?: unknown; downloaded?: unknown; total?: unknown }
   if (value.phase === "install") return { phase: "install" }
-  if (value.phase === "download" && typeof value.downloaded === "number") {
-    return { phase: "download", downloaded: value.downloaded, total: typeof value.total === "number" ? value.total : null }
+  if (value.phase === "download" && typeof value.downloaded === "number" && value.downloaded >= 0) {
+    const total = typeof value.total === "number" && value.total > 0 ? value.total : null
+    return { phase: "download", downloaded: value.downloaded, total }
   }
   return undefined
 }

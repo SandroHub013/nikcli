@@ -1,4 +1,4 @@
-import { onCleanup, onMount, Show } from "solid-js"
+import { createEffect, on, onCleanup, onMount, Show } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { locale, t } from "../i18n"
 import { nextFocusIndex, updateDialogView } from "./dialog-state"
@@ -12,8 +12,15 @@ import { formatMb, progressPercent, type UpdateProgress } from "./progress"
  * every running session. Here the focus starts on «Più tardi», Esc and the
  * scrim refuse, and only Enter on the filled button updates. The download and
  * the hand-over to the installer are shown in the same panel, so the window
- * does not go silent between the click and its own closing; a failure is
- * shown here too, with the release page one link away.
+ * does not go silent between the click and its own closing; while they run
+ * the ghost button says «Nascondi» and puts the panel away, the bell's bar
+ * keeps reporting. A failure is shown here too, with the release page one
+ * link away.
+ *
+ * The focus never leaves the panel: Tab wraps over what can be pressed, and
+ * when nothing can be (a stage change disabled the button that had it) the
+ * panel itself takes it, so the person is never left behind a modal they
+ * cannot reach with the keyboard.
  */
 export function UpdateDialog(props: {
   readonly fromVersion: string | undefined
@@ -36,9 +43,15 @@ export function UpdateDialog(props: {
 
   // The focus goes back where it came from: the bell's «Aggiorna» button.
   const opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
+  const keepFocusInside = () => {
+    if (!surface || surface.contains(document.activeElement)) return
+    ;(surface.querySelector<HTMLElement>('[data-slot="decision-ghost"]:not(:disabled)') ?? stops()[0] ?? surface).focus()
+  }
   onMount(() => {
     queueMicrotask(() => surface?.querySelector<HTMLElement>('[data-slot="decision-ghost"]')?.focus())
   })
+  // A button that goes disabled drops the focus on the body; pick it up again.
+  createEffect(on(() => view().stage, () => queueMicrotask(keepFocusInside), { defer: true }))
   onCleanup(() => {
     if (opener?.isConnected) opener.focus()
   })
@@ -73,11 +86,10 @@ export function UpdateDialog(props: {
           return
         }
         if (event.key !== "Tab") return
+        event.preventDefault()
         const list = stops()
         const next = nextFocusIndex(list.indexOf(document.activeElement as HTMLElement), list.length, event.shiftKey)
-        if (next < 0) return
-        event.preventDefault()
-        list[next]?.focus()
+        ;(next < 0 ? surface : list[next])?.focus()
       }}
     >
       <Surface
@@ -88,6 +100,7 @@ export function UpdateDialog(props: {
         aria-labelledby="update-dialog-title"
         aria-describedby="update-dialog-body"
         data-stage={view().stage}
+        tabindex={-1}
       >
         <header data-slot="sheet-head">
           <span data-slot="update-dialog-mark" aria-hidden="true">
@@ -144,7 +157,11 @@ export function UpdateDialog(props: {
             </span>
           </Show>
           <button type="button" data-slot="decision-ghost" disabled={!view().ghost.enabled} onClick={refuse}>
-            {view().ghost.label === "close" ? t("update.dialog.close") : t("update.restart.later")}
+            {view().ghost.label === "close"
+              ? t("update.dialog.close")
+              : view().ghost.label === "hide"
+                ? t("update.dialog.hide")
+                : t("update.restart.later")}
           </button>
           <button type="button" data-slot="decision-submit" disabled={!view().submit.enabled} onClick={props.onGo}>
             {view().submit.label === "retry" ? t("update.dialog.retry") : t("update.restart.ok")}
