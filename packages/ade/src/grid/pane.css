@@ -1170,12 +1170,20 @@
   }
 }
 
-/* Dense header pill layout */
+/*
+ * Dense header pill layout: the look of the pill, not where it sits.
+ *
+ * A header is in the flow by default, like every other pane's bar. Floating
+ * over the content is the session pane's own choice, made in its rule above
+ * (`[data-component="session-pane"] > [data-slot="pane-header"]`), because
+ * over a terminal the pill covers blank lines. This class used to carry the
+ * absolute position too, so the video pane had to undo it — over a picture
+ * the pill covered the picture — with a rule keyed on this class, which is
+ * a name the video pane does not own (S67.3). A pane that wants the pill
+ * lifted says so in its own sheet; a pane that says nothing gets a bar.
+ */
 .pill.hA {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  right: 6px;
+  flex: 0 0 auto;
   height: 30px;
   min-height: 30px;
   display: flex;
@@ -1192,7 +1200,6 @@
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   font-family: var(--ade-sans);
-  z-index: 3;
 }
 
 .hA .logo {

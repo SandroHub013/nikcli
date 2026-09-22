@@ -113,6 +113,29 @@ describe("pane chrome", () => {
     expect(hidden).toEqual([])
   })
 
+  test("a header floats only where its own pane lifts it, never by its class (S67.3)", () => {
+    /*
+     * `.pill.hA` used to carry `position: absolute`, so every pane that took
+     * the pill got it floating and the video pane undid that with a rule keyed
+     * on the class — a name it does not own, which a refactor of the pill
+     * would have broken in silence. The class is the look; the lift is a
+     * decision each pane makes in its own sheet, on the header slot.
+     */
+    const css = read("grid/pane.css").replace(/\/\*[\s\S]*?\*\//g, "")
+    const pill = css.split("}").find((rule) => /^\s*\.pill\.hA\s*\{/.test(rule))
+    expect(pill).toBeDefined()
+    expect(pill).not.toMatch(/position\s*:/)
+    expect(pill).not.toMatch(/z-index\s*:/)
+    const lifted = css.split("}").filter((rule) => /position\s*:\s*absolute/.test(rule) && /pane-header/.test(rule))
+    expect(lifted.map((rule) => rule.slice(0, rule.indexOf("{")).trim())).toEqual(['[data-component="session-pane"] > [data-slot="pane-header"]'])
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const file = entry.replace(/\\/g, "/")
+      if (file === "grid/pane.css") continue
+      const sheet = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+      expect(`${file}: ${/\.hA\b/.test(sheet)}`).toBe(`${file}: false`)
+    }
+  })
+
   test("the pill's clearance follows the header, never a list of body slots (S67.1)", () => {
     /*
      * The 42px under the floating pill used to be granted to three bodies by

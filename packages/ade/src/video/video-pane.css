@@ -29,14 +29,11 @@
 
 /*
  * The session's header pill, in the flow rather than over the content: over a
- * terminal it covers blank lines, over a video it would cover the picture.
+ * terminal it covers blank lines, over a video it would cover the picture. In
+ * the flow is what a header is unless its pane lifts it (see `.pill.hA` in
+ * pane.css), so all this pane adds is the air around the pill.
  */
-[data-component="video-pane"] > .pill.hA {
-  position: relative;
-  top: auto;
-  left: auto;
-  right: auto;
-  flex: 0 0 auto;
+[data-component="video-pane"] > [data-slot="pane-header"] {
   margin: 6px 6px 0;
 }
 
