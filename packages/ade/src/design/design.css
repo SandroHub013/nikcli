@@ -732,3 +732,9 @@
     background: var(--ade-error);
   }
 }
+
+/* «puoi sceglierne più d'una», under the title of a multiple question. */
+[data-slot="design-multi"] {
+  font-size: 11.5px;
+  color: var(--ade-text-soft);
+}

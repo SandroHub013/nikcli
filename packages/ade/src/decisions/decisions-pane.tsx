@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment } from "./answer"
+import { formatDay, formatMoment, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
@@ -53,7 +53,10 @@ export function DecisionsPane(props: {
       onRecord={() => void props.hub.submit(decision, "record")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
-      onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
+      onPick={(index) => {
+        const draft = props.hub.draft(decision.k)
+        props.hub.setDraft(decision.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(decision.multi)) })
+      }}
       onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
       onSubmit={() => void props.hub.submit(decision, "primary")}
       onDefer={(until) => void props.hub.defer(decision, until)}
@@ -143,8 +146,8 @@ export function DecisionsPane(props: {
                       <span data-slot="decision-pill" data-tone="done">{t("decisions.pill.answered")}</span>
                     </header>
                     <div data-slot="decision-answer">
-                      <b>{decision.answer?.choice ?? decision.answer?.words}</b>
-                      <Show when={decision.answer?.choice && decision.answer?.note}> · {decision.answer?.note}</Show>
+                      <b>{decision.answer?.choices?.join(" + ") ?? decision.answer?.choice ?? decision.answer?.words}</b>
+                      <Show when={(decision.answer?.choices || decision.answer?.choice) && decision.answer?.note}> · {decision.answer?.note}</Show>
                     </div>
                     <Show when={props.hub.problem(decision.k)}>
                       <div data-slot="decision-problem" role="alert">{props.hub.problem(decision.k)}</div>

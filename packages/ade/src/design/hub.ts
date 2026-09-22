@@ -7,7 +7,8 @@ import type { DesignRegister } from "./register"
 import type { DesignProposal } from "./state"
 
 export interface DesignDraft {
-  readonly picked?: number
+  /** One variant, or the boxes ticked on a `multi` proposal. */
+  readonly picked?: number | readonly number[]
   readonly note: string
 }
 

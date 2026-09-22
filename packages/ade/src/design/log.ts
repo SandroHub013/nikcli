@@ -45,12 +45,16 @@ export interface OpenedDesignEvent extends EventBase {
   readonly variants: readonly DesignVariant[]
   /** Lower comes first. Absent: after ordered ones, by time. */
   readonly order?: number
+  /** More than one variant may be picked; needs at least two variants. */
+  readonly multi?: true
 }
 
 export interface AnsweredDesignEvent extends EventBase {
   readonly type: "risposta"
   /** The variant name chosen, when one was. */
   readonly choice?: string
+  /** The variants chosen, in a proposal opened with `multi`. Never with `choice`. */
+  readonly choices?: readonly string[]
   /** A note added to the choice. */
   readonly note?: string
   /** What the user decided, verbatim. Required: it is what gets executed. */
@@ -142,6 +146,8 @@ export function toEvent(value: unknown): DesignEvent | string {
       if (variants.length === 0) return t("design.log.variants")
       const order = record.order
       if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("design.log.order")
+      const multi = record.multi === true
+      if (multi && variants.length < 2) return t("design.log.multi")
       return compact({
         type: "aperta",
         ...base,
@@ -150,6 +156,7 @@ export function toEvent(value: unknown): DesignEvent | string {
         spec: text(record.spec),
         variants,
         order: order as number | undefined,
+        multi: multi ? true : undefined,
       }) as OpenedDesignEvent
     }
     case "risposta": {
@@ -157,11 +164,15 @@ export function toEvent(value: unknown): DesignEvent | string {
       if (again && (record.choice !== undefined || record.choices !== undefined)) return t("design.log.again")
       const words = text(record.words)
       if (!words) return again ? t("design.log.again") : t("design.log.words")
+      const choices = choicesOf(record.choices, t("design.log.choices"))
+      if (choices && "error" in choices) return choices.error
+      if (choices && record.choice !== undefined) return t("design.log.choiceAndChoices")
       return compact({
         type: "risposta",
         ...base,
         words,
         choice: text(record.choice),
+        choices,
         note: text(record.note),
         again: again ? true : undefined,
       }) as AnsweredDesignEvent
@@ -194,6 +205,22 @@ function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * The options picked in a multiple answer: a non-empty list of distinct,
+ * non-empty texts. `undefined` when the field is absent.
+ */
+function choicesOf(value: unknown, bad: string): string[] | undefined | { error: string } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length === 0) return { error: bad }
+  const seen = new Set<string>()
+  for (const item of value) {
+    const label = text(item)
+    if (!label || seen.has(label)) return { error: bad }
+    seen.add(label)
+  }
+  return [...seen]
 }
 
 function variantsOf(value: unknown): DesignVariant[] | string {

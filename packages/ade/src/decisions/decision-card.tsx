@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js"
-import { deferFromInput, deferPresets, formatDay, localDay } from "./answer"
+import { deferFromInput, deferPresets, formatDay, isPicked, localDay, type Picked } from "./answer"
 import type { Decision } from "./state"
 import type { SubmitControl } from "./card"
 import { t } from "../i18n"
@@ -15,7 +15,7 @@ import { t } from "../i18n"
  */
 export function DecisionCard(props: {
   decision: Decision
-  picked: number | undefined
+  picked: Picked
   note: string
   busy: boolean
   problem?: string
@@ -48,6 +48,9 @@ export function DecisionCard(props: {
       <div data-slot="decision-meta">
         {[props.decision.spec, t("decisions.from", props.decision.raisedBy), formatDay(props.decision.openedAt, props.now)].filter(Boolean).join(" · ")}
       </div>
+      <Show when={props.decision.multi}>
+        <div data-slot="decision-multi">{t("decisions.multi")}</div>
+      </Show>
       <Show when={props.decision.context}>
         <p data-slot="decision-context">{props.decision.context}</p>
       </Show>
@@ -56,15 +59,15 @@ export function DecisionCard(props: {
       </Show>
 
       <Show when={props.decision.options.length > 0}>
-        <div data-slot="decision-options" role="radiogroup" aria-label={t("decisions.options")}>
+        <div data-slot="decision-options" role={props.decision.multi ? "group" : "radiogroup"} aria-label={t("decisions.options")}>
           <For each={props.decision.options}>
             {(option, index) => (
               <button
                 type="button"
-                role="radio"
-                aria-checked={props.picked === index()}
+                role={props.decision.multi ? "checkbox" : "radio"}
+                aria-checked={isPicked(props.picked, index())}
                 data-slot="decision-option"
-                data-on={props.picked === index() ? "true" : undefined}
+                data-on={isPicked(props.picked, index()) ? "true" : undefined}
                 onClick={() => props.onPick(index())}
               >
                 <span data-slot="decision-option-key" aria-hidden="true">{index() + 1}</span>

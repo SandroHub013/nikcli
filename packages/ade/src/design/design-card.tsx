@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import { formatDay } from "./answer"
+import { formatDay, isPicked, type Picked } from "./answer"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
@@ -8,7 +8,7 @@ import { t } from "../i18n"
 
 export function DesignCard(props: {
   proposal: DesignProposal
-  picked: number | undefined
+  picked: Picked
   note: string
   busy: boolean
   problem?: string
@@ -50,24 +50,28 @@ export function DesignCard(props: {
           .join(" · ")}
       </div>
 
+      <Show when={props.proposal.multi}>
+        <div data-slot="design-multi">{t("design.multi")}</div>
+      </Show>
+
       <Show when={props.proposal.context}>
         <p data-slot="design-context">{props.proposal.context}</p>
       </Show>
 
-      <div data-slot="design-variants" role="radiogroup" aria-label={t("design.variants")}>
+      <div data-slot="design-variants" role={props.proposal.multi ? "group" : "radiogroup"} aria-label={t("design.variants")}>
         <For each={props.proposal.variants}>
           {(variant, index) => (
             <div
               data-slot="design-variant-item"
-              data-selected={props.picked === index() ? "true" : undefined}
+              data-selected={isPicked(props.picked, index()) ? "true" : undefined}
             >
               <div data-slot="variant-head">
                 <button
                   type="button"
-                  role="radio"
-                  aria-checked={props.picked === index()}
+                  role={props.proposal.multi ? "checkbox" : "radio"}
+                  aria-checked={isPicked(props.picked, index())}
                   data-slot="variant-pick-button"
-                  data-on={props.picked === index() ? "true" : undefined}
+                  data-on={isPicked(props.picked, index()) ? "true" : undefined}
                   onClick={() => props.onPick(index())}
                 >
                   <span data-slot="variant-key" aria-hidden="true">{index() + 1}</span>

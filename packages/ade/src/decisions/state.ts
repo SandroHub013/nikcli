@@ -25,6 +25,7 @@ export type DecisionStatus = "aperta" | "risposta" | "rimandata" | "chiusa"
 
 export interface DecisionAnswer {
   readonly choice?: string
+  readonly choices?: readonly string[]
   readonly note?: string
   readonly words: string
   readonly at: string
@@ -36,6 +37,8 @@ export interface Decision {
   readonly title: string
   readonly context?: string
   readonly options: readonly DecisionOption[]
+  /** More than one option may be picked. */
+  readonly multi?: true
   readonly unlocks?: string
   readonly spec?: string
   readonly order?: number
@@ -89,6 +92,7 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
         title: event.title,
         context: event.context,
         options: event.options ?? [],
+        ...(event.multi ? { multi: true as const } : {}),
         unlocks: event.unlocks,
         spec: event.spec,
         order: event.order,
@@ -118,7 +122,22 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
           reject(event, t("decisions.rule.answered", event.k))
           continue
         }
-        current.answer = { choice: event.choice, note: event.note, words: event.words, at: event.at, by: event.by }
+        {
+          // The log does not know how the question was opened: the fold does.
+          const wrong = choiceProblem(current, event.choice, event.choices, current.options.map((option) => option.label))
+          if (wrong) {
+            reject(event, t(wrong, event.k))
+            continue
+          }
+        }
+        current.answer = {
+          choice: event.choice,
+          ...(event.choices ? { choices: event.choices } : {}),
+          note: event.note,
+          words: event.words,
+          at: event.at,
+          by: event.by,
+        }
         current.status = "risposta"
         current.deferredUntil = undefined
         break
@@ -209,11 +228,31 @@ export function resolvedMessage(decision: Decision): string {
   const answer = decision.answer
   if (!answer) throw new Error(`${decision.k} non ha una risposta`)
   const parts = [`risolta [k=${decision.k}] ${decision.title}`]
-  if (answer.choice) parts.push(`scelta: ${answer.choice}`)
+  if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)
+  else if (answer.choice) parts.push(`scelta: ${answer.choice}`)
   if (answer.note) parts.push(`nota: ${answer.note}`)
   parts.push(`parole: "${answer.words}"`)
   if (decision.unlocks) parts.push(`sblocca ${decision.unlocks}`)
   return asOneLine(parts.join(" — "))
+}
+
+/**
+ * Why an answer does not fit how the question was opened, as an i18n key:
+ * a multiple question takes `choices` from its own options, never `choice`;
+ * a single one never takes `choices`.
+ */
+function choiceProblem(
+  question: { multi?: true },
+  choice: string | undefined,
+  choices: readonly string[] | undefined,
+  known: readonly string[],
+): "decisions.rule.multiChoice" | "decisions.rule.unknownChoice" | "decisions.rule.singleChoice" | undefined {
+  if (question.multi) {
+    if (choice !== undefined) return "decisions.rule.multiChoice"
+    if (choices?.some((item) => !known.includes(item))) return "decisions.rule.unknownChoice"
+    return undefined
+  }
+  return choices ? "decisions.rule.singleChoice" : undefined
 }
 
 /**

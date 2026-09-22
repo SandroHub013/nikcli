@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { sheetKey } from "./answer"
+import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
@@ -25,8 +25,9 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
   const [needChoice, setNeedChoice] = createSignal<string>()
 
-  const pick = (k: string, picked: number) => {
-    props.hub.setDraft(k, { ...props.hub.draft(k), picked })
+  const pick = (k: string, index: number, multi: boolean) => {
+    const draft = props.hub.draft(k)
+    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
     setChosenHere((keys) => new Set(keys).add(k))
     setNeedChoice(undefined)
   }
@@ -57,20 +58,21 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     }
 
     const proposal = current()
-    const picked = Boolean(proposal && chosenHere().has(proposal.k) && props.hub.draft(proposal.k).picked !== undefined)
+    const draft = proposal ? props.hub.draft(proposal.k) : undefined
+    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, chosenHere().has(proposal.k)))
     const action = sheetKey(event, proposal?.variants.length ?? 0, event.target === note, picked)
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
     if (action.kind === "close") props.onClose()
     else if (!proposal) return
-    else if (action.kind === "pick") pick(proposal.k, action.index)
+    else if (action.kind === "pick") pick(proposal.k, action.index, Boolean(proposal.multi))
     else if (action.kind === "need-choice") setNeedChoice(proposal.k)
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
     else if (action.kind === "expand") {
-      const pickedIndex = props.hub.draft(proposal.k).picked ?? 0
+      const pickedIndex = firstPick(props.hub.draft(proposal.k).picked) ?? 0
       const variant = proposal.variants[pickedIndex]
       if (variant) props.hub.openFullPreview(variant, proposal.title)
     }
@@ -139,7 +141,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={new Date()}
                 projectRoot={root()}
-                onPick={(picked) => pick(proposal.k, picked)}
+                onPick={(index) => pick(proposal.k, index, Boolean(proposal.multi))}
                 onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
                 onSubmit={() => void submit()}
                 onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}

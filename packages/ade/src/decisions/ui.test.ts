@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { enterReady, togglePick } from "./answer"
 import { queuedBadge, submitControl } from "./card"
 import { createDecisionsHub } from "./hub"
 import type { DecisionsRegister } from "./register"
@@ -270,5 +271,72 @@ describe("answering with nobody to receive", () => {
   test("the bar button says how many answers wait", () => {
     expect(queuedBadge(0)).toBeUndefined()
     expect(queuedBadge(2)).toBe("· 2 in coda")
+  })
+})
+
+/*
+ * Multiple answers (S75 point 6). As for point 1, the spec's UI test is run
+ * against the functions the card and the sheet use: `sheetKey` for the key,
+ * `togglePick` for the box, `enterReady` for Enter, the hub for the answer.
+ */
+describe("a multiple question", () => {
+  const multi = { k: "M1", options: [{ label: "opzione 1" }, { label: "opzione 2" }, { label: "opzione 3" }], multi: true as const }
+
+  test("answerEvent: boxes 3 and 1 give choices in the options' order, and the words", () => {
+    const at = new Date("2026-09-23T10:00:00Z")
+    expect(answerEvent(multi, [2, 0], "", at)).toMatchObject({ choices: ["opzione 1", "opzione 3"], words: "opzione 1 + opzione 3" })
+    expect(answerEvent(multi, [2, 0], "ma piano", at)).toMatchObject({ words: "opzione 1 + opzione 3 — ma piano", note: "ma piano" })
+    expect(answerEvent(multi, [], "", at)).toBeTypeOf("string")
+    expect((answerEvent(multi, [0], "", at) as { choice?: string }).choice).toBeUndefined()
+  })
+
+  test("«1» then «3» tick two boxes, «1» again unticks the first, and Enter records choices with option 3 only", async () => {
+    const appended: DecisionEvent[] = []
+    const register = {
+      path: () => "C:\\p\\.ade\\decisions.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      now: () => new Date(),
+      refresh: async () => {},
+      append: async (event: DecisionEvent) => {
+        appended.push(event)
+      },
+      watch: () => () => {},
+    } as unknown as DecisionsRegister
+    const hub = createDecisionsHub({
+      register,
+      recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+      sessions: () => [{ id: "p1", title: "Master", running: true }],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    const decision = { ...multi, title: "Quali", raisedBy: "fable", openedAt: "2026-09-23T10:00:00Z", status: "aperta", history: [] } as never
+    const press = (key: string) => {
+      const draft = hub.draft("M1")
+      const action = sheetKey({ key }, 3, false, enterReady(true, draft.picked, draft.note, true))
+      if (action?.kind === "pick") hub.setDraft("M1", { ...draft, picked: togglePick(draft.picked, action.index, true) })
+      return action
+    }
+    press("1")
+    press("3")
+    expect(hub.draft("M1").picked).toEqual([0, 2])
+    press("1")
+    expect(hub.draft("M1").picked).toEqual([2])
+    expect(press("Enter")).toEqual({ kind: "submit" })
+    expect(await hub.submit(decision, "primary")).toBe(true)
+    expect(appended[0]).toMatchObject({ choices: ["opzione 3"], words: "opzione 3" })
+  })
+
+  test("Enter with no box and no note asks, as today", () => {
+    expect(sheetKey({ key: "Enter" }, 3, false, enterReady(true, [], "", true))).toEqual({ kind: "need-choice" })
+    expect(sheetKey({ key: "Enter" }, 3, false, enterReady(true, [], "solo nota", true))).toEqual({ kind: "submit" })
+  })
+
+  test("a single question keeps today's picking", () => {
+    expect(togglePick(0, 2, false)).toBe(2)
+    expect(enterReady(false, 1, "", false)).toBe(false)
+    expect(enterReady(false, 1, "", true)).toBe(true)
   })
 })

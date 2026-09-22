@@ -242,3 +242,32 @@ describe("another round (S75 point 2)", () => {
     expect(pruneOutbox([item], path, proposals)).toEqual([item])
   })
 })
+
+describe("multiple answers (S75 point 6)", () => {
+  const open = (extra: Record<string, unknown> = {}) =>
+    ({ ...opened("DS40"), variants: [{ name: "A", description: "", preview: "" }, { name: "B", description: "", preview: "" }, { name: "C", description: "", preview: "" }], multi: true, ...extra }) as unknown as DesignEvent
+  const answer = (extra: Record<string, unknown>) =>
+    ({ type: "risposta", k: "DS40", at: at(5), by: "utente", words: "A + C", ...extra }) as unknown as DesignEvent
+
+  test("multi with a single variant is a line problem; choice and choices together too", () => {
+    expect(toEvent(open({ variants: [{ name: "A" }] }))).toBe("una scelta multipla vuole almeno due varianti")
+    expect(toEvent(answer({ choice: "A", choices: ["A", "C"] }))).toBe("choice e choices insieme")
+  })
+
+  test("on a multi proposal valid choices answer it; an unknown one or a choice is refused", () => {
+    const good = foldProposals([open(), answer({ choices: ["A", "C"] })])
+    expect(good.rejected).toEqual([])
+    expect(good.proposals[0]).toMatchObject({ status: "risposta", answer: { choices: ["A", "C"] } })
+    expect(foldProposals([open(), answer({ choices: ["Z"] })]).rejected.map((r) => r.reason)).toEqual(["DS40: una delle scelte non è una variante"])
+    expect(foldProposals([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual(["DS40 è a scelta multipla: si risponde con choices"])
+  })
+
+  test("on a single proposal choices is refused", () => {
+    expect(foldProposals([open({ multi: undefined }), answer({ choices: ["A"] })]).rejected).toHaveLength(1)
+  })
+
+  test("the message says scelte: A + C", () => {
+    const { proposals } = foldProposals([open(), answer({ choices: ["A", "C"] })])
+    expect(resolvedMessage(proposals[0]!)).toBe('design [k=DS40] Titolo DS40 — scelte: A + C — parole: "A + C" — spec: S54')
+  })
+})

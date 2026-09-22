@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment } from "./answer"
+import { formatDay, formatMoment, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
@@ -54,7 +54,10 @@ export function DesignPane(props: {
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
-      onPick={(picked) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), picked })}
+      onPick={(index) => {
+        const draft = props.hub.draft(proposal.k)
+        props.hub.setDraft(proposal.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(proposal.multi)) })
+      }}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
       onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
@@ -172,8 +175,8 @@ export function DesignPane(props: {
                       <span data-slot="design-pill" data-tone="done">{t("design.pill.answered")}</span>
                     </header>
                     <div data-slot="design-answer">
-                      <b>{proposal.answer?.choice ?? proposal.answer?.words}</b>
-                      <Show when={proposal.answer?.choice && proposal.answer?.note}> · {proposal.answer?.note}</Show>
+                      <b>{proposal.answer?.choices?.join(" + ") ?? proposal.answer?.choice ?? proposal.answer?.words}</b>
+                      <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}> · {proposal.answer?.note}</Show>
                     </div>
                     <Show when={props.hub.problem(proposal.k)}>
                       <div data-slot="design-problem" role="alert">{props.hub.problem(proposal.k)}</div>

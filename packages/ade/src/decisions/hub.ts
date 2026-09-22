@@ -15,7 +15,8 @@ import type { DecisionsRegister } from "./register"
 import type { Decision } from "./state"
 
 export interface DecisionDraft {
-  readonly picked?: number
+  /** One option, or the boxes ticked on a `multi` question. */
+  readonly picked?: number | readonly number[]
   readonly note: string
 }
 

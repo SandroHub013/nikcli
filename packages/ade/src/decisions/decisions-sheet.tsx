@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { sheetKey } from "./answer"
+import { enterReady, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import type { RecipientStatus } from "./delivery"
@@ -34,8 +34,9 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
    */
   const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
   const [needChoice, setNeedChoice] = createSignal<string>()
-  const pick = (k: string, picked: number) => {
-    props.hub.setDraft(k, { ...props.hub.draft(k), picked })
+  const pick = (k: string, index: number, multi: boolean) => {
+    const draft = props.hub.draft(k)
+    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
     setChosenHere((keys) => new Set(keys).add(k))
     setNeedChoice(undefined)
   }
@@ -56,14 +57,15 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
 
   const onKeyDown = (event: KeyboardEvent) => {
     const decision = current()
-    const picked = Boolean(decision && chosenHere().has(decision.k) && props.hub.draft(decision.k).picked !== undefined)
+    const draft = decision ? props.hub.draft(decision.k) : undefined
+    const picked = Boolean(decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)))
     const action = sheetKey(event, decision?.options.length ?? 0, event.target === note, picked)
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
     if (action.kind === "close") props.onClose()
     else if (!decision) return
-    else if (action.kind === "pick") pick(decision.k, action.index)
+    else if (action.kind === "pick") pick(decision.k, action.index, Boolean(decision.multi))
     else if (action.kind === "need-choice") setNeedChoice(decision.k)
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
@@ -135,7 +137,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                 onRecord={() => void submit("record")}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={props.hub.register.now()}
-                onPick={(picked) => pick(decision.k, picked)}
+                onPick={(index) => pick(decision.k, index, Boolean(decision.multi))}
                 onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
                 onSubmit={() => void submit()}
                 onDefer={(until) => void props.hub.defer(decision, until).then((done) => done && surface?.focus())}

@@ -7,6 +7,7 @@ export type DesignStatus = "aperta" | "risposta" | "giro" | "chiusa"
 
 export interface DesignAnswer {
   readonly choice?: string
+  readonly choices?: readonly string[]
   readonly note?: string
   readonly words: string
   readonly at: string
@@ -21,6 +22,8 @@ export interface DesignProposal {
   readonly context?: string
   readonly spec?: string
   readonly variants: readonly DesignVariant[]
+  /** More than one variant may be picked. */
+  readonly multi?: true
   readonly order?: number
   readonly raisedBy: string
   readonly openedAt: string
@@ -64,6 +67,7 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
         context: event.context,
         spec: event.spec,
         variants: event.variants,
+        ...(event.multi ? { multi: true as const } : {}),
         order: event.order,
         raisedBy: event.by,
         openedAt: event.at,
@@ -91,8 +95,17 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
           reject(event, t("design.rule.answered", event.k))
           continue
         }
+        {
+          // The log does not know how the proposal was opened: the fold does.
+          const wrong = choiceProblem(current, event.choice, event.choices, current.variants.map((variant) => variant.name))
+          if (wrong) {
+            reject(event, t(wrong, event.k))
+            continue
+          }
+        }
         current.answer = {
           choice: event.choice,
+          ...(event.choices ? { choices: event.choices } : {}),
           note: event.note,
           words: event.words,
           at: event.at,
@@ -158,11 +171,31 @@ export function resolvedMessage(proposal: DesignProposal): string {
     parts.push("ALTRO GIRO, non una scelta", `parole: "${answer.words}"`, "rifai le varianti e riapri con: ade-msg registro design riaperta")
     return asOneLine(parts.join(" — "))
   }
-  if (answer.choice) parts.push(`scelta: ${answer.choice}`)
+  if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)
+  else if (answer.choice) parts.push(`scelta: ${answer.choice}`)
   if (answer.note) parts.push(`nota: ${answer.note}`)
   parts.push(`parole: "${answer.words}"`)
   if (proposal.spec) parts.push(`spec: ${proposal.spec}`)
   return asOneLine(parts.join(" — "))
+}
+
+/**
+ * Why an answer does not fit how the proposal was opened, as an i18n key:
+ * a multiple proposal takes `choices` from its own variants, never `choice`;
+ * a single one never takes `choices`.
+ */
+function choiceProblem(
+  proposal: { multi?: true },
+  choice: string | undefined,
+  choices: readonly string[] | undefined,
+  known: readonly string[],
+): "design.rule.multiChoice" | "design.rule.unknownChoice" | "design.rule.singleChoice" | undefined {
+  if (proposal.multi) {
+    if (choice !== undefined) return "design.rule.multiChoice"
+    if (choices?.some((item) => !known.includes(item))) return "design.rule.unknownChoice"
+    return undefined
+  }
+  return choices ? "design.rule.singleChoice" : undefined
 }
 
 export function nextDesignKey(proposals: readonly Pick<DesignProposal, "k">[], prefix = "DS"): string {
