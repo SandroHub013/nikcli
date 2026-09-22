@@ -99,7 +99,7 @@ export function DecisionsPane(props: {
           <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
         </Show>
         <Show when={problems().length > 0}>
-          <details data-slot="decisions-problems">
+          <details data-slot="decisions-problems" open>
             <summary>{t("decisions.ignored", problems().length)}</summary>
             <ul>
               <For each={problems()}>{(line) => <li>{line}</li>}</For>

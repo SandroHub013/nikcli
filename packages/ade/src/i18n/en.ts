@@ -568,6 +568,7 @@ export const en: Messages = {
   "decisions.submit.choose": "Choose and send",
   "decisions.submit.record": "Record without sending",
   "decisions.badge.queued": (count) => `· ${count} queued`,
+  "decisions.badge.discarded": (count) => `· ${count} discarded`,
 
   "design.title": "Design",
   "design.openCount": (count) => `${count} open`,
@@ -623,6 +624,7 @@ export const en: Messages = {
   "design.pill.rework": "another round",
   "design.round": (round) => `round ${round}`,
   "design.badge.queued": (count) => `· ${count} queued`,
+  "design.badge.discarded": (count) => `· ${count} discarded`,
 
   // Editor, review, plugins, screenshots
   "editor.truncatedSave": "The file was only partly loaded, so saving would destroy the part that wasn't read.",

@@ -378,8 +378,9 @@ $effort = $null
 $profile = $null
 $file = $null
 $via = $null
-# update takes an id and a state before its text, kv an operation and a key, memory an operation and a type; everything else one word.
-$lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory') { 2 } else { 1 }
+# update takes an id and a state before its text, kv an operation and a key, memory an operation and a type,
+# registro a register and an operation; everything else one word.
+$lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory' -or $cmd -eq 'registro') { 2 } else { 1 }
 $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
@@ -584,6 +585,11 @@ switch ($cmd) {
       default { Usage }
     }
   }
+  'registro' {
+    # The JSON is the event's fields; ADE adds type, at and by, checks and writes it.
+    if (-not $head -or -not $second -or -not $text) { Usage }
+    PostAndPrint ([ordered]@{ kind = 'registro'; register = $head; op = $second; text = $text })
+  }
   'memory' {
     switch ($head) {
       'add' { if (-not $second -or -not $text) { Usage }; PostAndPrint ([ordered]@{ kind = 'memory'; op = 'add'; type = $second; text = $text }) }
@@ -685,7 +691,7 @@ valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
 timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""
-lead=1; case "$cmd" in update|kv|memory) lead=2 ;; esac
+lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
@@ -837,6 +843,9 @@ case "$cmd" in
       unlock) [ -n "$second" ] || usage; show "\"kind\":\"kv\",\"op\":\"unlock\",$key,\"force\":$force" ;;
       *) usage ;;
     esac ;;
+  registro)
+    [ -n "$head" ] && [ -n "$second" ] && [ -n "$text" ] || usage
+    show "\"kind\":\"registro\",\"register\":\"$(esc "$head")\",\"op\":\"$(esc "$second")\"" ;;
   memory)
     case "$head" in
       add) [ -n "$second" ] && [ -n "$text" ] || usage; show "\"kind\":\"memory\",\"op\":\"add\",\"type\":\"$(esc "$second")\"" ;;

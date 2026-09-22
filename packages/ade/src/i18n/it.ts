@@ -573,6 +573,7 @@ export const it = {
   "decisions.submit.choose": "Scegli e invia",
   "decisions.submit.record": "Registra senza inviare",
   "decisions.badge.queued": (count: number) => `· ${count} in coda`,
+  "decisions.badge.discarded": (count: number) => `· ${count} ${count === 1 ? "scartata" : "scartate"}`,
 
   "design.title": "Design",
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
@@ -628,6 +629,7 @@ export const it = {
   "design.pill.rework": "altro giro",
   "design.round": (round: number) => `giro ${round}`,
   "design.badge.queued": (count: number) => `· ${count} in coda`,
+  "design.badge.discarded": (count: number) => `· ${count} ${count === 1 ? "scartata" : "scartate"}`,
 
   // Editor, review, plugins, screenshots
   "editor.truncatedSave": "Il file è troncato in lettura: il salvataggio distruggerebbe i dati non caricati.",

@@ -81,6 +81,15 @@ export async function runSubmit(
   return answered
 }
 
+/**
+ * «· N scartate» on the bar button: lines the parser threw away and events
+ * the fold refused. A line written by hand that is wrong must not pass
+ * unseen, so the button shows even when nothing else would.
+ */
+export function discardedBadge(discarded: number): string | undefined {
+  return discarded > 0 ? t("decisions.badge.discarded", discarded) : undefined
+}
+
 /** «· N in coda» on the bar button, or nothing. */
 export function queuedBadge(queued: number): string | undefined {
   return queued > 0 ? t("decisions.badge.queued", queued) : undefined

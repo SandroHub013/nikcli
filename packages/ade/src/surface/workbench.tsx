@@ -285,7 +285,7 @@ import { MODEL_EXTENSIONS } from "../model3d/model"
 import { paneShowing, routeForFile } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
-import { queuedBadge } from "../decisions/card"
+import { discardedBadge, queuedBadge } from "../decisions/card"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
 import {
   deliveryLine,
@@ -307,7 +307,7 @@ import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
 import { decisionsPath } from "../decisions/store"
 import { countLabel as designCountLabel } from "../design/answer"
-import { queuedBadge as designQueuedBadge } from "../design/card"
+import { discardedBadge as designDiscardedBadge, queuedBadge as designQueuedBadge } from "../design/card"
 import { DesignSheet } from "../design/design-sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -326,6 +326,7 @@ import {
 import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { designPath } from "../design/store"
+import { registerWrite } from "../session/register-write"
 import {
   AgentOrb,
   createMicMeter,
@@ -1325,6 +1326,9 @@ export function Workbench() {
   const decisionsQueued = createMemo(
     () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda").length ?? 0,
   )
+  // Lines thrown away and events refused: the button shows them too, so a wrong line never passes unseen.
+  const decisionsDiscarded = createMemo(() => (decisionsRegister.loaded()?.problems.length ?? 0) + (decisionsRegister.state()?.rejected.length ?? 0))
+  const designDiscarded = createMemo(() => (designRegister.loaded()?.problems.length ?? 0) + (designRegister.state()?.rejected.length ?? 0))
   const designQueued = createMemo(
     () => designRegister.state()?.proposals.filter((proposal) => (proposal.status === "risposta" || proposal.status === "giro") && designHub.delivery(proposal).state === "in coda").length ?? 0,
   )
@@ -2592,6 +2596,45 @@ export function Workbench() {
       await excludeAdeResults(host, owner.root)
       appendLine(sender.id, t("note.memory", entry.line.trim()), "note")
       await answer(memoryAddReply(path, next.length))
+      return true
+    }
+
+    /*
+     * `ade-msg registro`: the one writer of the two registers (S75 point 5).
+     * `registerWrite` checks, appends and reads back; here only the project,
+     * the file and the host's I/O.
+     */
+    if (message.kind === "registro") {
+      const owner = message.from ? await projectOfPane(host, message.from) : project()
+      if (!owner || owner.remote || !host.readTextFile) {
+        await answer("errore: i registri esistono solo per i progetti locali")
+        return true
+      }
+      const path = message.register === "design" ? designPath(owner.root) : decisionsPath(owner.root)
+      const read = async () => {
+        try {
+          return (await host.readTextFile!(path)).text
+        } catch (error) {
+          if (/not found|no such file|os error 2|impossibile trovare/i.test(String(error))) return ""
+          throw error
+        }
+      }
+      const reply = await registerWrite(
+        {
+          read,
+          append: async (text) =>
+            host.appendTextFile
+              ? host.appendTextFile(path, text)
+              : host.writeTextFile
+                ? host.writeTextFile(path, `${await read()}${text}`)
+                : "scrittura non disponibile",
+          now: () => new Date(),
+          sender: sender?.title ?? message.from ?? "ade-msg",
+        },
+        message,
+      )
+      if (reply.startsWith("ok")) void (message.register === "design" ? designRegister.refresh() : decisionsRegister.refresh())
+      await answer(reply)
       return true
     }
 
@@ -6083,11 +6126,12 @@ export function Workbench() {
           </svg>
         </button>
         {/* Decisions waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={decisionsWaiting() > 0 || decisionsQueued() > 0}>
+        <Show when={decisionsWaiting() > 0 || decisionsQueued() > 0 || decisionsDiscarded() > 0}>
           <button
             type="button"
             data-slot="decisions-badge"
             data-queued={decisionsQueued() > 0 ? String(decisionsQueued()) : undefined}
+            data-discarded={decisionsDiscarded() > 0 ? String(decisionsDiscarded()) : undefined}
             onClick={() => setDecisionsOpen(true)}
             title={t("decisions.waiting")}
           >
@@ -6095,14 +6139,18 @@ export function Workbench() {
             <Show when={queuedBadge(decisionsQueued())}>
               {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
             </Show>
+            <Show when={discardedBadge(decisionsDiscarded())}>
+              {(text) => <span data-slot="badge-discarded" data-tone="error">{` ${text()}`}</span>}
+            </Show>
           </button>
         </Show>
         {/* Design proposals waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={designWaiting() > 0 || designQueued() > 0}>
+        <Show when={designWaiting() > 0 || designQueued() > 0 || designDiscarded() > 0}>
           <button
             type="button"
             data-slot="design-badge"
             data-queued={designQueued() > 0 ? String(designQueued()) : undefined}
+            data-discarded={designDiscarded() > 0 ? String(designDiscarded()) : undefined}
             onClick={() => setDesignOpen(true)}
             title={t("design.waiting")}
             aria-label={designCountLabel(designWaiting())}
@@ -6117,6 +6165,9 @@ export function Workbench() {
             <span data-slot="design-badge-label">{t("design.title")}</span>
             <Show when={designQueuedBadge(designQueued())}>
               {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
+            </Show>
+            <Show when={designDiscardedBadge(designDiscarded())}>
+              {(text) => <span data-slot="badge-discarded" data-tone="error">{` ${text()}`}</span>}
             </Show>
           </button>
         </Show>

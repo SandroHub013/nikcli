@@ -577,3 +577,9 @@ button[data-slot="decision-row"]:hover {
   border-radius: 6px;
   padding: 2px 6px;
 }
+
+/* «· N scartate»: lines of the register nobody will see otherwise. */
+[data-slot="badge-discarded"][data-tone="error"] {
+  color: var(--ade-error);
+  font-weight: var(--ade-weight-semibold);
+}

@@ -103,7 +103,7 @@ export function DesignPane(props: {
         </Show>
 
         <Show when={problems().length > 0}>
-          <details data-slot="design-problems">
+          <details data-slot="design-problems" open>
             <summary>{t("design.ignored", problems().length)}</summary>
             <ul>
               <For each={problems()}>{(line) => <li>{line}</li>}</For>

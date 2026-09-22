@@ -710,3 +710,25 @@
   background: var(--ade-accent-soft);
   color: var(--ade-accent);
 }
+
+/* «· N scartate»: lines of the register nobody will see otherwise. */
+[data-slot="badge-discarded"][data-tone="error"] {
+  color: var(--ade-error);
+  font-weight: var(--ade-weight-semibold);
+}
+
+@media (max-width: 640px) {
+  [data-slot="design-badge"] [data-slot="badge-discarded"] {
+    display: none;
+  }
+  [data-slot="design-badge"][data-discarded]::before {
+    content: "";
+    position: absolute;
+    bottom: -2px;
+    left: -2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--ade-error);
+  }
+}

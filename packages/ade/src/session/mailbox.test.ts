@@ -644,3 +644,24 @@ describe("una riga iniziata dall'utente", () => {
     expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe('ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera')
   })
 })
+
+describe("ade-msg registro", () => {
+  test("parses a known register and operation, with the JSON as text", () => {
+    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":"{\\"title\\":\\"x\\"}"}')).toEqual({
+      kind: "registro",
+      from: "a",
+      token: undefined,
+      register: "design",
+      op: "aperta",
+      text: '{"title":"x"}',
+    })
+    expect(parseMessage('{"kind":"registro","from":"a","register":"decisioni","op":"rimandata","text":"{}"}')).toMatchObject({ op: "rimandata" })
+  })
+
+  test("refuses an unknown register, an unknown operation, rimandata on design and an empty text", () => {
+    expect(parseMessage('{"kind":"registro","from":"a","register":"note","op":"aperta","text":"{}"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"cancellata","text":"{}"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"rimandata","text":"{}"}')).toBeUndefined()
+    expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":" "}')).toBeUndefined()
+  })
+})
