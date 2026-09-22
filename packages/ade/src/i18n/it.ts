@@ -307,6 +307,7 @@ export const it = {
   "update.dialog.retry": "Riprova",
   "update.dialog.close": "Chiudi",
   "update.dialog.hide": "Nascondi",
+  "update.dialog.show": "Mostra",
   "update.dialog.escKey": "Esc",
   "voice.noMic": "Nessun microfono disponibile in questo ambiente.",
   "voice.noHost.download": "La voce si scarica solo dall'app desktop.",

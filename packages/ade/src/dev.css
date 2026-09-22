@@ -390,9 +390,26 @@
 }
 
 [data-slot="ade-notice-progress-text"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
   white-space: nowrap;
+}
+
+/* Brings the hidden dialog back; only there while it is hidden. */
+[data-slot="ade-notice-progress-show"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="ade-notice-progress-show"]:hover {
+  text-decoration: underline;
 }
 
 [data-slot="ade-notice-progress-track"] {

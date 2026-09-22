@@ -3206,6 +3206,13 @@ export function Workbench() {
    */
   const [latestUpdate, setLatestUpdate] = createSignal<AvailableUpdate | undefined>(undefined)
   const [updateAsk, setUpdateAsk] = createSignal<{ href: string; version: string; running: number } | undefined>(undefined)
+  /*
+   * What the dialog was showing when «Nascondi» put it away, so the bell can
+   * bring it back while the download runs, and a failure brings it back by
+   * itself: a person who hid the panel and went to work must not learn from
+   * silence that the update failed.
+   */
+  const [hiddenAsk, setHiddenAsk] = createSignal<{ href: string; version: string; running: number } | undefined>(undefined)
   const [updateError, setUpdateError] = createSignal<string | undefined>(undefined)
   const [installedVersion] = createResource(async () => {
     if (!isTauriDesktop()) return undefined
@@ -3222,7 +3229,14 @@ export function Workbench() {
     const latest = latestUpdate()
     const version = latest && latest.url === href ? latest.version : (/\d+\.\d+\.\d+/.exec(href)?.[0] ?? "")
     setUpdateError(undefined)
+    setHiddenAsk(undefined)
     setUpdateAsk({ href, version, running: runningSessions() })
+  }
+  const showUpdate = () => {
+    const hidden = hiddenAsk()
+    if (!hidden) return
+    setHiddenAsk(undefined)
+    setUpdateAsk(hidden)
   }
   const runUpdate = async () => {
     if (updating()) return
@@ -3239,6 +3253,7 @@ export function Workbench() {
       setUpdating(false)
       setUpdateProgress(undefined)
       setUpdateError(String(error))
+      showUpdate()
       report(t("update.installFailed", String(error)))
     }
   }
@@ -6419,7 +6434,14 @@ export function Workbench() {
                                       aria-valuenow={progressPercent(updateProgress())}
                                       aria-label={updateProgressText()}
                                     >
-                                      <span data-slot="ade-notice-progress-text">{updateProgressText()}</span>
+                                      <span data-slot="ade-notice-progress-text">
+                                        {updateProgressText()}
+                                        <Show when={hiddenAsk()}>
+                                          <button type="button" data-slot="ade-notice-progress-show" onClick={showUpdate}>
+                                            {t("update.dialog.show")}
+                                          </button>
+                                        </Show>
+                                      </span>
                                       <span data-slot="ade-notice-progress-track">
                                         <span
                                           data-slot="ade-notice-progress-fill"
@@ -6474,6 +6496,7 @@ export function Workbench() {
               progress={updateProgress()}
               error={updateError()}
               onLater={() => {
+                setHiddenAsk(updating() ? ask() : undefined)
                 setUpdateError(undefined)
                 setUpdateAsk(undefined)
               }}

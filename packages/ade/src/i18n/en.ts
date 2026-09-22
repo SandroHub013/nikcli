@@ -302,6 +302,7 @@ export const en: Messages = {
   "update.dialog.retry": "Try again",
   "update.dialog.close": "Close",
   "update.dialog.hide": "Hide",
+  "update.dialog.show": "Show",
   "update.dialog.escKey": "Esc",
   "voice.noMic": "No microphone is available here.",
   "voice.noHost.download": "Can't download the voice here: it needs the desktop app.",
