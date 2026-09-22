@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { INTRO_TEXT, displayArgs, introArgs, withIntro } from "./intro"
+import { INTRO_TEXT, MODEL_LINES, displayArgs, introArgs, introText, withIntro } from "./intro"
 
 describe("introArgs", () => {
   test("the CLIs with an instructions flag get the notice there", () => {
@@ -20,6 +20,26 @@ describe("introArgs", () => {
   test("the text survives cmd.exe: none of its metacharacters", () => {
     expect(INTRO_TEXT).not.toMatch(/["&|<>^%]/)
     expect(INTRO_TEXT).toContain("ade-msg send")
+  })
+})
+
+describe("introText", () => {
+  test("one line more for a model ADE knows, the plain notice otherwise", () => {
+    expect(introText("claude-opus-5")).toBe(`${INTRO_TEXT} ${MODEL_LINES[0]!.line}`)
+    expect(introText("sonnet")).toContain("Riporta tutto")
+    expect(introText("claude-fable-5-1")).toContain("elenchi e grassetto")
+    expect(introText("claude-haiku-4-5-20251001")).toBe(INTRO_TEXT)
+    expect(introText(undefined)).toBe(INTRO_TEXT)
+  })
+
+  test("every model line survives cmd.exe like the notice", () => {
+    for (const { line } of MODEL_LINES) expect(line).not.toMatch(/["&|<>^%]/)
+  })
+
+  test("the transcript folds the notice and keeps the model's line", () => {
+    const [, shown] = displayArgs(["--append-system-prompt", introText("opus")])
+    expect(shown!.startsWith("…ade-msg… ")).toBe(true)
+    expect(shown).toContain("non aprire sessioni")
   })
 })
 

@@ -260,7 +260,7 @@ import {
   withMemoryEntry,
   type TokenUsage,
 } from "../session/shared"
-import { displayArgs, introArgs, withIntro } from "../session-new/intro"
+import { displayArgs, introArgs, introText, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -5230,7 +5230,7 @@ export function Workbench() {
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     const extraArgs = [
-      ...introArgs(agentId),
+      ...introArgs(agentId, introText(modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
       ...nativeLaunchArgs(agentId, paneTitle),
       ...(launched?.spawnArgs ?? []),
       ...opening.args,
