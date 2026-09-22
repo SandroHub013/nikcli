@@ -61,16 +61,27 @@ export const INTRO_TEXT =
  *   Fable 5.1 formats less than earlier models, so anti-formatting rules cut
  *             structure the content needs, and adds fixes nobody asked for.
  *
- * The model is read off the launch line (`modelIn`, `session/orchestra.ts`): a pane without one runs
- * the CLI's default, which ADE does not know, and gets no line. Only
- * claude-code models are matched; other CLIs name theirs differently.
+ * The model is read off the launch line (`modelIn`, `session/orchestra.ts`):
+ * a pane without one runs the CLI's default, which ADE does not know, and
+ * gets no line. Only claude-code gets a line at all: the lines are written
+ * for Claude models, and the review showed that without the check in code a
+ * Prime or Codex pane whose model happened to contain "sonnet" would have
+ * been handed Sonnet's line.
  */
 export const MODEL_LINES: readonly { match: RegExp; line: string }[] = [
   {
     match: /opus/i,
+    /*
+     * Not "open no sessions": the notice above tells every session to
+     * delegate big tasks and not small ones, and a flat ban would contradict
+     * it for the one model that reads both. The Opus 5 guide does not ban
+     * delegation either, it caps it: big and genuinely independent work, one
+     * session rather than several, never to check one's own work. The hard
+     * cap, where one is wanted, is the spawn depth in the request contract.
+     */
     line:
       "Rispondi entro il tetto di righe del contratto. Non verificare o ricontrollare oltre quanto ti e chiesto. " +
-      "Consegna quello che e chiesto, alla portata intesa, e non aprire sessioni.",
+      "Consegna quello che e chiesto, alla portata intesa. Se deleghi, una sessione sola e solo per un lavoro grande e indipendente, mai per controllare il tuo.",
   },
   {
     match: /sonnet/i,
@@ -86,8 +97,9 @@ export const MODEL_LINES: readonly { match: RegExp; line: string }[] = [
   },
 ]
 
-/** The notice, plus the line for the model when the launch line names one ADE knows. */
-export function introText(model?: string): string {
+/** The notice, plus the line for the model when the pane is claude-code and the launch line names one ADE knows. */
+export function introText(agentId: string, model?: string): string {
+  if (agentId !== "claude-code") return INTRO_TEXT
   const found = model ? MODEL_LINES.find((entry) => entry.match.test(model)) : undefined
   return found ? `${INTRO_TEXT} ${found.line}` : INTRO_TEXT
 }

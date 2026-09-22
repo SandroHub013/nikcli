@@ -5256,7 +5256,7 @@ export function Workbench() {
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     const extraArgs = [
-      ...introArgs(agentId, introText(modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
+      ...introArgs(agentId, introText(agentId, modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
       ...nativeLaunchArgs(agentId, paneTitle),
       ...(launched?.spawnArgs ?? []),
       ...opening.args,

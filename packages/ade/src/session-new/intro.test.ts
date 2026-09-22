@@ -25,11 +25,28 @@ describe("introArgs", () => {
 
 describe("introText", () => {
   test("one line more for a model ADE knows, the plain notice otherwise", () => {
-    expect(introText("claude-opus-5")).toBe(`${INTRO_TEXT} ${MODEL_LINES[0]!.line}`)
-    expect(introText("sonnet")).toContain("Riporta tutto")
-    expect(introText("claude-fable-5-1")).toContain("elenchi e grassetto")
-    expect(introText("claude-haiku-4-5-20251001")).toBe(INTRO_TEXT)
-    expect(introText(undefined)).toBe(INTRO_TEXT)
+    expect(introText("claude-code", "claude-opus-5")).toBe(`${INTRO_TEXT} ${MODEL_LINES[0]!.line}`)
+    expect(introText("claude-code", "sonnet")).toContain("Riporta tutto")
+    expect(introText("claude-code", "claude-fable-5-1")).toContain("elenchi e grassetto")
+    expect(introText("claude-code", "claude-haiku-4-5-20251001")).toBe(INTRO_TEXT)
+    expect(introText("claude-code", undefined)).toBe(INTRO_TEXT)
+  })
+
+  /** The review's reproduction: a Prime pane whose model is called like ours must not get Sonnet's line. */
+  test("only claude-code gets a model line, whatever the model is called", () => {
+    for (const id of ["prime", "pi", "codex", "agy", "opencode", "nikcli", "terminal"]) {
+      expect([id, introText(id, "un-modello-con-sonnet-nel-nome")]).toEqual([id, INTRO_TEXT])
+      expect(introArgs(id, introText(id, "opus"))).toEqual(introArgs(id))
+    }
+  })
+
+  /** The notice tells everyone to delegate big tasks; the Opus line must cap that, not contradict it. */
+  test("the Opus line caps delegation and does not forbid it", () => {
+    expect(INTRO_TEXT).toContain("Delega compiti grandi, non piccoli")
+    const opus = MODEL_LINES.find((entry) => entry.match.test("opus"))!.line
+    expect(opus).not.toContain("non aprire sessioni")
+    expect(opus).toContain("una sessione sola")
+    expect(opus).toContain("mai per controllare il tuo")
   })
 
   test("every model line survives cmd.exe like the notice", () => {
@@ -37,9 +54,9 @@ describe("introText", () => {
   })
 
   test("the transcript folds the notice and keeps the model's line", () => {
-    const [, shown] = displayArgs(["--append-system-prompt", introText("opus")])
+    const [, shown] = displayArgs(["--append-system-prompt", introText("claude-code", "opus")])
     expect(shown!.startsWith("…ade-msg… ")).toBe(true)
-    expect(shown).toContain("non aprire sessioni")
+    expect(shown).toContain("una sessione sola")
   })
 })
 
