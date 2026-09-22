@@ -28,6 +28,8 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
+    "brand": "bun script/brand.ts",
+    "brand:check": "bun script/brand.ts --check",
     "dev": "vite",
     "build": "vite build",
     "test": "bun run test:unit",
