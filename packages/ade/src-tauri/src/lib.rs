@@ -13,6 +13,7 @@
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
 mod agent_link;
+mod brand;
 mod append;
 mod browse;
 mod browser_shot;
@@ -969,13 +970,8 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     // The config always names the product (`bun run brand` writes it); the
-    // fallback reads the same brand.json at compile time, so no name is typed here.
-    let mut title = app.config().product_name.clone().unwrap_or_else(|| {
-        serde_json::from_str::<serde_json::Value>(include_str!("../../brand.json"))
-            .ok()
-            .and_then(|brand| brand["name"].as_str().map(str::to_owned))
-            .unwrap_or_default()
-    });
+    // fallback reads the same brand.json, so no name is typed here.
+    let mut title = app.config().product_name.clone().unwrap_or_else(|| crate::brand::name().to_owned());
     // `bun run test:app` names the worktree and branch, so with several test
     // instances open the taskbar says which is which.
     if is_test_build(app) {
