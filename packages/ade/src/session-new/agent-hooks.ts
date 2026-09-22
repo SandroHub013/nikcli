@@ -64,6 +64,8 @@ export interface HookTarget {
    * the screen looks — a long turn with nothing new drawn is not an idle agent.
    */
   readonly activityEvents?: readonly string[]
+  /** avviato con args, senza shell: formato verificato in Claude Code 2.1.280 */
+  readonly execForm?: boolean
 }
 
 /**
@@ -87,6 +89,7 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     script: [".claude", "hooks", `${HOOK_MARKER}.ps1`],
     matcher: "startup|resume|clear",
     activityEvents: ["UserPromptSubmit", "Stop"],
+    execForm: true,
   },
   {
     id: "codex",
@@ -105,6 +108,11 @@ export function hookTarget(agentId: string): HookTarget | undefined {
 /** How the config file invokes the script. */
 export function hookCommand(scriptPath: string): string {
   return `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`
+}
+
+/** Invocazione in forma exec (command + args), senza passare dalla shell. */
+export function hookExec(scriptPath: string): { command: string; args: string[] } {
+  return { command: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath] }
 }
 
 /** True for a command string that belongs to ADE. */
@@ -146,6 +154,15 @@ function leaves(group: Table): unknown[] {
 
 function commandOf(leaf: unknown): string | undefined {
   if (!isTable(leaf)) return undefined
+  if (
+    typeof leaf.command === "string" &&
+    Array.isArray(leaf.args) &&
+    leaf.args.length > 0 &&
+    leaf.args.every((item) => typeof item === "string")
+  ) {
+    const args = leaf.args as string[]
+    return `${leaf.command} ${args.slice(0, -1).join(" ")} "${args[args.length - 1]}"`
+  }
   return typeof leaf.command === "string" ? leaf.command : undefined
 }
 
@@ -179,11 +196,14 @@ export function installHook(
   command: string,
   matcher?: string,
   activityEvents: readonly string[] = [],
+  exec?: { command: string; args: string[] },
 ): string {
   const config = withoutAde(parse(configText))
   const hooks: Table = isTable(config.hooks) ? config.hooks : {}
   config.hooks = hooks
-  const leaf = { type: "command", command, timeout: HOOK_TIMEOUT }
+  const leaf: Table = exec
+    ? { type: "command", command: exec.command, args: exec.args, timeout: HOOK_TIMEOUT }
+    : { type: "command", command, timeout: HOOK_TIMEOUT }
   const append = (event: string, group: Table) => {
     const groups: unknown[] = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : []
     groups.push(group)
@@ -202,6 +222,26 @@ export function missingActivityEvents(configText: string | undefined, events: re
     const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter(isTable) : []
     return !groups.some((group) => leaves(group).some((leaf) => isAdeCommand(commandOf(leaf))))
   })
+}
+
+/** True when an installed ADE hook has an outdated timeout or command form. */
+export function hookOutdated(configText: string | undefined, target: HookTarget): boolean {
+  const config = parse(configText)
+  const hooks = isTable(config.hooks) ? config.hooks : {}
+  for (const event of Object.keys(hooks)) {
+    const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]).filter(isTable) : []
+    for (const group of groups) {
+      for (const leaf of leaves(group)) {
+        if (!isTable(leaf)) continue
+        const cmd = commandOf(leaf)
+        if (cmd !== undefined && isAdeCommand(cmd)) {
+          if (leaf.timeout !== HOOK_TIMEOUT) return true
+          if (target.execForm && (!Array.isArray(leaf.args) || leaf.args.length === 0)) return true
+        }
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -375,7 +415,17 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
   const current = files.configText ?? undefined
   if (install) {
     const command = hookCommand(files.scriptPath)
-    await write(target.id, installHook(current, command, target.matcher, target.activityEvents), hookScript(target.agent))
+    await write(
+      target.id,
+      installHook(
+        current,
+        command,
+        target.matcher,
+        target.activityEvents,
+        target.execForm ? hookExec(files.scriptPath) : undefined,
+      ),
+      hookScript(target.agent),
+    )
   } else {
     await write(target.id, removeHook(current), null)
   }
@@ -383,15 +433,16 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
 }
 
 /**
- * Rewrites an installed hook's script with this version's, config untouched.
+ * Rewrites an installed hook's script with this version's, or upgrades a config
+ * with an outdated timeout or command form.
  *
  * The script is ADE's own file and changes when ADE does (it began sending
  * `source`); an install from an older version would otherwise keep the old
  * one until the user thought to reinstall. The config is written back as the
- * exact text just read, because `writeAgentHook` writes both halves and the
- * config is not ADE's to reformat. Done only when `lastWritten` differs, so a
- * launch with nothing new does not touch another program's settings file.
- * Answers the script now on disk, for the caller to remember.
+ * exact text just read, unless the activity events, timeout or exec form
+ * need an upgrade. Done only when `lastWritten` differs or the install is
+ * stale, so a launch with nothing new does not touch another program's
+ * settings file. Answers the script now on disk, for the caller to remember.
  */
 export async function refreshHookScript(
   host: HookHost,
@@ -399,14 +450,23 @@ export async function refreshHookScript(
   lastWritten: string | undefined,
 ): Promise<string | undefined> {
   const script = hookScript(target.agent)
-  if (lastWritten === script || !host.readAgentHook || !host.writeAgentHook) return undefined
+  if (!host.readAgentHook || !host.writeAgentHook) return undefined
   const files = await host.readAgentHook(target.id)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.
   const missing = missingActivityEvents(files.configText, target.activityEvents)
-  const config =
-    missing.length > 0 ? installHook(files.configText, command, target.matcher, target.activityEvents) : files.configText
+  const stale = missing.length > 0 || hookOutdated(files.configText, target)
+  if (lastWritten === script && !stale) return undefined
+  const config = stale
+    ? installHook(
+        files.configText,
+        command,
+        target.matcher,
+        target.activityEvents,
+        target.execForm ? hookExec(files.scriptPath) : undefined,
+      )
+    : files.configText
   await host.writeAgentHook(target.id, config, script)
   return script
 }
