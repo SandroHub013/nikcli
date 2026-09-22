@@ -271,26 +271,22 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
-
       # The page a person downloads from says what Windows will say to them,
-      # and gives them a way to check the file. The Windows paragraph goes
-      # away by itself once the setup is signed (see CODE_SIGNING.md); the
-      # checksums stay, since the macOS and Linux bundles are not signed
-      # either. SHA256SUMS.txt is also uploaded as an asset.
+      # and gives them a way to check the file. Both are written while the
+      # release is still a draft, so nobody sees it without them. The Windows
+      # paragraph is keyed on the file itself: it goes away only when the setup
+      # that was uploaded carries an Authenticode signature, not when a secret
+      # happens to be set (see CODE_SIGNING.md). The checksums cover every
+      # bundle, the updater's .app.tar.gz included, since the macOS and Linux
+      # bundles are not signed either. SHA256SUMS.txt is also an asset.
       - name: Checksums and the warning Windows will show
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          SIGNED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
         run: |
           set -euo pipefail
-          VERSION="${TAG#ade-v}"
           mkdir -p sums && cd sums
-          for pattern in '*.exe' '*.dmg' '*.app.zip' '*.deb' '*.rpm' '*.AppImage'; do
+          for pattern in '*.exe' '*.msi' '*.dmg' '*.app.zip' '*.app.tar.gz' '*.deb' '*.rpm' '*.AppImage'; do
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern" || true
           done
           if ! ls ADE_* >/dev/null 2>&1; then
@@ -299,6 +295,26 @@ jobs:
           fi
           sha256sum ADE_* > SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
+          # Signed means the PE has a certificate table (data directory 4 of
+          # the optional header); an unsigned build has none. Checked on the
+          # file that was uploaded, which is the one people download.
+          SIGNED=true
+          for setup in *-setup.exe; do
+            [ -f "$setup" ] || { SIGNED=false; break; }
+            python3 - "$setup" <<'PY' || SIGNED=false
+          import struct, sys
+          data = open(sys.argv[1], "rb").read()
+          pe = struct.unpack_from("<I", data, 0x3C)[0]
+          assert data[pe:pe + 4] == b"PE\0\0", "not a PE file"
+          optional = pe + 24
+          magic = struct.unpack_from("<H", data, optional)[0]
+          directories = optional + (112 if magic == 0x20B else 96)
+          address, size = struct.unpack_from("<II", data, directories + 4 * 8)
+          sys.exit(0 if address and size else 1)
+          PY
+          done
+          echo "windows setup signed: $SIGNED"
 
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
           {
@@ -313,6 +329,11 @@ jobs:
             printf '```\n'
           } >> notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
 
       # One entry per platform the updater can install. A platform without a
       # signed bundle (Linux on ARM ships only deb/rpm) is left out, and the
