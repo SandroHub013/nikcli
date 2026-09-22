@@ -65,7 +65,6 @@ export interface NativeSession {
   sessionId: string
   name: string
   kind: string
-  status?: string
 }
 
 /**
@@ -87,14 +86,17 @@ export function parseNativeSessions(output: string): NativeSession[] {
   const rows: NativeSession[] = []
   for (const row of raw) {
     if (!row || typeof row !== "object") continue
-    const { sessionId, name, kind, status } = row as Record<string, unknown>
+    const { sessionId, name, kind } = row as Record<string, unknown>
     if (typeof sessionId !== "string" || !sessionId || typeof name !== "string" || !name) continue
-    rows.push({
-      sessionId,
-      name,
-      kind: typeof kind === "string" ? kind : "",
-      ...(typeof status === "string" ? { status } : {}),
-    })
+    /*
+     * `status` and `state` are read by nobody, so they are not kept: a field
+     * that looks like a guard and is not one misleads the next reader. The
+     * review found a month-old `state: "blocked"` row in the live list, and the
+     * live test a fresh session with no `status` at all, so neither field can
+     * say "alive" without a vocabulary the CLI does not document. A dead row
+     * costs one 90 s clock, not a message.
+     */
+    rows.push({ sessionId, name, kind: typeof kind === "string" ? kind : "" })
   }
   return rows
 }
@@ -174,6 +176,37 @@ export interface Handoff {
   kind: "ask" | "send"
   from: string
   at: number
+}
+
+/**
+ * Handoffs as saved across a restart, next to the open requests; anything
+ * malformed is dropped. Saved because a `send` leaves no other line on disk:
+ * the review found that an ADE closed within the 90 s lost the note with
+ * nobody told — the sender had its ok, the target never knew. Replayed at
+ * start, an old handoff runs into the same clock as a live one and is typed,
+ * marked as a possible repeat.
+ */
+export function parseHandoffs(text: string | null | undefined): Handoff[] {
+  if (!text) return []
+  try {
+    const raw: unknown = JSON.parse(text)
+    if (!Array.isArray(raw)) return []
+    return raw
+      .filter(
+        (entry): entry is Handoff =>
+          !!entry &&
+          typeof entry === "object" &&
+          typeof (entry as Handoff).paneId === "string" &&
+          typeof (entry as Handoff).line === "string" &&
+          typeof (entry as Handoff).id === "string" &&
+          ((entry as Handoff).kind === "ask" || (entry as Handoff).kind === "send") &&
+          typeof (entry as Handoff).from === "string" &&
+          typeof (entry as Handoff).at === "number",
+      )
+      .map(({ paneId, line, id, kind, from, at }) => ({ paneId, line, id, kind, from, at }))
+  } catch {
+    return []
+  }
 }
 
 /**

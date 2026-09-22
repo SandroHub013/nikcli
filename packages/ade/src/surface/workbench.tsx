@@ -240,6 +240,7 @@ import {
   formatHandoff,
   handoffOutcome,
   nativeLaunchArgs,
+  parseHandoffs,
   parseNativeSessions,
   routeFor,
   type Handoff,
@@ -1587,6 +1588,8 @@ export function Workbench() {
    * session without its mail.
    */
   const handoffs = new Map<string, Handoff & { failed?: string; acked?: boolean }>()
+  /** Saved with the same care as the requests: a `send` has no other line on disk. */
+  let saveHandoffs = () => {}
   /**
    * How each closed handoff ended. The live test showed the target's turn hook
    * confirming a delivery before the sender got round to `ade-msg delivered`,
@@ -1598,6 +1601,7 @@ export function Workbench() {
   /** Types what a handoff did not deliver, and says so on both sides. */
   const fallBackToTyping = (handoff: Handoff, reason: string) => {
     handoffs.delete(handoff.id)
+    saveHandoffs()
     closedHandoffs.set(handoff.id, "digitata")
     const request = openRequests.get(handoff.id)
     if (request) {
@@ -1620,6 +1624,7 @@ export function Workbench() {
         continue
       }
       handoffs.delete(handoff.id)
+      saveHandoffs()
       closedHandoffs.set(handoff.id, "confermata")
       const request = openRequests.get(handoff.id)
       if (request) {
@@ -1774,6 +1779,18 @@ export function Workbench() {
   /** The `ask` and `spawn` requests still waiting for a reply. */
   const openRequests = new Map<string, OpenRequest>(parseOpenRequests(readStored(REQUESTS_KEY)).map((request) => [request.id, request]))
   const saveRequests = () => writeStored(REQUESTS_KEY, JSON.stringify([...openRequests.values()]))
+
+  /*
+   * Native handoffs still in the sender's hands, replayed after a restart.
+   * The review's serious loss: a `send` booked natively, ADE closed before the
+   * sender's `delivered`, and at reopening no clock, no fallback, no trace.
+   * Loaded here, they run into the same clock as live ones on the first pass
+   * of `settleHandoffs`: one older than the limit is typed, marked as a
+   * possible repeat; a younger one keeps waiting for the sender's word.
+   */
+  const HANDOFFS_KEY = "ade.mailbox.handoffs"
+  for (const handoff of parseHandoffs(readStored(HANDOFFS_KEY))) handoffs.set(handoff.id, handoff)
+  saveHandoffs = () => writeStored(HANDOFFS_KEY, JSON.stringify([...handoffs.values()]))
 
   /** Long messages left in an inbox and not yet read (S20). */
   const INBOX_KEY = "ade.mailbox.inbox"
@@ -2302,7 +2319,18 @@ export function Workbench() {
 
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
-      if (request && request.to !== message.from) {
+      /*
+       * Every `ask` and `spawn` is booked here and stays until it is settled,
+       * so an id that is not here is closed or was never made. The review
+       * found the second reply to a request — the target answering both the
+       * native copy and the typed repeat — accepted and overwriting the result
+       * file in silence; now it is refused and the replier told.
+       */
+      if (!request) {
+        await answer(`errore: la richiesta ${message.ref} non è aperta (già risposta, annullata o mai fatta): questa risposta non è stata consegnata`)
+        return true
+      }
+      if (request.to !== message.from) {
         await answer(`errore: la richiesta ${message.ref} non è stata fatta a questa sessione`)
         return true
       }
@@ -2891,6 +2919,7 @@ export function Workbench() {
       }
       held.delete(id)
       handoffs.set(id, { paneId: target.pane.id, line, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
+      saveHandoffs()
       await answer(formatHandoff(route.name, id, line))
       return true
     }

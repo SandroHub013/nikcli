@@ -9,6 +9,7 @@ import {
   isHandoff,
   nativeLaunchArgs,
   nativeName,
+  parseHandoffs,
   parseNativeSessions,
   routeFor,
 } from "./native-mail"
@@ -45,7 +46,7 @@ describe("parseNativeSessions", () => {
 
   test("keeps every row that can be addressed", () => {
     expect(parseNativeSessions(listing)).toEqual([
-      { sessionId: "s-1", name: "Fabio", kind: "interactive", status: "idle" },
+      { sessionId: "s-1", name: "Fabio", kind: "interactive" },
       { sessionId: "s-2", name: "PLAN.md analysis", kind: "background" },
     ])
   })
@@ -133,5 +134,27 @@ describe("handoffOutcome", () => {
     expect(typed.startsWith("[Richiesta x]: fai y")).toBe(true)
     expect(typed).toContain("nessuna conferma dal mittente")
     expect(typed).toContain("ignora questo doppione")
+  })
+})
+
+describe("parseHandoffs", () => {
+  const handoff = { paneId: "p2", line: "[Richiesta x]: fai y", id: "x", kind: "ask" as const, from: "p1", at: 10_000 }
+
+  test("keeps what a restart needs and nothing else", () => {
+    const [kept] = parseHandoffs(JSON.stringify([{ ...handoff, acked: true, stray: 1 }]))
+    expect(kept).toEqual(handoff)
+  })
+
+  test("drops what is not a handoff", () => {
+    expect(parseHandoffs(null)).toEqual([])
+    expect(parseHandoffs("{")).toEqual([])
+    expect(parseHandoffs(JSON.stringify([{ ...handoff, kind: "reply" }, { ...handoff, at: "10" }, null, 7]))).toEqual([])
+  })
+
+  /** Replayed at start, an old handoff is exactly one the clock has run out on. */
+  test("a saved handoff older than the limit falls back on the keyboard", () => {
+    const [kept] = parseHandoffs(JSON.stringify([handoff]))
+    expect(handoffOutcome(kept, {}, handoff.at + HANDOFF_ACK_MS)).toBe("fallback")
+    expect(handoffOutcome(kept, {}, handoff.at + 1)).toBe("wait")
   })
 })
