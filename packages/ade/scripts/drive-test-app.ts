@@ -24,7 +24,9 @@
  * It drives ADE Test only. Before any command it asks the page for its build
  * mark (`data-ade-build="test"`, set by `dev.tsx` from the Tauri identifier)
  * and refuses anything else, so the official ADE cannot be driven by mistake
- * even if remote debugging happened to be open on it.
+ * even if remote debugging happened to be open on it. A window still on its
+ * splash has no mark yet: the script waits for it up to fifteen seconds and
+ * says so if it never comes, which is not the same message as another ADE.
  *
  * Two things that cost half an hour to whoever does not know them:
  *   - a change to the Rust sources does not reach the open window: stop and
@@ -46,8 +48,10 @@ import { spawnSync } from "node:child_process"
 
 import {
   BUILD_CHECK,
+  BUILD_WAIT_MS,
   CONNECT_TIMEOUT_MS,
   buildRefusal,
+  buildVerdict,
   chooseCdpPort,
   notListening,
   parseArgs,
@@ -124,11 +128,21 @@ const evaluate = async (expression: string): Promise<unknown> => {
   return result?.result?.value
 }
 
-// The rule before anything else: a test build, or nothing.
-const refusal = buildRefusal(await evaluate(BUILD_CHECK).catch(() => undefined))
-if (refusal) {
-  ws.close()
-  fail(refusal)
+// The rule before anything else: a test build, or nothing. A page still
+// loading has no mark yet and is asked again for a while; another ADE is
+// refused at once.
+{
+  const until = Date.now() + BUILD_WAIT_MS
+  for (;;) {
+    const answer = await evaluate(BUILD_CHECK).catch(() => undefined)
+    const verdict = buildVerdict(answer, Date.now() >= until)
+    if (verdict === "test") break
+    if (verdict === "other" || Date.now() >= until) {
+      ws.close()
+      fail(buildRefusal(verdict, answer))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
 }
 
 const cell = (n: number) => `document.querySelectorAll("[data-slot=grid-cell]")[${n - 1}]`
