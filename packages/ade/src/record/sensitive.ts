@@ -1,44 +1,89 @@
 /**
- * What a take must never show (S36): the fields that hold a secret.
+ * What a take must never show (S36): the values that are secrets.
  *
  * Covered by the page itself for as long as a take runs, so the value is never
  * drawn and no frame can contain it. The rule lives in `index.css` under
- * `html[data-ade-recording]`.
+ * `html[data-ade-recording]`, generated from the list below.
  *
  * The selector used to end in `#openrouter-key-field`: one id, cabled for one
- * field. Any key field added afterwards was on its own — and by the time this
- * was looked at, that id no longer existed anywhere in the app, so the third
- * of the three rules was covering nothing at all. A name that protects one
- * field protects it until someone renames it, and the cost of forgetting here
- * is a key in a video, not an ugly panel.
+ * field. That field is real — it is the OpenRouter key in
+ * `packages/voice/src/ui/voice-settings-panel.tsx`, and pressing «Mostra»
+ * really does turn it into `type="text"` with the key in the clear — so the
+ * old rule was covering something. What it was not doing was covering
+ * anything else: a name protects one field until someone renames it, and says
+ * nothing about the field written next to it. The cost of forgetting here is a
+ * key in a video.
  *
- * So the cover is chosen by shape, in four nets, and a field has to escape
- * all four to be filmed:
+ * So the cover is chosen by shape, in four nets, and a value has to escape all
+ * four to be filmed:
  *
- *   1. `[data-sensitive]` — the explicit mark, for anything this file cannot
- *      recognise (a rendered value, a log line, a QR code).
+ *   1. `[data-sensitive]` — the explicit mark, for a value this file cannot
+ *      recognise: a rendered key, a log line, a QR code.
  *   2. `input[type="password"]`, and the autocomplete tokens the platform
  *      itself uses for credentials — a browser that autofills a password into
  *      a field has already decided that field holds one.
- *   3. The names a field gives itself: an `id` or `name` containing key,
- *      token or secret, or a placeholder starting `sk-`. This is what keeps
- *      the OpenRouter field covered when «Mostra» turns it into
- *      `type="text"` — measured live: press it and the type really does
- *      change, which is why an id had been cabled in here in the first place.
- *      It can over-cover (a "keywords" field would be hidden in a take), and
- *      that is the right direction to be wrong in.
- *   4. `[data-secrets] *` — a whole zone. This is the net that fails safe:
- *      the mark is on the container, so a field added to the key form
- *      tomorrow is born covered, without anyone editing this file or
- *      remembering an attribute on the input itself.
+ *   3. The name a field gives itself, on any of the attributes a name is
+ *      actually written on (`id`, `name`, `aria-label`, `placeholder`,
+ *      `data-testid`), and the prefixes a real key is printed with. It can
+ *      over-cover — a "keywords" box disappears from a take — and that is the
+ *      right direction to be wrong in.
+ *   4. `[data-secrets] *` — a whole zone. This is the net that fails safe: the
+ *      mark is on the container, so a field added to the key form tomorrow is
+ *      born covered, without anyone editing this file.
  *
- * The fourth is why the zone is marked rather than the fields: forgetting is
- * the normal case, and the only cover that survives forgetting is one that is
- * already there before the field is written.
+ * Nets 2 and 3 used to be written for `<input>` only, which left out the shape
+ * a long secret is actually pasted into: a PEM key, a service-account JSON or
+ * an SSH key goes in a `<textarea>` or a `contenteditable`. They now match any
+ * field, not any input.
+ *
+ * The fourth net is still the one to reach for. Nets 2 and 3 recognise a value
+ * by how it looks, and a value can always be made to look like something else
+ * — `pat`, `bearer`, `dsn` and `credential` are the names people write first,
+ * and the list of them can only ever be the ones we thought of. The zone does
+ * not need to recognise anything, which is why it is the one that survives
+ * being forgotten. When in doubt, mark the container.
+ *
+ * Two things this cover cannot reach, and they are not oversights: the
+ * terminal, whose lines match no net, and the browser pane, which is an
+ * `<iframe>` holding somebody else's document that our CSS never enters.
+ * Both need a cover over the whole pane rather than over a field.
  */
 
 /** The zones that hold credentials. Everything inside is covered. */
 export const SECRET_ZONE_ATTRIBUTE = "data-secrets"
+
+/** Anything a value can be typed into — not just `<input>`. */
+const FIELD = ":is(input, textarea, select, [contenteditable])"
+
+/** The attributes a field uses to say what it is; a Solid input often has no id. */
+const NAMED_BY = ["id", "name", "aria-label", "placeholder", "data-testid"]
+
+/** Words that mean «this holds a credential», in both languages of this app. */
+const SECRET_WORDS = [
+  "key",
+  "chiave",
+  "token",
+  "secret",
+  "segreto",
+  "credential",
+  "credenziale",
+  "passphrase",
+  "password",
+  "bearer",
+  "authorization",
+  "dsn",
+  "otp",
+]
+
+/** Words too short to look for inside another word: `pat` is also `path`. */
+const SECRET_EXACT_WORDS = ["pat"]
+
+/** How a real key announces itself when the box asks you to paste one. */
+const SECRET_PREFIXES = ["sk-", "ghp_", "gho_", "ghs_", "github_pat_", "xox", "AKIA", "AIza", "glpat-", "hf_", "eyJ"]
+
+const anyField = (conditions: string[]): string => `${FIELD}:is(${conditions.join(", ")})`
+
+const onAnyName = (test: (attribute: string) => string): string[] => NAMED_BY.map(test)
 
 /**
  * The pieces of the selector, kept apart so the stylesheet and the tests can
@@ -50,17 +95,12 @@ export const SENSITIVE_PARTS = [
   'input[autocomplete="current-password"]',
   'input[autocomplete="new-password"]',
   'input[autocomplete="one-time-code"]',
-  // A field that calls itself a key, a token or a secret is one.
-  'input[id*="key" i]',
-  'input[name*="key" i]',
-  'input[id*="token" i]',
-  'input[name*="token" i]',
-  'input[id*="secret" i]',
-  'input[name*="secret" i]',
-  'input[placeholder^="sk-" i]',
+  anyField(SECRET_WORDS.flatMap((word) => onAnyName((attribute) => `[${attribute}*="${word}" i]`))),
+  anyField(SECRET_EXACT_WORDS.flatMap((word) => onAnyName((attribute) => `[${attribute}="${word}" i]`))),
+  anyField(SECRET_PREFIXES.map((prefix) => `[placeholder^="${prefix}" i]`)),
   `[${SECRET_ZONE_ATTRIBUTE}]`,
   `[${SECRET_ZONE_ATTRIBUTE}] *`,
-] as const
+]
 
 export const SENSITIVE_SELECTOR = SENSITIVE_PARTS.join(", ")
 
