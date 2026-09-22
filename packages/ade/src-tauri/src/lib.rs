@@ -458,13 +458,20 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
 
 /// The arguments `nikcli` may be run with from the bots panel.
 ///
+///   nikcli --version
 ///   nikcli models
 ///   nikcli agent create --path <dir> --description <t> --mode <m> --tools <list> [--model <id>]
 ///
 /// Each option once, each with a value, and `--path` a configuration root the
 /// agent file is then written under.
+///
+/// `--version` is here rather than behind a door of its own: it is the same
+/// program with fixed arguments, it writes nothing and reads nothing but
+/// itself, and the top bar asks it a few times a day. A second command would
+/// have been a second thing to keep in step with this list for no gain.
 fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
     match args {
+        [only] if only == "--version" => Ok(()),
         [only] if only == "models" => Ok(()),
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
@@ -1487,12 +1494,13 @@ mod tests {
     }
 
     #[test]
-    fn nikcli_runs_only_the_two_bot_commands() {
+    fn nikcli_runs_only_the_commands_on_the_list() {
         let dir = TempDir::new("bots");
         let roots = dir.roots();
         let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
         let home = dir.join(".nikcli").to_string_lossy().into_owned();
 
+        assert!(check_nikcli_args(&roots, &args(&["--version"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
         assert!(check_nikcli_args(
             &roots,
@@ -1502,6 +1510,8 @@ mod tests {
         for bad in [
             &["run", "rm -rf"][..],
             &["models", "--x"],
+            &["--version", "--x"],
+            &["--help"],
             &["agent", "create", "--description", "a"],
             &["agent", "create", "--path", &home, "--path", &home],
             &["agent", "create", "--path", &home, "--exec", "calc"],

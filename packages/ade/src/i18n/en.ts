@@ -370,6 +370,7 @@ export const en: Messages = {
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
   "pane.close": "Close",
+  "bar.nikcliVersion": (v) => `nikcli ${v}, the one new sessions start`,
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,
   "bar.sections": "Sections",
   "bar.palette": "Search or run",

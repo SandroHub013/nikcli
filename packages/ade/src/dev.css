@@ -736,17 +736,44 @@
   text-overflow: ellipsis;
 }
 
-[data-slot="ade-project-branch"] {
+/*
+ * Which nikcli is installed, where the branch used to be.
+ *
+ * Same typeface and the same 22ch ceiling as the branch it replaces — a
+ * version never reaches it, a future build with a hash appended might — but a
+ * step stronger in ink. The branch wore `--ade-text-weak`, and in the glass
+ * theme with the veil at its most transparent that is very nearly the
+ * backdrop: the digits were there and could not be read. `soft` raises the
+ * contrast rather than lowering it, so the ceiling the bar has on the white
+ * lift is untouched.
+ */
+[data-slot="ade-nikcli-version"] {
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-2);
-  color: var(--ade-text-weak);
+  min-width: 0;
+  color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   max-width: 22ch;
   white-space: nowrap;
+}
+
+/*
+ * Clipped from the left, not from the right.
+ *
+ * The end of a version is the part that identifies it, so the ellipsis has to
+ * eat the `v` and leave the `0`. `direction: rtl` puts the ellipsis at the
+ * start; the element is a `<bdi>`, so the digits and dots inside are still
+ * laid out in the order they were written instead of being reordered by the
+ * bidirectional algorithm.
+ */
+[data-slot="ade-nikcli-number"] {
+  direction: rtl;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The one warning the bar can carry, so it is allowed to look like one. */

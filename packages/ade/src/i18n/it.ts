@@ -375,6 +375,7 @@ export const it = {
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",
   "pane.close": "Chiudi",
+  "bar.nikcliVersion": (v: string) => `nikcli ${v}, quello con cui partono le sessioni nuove`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.sections": "Sezioni",
   "bar.palette": "Cerca o esegui",

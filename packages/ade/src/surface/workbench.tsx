@@ -2,6 +2,7 @@ import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createR
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every } from "../host/every"
+import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, openProject, type Project } from "../host/project"
@@ -485,6 +486,9 @@ export function Workbench() {
       "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>),
   )
   const [project, setProject] = createSignal<Project>()
+  /** The installed nikcli, read from the binary; undefined until asked, and
+      after an answer that says nothing. */
+  const [nikcliVersion, setNikcliVersion] = createSignal<string>()
   const [recents, setRecents] = createSignal<RecentEntry[]>([])
 
   /**
@@ -3208,6 +3212,26 @@ export function Workbench() {
     )
     // Usage only feeds what is on screen and `ade-msg stats`: paused while hidden.
     onCleanup(every(15_000, () => refreshUsage()))
+    /*
+     * Which nikcli is installed, for the top bar.
+     *
+     * Asked of the binary, not of any package.json: the project open here is
+     * usually not nikcli's own. Once at startup and then very rarely, because
+     * the answer only changes when nikcli updates itself, and paused while the
+     * window is hidden. Every failure is the same silence.
+     */
+    onCleanup(
+      every(
+        NIKCLI_VERSION_EVERY_MS,
+        async () => {
+          const host = await getHost()
+          if (!host?.nikcliBot) return
+          const answer = await host.nikcliBot(["--version"]).catch(() => null)
+          setNikcliVersion(parseNikcliVersion(answer))
+        },
+        { immediate: true },
+      ),
+    )
     void getHost().then((host) => {
       void host?.mailboxPublish?.(agentsTable(SPAWNABLE), "agents").catch(() => {})
       const panelVerbs = [
@@ -5913,7 +5937,7 @@ export function Workbench() {
               <NikChromeLogo size={30} />
             </span>
           </Show>
-          <ProjectBar project={project()} />
+          <ProjectBar project={project()} nikcliVersion={nikcliVersion()} />
           <span data-slot="ade-count">{t("bar.sessions", wb().panes.filter(p => !isPanelPane(p)).length)}</span>
         </div>
 
