@@ -941,26 +941,15 @@ body,
 }
 
 /*
- * Selection is position (the accent bar) plus fill, never accent-colored text:
- * the accent hue is reserved for focus and interactive affordances, and
- * recoloring content made a selected row compete with the status dots.
+ * Selection adds fill and weight, never accent-colored text: the accent hue
+ * is reserved for focus and interactive affordances, and recoloring content
+ * made a selected row compete with the status dots. The sidebar paints its
+ * own accent veil over this fill from sidebar.css.
  */
 [data-slot="session-row"][data-selected] {
   background: var(--ade-active);
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);
-}
-
-/* Accent bar on the leading edge for the selected row. */
-[data-slot="session-row"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--ade-space-1);
-  bottom: var(--ade-space-1);
-  width: 3px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="session-row"]:focus-visible {
@@ -1035,17 +1024,6 @@ body,
   background: var(--ade-active);
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);
-}
-
-[data-slot="tree-row"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 3px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="tree-row"]:focus-visible {
