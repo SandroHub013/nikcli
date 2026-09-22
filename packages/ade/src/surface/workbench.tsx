@@ -220,6 +220,8 @@ import {
   type Message,
   formatBell,
   formatHeld,
+  formatHeldReceipt,
+  HELD_BY_LINE,
   formatUnread,
   formatWedged,
   interruptKeys,
@@ -232,7 +234,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
-import { isTyping } from "../session/typed-line"
+import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
@@ -1558,8 +1560,10 @@ export function Workbench() {
 
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
+  /** The state last written for a queued request, so a waiter hears about changes only. */
+  const heldStates = new Map<string, string>()
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
 
   /*
    * How much mail is waiting for each pane, for the badge in its header.
@@ -1578,6 +1582,18 @@ export function Workbench() {
       for (const id of ids) if ((current[id] ?? 0) !== (counts[id] ?? 0)) return counts
       return current
     })
+  }
+
+  /**
+   * Writes into a session's input line on the user's behalf — dropped paths,
+   * dictated speech — and counts it as typed, because it is: nothing is
+   * submitted until the user says so, and until then the line is theirs.
+   */
+  const typeAsUser = (paneId: string, text: string) => {
+    const session = running.get(paneId)
+    if (!session) return
+    records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
+    session.write(text)
   }
 
   /**
@@ -1608,6 +1624,16 @@ export function Workbench() {
       activity = keptActivity(activity, parseActivity(await host.readAgentActivity(nonce), resumeId))
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
+    }
+    /*
+     * The CLI's own hook is certain where the count is a guess: a turn that
+     * began after the last keystroke means the line was sent, whatever key
+     * emptied it. Heals a count left too high by Ctrl+K, a vim command, or
+     * any key `typed-line.ts` does not know — for every CLI that has the hook.
+     */
+    if (activity?.state === "busy") {
+      const submittedAt = activity.at
+      records.typed.update(paneId, (line) => submittedSince(line, submittedAt))
     }
     return isFree(
       {
@@ -2075,6 +2101,14 @@ export function Workbench() {
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
+      } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
+        // Replies and updates too, not only what went to the inbox: the
+        // sender is told at once, and once, why this is not arriving.
+        item.told = true
+        if (running.has(item.inbox.from)) {
+          const reader = mailPanes().find((pane) => pane.id === item.paneId)
+          heldLines.push({ paneId: item.inbox.from, text: formatHeld(item.inbox, reader), told: true })
+        }
       }
     }
 
@@ -2111,7 +2145,7 @@ export function Workbench() {
       }
       const session = running.get(request.to)
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
-      if (session && shouldRering(request, targetOf(request), now)) {
+      if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         request.rings = (request.rings ?? 0) + 1
         saveRequests()
         session.write("\r")
@@ -2540,6 +2574,8 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
+      // The TUI drops whatever was in the line with the work: so does the count.
+      records.typed.forget(target.pane.id)
       appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note")
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -2663,12 +2699,26 @@ export function Workbench() {
      * sender is told at once, so it neither resends nor stops waiting.
      */
     if (!(await freeNow(host, target.pane.id))) {
+      const byLine = isTyping(records.typed.get(target.pane.id))
       if (!held.has(id)) {
         held.add(id)
-        await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+        await answer(byLine ? formatHeldReceipt(target.pane) : `ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+      }
+      /*
+       * Whoever waits on `ade-msg wait` sees the reason as the request's
+       * state, the moment it applies and the moment it stops: a line half
+       * written in the other session is not the other session ignoring them.
+       */
+      if (message.kind === "ask") {
+        const state = byLine ? HELD_BY_LINE : ""
+        if (heldStates.get(id) !== state) {
+          heldStates.set(id, state)
+          await host.mailboxState?.(id, state).catch(() => {})
+        }
       }
       return false
     }
+    heldStates.delete(id)
 
     const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
     const targetDepth = depthOf(target.pane.id, parentOf)
@@ -3041,7 +3091,11 @@ export function Workbench() {
     project,
     runCommand: (id) => runCommand(id),
     isRunning,
-    getRunningSession: (id) => running.get(id),
+    // Dictated text goes into the line and is not submitted: it counts as typed.
+    getRunningSession: (id) => {
+      const session = running.get(id)
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+    },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     permissions,
@@ -5520,6 +5574,7 @@ export function Workbench() {
     panels,
     mailWaiting,
     showMail,
+    typeAsUser,
     announceToAll,
     pluginRuntime,
     browserControllers,

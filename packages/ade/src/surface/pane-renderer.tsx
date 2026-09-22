@@ -90,6 +90,8 @@ export interface PaneRendererDeps {
   mailWaiting: () => Record<string, number>
   /** Shows a pane what is waiting for it, without typing anything. */
   showMail: (id: string) => void
+  /** Writes into a session's input line on the user's behalf, and counts it as typed. */
+  typeAsUser: (id: string, text: string) => void
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
   pluginRuntime: AdePluginRuntime
@@ -385,7 +387,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * for every agent in the catalogue and for a plain shell, since it
            * never asks what is running: see `session/typing.ts`.
            */
-          deps.records.typed.update(current().id, (pending) => typedAfter(pending ?? 0, data) || undefined)
+          deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now()))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
@@ -415,9 +417,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
           focus()
 
-          const session = deps.sessionFor(current().id)
-          if (session) {
-            session.write(`${text} `)
+          if (deps.sessionFor(current().id)) {
+            // Into the line, not submitted: the user adds the instruction. So
+            // it is typing, and counts as such (`session/typed-line.ts`).
+            deps.typeAsUser(current().id, `${text} `)
             return
           }
           deps.appendLine(

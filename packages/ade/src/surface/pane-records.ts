@@ -1,3 +1,4 @@
+import type { TypedLine } from "../session/typed-line"
 import { createSignal } from "solid-js"
 import type { Buffer } from "../editor"
 import type { PermissionRequest } from "../session/permission"
@@ -91,7 +92,7 @@ export interface PaneRecords {
    * pane forgets it like everything else — a counter left behind would make
    * that pane refuse mail for ever. See `session/typing.ts`.
    */
-  typed: PaneRecord<number>
+  typed: PaneRecord<TypedLine>
   /** Whether a pane is showing its transcript or its diff. */
   paneView: PaneRecord<"transcript" | "diff">
   paneDiff: PaneRecord<SessionDiff>
@@ -106,7 +107,7 @@ export function createPaneRecords(): PaneRecords {
     buffers: createPaneRecord<Buffer>(),
     bufferLoading: createPaneRecord<boolean>(),
     permissions: createPaneRecord<PermissionRequest>(),
-    typed: createPaneRecord<number>(),
+    typed: createPaneRecord<TypedLine>(),
     paneView: createPaneRecord<"transcript" | "diff">(),
     paneDiff: createPaneRecord<SessionDiff>(),
     diffLoading: createPaneRecord<boolean>(),

@@ -493,14 +493,33 @@ export function inboxAction(
   return entry.rings < MAX_REBELLS ? "ring" : "warn"
 }
 
-/** Told to the sender, once, while ADE holds mail back from a half-written line. */
-export function formatHeld(entry: InboxEntry, reader: MailPane | undefined): string {
-  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+/**
+ * Told to the sender, once, while ADE holds mail back from a half-written line.
+ *
+ * It says what is true — ADE has it and is not typing it — and not what the
+ * sender would otherwise conclude, that the other session is refusing to
+ * answer. Whoever waits on `ade-msg wait` has to know why they are waiting.
+ */
+export function formatHeld(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what =
+    entry.kind === "ask" || entry.kind === "spawn"
+      ? `la richiesta ${entry.id}`
+      : entry.kind === "reply"
+        ? `la tua risposta alla richiesta ${entry.id}`
+        : "il tuo messaggio"
   return (
-    `[ade-msg] ADE ha ${what} per ${who(reader)} ma non l'ha ancora consegnata: ` +
+    `[ade-msg] ADE ha ${what} per ${who(reader)} ma non la consegna ancora: ` +
     `in quella sessione c'è una riga iniziata e non inviata, e consegnare ora la rovinerebbe. ` +
-    `Resta in attesa e arriva da sola appena la riga è libera: la sessione non ti sta ignorando.`
+    `Arriva da sola appena la riga è libera: la sessione non ti sta ignorando.`
   )
+}
+
+/** What a waiter is told, in the state of its request, while its target has a line half-written. */
+export const HELD_BY_LINE: RequestState = "trattenuta: riga a metà"
+
+/** The receipt a sender gets for mail held back from a half-written line. */
+export function formatHeldReceipt(target: MailPane | undefined): string {
+  return `ok: in coda, "${target?.title ?? "la sessione"}" ha una riga iniziata e non inviata: arriva appena è libera`
 }
 
 /** Told to the sender when a long message was never read. */
@@ -563,6 +582,7 @@ export interface OpenRequest {
 
 export type RequestState =
   | "in corso"
+  | "trattenuta: riga a metà"
   | "attende un permesso"
   | "sessione chiusa"
   | "in avvio"

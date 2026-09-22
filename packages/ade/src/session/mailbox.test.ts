@@ -21,6 +21,7 @@ import {
   formatUnread,
   goesToInbox,
   formatHeld,
+  formatHeldReceipt,
   HELD_TELL_MS,
   inboxAction,
   inboxName,
@@ -613,8 +614,11 @@ describe("una riga iniziata dall'utente", () => {
 
   test("l'avviso dice che ADE non ha consegnato, non che l'altra non risponde", () => {
     const text = formatHeld(entry(), { id: "p1", title: "Dario", agent: "claude-code" })
-    expect(text).toContain("non l'ha ancora consegnata")
+    expect(text).toContain("non la consegna ancora")
     expect(text).toContain("non ti sta ignorando")
     expect(text).not.toContain("non ha letto")
+    // A reply held back is named as such: the caller knows its answer exists.
+    expect(formatHeld({ id: "1790000000000-bbbb", kind: "reply" }, undefined)).toContain("la tua risposta alla richiesta 1790000000000-bbbb")
+    expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe('ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera')
   })
 })
