@@ -19,19 +19,42 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "nikcli",
+    "copyright": "© 2026 nikcli",
+    "homepage": "https://github.com/SandroHub013/nikcli/releases",
+    "shortDescription": "Agent Development Environment",
+    "longDescription": "ADE runs coding agents side by side in one window: sessions, files, browser and voice.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Italian",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "icons/nsis/header.bmp",
+        "uninstallerHeaderImage": "icons/nsis/header.bmp",
+        "sidebarImage": "icons/nsis/sidebar.bmp"
+      }
+    }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEExMDFFMDY3Njk0NzkyOUUKUldTZWtrZHBaK0FCb1RoUloreWxRMlRienJnSFdhaW1oY3lNNlN0MHd6N01nbVpDaWhPMGN5WG0K",
-      "endpoints": ["https://github.com/SandroHub013/nikcli/releases/download/ade-updater/latest.json"],
-      "windows": { "installMode": "passive" }
+      "endpoints": [
+        "https://github.com/SandroHub013/nikcli/releases/download/ade-updater/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

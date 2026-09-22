@@ -53,6 +53,7 @@ import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
 import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
 import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
+import { formatMb, parseUpdateProgress, progressPercent, UPDATE_PROGRESS_EVENT, type UpdateProgress } from "../update/progress"
 import { exitedActivity } from "../grid/activity"
 import { ExtensionsPage } from "../extensions/extensions-page"
 import type { McpConfigIO } from "../extensions/mcp-config"
@@ -3162,6 +3163,36 @@ export function Workbench() {
    * release page, so the notice is never a dead end.
    */
   const [updating, setUpdating] = createSignal(false)
+  /*
+   * How far the download is, from the Rust side: the only sign of life ADE
+   * gives between «Aggiorna e riavvia» and the window closing, so it must be
+   * there for every megabyte and not only at the end.
+   */
+  const [updateProgress, setUpdateProgress] = createSignal<UpdateProgress | undefined>(undefined)
+  const updateProgressText = () => {
+    const progress = updateProgress()
+    if (!progress) return t("update.acting")
+    if (progress.phase === "install") return t("update.installing")
+    return t("update.downloading", formatMb(progress.downloaded, locale()), progress.total ? formatMb(progress.total, locale()) : null)
+  }
+  onMount(() => {
+    if (!isTauriDesktop()) return
+    let unlisten: (() => void) | undefined
+    let gone = false
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen(UPDATE_PROGRESS_EVENT, (event) => {
+        const progress = parseUpdateProgress(event.payload)
+        if (progress) setUpdateProgress(progress)
+      }),
+    ).then((stop) => {
+      if (gone) stop()
+      else unlisten = stop
+    })
+    onCleanup(() => {
+      gone = true
+      unlisten?.()
+    })
+  })
   const installUpdate = async (href: string) => {
     if (updating()) return
     const running = wb().panes.filter(
@@ -3186,6 +3217,7 @@ export function Workbench() {
       await invoke("ade_update_install")
     } catch (error) {
       setUpdating(false)
+      setUpdateProgress(undefined)
       report(t("update.installFailed", String(error)))
       await openNoticeLink(href)
     }
@@ -6356,14 +6388,36 @@ export function Workbench() {
                             <span data-slot="ade-notice-text">{notice.text}</span>
                             <Show when={notice.href}>
                               {(href) => (
-                                <button
-                                  type="button"
-                                  data-slot="ade-notice-link"
-                                  disabled={updating()}
-                                  onClick={() => void installUpdate(href())}
+                                <Show
+                                  when={!updating()}
+                                  fallback={
+                                    <span
+                                      data-slot="ade-notice-progress"
+                                      role="progressbar"
+                                      aria-valuemin={0}
+                                      aria-valuemax={100}
+                                      aria-valuenow={progressPercent(updateProgress())}
+                                      aria-label={updateProgressText()}
+                                    >
+                                      <span data-slot="ade-notice-progress-text">{updateProgressText()}</span>
+                                      <span data-slot="ade-notice-progress-track">
+                                        <span
+                                          data-slot="ade-notice-progress-fill"
+                                          data-indeterminate={progressPercent(updateProgress()) === undefined ? "true" : undefined}
+                                          style={{ width: `${progressPercent(updateProgress()) ?? 100}%` }}
+                                        />
+                                      </span>
+                                    </span>
+                                  }
                                 >
-                                  {updating() ? "Aggiornamento…" : "Aggiorna"}
-                                </button>
+                                  <button
+                                    type="button"
+                                    data-slot="ade-notice-link"
+                                    onClick={() => void installUpdate(href())}
+                                  >
+                                    {t("update.action")}
+                                  </button>
+                                </Show>
                               )}
                             </Show>
                             <button

@@ -379,6 +379,56 @@
   background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
 }
 
+/* The download, where the «Aggiorna» button was: text above, a bar below. */
+[data-slot="ade-notice-progress"] {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 128px;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="ade-notice-progress-text"] {
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+[data-slot="ade-notice-progress-track"] {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ade-hover);
+  overflow: hidden;
+}
+
+[data-slot="ade-notice-progress-fill"] {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ade-accent);
+  transition: width var(--ade-dur-fast) var(--ade-ease-out);
+}
+
+[data-slot="ade-notice-progress-fill"][data-indeterminate] {
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+  width: 40% !important;
+}
+
+@keyframes ade-notice-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="ade-notice-progress-fill"][data-indeterminate] {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.5;
+  }
+}
+
 /* ── command field ────────────────────────────────────────────────────────── */
 
 [data-slot="ade-search"] {

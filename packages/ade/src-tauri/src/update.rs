@@ -4,6 +4,22 @@
 //! `.github/workflows/ade-release.yml` for how they are produced, and
 //! `plugins.updater` in `tauri.conf.json` for the endpoint and the public key.
 
+/// Where an install stands, as the window hears it on `ade-update-progress`.
+///
+/// A download of a few megabytes arrives in thousands of chunks; the page gets
+/// one event per quarter megabyte, which is finer than any bar can draw, and
+/// one when the installer is about to take over, which on Windows is the last
+/// thing this process says.
+#[derive(Clone, serde::Serialize)]
+#[serde(tag = "phase", rename_all = "lowercase")]
+pub enum Progress {
+    Download { downloaded: u64, total: Option<u64> },
+    Install,
+}
+
+pub const PROGRESS_EVENT: &str = "ade-update-progress";
+const PROGRESS_STEP: u64 = 256 * 1024;
+
 /// Downloads the newest signed ADE release, installs it and restarts into it.
 ///
 /// Everything happens here rather than through the updater plugin's JavaScript
@@ -23,8 +39,25 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "nessun aggiornamento installabile per questa piattaforma".to_string())?;
+    use tauri::Emitter;
+    let on_chunk = app.clone();
+    let on_finish = app.clone();
+    let mut downloaded: u64 = 0;
+    let mut reported: u64 = 0;
     update
-        .download_and_install(|_, _| {}, || {})
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                if downloaded / PROGRESS_STEP == reported / PROGRESS_STEP && Some(downloaded) != total {
+                    return;
+                }
+                reported = downloaded;
+                let _ = on_chunk.emit(PROGRESS_EVENT, Progress::Download { downloaded, total });
+            },
+            move || {
+                let _ = on_finish.emit(PROGRESS_EVENT, Progress::Install);
+            },
+        )
         .await
         .map_err(|e| e.to_string())?;
     app.restart()
