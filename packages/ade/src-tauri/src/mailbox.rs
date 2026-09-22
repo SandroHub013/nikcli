@@ -304,9 +304,17 @@ pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: Strin
     }
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
     let file = format!("{name}.msg");
-    Ok(if dir.join(&file).exists() {
+    /*
+     * `try_exists`, not `exists`: `exists` swallows every I/O error into
+     * "no", so a permission denied on either folder would have come back as
+     * "lost" — the one thing this command must never say by mistake, because
+     * "lost" is what makes the sender resend. An error is an error; the
+     * caller keeps waiting and asks again.
+     */
+    let present = |path: std::path::PathBuf| path.try_exists().map_err(|e| format!("casella non leggibile ({}): {e}", path.display()));
+    Ok(if present(dir.join(&file))? {
         "unread"
-    } else if dir.join("handled").join(&file).exists() {
+    } else if present(dir.join("handled").join(&file))? {
         "read"
     } else {
         "lost"
