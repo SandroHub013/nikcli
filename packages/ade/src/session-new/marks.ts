@@ -17,6 +17,10 @@
  *
  * `hermes` is drawn with Nous Research's vector geometry.
  *
+ * `grok` is xAI's Grok mark, from the same set Codex's comes out of. The
+ * set has no coloured variant of it, so the mark is ink and the tile in
+ * `session-new.css` is ink with it.
+ *
  * Adding an entry here without adding the drawing in `agent-mark.tsx` is the
  * mistake this pair exists to make visible, and the test asserts they agree.
  */
@@ -25,6 +29,7 @@ export const REAL_MARK_IDS: readonly string[] = [
   "codex",
   "opencode",
   "nikcli",
+  "grok",
   "agy",
   "kimi",
   "prime",

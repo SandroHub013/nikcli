@@ -258,6 +258,7 @@ pub fn agent_for_command(command: &str) -> Option<&'static str> {
         "codex" => Some("codex"),
         "opencode" => Some("opencode"),
         "nikcli" => Some("nikcli"),
+        "grok" => Some("grok"),
         "agy" => Some("agy"),
         "kimi" => Some("kimi"),
         "prime" => Some("prime"),

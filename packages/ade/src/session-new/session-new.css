@@ -227,11 +227,12 @@
  * the one its mark is drawn in (`agent-mark.tsx` names the source of every
  * one). Codex takes the blue end of its gradient and Antigravity the blue of
  * its largest blob — one colour has to stand for a mark that has several,
- * and the one that covers most of it is the honest pick. Prime, pi and Nous
- * have no colour: they ship black-on-white, so their tiles take the same
- * ink as OpenCode's and nothing else. They used to have a hue each — teal,
- * violet, indigo, amber, red — chosen here rather than by the vendor, and a
- * black mark on a violet tile still reads as violet.
+ * and the one that covers most of it is the honest pick. Prime, pi, Nous and
+ * Grok have no colour: the first three ship black-on-white, and Grok ships
+ * `currentColor` with no coloured variant at all, so their tiles take the
+ * same ink as OpenCode's and nothing else. They used to have a hue each —
+ * teal, violet, indigo, amber, red — chosen here rather than by the vendor,
+ * and a black mark on a violet tile still reads as violet.
  */
 [data-agent-id="claude-code"] {
   --cli-color: light-dark(#c25a39, #d97757);
@@ -260,7 +261,8 @@
 /* Black-and-white brands: ink, at the same strengths OpenCode's off-white gets. */
 [data-agent-id="prime"],
 [data-agent-id="pi"],
-[data-agent-id="hermes"] {
+[data-agent-id="hermes"],
+[data-agent-id="grok"] {
   --cli-color: light-dark(#000000, #ffffff);
   --cli-tint: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
   --cli-border: light-dark(rgba(0, 0, 0, 0.25), rgba(255, 255, 255, 0.30));

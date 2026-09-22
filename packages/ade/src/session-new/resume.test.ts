@@ -18,6 +18,29 @@ describe("planStart", () => {
     expect(plan.resumeId).toBe("11111111-2222-4333-a444-555555555555")
   })
 
+  /*
+   * Read off `grok --help` on 1.0.40, which is the version installed here:
+   * `--session-id` starts a new conversation under a UUID the caller picks,
+   * `--resume` reopens one by id, `--continue` is the most recent in this
+   * directory. The help is explicit that the id must not already exist, which
+   * is what `newSessionId` hands it.
+   */
+  test("grok takes an id on start and asks for it back, like Claude Code", () => {
+    const plan = planStart("grok", "11111111-2222-4333-a444-555555555555")
+    expect(plan.args).toEqual(["--session-id", "11111111-2222-4333-a444-555555555555"])
+    expect(plan.resumeId).toBe("11111111-2222-4333-a444-555555555555")
+    expect(planResume({ agentId: "grok", resumeId: "abc" })).toEqual({
+      kind: "resume",
+      via: "id",
+      args: ["--resume", "abc"],
+    })
+    expect(planResume({ agentId: "grok" })).toEqual({
+      kind: "resume",
+      via: "last",
+      args: ["--continue"],
+    })
+  })
+
   test("an agent that does not adds nothing and reports no id", () => {
     /*
      * The honest half. Writing an id down for a CLI that will not take it

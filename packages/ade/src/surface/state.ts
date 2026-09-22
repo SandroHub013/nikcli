@@ -317,6 +317,7 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("claude")) return "claude-code"
   if (t.includes("codex") || t.includes("openai")) return "codex"
   if (t.includes("opencode")) return "opencode"
+  if (t.includes("grok") || t.includes("xai")) return "grok"
   if (t.includes("agy") || t.includes("antigravity")) return "agy"
   if (t.includes("hermes") || t.includes("nous")) return "hermes"
   if (t.includes("kimi") || t.includes("moonshot")) return "kimi"

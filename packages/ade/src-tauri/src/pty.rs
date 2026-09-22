@@ -66,7 +66,7 @@ struct Exit {
  * form offers: a name added there and not here cannot start.
  */
 const ALLOWED_AGENTS: &[&str] = &[
-    "claude", "codex", "opencode", "nikcli", "agy", "kimi", "prime", "pi", "ohmypi",
+    "claude", "codex", "opencode", "nikcli", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
 ];
 

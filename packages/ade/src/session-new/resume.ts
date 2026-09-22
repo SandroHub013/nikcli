@@ -162,9 +162,11 @@ function claudeTranscript(home: string, cwd: string, id: string): string | undef
  *   prime     -r, --resume <id>     / -c, --continue
  *   nikcli    -s, --session <id>    / -c, --continue
  *   opencode  -s, --session <id>    / -c, --continue
+ *   grok      -s, --session-id <uuid>   start under a given id
+ *             -r, --resume <id>     reopen it / -c, --continue
  *   gemini    -r, --resume <value>  takes "latest" or an index, never a uuid
  *
- * Two of them let ADE choose the id, and only those can promise the exact
+ * Three of them let ADE choose the id, and only those can promise the exact
  * conversation back. The rest can be resumed by an id ADE has no way to learn
  * — herdr solves that by installing a hook into each CLI's own config so the
  * CLI reports its id back, which is more capable and edits files ADE does not
@@ -204,6 +206,11 @@ export const RESUME: Record<string, ResumeRecipe> = {
       args: (title) => ["api", "session.create", "--log-level", "warn", "-d", JSON.stringify({ title })],
       read: mintedNikcliId,
     },
+  },
+  grok: {
+    start: (id) => ["--session-id", id],
+    byId: (id) => ["--resume", id],
+    last: () => ["--continue"],
   },
   hermes: {
     byId: (id) => ["--resume", id],
