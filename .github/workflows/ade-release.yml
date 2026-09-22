@@ -276,6 +276,44 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
 
+      # The page a person downloads from says what Windows will say to them,
+      # and gives them a way to check the file. The Windows paragraph goes
+      # away by itself once the setup is signed (see CODE_SIGNING.md); the
+      # checksums stay, since the macOS and Linux bundles are not signed
+      # either. SHA256SUMS.txt is also uploaded as an asset.
+      - name: Checksums and the warning Windows will show
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#ade-v}"
+          mkdir -p sums && cd sums
+          for pattern in '*.exe' '*.dmg' '*.app.zip' '*.deb' '*.rpm' '*.AppImage'; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern" || true
+          done
+          if ! ls ADE_* >/dev/null 2>&1; then
+            echo "no bundles to sum in $TAG"
+            exit 1
+          fi
+          sha256sum ADE_* > SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
+          {
+            printf '\n## Prima di installare\n\n'
+            if [ "$SIGNED" != "true" ]; then
+              printf '%s\n\n' '**Windows.** Il setup non è ancora firmato, quindi Windows lo ferma con «PC protetto da Windows»: premi *Ulteriori informazioni* e poi *Esegui comunque*. Gli aggiornamenti dall'"'"'app non lo chiedono.'
+            fi
+            printf '%s\n\n' '**macOS.** L'"'"'app non è notarizzata: la prima volta, tasto destro sull'"'"'app e *Apri*.'
+            printf '%s\n\n' '**Impronte SHA-256** dei file qui sopra, anche in `SHA256SUMS.txt`. Per confrontare un file scaricato: su Windows `certutil -hashfile <file> SHA256`, su macOS e Linux `shasum -a 256 <file>`.'
+            printf '```\n'
+            cat SHA256SUMS.txt
+            printf '```\n'
+          } >> notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+
       # One entry per platform the updater can install. A platform without a
       # signed bundle (Linux on ARM ships only deb/rpm) is left out, and the
       # app falls back to opening the release page there.
