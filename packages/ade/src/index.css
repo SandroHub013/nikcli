@@ -1189,6 +1189,106 @@ body,
   padding: 0 16px 14px;
 }
 
+/*
+ * ADE asks before updating itself (S71): the same sheet as the other
+ * questions, with the version in the head and the download in the body. On
+ * glass the overlay colour already reads without blur, so nothing more here.
+ */
+[data-component="update-dialog"] [data-slot="update-dialog-mark"] {
+  display: inline-flex;
+  color: var(--ade-accent);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-version"] {
+  margin-left: auto;
+  font-family: var(--ade-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ade-text-weak);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-version"] b {
+  color: var(--ade-accent);
+  font-weight: 600;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-body"] {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 8px;
+  font-size: 12.5px;
+  color: var(--ade-text-soft);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-body"] p {
+  margin: 0;
+}
+[data-component="update-dialog"] [data-stage="error"] [data-slot="update-dialog-body"] p {
+  color: var(--ade-error, #e5484d);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-problem"] {
+  font-family: var(--ade-mono);
+  font-size: 11px;
+  color: var(--ade-text-weak);
+  overflow-wrap: anywhere;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-link"] {
+  width: fit-content;
+  font-size: 11.5px;
+  color: var(--ade-accent);
+  text-decoration: none;
+  border-radius: 3px;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-link"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-track"] {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ade-hover);
+  overflow: hidden;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-fill"] {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ade-accent);
+  transition: width var(--ade-dur-fast) var(--ade-ease-out);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-fill"][data-indeterminate] {
+  width: 40% !important;
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-actions"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 16px 14px;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-hint"] {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--ade-text-weak);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-hint"] kbd {
+  font-family: var(--ade-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+[data-component="update-dialog"] [data-slot="decision-submit"]:focus-visible,
+[data-component="update-dialog"] [data-slot="decision-ghost"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-component="update-dialog"] [data-slot="update-dialog-fill"][data-indeterminate] {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.5;
+  }
+}
+
 
 /*
  * While a take runs (S36), secrets are not drawn at all, so no frame of the

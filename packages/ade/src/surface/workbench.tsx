@@ -156,6 +156,7 @@ import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
 import { RECORD_VERBS, runRecordRequest, type RecordConsent } from "../record/record-panel"
 import { RecordConsentDialog } from "../record/consent-dialog"
+import { UpdateDialog } from "../update/update-dialog"
 import { coverSecrets } from "../record/sensitive"
 import {
   DEFAULT_QUALITY,
@@ -361,7 +362,7 @@ import {
   type NoticeKind,
 } from "./notifications"
 import { checkMessage, createUpdateWatch, type UpdateMemory, type UpdateWatch } from "../update/watch"
-import { isReleasePage } from "../update/release"
+import { isReleasePage, type AvailableUpdate } from "../update/release"
 import { createAdeVoiceHost } from "../voice/host"
 import { createPushToTalkHandler, resolveVoiceOrAdeKey } from "../voice/shortcuts"
 import {
@@ -3044,7 +3045,8 @@ export function Workbench() {
     if (!isTauriDesktop()) return
     const watch = createUpdateWatch({
       currentVersion: async () => (await import("@tauri-apps/api/app")).getVersion(),
-      onUpdate: (update) =>
+      onUpdate: (update) => {
+        setLatestUpdate(update)
         setNotices((list) =>
           addNotice(list, {
             kind: "info",
@@ -3052,7 +3054,8 @@ export function Workbench() {
             href: update.url,
             at: Date.now(),
           }),
-        ),
+        )
+      },
       /*
        * The tag GitHub last answered with and the release it stood for, kept
        * together across restarts: the first check after launch then usually
@@ -3193,21 +3196,38 @@ export function Workbench() {
       unlisten?.()
     })
   })
-  const installUpdate = async (href: string) => {
-    if (updating()) return
-    const running = wb().panes.filter(
+  /*
+   * The release the bell announced, and whether the question is open. The
+   * dialog is ADE's own (see update/update-dialog.tsx): it names the
+   * version, says what happens to the running sessions, and stays up through
+   * the download, so the window is never silent between the click and its
+   * own closing. Asked every time, sessions or not, because the choice to
+   * close and reopen ADE should always be the user's.
+   */
+  const [latestUpdate, setLatestUpdate] = createSignal<AvailableUpdate | undefined>(undefined)
+  const [updateAsk, setUpdateAsk] = createSignal<{ href: string; version: string; running: number } | undefined>(undefined)
+  const [updateError, setUpdateError] = createSignal<string | undefined>(undefined)
+  const [installedVersion] = createResource(async () => {
+    if (!isTauriDesktop()) return undefined
+    return (await import("@tauri-apps/api/app")).getVersion()
+  })
+  const runningSessions = () =>
+    wb().panes.filter(
       (pane) =>
         !isPanelPane(pane) && (pane.agent ?? pane.model) &&
         pane.status !== "done" && pane.status !== "error",
     ).length
-    if (running > 0) {
-      const { ask } = await import("@tauri-apps/plugin-dialog")
-      const go = await ask(
-        t("update.restart", running),
-        { title: t("update.restart.title"), kind: "warning", okLabel: t("update.restart.ok"), cancelLabel: t("update.restart.later") },
-      )
-      if (!go) return
-    }
+  const installUpdate = (href: string) => {
+    if (updating()) return
+    const latest = latestUpdate()
+    const version = latest && latest.url === href ? latest.version : (/\d+\.\d+\.\d+/.exec(href)?.[0] ?? "")
+    setUpdateError(undefined)
+    setUpdateAsk({ href, version, running: runningSessions() })
+  }
+  const runUpdate = async () => {
+    if (updating()) return
+    setUpdateError(undefined)
+    setUpdateProgress(undefined)
     setUpdating(true)
     autosave.flush()
     // localStorage reaches WebView2's disk store a moment after setItem.
@@ -3218,8 +3238,8 @@ export function Workbench() {
     } catch (error) {
       setUpdating(false)
       setUpdateProgress(undefined)
+      setUpdateError(String(error))
       report(t("update.installFailed", String(error)))
-      await openNoticeLink(href)
     }
   }
 
@@ -6441,6 +6461,26 @@ export function Workbench() {
 
         <Show when={recordAsk()}>
           {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+        </Show>
+
+        <Show when={updateAsk()}>
+          {(ask) => (
+            <UpdateDialog
+              fromVersion={installedVersion()}
+              toVersion={ask().version}
+              releaseUrl={ask().href}
+              running={ask().running}
+              updating={updating()}
+              progress={updateProgress()}
+              error={updateError()}
+              onLater={() => {
+                setUpdateError(undefined)
+                setUpdateAsk(undefined)
+              }}
+              onGo={() => void runUpdate()}
+              onOpenRelease={() => void openNoticeLink(ask().href)}
+            />
+          )}
         </Show>
 
 
