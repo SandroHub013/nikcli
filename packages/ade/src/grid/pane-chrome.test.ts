@@ -112,4 +112,32 @@ describe("pane chrome", () => {
     }
     expect(hidden).toEqual([])
   })
+
+  test("the pill's clearance follows the header, never a list of body slots (S67.1)", () => {
+    /*
+     * The 42px under the floating pill used to be granted to three bodies by
+     * name — terminal, transcript, plugin — so the fourth view of the pane
+     * started underneath the pill and nothing said so until the pane was open.
+     * The clearance belongs to whoever follows the lifted header: a selector
+     * that names bodies again fails here, and a body added tomorrow must not
+     * need an edit in this rule to be born covered.
+     */
+    const clearances: string[] = []
+    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
+      const file = entry.replace(/\\/g, "/")
+      const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+      for (const rule of css.split("}")) {
+        if (!/padding-top:\s*42px/.test(rule)) continue
+        clearances.push(`${file}: ${rule.slice(0, rule.indexOf("{")).trim()}`)
+      }
+    }
+    expect(clearances).toHaveLength(1)
+    const [clearance] = clearances
+    expect(clearance!.startsWith("grid/pane.css: ")).toBe(true)
+    expect(clearance).toContain('[data-component="session-pane"] > [data-slot="pane-header"] ~ *')
+    expect(clearance).toContain(':not([data-slot="pane-dock"])')
+    for (const body of ["pane-terminal", "pane-transcript", "pane-plugin"]) {
+      expect(clearance).not.toContain(body)
+    }
+  })
 })
