@@ -1042,10 +1042,16 @@
  * pixels — six of margin, thirty of pill, six of air — is the top padding that
  * keeps the first prompt readable, and it is the two rows this direction
  * costs. Bottom and sides stay at zero: those are terminal columns.
+ *
+ * The room follows the lifted header, not a list of bodies: every direct
+ * sibling after it makes space, so a view added to this pane tomorrow starts
+ * below the pill without anyone remembering to edit this rule. The three
+ * bodies used to be named here one by one, and the first view that was not in
+ * the list began underneath the pill. The dock is the single exception — it is
+ * the bottom row, the pill is at the top, and clearance inside the dock would
+ * only make the dock taller.
  */
-[data-component="session-pane"] [data-slot="pane-terminal"],
-[data-component="session-pane"] [data-slot="pane-transcript"],
-[data-component="session-pane"] [data-slot="pane-plugin"] {
+[data-component="session-pane"] > [data-slot="pane-header"] ~ *:not([data-slot="pane-dock"]) {
   padding-top: 42px;
 }
 
