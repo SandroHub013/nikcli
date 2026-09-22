@@ -277,6 +277,11 @@ export interface Host {
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** `nikcli models` or `nikcli agent create …`: the only nikcli commands the bots panel runs. */
   nikcliBot?: (args: string[], cwd?: string) => Promise<RunResult>
+  /**
+   * `claude agents --json`, the only claude command ADE runs by itself: the
+   * CLI's list of its live sessions, which native mail delivery is routed on.
+   */
+  claudeAgents?: (cwd?: string) => Promise<RunResult>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
@@ -373,6 +378,15 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
         return await invoke<RunResult>("nikcli_bot", { args, cwd })
+      } catch (error) {
+        return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
+      }
+    },
+
+    async claudeAgents(cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<RunResult>("claude_agents", { cwd })
       } catch (error) {
         return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
       }

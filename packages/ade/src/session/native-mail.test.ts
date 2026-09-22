@@ -112,17 +112,20 @@ describe("handoffOutcome", () => {
   test("the sender's word decides at once, either way", () => {
     expect(handoffOutcome(handoff, { acked: true }, 10_001)).toBe("delivered")
     expect(handoffOutcome(handoff, { failed: true }, 10_001)).toBe("fallback")
-    // Said "no" wins over a turn that happens to be running.
-    expect(handoffOutcome(handoff, { failed: true, turnBeganAt: 10_500 }, 10_001)).toBe("fallback")
+    // Said "no" wins even before the clock.
+    expect(handoffOutcome(handoff, { failed: true, acked: true }, 10_001)).toBe("fallback")
   })
 
-  /** The target's own hook is the other witness: a turn after the handoff means it arrived. */
-  test("a turn that began after the handoff counts as delivered", () => {
-    expect(handoffOutcome(handoff, { turnBeganAt: 10_000 }, 10_001)).toBe("delivered")
-    expect(handoffOutcome(handoff, { turnBeganAt: 12_000 }, 12_001)).toBe("delivered")
-    // A turn that was already running when the handoff went out proves nothing.
-    expect(handoffOutcome(handoff, { turnBeganAt: 9_000 }, 10_001)).toBe("wait")
-    expect(handoffOutcome(handoff, { turnBeganAt: 9_000 }, 10_000 + HANDOFF_ACK_MS)).toBe("fallback")
+  /**
+   * Nothing but the sender's word: the live test saw ADE's own reminder open a
+   * turn in the target and a hook-based "delivered" swallow a message nobody
+   * had sent. The shape of `seen` is the whole guarantee.
+   */
+  test("the target's turn is not a witness", () => {
+    const seen: Parameters<typeof handoffOutcome>[1] = { acked: false }
+    expect("turnBeganAt" in seen).toBe(false)
+    expect(handoffOutcome(handoff, seen, 10_000 + HANDOFF_ACK_MS - 1)).toBe("wait")
+    expect(handoffOutcome(handoff, seen, 10_000 + HANDOFF_ACK_MS)).toBe("fallback")
   })
 
   test("the typed line says it may be a repeat", () => {

@@ -179,21 +179,25 @@ export interface Handoff {
 /**
  * What to do with a handoff nobody has confirmed yet.
  *
- * `delivered` when the sender said so, or when the target's own turn hook
- * shows a turn that began after the handoff — the message opened it, or
- * arrived inside it. `fallback` once the clock runs out with neither: the
- * message is typed, protected, and the sender is not asked again. A sender
- * that did send and forgot to say so costs the target a repeat, which the
- * typed line says it may be; a sender that never sent costs nothing.
+ * `delivered` when the sender said so, `fallback` when it said no or the clock
+ * ran out: the message is typed, protected, and the sender is not asked again.
+ * A sender that did send and forgot to say so costs the target a repeat, which
+ * the typed line says it may be; a sender that never sent costs nothing.
+ *
+ * The target's turn hook is deliberately not a witness. The first version
+ * took "a turn began after the handoff" as delivery, and the live test showed
+ * a turn opened by ADE's own reminder confirming a message nobody had sent:
+ * the mail was gone and the note said it had arrived. Anything opens a turn —
+ * the user, other mail, a nudge — so the only word that counts is the sender's,
+ * and the worst it can be wrong by is one repeat.
  */
 export function handoffOutcome(
   handoff: Pick<Handoff, "at">,
-  seen: { acked?: boolean; failed?: boolean; turnBeganAt?: number },
+  seen: { acked?: boolean; failed?: boolean },
   now: number,
 ): "wait" | "delivered" | "fallback" {
   if (seen.failed) return "fallback"
   if (seen.acked) return "delivered"
-  if (seen.turnBeganAt !== undefined && seen.turnBeganAt >= handoff.at) return "delivered"
   return now - handoff.at >= HANDOFF_ACK_MS ? "fallback" : "wait"
 }
 

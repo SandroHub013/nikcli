@@ -1587,10 +1587,18 @@ export function Workbench() {
    * session without its mail.
    */
   const handoffs = new Map<string, Handoff & { failed?: string; acked?: boolean }>()
+  /**
+   * How each closed handoff ended. The live test showed the target's turn hook
+   * confirming a delivery before the sender got round to `ade-msg delivered`,
+   * and the sender then read "no handoff waiting" as a failure. A confirmation
+   * that arrives after the fact is answered with what happened, not an error.
+   */
+  const closedHandoffs = new Map<string, "confermata" | "digitata">()
 
   /** Types what a handoff did not deliver, and says so on both sides. */
   const fallBackToTyping = (handoff: Handoff, reason: string) => {
     handoffs.delete(handoff.id)
+    closedHandoffs.set(handoff.id, "digitata")
     const request = openRequests.get(handoff.id)
     if (request) {
       request.via = "digitata"
@@ -1605,24 +1613,21 @@ export function Workbench() {
   /** Closes the handoffs the sender confirmed, the hook showed, or the clock ran out on. */
   const settleHandoffs = (now: number) => {
     for (const handoff of [...handoffs.values()]) {
-      const turn = activityOf.get(handoff.paneId)
-      const outcome = handoffOutcome(
-        handoff,
-        { ...(handoff.acked ? { acked: true } : {}), ...(handoff.failed !== undefined ? { failed: true } : {}), ...(turn?.state === "busy" ? { turnBeganAt: turn.at } : {}) },
-        now,
-      )
+      const outcome = handoffOutcome(handoff, { ...(handoff.acked ? { acked: true } : {}), ...(handoff.failed !== undefined ? { failed: true } : {}) }, now)
       if (outcome === "wait") continue
       if (outcome === "fallback") {
         fallBackToTyping(handoff, handoff.failed || "nessuna conferma dal mittente")
         continue
       }
       handoffs.delete(handoff.id)
+      closedHandoffs.set(handoff.id, "confermata")
       const request = openRequests.get(handoff.id)
       if (request) {
         request.acked = true
         saveRequests()
       }
       appendLine(handoff.paneId, t("note.viaNativeAck"), "note")
+      if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaNativeAck"), "note")
     }
   }
 
@@ -1632,7 +1637,12 @@ export function Workbench() {
   const listNativeSessions = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>): Promise<NativeSession[] | undefined> => {
     const now = Date.now()
     if (nativeList && now - nativeList.at < NATIVE_LIST_TTL_MS) return nativeList.sessions
-    const listing = host.run("claude", ["agents", "--json"], project()?.root)
+    // Not `host.run`: that door is git-only by design. The live test of S70
+    // found every claude→claude message falling back on "the CLI does not list"
+    // because of it, so the listing has a door of its own.
+    if (!host.claudeAgents) return undefined
+    const listing = host
+      .claudeAgents(project()?.root)
       .then((result) => (result.code === 0 ? parseNativeSessions(result.stdout) : undefined))
       .catch(() => undefined)
     const late = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), NATIVE_LIST_TIMEOUT_MS))
@@ -1642,6 +1652,16 @@ export function Workbench() {
   }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
   const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
+  /**
+   * Replies to natively delivered requests, kept as files until the caller is
+   * free. On the typed route the caller is already blocked in `ade-msg ask`
+   * when the answer lands; on the native route it delivered the request itself
+   * and reaches `ade-msg wait` a few tool calls later. The live test saw the
+   * answer taken back after three seconds, the wait run its 110 s out empty,
+   * and the answer typed only then. So: claimed by the wait whenever it starts,
+   * taken back and typed only once the caller's turn has ended.
+   */
+  const lateReplies: { ref: string; callerId: string; from: string; sender: MailPane | undefined }[] = []
 
   /*
    * How much mail is waiting for each pane, for the badge in its header.
@@ -2173,6 +2193,22 @@ export function Workbench() {
       else await host.mailboxReceipt(id, "errore: messaggio non valido").catch(() => {})
     }
 
+    for (const item of [...lateReplies]) {
+      if (!running.has(item.callerId)) {
+        lateReplies.splice(lateReplies.indexOf(item), 1)
+      } else if (await freeNow(host, item.callerId)) {
+        lateReplies.splice(lateReplies.indexOf(item), 1)
+        const text = await host.mailboxResultReclaim?.(item.ref).catch(() => null)
+        if (text != null) {
+          heldLines.push({
+            paneId: item.callerId,
+            text: formatLateReply(item.ref, text, item.sender),
+            inbox: { id: item.ref, kind: "reply", from: item.from },
+          })
+        }
+      }
+    }
+
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
@@ -2201,6 +2237,13 @@ export function Workbench() {
     await watchFolders(host, now)
     await readDecisions(host, now)
     for (const request of [...openRequests.values()]) {
+      /*
+       * Still in the sender's hands: nothing was typed, so there is nothing to
+       * re-ring, and a reminder now would only open a turn in the target
+       * before the message — the live test saw that reminder pass for a
+       * delivery. The clock in `settleHandoffs` is what happens next.
+       */
+      if (handoffs.has(request.id)) continue
       const state = stateOf(request, now)
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
       if (state === "sessione chiusa") {
@@ -2267,6 +2310,17 @@ export function Workbench() {
         await answer("errore: questa versione di ADE non accetta risposte")
         return true
       }
+      /*
+       * The answer is the one certain witness of delivery: only a session
+       * that has the request can answer it. A sender that forgot its
+       * `ade-msg delivered` no longer costs the target a repeat (the live
+       * test's scenario E).
+       */
+      const handoff = handoffs.get(message.ref)
+      if (handoff && request && handoff.paneId === message.from) {
+        handoff.acked = true
+        settleHandoffs(Date.now())
+      }
       await settle(host, message.ref, message.text)
       const caller = request ? panes.find((pane) => pane.id === request.from) : undefined
       if (sender) appendLine(sender.id, (caller ? t("note.replySentTo", caller.title, message.ref) : t("note.replySent", message.ref)), "note")
@@ -2275,6 +2329,10 @@ export function Workbench() {
         `ok: risposta consegnata${caller ? ` a "${caller.title}"` : ""}` +
           (request?.autoClose ? " — se non ha lavoro da integrare questa sessione ora si chiude" : " — la sessione resta aperta per i seguiti"),
       )
+      if (request?.via === "nativa" && caller) {
+        lateReplies.push({ ref: message.ref, callerId: caller.id, from: message.from, sender })
+        return true
+      }
       // Nobody claimed it: the caller stopped waiting, so it is typed in, the way a background subagent reports back.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(message.ref).then((text) => {
@@ -2331,7 +2389,14 @@ export function Workbench() {
     if (message.kind === "delivered") {
       const handoff = handoffs.get(message.ref)
       if (!handoff) {
-        await answer(`errore: nessuna consegna nativa in attesa con id ${message.ref}`)
+        const closed = closedHandoffs.get(message.ref)
+        await answer(
+          closed === "confermata"
+            ? `ok: consegna ${message.ref} già confermata dal turno del destinatario${message.ok ? "" : "; nessun doppione"}`
+            : closed === "digitata"
+              ? `ok: consegna ${message.ref} già digitata da ADE${message.ok ? ": il destinatario può averla due volte" : ""}`
+              : `errore: nessuna consegna nativa in attesa con id ${message.ref}`,
+        )
         return true
       }
       if (!message.from || handoff.from !== message.from) {
@@ -2890,6 +2955,7 @@ export function Workbench() {
     // Typed: say so, and why the CLI's channel was not used, so a message that
     // went missing can be looked for where it actually went.
     appendLine(target.pane.id, t("note.viaTyped", route.reason), "note")
+    if (sender && sender.id !== target.pane.id && running.has(sender.id)) appendLine(sender.id, t("note.viaTyped", route.reason), "note")
     if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.pane.title, message.text), "note")
     // A held message's sender was answered when it was held, and has stopped listening since.
     if (held.delete(id)) return true
