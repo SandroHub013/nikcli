@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
+import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
@@ -41,12 +42,20 @@ export function DecisionsPane(props: {
       note={props.hub.draft(decision.k).note}
       busy={props.hub.busy(decision.k)}
       problem={props.hub.problem(decision.k)}
-      submitLabel={t("decisions.submit")}
+      control={submitControl({
+        recipient: props.hub.recipient(),
+        sessions: props.hub.sessions(),
+        inline: props.hub.inlineRecipient(),
+        busy: props.hub.busy(decision.k),
+        label: t("decisions.submit"),
+      })}
+      onInline={(id) => props.hub.setInlineRecipient(id)}
+      onRecord={() => void props.hub.submit(decision, "record")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
       onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
-      onSubmit={() => void props.hub.answer(decision)}
+      onSubmit={() => void props.hub.submit(decision, "primary")}
       onDefer={(until) => void props.hub.defer(decision, until)}
     />
   )

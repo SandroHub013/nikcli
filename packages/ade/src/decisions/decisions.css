@@ -547,3 +547,33 @@ button[data-slot="decision-row"]:hover {
 [data-slot="decisions-recipient-confirm"] span {
   flex: 1 1 12rem;
 }
+
+/* «· N in coda» on the bar button: answers recorded that nobody has received. */
+[data-slot="badge-queued"][data-tone="warn"] {
+  color: var(--ade-warning, #b7791f);
+  font-weight: var(--ade-weight-semibold);
+}
+
+/* The inline "who receives" select, when the answer would otherwise go nowhere. */
+[data-slot="recipient-inline-wrap"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+[data-slot="recipient-inline-wrap"] [data-tone="warn"] {
+  color: var(--ade-warning, #b7791f);
+}
+
+[data-slot="recipient-inline"] {
+  align-self: flex-start;
+  max-width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ade-text);
+  background: var(--ade-surface, transparent);
+  border: 1px solid var(--ade-warning, #b7791f);
+  border-radius: 6px;
+  padding: 2px 6px;
+}

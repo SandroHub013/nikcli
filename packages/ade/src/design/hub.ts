@@ -1,5 +1,6 @@
 import { createSignal, type Accessor } from "solid-js"
 import { answerEvent } from "./answer"
+import { runSubmit, submitControl, submitSteps } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
@@ -33,6 +34,14 @@ export interface DesignHub {
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
+  /** The session picked in a card's own "who receives" select, not yet chosen. */
+  inlineRecipient: () => string | undefined
+  setInlineRecipient: (id: string | undefined) => void
+  /**
+   * The card's buttons and Enter: `primary` sends, first choosing the session
+   * picked inline when nobody receives yet; `record` writes without sending.
+   */
+  submit: (proposal: DesignProposal, press: "primary" | "record") => Promise<boolean>
   fullPreview: Accessor<FullPreviewState>
   openFullPreview: (variant: DesignVariant, title?: string) => void
   closeFullPreview: () => void
@@ -50,6 +59,7 @@ export function createDesignHub(deps: {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
+  const [inline, setInline] = createSignal<string>()
   const [fullPreview, setFullPreview] = createSignal<FullPreviewState>({ open: false })
 
   const setProblem = (k: string, text: string | undefined) =>
@@ -85,6 +95,20 @@ export function createDesignHub(deps: {
       return next
     })
 
+  const answer = (proposal: DesignProposal): Promise<boolean> => {
+    const current = draft(proposal.k)
+    const event = answerEvent(proposal, current.picked, current.note, new Date())
+    if (typeof event === "string") {
+      setProblem(proposal.k, event)
+      return Promise.resolve(false)
+    }
+    return write(proposal.k, async () => {
+      await deps.register.append(event)
+      clearDraft(proposal.k)
+      deps.onAnswered(proposal, event)
+    })
+  }
+
   return {
     register: deps.register,
     projectRoot: deps.projectRoot,
@@ -99,17 +123,24 @@ export function createDesignHub(deps: {
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
-    answer: (proposal) => {
-      const current = draft(proposal.k)
-      const event = answerEvent(proposal, current.picked, current.note, new Date())
-      if (typeof event === "string") {
-        setProblem(proposal.k, event)
-        return Promise.resolve(false)
-      }
-      return write(proposal.k, async () => {
-        await deps.register.append(event)
-        clearDraft(proposal.k)
-        deps.onAnswered(proposal, event)
+    answer,
+    inlineRecipient: inline,
+    setInlineRecipient: setInline,
+    submit: (proposal, press) => {
+      const control = submitControl({
+        recipient: deps.recipient(),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(proposal.k),
+        label: "",
+      })
+      const steps = submitSteps(control, deps.sessions(), inline(), press)
+      return runSubmit(steps, {
+        choose: (id) => {
+          deps.choose(id)
+          setInline(undefined)
+        },
+        answer: () => answer(proposal),
       })
     },
     fullPreview,

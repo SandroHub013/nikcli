@@ -285,6 +285,7 @@ import { MODEL_EXTENSIONS } from "../model3d/model"
 import { paneShowing, routeForFile } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
+import { queuedBadge } from "../decisions/card"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
 import {
   deliveryLine,
@@ -306,6 +307,7 @@ import { createDecisionsHub } from "../decisions/hub"
 import { createDecisionsRegister } from "../decisions/register"
 import { decisionsPath } from "../decisions/store"
 import { countLabel as designCountLabel } from "../design/answer"
+import { queuedBadge as designQueuedBadge } from "../design/card"
 import { DesignSheet } from "../design/design-sheet"
 import {
   OUTBOX_KEY as DESIGN_OUTBOX_KEY,
@@ -1319,6 +1321,13 @@ export function Workbench() {
 
   const [designOpen, setDesignOpen] = createSignal(false)
   const designWaiting = createMemo(() => designRegister.state()?.proposals.filter((proposal) => proposal.status === "aperta").length ?? 0)
+  // Answers recorded but not delivered: the bar says so, even with nothing left open.
+  const decisionsQueued = createMemo(
+    () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda").length ?? 0,
+  )
+  const designQueued = createMemo(
+    () => designRegister.state()?.proposals.filter((proposal) => proposal.status === "risposta" && designHub.delivery(proposal).state === "in coda").length ?? 0,
+  )
 
   onMount(() => {
     onCleanup(decisionsRegister.watch())
@@ -6074,21 +6083,26 @@ export function Workbench() {
           </svg>
         </button>
         {/* Decisions waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={decisionsWaiting() > 0}>
+        <Show when={decisionsWaiting() > 0 || decisionsQueued() > 0}>
           <button
             type="button"
             data-slot="decisions-badge"
+            data-queued={decisionsQueued() > 0 ? String(decisionsQueued()) : undefined}
             onClick={() => setDecisionsOpen(true)}
             title={t("decisions.waiting")}
           >
             {countLabel(decisionsWaiting())}
+            <Show when={queuedBadge(decisionsQueued())}>
+              {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
+            </Show>
           </button>
         </Show>
         {/* Design proposals waiting for the user. Hidden at zero; opens only when pressed. */}
-        <Show when={designWaiting() > 0}>
+        <Show when={designWaiting() > 0 || designQueued() > 0}>
           <button
             type="button"
             data-slot="design-badge"
+            data-queued={designQueued() > 0 ? String(designQueued()) : undefined}
             onClick={() => setDesignOpen(true)}
             title={t("design.waiting")}
             aria-label={designCountLabel(designWaiting())}
@@ -6101,6 +6115,9 @@ export function Workbench() {
             </span>
             <span data-slot="design-badge-count">{designWaiting()}</span>
             <span data-slot="design-badge-label">{t("design.title")}</span>
+            <Show when={designQueuedBadge(designQueued())}>
+              {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
+            </Show>
           </button>
         </Show>
         </div>

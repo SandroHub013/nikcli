@@ -2,6 +2,7 @@ import { For, Show } from "solid-js"
 import { formatDay } from "./answer"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
+import type { SubmitControl } from "./card"
 import type { DesignVariant } from "./log"
 import { t } from "../i18n"
 
@@ -11,13 +12,19 @@ export function DesignCard(props: {
   note: string
   busy: boolean
   problem?: string
-  submitLabel: string
   recipientHint: string
   now: Date
   projectRoot?: string
   onPick: (index: number) => void
   onNote: (note: string) => void
+  /** The answer buttons, from `submitControl`. */
+  control: SubmitControl
+  /** A session picked in the inline "who receives" select. */
+  onInline: (id: string | undefined) => void
+  /** The main button: sends, choosing the inline pick first when needed. */
   onSubmit: () => void
+  /** «Registra senza inviare»: writes the answer, leaves it queued. */
+  onRecord: () => void
   onOpenFullPreview?: (variant: DesignVariant) => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
@@ -106,16 +113,35 @@ export function DesignCard(props: {
       </Show>
 
       <div data-slot="design-actions">
-        <button
-          type="button"
-          data-slot="design-submit"
-          disabled={props.busy}
-          onClick={() => props.onSubmit()}
-        >
-          {props.submitLabel}
+        <button type="button" data-slot="design-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
+          {props.control.label}
         </button>
-        <span data-slot="design-hint">{props.recipientHint}</span>
+        <Show when={props.control.recordOnly}>
+          <button type="button" data-slot="design-ghost" data-action="record" disabled={props.busy} onClick={() => props.onRecord()}>
+            {t("design.submit.record")}
+          </button>
+        </Show>
+        <Show when={!props.control.options}>
+          <span data-slot="design-hint">{props.recipientHint}</span>
+        </Show>
       </div>
+
+      <Show when={props.control.options}>
+        {(options) => (
+          <label data-slot="recipient-inline-wrap">
+            <span data-slot="design-hint" data-tone="warn">{t("design.recipient.inline")}</span>
+            <select data-slot="recipient-inline" onChange={(event) => props.onInline(event.currentTarget.value || undefined)}>
+              <For each={options()}>
+                {(option) => (
+                  <option value={option.value} selected={option.selected}>
+                    {option.label}
+                  </option>
+                )}
+              </For>
+            </select>
+          </label>
+        )}
+      </Show>
     </section>
   )
 }

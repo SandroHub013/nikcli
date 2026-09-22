@@ -569,6 +569,10 @@ export const it = {
   "decisions.hint.ready": (title: string) => `→ ${title}, come messaggio`,
   "decisions.hint.idle": (title: string) => `→ in coda: «${title}» non è in esecuzione`,
   "decisions.hint.none": "→ in coda: scegli chi riceve le risposte nella vista completa",
+  "decisions.recipient.inline": "Scegli chi riceve questa risposta: senza, non la legge nessuno.",
+  "decisions.submit.choose": "Scegli e invia",
+  "decisions.submit.record": "Registra senza inviare",
+  "decisions.badge.queued": (count: number) => `· ${count} in coda`,
 
   "design.title": "Design",
   "design.openCount": (count: number) => `${count} ${count === 1 ? "aperta" : "aperte"}`,
@@ -615,6 +619,10 @@ export const it = {
   "design.hint.ready": (title: string) => `→ ${title}, come messaggio`,
   "design.hint.idle": (title: string) => `→ in coda: «${title}» non è in esecuzione`,
   "design.hint.none": "→ in coda: scegli chi riceve le risposte nella vista completa",
+  "design.recipient.inline": "Scegli chi riceve questa risposta: senza, non la legge nessuno.",
+  "design.submit.choose": "Scegli e invia",
+  "design.submit.record": "Registra senza inviare",
+  "design.badge.queued": (count: number) => `· ${count} in coda`,
 
   // Editor, review, plugins, screenshots
   "editor.truncatedSave": "Il file è troncato in lettura: il salvataggio distruggerebbe i dati non caricati.",

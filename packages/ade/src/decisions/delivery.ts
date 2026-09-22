@@ -107,6 +107,17 @@ export function recipientOptions(
 }
 
 /**
+ * Whether the answer button can send, or has to ask who receives first.
+ *
+ * With nobody chosen, or a chosen session that is not running, an answer
+ * recorded as it is would wait in the outbox with nobody to read it. So the
+ * card asks for a recipient right there instead of recording in silence.
+ */
+export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
+  return recipient.state === "pronta" ? "invia" : "scegli"
+}
+
+/**
  * What a change in the "Risposte a" selector does. Arrow keys on a closed
  * select change it one entry at a time, so a change that would send queued
  * answers somewhere waits for a confirmation; choosing nobody, or a change

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { submitGate } from "./delivery"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
 import { bucketProposals, describeProblems, foldProposals, nextDesignKey, resolvedMessage } from "./state"
 import { appendDesignEvent, designPath, loadDesign, type DesignIo } from "./store"
@@ -163,5 +164,13 @@ describe("the design store", () => {
     const after = await loadDesign(io, "C:\\project\\.ade\\design.jsonl")
     expect(after.events.length).toBe(1)
     expect(after.state.proposals[0]!.k).toBe("DS1")
+  })
+})
+
+describe("the answer button's gate", () => {
+  test("sends only to a session that is ready; otherwise it asks who receives", () => {
+    expect(submitGate({ state: "pronta", id: "p1", title: "Master" })).toBe("invia")
+    expect(submitGate({ state: "non scelta" })).toBe("scegli")
+    expect(submitGate({ state: "non attiva", id: "p2", title: "fable" })).toBe("scegli")
   })
 })

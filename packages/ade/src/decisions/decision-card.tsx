@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js"
 import { deferFromInput, deferPresets, formatDay, localDay } from "./answer"
 import type { Decision } from "./state"
+import type { SubmitControl } from "./card"
 import { t } from "../i18n"
 
 /**
@@ -18,13 +19,19 @@ export function DecisionCard(props: {
   note: string
   busy: boolean
   problem?: string
-  submitLabel: string
   /** Who the answer goes to, said under the buttons. */
   recipientHint: string
   now: Date
   onPick: (index: number) => void
   onNote: (note: string) => void
+  /** The answer buttons, from `submitControl`. */
+  control: SubmitControl
+  /** A session picked in the inline "who receives" select. */
+  onInline: (id: string | undefined) => void
+  /** The main button: sends, choosing the inline pick first when needed. */
   onSubmit: () => void
+  /** «Registra senza inviare»: writes the answer, leaves it queued. */
+  onRecord: () => void
   onDefer: (until: string) => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
@@ -88,9 +95,14 @@ export function DecisionCard(props: {
       </Show>
 
       <div data-slot="decision-actions">
-        <button type="button" data-slot="decision-submit" disabled={props.busy} onClick={() => props.onSubmit()}>
-          {props.submitLabel}
+        <button type="button" data-slot="decision-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
+          {props.control.label}
         </button>
+        <Show when={props.control.recordOnly}>
+          <button type="button" data-slot="decision-ghost" data-action="record" disabled={props.busy} onClick={() => props.onRecord()}>
+            {t("decisions.submit.record")}
+          </button>
+        </Show>
         <button
           type="button"
           data-slot="decision-ghost"
@@ -100,8 +112,27 @@ export function DecisionCard(props: {
         >
           {t("decisions.defer.open")}
         </button>
-        <span data-slot="decision-hint">{props.recipientHint}</span>
+        <Show when={!props.control.options}>
+          <span data-slot="decision-hint">{props.recipientHint}</span>
+        </Show>
       </div>
+
+      <Show when={props.control.options}>
+        {(options) => (
+          <label data-slot="recipient-inline-wrap">
+            <span data-slot="decision-hint" data-tone="warn">{t("decisions.recipient.inline")}</span>
+            <select data-slot="recipient-inline" onChange={(event) => props.onInline(event.currentTarget.value || undefined)}>
+              <For each={options()}>
+                {(option) => (
+                  <option value={option.value} selected={option.selected}>
+                    {option.label}
+                  </option>
+                )}
+              </For>
+            </select>
+          </label>
+        )}
+      </Show>
 
       <Show when={deferring()}>
         <div data-slot="decision-defer" role="group" aria-label={t("decisions.defer.until")}>

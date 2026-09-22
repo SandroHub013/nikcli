@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { sheetKey } from "./answer"
+import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
@@ -38,10 +39,10 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     surface?.focus()
   })
 
-  const submit = async () => {
+  const submit = async (press: "primary" | "record" = "primary") => {
     const proposal = current()
     if (!proposal) return
-    if (await props.hub.answer(proposal)) surface?.focus()
+    if (await props.hub.submit(proposal, press)) surface?.focus()
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -125,7 +126,15 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                   props.hub.problem(proposal.k) ??
                   (needChoice() === proposal.k ? t("design.sheet.needChoice") : undefined)
                 }
-                submitLabel={open().length > 1 ? t("design.submitNext") : t("design.submit")}
+                control={submitControl({
+                  recipient: props.hub.recipient(),
+                  sessions: props.hub.sessions(),
+                  inline: props.hub.inlineRecipient(),
+                  busy: props.hub.busy(proposal.k),
+                  label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                })}
+                onInline={(id) => props.hub.setInlineRecipient(id)}
+                onRecord={() => void submit("record")}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={new Date()}
                 projectRoot={root()}

@@ -564,6 +564,10 @@ export const en: Messages = {
   "decisions.hint.ready": (title) => `→ ${title}, as a message`,
   "decisions.hint.idle": (title) => `→ queued: “${title}” isn't running`,
   "decisions.hint.none": "→ queued: choose who gets answers in the full view",
+  "decisions.recipient.inline": "Choose who receives this answer: without one, nobody reads it.",
+  "decisions.submit.choose": "Choose and send",
+  "decisions.submit.record": "Record without sending",
+  "decisions.badge.queued": (count) => `· ${count} queued`,
 
   "design.title": "Design",
   "design.openCount": (count) => `${count} open`,
@@ -610,6 +614,10 @@ export const en: Messages = {
   "design.hint.ready": (title) => `→ ${title}, as a message`,
   "design.hint.idle": (title) => `→ queued: “${title}” isn't running`,
   "design.hint.none": "→ queued: choose who gets answers in the full view",
+  "design.recipient.inline": "Choose who receives this answer: without one, nobody reads it.",
+  "design.submit.choose": "Choose and send",
+  "design.submit.record": "Record without sending",
+  "design.badge.queued": (count) => `· ${count} queued`,
 
   // Editor, review, plugins, screenshots
   "editor.truncatedSave": "The file was only partly loaded, so saving would destroy the part that wasn't read.",

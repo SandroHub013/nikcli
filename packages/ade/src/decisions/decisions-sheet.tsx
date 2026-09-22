@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { sheetKey } from "./answer"
+import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import type { RecipientStatus } from "./delivery"
 import type { DecisionsHub } from "./hub"
@@ -47,10 +48,10 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
     surface?.focus()
   })
 
-  const submit = async () => {
+  const submit = async (press: "primary" | "record" = "primary") => {
     const decision = current()
     if (!decision) return
-    if (await props.hub.answer(decision)) surface?.focus()
+    if (await props.hub.submit(decision, press)) surface?.focus()
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -123,7 +124,15 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
                       : t("decisions.sheet.needText")
                     : undefined)
                 }
-                submitLabel={open().length > 1 ? t("decisions.submitNext") : t("decisions.submit")}
+                control={submitControl({
+                  recipient: props.hub.recipient(),
+                  sessions: props.hub.sessions(),
+                  inline: props.hub.inlineRecipient(),
+                  busy: props.hub.busy(decision.k),
+                  label: open().length > 1 ? t("decisions.submitNext") : t("decisions.submit"),
+                })}
+                onInline={(id) => props.hub.setInlineRecipient(id)}
+                onRecord={() => void submit("record")}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={props.hub.register.now()}
                 onPick={(picked) => pick(decision.k, picked)}

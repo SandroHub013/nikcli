@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { queuedBadge, submitControl } from "./card"
+import { createDecisionsHub } from "./hub"
+import type { DecisionsRegister } from "./register"
+import type { RecipientStatus } from "./delivery"
+import type { Decision } from "./state"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
 import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, recipientOptions, resolveRecipient } from "./delivery"
 import type { DecisionEvent } from "./log"
@@ -165,5 +170,105 @@ describe("the outbox", () => {
     const { decisions } = foldDecisions(events)
     expect(deliveryState([], path, decisions[0]!)).toEqual({ state: "fuori da ADE" })
     expect(parseOutbox("{rotto")).toEqual([])
+  })
+})
+
+/*
+ * The card's answer buttons (S75 point 1). The spec asks for these as UI
+ * tests; Solid components are not rendered in `bun test` on this repo, so the
+ * card only draws `submitControl` and the hub runs `submitSteps`, and the
+ * same scenarios are asserted here against those functions.
+ */
+describe("answering with nobody to receive", () => {
+  const sessions = [
+    { id: "p1", title: "Master", project: "nikcli", running: true },
+    { id: "p2", title: "fable", project: "nikcli", running: false },
+  ]
+  const decision: Decision = {
+    k: "D30",
+    title: "Dove va il registro",
+    context: "",
+    options: [{ label: "A" }, { label: "B" }],
+    unlocks: "",
+    order: 0,
+    raisedBy: "fable",
+    openedAt: "2026-09-23T10:00:00Z",
+    status: "aperta",
+    history: [],
+  } as unknown as Decision
+
+  const setup = (recipient: () => RecipientStatus) => {
+    const calls: string[] = []
+    const register = {
+      path: () => "C:\p\.ade\decisions.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      now: () => new Date(),
+      refresh: async () => {},
+      append: async (event: DecisionEvent) => {
+        calls.push(`answer:${event.type}`)
+      },
+      watch: () => () => {},
+    } as unknown as DecisionsRegister
+    const hub = createDecisionsHub({
+      register,
+      recipient,
+      sessions: () => sessions,
+      choose: (id) => calls.push(`choose:${id}`),
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    hub.setDraft(decision.k, { picked: 1, note: "" })
+    const control = () =>
+      submitControl({ recipient: recipient(), sessions, inline: hub.inlineRecipient(), busy: false, label: "Registra" })
+    return { hub, calls, control }
+  }
+
+  test("the card shows the inline select, «Scegli e invia» disabled, and Enter records nothing", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "non scelta" }))
+    expect(control().options?.map((option) => option.value)).toEqual(["", "p1", "p2"])
+    expect(control().label).toBe("Scegli e invia")
+    expect(control().disabled).toBe(true)
+    expect(control().recordOnly).toBe(true)
+    // Enter, with a variant picked: the sheet turns it into the main button's press.
+    expect(sheetKey({ key: "Enter" }, 2, false, true)).toEqual({ kind: "submit" })
+    expect(await hub.submit(decision, "primary")).toBe(false)
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, true, true)).toEqual({ kind: "submit" })
+    expect(await hub.submit(decision, "primary")).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  test("a stopped session picked inline does not enable it", () => {
+    const { hub, control } = setup(() => ({ state: "non scelta" }))
+    hub.setInlineRecipient("p2")
+    expect(control().disabled).toBe(true)
+  })
+
+  test("with a running session picked, the button chooses it and then answers, in that order", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "non scelta" }))
+    hub.setInlineRecipient("p1")
+    expect(control().disabled).toBe(false)
+    expect(control().options?.find((option) => option.selected)?.value).toBe("p1")
+    expect(await hub.submit(decision, "primary")).toBe(true)
+    expect(calls).toEqual(["choose:p1", "answer:risposta"])
+  })
+
+  test("«Registra senza inviare» answers without choosing", async () => {
+    const { hub, calls } = setup(() => ({ state: "non attiva", id: "p2", title: "fable" }))
+    expect(await hub.submit(decision, "record")).toBe(true)
+    expect(calls).toEqual(["answer:risposta"])
+  })
+
+  test("with a ready recipient the card is today's: no select, no second button", async () => {
+    const { hub, calls, control } = setup(() => ({ state: "pronta", id: "p1", title: "Master" }))
+    expect(control()).toEqual({ gate: "invia", label: "Registra", disabled: false, recordOnly: false })
+    expect(await hub.submit(decision, "primary")).toBe(true)
+    expect(calls).toEqual(["answer:risposta"])
+  })
+
+  test("the bar button says how many answers wait", () => {
+    expect(queuedBadge(0)).toBeUndefined()
+    expect(queuedBadge(2)).toBe("· 2 in coda")
   })
 })

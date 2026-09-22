@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { submitGate } from "./delivery"
 import { resetLocaleForTests } from "../i18n"
 import { parseDecisionLog, serializeDecisionEvent, toEvent, type DecisionEvent } from "./log"
 import { bucketDecisions, describeProblems, foldDecisions, nextDecisionKey, resolvedMessage } from "./state"
@@ -270,5 +271,13 @@ describe("the store", () => {
     await expect(appendDecisionEvent(failing, path, opened("D1"))).rejects.toThrow("fuori dal progetto")
     const huge: DecisionsIo = { ...failing, readTextFile: async () => ({ text: "x", truncated: true }) }
     await expect(loadDecisions(huge, path)).rejects.toThrow("supera 8 MB")
+  })
+})
+
+describe("the answer button's gate", () => {
+  test("sends only to a session that is ready; otherwise it asks who receives", () => {
+    expect(submitGate({ state: "pronta", id: "p1", title: "Master" })).toBe("invia")
+    expect(submitGate({ state: "non scelta" })).toBe("scegli")
+    expect(submitGate({ state: "non attiva", id: "p2", title: "fable" })).toBe("scegli")
   })
 })

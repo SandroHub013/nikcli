@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { formatDay, formatMoment } from "./answer"
+import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import { recipientHint } from "./design-sheet"
@@ -40,13 +41,21 @@ export function DesignPane(props: {
       note={props.hub.draft(proposal.k).note}
       busy={props.hub.busy(proposal.k)}
       problem={props.hub.problem(proposal.k)}
-      submitLabel={t("design.submit")}
+      control={submitControl({
+        recipient: props.hub.recipient(),
+        sessions: props.hub.sessions(),
+        inline: props.hub.inlineRecipient(),
+        busy: props.hub.busy(proposal.k),
+        label: t("design.submit"),
+      })}
+      onInline={(id) => props.hub.setInlineRecipient(id)}
+      onRecord={() => void props.hub.submit(proposal, "record")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
       onPick={(picked) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), picked })}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
-      onSubmit={() => void props.hub.answer(proposal)}
+      onSubmit={() => void props.hub.submit(proposal, "primary")}
       onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
     />
   )
