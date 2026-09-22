@@ -111,13 +111,82 @@ describe("record/sensitive", () => {
     expect(root.hasAttribute(RECORDING_ATTRIBUTE)).toBe(false)
   })
 
-  test("the stylesheet covers every kind of secret the selector names", () => {
+  test("the stylesheet and the selector are the same list, in both directions", () => {
+    /*
+     * One-way was not enough: a cover written straight into the stylesheet and
+     * never added to `SENSITIVE_PARTS` used to pass in silence, which is
+     * exactly what someone patching a leak in a hurry would do. Each of the
+     * three blocks must name every part and nothing else.
+     */
     const css = readFileSync(join(src, "index.css"), "utf8")
-    for (const part of SENSITIVE_PARTS) {
-      expect([part, css.includes(`html[${RECORDING_ATTRIBUTE}] ${part}`)]).toEqual([part, true])
-      // Selecting a covered field must not paint its text back.
-      expect([part, css.includes(`html[${RECORDING_ATTRIBUTE}] ${part}::selection`)]).toEqual([part, true])
+    const prefix = `html[${RECORDING_ATTRIBUTE}] `
+    // Each block: the selector list before the brace, one selector per line.
+    const blocks = css
+      .split("}")
+      .map((block) => block.slice(0, block.indexOf("{")))
+      // Drop the comment that sits between the previous rule and this one.
+      .map((header) => header.slice(header.includes("*/") ? header.lastIndexOf("*/") + 2 : 0).trim())
+      .filter((header) => header.startsWith(prefix))
+      .map((header) => header.split(new RegExp(",\\r?\\n")).map((line) => line.trim().slice(prefix.length)))
+    // The last block covers the children of a zone; it is not a part.
+    const extra = ["[data-sensitive] *", `[${SECRET_ZONE_ATTRIBUTE}] *`]
+    expect(blocks.length).toBe(4)
+    for (const written of blocks) {
+      const suffix = written[0].endsWith("::selection") ? "::selection" : written[0].endsWith("::placeholder") ? "::placeholder" : ""
+      const bare = written.map((selector) => selector.slice(0, selector.length - suffix.length))
+      if (bare.join() === extra.join()) continue
+      for (const selector of bare) {
+        expect([suffix, selector, SENSITIVE_PARTS.includes(selector)]).toEqual([suffix, selector, true])
+      }
+      for (const part of SENSITIVE_PARTS) {
+        expect([suffix, part, bare.includes(part)]).toEqual([suffix, part, true])
+      }
     }
+  })
+
+  test("una chiave lunga non sfugge solo perche non sta in un input", () => {
+    /*
+     * A PEM key, a service-account JSON or an SSH key is multi-line, so the
+     * box it is pasted into is a textarea or a contenteditable. Nets 2 and 3
+     * were written with an `input` prefix and looked straight past them.
+     */
+    document.body.innerHTML = `
+      <textarea id="api-key"></textarea>
+      <div contenteditable id="token"></div>
+      <select name="secret-store"></select>
+      <textarea id="note"></textarea>`
+    const found = [...document.querySelectorAll(SENSITIVE_SELECTOR)].map(
+      (element) => element.id || element.getAttribute("name"),
+    )
+    expect(found).toEqual(["api-key", "token", "secret-store"])
+    document.body.innerHTML = ""
+  })
+
+  test("i nomi che si scrivono per primi contano come chiave", () => {
+    /*
+     * `pat`, `bearer`, `passphrase`, `dsn` and `credential` are what someone
+     * types before they think of the word «token», and in Solid a field often
+     * has no id at all, so the name is on the aria-label or the placeholder.
+     * The prefixes are how a real key announces itself in an empty box.
+     */
+    document.body.innerHTML = `
+      <input id="pat">
+      <input id="bearer">
+      <input name="passphrase">
+      <input id="db-dsn">
+      <input id="openrouter-credential">
+      <input aria-label="API key">
+      <input data-testid="api-token">
+      <input placeholder="ghp_…">
+      <input placeholder="Incolla la chiave">
+      <input id="path-to-project">
+      <input placeholder="Cerca nel progetto">`
+    const scoperti = [...document.body.querySelectorAll("input")]
+      .filter((element) => !element.matches(SENSITIVE_SELECTOR))
+      .map((element) => element.id || element.getAttribute("placeholder"))
+    // `path` must stay visible: `pat` is only looked for as a whole name.
+    expect(scoperti).toEqual(["path-to-project", "Cerca nel progetto"])
+    document.body.innerHTML = ""
   })
 
   test("il foglio di stile non copre per nome un campo solo", () => {
