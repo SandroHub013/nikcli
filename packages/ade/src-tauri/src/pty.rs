@@ -1183,6 +1183,25 @@ pub async fn pty_which(command: String) -> Option<String> {
     which_on_path(&command)
 }
 
+/// Whether CreateProcess would accept this file as a program.
+///
+/// On Windows an extensionless file on PATH is not a program, it is the shell
+/// shim an installer left for Git Bash, and `CreateProcessW` refuses it with
+/// "not a valid Win32 application" (193). Answering with it reports the agent
+/// installed and fails every launch — which is what grok did on this machine,
+/// where `~/bin/grok` (a `#!/usr/bin/env bash` shim) sits on PATH ahead of
+/// `~/.grok/bin/grok.exe`. A PE image is recognised by its first two bytes,
+/// `MZ`, which is the whole test: a script with the execute bit has neither.
+#[cfg(windows)]
+fn runnable_on_windows(candidate: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(candidate) else {
+        return false;
+    };
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic).is_ok() && magic == *b"MZ"
+}
+
 /// Shared with `serve`, which has to find the same `nikcli` this module would
 /// start — on Windows that means honouring PATHEXT rather than guessing `.exe`.
 pub(crate) fn which_on_path(command: &str) -> Option<String> {
@@ -1221,6 +1240,17 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
             }
         }
         let base = dir.join(command);
+        /*
+         * The bare name, on the platforms where it means a program. On Windows
+         * it is checked rather than trusted: a directory may hold nothing but a
+         * Git Bash shim under that name, and taking it is the failure this
+         * function's comment above describes.
+         */
+        #[cfg(windows)]
+        if runnable_on_windows(&base) {
+            return Some(base.to_string_lossy().into_owned());
+        }
+        #[cfg(not(windows))]
         if base.is_file() {
             return Some(base.to_string_lossy().into_owned());
         }
@@ -1240,6 +1270,28 @@ mod tests {
         assert!(!is_pipe_command("codex"));
         assert!(!is_pipe_command("powershell"));
         assert!(!is_pipe_command("claude-evil"));
+    }
+
+    /*
+     * The shim that hid grok. `~/bin/grok` is a bash script with no extension
+     * and it comes before `~/.grok/bin/grok.exe` on PATH, so the lookup
+     * answered with a file Windows cannot start: the card said "installato",
+     * the launch said "non è un'applicazione di Win32 valida".
+     */
+    #[cfg(windows)]
+    #[test]
+    fn an_extensionless_shell_script_is_not_a_program() {
+        let dir = std::env::temp_dir().join("ade-which-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("grok");
+        std::fs::write(&shim, "#!/usr/bin/env bash\nexec \"$HOME/.grok/bin/grok.exe\" \"$@\"\n").unwrap();
+        let binary = dir.join("grok.exe");
+        std::fs::write(&binary, b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00").unwrap();
+
+        assert!(!runnable_on_windows(&shim), "a shell script is not a PE image");
+        assert!(runnable_on_windows(&binary), "an .exe is");
+        assert!(!runnable_on_windows(&dir.join("nothing-here")), "a missing file is neither");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
