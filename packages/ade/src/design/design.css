@@ -542,14 +542,15 @@
   font-size: 11px;
 }
 
-/* Pane styles */
+/*
+ * The shell (index.css) lays the tile out; design keeps the two differences
+ * it was built with and says both here: the page colour as ground, and no
+ * focus line — it has never drawn one, and the shell's default would add it
+ * silently. Delete the variable to adopt the standard line.
+ */
 [data-component="design-pane"] {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--ade-bg);
-  position: relative;
-  overflow: hidden;
+  --ade-pane-ground: var(--ade-bg);
+  --ade-pane-focus: none;
 }
 
 [data-slot="design-body"] {

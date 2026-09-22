@@ -7,24 +7,8 @@
  * black rectangle, and a theme switch repaints it.
  */
 
-/* Frameless and filling its tile, like the browser and session panes beside it:
-   the grid's one-pixel gap is the only line between two tiles. */
-[data-component="model-pane"] {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  position: relative;
-  background: var(--ade-surface);
-}
-
-[data-component="model-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
-}
+/* Geometry, ground and focus line come from the shell on the cell's child
+   (index.css): this pane copies none of them. */
 
 [data-slot="model-stage"] {
   position: relative;

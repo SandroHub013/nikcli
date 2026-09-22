@@ -32,25 +32,12 @@
   --pane-status: var(--ade-text-weak);
 
   /*
-   * No border, no radius, no shadow.
-   *
-   * This card used to be a card: a hairline frame, rounded corners, a lift off
-   * the ground. Tiled six across that costs two pixels of frame and four of
-   * corner radius on every edge, and it buys nothing a terminal needs — the
-   * grid's one-pixel gap already says where one session ends and the next
-   * begins. Everything here that still draws is either information or a
-   * control; the pane's whole remaining job is to hand its height to xterm.
+   * Geometry, ground, framelessness and the focus line come from the shell on
+   * the cell's child (index.css), with every other cell's. This pane keeps
+   * only what is its own: the size container for the header's queries, and —
+   * further down — the terminal ground and the focus ring, both declared with
+   * the `--ade-pane-*` variables rather than by overriding the shell.
    */
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  background: var(--ade-surface);
-  overflow: hidden;
-  /* Children query the card's own width to decide what to drop when it gets
-     narrow — a four-column grid halves this card twice. */
   container-type: inline-size;
 }
 
@@ -97,20 +84,6 @@
 }
 [data-component="session-pane"][data-status="error"] {
   --pane-status: var(--ade-error);
-}
-
-/*
- * Focus is an outline drawn inside the pane, not a ring around it.
- *
- * A ring and a lift both need room outside the card, and there is no outside
- * any more — the next terminal starts one pixel away. `outline-offset: -1px`
- * paints the accent over the pane's own first pixel row, so the focused
- * session is findable from across the screen without costing a single column
- * or line of terminal.
- */
-[data-component="session-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
 }
 
 /* ── header ────────────────────────────────────────────────────────────────── */
@@ -328,12 +301,13 @@
 }
 
 /*
- * Revealed for every kind of pane, in one place. Each pane used to add its own
- * rule, and the video and editor panes never did: their expand and close
- * buttons stayed invisible (0.6.1). `pane-chrome.test.ts` keeps it so.
+ * Revealed by the cell, in one place: hovering or focusing the tile shows
+ * them, whichever kind of pane it holds. Each pane used to add its own rule,
+ * and the video and editor panes never did: their expand and close buttons
+ * stayed invisible (0.6.1). `pane-chrome.test.ts` keeps it so.
  */
-[data-component$="-pane"]:hover [data-slot="pane-actions"],
-[data-component$="-pane"][data-focused] [data-slot="pane-actions"],
+[data-slot="grid-cell"]:hover > [data-component] [data-slot="pane-actions"],
+[data-slot="grid-cell"][data-focused] > [data-component] [data-slot="pane-actions"],
 [data-slot="pane-actions"]:focus-within {
   opacity: 1;
 }
@@ -867,7 +841,7 @@
 
 /* ── the shell: the terminal's ground, corner to corner ── */
 [data-component="session-pane"] {
-  background: var(--ade-terminal-bg, var(--ade-sunken));
+  --ade-pane-ground: var(--ade-terminal-bg, var(--ade-sunken));
   transition: box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
@@ -878,10 +852,12 @@
 
 /*
  * Focus is a ring on the shell and a longer shadow, not a line drawn inside.
- * There is an outside again — the gutter — so the ring can sit on it.
+ * There is an outside again — the gutter — so the ring can sit on it. The
+ * shell's default line is opted out with the variable, which is the
+ * difference index.css leaves room for, rather than by overriding it.
  */
 [data-component="session-pane"][data-focused] {
-  outline: none;
+  --ade-pane-focus: none;
   box-shadow:
     0 0 0 1.5px var(--ade-accent),
     0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));

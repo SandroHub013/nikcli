@@ -72,8 +72,8 @@ describe("pane chrome", () => {
 
   test("every pane that uses the shared actions is revealed by the shared rule", () => {
     const css = read("grid/pane.css")
-    expect(css).toContain('[data-component$="-pane"]:hover [data-slot="pane-actions"]')
-    expect(css).toContain('[data-component$="-pane"][data-focused] [data-slot="pane-actions"]')
+    expect(css).toContain('[data-slot="grid-cell"]:hover > [data-component] [data-slot="pane-actions"]')
+    expect(css).toContain('[data-slot="grid-cell"][data-focused] > [data-component] [data-slot="pane-actions"]')
     for (const pane of panes) {
       const file = componentFile(pane.component)
       const source = read(file)
@@ -85,18 +85,16 @@ describe("pane chrome", () => {
 
   test("a pane that is a size container grows into its cell", () => {
     // A size container stops taking its width from its content: without
-    // `flex: 1` the video pane was 1.6px wide in ADE Test.
-    const collapsed: string[] = []
-    for (const entry of new Bun.Glob("**/*.css").scanSync(src)) {
-      const file = entry.replace(/\\/g, "/")
-      const css = readFileSync(join(src, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
-      for (const rule of css.split("}")) {
-        const selector = rule.slice(0, rule.indexOf("{")).trim().split("\n").pop() ?? ""
-        if (!/^\[data-component="[\w-]+-pane"\]$/.test(selector)) continue
-        if (/container-type:\s*(inline-)?size/.test(rule) && !/\bflex:\s*1\b/.test(rule)) collapsed.push(`${file}: ${selector}`)
-      }
-    }
-    expect(collapsed).toEqual([])
+    // `flex: 1` the video pane was 1.6px wide in ADE Test. The shell on the
+    // cell's child grants it to every pane now (S67.2), so the invariant
+    // lives with the geometry it protects instead of in each container's
+    // own copy of the rule.
+    const index = read("index.css").replace(/\/\*[\s\S]*?\*\//g, "")
+    const shell = index
+      .split("}")
+      .find((rule) => rule.slice(0, rule.indexOf("{")).trim() === '[data-slot="grid-cell"] > [data-component]')
+    expect(shell).toBeDefined()
+    expect(shell).toContain("flex: 1")
   })
 
   test("no stylesheet hides the shared actions again", () => {
