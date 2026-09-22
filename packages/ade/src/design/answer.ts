@@ -57,6 +57,16 @@ export function answerEvent(
   }
 }
 
+/**
+ * «Altro giro»: not a choice, the note says what to change. Without a note
+ * there is nothing for the author to do, so nothing is recorded.
+ */
+export function againEvent(proposal: Pick<DesignProposal, "k">, note: string, at: Date): AnsweredDesignEvent | string {
+  const words = note.trim()
+  if (!words) return t("design.again.needNote")
+  return { type: "risposta", k: proposal.k, at: at.toISOString(), by: USER, words, again: true }
+}
+
 const MONTHS_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
 const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const month = (index: number) => (locale() === "en" ? MONTHS_EN : MONTHS_IT)[index]

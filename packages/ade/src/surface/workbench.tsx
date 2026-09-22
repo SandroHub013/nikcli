@@ -1326,7 +1326,7 @@ export function Workbench() {
     () => decisionsRegister.state()?.decisions.filter((decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda").length ?? 0,
   )
   const designQueued = createMemo(
-    () => designRegister.state()?.proposals.filter((proposal) => proposal.status === "risposta" && designHub.delivery(proposal).state === "in coda").length ?? 0,
+    () => designRegister.state()?.proposals.filter((proposal) => (proposal.status === "risposta" || proposal.status === "giro") && designHub.delivery(proposal).state === "in coda").length ?? 0,
   )
 
   onMount(() => {

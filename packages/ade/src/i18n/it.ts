@@ -622,6 +622,11 @@ export const it = {
   "design.recipient.inline": "Scegli chi riceve questa risposta: senza, non la legge nessuno.",
   "design.submit.choose": "Scegli e invia",
   "design.submit.record": "Registra senza inviare",
+  "design.again": "Altro giro",
+  "design.again.needNote": "Scrivi nella nota cosa cambiare",
+  "design.section.rework": "Altro giro chiesto",
+  "design.pill.rework": "altro giro",
+  "design.round": (round: number) => `giro ${round}`,
   "design.badge.queued": (count: number) => `· ${count} in coda`,
 
   // Editor, review, plugins, screenshots
@@ -972,6 +977,9 @@ export const it = {
   "design.rule.neverOpened": (key: string) => `${key} non è mai stata aperta`,
   "design.rule.closed": (key: string) => `${key} è già chiusa`,
   "design.rule.answered": (key: string) => `${key} ha già una risposta`,
+  "design.rule.open": (key: string) => `${key} è già aperta`,
+  "design.log.again": "un altro giro dice cosa cambiare, senza scelta",
+  "design.status.giro": "altro giro",
   "design.status.aperta": "aperta",
   "design.status.risposta": "scelta",
   "design.status.chiusa": "chiusa",

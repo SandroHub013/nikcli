@@ -143,7 +143,7 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposa
   return outbox.filter((item) => {
     if (item.path !== path) return true
     const proposal = byKey.get(item.k)
-    return proposal?.status === "risposta" && proposal.answer?.at === item.answeredAt
+    return (proposal?.status === "risposta" || proposal?.status === "giro") && proposal.answer?.at === item.answeredAt
   })
 }
 

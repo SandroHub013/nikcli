@@ -699,3 +699,14 @@
     background: var(--ade-warning, #b7791f);
   }
 }
+
+/* «giro N» next to the key, from the second round on. */
+[data-slot="design-round"] {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-accent-soft);
+  color: var(--ade-accent);
+}

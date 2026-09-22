@@ -15,7 +15,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
-    buckets().answered.filter((proposal) => props.hub.delivery(proposal).state === "in coda").length
+    [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length
   const [index, setIndex] = createSignal(0)
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
@@ -135,6 +135,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 })}
                 onInline={(id) => props.hub.setInlineRecipient(id)}
                 onRecord={() => void submit("record")}
+                onAgain={() => void props.hub.again(proposal).then((done) => done && surface?.focus())}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={new Date()}
                 projectRoot={root()}

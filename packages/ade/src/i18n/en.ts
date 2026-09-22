@@ -617,6 +617,11 @@ export const en: Messages = {
   "design.recipient.inline": "Choose who receives this answer: without one, nobody reads it.",
   "design.submit.choose": "Choose and send",
   "design.submit.record": "Record without sending",
+  "design.again": "Another round",
+  "design.again.needNote": "Write in the note what to change",
+  "design.section.rework": "Another round asked",
+  "design.pill.rework": "another round",
+  "design.round": (round) => `round ${round}`,
   "design.badge.queued": (count) => `· ${count} queued`,
 
   // Editor, review, plugins, screenshots
@@ -965,6 +970,9 @@ export const en: Messages = {
   "design.rule.neverOpened": (key) => `${key} was never opened`,
   "design.rule.closed": (key) => `${key} is already closed`,
   "design.rule.answered": (key) => `${key} already has an answer`,
+  "design.rule.open": (key) => `${key} is already open`,
+  "design.log.again": "another round says what to change, without a choice",
+  "design.status.giro": "another round",
   "design.status.aperta": "open",
   "design.status.risposta": "chosen",
   "design.status.chiusa": "closed",

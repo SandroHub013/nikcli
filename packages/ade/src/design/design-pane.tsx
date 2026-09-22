@@ -50,6 +50,7 @@ export function DesignPane(props: {
       })}
       onInline={(id) => props.hub.setInlineRecipient(id)}
       onRecord={() => void props.hub.submit(proposal, "record")}
+      onAgain={() => void props.hub.again(proposal)}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
@@ -113,7 +114,7 @@ export function DesignPane(props: {
         <Show when={props.hub.register.path()}>
           <DesignRecipientPicker
             hub={props.hub}
-            queued={buckets().answered.filter((proposal) => props.hub.delivery(proposal).state === "in coda").length}
+            queued={[...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length}
           />
 
           <h4 data-slot="design-section">{t("design.section.open")}</h4>
@@ -133,6 +134,27 @@ export function DesignPane(props: {
                   >
                     {card(proposal)}
                   </Show>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <Show when={buckets().rework.length > 0}>
+            <h4 data-slot="design-section">{t("design.section.rework")}</h4>
+            <div data-slot="design-list">
+              <For each={buckets().rework}>
+                {(proposal) => (
+                  <section data-slot="design-card" data-state="giro">
+                    <header data-slot="design-head">
+                      <span data-slot="design-key">{proposal.k}</span>
+                      <h3 data-slot="design-title">{proposal.title}</h3>
+                      <span data-slot="design-pill" data-tone="later">{t("design.pill.rework")}</span>
+                    </header>
+                    <div data-slot="design-answer">{proposal.answer?.words}</div>
+                    <div data-slot="design-actions">
+                      <span data-slot="design-hint">{deliveryText(props.hub, proposal, now())}</span>
+                    </div>
+                  </section>
                 )}
               </For>
             </div>

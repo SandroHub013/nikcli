@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { submitGate } from "./delivery"
+import { pruneOutbox, submitGate } from "./delivery"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
 import { bucketProposals, describeProblems, foldProposals, nextDesignKey, resolvedMessage } from "./state"
 import { appendDesignEvent, designPath, loadDesign, type DesignIo } from "./store"
@@ -172,5 +172,73 @@ describe("the answer button's gate", () => {
     expect(submitGate({ state: "pronta", id: "p1", title: "Master" })).toBe("invia")
     expect(submitGate({ state: "non scelta" })).toBe("scegli")
     expect(submitGate({ state: "non attiva", id: "p2", title: "fable" })).toBe("scegli")
+  })
+})
+
+describe("another round (S75 point 2)", () => {
+  const again = (k: string, extra: Record<string, unknown> = {}, minute = 5) =>
+    ({ type: "risposta", k, at: at(minute), by: "utente", words: "più contrasto, meno vetro", again: true, ...extra }) as unknown as DesignEvent
+  const reopened = (k: string, extra: Record<string, unknown> = {}, minute = 7) =>
+    ({ type: "riaperta", k, at: at(minute), by: "fable", ...extra }) as unknown as DesignEvent
+
+  test("again with a choice, or without words, is a line problem", () => {
+    expect(toEvent(again("DS1", { choice: "A" }))).toBe("un altro giro dice cosa cambiare, senza scelta")
+    expect(toEvent(again("DS1", { choices: ["A"] }))).toBe("un altro giro dice cosa cambiare, senza scelta")
+    expect(toEvent(again("DS1", { words: " " }))).toBe("un altro giro dice cosa cambiare, senza scelta")
+    expect(toEvent(again("DS1"))).toMatchObject({ type: "risposta", again: true })
+  })
+
+  test("a riaperta with an empty variant list is a line problem", () => {
+    expect(typeof toEvent(reopened("DS1", { variants: [] }))).toBe("string")
+    expect(toEvent(reopened("DS1"))).toMatchObject({ type: "riaperta", k: "DS1" })
+  })
+
+  test("aperta, then again: giro, out of forYou, into rework", () => {
+    const { proposals, rejected } = foldProposals([opened("DS1"), again("DS1")])
+    expect(rejected).toEqual([])
+    expect(proposals[0]!.status).toBe("giro")
+    const buckets = bucketProposals(proposals)
+    expect(buckets.forYou).toEqual([])
+    expect(buckets.rework.map((p) => p.k)).toEqual(["DS1"])
+  })
+
+  test("then riaperta with two new variants: open again, round 2, no answer", () => {
+    const variants = [
+      { name: "C", description: "", preview: ".ade/design/DS1/1.html" },
+      { name: "D", description: "", preview: ".ade/design/DS1/2.html" },
+    ]
+    const { proposals, rejected } = foldProposals([opened("DS1"), again("DS1"), reopened("DS1", { variants })])
+    expect(rejected).toEqual([])
+    const proposal = proposals[0]!
+    expect(proposal.status).toBe("aperta")
+    expect(bucketProposals(proposals).forYou.map((p) => p.k)).toEqual(["DS1"])
+    expect(proposal.variants).toEqual(variants)
+    expect(proposal.round).toBe(2)
+    expect(proposal.answer).toBeUndefined()
+  })
+
+  test("riaperta on an open proposal is rejected, and so is an answer on a giro", () => {
+    const onOpen = foldProposals([opened("DS1"), reopened("DS1")])
+    expect(onOpen.rejected.map((r) => r.reason)).toEqual(["DS1 è già aperta"])
+    const onGiro = foldProposals([opened("DS1"), again("DS1"), answered("DS1", "A", 6)])
+    expect(onGiro.rejected.length).toBe(1)
+    expect(onGiro.proposals[0]!.status).toBe("giro")
+  })
+
+  test("the message for another round is work, not a choice", () => {
+    const { proposals } = foldProposals([opened("DS1"), again("DS1")])
+    const message = resolvedMessage(proposals[0]!)
+    expect(message).toContain("ALTRO GIRO")
+    expect(message).toContain("riaperta")
+    expect(message).toBe(
+      'design [k=DS1] Titolo DS1 — ALTRO GIRO, non una scelta — parole: "più contrasto, meno vetro" — rifai le varianti e riapri con: ade-msg registro design riaperta',
+    )
+  })
+
+  test("the outbox keeps the answer of a proposal in giro", () => {
+    const path = "C:\p\.ade\design.jsonl"
+    const { proposals } = foldProposals([opened("DS1"), again("DS1")])
+    const item = { path, k: "DS1", answeredAt: at(5), queuedAt: 1 }
+    expect(pruneOutbox([item], path, proposals)).toEqual([item])
   })
 })

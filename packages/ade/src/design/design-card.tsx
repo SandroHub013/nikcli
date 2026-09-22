@@ -25,6 +25,8 @@ export function DesignCard(props: {
   onSubmit: () => void
   /** «Registra senza inviare»: writes the answer, leaves it queued. */
   onRecord: () => void
+  /** «Altro giro»: the note, as a request for new variants. */
+  onAgain: () => void
   onOpenFullPreview?: (variant: DesignVariant) => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
@@ -32,6 +34,9 @@ export function DesignCard(props: {
     <section data-slot="design-card" aria-label={`${props.proposal.k} ${props.proposal.title}`}>
       <header data-slot="design-head">
         <span data-slot="design-key">{props.proposal.k}</span>
+        <Show when={(props.proposal.round ?? 1) >= 2}>
+          <span data-slot="design-round">{t("design.round", props.proposal.round ?? 1)}</span>
+        </Show>
         <h3 data-slot="design-title">{props.proposal.title}</h3>
       </header>
 
@@ -115,6 +120,9 @@ export function DesignCard(props: {
       <div data-slot="design-actions">
         <button type="button" data-slot="design-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
           {props.control.label}
+        </button>
+        <button type="button" data-slot="design-ghost" data-action="again" disabled={props.busy} onClick={() => props.onAgain()}>
+          {t("design.again")}
         </button>
         <Show when={props.control.recordOnly}>
           <button type="button" data-slot="design-ghost" data-action="record" disabled={props.busy} onClick={() => props.onRecord()}>

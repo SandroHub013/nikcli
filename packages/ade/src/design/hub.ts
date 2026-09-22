@@ -1,5 +1,5 @@
 import { createSignal, type Accessor } from "solid-js"
-import { answerEvent } from "./answer"
+import { againEvent, answerEvent } from "./answer"
 import { runSubmit, submitControl, submitSteps } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
@@ -42,6 +42,11 @@ export interface DesignHub {
    * picked inline when nobody receives yet; `record` writes without sending.
    */
   submit: (proposal: DesignProposal, press: "primary" | "record") => Promise<boolean>
+  /**
+   * «Altro giro»: records the note as a request for another round. Like the
+   * main button, a session picked inline is chosen first.
+   */
+  again: (proposal: DesignProposal) => Promise<boolean>
   fullPreview: Accessor<FullPreviewState>
   openFullPreview: (variant: DesignVariant, title?: string) => void
   closeFullPreview: () => void
@@ -95,9 +100,7 @@ export function createDesignHub(deps: {
       return next
     })
 
-  const answer = (proposal: DesignProposal): Promise<boolean> => {
-    const current = draft(proposal.k)
-    const event = answerEvent(proposal, current.picked, current.note, new Date())
+  const record = (proposal: DesignProposal, event: AnsweredDesignEvent | string): Promise<boolean> => {
     if (typeof event === "string") {
       setProblem(proposal.k, event)
       return Promise.resolve(false)
@@ -107,6 +110,11 @@ export function createDesignHub(deps: {
       clearDraft(proposal.k)
       deps.onAnswered(proposal, event)
     })
+  }
+
+  const answer = (proposal: DesignProposal): Promise<boolean> => {
+    const current = draft(proposal.k)
+    return record(proposal, answerEvent(proposal, current.picked, current.note, new Date()))
   }
 
   return {
@@ -142,6 +150,23 @@ export function createDesignHub(deps: {
         },
         answer: () => answer(proposal),
       })
+    },
+    again: (proposal) => {
+      const event = againEvent(proposal, draft(proposal.k).note, new Date())
+      if (typeof event === "string") return record(proposal, event)
+      const control = submitControl({
+        recipient: deps.recipient(),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(proposal.k),
+        label: "",
+      })
+      const chosen = submitSteps(control, deps.sessions(), inline(), "primary").find((step) => step.kind === "choose")
+      if (chosen?.kind === "choose") {
+        deps.choose(chosen.id)
+        setInline(undefined)
+      }
+      return record(proposal, event)
     },
     fullPreview,
     openFullPreview: (variant, title) => setFullPreview({ open: true, variant, title }),

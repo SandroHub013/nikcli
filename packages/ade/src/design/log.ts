@@ -4,7 +4,7 @@ import { t } from "../i18n"
  * The design proposals register, as it is written to disk in `.ade/design.jsonl`.
  *
  * One JSON object per line, appended and never rewritten: an event says what
- * happened to a design proposal — aperta, risposta, chiusa — and the current
+ * happened to a design proposal — aperta, risposta, riaperta, chiusa — and the current
  * state is computed from all of them by `state.ts`.
  *
  * A proposal carries a key, title, author, reference spec, short text/context,
@@ -12,7 +12,7 @@ import { t } from "../i18n"
  * preview (an image path/URL or a standalone HTML page).
  */
 
-export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "chiusa"] as const
+export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "riaperta", "chiusa"] as const
 
 export type DesignEventType = (typeof DESIGN_EVENT_TYPES)[number]
 
@@ -55,6 +55,18 @@ export interface AnsweredDesignEvent extends EventBase {
   readonly note?: string
   /** What the user decided, verbatim. Required: it is what gets executed. */
   readonly words: string
+  /**
+   * Not a choice: the user asks for another round, and `words` says what to
+   * change. The author answers with a `riaperta` carrying the new variants.
+   */
+  readonly again?: true
+}
+
+/** A new round on the same key: back in front of the user, with new variants when it brings them. */
+export interface ReopenedDesignEvent extends EventBase {
+  readonly type: "riaperta"
+  readonly reason?: string
+  readonly variants?: readonly DesignVariant[]
 }
 
 export interface ClosedDesignEvent extends EventBase {
@@ -63,7 +75,7 @@ export interface ClosedDesignEvent extends EventBase {
   readonly evidence?: string
 }
 
-export type DesignEvent = OpenedDesignEvent | AnsweredDesignEvent | ClosedDesignEvent
+export type DesignEvent = OpenedDesignEvent | AnsweredDesignEvent | ReopenedDesignEvent | ClosedDesignEvent
 
 export interface LogProblem {
   readonly line: number
@@ -141,15 +153,33 @@ export function toEvent(value: unknown): DesignEvent | string {
       }) as OpenedDesignEvent
     }
     case "risposta": {
+      const again = record.again === true
+      if (again && (record.choice !== undefined || record.choices !== undefined)) return t("design.log.again")
       const words = text(record.words)
-      if (!words) return t("design.log.words")
+      if (!words) return again ? t("design.log.again") : t("design.log.words")
       return compact({
         type: "risposta",
         ...base,
         words,
         choice: text(record.choice),
         note: text(record.note),
+        again: again ? true : undefined,
       }) as AnsweredDesignEvent
+    }
+    case "riaperta": {
+      let variants: DesignVariant[] | undefined
+      if (record.variants !== undefined) {
+        const checked = variantsOf(record.variants)
+        if (typeof checked === "string") return checked
+        if (checked.length === 0) return t("design.log.variants")
+        variants = checked
+      }
+      return compact({
+        type: "riaperta",
+        ...base,
+        reason: text(record.reason),
+        variants,
+      }) as ReopenedDesignEvent
     }
     case "chiusa":
       return compact({
