@@ -177,7 +177,8 @@ export interface Host {
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
   mailboxInboxPut?: (pane: string, name: string, text: string) => Promise<void>
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
-  mailboxInboxRead?: (pane: string, name: string) => Promise<boolean>
+  /** Where a long message is: still in the inbox, moved to `handled/` by `ade-msg inbox`, or in neither. */
+  mailboxInboxRead?: (pane: string, name: string) => Promise<InboxFileState>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
@@ -287,6 +288,9 @@ export interface Host {
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
+
+/** What `mailboxInboxRead` answers. Mirrors `mailbox_inbox_read` in `mailbox.rs`. */
+export type InboxFileState = "unread" | "read" | "lost"
 
 /** ADE only: this app, its webview and every agent it started. */
 export interface SystemStats {
@@ -716,7 +720,8 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxInboxRead(pane, name) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<boolean>("mailbox_inbox_read", { pane, name })
+      const state = await invoke<string>("mailbox_inbox_read", { pane, name })
+      return state === "read" || state === "lost" ? state : "unread"
     },
 
     async mailboxResult(id, text) {

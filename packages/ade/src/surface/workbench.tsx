@@ -211,6 +211,7 @@ import {
   statusFromActivity,
   sameDir,
   formatLateReply,
+  formatLost,
   formatRequest,
   parseMessage,
   resolveAgent,
@@ -1852,7 +1853,25 @@ export function Workbench() {
     let changed = false
     for (const entry of [...inboxPending]) {
       const session = running.get(entry.paneId)
-      const read = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => false) : false
+      const state = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const) : "unread"
+      if (state === "lost") {
+        /*
+         * Gone before it was read: said as lost, to the sender and, for a
+         * request, to whoever waits on it, so nobody believes it arrived. A
+         * file the reader moved is "read"; only a file in neither place is this.
+         */
+        inboxPending.splice(inboxPending.indexOf(entry), 1)
+        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
+        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note")
+        if (entry.kind === "ask" || entry.kind === "spawn") {
+          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+        } else if (entry.from && running.has(entry.from)) {
+          heldLines.push({ paneId: entry.from, text: formatLost(entry, reader) })
+        }
+        changed = true
+        continue
+      }
+      const read = state === "read"
       const free = session && !read ? await freeNow(host, entry.paneId) : false
       const action = inboxAction(
         entry,

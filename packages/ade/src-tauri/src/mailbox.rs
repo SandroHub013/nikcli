@@ -290,14 +290,28 @@ pub async fn mailbox_inbox_put(app: tauri::AppHandle, pane: String, name: String
     write_whole(dir, &format!("{name}.msg"), &text)
 }
 
-/// Whether the message was read: `ade-msg inbox` moves what it prints to `handled/`.
+/// Where the message is: `unread` still in the inbox, `read` in `handled/`
+/// (where `ade-msg inbox` moves what it prints), `lost` in neither.
+///
+/// The first version answered "read" for anything no longer in the inbox, so
+/// a file deleted by hand passed for read and nobody was told: the same
+/// silent loss S70's review found in the native handoff. Whoever waits must
+/// never believe a thing arrived when it did not.
 #[tauri::command]
-pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: String) -> Result<bool, String> {
+pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: String) -> Result<String, String> {
     if !valid_id(&pane) || !valid_id(&name) {
         return Err("id non valido".into());
     }
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?.join("inbox").join(&pane);
-    Ok(!dir.join(format!("{name}.msg")).exists())
+    let file = format!("{name}.msg");
+    Ok(if dir.join(&file).exists() {
+        "unread"
+    } else if dir.join("handled").join(&file).exists() {
+        "read"
+    } else {
+        "lost"
+    }
+    .to_string())
 }
 
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for

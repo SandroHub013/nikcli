@@ -549,6 +549,16 @@ export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): s
   return `[ade-msg] ${who(reader)} non ha letto ${what} dopo ${entry.rings + 1} avvisi: resta nella sua inbox; ricordaglielo o annulla la richiesta`
 }
 
+/**
+ * Told to the sender when the inbox file is gone before it was read: lost,
+ * not ignored, and said as such. For a request it is also the answer the
+ * waiter gets, so `ade-msg wait` ends instead of running out.
+ */
+export function formatLost(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+  return `[ade-msg] errore: ${what} risulta persa, non ignorata: il file nella casella di ${who(reader)} è sparito prima di essere letto. Rimandala.`
+}
+
 /** Entries restored from storage; anything malformed is dropped. */
 export function parseInbox(raw: string | null): InboxEntry[] {
   try {
