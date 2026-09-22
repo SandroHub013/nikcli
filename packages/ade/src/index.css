@@ -1214,10 +1214,28 @@ body,
 /*
  * While a take runs (S36), secrets are not drawn at all, so no frame of the
  * video can hold one. The user sees them covered too, which says why.
+ *
+ * The list below is the one in `record/sensitive.ts`, and a test fails if the
+ * two drift apart. It used to end in `#openrouter-key-field`: one id, for one
+ * field, which by then no longer existed. Now a field is covered for being a
+ * password, for carrying a credential autocomplete token, for being marked,
+ * or — the net that matters — for standing inside a zone marked
+ * `data-secrets`, which covers fields nobody has written yet.
  */
 html[data-ade-recording] [data-sensitive],
 html[data-ade-recording] input[type="password"],
-html[data-ade-recording] #openrouter-key-field {
+html[data-ade-recording] input[autocomplete="current-password"],
+html[data-ade-recording] input[autocomplete="new-password"],
+html[data-ade-recording] input[autocomplete="one-time-code"],
+html[data-ade-recording] input[id*="key" i],
+html[data-ade-recording] input[name*="key" i],
+html[data-ade-recording] input[id*="token" i],
+html[data-ade-recording] input[name*="token" i],
+html[data-ade-recording] input[id*="secret" i],
+html[data-ade-recording] input[name*="secret" i],
+html[data-ade-recording] input[placeholder^="sk-" i],
+html[data-ade-recording] [data-secrets],
+html[data-ade-recording] [data-secrets] * {
   color: transparent !important;
   text-shadow: none !important;
   caret-color: transparent !important;
@@ -1225,16 +1243,41 @@ html[data-ade-recording] #openrouter-key-field {
   -webkit-text-security: disc;
 }
 html[data-ade-recording] [data-sensitive]::selection,
-html[data-ade-recording] [data-sensitive] *::selection,
 html[data-ade-recording] input[type="password"]::selection,
-html[data-ade-recording] #openrouter-key-field::selection {
+html[data-ade-recording] input[autocomplete="current-password"]::selection,
+html[data-ade-recording] input[autocomplete="new-password"]::selection,
+html[data-ade-recording] input[autocomplete="one-time-code"]::selection,
+html[data-ade-recording] input[id*="key" i]::selection,
+html[data-ade-recording] input[name*="key" i]::selection,
+html[data-ade-recording] input[id*="token" i]::selection,
+html[data-ade-recording] input[name*="token" i]::selection,
+html[data-ade-recording] input[id*="secret" i]::selection,
+html[data-ade-recording] input[name*="secret" i]::selection,
+html[data-ade-recording] input[placeholder^="sk-" i]::selection,
+html[data-ade-recording] [data-secrets]::selection,
+html[data-ade-recording] [data-secrets] *::selection {
   color: transparent !important;
   background: transparent !important;
 }
-html[data-ade-recording] [data-sensitive] *,
 html[data-ade-recording] [data-sensitive]::placeholder,
 html[data-ade-recording] input[type="password"]::placeholder,
-html[data-ade-recording] #openrouter-key-field::placeholder {
+html[data-ade-recording] input[autocomplete="current-password"]::placeholder,
+html[data-ade-recording] input[autocomplete="new-password"]::placeholder,
+html[data-ade-recording] input[autocomplete="one-time-code"]::placeholder,
+html[data-ade-recording] input[id*="key" i]::placeholder,
+html[data-ade-recording] input[name*="key" i]::placeholder,
+html[data-ade-recording] input[id*="token" i]::placeholder,
+html[data-ade-recording] input[name*="token" i]::placeholder,
+html[data-ade-recording] input[id*="secret" i]::placeholder,
+html[data-ade-recording] input[name*="secret" i]::placeholder,
+html[data-ade-recording] input[placeholder^="sk-" i]::placeholder,
+html[data-ade-recording] [data-secrets]::placeholder,
+html[data-ade-recording] [data-secrets] *::placeholder {
+  visibility: hidden !important;
+  color: transparent !important;
+}
+html[data-ade-recording] [data-sensitive] *,
+html[data-ade-recording] [data-secrets] * {
   visibility: hidden !important;
   color: transparent !important;
 }

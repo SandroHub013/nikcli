@@ -75,7 +75,13 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
 
       <Show when={props.host}>
         <Show when={keys().length > 0} fallback={<p data-slot="settings-meta">{t("keys.none")}</p>}>
-          <ul data-slot="settings-list">
+          {/*
+            * Marcata come zona di segreti, non campo per campo: qui dentro
+            * vivono i valori delle chiavi, e una riga aggiunta domani nasce
+            * coperta durante una registrazione senza che nessuno si ricordi
+            * di marcarla. Vedi record/sensitive.ts.
+            */}
+          <ul data-slot="settings-list" data-secrets>
             <For each={keys()}>
               {(key) => (
                 <li data-slot="keys-row">
@@ -266,7 +272,7 @@ export function KeyForm(props: {
   }
 
   return (
-    <form data-slot="keys-form" onSubmit={(event) => void submit(event)} autocomplete="off">
+    <form data-slot="keys-form" data-secrets onSubmit={(event) => void submit(event)} autocomplete="off">
       <label data-slot="keys-field">
         <span>{t("keys.field.name")}</span>
         <input
