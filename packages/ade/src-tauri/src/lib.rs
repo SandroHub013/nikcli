@@ -522,6 +522,35 @@ async fn nikcli_bot(
     })
 }
 
+/// Runs `claude agents --json`, the CLI's own list of its live sessions, and
+/// hands back what it printed.
+///
+/// One program, fixed arguments, nothing from the caller but a directory: the
+/// list is what native mail delivery is routed on, and `run` is git-only on
+/// purpose (see below), so this is the second door of its kind, next to
+/// `nikcli_bot`. An older CLI without the subcommand exits non-zero, and the
+/// caller reads that as "the CLI does not list".
+#[tauri::command]
+async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
+    let program = pty::which_on_path("claude").ok_or("claude non trovato nel PATH")?;
+    let mut command = std::process::Command::new(program);
+    command.args(["agents", "--json"]).stdin(std::process::Stdio::null());
+    if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
+        command.current_dir(dir);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let output = command.output().map_err(|e| format!("claude non eseguibile: {e}"))?;
+    Ok(ShellOutput {
+        code: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // git, behind a gate of its own
 // ---------------------------------------------------------------------------
@@ -1205,6 +1234,7 @@ pub fn run() {
             git_run,
             bot_delete,
             nikcli_bot,
+            claude_agents,
             read_dir,
             read_text_file,
             write_text_file,

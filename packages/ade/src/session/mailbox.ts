@@ -31,7 +31,7 @@ export interface MailPane {
 /** `token` is what proves `from`; see {@link verifySender}. */
 export type Message = { from: string; token?: string; text: string } & (
   /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
-  | { kind: "send" | "ask"; to: string; effort?: string }
+  | { kind: "send" | "ask"; to: string; effort?: string; via?: "typed" }
   /**
    * `autoClose`: closed once it has replied, unless it has work not yet
    * integrated. `name` titles it; `worktree` gives it its own checkout;
@@ -75,6 +75,8 @@ export type Message = { from: string; token?: string; text: string } & (
   | { kind: "interrupt"; to: string }
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
+  /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
+  | { kind: "delivered"; ref: string; ok: boolean }
 )
 
 export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
@@ -128,6 +130,10 @@ export function parseMessage(body: string): Message | undefined {
     const ref = str("ref")
     return isRequestId(ref) ? { kind, from, token, ref, text: "" } : undefined
   }
+  if (kind === "delivered") {
+    const ref = str("ref")
+    return isRequestId(ref) ? { kind, from, token, ref, ok: record.ok !== false, text } : undefined
+  }
   if (kind === "kv") {
     const op = KV_OPS.find((known) => known === str("op"))
     const key = str("key")
@@ -148,7 +154,9 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "send" || kind === "ask") {
     const to = str("to")
     const effort = str("effort")
-    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}) } : undefined
+    // `--digita`: the sender wants the keyboard, whatever the route would be.
+    const via = str("via") === "typed" ? ("typed" as const) : undefined
+    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}), ...(via ? { via } : {}) } : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
@@ -578,6 +586,10 @@ export interface OpenRequest {
   rings?: number
   /** Its caller was told the session may be stuck; said once. */
   wedgeWarned?: boolean
+  /** How it reached the session: typed by ADE, or sent by the caller over the CLI's own channel. */
+  via?: "nativa" | "digitata"
+  /** The caller confirmed its `SendMessage`, or the target's turn showed it arrived. */
+  acked?: boolean
 }
 
 export type RequestState =
@@ -907,7 +919,7 @@ export function requestsTable(
   const title = (id: string) => (id ? panes.find((pane) => pane.id === id)?.title ?? id : "anonima")
   const rows = requests.map((request) => [
     request.id,
-    request.kind + (request.autoClose ? "+close" : ""),
+    request.kind + (request.autoClose ? "+close" : "") + (request.via === "nativa" ? (request.acked ? "·nativa✓" : "·nativa?") : ""),
     age(now - request.at),
     request.update && stateOf(request) === "in corso" ? `${request.update.state}: ${briefOf(request.update.text, 40)}` : stateOf(request),
     `${title(request.from)} → ${title(request.to)}`,
@@ -994,6 +1006,7 @@ export const USAGE =
   "  ade-msg wait   <id> [<id>...] [--any]     aspetta le risposte (tutte, o la prima con --any)\n" +
   "  ade-msg status                          richieste in corso\n" +
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
+  "  ade-msg delivered <id> [no [motivo]]    dopo una consegna nativa: l'hai mandata (o no, e ADE la digita)\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
   "  ade-msg relaunch <sessione> --note \"<a che punto è>\" [--model <id>] [--fresh]\n" +
