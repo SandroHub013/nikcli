@@ -86,6 +86,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          NAME="$(jq -r .name packages/ade/brand.json)"
+          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release $TAG already exists; builds will upload into it"
             exit 0
@@ -94,11 +96,11 @@ jobs:
           if [ -n "$PREVIOUS" ]; then
             NOTES="$(bun packages/ade/script/release-plan.ts notes "$PREVIOUS" "$TAG")"
           else
-            NOTES="Prima release di ADE."
+            NOTES="Prima release di $NAME."
           fi
           printf '%s\n' "$NOTES" > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
-            --title "$(jq -r .name packages/ade/brand.json) ${TAG#ade-v}" --notes-file notes.md --verify-tag
+            --title "$NAME ${TAG#ade-v}" --notes-file notes.md --verify-tag
 
   build:
     needs: draft
@@ -238,6 +240,7 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.draft.outputs.version }}"
           NAME="$(jq -r .name packages/ade/brand.json)"
+          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
           BUNDLE="packages/ade/src-tauri/target/${{ matrix.target }}/release/bundle"
           STAGE="ade-release"
           mkdir -p "$STAGE"
@@ -301,6 +304,7 @@ jobs:
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern" || true
           done
           NAME="$(jq -r .name "$GITHUB_WORKSPACE/packages/ade/brand.json")"
+          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
           if ! ls "${NAME}"_* >/dev/null 2>&1; then
             echo "no bundles to sum in $TAG"
             exit 1
@@ -362,6 +366,7 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#ade-v}"
           NAME="$(jq -r .name packages/ade/brand.json)"
+          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
           mkdir -p manifest && cd manifest
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig'
           BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
@@ -386,6 +391,6 @@ jobs:
           gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
           if ! gh release view ade-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create ade-updater --repo "$GITHUB_REPOSITORY" --target feat/ade --prerelease --latest=false \
-              --title "ADE updater" --notes "Manifest read by installed copies of ADE to update themselves. Not a release: see the ade-v* releases."
+              --title "$NAME updater" --notes "Manifest read by installed copies of $NAME to update themselves. Not a release: see the ade-v* releases."
           fi
           gh release upload ade-updater latest.json --clobber --repo "$GITHUB_REPOSITORY"
