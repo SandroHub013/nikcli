@@ -813,6 +813,8 @@ export const en: Messages = {
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
+  "note.mailWaiting": (what) => `Mail waiting (the session is typing): ${what}`,
+  "pane.mail": (count) => `${count} waiting: ADE holds mail back while the line is half-written`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,
   "note.nudged": (id) => `Reminder sent: request ${id} is waiting for a reply`,
   "note.replySent": (ref) => `Reply sent (request ${ref})`,

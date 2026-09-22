@@ -192,6 +192,17 @@ export interface SessionPaneProps {
   /** Keystrokes from the terminal, on their way to the process. */
   onInput?: (data: string) => void
   /**
+   * How many messages ADE is holding for this session.
+   *
+   * Held, not lost: mail is never typed onto a line the user has begun. The
+   * badge is how that shows, and it is a property of the pane rather than of
+   * the agent inside it, so a CLI added to the catalogue tomorrow gets it
+   * without anyone remembering to ask for it.
+   */
+  mail?: number
+  /** Shows what is waiting, in the transcript. Looking is not reading. */
+  onMail?: () => void
+  /**
    * Files were dropped on this session: from the project tree, from the
    * screenshot tray, or from the system's own file manager.
    *
@@ -560,6 +571,21 @@ export function SessionPane(props: SessionPaneProps) {
             </span>
           )}
         </span>
+        <Show when={(props.mail ?? 0) > 0 && props.onMail}>
+          <button
+            type="button"
+            class="mail"
+            data-slot="pane-mail"
+            title={t("pane.mail", props.mail ?? 0)}
+            aria-label={t("pane.mail", props.mail ?? 0)}
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onMail?.()
+            }}
+          >
+            {props.mail}
+          </button>
+        </Show>
         <Show
           when={editing()}
           fallback={

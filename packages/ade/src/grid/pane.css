@@ -260,6 +260,44 @@
   white-space: nowrap;
 }
 
+/*
+ * Mail ADE is holding for this session, because the user has a line half
+ * written in it. A counter, not an alarm: the mail is not late, it is simply
+ * not being typed over somebody's sentence.
+ *
+ * Chrome size (20px): under 24 it does not scale on press, per S62 — three
+ * per cent of twenty pixels is half a pixel and reads as a flicker.
+ */
+[data-slot="pane-mail"] {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--ade-space-2);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-working-bg);
+  color: var(--ade-working);
+  font: inherit;
+  font-size: var(--ade-font-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--ade-weight-semibold);
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--ade-btn-transition, background 120ms var(--ade-ease));
+}
+
+[data-slot="pane-mail"]:hover {
+  background: var(--ade-active);
+}
+
+[data-slot="pane-mail"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
 [data-slot="pane-actions"] {
   display: flex;
   gap: var(--ade-space-1);

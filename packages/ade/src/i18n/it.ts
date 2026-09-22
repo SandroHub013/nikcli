@@ -820,6 +820,8 @@ export const it = {
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
+  "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
+  "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
   "note.nudged": (id: string) => `Promemoria inviato: la richiesta ${id} aspetta una risposta`,
   "note.replySent": (ref: string) => `Risposta inviata (richiesta ${ref})`,

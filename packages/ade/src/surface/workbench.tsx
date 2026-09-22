@@ -219,6 +219,9 @@ import {
   type MailPane,
   type Message,
   formatBell,
+  formatHeld,
+  formatHeldReceipt,
+  HELD_BY_LINE,
   formatUnread,
   formatWedged,
   interruptKeys,
@@ -231,6 +234,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
@@ -1556,8 +1560,59 @@ export function Workbench() {
 
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
+  /** The state last written for a queued request, so a waiter hears about changes only. */
+  const heldStates = new Map<string, string>()
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
+
+  /*
+   * How much mail is waiting for each pane, for the badge in its header.
+   *
+   * Recomputed from the two queues on every pass rather than kept in step by
+   * hand at each push and splice: a count that drifts is a badge that lies,
+   * and the queues are touched from a dozen places.
+   */
+  const [mailWaiting, setMailWaiting] = createSignal<Record<string, number>>({})
+  const refreshMailWaiting = () => {
+    const counts: Record<string, number> = {}
+    for (const held of heldLines) counts[held.paneId] = (counts[held.paneId] ?? 0) + 1
+    for (const entry of inboxPending) counts[entry.paneId] = (counts[entry.paneId] ?? 0) + 1
+    setMailWaiting((current) => {
+      const ids = new Set([...Object.keys(current), ...Object.keys(counts)])
+      for (const id of ids) if ((current[id] ?? 0) !== (counts[id] ?? 0)) return counts
+      return current
+    })
+  }
+
+  /**
+   * Writes into a session's input line on the user's behalf — dropped paths,
+   * dictated speech — and counts it as typed, because it is: nothing is
+   * submitted until the user says so, and until then the line is theirs.
+   */
+  const typeAsUser = (paneId: string, text: string) => {
+    const session = running.get(paneId)
+    if (!session) return
+    records.typed.update(paneId, (line) => typedAfter(line, text, Date.now()))
+    session.write(text)
+  }
+
+  /**
+   * Shows the user what a pane is waiting for, without typing a character.
+   *
+   * The badge opens into the pane's own transcript: the mail is ADE's to
+   * show, and the session reads it when its line is free. Looking is not
+   * reading — the badge stays until the session itself takes the mail.
+   */
+  const showMail = (paneId: string) => {
+    const panes = mailPanes()
+    const named = (from: string | undefined) => panes.find((pane) => pane.id === from)?.title ?? "una sessione"
+    const waiting = [
+      ...heldLines.filter((held) => held.paneId === paneId).map((held) => held.text),
+      ...inboxPending.filter((entry) => entry.paneId === paneId).map((entry) => `${named(entry.from)}: ${entry.chars} caratteri, ${entry.id}`),
+    ]
+    if (waiting.length === 0) return
+    for (const line of waiting) appendLine(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)), "note")
+  }
 
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
@@ -1570,10 +1625,23 @@ export function Workbench() {
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
     }
+    /*
+     * The CLI's own hook is certain where the count is a guess: a turn that
+     * began after the last keystroke means the line was sent, whatever key
+     * emptied it. Heals a count left too high by Ctrl+K, a vim command, or
+     * any key `typed-line.ts` does not know — for every CLI that has the hook.
+     */
+    if (activity?.state === "busy") {
+      const submittedAt = activity.at
+      records.typed.update(paneId, (line) => submittedSince(line, submittedAt))
+    }
     return isFree(
       {
         hooked: isHooked,
         permissionPending: Boolean(permissions()[paneId]),
+        // A line the user began is not the agent being busy, but it is just
+        // as much a reason not to type: see `session/typing.ts`.
+        typing: isTyping(records.typed.get(paneId)),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -1650,9 +1718,21 @@ export function Workbench() {
       const session = running.get(entry.paneId)
       const read = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => false) : false
       const free = session && !read ? await freeNow(host, entry.paneId) : false
-      const action = inboxAction(entry, { running: Boolean(session), free, read }, now)
+      const action = inboxAction(
+        entry,
+        { running: Boolean(session), free, read, typing: isTyping(records.typed.get(entry.paneId)) },
+        now,
+      )
       if (action === "wait") continue
       const panes = mailPanes()
+      if (action === "tell") {
+        entry.told = true
+        if (entry.from && running.has(entry.from)) {
+          heldLines.push({ paneId: entry.from, text: formatHeld(entry, panes.find((pane) => pane.id === entry.paneId)) })
+        }
+        changed = true
+        continue
+      }
       if (action === "ring" && session) {
         entry.rings += 1
         entry.ringAt = now
@@ -2021,6 +2101,14 @@ export function Workbench() {
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
+      } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
+        // Replies and updates too, not only what went to the inbox: the
+        // sender is told at once, and once, why this is not arriving.
+        item.told = true
+        if (running.has(item.inbox.from)) {
+          const reader = mailPanes().find((pane) => pane.id === item.paneId)
+          heldLines.push({ paneId: item.inbox.from, text: formatHeld(item.inbox, reader), told: true })
+        }
       }
     }
 
@@ -2057,7 +2145,7 @@ export function Workbench() {
       }
       const session = running.get(request.to)
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
-      if (session && shouldRering(request, targetOf(request), now)) {
+      if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         request.rings = (request.rings ?? 0) + 1
         saveRequests()
         session.write("\r")
@@ -2075,6 +2163,7 @@ export function Workbench() {
     }
 
     await followInbox(host, now)
+    refreshMailWaiting()
 
     const table = requestsTable([...openRequests.values()], panes, (request) => stateOf(request, now), now, decisions)
     if (table !== publishedRequests) {
@@ -2485,6 +2574,8 @@ export function Workbench() {
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
       session.write(interruptKeys(pane?.agent ?? pane?.model))
+      // The TUI drops whatever was in the line with the work: so does the count.
+      records.typed.forget(target.pane.id)
       appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note")
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -2608,12 +2699,26 @@ export function Workbench() {
      * sender is told at once, so it neither resends nor stops waiting.
      */
     if (!(await freeNow(host, target.pane.id))) {
+      const byLine = isTyping(records.typed.get(target.pane.id))
       if (!held.has(id)) {
         held.add(id)
-        await answer(`ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+        await answer(byLine ? formatHeldReceipt(target.pane) : `ok: in coda, arriva a "${target.pane.title}" quando finisce il turno`)
+      }
+      /*
+       * Whoever waits on `ade-msg wait` sees the reason as the request's
+       * state, the moment it applies and the moment it stops: a line half
+       * written in the other session is not the other session ignoring them.
+       */
+      if (message.kind === "ask") {
+        const state = byLine ? HELD_BY_LINE : ""
+        if (heldStates.get(id) !== state) {
+          heldStates.set(id, state)
+          await host.mailboxState?.(id, state).catch(() => {})
+        }
       }
       return false
     }
+    heldStates.delete(id)
 
     const targetPane = wb().panes.find((pane) => pane.id === target.pane.id)
     const targetDepth = depthOf(target.pane.id, parentOf)
@@ -2986,7 +3091,11 @@ export function Workbench() {
     project,
     runCommand: (id) => runCommand(id),
     isRunning,
-    getRunningSession: (id) => running.get(id),
+    // Dictated text goes into the line and is not submitted: it counts as typed.
+    getRunningSession: (id) => {
+      const session = running.get(id)
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+    },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     permissions,
@@ -4295,6 +4404,9 @@ export function Workbench() {
     running.delete(id)
     touchRunning()
     forgetQuiet(id)
+    // Whatever was half-written belonged to the process that has gone. Left
+    // behind, it would hold mail back from the session that starts next.
+    records.typed.forget(id)
     setWb(w => updatePane(w, id, {
       status: code === 0 ? "done" : "error",
       activity: code === 0 ? "done" : exitedActivity(code)
@@ -5146,6 +5258,7 @@ export function Workbench() {
     paneNonces.delete(paneId)
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
+    records.typed.forget(paneId)
     setWb((w) =>
       updatePane(w, paneId, {
         cwd: remoteRoot(target),
@@ -5459,6 +5572,9 @@ export function Workbench() {
     decisions: decisionsHub,
     design: designHub,
     panels,
+    mailWaiting,
+    showMail,
+    typeAsUser,
     announceToAll,
     pluginRuntime,
     browserControllers,
