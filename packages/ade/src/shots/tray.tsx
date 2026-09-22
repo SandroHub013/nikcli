@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import "./tray.css"
 import { t } from "../i18n"
 
@@ -84,6 +84,33 @@ function Thumb(props: { shot: Shot; load?: ShotTrayProps["load"] }) {
 export function ShotTray(props: ShotTrayProps) {
   const [collapsed, setCollapsed] = createSignal(false)
   const [opened, setOpened] = createSignal<Shot>()
+  const [strip, setStrip] = createSignal<HTMLDivElement>()
+  /** Whether there are screenshots past each end of what you can see. */
+  const [edges, setEdges] = createSignal({ left: false, right: false })
+
+  const readEdges = () => {
+    const el = strip()
+    if (!el) return setEdges({ left: false, right: false })
+    const slack = el.scrollWidth - el.clientWidth
+    // A pixel of tolerance: fractional widths leave a rounding remainder that
+    // would keep the arrow lit on a row already scrolled to its end.
+    setEdges({ left: el.scrollLeft > 1, right: el.scrollLeft < slack - 1 })
+  }
+
+  onMount(() => {
+    const el = strip()
+    if (!el) return
+    // The row's own width changes with the sidebar, and its contents change
+    // with every screenshot: both decide whether there is more to reach.
+    const observer = new ResizeObserver(readEdges)
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    props.shots.length
+    queueMicrotask(readEdges)
+  })
 
   return (
     <Show
@@ -111,7 +138,34 @@ export function ShotTray(props: ShotTrayProps) {
          * is still available to anyone who cannot see the thumbnails.
          */}
         <Show when={!collapsed()}>
-          <div data-slot="shot-tray-strip">
+          <div
+            data-slot="shot-tray-row"
+            data-more={`${edges().left ? "l" : ""}${edges().right ? "r" : ""}` || undefined}
+          >
+          <div
+            data-slot="shot-tray-strip"
+            ref={setStrip}
+            onScroll={readEdges}
+            /*
+             * The wheel, turned sideways by hand.
+             *
+             * Chromium only sends a vertical wheel to a row that scrolls
+             * sideways when no ancestor can take it, and here the sidebar can:
+             * the column scrolled and the tray never moved, so the screenshots
+             * past the second one were unreachable with a mouse. Measured in
+             * ADE Test: three notches of deltaY 120 left scrollLeft at 0.
+             */
+            onWheel={(event) => {
+              const el = strip()
+              if (!el || el.scrollWidth <= el.clientWidth) return
+              // A trackpad swipe already arrives as deltaX and the browser
+              // handles it; adding it here would move the row twice.
+              if (!event.deltaY) return
+              const before = el.scrollLeft
+              el.scrollLeft = before + event.deltaY
+              if (el.scrollLeft !== before) event.preventDefault()
+            }}
+          >
             <For each={props.shots}>
               {(shot) => (
                 /*
@@ -168,6 +222,42 @@ export function ShotTray(props: ShotTrayProps) {
                 </figure>
               )}
             </For>
+          </div>
+          {/*
+           * Two ways of saying the row continues, because the scrollbar is
+           * hidden: the edge fades out under the thumbnail that is half
+           * there, and an arrow sits on the fade for anyone who would rather
+           * press than scroll. Both appear only on the side that has more.
+           */}
+          <For each={["left", "right"] as const}>
+            {(side) => (
+              <Show when={side === "left" ? edges().left : edges().right}>
+                <button
+                  type="button"
+                  data-slot="shot-tray-more"
+                  data-side={side}
+                  aria-label={side === "left" ? t("shots.more.left") : t("shots.more.right")}
+                  title={side === "left" ? t("shots.more.left") : t("shots.more.right")}
+                  onClick={() => {
+                    const el = strip()
+                    if (!el) return
+                    el.scrollBy({ left: (side === "left" ? -1 : 1) * el.clientWidth * 0.8, behavior: "smooth" })
+                  }}
+                >
+                  <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                    <path
+                      d={side === "left" ? "M7.5 2.5L4 6l3.5 3.5" : "M4.5 2.5L8 6l-3.5 3.5"}
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </Show>
+            )}
+          </For>
           </div>
         </Show>
       </aside>

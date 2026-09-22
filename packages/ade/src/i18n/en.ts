@@ -638,6 +638,8 @@ export const en: Messages = {
   "shots.dismiss.named": (name) => `Remove ${name}`,
   "shots.hint": "drag it onto a session to give it to the agent",
   "shots.delete": "delete",
+  "shots.more.left": "Earlier screenshots",
+  "shots.more.right": "More screenshots",
   "shots.close": "close",
 
   // Extensions

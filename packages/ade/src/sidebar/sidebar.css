@@ -1736,23 +1736,33 @@ aside[data-component="ade-sidebar"] {
 }
 
 /*
- * Below these two widths a reading leaves, one at a time, from the right.
+ * Below this width the readings go to a line of their own.
  *
- * Disk first, then memory, so the one that keeps its place is the one that
- * changes moment to moment and says whether the machine is busy. Both keep
- * their tooltip and their accessible name in the panel; nothing about the
- * machine becomes unknowable, it stops being on this row. The thresholds are
- * the measured widths at which the row stops fitting, not round numbers.
+ * They used to leave one at a time — disk, then memory — and at the column's
+ * 180px minimum that left the processor alone on the row, which reads as a
+ * truncated line rather than as a decision. So the form changes instead of the
+ * contents: the buttons keep the first line, the three readings take the
+ * second, and all of them stay inside the rounded edge.
+ *
+ * Measured in ADE Test: the three buttons want 68px, the three readings 105,
+ * and with the 6px between them the row needs 179. The query is on the
+ * footer's content box, which is 16px narrower than the column, so 184 here is
+ * a column of 200 — the row's real limit is 195, and the five spare pixels
+ * keep the buttons and the numbers from touching.
  */
-@container (max-width: 215px) {
-  [data-slot="sidebar-stat"][data-kind="mem"] {
-    display: none;
+@container (max-width: 184px) {
+  [data-slot="sidebar-settings-strip"] {
+    flex-wrap: wrap;
+    row-gap: 4px;
   }
-}
 
-@container (max-width: 192px) {
-  [data-slot="sidebar-stat"][data-kind="ram"] {
-    display: none;
+  [data-slot="sidebar-stats"] {
+    /* A whole line of its own, read from the left like everything else on
+       this column, rather than pushed to the edge by a margin. */
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    gap: 10px;
   }
 }
 
