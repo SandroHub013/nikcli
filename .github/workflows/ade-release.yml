@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           NAME="$(jq -r .name packages/ade/brand.json)"
-          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release $TAG already exists; builds will upload into it"
             exit 0
@@ -240,7 +240,7 @@ jobs:
           set -euo pipefail
           VERSION="${{ needs.draft.outputs.version }}"
           NAME="$(jq -r .name packages/ade/brand.json)"
-          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           BUNDLE="packages/ade/src-tauri/target/${{ matrix.target }}/release/bundle"
           STAGE="ade-release"
           mkdir -p "$STAGE"
@@ -304,7 +304,7 @@ jobs:
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern" || true
           done
           NAME="$(jq -r .name "$GITHUB_WORKSPACE/packages/ade/brand.json")"
-          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
+          jq -e '.name | type == "string" and length > 0' "$GITHUB_WORKSPACE/packages/ade/brand.json" >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           if ! ls "${NAME}"_* >/dev/null 2>&1; then
             echo "no bundles to sum in $TAG"
             exit 1
@@ -350,6 +350,21 @@ jobs:
           } >> notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
+      # The copyright's last year is written in brand.json, never read from
+      # the clock (a check that goes red on the first of January by itself is
+      # worse than none). This is the one moment somebody is looking at a
+      # release, so it is where a year left behind gets pointed out: a
+      # warning, not a failure.
+      - name: Copyright year
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNTIL="$(jq -r .until packages/ade/brand.json)"
+          YEAR="$(date -u +%Y)"
+          if ! [[ "$UNTIL" =~ ^[0-9]{4}$ ]] || [ "$UNTIL" -lt "$YEAR" ]; then
+            echo "::warning file=packages/ade/brand.json::copyright runs to $UNTIL and it is $YEAR: raise \"until\" and run bun run brand"
+          fi
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -366,7 +381,7 @@ jobs:
           set -euo pipefail
           VERSION="${TAG#ade-v}"
           NAME="$(jq -r .name packages/ade/brand.json)"
-          [ -n "$NAME" ] && [ "$NAME" != null ] || { echo "brand.json has no name"; exit 1; }
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           mkdir -p manifest && cd manifest
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig'
           BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
