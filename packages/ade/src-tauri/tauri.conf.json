@@ -20,7 +20,7 @@
     "active": true,
     "targets": "all",
     "publisher": "nikcli",
-    "copyright": "© 2026 nikcli",
+    "copyright": "© 2025-2026 nikcli · opencode",
     "homepage": "https://github.com/SandroHub013/nikcli/releases",
     "shortDescription": "Agent Development Environment",
     "longDescription": "ADE runs coding agents side by side in one window: sessions, files, browser and voice.",
