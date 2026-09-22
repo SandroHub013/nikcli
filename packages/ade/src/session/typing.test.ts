@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { HOOK_TIMEOUT } from "../session-new/agent-hooks"
 import {
   PASTE_QUIET_MS,
   PASTE_SETTLE_MAX_MS,
@@ -109,6 +110,12 @@ describe("submitCheck", () => {
 
   test("confirmDeadline(1000, 10) → 13000", () => {
     expect(confirmDeadline(1000, 10)).toBe(13000)
+  })
+
+  // Il test sopra fissa la formula con un 10 scritto a mano: se HOOK_TIMEOUT
+  // tornasse a 5, quello continuerebbe a passare. Questo no.
+  test("la finestra segue HOOK_TIMEOUT, non un numero scritto a mano", () => {
+    expect(confirmDeadline(0, HOOK_TIMEOUT)).toBeGreaterThanOrEqual(12_000)
   })
 })
 

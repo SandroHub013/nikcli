@@ -17,6 +17,8 @@
  * and can be tested without mounting anything.
  */
 
+import type { Activity } from "./mailbox"
+
 /**
  * Everything a terminal or a line discipline can read as "the line ends here",
  * collapsed to a single space.
@@ -67,8 +69,6 @@ export function pasteSettled(input: { typedAt: number; lastOutputAt?: number; no
   if (now - typedAt >= PASTE_SETTLE_MAX_MS) return true
   return lastOutputAt !== undefined && lastOutputAt > typedAt && now - lastOutputAt >= PASTE_QUIET_MS
 }
-
-import type { Activity } from "./mailbox"
 
 export const CONFIRM_MARGIN_MS = 2000
 

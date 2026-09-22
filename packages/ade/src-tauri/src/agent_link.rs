@@ -305,12 +305,42 @@ fn hook_command(script_path: &Path) -> String {
     format!("powershell -NoProfile -ExecutionPolicy Bypass -File \"{}\"", script_path.display())
 }
 
+/// How one configuration entry invokes its program, as a single command line.
+///
+/// The same entry can be written two ways: a shell-shaped one, where `command`
+/// holds the whole line, and the exec form, where `command` is the program and
+/// `args` are its arguments. ADE installs the exec form because the script's
+/// path may contain spaces, and in that form the script's name is nowhere in
+/// `command` — which is how this module missed its own entries and refused to
+/// write the configuration.
+///
+/// Mirrors `commandOf` in `agent-hooks.ts`, quoting included, so the string it
+/// returns is directly comparable with `hook_command`.
+fn command_of(leaf: &serde_json::Value) -> Option<String> {
+    use serde_json::Value;
+    let map = leaf.as_object()?;
+    let command = map.get("command")?.as_str()?;
+    let args = match map.get("args").and_then(Value::as_array) {
+        Some(args) if !args.is_empty() && args.iter().all(Value::is_string) => args,
+        _ => return Some(command.to_string()),
+    };
+    let last = args[args.len() - 1].as_str().unwrap_or_default();
+    let rest = args[..args.len() - 1]
+        .iter()
+        .map(|arg| arg.as_str().unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(format!("{command} {rest} \"{last}\""))
+}
+
 /// The configuration with every ADE entry taken out, and whatever that emptied.
 fn without_ade(value: &serde_json::Value) -> Option<serde_json::Value> {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
-            if map.get("command").and_then(Value::as_str).is_some_and(|c| c.contains(SCRIPT_NAME)) {
+            // ADE's own entry, whichever form it is written in: the script's
+            // name is in the command line, or among the arguments.
+            if command_of(value).is_some_and(|c| c.contains(SCRIPT_NAME)) {
                 return None;
             }
             let kept: serde_json::Map<String, Value> = map
@@ -329,15 +359,24 @@ fn without_ade(value: &serde_json::Value) -> Option<serde_json::Value> {
     }
 }
 
+/// Every invocation in the configuration that belongs to ADE, as whole command
+/// lines, so each one can be compared with the line ADE is supposed to write.
+///
+/// An entry is ADE's when the script's name appears in it, in the command line
+/// or among the arguments; what comes out is the joined form either way, so a
+/// matching script behind a different program, or with an argument added, is
+/// still a mismatch rather than a pass.
 fn ade_commands(value: &serde_json::Value, out: &mut Vec<String>) {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
-            for (key, v) in map {
-                match v {
-                    Value::String(s) if key == "command" && s.contains(SCRIPT_NAME) => out.push(s.clone()),
-                    other => ade_commands(other, out),
-                }
+            if let Some(command) = command_of(value).filter(|c| c.contains(SCRIPT_NAME)) {
+                out.push(command);
+                // The entry itself: nothing inside it is another entry.
+                return;
+            }
+            for v in map.values() {
+                ade_commands(v, out);
             }
         }
         Value::Array(items) => items.iter().for_each(|v| ade_commands(v, out)),
@@ -454,5 +493,80 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).expect("the file"), "dopo");
         assert!(!path.with_extension("ade-part").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The entry ADE installs now: program in `command`, script in `args`.
+    fn exec_entry(program: &str, script: &Path, extra: &[&str]) -> serde_json::Value {
+        let mut args = vec![
+            "-NoProfile".to_string(),
+            "-ExecutionPolicy".to_string(),
+            "Bypass".to_string(),
+            "-File".to_string(),
+            script.to_string_lossy().to_string(),
+        ];
+        args.extend(extra.iter().map(|arg| arg.to_string()));
+        serde_json::json!({
+            "type": "command",
+            "command": program,
+            "args": args,
+            "timeout": 10
+        })
+    }
+
+    /// A configuration like the user's: someone else's `Stop` hook, and ADE's
+    /// own entry at the end of `SessionStart` under a matcher.
+    fn with_ade_entry(leaf: serde_json::Value) -> String {
+        serde_json::json!({
+            "model": "opus",
+            "hooks": {
+                "Stop": [{ "hooks": [{ "type": "command", "command": "notify" }] }],
+                "SessionStart": [{
+                    "matcher": "startup|resume|clear",
+                    "hooks": [leaf]
+                }]
+            }
+        })
+        .to_string()
+    }
+
+    /// The migration that was silently failing: the entry on disk written the
+    /// old way, the one ADE is about to write with the script among the args.
+    /// While the exec entry was taken for a stranger's, the configuration
+    /// looked changed and every write was refused.
+    #[test]
+    fn an_exec_form_entry_is_recognised_as_ades_own() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let string_form = with_ade_entry(serde_json::json!({
+            "type": "command",
+            "command": command,
+            "timeout": 5
+        }));
+        let exec_form = with_ade_entry(exec_entry("powershell", &script, &[]));
+
+        assert!(check_hook_config(Some(&string_form), &exec_form, &command).is_ok());
+        assert!(check_hook_config(Some(&exec_form), &string_form, &command).is_ok());
+    }
+
+    #[test]
+    fn an_exec_form_entry_that_runs_another_program_is_refused() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let current = with_ade_entry(exec_entry("powershell", &script, &[]));
+        let next = with_ade_entry(exec_entry("cmd", &script, &[]));
+
+        let error = check_hook_config(Some(&current), &next, &command).expect_err("cmd was accepted");
+        assert!(error.contains("non riconosciuto"), "{error}");
+    }
+
+    #[test]
+    fn an_exec_form_entry_with_an_extra_argument_is_refused() {
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let current = with_ade_entry(exec_entry("powershell", &script, &[]));
+        let next = with_ade_entry(exec_entry("powershell", &script, &["-Verbose"]));
+
+        let error = check_hook_config(Some(&current), &next, &command).expect_err("-Verbose was accepted");
+        assert!(error.contains("non riconosciuto"), "{error}");
     }
 }
