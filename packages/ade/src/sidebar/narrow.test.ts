@@ -14,7 +14,10 @@ const tray = readFileSync(new URL("../shots/tray.css", import.meta.url), "utf8")
 
 /** A rule's declarations, with comments stripped so a note cannot pass for code. */
 function ruleBody(css: string, selector: string): string {
-  const start = css.indexOf(`${selector} {`)
+  // Anchored to the start of a line, or a compound selector that merely ends
+  // with this one would be mistaken for the rule itself.
+  const start = css.indexOf(`
+${selector} {`) + 1
   expect(start).toBeGreaterThanOrEqual(0)
   return css.slice(start, css.indexOf("}", start)).replace(/\/\*[\s\S]*?\*\//g, "")
 }
@@ -28,15 +31,21 @@ describe("the sidebar footer, when the column is narrow", () => {
   })
 
   /*
-   * Which one leaves is a decision, not an accident of source order: a reading
-   * can also be found in the panel, a button is the only way to reach what it
-   * opens. So the readings go, one at a time, and the buttons never move.
+   * The form changes, the contents do not. Hiding the readings one at a time
+   * left the processor alone at the 180px minimum, which the user read as a
+   * truncated row: on a narrow column they take a second line instead, and all
+   * three stay on screen.
    */
-  test("a reading leaves at each measured width, and the buttons stay", () => {
-    expect(sidebar).toMatch(/@container \(max-width: 215px\) \{\s*\[data-slot="sidebar-stat"\]\[data-kind="mem"\] \{\s*display: none/)
-    expect(sidebar).toMatch(/@container \(max-width: 192px\) \{\s*\[data-slot="sidebar-stat"\]\[data-kind="ram"\] \{\s*display: none/)
-    for (const kind of ["cpu"]) {
-      expect(sidebar).not.toContain(`[data-kind="${kind}"] {\n    display: none`)
+  test("on a narrow column the readings take a line of their own", () => {
+    const narrow = sidebar.slice(sidebar.indexOf("@container (max-width: 184px)"))
+    expect(narrow).not.toBe(sidebar)
+    expect(narrow).toContain("flex-wrap: wrap")
+    expect(narrow).toMatch(/\[data-slot="sidebar-stats"\] \{[^}]*flex: 1 0 100%/)
+  })
+
+  test("no reading is ever hidden to make the row fit", () => {
+    for (const kind of ["cpu", "ram", "mem"]) {
+      expect(sidebar).not.toMatch(new RegExp(`\[data-kind="${kind}"\] \{\s*display: none`))
     }
   })
 })
@@ -52,13 +61,26 @@ describe("the screenshot tray", () => {
     expect(body).not.toContain("grid-auto-rows")
   })
 
-  /*
-   * Fixed columns rather than fractions: a thumbnail is then the same size at
-   * every sidebar width, and the one that does not fit shows a sliver of itself
-   * — which is the only thing saying the row continues, with the scrollbar
-   * hidden and no second line to fall onto.
-   */
+  /* Fixed columns rather than fractions, so a thumbnail is the same size at
+     every sidebar width and one can hang over the edge. */
   test("its thumbnails are a fixed width, so one can hang over the edge", () => {
     expect(ruleBody(tray, '[data-slot="shot-tray-strip"]')).toMatch(/grid-auto-columns:\s*\d+px/)
+  })
+
+  /*
+   * With the scrollbar hidden, the row has to say it continues and has to move
+   * under a plain mouse wheel. Chromium turns a vertical wheel sideways only
+   * when no ancestor can take it, and the sidebar can: measured in ADE Test,
+   * three notches left scrollLeft at 0. Both halves of that are kept here.
+   */
+  test("it says it continues, on the edge that has more", () => {
+    expect(tray).toContain('[data-slot="shot-tray-more"]')
+    expect(ruleBody(tray, '[data-slot="shot-tray-row"]')).toContain("position: relative")
+  })
+
+  test("a vertical wheel is turned sideways by hand", () => {
+    const tsx = readFileSync(new URL("../shots/tray.tsx", import.meta.url), "utf8")
+    expect(tsx).toMatch(/onWheel/)
+    expect(tsx).toMatch(/scrollLeft = before \+ event\.deltaY/)
   })
 })

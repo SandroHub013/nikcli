@@ -643,6 +643,8 @@ export const it = {
   "shots.dismiss.named": (name: string) => `Togli ${name}`,
   "shots.hint": "trascinala su una sessione per darla all'agente",
   "shots.delete": "elimina",
+  "shots.more.left": "Schermate precedenti",
+  "shots.more.right": "Altre schermate",
   "shots.close": "chiudi",
 
   // Extensions

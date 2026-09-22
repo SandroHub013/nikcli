@@ -95,11 +95,40 @@
  * newest where the eye lands first.
  *
  * The columns are a fixed 76px rather than a fraction of the width, so a
- * thumbnail is the same size at every sidebar width and the one that does not
- * fit shows a sliver of itself at the edge — which is what says the row
- * continues, now that there is no scrollbar and no second line to fall onto.
- * At the minimum width two fit whole and the third is that sliver.
+ * thumbnail is the same size at every sidebar width. That the row continues is
+ * said by the fade and the arrow on the edge, not by the sliver alone: the
+ * sliver was there before and was read as the end of the tray.
  */
+/*
+ * The row and the two hints that live on its edges.
+ *
+ * Positioned here rather than on the strip itself: a pseudo-element on a
+ * scrolling box scrolls with its contents, so the fade would have drifted off
+ * the edge it exists to mark.
+ */
+[data-slot="shot-tray-row"] {
+  position: relative;
+  min-width: 0;
+}
+
+/*
+ * The edge that has more is faded out, on the side that has it.
+ *
+ * A mask rather than a gradient painted over the row: in the glass theme
+ * `--ade-surface` is literally `transparent`, so a paint of the background
+ * colour fades into nothing and the edge kept its hard cut. A mask takes the
+ * thumbnail away instead of covering it, which reads the same on all three
+ * themes, and on a scrolling box it stays on the edge instead of travelling
+ * with the contents.
+ */
+[data-slot="shot-tray-row"][data-more*="l"] [data-slot="shot-tray-strip"] {
+  --ade-shot-fade-left: 30px;
+}
+
+[data-slot="shot-tray-row"][data-more*="r"] [data-slot="shot-tray-strip"] {
+  --ade-shot-fade-right: 30px;
+}
+
 [data-slot="shot-tray-strip"] {
   display: grid;
   grid-auto-flow: column;
@@ -118,10 +147,64 @@
    * the keyboard all still work; only the bar is gone.
    */
   scrollbar-width: none;
+  --ade-shot-fade-left: 0px;
+  --ade-shot-fade-right: 0px;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--ade-shot-fade-left),
+    #000 calc(100% - var(--ade-shot-fade-right)),
+    transparent 100%
+  );
 }
 
 [data-slot="shot-tray-strip"]::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * The arrow that says there is more, and moves the row when pressed.
+ *
+ * With the scrollbar hidden the sliver of a thumbnail at the edge was the only
+ * thing saying the row continued, and the user read it as the end of the tray.
+ * It now sits on the faded edge above, so the row visibly dissolves instead of
+ * simply stopping, and pressing it moves the row by most of a screenful for
+ * anyone not using a wheel.
+ */
+[data-slot="shot-tray-more"] {
+  position: absolute;
+  top: 0;
+  bottom: var(--ade-space-1);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="shot-tray-more"][data-side="left"] {
+  left: 0;
+}
+
+[data-slot="shot-tray-more"][data-side="right"] {
+  right: 0;
+}
+
+[data-slot="shot-tray-more"]:hover {
+  color: var(--ade-text);
+}
+
+[data-slot="shot-tray-more"]:active {
+  transform: var(--ade-press);
+}
+
+[data-slot="shot-tray-more"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="shot"] {
