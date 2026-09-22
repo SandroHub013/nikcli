@@ -1614,7 +1614,12 @@ export function Workbench() {
       delete request.acked
       saveRequests()
     }
-    heldLines.push({ paneId: handoff.paneId, text: formatFallbackLine(handoff.line, reason), inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from } })
+    heldLines.push({
+      paneId: handoff.paneId,
+      text: formatFallbackLine(handoff.line, reason),
+      ...(handoff.full ? { full: formatFallbackLine(handoff.full, reason) } : {}),
+      inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from },
+    })
     appendLine(handoff.paneId, t("note.viaFallback", reason), "note")
     if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note")
   }
@@ -1676,7 +1681,7 @@ export function Workbench() {
     return sessions
   }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string }[] = []
   /**
    * Replies to natively delivered requests, kept as files until the caller is
    * free. On the typed route the caller is already blocked in `ade-msg ask`
@@ -2273,6 +2278,7 @@ export function Workbench() {
           heldLines.push({
             paneId: item.callerId,
             text: formatLateReply(item.ref, text, item.sender),
+            full: formatLateReply(item.ref, text, item.sender, { keepLines: true }),
             inbox: { id: item.ref, kind: "reply", from: item.from },
           })
         }
@@ -2284,7 +2290,7 @@ export function Workbench() {
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
-        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
+        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox, item.full) : typeLine(session, item.text))
       } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
         // Replies and updates too, not only what went to the inbox: the
         // sender is told at once, and once, why this is not arriving.
@@ -2953,14 +2959,13 @@ export function Workbench() {
       alreadyQueued: held.has(id),
     })
     if (route.via === "nativa") {
-      const line =
-        message.kind === "ask"
-          ? formatRequest(id, message.text, sender, {
-              ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
-              depth: depthOf(target.pane.id, parentOf),
-              maxDepth: maxDepth(),
-            })
-          : formatDelivery(message, sender)
+      const nativeContext = {
+        ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+        depth: depthOf(target.pane.id, parentOf),
+        maxDepth: maxDepth(),
+      }
+      const line = message.kind === "ask" ? formatRequest(id, message.text, sender, nativeContext) : formatDelivery(message, sender)
+      const full = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...nativeContext, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
       if (message.kind === "ask") {
         const at = Date.now()
         openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa" })
@@ -2974,7 +2979,7 @@ export function Workbench() {
         appendLine(sender.id, t("note.viaNative", route.name), "note")
       }
       held.delete(id)
-      handoffs.set(id, { paneId: target.pane.id, line, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
+      handoffs.set(id, { paneId: target.pane.id, line, full, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
       saveHandoffs()
       await answer(formatHandoff(route.name, id, line))
       return true

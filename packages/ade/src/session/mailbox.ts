@@ -984,8 +984,8 @@ export function briefOf(text: string, length = 60): string {
 }
 
 /** The answer to a request, typed into the caller when nothing was waiting for it any more. */
-export function formatLateReply(ref: string, text: string, replier: MailPane | undefined): string {
-  return `[Risposta a ${ref} da ${who(replier)}]: ${oneLine(text)}`
+export function formatLateReply(ref: string, text: string, replier: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+  return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? cleanText(text) : oneLine(text)}`
 }
 
 /**
