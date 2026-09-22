@@ -214,6 +214,7 @@ import {
   statusFromActivity,
   sameDir,
   formatLateReply,
+  formatLost,
   formatRequest,
   parseMessage,
   resolveAgent,
@@ -263,7 +264,7 @@ import {
   withMemoryEntry,
   type TokenUsage,
 } from "../session/shared"
-import { displayArgs, introArgs, withIntro } from "../session-new/intro"
+import { displayArgs, introArgs, introText, withIntro } from "../session-new/intro"
 import { createThemeState } from "./theme-state"
 import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
@@ -1616,7 +1617,12 @@ export function Workbench() {
       delete request.acked
       saveRequests()
     }
-    heldLines.push({ paneId: handoff.paneId, text: formatFallbackLine(handoff.line, reason), inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from } })
+    heldLines.push({
+      paneId: handoff.paneId,
+      text: formatFallbackLine(handoff.line, reason),
+      ...(handoff.full ? { full: formatFallbackLine(handoff.full, reason) } : {}),
+      inbox: { id: handoff.id, kind: handoff.kind, from: handoff.from },
+    })
     appendLine(handoff.paneId, t("note.viaFallback", reason), "note")
     if (running.has(handoff.from)) appendLine(handoff.from, t("note.viaFallback", reason), "note")
   }
@@ -1678,7 +1684,7 @@ export function Workbench() {
     return sessions
   }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string }[] = []
   /**
    * Replies to natively delivered requests, kept as files until the caller is
    * free. On the typed route the caller is already blocked in `ade-msg ask`
@@ -1831,13 +1837,15 @@ export function Workbench() {
     paneId: string,
     line: string,
     meta: InboxMeta,
+    /** What the inbox file holds when it differs from the typed line: the same text with its line breaks. */
+    full: string = line,
   ): Promise<boolean> => {
     const session = running.get(paneId)
     if (!session) return false
     if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return typeLine(session, line)
     const at = Date.now()
-    const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: line.length, at, ringAt: at, rings: 0 }
-    const stored = await host.mailboxInboxPut(paneId, entry.name, line).then(
+    const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: full.length, at, ringAt: at, rings: 0 }
+    const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
       () => false,
     )
@@ -1853,7 +1861,25 @@ export function Workbench() {
     let changed = false
     for (const entry of [...inboxPending]) {
       const session = running.get(entry.paneId)
-      const read = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => false) : false
+      const state = session ? await host.mailboxInboxRead(entry.paneId, entry.name).catch(() => "unread" as const) : "unread"
+      if (state === "lost") {
+        /*
+         * Gone before it was read: said as lost, to the sender and, for a
+         * request, to whoever waits on it, so nobody believes it arrived. A
+         * file the reader moved is "read"; only a file in neither place is this.
+         */
+        inboxPending.splice(inboxPending.indexOf(entry), 1)
+        const reader = mailPanes().find((pane) => pane.id === entry.paneId)
+        appendLine(entry.paneId, t("note.inboxLost", entry.id), "note")
+        if (entry.kind === "ask" || entry.kind === "spawn") {
+          if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
+        } else if (entry.from && running.has(entry.from)) {
+          heldLines.push({ paneId: entry.from, text: formatLost(entry, reader) })
+        }
+        changed = true
+        continue
+      }
+      const read = state === "read"
       const free = session && !read ? await freeNow(host, entry.paneId) : false
       const action = inboxAction(
         entry,
@@ -2255,6 +2281,7 @@ export function Workbench() {
           heldLines.push({
             paneId: item.callerId,
             text: formatLateReply(item.ref, text, item.sender),
+            full: formatLateReply(item.ref, text, item.sender, { keepLines: true }),
             inbox: { id: item.ref, kind: "reply", from: item.from },
           })
         }
@@ -2266,7 +2293,7 @@ export function Workbench() {
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
-        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox) : typeLine(session, item.text))
+        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox, item.full) : typeLine(session, item.text))
       } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
         // Replies and updates too, not only what went to the inbox: the
         // sender is told at once, and once, why this is not arriving.
@@ -2935,14 +2962,13 @@ export function Workbench() {
       alreadyQueued: held.has(id),
     })
     if (route.via === "nativa") {
-      const line =
-        message.kind === "ask"
-          ? formatRequest(id, message.text, sender, {
-              ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
-              depth: depthOf(target.pane.id, parentOf),
-              maxDepth: maxDepth(),
-            })
-          : formatDelivery(message, sender)
+      const nativeContext = {
+        ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+        depth: depthOf(target.pane.id, parentOf),
+        maxDepth: maxDepth(),
+      }
+      const line = message.kind === "ask" ? formatRequest(id, message.text, sender, nativeContext) : formatDelivery(message, sender)
+      const full = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...nativeContext, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
       if (message.kind === "ask") {
         const at = Date.now()
         openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa" })
@@ -2956,7 +2982,7 @@ export function Workbench() {
         appendLine(sender.id, t("note.viaNative", route.name), "note")
       }
       held.delete(id)
-      handoffs.set(id, { paneId: target.pane.id, line, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
+      handoffs.set(id, { paneId: target.pane.id, line, full, id, kind: ask ? "ask" : "send", from: message.from, at: Date.now() })
       saveHandoffs()
       await answer(formatHandoff(route.name, id, line))
       return true
@@ -2993,15 +3019,15 @@ export function Workbench() {
     heldStates.delete(id)
 
     const targetDepth = depthOf(target.pane.id, parentOf)
-    const line =
-      message.kind === "ask"
-        ? formatRequest(id, message.text, sender, {
-            ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
-            depth: targetDepth,
-            maxDepth: maxDepth(),
-          })
-        : formatDelivery(message, sender)
-    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }))) {
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: targetDepth,
+      maxDepth: maxDepth(),
+    }
+    const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    // The inbox copy, read and never typed, keeps the sender's line breaks.
+    const stored = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
+    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored))) {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -5298,7 +5324,7 @@ export function Workbench() {
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     const extraArgs = [
-      ...introArgs(agentId),
+      ...introArgs(agentId, introText(agentId, modelIn([...(launched?.spawnArgs ?? []), ...(extra ?? [])]))),
       ...nativeLaunchArgs(agentId, paneTitle),
       ...(launched?.spawnArgs ?? []),
       ...opening.args,

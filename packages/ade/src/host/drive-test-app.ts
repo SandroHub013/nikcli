@@ -52,8 +52,17 @@ export function pickPage(targets: unknown): CdpTarget | string {
   return page ?? "nessuna finestra fra i bersagli di /json/list"
 }
 
-/** What the page is asked, before any command: it answers with the build attribute. */
-export const BUILD_CHECK = "document.documentElement.dataset.adeBuild ?? null"
+/**
+ * What the page is asked, before any command: the build mark, and whether the
+ * workbench is on screen yet. Both travel in one round trip.
+ */
+export const BUILD_CHECK =
+  '({ build: document.documentElement.dataset.adeBuild ?? null, workbench: !!document.querySelector("[data-slot=ade-bar]") })'
+
+/** How long the page may take to declare itself before the script gives up waiting. */
+export const BUILD_WAIT_MS = 15_000
+
+export type BuildVerdict = "test" | "waiting" | "other"
 
 /**
  * Only a test build is driven. `dev.tsx` sets `data-ade-build="test"` on the
@@ -61,12 +70,32 @@ export const BUILD_CHECK = "document.documentElement.dataset.adeBuild ?? null"
  * the official ADE answers `null`. The check is on the page, not on the port,
  * because the port is only a convention and the user may have opened remote
  * debugging on the official app for a reason of their own.
+ *
+ * The mark arrives a moment after the page, and after the workbench too:
+ * `dev.tsx` asks Tauri for the identifier and sets the mark when the answer
+ * comes, while the workbench renders on its own. The first version refused a
+ * bare workbench at once with the message meant for the official ADE — true
+ * for a few seconds only, and exactly the fear the check exists to remove.
+ * So a missing mark is always waited for; once the wait is over, a workbench
+ * still without it is another ADE, refused hard, and no workbench at all is a
+ * window still loading, said as such.
  */
-export function buildRefusal(value: unknown): string | undefined {
-  if (value === "test") return undefined
-  return value === null || value === undefined
+export function buildVerdict(answer: unknown, waited = false): BuildVerdict {
+  const { build, workbench } = (answer && typeof answer === "object" ? answer : {}) as { build?: unknown; workbench?: unknown }
+  if (build === "test") return "test"
+  if (build === null || build === undefined) return waited && workbench ? "other" : "waiting"
+  return "other"
+}
+
+/** The message for each refusal; the one for another ADE stays as hard as it was. */
+export function buildRefusal(verdict: Exclude<BuildVerdict, "test">, answer?: unknown): string {
+  if (verdict === "waiting") {
+    return `sto ancora aspettando che la pagina dichiari di essere ADE Test: dopo ${BUILD_WAIT_MS / 1000} s non lo ha fatto. La finestra sta ancora caricando? Riprova fra poco`
+  }
+  const build = (answer && typeof answer === "object" ? (answer as { build?: unknown }).build : undefined) ?? null
+  return build === null
     ? "questa finestra non è ADE Test (nessun contrassegno di build di prova): non si guida ADE ufficiale, nemmeno per sbaglio"
-    : `questa finestra ha un contrassegno di build sconosciuto (${String(value)}): mi fermo`
+    : `questa finestra ha un contrassegno di build sconosciuto (${String(build)}): è un'altra ADE, non la guido`
 }
 
 /** The commands, with the argument each takes. */

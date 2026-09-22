@@ -171,6 +171,8 @@ export interface Handoff {
   /** Whose mail, and what ADE would have typed. */
   paneId: string
   line: string
+  /** The same text with the sender's line breaks, for the inbox copy if the fallback goes there. */
+  full?: string
   id: string
   kind: "ask" | "send"
   from: string
@@ -202,7 +204,7 @@ export function parseHandoffs(text: string | null | undefined): Handoff[] {
           typeof (entry as Handoff).from === "string" &&
           typeof (entry as Handoff).at === "number",
       )
-      .map(({ paneId, line, id, kind, from, at }) => ({ paneId, line, id, kind, from, at }))
+      .map(({ paneId, line, full, id, kind, from, at }) => ({ paneId, line, ...(typeof full === "string" ? { full } : {}), id, kind, from, at }))
   } catch {
     return []
   }

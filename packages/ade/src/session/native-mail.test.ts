@@ -143,6 +143,8 @@ describe("parseHandoffs", () => {
   test("keeps what a restart needs and nothing else", () => {
     const [kept] = parseHandoffs(JSON.stringify([{ ...handoff, acked: true, stray: 1 }]))
     expect(kept).toEqual(handoff)
+    const [withFull] = parseHandoffs(JSON.stringify([{ ...handoff, full: "[Richiesta x]: fai\ny" }]))
+    expect(withFull).toEqual({ ...handoff, full: "[Richiesta x]: fai\ny" })
   })
 
   test("drops what is not a handoff", () => {

@@ -323,10 +323,21 @@ export function resolveAgent(
 
 /** Control characters out, line breaks to spaces, and a ceiling on length. */
 function oneLine(text: string): string {
+  return cleanText(text.replace(/\r?\n|\r/g, " "))
+}
+
+/**
+ * The text as the sender wrote it, minus control characters, for the copy that
+ * goes to the inbox file and is read with `ade-msg inbox`: nobody types that
+ * copy, so nothing there has to be one line. S72 found the sender's numbered
+ * points flattened into one paragraph on the way, and the sender writing
+ * longer to compensate.
+ */
+function cleanText(text: string): string {
   const clean = text
-    .replace(/\r?\n|\r/g, " ")
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, "")
+    .replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, "")
+    .replace(/\r\n?/g, "\n")
     .trim()
   return clean.length > MAX_TEXT ? `${clean.slice(0, MAX_TEXT)}… [troncato]` : clean
 }
@@ -342,9 +353,9 @@ function who(sender: MailPane | undefined): string {
  * a keystroke in somebody else's terminal — and line breaks become spaces,
  * because Enter is what submits the line and a message must arrive whole.
  */
-export function formatDelivery(message: { text: string }, sender: MailPane | undefined): string {
+export function formatDelivery(message: { text: string }, sender: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
   const reply = sender ? ` — rispondi: ade-msg send ${sender.id} "<testo>"` : ""
-  return `[Messaggio da ${who(sender)}]: ${oneLine(message.text)}${reply}`
+  return `[Messaggio da ${who(sender)}]: ${options.keepLines ? cleanText(message.text) : oneLine(message.text)}${reply}`
 }
 
 /**
@@ -374,7 +385,7 @@ export function formatRequest(
       ? " Non avviare sessioni (ultimo livello)."
       : ""
   return (
-    `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} —${where}${delegate} ` +
+    `[Richiesta ${id} da ${who(sender)}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
     `Rispondi solo con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
     `); se bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
@@ -382,6 +393,8 @@ export function formatRequest(
 }
 
 export interface RequestContext {
+  /** For the inbox copy, which nobody types: the sender's line breaks stay. */
+  keepLines?: boolean
   worktree?: { path: string; branch: string }
   /** Where detail that does not belong in the reply goes. */
   resultsDir?: string
@@ -534,6 +547,16 @@ export function formatHeldReceipt(target: MailPane | undefined): string {
 export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
   const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
   return `[ade-msg] ${who(reader)} non ha letto ${what} dopo ${entry.rings + 1} avvisi: resta nella sua inbox; ricordaglielo o annulla la richiesta`
+}
+
+/**
+ * Told to the sender when the inbox file is gone before it was read: lost,
+ * not ignored, and said as such. For a request it is also the answer the
+ * waiter gets, so `ade-msg wait` ends instead of running out.
+ */
+export function formatLost(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+  return `[ade-msg] errore: ${what} risulta persa, non ignorata: il file nella casella di ${who(reader)} è sparito prima di essere letto. Rimandala.`
 }
 
 /** Entries restored from storage; anything malformed is dropped. */
@@ -961,8 +984,8 @@ export function briefOf(text: string, length = 60): string {
 }
 
 /** The answer to a request, typed into the caller when nothing was waiting for it any more. */
-export function formatLateReply(ref: string, text: string, replier: MailPane | undefined): string {
-  return `[Risposta a ${ref} da ${who(replier)}]: ${oneLine(text)}`
+export function formatLateReply(ref: string, text: string, replier: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+  return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? cleanText(text) : oneLine(text)}`
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   MAX_TEXT,
   formatDelivery,
   formatLateReply,
+  formatLost,
   formatRequest,
   isFree,
   statusFromActivity,
@@ -358,6 +359,23 @@ describe("spawn options, updates and the request contract", () => {
     expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
     expect(line).not.toContain("livello 1 di 2")
     expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare sessioni")
+  })
+
+  test("a vanished inbox file is said as lost, never as read", () => {
+    const reader = { id: "p2", title: "Sessione 2", agent: "claude-code" } as Parameters<typeof formatLost>[1]
+    expect(formatLost({ id: "171-ab", kind: "ask" }, reader)).toBe(
+      '[ade-msg] errore: la richiesta 171-ab risulta persa, non ignorata: il file nella casella di "Sessione 2" è sparito prima di essere letto. Rimandala.',
+    )
+    expect(formatLost({ id: "x", kind: "send" }, undefined)).toContain("il tuo messaggio risulta persa")
+  })
+
+  /** The typed line is one line; the copy read with `ade-msg inbox` keeps the sender's structure. */
+  test("keeps the sender's line breaks only for the inbox copy", () => {
+    const text = "Due cose:\n(1) la prima\r\n(2) la seconda\u0007"
+    expect(formatRequest("x", text, undefined)).toContain("Due cose: (1) la prima (2) la seconda —")
+    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda —")
+    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda")
+    expect(formatDelivery({ text }, undefined)).not.toContain("\n")
   })
 
   test("an update tells the caller how to unblock and resume waiting", () => {

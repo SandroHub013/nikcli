@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
 
-import { BUILD_CHECK, buildRefusal, chooseCdpPort, notListening, parseArgs, pickPage, usage } from "./drive-test-app"
+import { BUILD_CHECK, buildRefusal, buildVerdict, chooseCdpPort, notListening, parseArgs, pickPage, usage } from "./drive-test-app"
 
 describe("chooseCdpPort", () => {
   test("CDP_PORT wins, and must be a port", () => {
@@ -27,14 +27,29 @@ describe("pickPage", () => {
   })
 })
 
-describe("buildRefusal", () => {
+describe("the build check", () => {
   /** `dev.tsx` marks a test build and nothing marks the official one. */
-  test("drives a test build only", () => {
-    expect(buildRefusal("test")).toBeUndefined()
-    expect(buildRefusal(null)).toContain("non si guida ADE ufficiale")
-    expect(buildRefusal(undefined)).toContain("non si guida ADE ufficiale")
-    expect(buildRefusal("prod")).toContain("sconosciuto")
+  test("drives a test build only, and tells loading from another ADE", () => {
+    expect(buildVerdict({ build: "test", workbench: true })).toBe("test")
+    expect(buildVerdict({ build: "test", workbench: false })).toBe("test")
+    // No mark yet: ask again, even with the workbench up — it renders before the mark lands.
+    expect(buildVerdict({ build: null, workbench: false })).toBe("waiting")
+    expect(buildVerdict({ build: null, workbench: true })).toBe("waiting")
+    expect(buildVerdict(undefined)).toBe("waiting")
+    // The wait is over: a workbench still without the mark is another ADE; no workbench is still loading.
+    expect(buildVerdict({ build: null, workbench: true }, true)).toBe("other")
+    expect(buildVerdict({ build: null, workbench: false }, true)).toBe("waiting")
+    // A foreign mark is another build at once.
+    expect(buildVerdict({ build: "prod", workbench: false })).toBe("other")
     expect(BUILD_CHECK).toContain("adeBuild")
+    expect(BUILD_CHECK).toContain("ade-bar")
+  })
+
+  test("the two refusals are different sentences, and the hard one stays hard", () => {
+    expect(buildRefusal("waiting")).toContain("sto ancora aspettando")
+    expect(buildRefusal("waiting")).not.toContain("ufficiale")
+    expect(buildRefusal("other", { build: null, workbench: true })).toContain("non si guida ADE ufficiale, nemmeno per sbaglio")
+    expect(buildRefusal("other", { build: "prod" })).toContain("un'altra ADE, non la guido")
   })
 })
 
