@@ -462,6 +462,7 @@ export const it = {
   "browser.mode.edit.tip": "Modalità Ispezione ed Editing",
   "browser.rotate": "Ruota orientamento",
   "browser.preview": "Anteprima del browser",
+  "browser.recordVeil.title": "Pagina nascosta durante la ripresa",
   "browser.error.title": "Impossibile caricare l'URL",
   "browser.error.hint": "Verifica che il server sia avviato e raggiungibile.",
   "browser.retry": "Riprova",

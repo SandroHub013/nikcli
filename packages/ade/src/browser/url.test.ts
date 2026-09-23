@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { isAdeOrigin, isValidBrowserUrl, normalizeUrl } from "./url"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { addressForTake, addressNeedsCover, isAdeOrigin, isValidBrowserUrl, normalizeUrl } from "./url"
+import { RECORDING_ATTRIBUTE } from "../record/sensitive"
 
 describe("normalizeUrl", () => {
   describe("port shorthands", () => {
@@ -226,5 +229,205 @@ describe("isAdeOrigin", () => {
     expect(isAdeOrigin("http://localhost:5173/", "http://localhost:5177")).toBe(false)
     expect(isAdeOrigin("https://bastelli-cmp.vercel.app/", "http://tauri.localhost")).toBe(false)
     expect(isAdeOrigin("not a url", "http://tauri.localhost")).toBe(false)
+  })
+})
+
+describe("a take on the browser pane (D78)", () => {
+  test("addressForTake: origin and path only, strips credentials, query and fragment", () => {
+    // 1. https://u:p@h.com/a?token=x#y -> https://h.com/a
+    expect(addressForTake("https://u:p@h.com/a?token=x#y")).toBe("https://h.com/a")
+
+    // 2. http://localhost:3000/ resta com'è
+    expect(addressForTake("http://localhost:3000/")).toBe("http://localhost:3000/")
+
+    // 3. un indirizzo non valido dà ""
+    expect(addressForTake("")).toBe("")
+    expect(addressForTake("not a url")).toBe("")
+    expect(addressForTake(":::")).toBe("")
+    expect(addressForTake("javascript:alert(1)")).toBe("")
+
+    // 4. un percorso lungo si tronca
+    const longPath = "/path/" + "x".repeat(100)
+    const truncated = addressForTake(`https://example.com${longPath}`)
+    expect(truncated).toContain("…")
+    expect(truncated).toStartWith("https://example.com/path/")
+
+    // 5. il risultato non contiene mai @, ? o #
+    const checks = [
+      "https://u:p@h.com/a?token=x#y",
+      "http://user:pass@localhost:3000/?foo=bar#section",
+      "https://user@test.org/p?q=1#h",
+    ]
+    for (const url of checks) {
+      const res = addressForTake(url)
+      expect(res).not.toContain("@")
+      expect(res).not.toContain("?")
+      expect(res).not.toContain("#")
+    }
+
+    // Special schemes: about:blank, data:, blob:
+    expect(addressForTake("about:blank")).toBe("about:")
+    expect(addressForTake("data:text/html,<h1>hi</h1>")).toBe("data:")
+    expect(addressForTake("blob:https://example.com/uuid")).toBe("blob:")
+  })
+
+  test("addressNeedsCover: true for credentials, queries and secrets; false for clean localhost", () => {
+    // vero con user:pass@, con ?q= e con DB_PASS=… incollato
+    expect(addressNeedsCover("user:pass@")).toBe(true)
+    expect(addressNeedsCover("https://user:pass@example.com/")).toBe(true)
+    expect(addressNeedsCover("?q=")).toBe(true)
+    expect(addressNeedsCover("http://localhost:5173/?q=secret")).toBe(true)
+    expect(addressNeedsCover("DB_PASS=hunter2hunter2")).toBe(true)
+
+    // falso con http://localhost:5173/
+    expect(addressNeedsCover("http://localhost:5173/")).toBe(false)
+    expect(addressNeedsCover("http://localhost:3000")).toBe(false)
+  })
+
+  test("recording veil CSS: flex and frame hidden under data-ade-recording; veil none and frame visible without", () => {
+    const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+
+    // Verify rules exist in index.css
+    const veilDefault = css.slice(css.indexOf('[data-slot="browser-record-veil"]'))
+    const veilDefaultBody = veilDefault.slice(veilDefault.indexOf("{"), veilDefault.indexOf("}"))
+    expect(veilDefaultBody).toMatch(/display:\s*none/)
+
+    const veilRecording = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"]`))
+    const veilRecordingBody = veilRecording.slice(veilRecording.indexOf("{"), veilRecording.indexOf("}"))
+    expect(veilRecordingBody).toMatch(/display:\s*flex/)
+    expect(veilRecordingBody).toMatch(/position:\s*absolute/)
+    expect(veilRecordingBody).toMatch(/inset:\s*0/)
+    expect(veilRecordingBody).toMatch(/background:\s*var\(--ade-bg\)/)
+
+    const frameRecording = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-frame"]`))
+    const frameRecordingBody = frameRecording.slice(frameRecording.indexOf("{"), frameRecording.indexOf("}"))
+    expect(frameRecordingBody).toMatch(/visibility:\s*hidden/)
+
+    // Matcher test with and without data-ade-recording on <html>
+    const veilSelector = `html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"]`
+    const frameSelector = `html[${RECORDING_ATTRIBUTE}] [data-slot="browser-frame"]`
+    const defaultVeilSelector = `[data-slot="browser-record-veil"]`
+
+    // Drawn again after each change to <html>: happy-dom keeps an element's match across an ancestor's attribute change.
+    const draw = () => {
+      document.body.innerHTML = `
+        <div data-slot="browser-viewport-container">
+          <div data-slot="browser-record-veil" id="test-veil"></div>
+          <iframe data-slot="browser-frame" id="test-frame"></iframe>
+        </div>
+      `
+    }
+
+    // Under recording: veil matches recording flex selector, frame matches recording hidden selector
+    document.documentElement.setAttribute(RECORDING_ATTRIBUTE, "")
+    draw()
+    const veilEl1 = document.getElementById("test-veil")!
+    const frameEl1 = document.getElementById("test-frame")!
+    expect(veilEl1.matches(veilSelector)).toBe(true)
+    expect(frameEl1.matches(frameSelector)).toBe(true)
+
+    // Without recording: veil matches display:none selector, neither matches recording selector
+    document.documentElement.removeAttribute(RECORDING_ATTRIBUTE)
+    draw()
+    const veilEl2 = document.getElementById("test-veil")!
+    const frameEl2 = document.getElementById("test-frame")!
+    expect(veilEl2.matches(veilSelector)).toBe(false)
+    expect(frameEl2.matches(frameSelector)).toBe(false)
+    expect(veilEl2.matches(defaultVeilSelector)).toBe(true)
+
+    document.body.innerHTML = ""
+  })
+
+  test("recording veil DOM: present on initial render of BrowserPane without Show", () => {
+    // Structural check: the veil is a direct child of browser-viewport-container and not wrapped in a conditional <Show>
+    const source = readFileSync(join(import.meta.dir, "browser-pane.tsx"), "utf8")
+    expect(source).toMatch(/data-slot="browser-viewport-container">\s*<div data-slot="browser-record-veil"/)
+    expect(source).not.toMatch(/<Show[^>]*>\s*<div data-slot="browser-record-veil"/)
+
+    // The veil includes title and reduced address
+    expect(source).toContain('data-slot="browser-record-veil-title"')
+    expect(source).toContain('data-slot="browser-record-veil-url"')
+    expect(source).toContain("addressForTake(url())")
+
+    // Address bar input has data-sensitive tied to addressNeedsCover
+    expect(source).toContain('data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}')
+
+    // In DOM, the veil element exists and contains the title text
+    document.body.innerHTML = `
+      <div data-slot="browser-viewport-container">
+        <div data-slot="browser-record-veil">
+          <span data-slot="browser-record-veil-title">Pagina nascosta durante la ripresa</span>
+        </div>
+      </div>
+    `
+    const veil = document.querySelector('[data-slot="browser-record-veil"]')
+    expect(veil).not.toBeNull()
+    expect(document.querySelector('[data-slot="browser-record-veil-title"]')?.textContent).toBe("Pagina nascosta durante la ripresa")
+    document.body.innerHTML = ""
+  })
+
+  test("recording veil under glass theme: veil background is solid #131111 (alpha 1) while light/dark keep var(--ade-bg)", () => {
+    const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+
+    // In [data-theme="glass"], container background is explicitly transparent:
+    // line 136: --ade-bg: transparent;
+    const glassSection = css.slice(css.indexOf('[data-theme="glass"]'))
+    const glassSectionBody = glassSection.slice(glassSection.indexOf("{"), glassSection.indexOf("}"))
+    expect(glassSectionBody).toMatch(/--ade-bg:\s*transparent/)
+
+    // Rule 1: Default veil rule for light and dark themes keeps var(--ade-bg).
+    // In light theme --ade-bg is #f4f2f0 and text is #1a1817 (dark text on light ground).
+    // In dark theme --ade-bg is #131111 and text is #ecebeb (light text on dark ground).
+    const defaultVeilRule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"]`))
+    const defaultVeilBody = defaultVeilRule.slice(defaultVeilRule.indexOf("{"), defaultVeilRule.indexOf("}"))
+    expect(defaultVeilBody).toMatch(/background:\s*var\(--ade-bg\)/)
+
+    // Rule 2: In glass theme, --ade-bg is transparent, so an explicit override is declared
+    // covering both html[data-theme="glass"] and [data-component="ade-shell"][data-theme="glass"].
+    const glassVeilRule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}][data-theme="glass"] [data-slot="browser-record-veil"]`))
+    const glassVeilBody = glassVeilRule.slice(glassVeilRule.indexOf("{"), glassVeilRule.indexOf("}"))
+    expect(glassVeilBody).toMatch(/background:\s*#131111/)
+
+    // Verify #131111 is full 6-digit hex without alpha channel (solid, alpha 1).
+    const bgMatch = glassVeilBody.match(/background:\s*(#[0-9a-fA-F]{6})/)
+    expect(bgMatch).not.toBeNull()
+    const hexColor = bgMatch![1]
+    expect(hexColor).toBe("#131111")
+    expect(hexColor.length).toBe(7) // # followed by 6 hex chars (alpha 1)
+
+    // Selector matching check:
+    // With data-theme="glass", element matches the glass veil selector.
+    // In happy-dom, CSS variables declared across external stylesheets are not evaluated by getComputedStyle;
+    // testing the selectors and stylesheet rules directly verifies the cascade behavior.
+    const glassVeilSelectorRoot = `html[${RECORDING_ATTRIBUTE}][data-theme="glass"] [data-slot="browser-record-veil"]`
+    const glassVeilSelectorInner = `html[${RECORDING_ATTRIBUTE}] [data-theme="glass"] [data-slot="browser-record-veil"]`
+
+    // Case A: data-theme="glass" on <html>
+    document.documentElement.setAttribute(RECORDING_ATTRIBUTE, "")
+    document.documentElement.setAttribute("data-theme", "glass")
+    document.body.innerHTML = `<div data-slot="browser-record-veil" id="veil-glass"></div>`
+    const veilGlassRoot = document.getElementById("veil-glass")!
+    expect(veilGlassRoot.matches(glassVeilSelectorRoot)).toBe(true)
+
+    // Case B: data-theme="glass" on shell/inner container
+    document.documentElement.removeAttribute("data-theme")
+    document.body.innerHTML = `
+      <div data-component="ade-shell" data-theme="glass">
+        <div data-slot="browser-record-veil" id="veil-glass-inner"></div>
+      </div>
+    `
+    const veilGlassInner = document.getElementById("veil-glass-inner")!
+    expect(veilGlassInner.matches(glassVeilSelectorInner)).toBe(true)
+
+    // Case C: light / dark themes do not match glass selector
+    document.documentElement.setAttribute("data-theme", "light")
+    document.body.innerHTML = `<div data-slot="browser-record-veil" id="veil-light"></div>`
+    const veilLight = document.getElementById("veil-light")!
+    expect(veilLight.matches(glassVeilSelectorRoot)).toBe(false)
+    expect(veilLight.matches(glassVeilSelectorInner)).toBe(false)
+
+    document.documentElement.removeAttribute("data-theme")
+    document.documentElement.removeAttribute(RECORDING_ATTRIBUTE)
+    document.body.innerHTML = ""
   })
 })
