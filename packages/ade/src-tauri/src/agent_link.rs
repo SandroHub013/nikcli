@@ -244,9 +244,50 @@ pub async fn agent_hook_write(
     let config = under_home(target.config)?;
     let script_path = under_home(target.script)?;
 
+    tauri::async_runtime::spawn_blocking(move || {
+        write_hook_files(&config, &script_path, &config_text, script.as_deref(), |script_path| {
+            let brand = crate::brand::name();
+            let question = format!(
+                "{brand} vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire a {brand} quale conversazione ha aperto. Consentire?",
+                script_path.display()
+            );
+            use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+            app.dialog()
+                .message(question)
+                .title(format!("Hook di {}", crate::brand::name()))
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                .blocking_show()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/*
+ * The body of `agent_hook_write`, with the confirmation handed in so a test
+ * can stand in for the dialog.
+ *
+ * The dialog can stay open for as long as the user leaves it, and the file
+ * belongs to another program: whatever it or the user wrote to it meanwhile
+ * was overwritten by a configuration built from the copy read before
+ * (audit 0.7.7, point 0 of the post-0.7.7 list). So the file is read again
+ * after the dialog, and if it is no longer the one the check passed on,
+ * nothing is written: the caller gets an error and tries again, from what is
+ * on disk now. Nothing is merged — the configuration was built from the old
+ * copy, and guessing how the two fit together is how someone's settings get
+ * damaged.
+ */
+fn write_hook_files(
+    config: &Path,
+    script_path: &Path,
+    config_text: &str,
+    script: Option<&str>,
+    confirm: impl FnOnce(&Path) -> bool,
+) -> Result<(), String> {
     /*
-     * This command writes a program another CLI runs and the configuration
-     * that makes it run, so it must not be a way to install any program.
+     * This writes a program another CLI runs and the configuration that makes
+     * it run, so it must not be a way to install any program.
      *
      * The configuration may differ from what is on disk only in ADE's own
      * entries, and those must invoke ADE's script exactly as `hookCommand`
@@ -254,29 +295,21 @@ pub async fn agent_hook_write(
      * that is not already the one on disk is shown to the user first, in a
      * native dialog nothing in the webview can click.
      */
-    let current = fs::read_to_string(&config).ok();
-    check_hook_config(current.as_deref(), &config_text, &hook_command(&script_path))?;
-    if let Some(text) = script.as_ref() {
-        let on_disk = fs::read_to_string(&script_path).ok();
-        if on_disk.as_deref() != Some(text.as_str()) {
-            let brand = crate::brand::name();
-            let question = format!(
-                "{brand} vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire a {brand} quale conversazione ha aperto. Consentire?",
-                script_path.display()
-            );
-            let allowed = tauri::async_runtime::spawn_blocking(move || {
-                use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-                app.dialog()
-                    .message(question)
-                    .title(format!("Hook di {}", crate::brand::name()))
-                    .kind(MessageDialogKind::Warning)
-                    .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
-                    .blocking_show()
-            })
-            .await
-            .map_err(|e| e.to_string())?;
-            if !allowed {
+    let current = fs::read_to_string(config).ok();
+    check_hook_config(current.as_deref(), config_text, &hook_command(script_path))?;
+    if let Some(text) = script {
+        let on_disk = fs::read_to_string(script_path).ok();
+        if on_disk.as_deref() != Some(text) {
+            if !confirm(script_path) {
                 return Err("installazione dell'hook annullata".to_string());
+            }
+            // Read again: the dialog may have been open for minutes.
+            let now = fs::read_to_string(config).ok();
+            if now != current {
+                return Err(format!(
+                    "{} è cambiato mentre il dialogo era aperto: riprova",
+                    config.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+                ));
             }
         }
     }
@@ -286,9 +319,9 @@ pub async fn agent_hook_write(
             if let Some(parent) = script_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| format!("cartella hook non creata: {e}"))?;
             }
-            write_atomic(&script_path, text.as_bytes())?;
+            write_atomic(script_path, text.as_bytes())?;
         }
-        None => match fs::remove_file(&script_path) {
+        None => match fs::remove_file(script_path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(format!("script non rimosso: {error}")),
@@ -298,7 +331,7 @@ pub async fn agent_hook_write(
     if let Some(parent) = config.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("cartella configurazione non creata: {e}"))?;
     }
-    write_atomic(&config, config_text.as_bytes())
+    write_atomic(config, config_text.as_bytes())
 }
 
 /// How a CLI's configuration invokes ADE's script. Mirrors `hookCommand` in `agent-hooks.ts`.
@@ -447,6 +480,70 @@ mod tests {
         assert!(check_hook_config(Some(current), &foreign, &command).is_err());
         let hijacked = installed.replace("powershell -NoProfile", "calc & powershell -NoProfile");
         assert!(check_hook_config(Some(current), &hijacked, &command).is_err());
+    }
+
+    /// A settings file and a script path in a fresh folder of their own, under the test TEMP.
+    fn hook_scratch(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let dir = std::env::temp_dir().join(format!(
+            "ade-hook-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        (dir.join("settings.json"), dir.join("hooks").join(SCRIPT_NAME), dir)
+    }
+
+    #[test]
+    fn a_settings_file_changed_while_the_dialog_was_open_is_not_written() {
+        let (config, script, dir) = hook_scratch("changed");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let external = r#"{"model":"opus","theme":"dark"}"#;
+        let mut asked = 0;
+        let result = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| {
+            asked += 1;
+            // Someone saves the file while the dialog waits for an answer.
+            fs::write(&config, external).unwrap();
+            true
+        });
+        let error = result.expect_err("a changed file was overwritten");
+        assert!(error.contains("è cambiato mentre il dialogo era aperto"), "{error}");
+        assert_eq!(asked, 1);
+        // The change made meanwhile survives, and nothing of ADE's was written.
+        assert_eq!(fs::read_to_string(&config).unwrap(), external);
+        assert!(!script.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_settings_file_left_as_it_was_is_written_as_before() {
+        let (config, script, dir) = hook_scratch("same");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let next = r#"{"model":"opus"}"#;
+        write_hook_files(&config, &script, next, Some("# script"), |_| true).expect("an unchanged file is written");
+        assert_eq!(fs::read_to_string(&config).unwrap(), next);
+        assert_eq!(fs::read_to_string(&script).unwrap(), "# script");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_file_is_read_again_after_the_dialog_not_before() {
+        let (config, script, dir) = hook_scratch("order");
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let mut asked = false;
+        // A change before the dialog is caught by the first check; one inside it only by a read after it.
+        let result = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| {
+            asked = true;
+            fs::write(&config, r#"{"model":"sonnet"}"#).unwrap();
+            true
+        });
+        assert!(asked, "the dialog was not shown");
+        assert!(result.is_err(), "the read after the dialog did not happen");
+        // Refused and not asked: nothing written either.
+        fs::write(&config, r#"{"model":"opus"}"#).unwrap();
+        let refused = write_hook_files(&config, &script, r#"{"model":"opus"}"#, Some("# script"), |_| false);
+        assert!(refused.is_err());
+        assert!(!script.exists());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

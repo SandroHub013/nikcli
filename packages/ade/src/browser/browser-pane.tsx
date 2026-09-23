@@ -244,11 +244,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   /**
    * Messages to the frame go to `"*"`, for a page loaded by URL too.
    *
-   * The frame is sandboxed without `allow-same-origin`, so every document in
-   * it — mirror or live page — has an opaque origin, and a target origin of
-   * `http://localhost:3000` matches nothing: the message is dropped without an
-   * error. That is why Design Mode never switched on for a page carrying the
-   * bridge itself. `"*"` gives nothing away: what goes out is the mode, the
+   * `"*"` dates from when the frame was sandboxed without `allow-same-origin`:
+   * every document in it had an opaque origin, a target origin of
+   * `http://localhost:3000` matched nothing and the message was dropped
+   * without an error, which is why Design Mode never switched on for a page
+   * carrying the bridge itself. The frame now has `allow-same-origin`
+   * (fec210d0b, for WebGL), so a page keeps its own origin, but that is not
+   * always the one in the address bar: a redirect moves it. `"*"` gives
+   * nothing away: what goes out is the mode, the
    * selectors the page itself sent; the secret goes on the frame script's own
    * port, and what the bridge says comes back on it (`frameGate`).
    */
@@ -421,8 +424,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   /*
    * Back and forward walk the pane's own list. They used to call the frame's
-   * `history`, which a frame sandboxed without `allow-same-origin` does not
-   * let ADE touch: the call threw and the buttons did nothing.
+   * `history`, which belongs to the page's origin, not ADE's: a page served
+   * from anywhere else is cross-origin to ADE even with `allow-same-origin`,
+   * which keeps the page's origin and does not hand it ADE's. The call threw
+   * and the buttons did nothing.
    */
   const go = (delta: -1 | 1) => {
     const next = step(history(), delta)
@@ -457,15 +462,14 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     /*
      * There used to be an attempt to reach into `contentDocument` here and
      * append the bridge script directly. It cannot work any more, and it should
-     * not: the frame is sandboxed without `allow-same-origin`, so its document
-     * has an opaque origin and is unreachable from here by design. That is the
-     * point — a `srcdoc` document inherits the embedder's origin unless the
-     * sandbox denies it, and this frame is filled with HTML fetched from
-     * whatever server the address bar names.
+     * not: the frame has `allow-same-origin`, which keeps the page's own
+     * origin, so a page served from anywhere but ADE's origin is cross-origin
+     * and its document is unreachable from here by design. It is also why the
+     * frame no longer holds a `srcdoc` copy of the page: a `srcdoc` document
+     * inherits the embedder's origin, and under `allow-same-origin` HTML
+     * fetched from whatever server the address bar names would run as ADE.
      *
-     * A page that does not ship the bridge itself still gets one when the user
-     * inspects it: `settleWithoutBridge` keeps a copy, and the bridge is
-     * injected into that copy, where it belongs.
+     * Inspect stays on the live page (see the effect on `mode` above).
      */
     syncMode()
   }

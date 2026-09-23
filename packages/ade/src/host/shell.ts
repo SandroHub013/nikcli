@@ -229,8 +229,12 @@ export interface Host {
    * file into the user's startup folder.
    *
    * Absent in the browser harness, which cannot write at all.
+   *
+   * True only when the host granted the root: it refuses one too broad to be a
+   * project (a home folder, the root of a drive), and a refused root must not
+   * count as granted anywhere else either (audit 0.7.7, D1-2).
    */
-  allowWriteRoot?: (path: string) => Promise<void>
+  allowWriteRoot?: (path: string) => Promise<boolean>
 
   /** Opens a native directory picker. Returns the chosen path, or undefined when the user cancels. */
   pickDirectory?: (title?: string) => Promise<string | undefined>
@@ -283,6 +287,8 @@ export interface Host {
    * CLI's list of its live sessions, which native mail delivery is routed on.
    */
   claudeAgents?: (cwd?: string) => Promise<RunResult>
+  /** The first line of `claude --version`, or null: which hook form Claude Code can read (C3). */
+  claudeVersion?: () => Promise<string | null>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
@@ -396,6 +402,11 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
+    async claudeVersion() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("claude_version").catch(() => null)
+    },
+
     async deleteBotFile(path) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
@@ -410,10 +421,12 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
         await invoke("allow_write_root", { path })
+        return true
       } catch {
         // Not fatal here: the write itself will refuse, with a message that
         // names the path, which is a better place to learn about it than a
         // silent failure during project discovery.
+        return false
       }
     },
 
