@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { createRoot, createSignal } from "solid-js"
+import { createEffect, createRoot, createSignal, on } from "solid-js"
 import { changedLinesAreSensitive, createFileCover, fileIsSensitive, whenToJudge, type CoverState } from "./sensitive-file"
 import { RECORDING_ATTRIBUTE } from "../record/sensitive"
 
@@ -206,6 +206,31 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     expect(svgBody).toContain('t("file.imageFailed")')
     expect(svgBody).toContain('data-slot="file-view" data-kind="svg"')
     expect(svgBody).toContain('data-slot="file-image"')
+  })
+
+  test("SvgView and ImageView reset failed state when src changes so a new src shows after an error (Punto 10 bis)", async () => {
+    const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
+    const svgIndex = view.indexOf("function SvgView")
+    const svgBody = view.slice(svgIndex, view.indexOf("\n}", svgIndex))
+    expect(svgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
+
+    const imgIndex = view.indexOf("function ImageView")
+    const imgBody = view.slice(imgIndex, view.indexOf("\n}", imgIndex))
+    expect(imgBody).toContain("createEffect(on(() => props.src, () => setFailed(false)))")
+
+    await createRoot(async (dispose) => {
+      const [src, setSrc] = createSignal("err.svg")
+      const [failed, setFailed] = createSignal(false)
+      createEffect(on(() => src(), () => setFailed(false)))
+
+      setFailed(true)
+      expect(failed()).toBe(true)
+
+      setSrc("new.svg")
+      await Promise.resolve()
+      expect(failed()).toBe(false)
+      dispose()
+    })
   })
 
   test("file-view uses margin auto on child instead of justify-content center to avoid top clipping on overflow (Punto 11)", () => {

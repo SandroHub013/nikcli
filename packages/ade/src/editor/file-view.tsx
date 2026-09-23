@@ -91,6 +91,7 @@ export function FileView(props: FileViewProps) {
 
 export function SvgView(props: { src: string; path: string }) {
   const [failed, setFailed] = createSignal(false)
+  createEffect(on(() => props.src, () => setFailed(false)))
   return (
     <div data-slot="file-view" data-kind="svg">
       <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
@@ -103,6 +104,7 @@ export function SvgView(props: { src: string; path: string }) {
 function ImageView(props: { src: string; path: string }) {
   const [size, setSize] = createSignal<string>()
   const [failed, setFailed] = createSignal(false)
+  createEffect(on(() => props.src, () => setFailed(false)))
   return (
     <div data-slot="file-view" data-kind="image">
       <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
