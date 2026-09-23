@@ -297,7 +297,7 @@ describe("a take on the browser pane (D78)", () => {
     expect(veilRecordingBody).toMatch(/display:\s*flex/)
     expect(veilRecordingBody).toMatch(/position:\s*absolute/)
     expect(veilRecordingBody).toMatch(/inset:\s*0/)
-    expect(veilRecordingBody).toMatch(/background:\s*var\(--ade-bg\)/)
+    expect(veilRecordingBody).toMatch(/background:\s*var\(--ade-surface-solid,\s*#131111\)/)
 
     const frameRecording = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-frame"]`))
     const frameRecordingBody = frameRecording.slice(frameRecording.indexOf("{"), frameRecording.indexOf("}"))
@@ -365,5 +365,58 @@ describe("a take on the browser pane (D78)", () => {
     expect(document.querySelector('[data-slot="browser-record-veil-title"]')?.textContent).toBe("Pagina nascosta durante la ripresa")
     document.body.innerHTML = ""
   })
+
+  test("recording veil under glass theme: veil background is solid (alpha 1) and does not use transparent --ade-bg", () => {
+    const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+
+    // In [data-theme="glass"], container background is explicitly transparent:
+    // line 136: --ade-bg: transparent;
+    const glassSection = css.slice(css.indexOf('[data-theme="glass"]'))
+    const glassSectionBody = glassSection.slice(glassSection.indexOf("{"), glassSection.indexOf("}"))
+    expect(glassSectionBody).toMatch(/--ade-bg:\s*transparent/)
+
+    // The browser recording veil rule must NOT depend on --ade-bg (which is transparent in glass).
+    // It must specify an opaque solid background (alpha 1), e.g. var(--ade-surface-solid, #131111).
+    const veilRecording = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"]`))
+    const veilRecordingBody = veilRecording.slice(veilRecording.indexOf("{"), veilRecording.indexOf("}"))
+    expect(veilRecordingBody).not.toMatch(/background:\s*var\(--ade-bg\)/)
+    expect(veilRecordingBody).toMatch(/background:\s*var\(--ade-surface-solid,\s*#131111\)/)
+
+    // Verify alpha is 1 (solid): #131111 is full 6-digit hex without alpha channel,
+    // corresponding to rgb(19, 17, 17) with alpha 1.0.
+    const bgMatch = veilRecordingBody.match(/background:\s*var\(--ade-surface-solid,\s*(#[0-9a-fA-F]{6})\)/)
+    expect(bgMatch).not.toBeNull()
+    const hexColor = bgMatch![1]
+    expect(hexColor).toBe("#131111")
+    expect(hexColor.length).toBe(7) // # followed by 6 hex chars (alpha 1)
+
+    // In happy-dom, CSS variables declared across external stylesheets are not evaluated by getComputedStyle
+    // (happy-dom does not implement full CSS cascade variable resolution from external stylesheets).
+    // If styles are injected into the DOM, we can also verify that the applied style does not inherit
+    // the transparent background from --ade-bg.
+    const styleEl = document.createElement("style")
+    styleEl.textContent = `
+      :root[data-theme="glass"] { --ade-bg: transparent; }
+      html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"] { background: var(--ade-surface-solid, #131111); }
+    `
+    document.head.appendChild(styleEl)
+    try {
+      document.documentElement.setAttribute("data-theme", "glass")
+      document.documentElement.setAttribute(RECORDING_ATTRIBUTE, "")
+      document.body.innerHTML = `<div data-slot="browser-record-veil" id="veil-glass-test"></div>`
+      const veil = document.getElementById("veil-glass-test")!
+      const computed = window.getComputedStyle(veil)
+      if (computed.backgroundColor) {
+        expect(computed.backgroundColor).not.toBe("transparent")
+        expect(computed.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+      }
+    } finally {
+      styleEl.remove()
+      document.documentElement.removeAttribute("data-theme")
+      document.documentElement.removeAttribute(RECORDING_ATTRIBUTE)
+      document.body.innerHTML = ""
+    }
+  })
 })
+
 

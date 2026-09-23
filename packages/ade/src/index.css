@@ -1441,7 +1441,7 @@ html[data-ade-recording] [data-slot="browser-record-veil"] {
   position: absolute;
   inset: 0;
   z-index: 20;
-  background: var(--ade-bg);
+  background: var(--ade-surface-solid, #131111);
   flex-direction: column;
   align-items: center;
   justify-content: center;
