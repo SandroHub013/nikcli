@@ -71,6 +71,20 @@ export function canSuspend(pane: SuspendPane, ctx: SuspendContext): SuspendCheck
   return { ok: true }
 }
 
+/**
+ * Closes a suspended session's process and everything it started — the MCP
+ * servers are its children — and waits for the kill to have run, so the pane
+ * says "Sospesa" when the processes are gone. False when the kill failed.
+ */
+export async function closeSuspendedTree(session: { kill: (options?: { tree?: boolean }) => void | Promise<boolean> } | undefined): Promise<boolean> {
+  if (!session) return true
+  try {
+    return (await session.kill({ tree: true })) !== false
+  } catch {
+    return false
+  }
+}
+
 /** The words shown for each reason, as the command's tooltip. */
 export const SUSPEND_REASON: Readonly<Record<SuspendBlock, MessageKey>> = {
   notClaude: "suspend.why.notClaude",

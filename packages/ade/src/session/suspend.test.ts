@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { canSuspend, offersSuspend, type SuspendContext, type SuspendPane } from "./suspend"
+import { canSuspend, closeSuspendedTree, offersSuspend, type SuspendContext, type SuspendPane } from "./suspend"
 
 const pane: SuspendPane = { id: "p1", agent: "claude-code", status: "idle", resumeId: "5f0c3a52-0000-4000-8000-000000000001" }
 const free: SuspendContext = {
@@ -47,5 +47,36 @@ describe("canSuspend (P1-C6)", () => {
     expect(offersSuspend({ agent: "codex" })).toBe(false)
     expect(offersSuspend({})).toBe(false)
     expect(offersSuspend(undefined)).toBe(false)
+  })
+})
+
+describe("closeSuspendedTree (P1-C6)", () => {
+  test("kills the whole tree and waits for the kill to have run", async () => {
+    const calls: { tree?: boolean }[] = []
+    let finish: (ok: boolean) => void = () => {}
+    const session = { kill: (options?: { tree?: boolean }) => (calls.push(options ?? {}), new Promise<boolean>((resolve) => (finish = resolve))) }
+    let done = false
+    const closing = closeSuspendedTree(session).then((ok) => ((done = true), ok))
+    await Promise.resolve()
+    expect(calls).toEqual([{ tree: true }])
+    expect(done).toBe(false)
+    finish(true)
+    expect(await closing).toBe(true)
+  })
+
+  test("a kill that failed or threw is reported", async () => {
+    expect(await closeSuspendedTree({ kill: () => Promise.resolve(false) })).toBe(false)
+    expect(
+      await closeSuspendedTree({
+        kill: () => {
+          throw new Error("registro bloccato")
+        },
+      }),
+    ).toBe(false)
+  })
+
+  test("a host whose kill returns nothing, or no process at all, counts as closed", async () => {
+    expect(await closeSuspendedTree({ kill: () => undefined })).toBe(true)
+    expect(await closeSuspendedTree(undefined)).toBe(true)
   })
 })

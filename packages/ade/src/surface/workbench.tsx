@@ -254,7 +254,7 @@ import {
 import { createLineQueue } from "../session/line-queue"
 import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
-import { canSuspend, offersSuspend, SUSPEND_REASON, type SuspendCheck, type SuspendContext } from "../session/suspend"
+import { canSuspend, closeSuspendedTree, offersSuspend, SUSPEND_REASON, type SuspendCheck, type SuspendContext } from "../session/suspend"
 import {
   formatFallbackLine,
   formatHandoff,
@@ -5574,7 +5574,8 @@ export function Workbench() {
     // Out of `running` before the kill, as a relaunch does: nothing below reads the exit as the session ending.
     running.delete(paneId)
     touchRunning()
-    session?.kill({ tree: true })
+    // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
+    if (!(await closeSuspendedTree(session))) appendLine(paneId, t("note.suspendKillFailed"), "note")
   }
 
   /**

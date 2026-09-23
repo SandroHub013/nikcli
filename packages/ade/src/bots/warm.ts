@@ -104,7 +104,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
     target.cancel?.()
     if (target.mailbox && target.token) unregisterSender(target.mailbox, target.token)
     target.session?.kill({ tree: true })
-    void target.starting.then((session) => session?.kill({ tree: true }))
+    void target.starting.then((session) => void session?.kill({ tree: true }))
     for (const [cwd, other] of lives) if (other === target) lives.delete(cwd)
   }
 

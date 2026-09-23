@@ -452,6 +452,7 @@ export const en: Messages = {
   "suspend.why.held": "it has messages waiting to be delivered",
   "suspend.why.typing": "a line is half written in the pane",
   "note.suspendRefused": (why) => `Not suspended: ${why}.`,
+  "note.suspendKillFailed": "Closing the processes failed: some may still be running.",
   "pane.limit": "limit reached",
   "pane.limit.window": (window) => `${window} window used up`,
 

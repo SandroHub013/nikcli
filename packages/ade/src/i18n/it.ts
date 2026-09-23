@@ -457,6 +457,7 @@ export const it = {
   "suspend.why.held": "ha messaggi in attesa di essere consegnati",
   "suspend.why.typing": "c'è una riga scritta a metà nel pannello",
   "note.suspendRefused": (why: string) => `Non sospesa: ${why}.`,
+  "note.suspendKillFailed": "La chiusura dei processi non è riuscita: alcuni potrebbero essere ancora vivi.",
   "pane.limit": "limite raggiunto",
   "pane.limit.window": (window: string) => `finestra ${window} esaurita`,
 
