@@ -225,8 +225,60 @@ export function missingActivityEvents(configText: string | undefined, events: re
   })
 }
 
-/** True when an installed ADE hook has an outdated timeout or command form. */
-export function hookOutdated(configText: string | undefined, target: HookTarget): boolean {
+/**
+ * The Claude Code that reads `args`: the release ADE's exec form was checked
+ * against (see `execForm`). The documentation gives no version for the field.
+ */
+export const EXEC_FORM_SINCE = [2, 1, 280] as const
+
+/** `2.1.280` in whatever `claude --version` printed around it, or undefined. */
+export function parseVersion(text: string | null | undefined): [number, number, number] | undefined {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(text ?? "")
+  return found ? [Number(found[1]), Number(found[2]), Number(found[3])] : undefined
+}
+
+/*
+ * Whether this Claude Code may be given the exec form (audit 0.7.7, C3).
+ *
+ * An older one may not know `args`: dropped, it leaves `command: "powershell"`
+ * to run bare, and a bare PowerShell with its stdin redirected reads it as
+ * commands — the hook's stdin is the JSON with the user's prompt in it. So the
+ * exec form only from the release it was verified on; anything older,
+ * unreadable or unknown gets the shell form ADE used before S74, whose
+ * command line is fixed and carries nothing from stdin.
+ */
+export function execFormReadable(versionText: string | null | undefined): boolean {
+  const version = parseVersion(versionText)
+  if (!version) return false
+  for (let i = 0; i < 3; i++) {
+    if (version[i] !== EXEC_FORM_SINCE[i]) return version[i] > EXEC_FORM_SINCE[i]
+  }
+  return true
+}
+
+/* `claude --version`, asked once per ADE session: a refresh must not start a CLI every time. */
+let claudeVersionOnce: Promise<string | null> | undefined
+
+/** Forgets the version read, for tests. */
+export function forgetClaudeVersion(): void {
+  claudeVersionOnce = undefined
+}
+
+/** Whether `target`'s hook is written in the exec form on this machine: the target wants it and its CLI reads it. */
+export async function usesExecForm(host: HookHost, target: HookTarget): Promise<boolean> {
+  if (!target.execForm) return false
+  claudeVersionOnce ??= (host.claudeVersion?.() ?? Promise.resolve(null)).catch(() => null)
+  return execFormReadable(await claudeVersionOnce)
+}
+
+/**
+ * True when an installed ADE hook has an outdated timeout or command form.
+ *
+ * `exec` is whether this machine's CLI gets the exec form (`usesExecForm`):
+ * an entry in the other form is outdated either way, so an exec entry written
+ * for a Claude Code that is older than the gate goes back to the shell form.
+ */
+export function hookOutdated(configText: string | undefined, target: HookTarget, exec: boolean): boolean {
   const config = parse(configText)
   const hooks = isTable(config.hooks) ? config.hooks : {}
   for (const event of Object.keys(hooks)) {
@@ -237,7 +289,8 @@ export function hookOutdated(configText: string | undefined, target: HookTarget)
         const cmd = commandOf(leaf)
         if (cmd !== undefined && isAdeCommand(cmd)) {
           if (leaf.timeout !== HOOK_TIMEOUT) return true
-          if (target.execForm && (!Array.isArray(leaf.args) || leaf.args.length === 0)) return true
+          const hasArgs = Array.isArray(leaf.args) && leaf.args.length > 0
+          if (hasArgs !== (exec && target.execForm === true)) return true
         }
       }
     }
@@ -340,6 +393,8 @@ export interface HookHost {
     scriptPresent: boolean
   }>
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
+  /** The first line of `claude --version`, or null. See `usesExecForm`. */
+  claudeVersion?: () => Promise<string | null>
 }
 
 /** What the settings panel shows for one CLI. */
@@ -416,15 +471,10 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
   const current = files.configText ?? undefined
   if (install) {
     const command = hookCommand(files.scriptPath)
+    const exec = await usesExecForm(host, target)
     await write(
       target.id,
-      installHook(
-        current,
-        command,
-        target.matcher,
-        target.activityEvents,
-        target.execForm ? hookExec(files.scriptPath) : undefined,
-      ),
+      installHook(current, command, target.matcher, target.activityEvents, exec ? hookExec(files.scriptPath) : undefined),
       hookScript(target.agent),
     )
   } else {
@@ -457,7 +507,8 @@ export async function refreshHookScript(
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.
   const missing = missingActivityEvents(files.configText, target.activityEvents)
-  const stale = missing.length > 0 || hookOutdated(files.configText, target)
+  const exec = await usesExecForm(host, target)
+  const stale = missing.length > 0 || hookOutdated(files.configText, target, exec)
   if (lastWritten === script && !stale) return undefined
   const config = stale
     ? installHook(
@@ -465,7 +516,7 @@ export async function refreshHookScript(
         command,
         target.matcher,
         target.activityEvents,
-        target.execForm ? hookExec(files.scriptPath) : undefined,
+        exec ? hookExec(files.scriptPath) : undefined,
       )
     : files.configText
   await host.writeAgentHook(target.id, config, script)

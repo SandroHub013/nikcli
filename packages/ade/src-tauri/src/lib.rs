@@ -560,6 +560,32 @@ async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
     })
 }
 
+/// Runs `claude --version` and hands back its first line, or None.
+///
+/// The hook form depends on it (audit 0.7.7, C3): the exec form, `command`
+/// plus `args`, is only written for a Claude Code known to read `args`. An
+/// older one may drop the field and run `powershell` bare, which reads the
+/// hook's stdin — the prompt — as commands. One program, one fixed argument,
+/// nothing from the caller; the page asks once per session.
+#[tauri::command]
+async fn claude_version() -> Option<String> {
+    let program = pty::which_on_path("claude")?;
+    let mut command = std::process::Command::new(program);
+    command.arg("--version").stdin(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let line = text.lines().next()?.trim();
+    (!line.is_empty()).then(|| line.chars().take(200).collect())
+}
+
 // ---------------------------------------------------------------------------
 // git, behind a gate of its own
 // ---------------------------------------------------------------------------
@@ -1361,6 +1387,7 @@ pub fn run() {
             bot_delete,
             nikcli_bot,
             claude_agents,
+            claude_version,
             read_dir,
             read_text_file,
             write_text_file,

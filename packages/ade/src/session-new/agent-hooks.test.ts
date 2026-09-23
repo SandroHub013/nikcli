@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import {
   HOOK_MARKER,
   HOOK_TARGETS,
   HOOK_TIMEOUT,
+  execFormReadable,
+  forgetClaudeVersion,
   hookCommand,
   hookExec,
   hookOutdated,
@@ -17,6 +19,7 @@ import {
   refreshHookScript,
   removeHook,
   setHook,
+  usesExecForm,
 } from "./agent-hooks"
 
 /**
@@ -275,9 +278,16 @@ describe("removeHook", () => {
 
 describe("readHookStatus and setHook", () => {
   /** A pair of files in memory, behaving the way the Rust commands do. */
-  function disk(configText: string | null = null, scriptPresent = false) {
-    const state = { configText, scriptPresent, writes: 0 }
+  // Each test reads the version afresh: ADE asks once per session, and each test is one.
+  beforeEach(() => forgetClaudeVersion())
+
+  function disk(configText: string | null = null, scriptPresent = false, version: string | null = "2.1.280 (Claude Code)") {
+    const state = { configText, scriptPresent, writes: 0, versionAsked: 0 }
     const host = {
+      claudeVersion: async () => {
+        state.versionAsked++
+        return version
+      },
       readAgentHook: async () => ({
         configPath: "C:\\Users\\x\\.claude\\settings.json",
         configText: state.configText,
@@ -391,6 +401,77 @@ describe("readHookStatus and setHook", () => {
     expect(second).toBeUndefined()
     expect(state.writes).toBe(1)
   })
+
+  test("an older Claude Code is installed in the shell form, never the exec form (C3)", async () => {
+    const { state, host } = disk(CLAUDE, false, "2.1.279 (Claude Code)")
+    await setHook(host, claude, true)
+    const leaf = JSON.parse(state.configText!).hooks.SessionStart.at(-1).hooks[0]
+    expect(leaf).toEqual({ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: HOOK_TIMEOUT })
+    expect(leaf.args).toBeUndefined()
+  })
+
+  test("an exec entry left on a machine whose Claude Code is older goes back to the shell form", async () => {
+    const execConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(CLAUDE_SCRIPT))
+    const { state, host } = disk(execConfig, true, "2.1.100 (Claude Code)")
+    const script = hookScript(claude.agent)
+    expect(await refreshHookScript(host, claude, script)).toBe(script)
+    const parsed = JSON.parse(state.configText!)
+    for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+      const ours = parsed.hooks[event].flatMap((group: { hooks: { command: string; args?: string[] }[] }) => group.hooks).filter((leaf: { command: string }) => leaf.command.includes(HOOK_MARKER))
+      expect(ours).toEqual([{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: HOOK_TIMEOUT }])
+    }
+    // Settled: the next refresh writes nothing.
+    expect(await refreshHookScript(host, claude, script)).toBeUndefined()
+    expect(state.writes).toBe(1)
+  })
+
+  test("the version is asked once per session, however often the hooks are refreshed", async () => {
+    const { state, host } = disk(CLAUDE, true)
+    await usesExecForm(host, claude)
+    await refreshHookScript(host, claude, undefined)
+    await refreshHookScript(host, claude, hookScript(claude.agent))
+    await setHook(host, claude, true)
+    expect(state.versionAsked).toBe(1)
+  })
+
+  test("a CLI that does not answer, or a host that cannot ask, gets the shell form", async () => {
+    expect(await usesExecForm({ claudeVersion: async () => null }, claude)).toBe(false)
+    forgetClaudeVersion()
+    expect(await usesExecForm({ claudeVersion: () => Promise.reject(new Error("claude non trovato")) }, claude)).toBe(false)
+    forgetClaudeVersion()
+    expect(await usesExecForm({}, claude)).toBe(false)
+    // codex never gets it, whatever the version.
+    forgetClaudeVersion()
+    expect(await usesExecForm({ claudeVersion: async () => "9.9.9" }, hookTarget("codex")!)).toBe(false)
+  })
+})
+
+describe("which Claude Code gets the exec form (C3)", () => {
+  test("2.1.279 gets the shell form, 2.1.280 and later the exec form", () => {
+    expect(execFormReadable("2.1.279 (Claude Code)")).toBe(false)
+    expect(execFormReadable("2.1.280 (Claude Code)")).toBe(true)
+    expect(execFormReadable("2.1.281")).toBe(true)
+    expect(execFormReadable("2.2.0")).toBe(true)
+    expect(execFormReadable("3.0.0")).toBe(true)
+    expect(execFormReadable("2.0.999")).toBe(false)
+    expect(execFormReadable("1.9.500")).toBe(false)
+  })
+
+  test("an unknown or unreadable version gets the shell form", () => {
+    for (const text of [null, undefined, "", "Claude Code", "2.1", "versione sconosciuta"]) {
+      expect(execFormReadable(text)).toBe(false)
+    }
+  })
+
+  test("hookOutdated follows the same gate: an exec entry is outdated when the CLI may not read it", () => {
+    const target = hookTarget("claude-code")!
+    const execConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(CLAUDE_SCRIPT))
+    const shellConfig = installHook(CLAUDE, hookCommand(CLAUDE_SCRIPT), "startup|resume|clear", ["UserPromptSubmit", "Stop"])
+    expect(hookOutdated(execConfig, target, false)).toBe(true)
+    expect(hookOutdated(shellConfig, target, false)).toBe(false)
+    expect(hookOutdated(shellConfig, target, true)).toBe(true)
+    expect(hookOutdated(execConfig, target, true)).toBe(false)
+  })
 })
 
 describe("hookOutdated", () => {
@@ -408,7 +489,7 @@ describe("hookOutdated", () => {
         ],
       },
     })
-    expect(hookOutdated(oldConfig, claudeTarget)).toBe(true)
+    expect(hookOutdated(oldConfig, claudeTarget, true)).toBe(true)
   })
 
   test("false after installHook with hookExec", () => {
@@ -419,7 +500,7 @@ describe("hookOutdated", () => {
       ["UserPromptSubmit", "Stop"],
       hookExec(CLAUDE_SCRIPT),
     )
-    expect(hookOutdated(newConfig, claudeTarget)).toBe(false)
+    expect(hookOutdated(newConfig, claudeTarget, true)).toBe(false)
   })
 
   test("for codex, true with timeout: 5 and false with timeout: 10 in string form", () => {
@@ -433,10 +514,10 @@ describe("hookOutdated", () => {
         ],
       },
     })
-    expect(hookOutdated(oldCodex, codexTarget)).toBe(true)
+    expect(hookOutdated(oldCodex, codexTarget, true)).toBe(true)
 
     const newCodex = installHook(CODEX, hookCommand(codexScript))
-    expect(hookOutdated(newCodex, codexTarget)).toBe(false)
+    expect(hookOutdated(newCodex, codexTarget, true)).toBe(false)
   })
 })
 
