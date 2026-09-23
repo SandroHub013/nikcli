@@ -203,6 +203,7 @@ describe("Enter with nobody to receive the answer, in the Design window (audit 0
       error: () => undefined,
       refresh: async () => {},
       append: async () => {},
+      tick: async () => {},
       watch: () => () => {},
     }
     const hub = createDesignHub({ register, recipient: () => ({ state: "non scelta" }), sessions: () => [], choose: () => {}, delivery: () => ({ state: "in coda" }), onAnswered: () => {} })
