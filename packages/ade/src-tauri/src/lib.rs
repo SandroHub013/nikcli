@@ -1049,11 +1049,11 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .initialization_script_for_all_frames(include_str!("../scripts/browser-frame.js"))
         .center();
 
-    // Su macOS e Linux, `on_navigation` con `is_own_page` viene chiamato anche per i frame:
-    // - su macOS, wry 0.55.1 wkwebview/navigation.rs:50-81 non guarda targetFrame.isMainFrame;
-    // - su Linux, webkitgtk decide-policy scatta anche per i sottoframe.
-    // Così il pannello browser e le anteprime Design restano bianchi. Su Windows non succede.
-    // macOS e Linux tornano come nella 0.7.6.
+    // On macOS and Linux, `on_navigation` with `is_own_page` is also called for subframes:
+    // - on macOS, wry 0.55.1 wkwebview/navigation.rs:50-81 does not check targetFrame.isMainFrame;
+    // - on Linux, webkitgtk decide-policy also triggers for child frames.
+    // This leaves the browser panel and Design preview frames white. This does not happen on Windows.
+    // macOS and Linux revert to the 0.7.6 behavior (no on_navigation).
     #[cfg(windows)]
     let builder = builder.on_navigation(move |url| is_own_page(url, dev_url.as_ref()));
 
@@ -1753,4 +1753,3 @@ mod tests {
         );
     }
 }
-
