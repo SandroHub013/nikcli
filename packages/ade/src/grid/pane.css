@@ -853,12 +853,14 @@
 /*
  * Focus is a ring on the shell and a longer shadow, not a line drawn inside.
  * There is an outside again — the gutter — so the ring can sit on it. The
- * shell's default line is opted out with the variable, which is the
- * difference index.css leaves room for, rather than by overriding it.
+ * shell's default line is opted out with one variable and the ring handed to
+ * it with another, rather than by overriding it: a `box-shadow` here ties
+ * with the shell's rule on specificity, and index.css, loaded after, won —
+ * the focused session had no mark at all.
  */
 [data-component="session-pane"][data-focused] {
   --ade-pane-focus: none;
-  box-shadow:
+  --ade-pane-shadow:
     0 0 0 1.5px var(--ade-accent),
     0 8px 24px light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.55));
 }

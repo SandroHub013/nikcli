@@ -607,7 +607,8 @@ body,
   background: var(--ade-pane-ground, var(--ade-surface));
   overflow: hidden;
   border-radius: 18px;
-  box-shadow: 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45));
+  /* A pane that draws its focus as a shadow (the session's ring) sets the variable: see `--ade-pane-focus`. */
+  box-shadow: var(--ade-pane-shadow, 0 3px 10px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45)));
 }
 
 [data-slot="grid-cell"] > [data-component][data-focused] {

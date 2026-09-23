@@ -227,3 +227,52 @@ describe("the pane shell stays in one place", () => {
     expect(read("video/video-pane.css")).toContain("container-type: inline-size")
   })
 })
+
+/*
+ * The focused session keeps its ring (Architect, S67 judgement).
+ *
+ * Its rule and the shell's tie on specificity, (0,2,0) each, and index.css
+ * loads after pane.css: a `box-shadow` written on the session lost to the
+ * shell's own, and with the line opted out the focused session had no mark
+ * at all. Measured on the cascade, not on the text of the rules.
+ */
+describe("the focused session shows its focus", () => {
+  /** `var(--x, fallback)` replaced by what `element` computes for `--x`, until none is left. */
+  function resolveVars(element: Element, value: string): string {
+    const style = getComputedStyle(element)
+    for (let round = 0; round < 10 && value.includes("var("); round++) {
+      value = value.replace(/var\(\s*(--[\w-]+)\s*(?:,((?:[^()]|\((?:[^()]|\([^()]*\))*\))*))?\)/g, (_, name: string, fallback?: string) => {
+        const own = style.getPropertyValue(name).trim()
+        return own || (fallback ?? "").trim()
+      })
+    }
+    return value
+  }
+
+  test("its computed shadow carries the accent, in the order the sheets load", () => {
+    const sheets = ["grid/pane.css", "index.css"].map((file) => {
+      const style = document.createElement("style")
+      style.textContent = read(file)
+      document.head.appendChild(style)
+      return style
+    })
+    const cell = document.createElement("div")
+    cell.setAttribute("data-slot", "grid-cell")
+    cell.style.setProperty("--ade-accent", "rgb(1, 2, 3)")
+    const session = document.createElement("div")
+    session.setAttribute("data-component", "session-pane")
+    session.setAttribute("data-focused", "true")
+    cell.appendChild(session)
+    document.body.appendChild(cell)
+    try {
+      const shadow = resolveVars(session, getComputedStyle(session).boxShadow)
+      expect(shadow).toContain("rgb(1, 2, 3)")
+      // Unfocused, the shell's shadow and no ring.
+      session.removeAttribute("data-focused")
+      expect(resolveVars(session, getComputedStyle(session).boxShadow)).not.toContain("rgb(1, 2, 3)")
+    } finally {
+      cell.remove()
+      for (const sheet of sheets) sheet.remove()
+    }
+  })
+})
