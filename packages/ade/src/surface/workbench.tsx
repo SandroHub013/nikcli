@@ -2,6 +2,7 @@ import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createR
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every } from "../host/every"
+import { mustConfirmLeaving } from "./before-unload"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
@@ -4365,11 +4366,12 @@ export function Workbench() {
     /*
      * Closing the window is the one way out of ADE that `close` cannot guard.
      * A modified buffer lives only in memory, so quitting with one open loses
-     * it as completely as closing its pane would.
+     * it as completely as closing its pane would; and a reload ends every
+     * running agent (`mustConfirmLeaving`).
      */
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      const unsaved = Object.values(buffers()).filter((buffer) => buffer.dirty)
-      if (unsaved.length === 0) return
+      const unsavedBuffers = Object.values(buffers()).filter((buffer) => buffer.dirty).length
+      if (!mustConfirmLeaving({ unsavedBuffers, runningSessions: running.size })) return
       event.preventDefault()
       // Browsers ignore the text and show their own, but setting returnValue
       // is still what makes the prompt appear at all.
