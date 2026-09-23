@@ -1,5 +1,6 @@
 import { createSignal, createMemo, createEffect, Show, For } from "solid-js"
 import { type Buffer, saveBlockedReason, lineCount, positionOf, offsetOfLine } from "./buffer"
+import { goToDue, type GoTo } from "./go-to"
 import "./editor.css"
 import { t } from "../i18n"
 
@@ -10,7 +11,7 @@ export interface EditorProps {
   onSave: () => void
   onRevert?: () => void
   /** Puts the cursor at the start of this line and scrolls it to the middle. */
-  goTo?: { line: number; at: number }
+  goTo?: GoTo
 }
 
 export function Editor(props: EditorProps) {
@@ -47,13 +48,17 @@ export function Editor(props: EditorProps) {
     }
   }
 
+  // This effect also runs on every keystroke (the draft changes): goToDue lets
+  // each goTo move the cursor once.
+  let done: GoTo | undefined
   createEffect(() => {
     const target = props.goTo
-    const text = props.buffer?.draft
-    if (!target || text === undefined || props.loading) return
+    if (!goToDue(target, done, props.buffer !== undefined && !props.loading)) return
+    done = target
     // After the textarea has its text: the effect can run before it renders it.
     requestAnimationFrame(() => {
-      if (!textareaRef) return
+      const text = props.buffer?.draft
+      if (!textareaRef || !target || text === undefined) return
       const offset = offsetOfLine(text, target.line)
       textareaRef.focus()
       textareaRef.setSelectionRange(offset, offset)
