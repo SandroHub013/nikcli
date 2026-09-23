@@ -12,6 +12,7 @@ import { pathEquals } from "../host/path"
 import { belongsTo, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
+import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -4454,47 +4455,19 @@ export function Workbench() {
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", handleBlur)
     window.addEventListener("beforeunload", handleBeforeUnload)
-    // Auto-sync OpenRouter API key from nikcli auth.json if not present in localStorage
+    // The voice's OpenRouter key from nikcli's auth.json when the profile has none;
+    // never under ADE Test's identity, whose profiles would get the user's paid key.
     if (!voiceSettings().openRouterApiKey) {
       void (async () => {
-        try {
-          const host = await getHost()
-          const home = await host?.homeDir?.()
-          if (home) {
-            const normalizedHome = home.replace(/\\/g, "/")
-            const candidatePaths = [
-              `${normalizedHome}/AppData/Local/nikcli/auth.json`,
-              `${home}/AppData/Local/nikcli/auth.json`,
-              `${home}\\AppData\\Local\\nikcli\\auth.json`,
-              `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
-              `${home}/AppData/Roaming/nikcli/auth.json`,
-              `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
-              `${normalizedHome}/.config/nikcli/auth.json`,
-              `${normalizedHome}/.nikcli/auth.json`,
-            ]
-            for (const authPath of candidatePaths) {
-              try {
-                const file = await host?.readTextFile?.(authPath, 64 * 1024)
-                if (file?.text) {
-                  const parsed = JSON.parse(file.text)
-                  const orKey = parsed?.openrouter?.key
-                  if (typeof orKey === "string" && orKey.trim().length > 0) {
-                    await handleVoiceSettingsChange({
-                      ...voiceSettings(),
-                      openRouterApiKey: orKey.trim(),
-                    })
-                    break
-                  }
-                }
-              } catch {
-                // check next path
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      })()
+        const host = await getHost()
+        if (!host?.homeDir || !host.readTextFile) return
+        await syncOpenRouterKey({
+          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
+          homeDir: () => host.homeDir!(),
+          readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
+          save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key }),
+        })
+      })().catch(() => {})
     }
 
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)) {
