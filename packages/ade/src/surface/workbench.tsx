@@ -254,6 +254,7 @@ import {
 import { createLineQueue } from "../session/line-queue"
 import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import { canSuspend, offersSuspend, SUSPEND_REASON, type SuspendCheck, type SuspendContext } from "../session/suspend"
 import {
   formatFallbackLine,
   formatHandoff,
@@ -4729,6 +4730,8 @@ export function Workbench() {
         ...here(),
         lines: []
       }))
+    } else if (id === "session.suspend") {
+      if (wb().focusedId) void suspendSession(wb().focusedId!)
     } else if (id === "process.kill") {
       if (wb().focusedId && isRunning(wb().focusedId!)) {
         running.get(wb().focusedId!)?.kill()
@@ -4813,6 +4816,7 @@ export function Workbench() {
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
+      ...(wb().focusedId ? { suspendCheck: suspendCheckFor(wb().focusedId!) } : {}),
       recording: recordState().status === "recording",
       recordMic: recordMic(),
       recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
@@ -5034,6 +5038,8 @@ export function Workbench() {
     // Whatever was half-written belonged to the process that has gone. Left
     // behind, it would hold mail back from the session that starts next.
     records.typed.forget(id)
+    // Suspended: the exit is the one asked for, not the session ending (P1-C6).
+    if (wb().panes.find((pane) => pane.id === id)?.suspended) return
     setWb(w => updatePane(w, id, {
       status: code === 0 ? "done" : "error",
       activity: code === 0 ? "done" : exitedActivity(code)
@@ -5514,6 +5520,61 @@ export function Workbench() {
     })
     const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
+  }
+
+  /*
+   * Suspending a Claude session at rest (P1-C6): its processes are closed, the
+   * pane keeps its place and its text, and "Riprendi" reopens the conversation.
+   */
+  const suspendContext = (pane: Pane, conversationMissing: boolean): SuspendContext => ({
+    running: running.has(pane.id),
+    conversationMissing,
+    permission: Boolean(permissions()[pane.id]),
+    openRequests: openRequests.values(),
+    heldLines,
+    typing: isTyping(records.typed.get(pane.id)),
+  })
+
+  /**
+   * The button's and the palette's answer. Whether the conversation is on disk
+   * is asked on the disk, so only at the click: here it is taken as there.
+   */
+  const suspendCheckFor = (paneId: string): SuspendCheck | undefined => {
+    // Read so the answer follows a process starting or ending, and the mail queues.
+    runningTick()
+    mailWaiting()
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return undefined
+    return canSuspend(pane, suspendContext(pane, false))
+  }
+
+  const suspendSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return
+    const refuse = (check: SuspendCheck) => {
+      if (!check.ok) appendLine(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])), "note")
+    }
+    const missing = await conversationMissing(pane.agent ?? pane.model, pane.resumeId, pane.cwd)
+    const first = canSuspend(pane, suspendContext(pane, missing))
+    if (!first.ok) return refuse(first)
+    /*
+     * The mark first, so a message arriving from here on is queued rather than
+     * typed; then the same check again, since one may have come in while the
+     * disk was asked; only then the kill. A check that fails now takes the
+     * mark back and closes nothing.
+     */
+    setWb((w) => updatePane(w, paneId, { suspended: true }))
+    const marked = wb().panes.find((candidate) => candidate.id === paneId)
+    const again = marked ? canSuspend({ ...marked, suspended: undefined }, suspendContext(marked, missing)) : first
+    if (!marked || !again.ok) {
+      setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+      return refuse(again)
+    }
+    const session = running.get(paneId)
+    // Out of `running` before the kill, as a relaunch does: nothing below reads the exit as the session ending.
+    running.delete(paneId)
+    touchRunning()
+    session?.kill({ tree: true })
   }
 
   /**
@@ -6252,6 +6313,8 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     answerPermission,
     restart: (pane, line) => void reopen(pane, line),
+    suspendCheck: suspendCheckFor,
+    suspend: (id) => void suspendSession(id),
     pickVideo,
     pickModel,
     readBytes: (path, maxBytes) =>

@@ -205,6 +205,11 @@ export interface Pane {
   spawnArgs?: string[]
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
   span?: Span
+  /**
+   * Suspended by the user (P1-C6): its processes closed, its conversation kept
+   * for "Riprendi". Nothing wakes it by itself: not a message, not a restart.
+   */
+  suspended?: true
 }
 
 /**

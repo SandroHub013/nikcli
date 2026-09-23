@@ -1502,3 +1502,14 @@
     animation: none !important;
   }
 }
+
+/* "Sospendi" off: visible, its tooltip says why (P1-C6). */
+.hA .act[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hA .act[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--ade-text-weak);
+}

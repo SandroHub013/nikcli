@@ -171,6 +171,11 @@ export interface SessionPaneProps {
   tree?: PaneTree
   /** Replaces the prompt when the session needs an answer rather than an instruction. */
   actions?: PaneAction[]
+  /**
+   * "Sospendi" in the header (P1-C6), on Claude sessions only. Off, it stays
+   * where it is and its tooltip says why.
+   */
+  suspend?: { enabled: boolean; reason?: string; onClick: () => void }
   focused?: boolean
   /** Sends a line to whatever the pane is running. Absent when nothing runs. */
   onSubmit?: (line: string) => void
@@ -775,7 +780,28 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
-        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()}>
+          <Show when={props.suspend}>
+            {(suspend) => (
+              <button
+                type="button"
+                class="act"
+                data-slot="pane-suspend"
+                aria-label={t("pane.suspend")}
+                aria-disabled={suspend().enabled ? undefined : "true"}
+                title={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}
+                data-tip={suspend().enabled ? t("pane.suspend.tip") : t("pane.suspend.no", suspend().reason ?? "")}
+                onClick={() => {
+                  if (suspend().enabled) suspend().onClick()
+                }}
+              >
+                <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M6 4v8M10 4v8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </button>
+            )}
+          </Show>
+        </PaneActions>
         <button
           type="button"
           class="act more"

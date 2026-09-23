@@ -322,3 +322,25 @@ describe("the palette during a take (D78 live test)", () => {
     expect(filterCommands(commands, "Ferma la registrazione")[0]?.command.id).toBe("record.toggle")
   })
 })
+
+describe("Sospendi la sessione (P1-C6)", () => {
+  test("offered for the focused pane, off with the reason canSuspend gives", () => {
+    resetLocaleForTests("it")
+    const wb = createWorkbench()
+    wb.panes.push(pane({ agent: "claude-code", status: "idle" }))
+    wb.focusedId = "p1"
+
+    const ready = buildCommands(context({ workbench: wb, suspendCheck: { ok: true } })).find((c) => c.id === "session.suspend")
+    expect(ready?.title).toBe("Sospendi la sessione")
+    expect(ready?.enabled).toBe(true)
+
+    const busy = buildCommands(context({ workbench: wb, suspendCheck: { ok: false, reason: "working" } })).find((c) => c.id === "session.suspend")
+    expect(busy?.enabled).toBe(false)
+    expect(busy?.disabledReason).toBe("sta lavorando")
+
+    // Not a Claude session: the workbench passes no check, and the row says why.
+    const other = buildCommands(context({ workbench: wb })).find((c) => c.id === "session.suspend")
+    expect(other?.enabled).toBe(false)
+    expect(other?.disabledReason).toBe("solo le sessioni Claude si sospendono")
+  })
+})

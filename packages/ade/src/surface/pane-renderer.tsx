@@ -12,6 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
+import { SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -70,6 +71,9 @@ export interface PaneRendererDeps {
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
   restart: (pane: Pane, line?: string) => void
+  /** Whether "Sospendi" can run on the pane now; undefined where it is not offered (P1-C6). */
+  suspendCheck: (id: string) => SuspendCheck | undefined
+  suspend: (id: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
   /** The native file picker, narrowed to the formats the 3D panel reads. */
@@ -387,6 +391,15 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         agent={current().agent}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
+        suspend={(() => {
+          const check = deps.suspendCheck(current().id)
+          if (!check) return undefined
+          return {
+            enabled: check.ok,
+            ...(check.ok ? {} : { reason: t(SUSPEND_REASON[check.reason]) }),
+            onClick: () => deps.suspend(current().id),
+          }
+        })()}
         mail={deps.mailWaiting()[current().id]}
         onMail={() => deps.showMail(current().id)}
         onLink={(request) => deps.openLink(current().id, request)}
