@@ -387,23 +387,8 @@
   text-overflow: ellipsis;
 }
 
-/* The panel. */
-[data-component="decisions-pane"] {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  position: relative;
-  background: var(--ade-surface);
-}
-
-[data-component="decisions-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
-}
+/* Geometry, ground and focus line come from the shell on the cell's child
+   (index.css): this pane copies none of them. */
 
 [data-slot="decisions-body"] {
   flex: 1;

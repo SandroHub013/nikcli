@@ -8,22 +8,16 @@
  * because at four panes wide a control row that wraps eats the stage.
  */
 
+/*
+ * Geometry, ground and focus line come from the shell on the cell's child
+ * (index.css). What is this pane's own is the size container: the header's
+ * queries read the pane's width, and the shell's `flex: 1` is what lets a
+ * size container still grow into its cell instead of collapsing to its
+ * content. No border, unlike before S67.2: every other pane is edged by its
+ * corners and shadow against the gutter, and this pane's hairline and focus
+ * glow were what was left of its own copy of the frame.
+ */
 [data-component="video-pane"] {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-surface);
-  /*
-   * The header's container queries drop what does not fit, as on a session.
-   * A size container no longer takes its width from its content, so the pane
-   * has to grow into its cell (`flex: 1`), or it collapses to nothing.
-   */
-  flex: 1;
   container-type: inline-size;
 }
 
@@ -39,11 +33,6 @@
 
 [data-slot="video-header-gap"] {
   flex: 1 1 auto;
-}
-
-[data-component="video-pane"][data-focused="true"] {
-  border-color: var(--ade-accent);
-  box-shadow: 0 0 0 1px var(--ade-accent-glow);
 }
 
 /* The stage. Black rather than the surface colour: it is the letterboxing

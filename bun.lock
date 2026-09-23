@@ -78,6 +78,7 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/three": "^0.186.0",
+        "postcss": "8.5.23",
         "typescript": "catalog:",
         "vite": "catalog:",
         "vite-plugin-solid": "catalog:",

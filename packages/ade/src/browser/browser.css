@@ -6,25 +6,15 @@
  * `--ade-*` design tokens.
  */
 
+/*
+ * Geometry, ground and focus line come from the shell on the cell's child
+ * (index.css). What is this pane's own is the size container: the toolbar
+ * responds to the pane width the grid gives it, not the window width — at
+ * three columns the pane is 431px — and the shell's `flex: 1` is what lets
+ * a size container still grow into its cell instead of collapsing.
+ */
 [data-component="browser-pane"] {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  background: var(--ade-surface);
-  /* Frameless, like the session pane it sits beside: the grid's one-pixel gap
-     is the only line between two tiles, and a border here would double it. */
-  overflow: hidden;
-  position: relative;
-  /* Inline-size container so the toolbar responds to the pane width the grid
-     gives it, not the window width — at three columns the pane is 431px. */
   container-type: inline-size;
-}
-
-[data-component="browser-pane"][data-focused] {
-  outline: 1px solid var(--ade-accent);
-  outline-offset: -1px;
 }
 
 /* ── header ───────────────────────────────────────────────────────────────── */

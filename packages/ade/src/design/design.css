@@ -542,14 +542,14 @@
   font-size: 11px;
 }
 
-/* Pane styles */
+/*
+ * The shell (index.css) lays the tile out and draws the focus line; design
+ * keeps the one difference it was built with, the page colour as ground.
+ * It had no focus line before the shell, but by omission: the root sets
+ * `data-focused` like every other pane.
+ */
 [data-component="design-pane"] {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--ade-bg);
-  position: relative;
-  overflow: hidden;
+  --ade-pane-ground: var(--ade-bg);
 }
 
 [data-slot="design-body"] {
