@@ -112,3 +112,28 @@ describe("ade-msg registro", () => {
     expect(appended[0]).toStartWith("\n{")
   })
 })
+
+describe("the check after the write looks for this very event (audit 0.7.7, MEDIO 5)", () => {
+  const opened = JSON.stringify({ type: "aperta", k: "D1", at: "2026-09-23T11:00:00.000Z", by: "Master", title: "Quale?", options: ["A", "B"] })
+
+  test("another answer lands just before this one: the key is answered, but not by this write", async () => {
+    let text = `${opened}\n`
+    const deps: RegisterWriteDeps = {
+      read: async () => text,
+      append: async (line) => {
+        // Someone else's answer reaches the file a moment earlier.
+        text += `${JSON.stringify({ type: "risposta", k: "D1", at: "2026-09-23T11:59:59.900Z", by: "Dario", words: "A" })}\n${line.replace(/^\n/, "")}`
+      },
+      now: () => NOW,
+      sender: "fable",
+    }
+    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    expect(reply).toStartWith("errore: scritta ma non conta: ")
+  })
+
+  test("its own answer, alone: ok as before", async () => {
+    const { deps } = file(`${opened}\n`)
+    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    expect(reply).toStartWith("ok: D1 risposta")
+  })
+})
