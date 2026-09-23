@@ -53,9 +53,12 @@ export function FilePane(props: FilePaneProps) {
   const [asText, setAsText] = createSignal(kind() === "markdown" || Boolean(props.goTo))
   const switchable = () => kind() === "svg" || kind() === "markdown"
   // A link with a line, arriving on a pane already open on the preview.
-  let seen: GoTo | undefined = props.goTo
+  // Copies, read field by field: the workbench store writes the next link into
+  // the same `fileGoTo` proxy, so the object itself never changes (see editor.tsx).
+  const copyOf = (goTo: GoTo | undefined): GoTo | undefined => goTo && { line: goTo.line, at: goTo.at }
+  let seen = copyOf(props.goTo)
   createEffect(() => {
-    const target = props.goTo
+    const target = copyOf(props.goTo)
     setAsText((now) => showTextFor(now, target, seen))
     seen = target
   })

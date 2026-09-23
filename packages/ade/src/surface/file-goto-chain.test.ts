@@ -23,7 +23,14 @@ type Workbench = ReturnType<typeof createWorkbench>
 /** Every dependency the file pane does not use: a function that does nothing. */
 const unused = new Proxy({}, { get: () => () => undefined })
 
-test("a second link to an open file moves the editor's cursor to its line", async () => {
+const frames = () => new Promise((resolve) => setTimeout(resolve, 50))
+
+/**
+ * One file pane, mounted the way the workbench mounts it: the store written by
+ * `writeWorkbench`, the pane renderer, FilePane, Editor. `link` does what
+ * `openFile` does for a file already open.
+ */
+function mountFile(path: string, fileGoTo?: { line: number; at: number }) {
   const moved: number[] = []
   const original = HTMLTextAreaElement.prototype.setSelectionRange
   HTMLTextAreaElement.prototype.setSelectionRange = function (start: number) {
@@ -31,7 +38,7 @@ test("a second link to an open file moves the editor's cursor to its line", asyn
   }
   const text = "a\nb\nc\nd\ne\n"
   const records = createPaneRecords()
-  records.buffers.set("f1", { path: "C:/p/x.ts", saved: text, draft: text, dirty: false } as never)
+  records.buffers.set("f1", { path, saved: text, draft: text, dirty: false } as never)
   const host = document.createElement("div")
   document.body.append(host)
   let setWb!: (next: (current: Workbench) => Workbench) => void
@@ -39,12 +46,12 @@ test("a second link to an open file moves the editor's cursor to its line", asyn
     const [store, setStore] = createStore<Workbench>(
       addPane(createWorkbench(), {
         id: "f1",
-        title: "x.ts",
+        title: path,
         status: "done",
         model: "—",
         mode: "file",
-        filePath: "C:/p/x.ts",
-        fileGoTo: { line: 2, at: 1 },
+        filePath: path,
+        ...(fileGoTo ? { fileGoTo } : {}),
         lines: [],
         workspaceId: "workspace",
       } as never),
@@ -68,20 +75,55 @@ test("a second link to an open file moves the editor's cursor to its line", asyn
     )
     return dispose
   })
-  const frames = () => new Promise((resolve) => setTimeout(resolve, 50))
+  return {
+    moved,
+    link: async (line: number, at: number) => {
+      setWb((w) => ({ ...updatePane(w, "f1", { fileGoTo: { line, at } }), focusedId: "f1" }))
+      await frames()
+    },
+    showsText: () => host.querySelector("textarea") !== null,
+    toggle: async () => {
+      host.querySelector<HTMLButtonElement>('[data-slot="pane-view-toggle"]')!.click()
+      await frames()
+    },
+    unmount: () => {
+      dispose()
+      host.remove()
+      HTMLTextAreaElement.prototype.setSelectionRange = original
+    },
+  }
+}
+
+test("a second link to an open file moves the editor's cursor to its line", async () => {
+  const pane = mountFile("C:/p/x.ts", { line: 2, at: 1 })
   try {
     await frames()
-    // What `openFile` does for a file already open.
-    setWb((w) => ({ ...updatePane(w, "f1", { fileGoTo: { line: 4, at: 2 } }), focusedId: "f1" }))
-    await frames()
+    await pane.link(4, 2)
     // And the same line again, clicked later: a new goTo too.
-    setWb((w) => updatePane(w, "f1", { fileGoTo: { line: 4, at: 3 } }))
-    await frames()
+    await pane.link(4, 3)
   } finally {
-    dispose()
-    host.remove()
-    HTMLTextAreaElement.prototype.setSelectionRange = original
+    pane.unmount()
   }
   // Lines 2 and 4 start at offsets 2 and 6.
-  expect(moved).toEqual([2, 6, 6])
+  expect(pane.moved).toEqual([2, 6, 6])
+})
+
+test("every link with a line turns a markdown preview back to its text, not only the first", async () => {
+  const pane = mountFile("C:/p/notes.md")
+  const seen: boolean[] = []
+  try {
+    await frames()
+    await pane.toggle()
+    seen.push(pane.showsText())
+    await pane.link(3, 2)
+    seen.push(pane.showsText())
+    // The reader goes back to the preview; the next link brings the text again.
+    await pane.toggle()
+    seen.push(pane.showsText())
+    await pane.link(5, 3)
+    seen.push(pane.showsText())
+  } finally {
+    pane.unmount()
+  }
+  expect(seen).toEqual([false, true, false, true])
 })
