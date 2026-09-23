@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { goToDue, type GoTo } from "./go-to"
+import { goToDue, showTextFor, type GoTo } from "./go-to"
 import { offsetOfLine } from "./buffer"
 
 /** The editor's goTo effect, run again on every change as Solid runs it: with each goTo and each keystroke. */
@@ -51,6 +51,14 @@ describe("goToDue", () => {
     e.goTo({ line: 3, at: 1 })
     e.goTo({ line: 2, at: 2 })
     expect(e.state.cursor).toBe(offsetOfLine(FILE, 2))
+  })
+
+  test("a new goTo turns a preview to text; the same goTo leaves the reader's choice", () => {
+    const first = { line: 3, at: 1 }
+    expect(showTextFor(false, { line: 3, at: 2 }, first)).toBe(true)
+    expect(showTextFor(false, first, undefined)).toBe(true)
+    expect(showTextFor(false, first, first)).toBe(false)
+    expect(showTextFor(false, undefined, first)).toBe(false)
   })
 
   test("waits for the text before carrying a goTo out", () => {

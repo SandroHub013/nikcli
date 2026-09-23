@@ -5,6 +5,14 @@ export interface GoTo {
 }
 
 /**
+ * Whether a file that is both picture and text shows its text: a new goTo
+ * means the text, also on a pane already open on the preview.
+ */
+export function showTextFor(asText: boolean, target: GoTo | undefined, seen: GoTo | undefined): boolean {
+  return asText || goToDue(target, seen, true)
+}
+
+/**
  * Whether to move the cursor for `target`: only for a goTo not yet carried
  * out, and only once the text it points into is there.
  *
