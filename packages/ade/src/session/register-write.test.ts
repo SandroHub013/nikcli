@@ -140,24 +140,45 @@ describe("the check after the write looks for this very event (audit 0.7.7, MEDI
 
 describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () => {
   const ok = "ok: D3 aperta, nel tasto Decisioni entro 3 s"
+  const nikcli = { name: "nikcli", root: "C:/lavoro/nikcli" }
+  const sito = { name: "sito", root: "C:/lavoro/sito" }
+  const pane = (project: { name: string; root: string }) => ({ workspaceId: project.name, projectRoot: project.root })
 
   test("the open project: said, and the button promise stands", () => {
-    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "nikcli" })).toBe(`${ok} (progetto nikcli)`)
+    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: pane(nikcli) })).toBe(`${ok} (progetto nikcli)`)
   })
 
   test("another project: the button does not show it, and the reply says where to look", () => {
-    const reply = withPlace(ok, "decisioni", { written: "sito", shown: "nikcli", asked: "sito" })
+    const reply = withPlace(ok, "decisioni", { written: sito, shown: nikcli, asked: pane(sito) })
     expect(reply).not.toContain("entro 3 s")
     expect(reply).toBe("ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra nikcli, lo vedi aprendo sito")
   })
 
   test("a session whose project is not among the recents: the fallback is said, not silent", () => {
-    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "vecchio" })).toBe(
+    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "vecchio" } })).toBe(
       `${ok} (progetto nikcli); la sessione è del progetto vecchio, che non è fra i recenti: scritto in nikcli`,
     )
   })
 
+  test("two projects called app: told apart by folder, not taken for one by name", () => {
+    const mine = { name: "app", root: "C:/lavoro/app" }
+    const other = { name: "app", root: "D:/clienti/app" }
+    const reply = withPlace(ok, "decisioni", { written: other, shown: mine, asked: pane(other) })
+    expect(reply).not.toContain("entro 3 s")
+    expect(reply).toBe(
+      "ok: D3 aperta, nel progetto app (D:/clienti/app): il tasto Decisioni ora mostra app (C:/lavoro/app), lo vedi aprendo app (D:/clienti/app)",
+    )
+    // The sender's app is the other folder: its register was not written.
+    expect(withPlace(ok, "decisioni", { written: mine, shown: mine, asked: pane(other) })).toBe(
+      `${ok} (progetto app); la sessione è del progetto app (D:/clienti/app), che non è fra i recenti: scritto in app (C:/lavoro/app)`,
+    )
+  })
+
+  test("a pane saved without a folder is still judged by name", () => {
+    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "nikcli" } })).toBe(`${ok} (progetto nikcli)`)
+  })
+
   test("an error is left as it is", () => {
-    expect(withPlace("errore: manca la chiave k", "design", { written: "a", shown: "b" })).toBe("errore: manca la chiave k")
+    expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: nikcli })).toBe("errore: manca la chiave k")
   })
 })

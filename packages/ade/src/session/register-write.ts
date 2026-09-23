@@ -17,6 +17,7 @@ import { bucketDecisions, describeProblems as describeDecisionProblems, foldDeci
 import { parseDesignLog, serializeDesignEvent, type DesignEvent } from "../design/log"
 import { bucketProposals, describeProblems as describeDesignProblems, foldProposals, nextDesignKey } from "../design/state"
 import type { RegisterName } from "./mailbox"
+import { belongsTo, type ProjectRef } from "../surface/pane-project"
 
 export interface RegisterWriteDeps {
   /** The register file as it is now; "" when it does not exist yet. */
@@ -206,11 +207,15 @@ const design: Book = {
   },
 }
 
-/** Where a register event went: the project written, the one the bar shows, the one the sending session belongs to. */
+/**
+ * Where a register event went: the project written, the one the bar shows, and
+ * the sending session's pane. Projects by folder as well as name: two projects
+ * called `app` are not the same register.
+ */
 export interface RegisterPlace {
-  readonly written: string
-  readonly shown?: string
-  readonly asked?: string
+  readonly written: ProjectRef
+  readonly shown?: ProjectRef
+  readonly asked?: { readonly workspaceId?: string; readonly projectRoot?: string }
 }
 
 /**
@@ -219,17 +224,29 @@ export interface RegisterPlace {
  * The event goes to the register of the sender's project, and the Decisions
  * and Design buttons read the open project's: «nel tasto entro 3 s» was false
  * whenever the two differ. And a session whose project is not among the
- * recents fell back to the open one in silence (audit 0.7.7, MEDIO 4).
+ * recents fell back to the open one in silence (audit 0.7.7, MEDIO 4). Told
+ * apart with `belongsTo`, the rule the grid uses: folder first, name only for
+ * a pane saved without one.
  */
 export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
   if (!reply.startsWith("ok")) return reply
   const button = register === "design" ? "Design" : "Decisioni"
+  const written = place.written
+  const shown = place.shown
+  // Two projects of one name are told apart by their folders.
+  const named = (project: ProjectRef, beside: ProjectRef | undefined) =>
+    beside && beside.name === project.name && !belongsTo({ workspaceId: project.name, projectRoot: project.root }, beside)
+      ? `${project.name} (${project.root})`
+      : project.name
   let text =
-    place.shown !== undefined && place.shown !== place.written
-      ? `${reply.replace(`, nel tasto ${button} entro 3 s`, "")}, nel progetto ${place.written}: il tasto ${button} ora mostra ${place.shown}, lo vedi aprendo ${place.written}`
-      : `${reply} (progetto ${place.written})`
-  if (place.asked !== undefined && place.asked !== place.written) {
-    text += `; la sessione è del progetto ${place.asked}, che non è fra i recenti: scritto in ${place.written}`
+    shown !== undefined && !belongsTo({ workspaceId: written.name, projectRoot: written.root }, shown)
+      ? `${reply.replace(`, nel tasto ${button} entro 3 s`, "")}, nel progetto ${named(written, shown)}: il tasto ${button} ora mostra ${named(shown, written)}, lo vedi aprendo ${named(written, shown)}`
+      : `${reply} (progetto ${written.name})`
+  if (place.asked && !belongsTo(place.asked, written)) {
+    const sameName = place.asked.workspaceId === written.name
+    const asked = sameName && place.asked.projectRoot ? `${written.name} (${place.asked.projectRoot})` : place.asked.workspaceId ?? place.asked.projectRoot
+    const into = sameName ? `${written.name} (${written.root})` : written.name
+    text += `; la sessione è del progetto ${asked}, che non è fra i recenti: scritto in ${into}`
   }
   return text
 }

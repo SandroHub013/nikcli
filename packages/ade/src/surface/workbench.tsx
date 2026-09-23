@@ -2792,8 +2792,9 @@ export function Workbench() {
       )
       if (reply.startsWith("ok")) void (message.register === "design" ? designRegister.refresh() : decisionsRegister.refresh())
       // Which project's register, and whether it is the one the button shows (`withPlace`).
-      const asked = message.from ? wb().panes.find((pane) => pane.id === message.from)?.workspaceId : undefined
-      await answer(withPlace(reply, message.register, { written: owner.name, shown: project()?.name, asked }))
+      const asked = message.from ? wb().panes.find((pane) => pane.id === message.from) : undefined
+      const shown = project()
+      await answer(withPlace(reply, message.register, { written: owner, ...(shown ? { shown } : {}), ...(asked ? { asked } : {}) }))
       return true
     }
 
