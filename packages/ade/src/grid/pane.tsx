@@ -307,11 +307,12 @@ export function SessionPane(props: SessionPaneProps) {
    * and the pane says so for a moment; while the program has the mouse, the
    * header says how to give it a click. See `configureTerminalSelection`.
    */
-  const [copied, setCopied] = createSignal(false)
+  /** What the toast says: «Copiato», or that a take refused the copy (D68). */
+  const [copied, setCopied] = createSignal<string | false>(false)
   const [mouseReporting, setMouseReporting] = createSignal(false)
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
-  const flashCopied = () => {
-    setCopied(true)
+  const flashCopied = (text: string) => {
+    setCopied(text)
     if (copiedTimer) clearTimeout(copiedTimer)
     copiedTimer = setTimeout(() => setCopied(false), 1500)
   }
@@ -813,7 +814,8 @@ export function SessionPane(props: SessionPaneProps) {
             const detach = attachTerminal(id, element, {
               onInput: (data) => props.onInput?.(data),
               onResize: (cols, rows) => props.onResize?.(cols, rows),
-              onCopied: flashCopied,
+              onCopied: () => flashCopied(t("pane.copied")),
+              onCopyBlocked: () => flashCopied(t("pane.copyBlocked")),
               onMouseMode: setMouseReporting,
               onLink: (request) => props.onLink?.(request),
             })
@@ -822,7 +824,7 @@ export function SessionPane(props: SessionPaneProps) {
         />
         <Show when={copied()}>
           <div data-slot="pane-toast" role="status">
-            {t("pane.copied")}
+            {copied()}
           </div>
         </Show>
       </Show>

@@ -389,6 +389,7 @@ export const it = {
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",
   "pane.copied": "Copiato",
+  "pane.copyBlocked": "Non copiato: durante la ripresa la selezione tocca una riga coperta",
   "file.preview": "Anteprima",
   "file.text": "Testo",
   "file.showPreview": "Mostra l'anteprima",

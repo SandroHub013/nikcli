@@ -46,8 +46,11 @@
  * Two things this cover cannot reach, and they are not oversights: the
  * terminal, whose lines match no net, and the browser pane, which is an
  * `<iframe>` holding somebody else's document that our CSS never enters.
- * Both need a cover over the whole pane rather than over a field.
+ * Both need a cover over the whole pane rather than over a field. The
+ * terminal has one now (D68): every row blurred unless judged clean, with
+ * the same words and prefixes as here — see `terminal/recording-cover.ts`.
  */
+import { coverTerminals } from "../terminal/registry"
 
 /** The zones that hold credentials. Everything inside is covered. */
 export const SECRET_ZONE_ATTRIBUTE = "data-secrets"
@@ -59,7 +62,7 @@ const FIELD = ":is(input, textarea, select, [contenteditable])"
 const NAMED_BY = ["id", "name", "aria-label", "placeholder", "data-testid"]
 
 /** Words that mean «this holds a credential», in both languages of this app. */
-const SECRET_WORDS = [
+export const SECRET_WORDS = [
   "key",
   "chiave",
   "token",
@@ -76,10 +79,10 @@ const SECRET_WORDS = [
 ]
 
 /** Words too short to look for inside another word: `pat` is also `path`. */
-const SECRET_EXACT_WORDS = ["pat"]
+export const SECRET_EXACT_WORDS = ["pat"]
 
 /** How a real key announces itself when the box asks you to paste one. */
-const SECRET_PREFIXES = ["sk-", "ghp_", "gho_", "ghs_", "github_pat_", "xox", "AKIA", "AIza", "glpat-", "hf_", "eyJ"]
+export const SECRET_PREFIXES = ["sk-", "ghp_", "gho_", "ghs_", "github_pat_", "xox", "AKIA", "AIza", "glpat-", "hf_", "eyJ"]
 
 const anyField = (conditions: string[]): string => `${FIELD}:is(${conditions.join(", ")})`
 
@@ -106,8 +109,12 @@ export const SENSITIVE_SELECTOR = SENSITIVE_PARTS.join(", ")
 
 export const RECORDING_ATTRIBUTE = "data-ade-recording"
 
-/** Covers or uncovers the secret fields; the user sees them covered too while filming. */
+/**
+ * Covers or uncovers the secret fields and the terminals; the user sees them
+ * covered too while filming.
+ */
 export function coverSecrets(on: boolean, root: HTMLElement = document.documentElement): void {
   if (on) root.setAttribute(RECORDING_ATTRIBUTE, "")
   else root.removeAttribute(RECORDING_ATTRIBUTE)
+  coverTerminals(on)
 }

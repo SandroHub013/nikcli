@@ -384,6 +384,7 @@ export const en: Messages = {
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
   "pane.copied": "Copied",
+  "pane.copyBlocked": "Not copied: during the recording the selection reaches a covered line",
   "file.preview": "Preview",
   "file.text": "Text",
   "file.showPreview": "Show the preview",
