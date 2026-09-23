@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createLineQueue } from "./line-queue"
-import { deliveryResult, enterAgain, typeThenEnter } from "./enter"
+import { deliveryResult, enterAgain, ringAgain, typeThenEnter } from "./enter"
 
 describe("no text over a permission prompt (audit 0.7.7, MEDIO 1)", () => {
   test("a prompt already open: nothing is written, and the line is not typed", async () => {
@@ -98,5 +98,31 @@ describe("the Enter pressed again: resend and re-ring (audit 0.7.7, MEDIO 2 and 
     const resend = again({}, written, queue)
     await Promise.all([line, resend])
     expect(written).toEqual([`line:${JSON.stringify("B")}`, `line:${JSON.stringify("\r")}`, `again:${JSON.stringify("\r")}`])
+  })
+})
+
+describe("a re-ring that did not press Enter gives its count back", () => {
+  test("counted at once, so the next round does not ring again while it waits", async () => {
+    const request: { rings?: number } = {}
+    let release!: (pressed: boolean) => void
+    const pending = ringAgain(request, () => new Promise((resolve) => (release = resolve)), () => {})
+    expect(request.rings).toBe(1)
+    release(true)
+    expect(await pending).toBe(true)
+    expect(request.rings).toBe(1)
+  })
+
+  test("no Enter (a draft or a prompt): back to 0 and saved", async () => {
+    const request: { rings?: number } = {}
+    const saved: (number | undefined)[] = []
+    expect(await ringAgain(request, async () => false, () => saved.push(request.rings))).toBe(false)
+    expect(request.rings).toBe(0)
+    expect(saved).toEqual([1, 0])
+  })
+
+  test("a later ring that did not go keeps the rings before it", async () => {
+    const request = { rings: 1 }
+    await ringAgain(request, async () => false, () => {})
+    expect(request.rings).toBe(1)
   })
 })

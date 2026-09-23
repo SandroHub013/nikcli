@@ -247,7 +247,7 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { createLineQueue } from "../session/line-queue"
-import { deliveryResult, enterAgain, lineGiven, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
+import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -2488,9 +2488,7 @@ export function Workbench() {
       }
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
-        request.rings = (request.rings ?? 0) + 1
-        saveRequests()
-        void pressAgain(request.to, session).then((pressed) => {
+        void ringAgain(request, () => pressAgain(request.to, session), saveRequests).then((pressed) => {
           if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note")
         })
         continue
