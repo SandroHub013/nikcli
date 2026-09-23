@@ -1535,6 +1535,7 @@ pub fn run() {
             mailbox::mailbox_dir,
             mailbox::mailbox_inbox_read,
             agent_link::agent_activity_read,
+            agent_link::agent_activity_read_many,
             agent_link::agent_link_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,

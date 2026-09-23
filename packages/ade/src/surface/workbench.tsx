@@ -145,6 +145,7 @@ import { BotsMain, BotsRoster } from "../bots/bots"
 import type { AgentFile } from "../bots/nikcli"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
+import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
 import { mayReroute, pickProvider, setProviderPicker } from "../session/provider-pick"
 import { pickByQuota } from "../session/quota-pick"
@@ -1836,6 +1837,15 @@ export function Workbench() {
     for (const line of waiting) appendLine(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)), "note")
   }
 
+  /** The activity files, one call a pass; a delivery reuses the pass's read for a second (P1-C2a). */
+  let activityReads: { host: object; reads: ActivityReads } | undefined
+  const readsOf = (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, readOne: (nonce: string) => Promise<string | null>) => {
+    if (activityReads?.host !== host) {
+      activityReads = { host, reads: createActivityReads({ readOne, ...(host.readAgentActivities ? { readMany: host.readAgentActivities } : {}) }) }
+    }
+    return activityReads.reads
+  }
+
   /** Whether a pane can be typed into now without interrupting it; reads its turn activity when hooked. */
   const freeNow = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<boolean> => {
     const isHooked = hooked(paneId)
@@ -1843,7 +1853,7 @@ export function Workbench() {
     const nonce = paneNonces.get(paneId)
     if (isHooked && nonce && host.readAgentActivity) {
       const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
-      activity = keptActivity(activity, parseActivity(await host.readAgentActivity(nonce), resumeId))
+      activity = keptActivity(activity, parseActivity(await readsOf(host, host.readAgentActivity).read(nonce), resumeId))
       if (activity) activityOf.set(paneId, activity)
       else activityOf.delete(paneId)
     }
@@ -2211,11 +2221,14 @@ export function Workbench() {
    */
   const readActivities = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
     if (!host.readAgentActivity) return
-    for (const paneId of running.keys()) {
+    const hookedPanes = [...running.keys()].flatMap((paneId) => {
       const nonce = paneNonces.get(paneId)
-      if (!nonce || !hooked(paneId)) continue
+      return nonce && hooked(paneId) ? [{ paneId, nonce }] : []
+    })
+    const texts = await readsOf(host, host.readAgentActivity).readAll(hookedPanes.map((entry) => entry.nonce))
+    for (const [index, { paneId }] of hookedPanes.entries()) {
       const pane = wb().panes.find((candidate) => candidate.id === paneId)
-      const read = parseActivity(await host.readAgentActivity(nonce), pane?.resumeId)
+      const read = parseActivity(texts[index] ?? null, pane?.resumeId)
       if (!read) {
         // Gone or unreadable: a busy stays busy, an old idle would let mail in mid-turn.
         const kept = keptActivity(activityOf.get(paneId), read)
