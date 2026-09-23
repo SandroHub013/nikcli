@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createDesignHub } from "./hub"
+import { t } from "../i18n"
 import type { DesignProposal } from "./state"
 import type { DesignRegister } from "./register"
 import type { DesignEvent } from "./log"
@@ -186,5 +187,38 @@ describe("«Altro giro» with nobody to receive it", () => {
     hub.setInlineRecipient("p1")
     expect(await hub.again(proposal)).toBe(true)
     expect(calls).toEqual(["choose:p1", "append:again"])
+  })
+})
+
+describe("Enter with nobody to receive the answer, in the Design window (audit 0.7.7, MEDIO 7)", () => {
+  test("the card says to choose who receives, and the note goes once a session is picked", async () => {
+    const register: DesignRegister = {
+      path: () => "/p/.ade/design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      watch: () => () => {},
+    }
+    const hub = createDesignHub({ register, recipient: () => ({ state: "non scelta" }), sessions: () => [], choose: () => {}, delivery: () => ({ state: "in coda" }), onAnswered: () => {} })
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Tasto",
+      spec: "S54",
+      variants: [
+        { name: "A", description: "", preview: "a.html" },
+        { name: "B", description: "", preview: "b.html" },
+      ],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    hub.setDraft("DS1", { picked: 0, note: "" })
+    expect(await hub.submit(proposal, "primary")).toBe(false)
+    expect(hub.problem("DS1")).toBe(t("design.sheet.needRecipient"))
+    hub.setInlineRecipient("p1")
+    expect(hub.problem("DS1")).toBeUndefined()
   })
 })

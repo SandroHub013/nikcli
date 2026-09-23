@@ -154,9 +154,3 @@ export function formatMoment(ms: number, now: Date): string {
 export function countLabel(count: number): string {
   return t("design.count", count)
 }
-
-/** Whether a key's target is a form field that takes keys of its own. */
-export function isFormField(target: unknown): boolean {
-  const tag = (target as { tagName?: unknown } | null)?.tagName
-  return tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA"
-}

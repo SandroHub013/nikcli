@@ -1,7 +1,9 @@
 import { createSignal, type Accessor } from "solid-js"
 import { againEvent, answerEvent } from "./answer"
 import { t } from "../i18n"
-import { runSubmit, submitControl, submitSteps, waitsForRecipient } from "./card"
+import { runSubmit, submitControl, submitSteps } from "./card"
+// The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
+import { waitsForRecipient } from "../decisions/card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
