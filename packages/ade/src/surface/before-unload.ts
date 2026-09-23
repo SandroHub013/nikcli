@@ -10,3 +10,24 @@
 export function mustConfirmLeaving(state: { unsavedBuffers: number; runningSessions: number }): boolean {
   return state.unsavedBuffers > 0 || state.runningSessions > 0
 }
+
+/**
+ * Whether closing the window requires user confirmation (D81).
+ *
+ * Reuses `mustConfirmLeaving` to determine if sessions are running,
+ * avoiding a duplicate definition of what counts as working.
+ */
+export function shouldConfirmWindowClose(state: { runningSessions: number }): boolean {
+  return mustConfirmLeaving({ unsavedBuffers: 0, runningSessions: state.runningSessions })
+}
+
+/**
+ * Message shown when window close is requested with active sessions.
+ */
+export function closeConfirmationMessage(runningSessions: number): string {
+  if (runningSessions === 1) {
+    return "1 sessione sta lavorando. Chiudere lo stesso?"
+  }
+  return `${runningSessions} sessioni stanno lavorando. Chiudere lo stesso?`
+}
+
