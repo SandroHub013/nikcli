@@ -1317,9 +1317,8 @@ fn webview_on_screen(visible: bool, minimized: bool) -> bool {
  * instead: `put_IsVisible(false)` when the window is minimised or hidden, and
  * true again when it comes back, so the page gets `visibilitychange`.
  *
- * Checked on every resize and focus change, because minimising and restoring
- * arrive as a resize on Windows; the controller is only called when the answer
- * changes.
+ * Minimising and restoring arrive as a move and a resize; the answer is read
+ * from the window then, and the controller only touched when it changes.
  */
 #[cfg(windows)]
 fn follow_window_visibility(window: &tauri::WebviewWindow) {
@@ -1330,7 +1329,10 @@ fn follow_window_visibility(window: &tauri::WebviewWindow) {
     let applied = Arc::new(AtomicU8::new(0));
     let target = window.clone();
     window.on_window_event(move |event| {
-        if !matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_)) {
+        if !matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Focused(_)
+        ) {
             return;
         }
         let on_screen = webview_on_screen(
