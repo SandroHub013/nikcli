@@ -35,6 +35,23 @@ describe("rowIsClean (D68)", () => {
 
   for (const text of clean) test(`clean: ${text || "(empty)"}`, () => expect(rowIsClean(text)).toBe(true))
   for (const text of secret) test(`covered: ${text.slice(0, 40)}`, () => expect(rowIsClean(text)).toBe(false))
+
+  /*
+   * What `cat .env` and `git remote -v` print first, and what the audit of
+   * 0.7.7 found in the clear: a password named `pass` or `pwd`, and one written
+   * inside a URL.
+   */
+  const leaked = [
+    "DATABASE_URL=postgresql://admin:S3cretPass!@db.example.com:5432/app",
+    "origin  https://sandro:MyP4ssw0rd@github.com/x/y.git (fetch)",
+    "MYSQL_PWD=hunter2hunter2",
+    "DB_PASS=hunter2hunter2",
+    'SMTP_PASS="hunter2hunter2"',
+    '"pass": "hunter2"',
+  ]
+  const stillClean = ["git status", "npm run build", "origin  https://github.com/x/y.git (fetch)", "bypass=1"]
+  for (const text of leaked) test(`covered: ${text.slice(0, 40)}`, () => expect(rowIsClean(text)).toBe(false))
+  for (const text of stillClean) test(`clean: ${text}`, () => expect(rowIsClean(text)).toBe(true))
 })
 
 /** A buffer of rows; `wrapped` marks a row the width continued from the one above. */
