@@ -3811,6 +3811,10 @@ export function Workbench() {
       if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
       return host.ttsPiperSpeak(voice, text)
     },
+    stop: async () => {
+      const host = await getHost()
+      await host?.ttsPiperStop?.()
+    },
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)

@@ -116,12 +116,34 @@ fn model_path(root: &Path, id: &str) -> PathBuf {
     root.join("voices").join(format!("{id}.onnx"))
 }
 
+/// How long a sentence may keep the synthesizer waiting before the resident
+/// process is considered stalled and dropped: twice the JS client's 15 s. The
+/// client decides when to stop waiting; this decides when to kill, and has to
+/// be the wider of the two.
+pub const SYNTHESIS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The first sentence after a start: piper reads stdin only once it has loaded
+/// its 63 MB model, and the first «Pronto.» took 22 s live. With the short
+/// limit a cold piper was killed before it was warm, the wake-up prepare too.
+pub const FIRST_SYNTHESIS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The limit for the next sentence: the long one until the process has answered once.
+fn synthesis_timeout(fresh: bool) -> std::time::Duration {
+    if fresh {
+        FIRST_SYNTHESIS_TIMEOUT
+    } else {
+        SYNTHESIS_TIMEOUT
+    }
+}
+
 /// The piper process for one voice, with its pipes. Sentences go through it one at a time.
 struct Resident {
     voice: String,
     child: std::process::Child,
     stdin: std::process::ChildStdin,
-    stdout: std::io::BufReader<std::process::ChildStdout>,
+    rx: std::sync::mpsc::Receiver<std::io::Result<String>>,
+    /// True from start until the first answer: the model may still be loading.
+    fresh: bool,
 }
 
 impl Drop for Resident {
@@ -243,14 +265,18 @@ fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str) -> Result<
     }
     let out = scratch.join(format!("{}.wav", SENTENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let result = synthesize(guard.as_mut().expect("started above"), &text, &out);
-    if result.is_err() {
-        // A process that failed once is not trusted with the next sentence.
-        *guard = None;
-    }
+    forget_on_error(&mut guard, &result);
     drop(guard);
     let bytes = result.and_then(|_| std::fs::read(&out).map_err(|e| e.to_string()));
     let _ = std::fs::remove_file(&out);
     bytes
+}
+
+/// A process that failed once is not trusted with the next sentence: dropped, which kills it.
+fn forget_on_error<T, R, E>(slot: &mut Option<T>, result: &Result<R, E>) {
+    if result.is_err() {
+        *slot = None;
+    }
 }
 
 /// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
@@ -262,11 +288,15 @@ pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> R
 }
 
 /// Ends the resident process, freeing its memory until the next sentence.
+/// Async and non-blocking: uses `try_lock` so an in-flight synthesis is never blocked,
+/// and the main window never freezes. If busy, synthesis is in progress and stop is skipped
+/// (JS will not re-arm the silence timer until another sentence finishes speaking).
 #[tauri::command]
-pub fn tts_piper_stop(state: tauri::State<'_, Piper>) {
-    if let Ok(mut guard) = state.resident.lock() {
+pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<(), String> {
+    if let Ok(mut guard) = state.resident.try_lock() {
         *guard = None;
     }
+    Ok(())
 }
 
 fn start(root: &Path, voice_id: &str) -> Result<Resident, String> {
@@ -288,21 +318,77 @@ fn start(root: &Path, voice_id: &str) -> Result<Resident, String> {
     hide_window(&mut command);
     let mut child = command.spawn().map_err(|e| format!("Piper non si avvia: {e}"))?;
     let stdin = child.stdin.take().ok_or("Piper senza stdin")?;
-    let stdout = std::io::BufReader::new(child.stdout.take().ok_or("Piper senza stdout")?);
-    Ok(Resident { voice: voice_id.to_string(), child, stdin, stdout })
+    let stdout = child.stdout.take().ok_or("Piper senza stdout")?;
+    let rx = spawn_stdout_reader(stdout);
+    Ok(Resident { voice: voice_id.to_string(), child, stdin, rx, fresh: true })
+}
+
+fn spawn_stdout_reader<R: std::io::Read + Send + 'static>(
+    reader: R,
+) -> std::sync::mpsc::Receiver<std::io::Result<String>> {
+    use std::io::BufRead;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut buf = std::io::BufReader::new(reader);
+    let _ = std::thread::Builder::new()
+        .name("piper-stdout-reader".into())
+        .spawn(move || {
+            loop {
+                let mut line = String::new();
+                match buf.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if tx.send(Ok(line)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        break;
+                    }
+                }
+            }
+        });
+    rx
+}
+
+fn read_response_with_timeout(
+    rx: &std::sync::mpsc::Receiver<std::io::Result<String>>,
+    timeout: std::time::Duration,
+) -> Result<String, String> {
+    match rx.recv_timeout(timeout) {
+        Ok(Ok(line)) => {
+            if line.is_empty() {
+                Err("Piper si è chiuso.".into())
+            } else {
+                Ok(line)
+            }
+        }
+        Ok(Err(e)) => Err(format!("Piper non risponde: {e}")),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            Err(format!("Piper non ha risposto entro il timeout ({} s).", timeout.as_secs()))
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err("Piper si è chiuso.".into()),
+    }
 }
 
 /// Piper writes the sentence to `out` and prints that path when it is done.
 fn synthesize(resident: &mut Resident, text: &str, out: &Path) -> Result<(), String> {
-    use std::io::{BufRead, Write};
+    let timeout = synthesis_timeout(resident.fresh);
+    synthesize_with_timeout(resident, text, out, timeout)
+}
+
+fn synthesize_with_timeout(
+    resident: &mut Resident,
+    text: &str,
+    out: &Path,
+    timeout: std::time::Duration,
+) -> Result<(), String> {
+    use std::io::Write;
     let line = serde_json::json!({ "text": text, "output_file": out.to_string_lossy() }).to_string();
     writeln!(resident.stdin, "{line}").map_err(|e| format!("Piper non risponde: {e}"))?;
     resident.stdin.flush().map_err(|e| format!("Piper non risponde: {e}"))?;
-    let mut answer = String::new();
-    let read = resident.stdout.read_line(&mut answer).map_err(|e| format!("Piper non risponde: {e}"))?;
-    if read == 0 {
-        return Err("Piper si è chiuso.".into());
-    }
+    read_response_with_timeout(&resident.rx, timeout)?;
+    resident.fresh = false;
     if !out.is_file() {
         return Err("Piper non ha scritto l'audio.".into());
     }
@@ -425,5 +511,64 @@ mod tests {
                 assert_eq!(d.sha256.len(), 64);
             }
         }
+    }
+
+    #[test]
+    fn synthesis_timeout_triggers_error_on_stalled_stdout() {
+        struct StalledReader;
+        impl std::io::Read for StalledReader {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                Ok(0)
+            }
+        }
+        let rx = spawn_stdout_reader(StalledReader);
+        let res = read_response_with_timeout(&rx, std::time::Duration::from_millis(50));
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.contains("timeout"), "expected timeout error, got: {err}");
+    }
+
+    #[test]
+    fn synthesis_reads_response_when_stdout_answers_in_time() {
+        use std::io::Cursor;
+        let rx = spawn_stdout_reader(Cursor::new(b"C:\\scratch\\0.wav\n"));
+        let res = read_response_with_timeout(&rx, std::time::Duration::from_millis(500));
+        assert_eq!(res.unwrap(), "C:\\scratch\\0.wav\n");
+    }
+
+    #[test]
+    fn synthesis_reports_closed_process_on_eof() {
+        use std::io::Cursor;
+        let rx = spawn_stdout_reader(Cursor::new(b""));
+        let res = read_response_with_timeout(&rx, std::time::Duration::from_millis(500));
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "Piper si è chiuso.");
+    }
+
+    #[test]
+    fn the_first_sentence_after_a_start_waits_longer() {
+        assert_eq!(synthesis_timeout(true), FIRST_SYNTHESIS_TIMEOUT);
+        assert_eq!(synthesis_timeout(false), SYNTHESIS_TIMEOUT);
+        // Wider than the JS client's 15 s, which decides when to stop waiting.
+        assert!(SYNTHESIS_TIMEOUT >= std::time::Duration::from_secs(30));
+        assert!(FIRST_SYNTHESIS_TIMEOUT > std::time::Duration::from_secs(22));
+    }
+
+    #[test]
+    fn a_failed_sentence_drops_the_process_and_frees_the_lock() {
+        let slot = Mutex::new(Some(7_u8));
+        {
+            let mut guard = slot.lock().unwrap();
+            let failed: Result<(), String> = Err("Piper non ha risposto entro il timeout (30 s).".into());
+            forget_on_error(&mut guard, &failed);
+        }
+        let guard = slot.try_lock().expect("the lock is free after a failure");
+        assert!(guard.is_none());
+        drop(guard);
+
+        let kept = Mutex::new(Some(7_u8));
+        forget_on_error(&mut kept.lock().unwrap(), &Ok::<(), String>(()));
+        assert_eq!(*kept.lock().unwrap(), Some(7));
     }
 }

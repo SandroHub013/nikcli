@@ -28,6 +28,12 @@ import type { Speaker } from "./speaker"
  */
 export const SYNTHESIS_LIMIT_MS = 15_000
 
+/**
+ * How long silence lasts without sentences to speak before the resident Piper
+ * process is shut down to free its ~98 MB of memory (P1-C4). 2 minutes.
+ */
+export const SILENCE_STOP_LIMIT_MS = 120_000
+
 function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const expired = new Promise<never>((_, reject) => {
@@ -55,6 +61,10 @@ export interface NaturalSpeakerDeps {
   onInstall?: (voice: string, state: "downloading" | "ready" | "failed", problem?: string) => void
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
   fallbackNotice?: () => string
+  /** Shuts down the resident process on the host after silence, freeing memory (P1-C4). */
+  stop?: () => Promise<void> | void
+  /** How long silence lasts before Piper is shut down (default 120_000 ms = 2 min). */
+  idleLimitMs?: number
 }
 
 /**
@@ -100,6 +110,52 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   let warmed: string | undefined
   let fallbackNotified = false
 
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let stopping: Promise<void> | undefined
+  let activeTasks = 0
+  let residentStarted = false
+
+  function cancelIdleTimer(): void {
+    if (idleTimer !== undefined) {
+      clearTimeout(idleTimer)
+      idleTimer = undefined
+    }
+  }
+
+  function scheduleIdleStop(): void {
+    cancelIdleTimer()
+    if (!deps.stop || !residentStarted || activeTasks > 0) return
+    const timeoutMs = deps.idleLimitMs ?? SILENCE_STOP_LIMIT_MS
+    idleTimer = setTimeout(() => {
+      idleTimer = undefined
+      residentStarted = false
+      warmed = undefined
+      const pending = deps.stop?.()
+      if (pending && typeof (pending as Promise<void>).then === "function") {
+        stopping = (pending as Promise<void>).finally(() => {
+          if (stopping === pending) stopping = undefined
+        })
+      }
+    }, timeoutMs)
+  }
+
+  async function ensureNotStopping(): Promise<void> {
+    if (stopping) {
+      try {
+        await stopping
+      } catch {
+        // A failure to stop an old process must not keep the new reply silent.
+      }
+    }
+  }
+
+  function invokeSynthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+    if (stopping) {
+      return stopping.catch(() => {}).then(() => deps.synthesize(voice, sentence))
+    }
+    return deps.synthesize(voice, sentence)
+  }
+
   async function announceFallbackOnce(voice: string): Promise<void> {
     if (voice === "system" || fallbackNotified || !deps.fallbackNotice) return
     fallbackNotified = true
@@ -113,13 +169,14 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const ahead = new Map<string, Promise<ArrayBuffer>>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
   function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+    residentStarted = true
     const key = aheadKey(voice, sentence)
     const early = ahead.get(key)
     if (early) {
       ahead.delete(key)
       return early
     }
-    return deps.synthesize(voice, sentence)
+    return invokeSynthesize(voice, sentence)
   }
 
   function ensure(voice: string): void {
@@ -165,63 +222,76 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
   return {
     async speak(text: string): Promise<void> {
-      // What was asked for ahead belongs to this reply: kept across the stop.
-      const early = new Map(ahead)
-      stopAll()
-      for (const [key, pending] of early) ahead.set(key, pending)
-      const mine = generation
-      if (!text || text.trim().length === 0) return
-      const clean = cleanForSpeech(text)
-      if (!clean || clean.trim().length === 0) return
-      const voice = deps.voice()
-      if (!(await usable(voice))) {
-        if (mine === generation) {
-          await announceFallbackOnce(voice)
-          await deps.fallback.speak(clean)
+      cancelIdleTimer()
+      activeTasks++
+      try {
+        await ensureNotStopping()
+        // What was asked for ahead belongs to this reply: kept across the stop.
+        const early = new Map(ahead)
+        stopAll()
+        for (const [key, pending] of early) ahead.set(key, pending)
+        const mine = generation
+        if (!text || text.trim().length === 0) return
+        const clean = cleanForSpeech(text)
+        if (!clean || clean.trim().length === 0) return
+        const voice = deps.voice()
+        if (!(await usable(voice))) {
+          if (mine === generation) {
+            await announceFallbackOnce(voice)
+            await deps.fallback.speak(clean)
+          }
+          return
         }
-        return
-      }
-      fallbackNotified = false
-      if (mine !== generation) return
+        fallbackNotified = false
+        if (mine !== generation) return
 
-      const sentences = splitSentences(clean)
-      // Requested together, played in order: the host works through them while the first plays.
-      const audio = sentences.map((sentence) => synthesize(voice, sentence))
-      audio.forEach((pending) => pending.catch(() => {}))
-      for (let i = 0; i < sentences.length; i++) {
-        let wav: ArrayBuffer
-        try {
-          // Timed from when this sentence is due, not when it was queued behind the others.
-          wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
-        } catch {
-          // The rest of the reply goes out in the old voice rather than not at all.
-          if (mine === generation) {
-            await announceFallbackOnce(voice)
-            await deps.fallback.speak(sentences.slice(i).join(" "))
+        const sentences = splitSentences(clean)
+        // Requested together, played in order: the host works through them while the first plays.
+        const audio = sentences.map((sentence) => synthesize(voice, sentence))
+        audio.forEach((pending) => pending.catch(() => {}))
+        for (let i = 0; i < sentences.length; i++) {
+          let wav: ArrayBuffer
+          try {
+            // Timed from when this sentence is due, not when it was queued behind the others.
+            wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
+          } catch {
+            // The rest of the reply goes out in the old voice rather than not at all.
+            if (mine === generation) {
+              await announceFallbackOnce(voice)
+              await deps.fallback.speak(sentences.slice(i).join(" "))
+            }
+            return
           }
-          return
-        }
-        if (mine !== generation) return
-        const controller = new AbortController()
-        playing = controller
-        markVoice("audio-start", sentences[i])
-        try {
-          await deps.play(wav, controller.signal)
-        } catch {
-          // Synthesised but not playable: the old voice still gets the words out.
-          if (mine === generation) {
-            await announceFallbackOnce(voice)
-            await deps.fallback.speak(sentences.slice(i).join(" "))
+          if (mine !== generation) return
+          const controller = new AbortController()
+          playing = controller
+          markVoice("audio-start", sentences[i])
+          try {
+            await deps.play(wav, controller.signal)
+          } catch {
+            // Synthesised but not playable: the old voice still gets the words out.
+            if (mine === generation) {
+              await announceFallbackOnce(voice)
+              await deps.fallback.speak(sentences.slice(i).join(" "))
+            }
+            return
           }
-          return
+          if (mine !== generation) return
         }
-        if (mine !== generation) return
+        playing = undefined
+      } finally {
+        activeTasks--
+        if (activeTasks === 0) {
+          scheduleIdleStop()
+        }
       }
-      playing = undefined
     },
 
     cancel(): void {
       stopAll()
+      if (activeTasks === 0) {
+        scheduleIdleStop()
+      }
     },
 
     prefetch(text: string): void {
@@ -230,10 +300,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       if (!clean || clean.trim().length === 0) return
       const voice = deps.voice()
       if (voice === "system" || !ready.has(voice)) return
+      cancelIdleTimer()
       for (const sentence of splitSentences(clean)) {
         const key = aheadKey(voice, sentence)
         if (ahead.has(key)) continue
-        const pending = deps.synthesize(voice, sentence)
+        residentStarted = true
+        activeTasks++
+        const pending = invokeSynthesize(voice, sentence)
+          .finally(() => {
+            activeTasks--
+            if (activeTasks === 0) scheduleIdleStop()
+          })
         pending.catch(() => {})
         ahead.set(key, pending)
       }
@@ -242,12 +319,20 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     prepare(): void {
       const voice = deps.voice()
       if (voice === warmed) return
+      cancelIdleTimer()
       void usable(voice).then((ok) => {
         if (!ok || warmed === voice) return
         warmed = voice
-        deps.synthesize(voice, "Pronto.").catch(() => {
-          warmed = undefined
-        })
+        residentStarted = true
+        activeTasks++
+        invokeSynthesize(voice, "Pronto.")
+          .catch(() => {
+            warmed = undefined
+          })
+          .finally(() => {
+            activeTasks--
+            if (activeTasks === 0) scheduleIdleStop()
+          })
       })
     },
   }
