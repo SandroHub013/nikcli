@@ -335,7 +335,7 @@ import {
 import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { designPath } from "../design/store"
-import { registerWrite } from "../session/register-write"
+import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
   createMicMeter,
@@ -2772,7 +2772,9 @@ export function Workbench() {
         message,
       )
       if (reply.startsWith("ok")) void (message.register === "design" ? designRegister.refresh() : decisionsRegister.refresh())
-      await answer(reply)
+      // Which project's register, and whether it is the one the button shows (`withPlace`).
+      const asked = message.from ? wb().panes.find((pane) => pane.id === message.from)?.workspaceId : undefined
+      await answer(withPlace(reply, message.register, { written: owner.name, shown: project()?.name, asked }))
       return true
     }
 

@@ -205,3 +205,31 @@ const design: Book = {
     return ownVerdict(events, foldProposals(events).rejected, event)
   },
 }
+
+/** Where a register event went: the project written, the one the bar shows, the one the sending session belongs to. */
+export interface RegisterPlace {
+  readonly written: string
+  readonly shown?: string
+  readonly asked?: string
+}
+
+/**
+ * The reply, saying which project's register was written.
+ *
+ * The event goes to the register of the sender's project, and the Decisions
+ * and Design buttons read the open project's: «nel tasto entro 3 s» was false
+ * whenever the two differ. And a session whose project is not among the
+ * recents fell back to the open one in silence (audit 0.7.7, MEDIO 4).
+ */
+export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
+  if (!reply.startsWith("ok")) return reply
+  const button = register === "design" ? "Design" : "Decisioni"
+  let text =
+    place.shown !== undefined && place.shown !== place.written
+      ? `${reply.replace(`, nel tasto ${button} entro 3 s`, "")}, nel progetto ${place.written}: il tasto ${button} ora mostra ${place.shown}, lo vedi aprendo ${place.written}`
+      : `${reply} (progetto ${place.written})`
+  if (place.asked !== undefined && place.asked !== place.written) {
+    text += `; la sessione è del progetto ${place.asked}, che non è fra i recenti: scritto in ${place.written}`
+  }
+  return text
+}

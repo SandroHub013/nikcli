@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { registerWrite, type RegisterWriteDeps } from "./register-write"
+import { registerWrite, withPlace, type RegisterWriteDeps } from "./register-write"
 
 const NOW = new Date("2026-09-23T12:00:00.000Z")
 
@@ -135,5 +135,29 @@ describe("the check after the write looks for this very event (audit 0.7.7, MEDI
     const { deps } = file(`${opened}\n`)
     const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
     expect(reply).toStartWith("ok: D1 risposta")
+  })
+})
+
+describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () => {
+  const ok = "ok: D3 aperta, nel tasto Decisioni entro 3 s"
+
+  test("the open project: said, and the button promise stands", () => {
+    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "nikcli" })).toBe(`${ok} (progetto nikcli)`)
+  })
+
+  test("another project: the button does not show it, and the reply says where to look", () => {
+    const reply = withPlace(ok, "decisioni", { written: "sito", shown: "nikcli", asked: "sito" })
+    expect(reply).not.toContain("entro 3 s")
+    expect(reply).toBe("ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra nikcli, lo vedi aprendo sito")
+  })
+
+  test("a session whose project is not among the recents: the fallback is said, not silent", () => {
+    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "vecchio" })).toBe(
+      `${ok} (progetto nikcli); la sessione è del progetto vecchio, che non è fra i recenti: scritto in nikcli`,
+    )
+  })
+
+  test("an error is left as it is", () => {
+    expect(withPlace("errore: manca la chiave k", "design", { written: "a", shown: "b" })).toBe("errore: manca la chiave k")
   })
 })
