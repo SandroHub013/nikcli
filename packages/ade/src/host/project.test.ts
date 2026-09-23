@@ -28,6 +28,7 @@ describe("discoverProject", () => {
       },
       allowWriteRoot: async (path) => {
         calls.push(`allow ${path}`)
+        return true
       },
     })
     const p = await discoverProject(host, "ssh://niko@devbox:2222/srv/app")
@@ -118,5 +119,13 @@ describe("grantedRoots (audit 0.7.7, D1-2)", () => {
     expect(roots.some((root) => root.startsWith("ssh://"))).toBe(false)
     // A project only remembered (a recent never reopened) never passed through here.
     expect(roots).not.toContain("C:/granted/recent-only")
+  })
+
+  it("leaves out a root the host refused", async () => {
+    // Rust refuses a home folder or a drive root; opened as a project, it must not make ../.ssh "inside".
+    await discoverProject(fakeHost({ allowWriteRoot: async () => false }), "C:/Users/refused-home")
+    await discoverProject(fakeHost({ allowWriteRoot: async () => true }), "C:/granted/by-host")
+    expect(grantedRoots()).not.toContain("C:/Users/refused-home")
+    expect(grantedRoots()).toContain("C:/granted/by-host")
   })
 })

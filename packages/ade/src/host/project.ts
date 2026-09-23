@@ -75,8 +75,9 @@ export async function discoverProject(
  * browser harness has no such method and needs none.
  */
 async function allowWrites(host: Host, root: string): Promise<void> {
-  await host.allowWriteRoot?.(root)
-  granted.add(root)
+  // A root the host refused (a home folder, a drive) is no root for a link either.
+  const allowed = host.allowWriteRoot ? await host.allowWriteRoot(root) : true
+  if (allowed) granted.add(root)
 }
 
 /* The roots granted this session, in the order they were: the same set `WriteRoots` holds on the Rust side. */
