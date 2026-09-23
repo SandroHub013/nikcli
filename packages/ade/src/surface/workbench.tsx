@@ -254,7 +254,17 @@ import {
 import { createLineQueue } from "../session/line-queue"
 import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
-import { canSuspend, closeSuspendedTree, offersSuspend, SUSPEND_REASON, type SuspendCheck, type SuspendContext } from "../session/suspend"
+import {
+  canSuspend,
+  closeSuspendedTree,
+  offersSuspend,
+  parseSuspendedMail,
+  suspendedDelivery,
+  suspendedMailToSave,
+  SUSPEND_REASON,
+  type SuspendCheck,
+  type SuspendContext,
+} from "../session/suspend"
 import {
   formatFallbackLine,
   formatHandoff,
@@ -1489,6 +1499,8 @@ export function Workbench() {
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick(n => n + 1)
   const isRunning = (id: string) => { runningTick(); return running.has(id) }
+  /** Suspended by the user (P1-C6): its mail waits for "Riprendi", and nothing wakes it. */
+  const isSuspendedPane = (paneId: string) => wb().panes.some((pane) => pane.id === paneId && pane.suspended)
 
   /*
    * Messages between sessions. See `session/mailbox.ts` and `mailbox.rs`.
@@ -1506,7 +1518,7 @@ export function Workbench() {
           id: pane.id,
           title: pane.title,
           agent: pane.agent ?? pane.model,
-          status: running.has(pane.id) ? pane.status : "chiusa",
+          status: running.has(pane.id) ? pane.status : pane.suspended ? "sospesa" : "chiusa",
           project: pane.workspaceId,
         })),
     )
@@ -1803,7 +1815,7 @@ export function Workbench() {
     return sessions
   }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string; suspended?: true }[] = []
   /**
    * Replies to natively delivered requests, kept as files until the caller is
    * free. On the typed route the caller is already blocked in `ade-msg ask`
@@ -1954,6 +1966,10 @@ export function Workbench() {
   const INBOX_KEY = "ade.mailbox.inbox"
   const inboxPending: InboxEntry[] = parseInbox(readStored(INBOX_KEY))
   const saveInbox = () => writeStored(INBOX_KEY, JSON.stringify(inboxPending))
+
+  /* The mail queued for suspended sessions (P1-C6), read back once the panes are restored. */
+  const SUSPENDED_MAIL_KEY = "ade.mailbox.suspended"
+  const saveSuspendedMail = () => writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, isSuspendedPane)))
 
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
@@ -2153,6 +2169,7 @@ export function Workbench() {
 
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
+    suspended: isSuspendedPane(request.to),
     permissionPending: Boolean(permissions()[request.to]),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
@@ -2439,12 +2456,24 @@ export function Workbench() {
 
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
-      if (!session) heldLines.splice(heldLines.indexOf(item), 1)
-      else if (await freeNow(host, item.paneId)) {
+      if (!session) {
+        // A suspended session keeps its mail until the user resumes it.
+        if (isSuspendedPane(item.paneId)) continue
+        heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
+      } else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (item.inbox
-          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => result === "held")
+          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => {
+              // Queued while suspended: the request reached the session now, and its clock starts now.
+              const request = item.suspended && item.inbox?.kind === "ask" && result === "given" ? openRequests.get(item.inbox.id) : undefined
+              if (request) {
+                request.at = request.deliveredAt = Date.now()
+                saveRequests()
+              }
+              return result === "held"
+            })
           : typeLineOutcome(session, item.text).then((outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held")
         ).then((again) => {
           if (again) heldLines.push(item)
@@ -2560,6 +2589,49 @@ export function Workbench() {
   }
 
   /** Delivers one message; false leaves it queued for the next pass. */
+  /**
+   * A `send` or `ask` to a suspended session (P1-C6): queued among the held
+   * lines, to be typed once the user resumes it, and the sender told at once.
+   * An `ask` stays open, in the state "sessione sospesa"; a caller blocked in
+   * `ade-msg ask` is woken with the same words instead of waiting it out.
+   */
+  const queueForSuspended = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    id: string,
+    message: Extract<Message, { kind: "send" | "ask" }>,
+    target: MailPane,
+    sender: MailPane | undefined,
+    receipt: string,
+  ): Promise<true> => {
+    const ask = message.kind === "ask"
+    const targetPane = wb().panes.find((pane) => pane.id === target.id)
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: depthOf(target.id, parentOf),
+      maxDepth: maxDepth(),
+      ...(ask && message.budget ? { budget: message.budget } : {}),
+    }
+    const line = ask ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    const full = ask ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
+    heldLines.push({ paneId: target.id, text: line, full, inbox: { id, kind: ask ? "ask" : "send", from: message.from }, suspended: true })
+    saveSuspendedMail()
+    if (ask) {
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.id, at: Date.now(), brief: briefOf(message.text), via: "digitata", ...(message.budget ? { budget: message.budget } : {}) })
+      saveRequests()
+    }
+    appendLine(target.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note")
+    heldStates.delete(id)
+    // Held before, for a turn that has ended since: its sender was answered then, and stopped listening.
+    if (!held.delete(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
+    if (ask) {
+      await host.mailboxState?.(id, `${receipt.replace(/^ok: /, "")}; la richiesta ${id} resta aperta: la risposta arriva con ade-msg wait ${id}`, "update").catch(() => {})
+      // Taken back if nobody woke on it (`--no-wait`): a later `ade-msg wait` waits for the answer, not for this.
+      setTimeout(() => void host.mailboxResultReclaim?.(id, "update").catch(() => null), CLAIM_WINDOW_MS)
+    }
+    return true
+  }
+
   const deliverOne = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, message: Message): Promise<boolean> => {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
     const panes = mailPanes()
@@ -3045,6 +3117,12 @@ export function Workbench() {
       await answer(`errore: ${target.error}`)
       return true
     }
+    // Nothing wakes a suspended session: a restart is refused, and mail is queued below.
+    const toSuspended = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+    if (toSuspended && !toSuspended.queue) {
+      await answer(toSuspended.refusal)
+      return true
+    }
 
     if (message.kind === "interrupt") {
       if (!message.from) {
@@ -3164,6 +3242,10 @@ export function Workbench() {
       await answer("errore: una sessione non può fare una richiesta a se stessa")
       return true
     }
+    // Before the route: a suspended Claude session has no pipe, and `SendMessage` to it fails with ENOINBOX.
+    if (toSuspended?.queue && (message.kind === "send" || message.kind === "ask")) {
+      return queueForSuspended(host, id, message, target.pane, sender, toSuspended.receipt)
+    }
     const session = running.get(target.pane.id)
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
@@ -3264,6 +3346,9 @@ export function Workbench() {
     // A prompt opened before the text: the message stays queued, as for a prompt seen above.
     if (delivered === "held") return false
     if (delivered === "closed") {
+      // Suspended while this was on its way: queued like the rest of its mail.
+      const late = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+      if (late?.queue && (message.kind === "send" || message.kind === "ask")) return queueForSuspended(host, id, message, target.pane, sender, late.receipt)
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -4252,6 +4337,8 @@ export function Workbench() {
       if (state) {
         restored = state
         setWb(fromWorkspaceState(state))
+        // The suspended sessions' queues, now that their panes are back (P1-C6).
+        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => isSuspendedPane(line.paneId)))
       }
     }
 

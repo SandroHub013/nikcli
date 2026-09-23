@@ -98,3 +98,84 @@ export const SUSPEND_REASON: Readonly<Record<SuspendBlock, MessageKey>> = {
   held: "suspend.why.held",
   typing: "suspend.why.typing",
 }
+
+/*
+ * Mail for a suspended session (point 3). Nothing wakes it: a `send` or an
+ * `ask` waits in a queue that survives ADE's restart and is delivered, in the
+ * order it came, once the user resumes the session; `restart` is refused. The
+ * check comes before the route is chosen: a suspended Claude session has no
+ * pipe of its own, and `SendMessage` to it fails with ENOINBOX.
+ */
+
+export type SuspendedDelivery = { queue: true; receipt: string } | { queue: false; refusal: string }
+
+/**
+ * What a message to a suspended session becomes; undefined for the kinds that
+ * take their usual way (an interrupt or a close have nothing to queue).
+ *
+ * The receipt starts with "ok": `ade-msg` exits 1 on any other, and a queued
+ * message is not a refusal.
+ */
+export function suspendedDelivery(kind: string, title: string): SuspendedDelivery | undefined {
+  if (kind === "send" || kind === "ask") {
+    return { queue: true, receipt: `ok: in coda: la sessione "${title}" è sospesa; la riceve quando l'utente la riprende` }
+  }
+  if (kind === "relaunch") return { queue: false, refusal: `errore: la sessione "${title}" è sospesa: la riprende l'utente` }
+  return undefined
+}
+
+/** A line waiting for a session, as `heldLines` keeps it. */
+export interface QueuedLine {
+  paneId: string
+  text: string
+  full?: string
+  inbox?: { id: string; kind: "ask" | "send"; from: string }
+  /** Queued while the session was suspended: its request counts as delivered only once it is typed. */
+  suspended?: true
+}
+
+/** The lines kept for suspended sessions, as they are saved. */
+export function suspendedMailToSave(
+  lines: readonly (Omit<QueuedLine, "inbox"> & { inbox?: { id: string; kind: string; from: string } })[],
+  isSuspended: (paneId: string) => boolean,
+): QueuedLine[] {
+  const saved: QueuedLine[] = []
+  for (const { paneId, text, full, inbox, suspended } of lines) {
+    if (!suspended || !isSuspended(paneId)) continue
+    // Only mail is queued for a suspended session: `send` and `ask`.
+    if (inbox && inbox.kind !== "ask" && inbox.kind !== "send") continue
+    saved.push({
+      paneId,
+      text,
+      ...(full !== undefined ? { full } : {}),
+      ...(inbox ? { inbox: { id: inbox.id, kind: inbox.kind as "ask" | "send", from: inbox.from } } : {}),
+      suspended: true,
+    })
+  }
+  return saved
+}
+
+/** The saved queue read back; anything malformed is dropped, the order is kept. */
+export function parseSuspendedMail(text: string | null | undefined): QueuedLine[] {
+  if (!text) return []
+  try {
+    const raw: unknown = JSON.parse(text)
+    if (!Array.isArray(raw)) return []
+    const lines: QueuedLine[] = []
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue
+      const { paneId, text: line, full, inbox } = entry as Record<string, unknown>
+      if (typeof paneId !== "string" || !paneId || typeof line !== "string") continue
+      let meta: QueuedLine["inbox"]
+      if (inbox !== undefined) {
+        const { id, kind, from } = (inbox ?? {}) as Record<string, unknown>
+        if (typeof id !== "string" || (kind !== "ask" && kind !== "send") || typeof from !== "string") continue
+        meta = { id, kind, from }
+      }
+      lines.push({ paneId, text: line, ...(typeof full === "string" ? { full } : {}), ...(meta ? { inbox: meta } : {}), suspended: true })
+    }
+    return lines
+  } catch {
+    return []
+  }
+}

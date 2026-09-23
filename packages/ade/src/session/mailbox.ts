@@ -741,6 +741,7 @@ export type RequestState =
   | "trattenuta: riga a metà"
   | "attende un permesso"
   | "sessione chiusa"
+  | "sessione sospesa"
   | "in avvio"
   | "inattiva senza risposta"
   | "forse bloccata"
@@ -868,6 +869,8 @@ export function requestState(
   request: OpenRequest,
   target: {
     running: boolean
+    /** Suspended by the user (P1-C6): no process, and the request waits for "Riprendi" instead of closing. */
+    suspended?: boolean
     permissionPending: boolean
     activity?: Activity
     lastOutputAt?: number
@@ -876,7 +879,7 @@ export function requestState(
   },
   now: number,
 ): RequestState {
-  if (!target.running) return now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
+  if (!target.running) return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
   if (target.permissionPending) return "attende un permesso"
   // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
   const reached = request.deliveredAt ?? request.at

@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { canSuspend, closeSuspendedTree, offersSuspend, type SuspendContext, type SuspendPane } from "./suspend"
+import {
+  canSuspend,
+  closeSuspendedTree,
+  offersSuspend,
+  parseSuspendedMail,
+  suspendedDelivery,
+  suspendedMailToSave,
+  type SuspendContext,
+  type SuspendPane,
+} from "./suspend"
 
 const pane: SuspendPane = { id: "p1", agent: "claude-code", status: "idle", resumeId: "5f0c3a52-0000-4000-8000-000000000001" }
 const free: SuspendContext = {
@@ -78,5 +87,49 @@ describe("closeSuspendedTree (P1-C6)", () => {
   test("a host whose kill returns nothing, or no process at all, counts as closed", async () => {
     expect(await closeSuspendedTree({ kill: () => undefined })).toBe(true)
     expect(await closeSuspendedTree(undefined)).toBe(true)
+  })
+})
+
+describe("mail for a suspended session (P1-C6)", () => {
+  test("send and ask are queued, and the sender is told at once", () => {
+    for (const kind of ["send", "ask"]) {
+      expect(suspendedDelivery(kind, "A")).toEqual({
+        queue: true,
+        receipt: 'ok: in coda: la sessione "A" è sospesa; la riceve quando l\'utente la riprende',
+      })
+    }
+  })
+
+  test("restart is refused: nothing wakes a suspended session", () => {
+    expect(suspendedDelivery("relaunch", "A")).toEqual({ queue: false, refusal: 'errore: la sessione "A" è sospesa: la riprende l\'utente' })
+  })
+
+  test("the other kinds take their usual way", () => {
+    for (const kind of ["interrupt", "close", "reply", "update", "spawn"]) expect(suspendedDelivery(kind, "A")).toBeUndefined()
+  })
+
+  test("the saved queue is read back after a restart, in the order it came", () => {
+    const held = [
+      { paneId: "a", text: "uno", inbox: { id: "1", kind: "send" as const, from: "m" }, suspended: true as const },
+      { paneId: "b", text: "di un'altra", suspended: true as const },
+      { paneId: "a", text: "due", full: "due\nrighe", inbox: { id: "2", kind: "ask" as const, from: "m" }, suspended: true as const },
+      { paneId: "a", text: "non sospesa" },
+    ]
+    const saved = JSON.stringify(suspendedMailToSave(held, (id) => id === "a"))
+    expect(parseSuspendedMail(saved)).toEqual([held[0]!, held[2]!])
+  })
+
+  test("a malformed saved queue is dropped entry by entry", () => {
+    expect(parseSuspendedMail(null)).toEqual([])
+    expect(parseSuspendedMail("{rotto")).toEqual([])
+    expect(parseSuspendedMail('{"paneId":"a"}')).toEqual([])
+    const text = JSON.stringify([
+      { paneId: "a", text: "buona" },
+      { paneId: "", text: "senza pannello" },
+      { paneId: "a", text: 3 },
+      { paneId: "a", text: "tipo sconosciuto", inbox: { id: "1", kind: "spawn", from: "m" } },
+      null,
+    ])
+    expect(parseSuspendedMail(text)).toEqual([{ paneId: "a", text: "buona", suspended: true }])
   })
 })
