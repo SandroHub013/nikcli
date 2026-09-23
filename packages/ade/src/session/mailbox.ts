@@ -1180,7 +1180,10 @@ export const USAGE =
   "                                          scrive un evento nel registro Decisioni o Design: il json ha i campi\n" +
   "                                          senza type, at e by (li mette ADE); k serve, tranne per aperta.\n" +
   "                                          ADE controlla la riga, la scrive e dice se il tasto la mostra;\n" +
-  "                                          rimandata solo per decisioni. I registri si scrivono solo così\n" +
+  "                                          rimandata solo per decisioni. I registri si scrivono solo così.\n" +
+  "                                          Il json anche da file (--file <percorso>) o da stdin (--stdin, al\n" +
+  "                                          posto del json): da PowerShell 5.1 usa --file, perché le virgolette\n" +
+  "                                          dentro '<json>' si perdono e una pipe perde le lettere accentate\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
@@ -1273,4 +1276,23 @@ export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer:
   // silent): the hook says when, and its `idle` settles the pane on its own.
   if (pane.hooked) return pane.busy ? "wait" : "settle"
   return pane.owesAnswer ? "recheck" : "settle"
+}
+
+/**
+ * Who hears that a message went wrong (held, unread, lost).
+ *
+ * The sending session, when it is open. Mail with no session behind it — the
+ * Decisions and Design panels' deliveries, a sender ADE could not verify —
+ * arrives with `from: ""`, and the check that skipped an empty sender left
+ * those notices with nobody (audit 0.7.7, MEDIO 6): they go to the window's
+ * notices instead. A sender that closed hears nothing, as before.
+ */
+export function noticeTarget(from: string | undefined, open: (paneId: string) => boolean): { pane: string } | "window" | undefined {
+  if (!from) return "window"
+  return open(from) ? { pane: from } : undefined
+}
+
+/** The `by` of an event `ade-msg registro` writes: never empty, whoever sent it. */
+export function registerAuthor(title: string | undefined, from: string | undefined): string {
+  return title || from || "ade-msg"
 }

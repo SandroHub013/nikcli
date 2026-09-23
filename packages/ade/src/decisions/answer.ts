@@ -35,8 +35,15 @@ export function sheetKey(
   optionCount: number,
   inText: boolean,
   picked: boolean,
+  /**
+   * The key is aimed at another field — the «who receives» select above all:
+   * its arrows, letters and Enter are its own. Only Escape still closes
+   * (audit 0.7.7, MEDIO 7).
+   */
+  inField = false,
 ): SheetKey | undefined {
   if (event.key === "Escape") return { kind: "close" }
+  if (inField) return undefined
   if (event.key === "Enter") {
     if (event.ctrlKey || event.metaKey) return { kind: "submit" }
     if (inText) return undefined
@@ -199,4 +206,10 @@ export function formatMoment(ms: number, now: Date): string {
 /** The badge's words. */
 export function countLabel(count: number): string {
   return t("decisions.count", count)
+}
+
+/** Whether a key's target is a form field that takes keys of its own. */
+export function isFormField(target: unknown): boolean {
+  const tag = (target as { tagName?: unknown } | null)?.tagName
+  return tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA"
 }

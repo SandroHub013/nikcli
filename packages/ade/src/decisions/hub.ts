@@ -8,7 +8,8 @@
 
 import { createSignal } from "solid-js"
 import { answerEvent, deferEvent, reopenEvent } from "./answer"
-import { runSubmit, submitControl, submitSteps } from "./card"
+import { t } from "../i18n"
+import { runSubmit, submitControl, submitSteps, waitsForRecipient } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredEvent } from "./log"
 import type { DecisionsRegister } from "./register"
@@ -123,7 +124,11 @@ export function createDecisionsHub(deps: {
     problem: (k) => problems()[k],
     answer,
     inlineRecipient: inline,
-    setInlineRecipient: setInline,
+    setInlineRecipient: (id) => {
+      setInline(id)
+      // A session picked: the note asking for one is done with.
+      setProblems((all) => Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("decisions.sheet.needRecipient"))))
+    },
     submit: (decision, press) => {
       const control = submitControl({
         recipient: deps.recipient(),
@@ -132,6 +137,10 @@ export function createDecisionsHub(deps: {
         busy: busyKeys().has(decision.k),
         label: "",
       })
+      if (waitsForRecipient(control, deps.sessions(), inline(), press)) {
+        setProblem(decision.k, t("decisions.sheet.needRecipient"))
+        return Promise.resolve(false)
+      }
       const steps = submitSteps(control, deps.sessions(), inline(), press)
       return runSubmit(steps, {
         choose: (id) => {

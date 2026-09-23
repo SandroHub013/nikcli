@@ -30,6 +30,7 @@ import { DesignPane } from "../design/design-pane"
 import type { DesignHub } from "../design/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
+import { belongsTo, sameProject } from "./pane-project"
 import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
 import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
 import type { BrowserRequest, Rect } from "../browser/request"
@@ -146,8 +147,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
      * in keep running and keep their scrollback; the sidebar still counts
      * them, and switching project brings them straight back.
      */
-    const owner = project()?.name
-    const mine = owner ? state.panes.filter((p) => p.workspaceId === owner) : state.panes
+    const open = project()
+    const mine = open ? state.panes.filter((p) => belongsTo(p, open)) : state.panes
     const currentPanes = state.expandedId ? mine.filter((p) => p.id === state.expandedId) : mine
 
     return currentPanes.map((p) => {
@@ -180,7 +181,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     /** The agent sessions of this pane's project, running or not. */
     const projectSessions = () =>
       wb()
-        .panes.filter((pane) => pane.workspaceId === current().workspaceId && !isPanelPane(pane) && (pane.agent ?? pane.model))
+        .panes.filter((pane) => sameProject(pane, current()) && !isPanelPane(pane) && (pane.agent ?? pane.model))
         .map((pane) => ({ id: pane.id, title: pane.title, running: deps.isRunning(pane.id) }))
 
     const filePane = () => (

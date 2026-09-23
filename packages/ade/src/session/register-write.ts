@@ -17,6 +17,7 @@ import { bucketDecisions, describeProblems as describeDecisionProblems, foldDeci
 import { parseDesignLog, serializeDesignEvent, type DesignEvent } from "../design/log"
 import { bucketProposals, describeProblems as describeDesignProblems, foldProposals, nextDesignKey } from "../design/state"
 import type { RegisterName } from "./mailbox"
+import { belongsTo, type ProjectRef } from "../surface/pane-project"
 
 export interface RegisterWriteDeps {
   /** The register file as it is now; "" when it does not exist yet. */
@@ -91,6 +92,14 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
     const problems = book.problems(after, deps.now())
     return `errore: scritta ma non risulta ${expected.word}: ${problems.length > 0 ? problems.join("; ") : "la riga non è nel file"}`
   }
+  /*
+   * The key's state says what the register holds, not whose event put it
+   * there: two answers written a moment apart both find the key answered, and
+   * the one the fold refused was told «ok» (audit 0.7.7, MEDIO 5). So the
+   * event is looked for by its own `at` and `by`, and must be one the fold kept.
+   */
+  const own = book.own(after, { k, type: message.op, at: event.at, by: event.by }, deps.now())
+  if (own !== true) return `errore: scritta ma non conta: ${own}`
   return `ok: ${k} ${expected.word}, nel tasto ${message.register === "design" ? "Design" : "Decisioni"} entro 3 s`
 }
 
@@ -130,6 +139,26 @@ interface Book {
   refusal: (text: string, event: unknown, now: Date) => string | undefined
   holds: (text: string, k: string, where: Where, now: Date) => boolean
   problems: (text: string, now: Date) => string[]
+  /** True when this very event is in the file and the fold kept it; otherwise why not. */
+  own: (text: string, event: OwnEvent, now: Date) => true | string
+}
+
+interface OwnEvent {
+  readonly k: string
+  readonly type: string
+  readonly at: string
+  readonly by: string
+}
+
+/** Finds `event` among `events` by key, type, time and author, and says whether the fold refused it. */
+function ownVerdict<E extends { k?: unknown; type?: unknown; at?: unknown; by?: unknown }>(
+  events: readonly E[],
+  rejected: readonly { event: unknown; reason: string }[],
+  event: OwnEvent,
+): true | string {
+  const found = events.find((item) => item.k === event.k && item.type === event.type && item.at === event.at && item.by === event.by)
+  if (!found) return "la riga non è nel file"
+  return rejected.find((item) => item.event === found)?.reason ?? true
 }
 
 const decisions: Book = {
@@ -148,6 +177,10 @@ const decisions: Book = {
   problems: (text, now) => {
     const parsed = parseDecisionLog(text)
     return describeDecisionProblems(parsed.problems, foldDecisions(parsed.events, now).rejected)
+  },
+  own: (text, event, now) => {
+    const events = parseDecisionLog(text).events
+    return ownVerdict(events, foldDecisions(events, now).rejected, event)
   },
 }
 
@@ -168,4 +201,52 @@ const design: Book = {
     const parsed = parseDesignLog(text)
     return describeDesignProblems(parsed.problems, foldProposals(parsed.events).rejected)
   },
+  own: (text, event) => {
+    const events = parseDesignLog(text).events
+    return ownVerdict(events, foldProposals(events).rejected, event)
+  },
+}
+
+/**
+ * Where a register event went: the project written, the one the bar shows, and
+ * the sending session's pane. Projects by folder as well as name: two projects
+ * called `app` are not the same register.
+ */
+export interface RegisterPlace {
+  readonly written: ProjectRef
+  readonly shown?: ProjectRef
+  readonly asked?: { readonly workspaceId?: string; readonly projectRoot?: string }
+}
+
+/**
+ * The reply, saying which project's register was written.
+ *
+ * The event goes to the register of the sender's project, and the Decisions
+ * and Design buttons read the open project's: «nel tasto entro 3 s» was false
+ * whenever the two differ. And a session whose project is not among the
+ * recents fell back to the open one in silence (audit 0.7.7, MEDIO 4). Told
+ * apart with `belongsTo`, the rule the grid uses: folder first, name only for
+ * a pane saved without one.
+ */
+export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
+  if (!reply.startsWith("ok")) return reply
+  const button = register === "design" ? "Design" : "Decisioni"
+  const written = place.written
+  const shown = place.shown
+  // Two projects of one name are told apart by their folders.
+  const named = (project: ProjectRef, beside: ProjectRef | undefined) =>
+    beside && beside.name === project.name && !belongsTo({ workspaceId: project.name, projectRoot: project.root }, beside)
+      ? `${project.name} (${project.root})`
+      : project.name
+  let text =
+    shown !== undefined && !belongsTo({ workspaceId: written.name, projectRoot: written.root }, shown)
+      ? `${reply.replace(`, nel tasto ${button} entro 3 s`, "")}, nel progetto ${named(written, shown)}: il tasto ${button} ora mostra ${named(shown, written)}, lo vedi aprendo ${named(written, shown)}`
+      : `${reply} (progetto ${written.name})`
+  if (place.asked && !belongsTo(place.asked, written)) {
+    const sameName = place.asked.workspaceId === written.name
+    const asked = sameName && place.asked.projectRoot ? `${written.name} (${place.asked.projectRoot})` : place.asked.workspaceId ?? place.asked.projectRoot
+    const into = sameName ? `${written.name} (${written.root})` : written.name
+    text += `; la sessione è del progetto ${asked}, che non è fra i recenti: scritto in ${into}`
+  }
+  return text
 }

@@ -9,6 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
+import { belongsTo, paneProject } from "./pane-project"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -221,6 +222,8 @@ import {
   sameDir,
   formatLateReply,
   formatLost,
+  noticeTarget,
+  registerAuthor,
   formatRequest,
   parseMessage,
   resolveAgent,
@@ -246,7 +249,7 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { createLineQueue } from "../session/line-queue"
-import { lineGiven, pressEnter, typeThenEnter, type LineOutcome } from "../session/enter"
+import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -334,7 +337,7 @@ import {
 import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { designPath } from "../design/store"
-import { registerWrite } from "../session/register-write"
+import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
   createMicMeter,
@@ -502,6 +505,11 @@ export function Workbench() {
       "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>),
   )
   const [project, setProject] = createSignal<Project>()
+  /** Who a new pane belongs to: the open project, by name and by folder (see `pane-project.ts`). */
+  const here = () => {
+    const open = project()
+    return { workspaceId: open?.name ?? "workspace", ...(open?.root ? { projectRoot: open.root } : {}) }
+  }
   /** The installed nikcli, read from the binary; undefined until asked, and
       after an answer that says nothing. */
   const [nikcliVersion, setNikcliVersion] = createSignal<string>()
@@ -716,7 +724,12 @@ export function Workbench() {
       mode: "browser",
       browserUrl: url,
       browserOwner: owner,
-      workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
+      // The owning session's project, name and folder both; the open one without an owner pane.
+      ...(() => {
+        const ownerPane = wb().panes.find((p) => p.id === owner.id)
+        if (!ownerPane) return here()
+        return { workspaceId: ownerPane.workspaceId, ...(ownerPane.projectRoot ? { projectRoot: ownerPane.projectRoot } : {}) }
+      })(),
       lines: [],
     }
     setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
@@ -1046,7 +1059,7 @@ export function Workbench() {
       model: "—",
       mode: "model",
       modelPath: path,
-      workspaceId: project()?.name ?? "workspace",
+      ...here(),
       lines: [],
     }))
   }
@@ -1065,7 +1078,7 @@ export function Workbench() {
       model: "—",
       mode: "video",
       videoPath: path,
-      workspaceId: project()?.name ?? "workspace",
+      ...here(),
       lines: [],
     }))
   }
@@ -1184,7 +1197,7 @@ export function Workbench() {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         if (!decision || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
-        if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
+        if ((await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("decisions.delivered", decision.k), "note")
@@ -1291,7 +1304,7 @@ export function Workbench() {
       for (const item of pending) {
         const proposal = state.proposals.find((entry) => entry.k === item.k)
         if (!proposal || !running.has(target.id) || !(await freeNow(host, target.id))) continue
-        if (!(await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" }))) continue
+        if ((await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = designOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("design.delivery.done", target.title, "adesso"), "note")
@@ -1366,7 +1379,7 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "design",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -1387,7 +1400,7 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "decisions",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -1660,14 +1673,25 @@ export function Workbench() {
           continue
         }
         if (check === "resend") {
-          // A prompt may have opened during the read above: its Enter is not ours to press (B1 bis).
-          if (!pressEnter((data) => session.write(data), () => Boolean(permissions()[paneId]))) return
+          // Not over a prompt (B1 bis), not into the user's draft, and in the pane's queue (`enterAgain`).
+          if (!(await pressAgain(paneId, session))) return
           appendLine(paneId, t("note.resent"), "note")
           break
         }
       }
     }
   }
+
+  /** An Enter on its own, for a line ADE typed and no turn took: see `enterAgain`. */
+  const pressAgain = (paneId: string, session: SpawnedSession): Promise<boolean> =>
+    enterAgain({
+      queue: lineQueue,
+      key: paneId,
+      write: (data) => session.write(data),
+      alive: () => running.get(paneId) === session,
+      typing: () => isTyping(records.typed.get(paneId)),
+      permissionOpen: () => Boolean(permissions()[paneId]),
+    })
 
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
@@ -1931,15 +1955,17 @@ export function Workbench() {
     meta: InboxMeta,
     /** What the inbox file holds when it differs from the typed line: the same text with its line breaks. */
     full: string = line,
-  ): Promise<boolean> => {
+  ): Promise<DeliveryResult> => {
     const session = running.get(paneId)
-    if (!session) return false
+    if (!session) return "closed"
+    // A prompt open now takes no text at all: the message waits for it to go (`deliveryResult`).
+    if (permissions()[paneId]) return "held"
     // Given even when a prompt held its Enter back; the sender is told it is waiting.
-    const given = (outcome: LineOutcome) => {
+    const given = (outcome: LineOutcome, stored = false) => {
       if (outcome === "typed-no-enter" && meta.from) {
         appendLine(meta.from, t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId), "note")
       }
-      return lineGiven(outcome)
+      return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
     if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return given(await typeLineOutcome(session, line))
     const at = Date.now()
@@ -1951,7 +1977,14 @@ export function Workbench() {
     if (!stored) return given(await typeLineOutcome(session, line))
     inboxPending.push(entry)
     saveInbox()
-    return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)))
+    return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)), true)
+  }
+
+  /** A notice for whoever sent a message: its session, or the window's notices when none is behind it (`noticeTarget`). */
+  const tellSender = (from: string | undefined, text: string) => {
+    const target = noticeTarget(from, (paneId) => running.has(paneId))
+    if (target === "window") report(text, "info")
+    else if (target) heldLines.push({ paneId: target.pane, text })
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -1972,8 +2005,8 @@ export function Workbench() {
         appendLine(entry.paneId, t("note.inboxLost", entry.id), "note")
         if (entry.kind === "ask" || entry.kind === "spawn") {
           if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
-        } else if (entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatLost(entry, reader) })
+        } else {
+          tellSender(entry.from, formatLost(entry, reader))
         }
         changed = true
         continue
@@ -1989,9 +2022,7 @@ export function Workbench() {
       const panes = mailPanes()
       if (action === "tell") {
         entry.told = true
-        if (entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatHeld(entry, panes.find((pane) => pane.id === entry.paneId)) })
-        }
+        tellSender(entry.from, formatHeld(entry, panes.find((pane) => pane.id === entry.paneId)))
         changed = true
         continue
       }
@@ -2002,8 +2033,8 @@ export function Workbench() {
         appendLine(entry.paneId, t("note.rang", entry.rings), "note")
       } else {
         inboxPending.splice(inboxPending.indexOf(entry), 1)
-        if (action === "warn" && entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatUnread(entry, panes.find((pane) => pane.id === entry.paneId)) })
+        if (action === "warn") {
+          tellSender(entry.from, formatUnread(entry, panes.find((pane) => pane.id === entry.paneId)))
         }
       }
       changed = true
@@ -2394,7 +2425,13 @@ export function Workbench() {
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
-        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox, item.full) : typeLine(session, item.text))
+        // Not typed while the session is still there (a prompt opened): back among the held lines.
+        void (item.inbox
+          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => result === "held")
+          : typeLineOutcome(session, item.text).then((outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held")
+        ).then((again) => {
+          if (again) heldLines.push(item)
+        })
       } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
         // Replies and updates too, not only what went to the inbox: the
         // sender is told at once, and once, why this is not arriving.
@@ -2472,10 +2509,9 @@ export function Workbench() {
       }
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
-        request.rings = (request.rings ?? 0) + 1
-        saveRequests()
-        session.write("\r")
-        appendLine(request.to, t("note.resentRequest", request.id), "note")
+        void ringAgain(request, () => pressAgain(request.to, session), saveRequests).then((pressed) => {
+          if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note")
+        })
         continue
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
@@ -2750,12 +2786,15 @@ export function Workbench() {
                 ? host.writeTextFile(path, `${await read()}${text}`)
                 : "scrittura non disponibile",
           now: () => new Date(),
-          sender: sender?.title ?? message.from ?? "ade-msg",
+          sender: registerAuthor(sender?.title, message.from),
         },
         message,
       )
       if (reply.startsWith("ok")) void (message.register === "design" ? designRegister.refresh() : decisionsRegister.refresh())
-      await answer(reply)
+      // Which project's register, and whether it is the one the button shows (`withPlace`).
+      const asked = message.from ? wb().panes.find((pane) => pane.id === message.from) : undefined
+      const shown = project()
+      await answer(withPlace(reply, message.register, { written: owner, ...(shown ? { shown } : {}), ...(asked ? { asked } : {}) }))
       return true
     }
 
@@ -2944,7 +2983,7 @@ export function Workbench() {
       if (root) await excludeAdeResults(host, root)
 
       const title = name ?? `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
-      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      const index = (ownerProject ? wb().panes.filter((pane) => belongsTo(pane, ownerProject)) : wb().panes).length + 1
       const task = formatRequest(id, message.text, sender, {
         ...(worktree ? { worktree } : {}),
         ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
@@ -2953,7 +2992,7 @@ export function Workbench() {
         ...(message.budget ? { budget: message.budget } : {}),
       })
       const created = addAgent(
-        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
+        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(root ? { projectRoot: root } : {}), ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
         { index, agentId: agent.id, role: "agent" },
       )
       openRequests.set(id, {
@@ -3204,7 +3243,10 @@ export function Workbench() {
     const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
     // The inbox copy, read and never typed, keeps the sender's line breaks.
     const stored = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
-    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored))) {
+    const delivered = await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored)
+    // A prompt opened before the text: the message stays queued, as for a prompt seen above.
+    if (delivered === "held") return false
+    if (delivered === "closed") {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -4126,7 +4168,7 @@ export function Workbench() {
             status: "done",
             model: "—",
             mode: "plugin",
-            workspaceId: project()?.name ?? "workspace",
+            ...here(),
             lines: [],
             plugin: { pluginId: pane.pluginId, name: pane.name },
           }),
@@ -4611,7 +4653,7 @@ export function Workbench() {
         model: "—",
         mode: "video",
         videoPath: "",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "update.check") {
@@ -4640,7 +4682,7 @@ export function Workbench() {
         model: "—",
         mode: "app",
         appUrl: "",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "browser.new") {
@@ -4664,7 +4706,7 @@ export function Workbench() {
          * It worked in the browser harness only because `project()` is
          * undefined there and the filter is skipped.
          */
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "process.kill") {
@@ -5066,7 +5108,7 @@ export function Workbench() {
         filePath: path,
         fileGoTo: goTo,
         lines: [],
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
       }),
     )
 
@@ -5458,15 +5500,14 @@ export function Workbench() {
    * Panes of every project stay in the workbench and keep talking to each
    * other, so a session of a project that is not on screen — restarted, or
    * spawned by one of its agents — has to start in its own root. Found by
-   * name among the known projects; the open one when the pane's is unknown.
+   * the folder the pane keeps, or by name for a pane saved before it kept one;
+   * the open one when the pane's is unknown. See `pane-project.ts`.
    */
   const projectOfPane = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<Project | undefined> => {
     const open = project()
-    const owner = wb().panes.find((pane) => pane.id === paneId)?.workspaceId
-    if (!owner || owner === open?.name) return open
-    const entry = recents().find((candidate) => candidate.name === owner)
-    if (!entry) return open
-    return discoverProject(host, entry.root).catch(() => open)
+    const found = paneProject(wb().panes.find((pane) => pane.id === paneId), open, recents())
+    if (found.kind === "open") return open
+    return discoverProject(host, found.root).catch(() => open)
   }
 
   const startProcess = async (
@@ -5824,9 +5865,12 @@ export function Workbench() {
             // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
             const spawned = [...openRequests.values()].find((request) => request.kind === "spawn" && request.to === paneId)
             if (session && spawned) {
-              void getHost().then((host) =>
-                host ? deliverText(host, paneId, opening, { id: spawned.id, kind: "spawn", from: spawned.from }) : typeLine(session, opening),
-              )
+              const meta = { id: spawned.id, kind: "spawn" as const, from: spawned.from }
+              void getHost().then(async (host) => {
+                if (!host) return void typeLine(session, opening)
+                // A prompt at start-up: the task waits among the held lines instead of going missing.
+                if ((await deliverText(host, paneId, opening, meta)) === "held") heldLines.push({ paneId, text: opening, inbox: meta })
+              })
             } else if (session) void typeLine(session, opening)
             return
           }
@@ -5976,7 +6020,7 @@ export function Workbench() {
     setProject(opened)
     setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
     setRemoteOpen(false)
-    if (!wb().panes.some((pane) => pane.workspaceId === opened.name)) {
+    if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(
         { agentId: "terminal", count: 1, task: "", title: `ssh ${target.destination}` },
         { index: 1, agentId: "terminal", role: "shell" },
@@ -6011,6 +6055,8 @@ export function Workbench() {
       preset?: string
       title?: string
       workspaceId?: string
+      /** That project's folder, when known: the name alone can belong to two. */
+      projectRoot?: string
       /** A spawned session's own checkout, with the branch it is on. */
       worktree?: { path: string; branch: string }
       spawnArgs?: string[]
@@ -6027,7 +6073,9 @@ export function Workbench() {
     const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
-    const currentProj = input.workspaceId && input.workspaceId !== open?.name ? undefined : open
+    const currentProj = input.projectRoot
+      ? paneProject({ projectRoot: input.projectRoot }, open, []).kind === "open" ? open : undefined
+      : input.workspaceId && input.workspaceId !== open?.name ? undefined : open
     setWb(w => addPane(w, {
       id,
       title,
@@ -6040,6 +6088,7 @@ export function Workbench() {
       task,
       lines: [{ kind: "note", text: task || t("task.none") }],
       workspaceId: input.workspaceId || currentProj?.name || "workspace",
+      ...(input.projectRoot ?? currentProj?.root ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
       cwd: input.worktree?.path ?? currentProj?.root,
       tree: input.worktree
         ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
@@ -6067,8 +6116,8 @@ export function Workbench() {
    * "Sessione 3 — Claude Code" next to the two already there.
    */
   const openVoiceSession = (input: { agentId: string; task: string }) => {
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const created = addAgent(
       { agentId: input.agentId, count: 1, task: input.task },
       { index: mine.length + 1, agentId: input.agentId, role: "agent" },
@@ -6089,8 +6138,8 @@ export function Workbench() {
   const openBotSession = (bot: AgentFile) => {
     const launch = botLaunch(bot)
     if (!launch) return undefined
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const id = `n${Date.now()}-bot-${++paneSequence}`
 
     setWb((w) => addPane(w, {
@@ -6103,7 +6152,7 @@ export function Workbench() {
       mode: "bot",
       task: "",
       lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
-      workspaceId: owner || "workspace",
+      ...here(),
     }))
     /* Narrowed to nothing, or the grid keeps showing whichever session was
        expanded and the one just started is off screen. */
@@ -6120,7 +6169,6 @@ export function Workbench() {
   const openLoginSession = (runner: Runner) => {
     const agentId = runner.id === "claude" ? "claude-code" : runner.id
     if (!agentById(agentId) || runner.login.length === 0) return
-    const owner = project()?.name
     const id = `n${Date.now()}-login-${++paneSequence}`
     setWb((w) => addPane(w, {
       id,
@@ -6132,7 +6180,7 @@ export function Workbench() {
       mode: "bot",
       task: "",
       lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
-      workspaceId: owner || "workspace",
+      ...here(),
     }))
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
@@ -6161,7 +6209,7 @@ export function Workbench() {
         model: "—",
         mode: "browser",
         browserUrl: url,
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",

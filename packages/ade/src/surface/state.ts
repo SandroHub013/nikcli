@@ -163,6 +163,12 @@ export interface Pane {
   cwd?: string
   tree?: PaneTree
   workspaceId: string
+  /**
+   * The folder of the project the pane belongs to. `workspaceId` is only its
+   * name, and two projects in different folders can share one. Absent on panes
+   * saved before it was kept: those are found by name.
+   */
+  projectRoot?: string
   /** Set when the pane holds a file being edited rather than a session. */
   filePath?: string
   /**
@@ -434,6 +440,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.resumeId ? { resumeId: p.resumeId } : {}),
       // The project each pane belongs to: the workbench holds every project's sessions, not only the open one's.
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
       ...(p.worktree ? { worktree: p.worktree } : {}),
       ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
@@ -464,6 +471,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
       ...(p.browserOwner ? { owner: { id: p.browserOwner.id, title: p.browserOwner.title } } : {}),
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
 
@@ -595,6 +603,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
           },
         ],
         workspaceId: p.project || owner,
+        ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
         ...(p.worktree ? { worktree: p.worktree } : {}),
         ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
         ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
@@ -627,6 +636,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
         ...(b.owner ? { browserOwner: { id: b.owner.id, title: b.owner.title } } : {}),
         workspaceId: b.project || owner,
+        ...(b.projectRoot ? { projectRoot: b.projectRoot } : {}),
         ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
         lines: [],
       })),
