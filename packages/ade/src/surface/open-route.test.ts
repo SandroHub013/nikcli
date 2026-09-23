@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { MODEL_EXTENSIONS } from "../model3d/model"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
-import { paneShowing, routeForFile } from "./open-route"
+import { paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 
 describe("routeForFile", () => {
   test("every format the video panel plays opens a video panel, whatever the case or folder", () => {
@@ -39,5 +39,37 @@ describe("paneShowing", () => {
     expect(paneShowing(panes, "video", "")).toBeUndefined()
     expect(paneShowing(panes, "video", "C:/Progetto/video/altro.mp4")).toBeUndefined()
     expect(paneShowing(panes, "video", "C:/Progetto/assets/robot.glb")).toBeUndefined()
+  })
+})
+
+describe("viewKind (S56)", () => {
+  const table: Record<string, string[]> = {
+    svg: ["svg"],
+    image: ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "avif"],
+    markdown: ["md", "markdown"],
+    font: ["woff2", "woff", "ttf", "otf"],
+    audio: ["aac", "mp3", "m4a", "wav", "oga", "opus"],
+  }
+
+  for (const [kind, extensions] of Object.entries(table)) {
+    test(`${kind}: ${extensions.join(", ")}, in any case`, () => {
+      for (const extension of extensions) {
+        expect(viewKind(`C:/p/file.${extension}`)).toBe(kind as ReturnType<typeof viewKind>)
+        expect(viewKind(String.raw`C:\p\FILE.` + extension.toUpperCase())).toBe(kind as ReturnType<typeof viewKind>)
+      }
+    })
+  }
+
+  test("everything else is text: .txt, .json, no extension, a dotfile", () => {
+    expect(viewKind("notes.txt")).toBe("text")
+    expect(viewKind("package.json")).toBe("text")
+    expect(viewKind("C:/p/Makefile")).toBe("text")
+    expect(viewKind("C:/p/.svg")).toBe("text")
+    expect(viewKind("C:/p.md/README")).toBe("text")
+  })
+
+  test("only SVG, markdown and text are read as text", () => {
+    expect(["svg", "markdown", "text"].every((kind) => readsText(kind as never))).toBe(true)
+    expect(["image", "font", "audio"].some((kind) => readsText(kind as never))).toBe(false)
   })
 })

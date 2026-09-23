@@ -329,7 +329,8 @@ fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
         {
             String::from_utf8_lossy(&slice[..error.valid_up_to()]).into_owned()
         }
-        Err(_) => return Err("file binario".to_string()),
+        // The size travels with it: the file pane says what it could not show.
+        Err(_) => return Err(format!("file binario, {total} byte")),
     };
 
     Ok(FileRead { text, truncated, bytes: total })
@@ -1615,7 +1616,7 @@ mod tests {
 
         let error = read_text(&path.to_string_lossy(), 1024)
             .expect_err("invalid bytes are not a truncated character");
-        assert_eq!(error, "file binario");
+        assert_eq!(error, "file binario, 5 byte");
     }
 
     #[test]

@@ -81,6 +81,8 @@ export interface PaneRecords {
   /** Open file buffers. */
   buffers: PaneRecord<Buffer>
   bufferLoading: PaneRecord<boolean>
+  /** Why a file pane has no buffer: the read's own error, shown in the pane. */
+  bufferError: PaneRecord<string>
   /** The question each pane is currently stopped on, if any. */
   permissions: PaneRecord<PermissionRequest>
   /**
@@ -106,6 +108,7 @@ export function createPaneRecords(): PaneRecords {
     reports: createPaneRecord<SessionReport>(),
     buffers: createPaneRecord<Buffer>(),
     bufferLoading: createPaneRecord<boolean>(),
+    bufferError: createPaneRecord<string>(),
     permissions: createPaneRecord<PermissionRequest>(),
     typed: createPaneRecord<TypedLine>(),
     paneView: createPaneRecord<"transcript" | "diff">(),

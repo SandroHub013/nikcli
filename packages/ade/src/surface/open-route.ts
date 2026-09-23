@@ -20,6 +20,52 @@ export function routeForFile(path: string): FileRoute {
   return "editor"
 }
 
+/** What a file pane shows for a file: a viewer of its own, or the editor. */
+export type ViewKind = "svg" | "image" | "markdown" | "font" | "audio" | "text"
+
+const VIEW_KINDS: Record<string, ViewKind> = {
+  svg: "svg",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  ico: "image",
+  bmp: "image",
+  avif: "image",
+  md: "markdown",
+  markdown: "markdown",
+  woff2: "font",
+  woff: "font",
+  ttf: "font",
+  otf: "font",
+  aac: "audio",
+  mp3: "audio",
+  m4a: "audio",
+  wav: "audio",
+  oga: "audio",
+  opus: "audio",
+}
+
+/**
+ * The one place that picks a file pane's viewer, by extension.
+ *
+ * `routeForFile` still decides the pane (3D, video, editor); inside a file
+ * pane this decides what is drawn. An image, a font or a sound is never read
+ * as text: it is not UTF-8, and the read only failed.
+ */
+export function viewKind(path: string): ViewKind {
+  const name = path.split(/[\/]/).pop() ?? path
+  const dot = name.lastIndexOf(".")
+  if (dot <= 0) return "text"
+  return VIEW_KINDS[name.slice(dot + 1).toLowerCase()] ?? "text"
+}
+
+/** Whether a viewer reads the file as text at all: SVG, markdown and text do. */
+export function readsText(kind: ViewKind): boolean {
+  return kind === "svg" || kind === "markdown" || kind === "text"
+}
+
 /**
  * The pane already showing `path` in the panel `route` names, if any.
  *
