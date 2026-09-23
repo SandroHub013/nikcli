@@ -8,6 +8,8 @@
  * must never be loaded into an embedded iframe.
  */
 
+import { MEDIA_SCHEME } from "../video/video"
+
 /**
  * Schemes that must be rejected immediately to prevent script execution,
  * local filesystem inspection, or content spoofing inside the frame.
@@ -165,12 +167,19 @@ export function isValidBrowserUrl(raw: string): boolean {
  * window and can read `localStorage` and call Tauri. `hostOrigin` is the
  * window's origin (Vite in development, `http://tauri.localhost` in a
  * release). `tauri.localhost` is always ADE on Windows, even during `test:app`.
+ *
+ * So is the media scheme (audit 0.7.7, C1): `ade-media://localhost/…`, which
+ * Windows rewrites to `http(s)://ade-media.localhost/…`. It serves every file
+ * of the open projects, and a page of them opened in a same-origin frame read
+ * the others — a `.env` included — with `fetch`.
  */
 export function isAdeOrigin(url: string, hostOrigin: string): boolean {
   try {
     const parsed = new URL(url)
     if (parsed.origin === hostOrigin) return true
-    return parsed.hostname.toLowerCase() === "tauri.localhost"
+    if (parsed.protocol.toLowerCase() === `${MEDIA_SCHEME}:`) return true
+    const host = parsed.hostname.toLowerCase()
+    return host === "tauri.localhost" || host === `${MEDIA_SCHEME}.localhost`
   } catch {
     return false
   }

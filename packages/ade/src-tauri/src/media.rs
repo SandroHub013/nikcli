@@ -159,8 +159,36 @@ fn within(roots: &[PathBuf], path: &Path) -> bool {
     roots.iter().any(|root| resolved.starts_with(root))
 }
 
+/*
+ * What every answer carries, whatever it is (audit 0.7.7, C1).
+ *
+ * The scheme serves HTML (a design variant's page) and SVG (the file panes'
+ * viewer), and both can run script. Opened as a document — the browser pane
+ * navigated to it, a link followed — such a file ran with ade-media's own
+ * origin, and from there `fetch` read every file of every open project, a
+ * `.env` included. The sandbox takes the origin away: an opaque one, whose
+ * requests carry no `Origin` ADE answers. Scripts and forms stay, because a
+ * design page is a page; Design already frames it without
+ * `allow-same-origin`, so for it nothing changes. `nosniff` keeps a file
+ * served as one type from being run as another.
+ *
+ * An `<img>`, `<video>` or `<audio>` is not a document: the CSP does not
+ * apply to it, and the viewers and the markdown preview read as before.
+ */
+const HARDENING: [(&str, &str); 2] = [
+    ("X-Content-Type-Options", "nosniff"),
+    ("Content-Security-Policy", "sandbox allow-scripts allow-forms"),
+];
+
+fn hardened(mut builder: tauri::http::response::Builder) -> tauri::http::response::Builder {
+    for (name, value) in HARDENING {
+        builder = builder.header(name, value);
+    }
+    builder
+}
+
 fn deny(status: StatusCode) -> Response<Vec<u8>> {
-    Response::builder()
+    hardened(Response::builder())
         .status(status)
         .body(Vec::new())
         .expect("risposta statica")
@@ -234,7 +262,7 @@ pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option
         .and_then(|value| value.to_str().ok())
         .filter(|origin| *origin != "null" && Some(*origin) == app_origin);
 
-    let mut response = Response::builder()
+    let mut response = hardened(Response::builder())
         .status(StatusCode::PARTIAL_CONTENT)
         .header("Content-Type", mime_of(&path))
         .header("Accept-Ranges", "bytes")
@@ -433,6 +461,48 @@ mod tests {
         let (start, end) = parse_range("bytes=0-", length).expect("intervallo");
         assert_eq!(start, 0);
         assert_eq!(end - start + 1, MAX_CHUNK);
+    }
+
+    fn fixture_named(name: &str, bytes: &[u8]) -> (tempdir::Dir, PathBuf) {
+        let dir = tempdir::Dir::new("ade-media");
+        let path = dir.path().join(name);
+        let mut file = File::create(&path).expect("file");
+        file.write_all(bytes).expect("scrittura");
+        (dir, path)
+    }
+
+    fn assert_hardened(response: &Response<Vec<u8>>) {
+        let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_owned);
+        assert_eq!(header("X-Content-Type-Options").as_deref(), Some("nosniff"));
+        assert_eq!(
+            header("Content-Security-Policy").as_deref(),
+            Some("sandbox allow-scripts allow-forms"),
+        );
+    }
+
+    #[test]
+    fn a_page_an_svg_and_any_file_are_served_sandboxed_and_unsniffed() {
+        for (name, bytes, mime) in [
+            ("variant.html", &b"<script>fetch('/C:/x/.env')</script>"[..], "text/html; charset=utf-8"),
+            ("drawing.svg", &b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>"[..], "image/svg+xml"),
+            ("notes.bin", &b"plain bytes"[..], "application/octet-stream"),
+        ] {
+            let (dir, path) = fixture_named(name, bytes);
+            let roots = vec![dir.path().canonicalize().unwrap()];
+            let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
+            assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT, "{name}");
+            assert_eq!(response.headers().get("Content-Type").unwrap(), mime, "{name}");
+            assert_hardened(&response);
+        }
+    }
+
+    #[test]
+    fn a_refusal_is_sandboxed_too() {
+        let (dir, _) = fixture(b"x");
+        let roots = vec![dir.path().canonicalize().unwrap()];
+        let response = respond(&roots, &request("ade-media://localhost/C%3A%2FWindows%2Fwin.ini", None), None);
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_hardened(&response);
     }
 
     #[test]
