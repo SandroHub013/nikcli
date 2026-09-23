@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./settings/model"
 import { createVoiceEngine, holdsToTalk } from "./engine"
-import { FOLLOW_UP_MS } from "./effect/program"
+import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
 import { createFakeSpeaker } from "./tts/speaker"
@@ -2318,6 +2318,98 @@ describe("a television talking on does not keep the window open", () => {
     await hear("e di Malta")
     expect(engine.followUp()).toBeDefined()
     expect(asked).toHaveLength(5)
+    await engine.stop()
+  })
+})
+
+describe("hearing: the orb lights only when the next sentence would be taken (D74)", () => {
+  beforeAll(() => setWakeWordEnabledForTests(true))
+  afterAll(() => setWakeWordEnabledForTests(true))
+
+  function listening() {
+    let clock = 10_000
+    const host = new MockVoiceHost()
+    ;(host as VoiceHost).askAgent = async () => ({ ok: true, text: "Fatto.", ran: true })
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker: createFakeSpeaker(),
+      cue: () => {},
+      now: () => clock,
+      settings: { agentEngine: "auto", alwaysListen: true, activation: "wake-word", mode: "agent" },
+    })
+    const hear = async (text: string) => {
+      transcriber.emit(text, true)
+      await new Promise((r) => setTimeout(r, 30))
+    }
+    return { engine, hear, advance: (ms: number) => (clock += ms) }
+  }
+
+  test("always listening at rest: the microphone is open, the orb is not lit", async () => {
+    const { engine } = listening()
+    await engine.start("agent", { waitForName: true })
+    expect(engine.isRunning()).toBe(true)
+    expect(engine.hearing()).toBe(false)
+    await engine.stop()
+  })
+
+  test("the button calls it: lit for the window, dark once it runs out, with one timer and no polling", async () => {
+    const { engine, advance } = listening()
+    await engine.start("agent", { waitForName: true })
+    const real = globalThis.setTimeout
+    const timers: { fn: () => void; ms: number }[] = []
+    globalThis.setTimeout = ((fn: () => void, ms?: number, ...rest: unknown[]) => {
+      timers.push({ fn, ms: ms ?? 0 })
+      return real(fn, ms, ...rest)
+    }) as typeof setTimeout
+    try {
+      await engine.toggle()
+    } finally {
+      globalThis.setTimeout = real
+    }
+    expect(engine.hearing()).toBe(true)
+    const end = timers.filter((timer) => timer.ms === WAKE_WINDOW_MS + 1)
+    expect(end.length).toBeGreaterThan(0)
+    advance(WAKE_WINDOW_MS + 1)
+    end.at(-1)?.fn()
+    expect(engine.hearing()).toBe(false)
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("an answer keeps it lit for the follow-up", async () => {
+    const { engine, hear } = listening()
+    await engine.start("agent", { waitForName: true })
+    await hear("nik qual è la capitale della Francia")
+    expect(engine.followUp()).toBe(10_000 + FOLLOW_UP_MS)
+    expect(engine.hearing()).toBe(true)
+    await engine.stop()
+  })
+
+  test("a sentence dropped for lack of the name leaves it dark", async () => {
+    const { engine, hear } = listening()
+    await engine.start("agent", { waitForName: true })
+    await hear("qual è la capitale della Francia")
+    expect(engine.lastOutcome()?.spoken).toStartWith("Ignorata")
+    expect(engine.hearing()).toBe(false)
+    await engine.stop()
+  })
+
+  test("closing the microphone puts it out, whatever held it", async () => {
+    const { engine } = listening()
+    await engine.start("agent", { waitForName: true })
+    await engine.toggle()
+    expect(engine.hearing()).toBe(true)
+    await engine.stop()
+    expect(engine.hearing()).toBe(false)
+  })
+
+  test("outside always-on listening by name, an open microphone is heard", async () => {
+    const { engine } = listening()
+    await engine.updateSettings({ activation: "push-to-talk" })
+    await engine.start("agent")
+    expect(engine.hearing()).toBe(true)
     await engine.stop()
   })
 })

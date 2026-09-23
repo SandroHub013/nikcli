@@ -81,6 +81,8 @@ function Wave(props: { level: number; running: boolean }) {
 export function VoiceHud(props: VoiceHudProps) {
   const status = () => props.engine.status()
   const running = () => props.engine.isRunning()
+  /* What the orb shows: whether the next sentence is heard, not whether the microphone is open (D74). */
+  const hearing = () => props.engine.hearing()
   const partial = () => props.engine.partialTranscript()
   const spoken = () => props.engine.lastSpoken()
   const level = () => props.engine.micLevel()
@@ -310,10 +312,10 @@ export function VoiceHud(props: VoiceHudProps) {
               */}
               <span data-slot="hud-orb">
                 <OrbMark
-                  awake={running()}
+                  awake={hearing()}
                   status={status()}
                   mode={mode()}
-                  level={orbLevel(level(), running())}
+                  level={orbLevel(level(), hearing())}
                   rim={rim()}
                 />
               </span>
@@ -388,10 +390,10 @@ export function VoiceHud(props: VoiceHudProps) {
           >
             <span data-slot="hud-mark">
               <OrbMark
-                awake={running()}
+                awake={hearing()}
                 status={status()}
                 mode="transcription"
-                level={orbLevel(level(), running())}
+                level={orbLevel(level(), hearing())}
                 rim={rim()}
               />
             </span>
