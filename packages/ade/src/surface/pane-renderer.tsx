@@ -3,6 +3,7 @@ import { BrowserPane } from "../browser"
 import { FilePane, editBuffer, revertBuffer } from "../editor"
 import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
+import type { LinkRequest } from "../terminal/links"
 import type { SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import { PluginPane } from "../plugin/pane"
@@ -90,6 +91,8 @@ export interface PaneRendererDeps {
   mailWaiting: () => Record<string, number>
   /** Shows a pane what is waiting for it, without typing anything. */
   showMail: (id: string) => void
+  /** Opens what was clicked in a session's terminal: a URL, or a file at a line. */
+  openLink: (id: string, request: LinkRequest) => void
   /** Writes into a session's input line on the user's behalf, and counts it as typed. */
   typeAsUser: (id: string, text: string) => void
   /** Tells every running session that a panel it can drive has opened. */
@@ -180,6 +183,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     const filePane = () => (
       <FilePane
         path={current().filePath!}
+        goTo={current().fileGoTo}
         buffer={buffers()[current().id]}
         loading={bufferLoading()[current().id]}
         focused={isFocused()}
@@ -377,6 +381,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         tree={current().tree}
         mail={deps.mailWaiting()[current().id]}
         onMail={() => deps.showMail(current().id)}
+        onLink={(request) => deps.openLink(current().id, request)}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
         onInput={(data) => {
           const session = deps.sessionFor(current().id)

@@ -383,6 +383,13 @@ export const en: Messages = {
 
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
+  "pane.copied": "Copied",
+  "pane.link.url": "Click: open in ADE · Ctrl+click: system browser",
+  "pane.link.file": "Click: open in the editor",
+  "pane.link.fileAt": (line) => `Click: open in the editor at line ${line}`,
+  "pane.link.missing": (path) => `File not found: ${path}`,
+  "pane.mouseHint": "Alt+click to the program",
+  "pane.mouseHint.tip": "The left click selects and copies. To send a click to the program, hold Alt.",
   "pane.close": "Close",
   "bar.nikcliVersion": (v) => `nikcli ${v}, the one new sessions start`,
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,

@@ -1,5 +1,5 @@
-import { createSignal, createMemo, Show, For } from "solid-js"
-import { type Buffer, saveBlockedReason, lineCount, positionOf } from "./buffer"
+import { createSignal, createMemo, createEffect, Show, For } from "solid-js"
+import { type Buffer, saveBlockedReason, lineCount, positionOf, offsetOfLine } from "./buffer"
 import "./editor.css"
 import { t } from "../i18n"
 
@@ -9,6 +9,8 @@ export interface EditorProps {
   onChange: (draft: string) => void
   onSave: () => void
   onRevert?: () => void
+  /** Puts the cursor at the start of this line and scrolls it to the middle. */
+  goTo?: { line: number; at: number }
 }
 
 export function Editor(props: EditorProps) {
@@ -44,6 +46,24 @@ export function Editor(props: EditorProps) {
       gutterRef.scrollTop = e.currentTarget.scrollTop
     }
   }
+
+  createEffect(() => {
+    const target = props.goTo
+    const text = props.buffer?.draft
+    if (!target || text === undefined || props.loading) return
+    // After the textarea has its text: the effect can run before it renders it.
+    requestAnimationFrame(() => {
+      if (!textareaRef) return
+      const offset = offsetOfLine(text, target.line)
+      textareaRef.focus()
+      textareaRef.setSelectionRange(offset, offset)
+      const lineHeight = parseFloat(getComputedStyle(textareaRef).lineHeight) || 18
+      const row = positionOf(text, offset).line - 1
+      textareaRef.scrollTop = Math.max(0, row * lineHeight - textareaRef.clientHeight / 2)
+      if (gutterRef) gutterRef.scrollTop = textareaRef.scrollTop
+      setCursor(positionOf(text, offset))
+    })
+  })
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {

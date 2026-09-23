@@ -388,6 +388,13 @@ export const it = {
 
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",
+  "pane.copied": "Copiato",
+  "pane.link.url": "Clic: apri in ADE · Ctrl+clic: browser di sistema",
+  "pane.link.file": "Clic: apri nell'editor",
+  "pane.link.fileAt": (line: number) => `Clic: apri nell'editor alla riga ${line}`,
+  "pane.link.missing": (path: string) => `File non trovato: ${path}`,
+  "pane.mouseHint": "Alt+clic al programma",
+  "pane.mouseHint.tip": "Il clic sinistro seleziona e copia. Per mandare un clic al programma, tieni Alt.",
   "pane.close": "Chiudi",
   "bar.nikcliVersion": (v: string) => `nikcli ${v}, quello con cui partono le sessioni nuove`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,

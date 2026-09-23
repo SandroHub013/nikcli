@@ -104,30 +104,85 @@ export const COMMANDS = {
   text: "<n>  le righe visibili del terminale del pannello n",
   notes: "<n>  le ultime righe del transcript del pannello n (note di ADE)",
   type: "<n> <testo>  digita testo nel pannello n e preme Invio",
-  key: "<n> <Enter|Escape|Tab>  preme un tasto nel pannello n",
+  key: "<n> <Enter|Escape|Tab|Ctrl+V>  preme un tasto nel pannello n",
+  drag: "<n> <riga> <col0> <col1> [alt|shift]  trascina col mouse vero sulla riga, celle da 0",
+  click: "<n> <riga> <col> [ctrl|alt]  clic col mouse vero su una cella, da 0",
   shot: "<file.png>  salva uno screenshot della finestra",
   eval: "<js>  valuta un'espressione nella pagina e stampa il valore",
 } as const
 
 export type Command = keyof typeof COMMANDS
 
+export type Modifier = "alt" | "shift" | "ctrl"
+
+/** A cell of the terminal to press on, for `drag` and `click`. 0-based, like xterm's rows. */
+export interface Pointer {
+  row: number
+  col: number
+  /** Where a drag is released; absent for a click. */
+  toCol?: number
+  modifier?: Modifier
+}
+
 export interface ParsedArgs {
   command: Command
   pane?: number
   rest: string
+  pointer?: Pointer
+}
+
+/** CDP's modifier bits: Alt 1, Ctrl 2, Meta 4, Shift 8. */
+export function modifierBits(modifier: Modifier | undefined): number {
+  return modifier === "alt" ? 1 : modifier === "ctrl" ? 2 : modifier === "shift" ? 8 : 0
+}
+
+/**
+ * The middle of a cell in page pixels, from the screen's box and its size in
+ * cells: xterm draws every cell the same size, so the box divides evenly.
+ */
+export function cellCenter(
+  box: { left: number; top: number; width: number; height: number },
+  rows: number,
+  cols: number,
+  row: number,
+  col: number,
+): { x: number; y: number } {
+  return { x: box.left + ((col + 0.5) * box.width) / cols, y: box.top + ((row + 0.5) * box.height) / rows }
+}
+
+function parsePointer(command: "drag" | "click", args: readonly string[]): Pointer | string {
+  const count = command === "drag" ? 3 : 2
+  const numbers = args.slice(0, count).map(Number)
+  if (numbers.length < count || numbers.some((n) => !Number.isInteger(n) || n < 0)) {
+    return command === "drag" ? "drag: servono riga, colonna di partenza e colonna di arrivo, da 0" : "click: servono riga e colonna, da 0"
+  }
+  const modifier = args[count]
+  const allowed: readonly string[] = command === "drag" ? ["alt", "shift"] : ["ctrl", "alt"]
+  if (modifier !== undefined && !allowed.includes(modifier)) return `${command}: modificatore non previsto: ${modifier} (${allowed.join(", ")})`
+  return {
+    row: numbers[0],
+    col: numbers[1],
+    toCol: command === "drag" ? numbers[2] : undefined,
+    modifier: modifier as Modifier | undefined,
+  }
 }
 
 /** The argument line, or what is wrong with it. */
 export function parseArgs(argv: readonly string[]): ParsedArgs | string {
   const [command, ...rest] = argv
   if (!command || !(command in COMMANDS)) return usage()
-  const withPane = command === "text" || command === "notes" || command === "type" || command === "key"
+  const withPane = ["text", "notes", "type", "key", "drag", "click"].includes(command)
   if (!withPane) {
     if ((command === "shot" || command === "eval") && rest.length === 0) return `${command}: manca l'argomento`
     return { command: command as Command, rest: rest.join(" ") }
   }
   const pane = Number(rest[0])
   if (!Number.isInteger(pane) || pane < 1) return `${command}: il primo argomento è l'indice del pannello, da 1`
+  if (command === "drag" || command === "click") {
+    const pointer = parsePointer(command, rest.slice(1))
+    if (typeof pointer === "string") return pointer
+    return { command, pane, rest: "", pointer }
+  }
   const tail = rest.slice(1).join(" ")
   if ((command === "type" || command === "key") && !tail) return `${command}: manca il testo`
   return { command: command as Command, pane, rest: tail }

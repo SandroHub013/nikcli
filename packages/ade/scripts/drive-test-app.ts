@@ -52,6 +52,8 @@ import {
   CONNECT_TIMEOUT_MS,
   buildRefusal,
   buildVerdict,
+  cellCenter,
+  modifierBits,
   chooseCdpPort,
   notListening,
   parseArgs,
@@ -183,6 +185,14 @@ try {
         await send("Input.insertText", { text: parsed.rest })
         await new Promise((resolve) => setTimeout(resolve, 300))
       }
+      if (parsed.rest === "Ctrl+V") {
+        // The editing command is what makes the page paste: a bare Ctrl+V key
+        // event through CDP types a "v" and reads nothing.
+        await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2, commands: ["paste"] })
+        await send("Input.dispatchKeyEvent", { type: "keyUp", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2 })
+        console.log(`Ctrl+V nel pannello ${parsed.pane}`)
+        break
+      }
       const keys: Record<string, [number, string]> = { Enter: [13, "\r"], Escape: [27, "\u001b"], Tab: [9, "\t"] }
       const name = parsed.command === "type" ? "Enter" : parsed.rest
       const key = keys[name]
@@ -190,6 +200,39 @@ try {
       await send("Input.dispatchKeyEvent", { type: "keyDown", key: name, code: name, windowsVirtualKeyCode: key[0], text: key[1] })
       await send("Input.dispatchKeyEvent", { type: "keyUp", key: name, code: name, windowsVirtualKeyCode: key[0] })
       console.log(parsed.command === "type" ? `digitato nel pannello ${parsed.pane}` : `${name} nel pannello ${parsed.pane}`)
+      break
+    }
+    case "drag":
+    case "click": {
+      // The real mouse, through the browser's input pipeline: xterm sees the
+      // same events a hand would give it, modifiers included.
+      const geometry = (await evaluate(
+        `(() => { const p = ${cell(parsed.pane!)}; if (!p) return "pane"; const s = p.querySelector(".xterm-screen"); if (!s) return "terminal"; const b = s.getBoundingClientRect(); const m = p.querySelector(".xterm-char-measure-element"); const w = m ? m.getBoundingClientRect().width / Math.max(1, m.textContent.length) : 0; return { left: b.left, top: b.top, width: b.width, height: b.height, rows: p.querySelectorAll(".xterm-rows > div").length, cellWidth: w } })()`,
+      )) as string | { left: number; top: number; width: number; height: number; rows: number; cellWidth: number }
+      if (geometry === "pane") fail(`nessun pannello con indice ${parsed.pane}`)
+      if (typeof geometry === "string") fail(`il pannello ${parsed.pane} non ha un terminale`)
+      const box = geometry as Exclude<typeof geometry, string>
+      const cols = box.cellWidth > 0 ? Math.round(box.width / box.cellWidth) : 0
+      if (!box.rows || !cols) fail("non riesco a misurare le celle del terminale")
+      const pointer = parsed.pointer!
+      const modifiers = modifierBits(pointer.modifier)
+      const at = (col: number) => cellCenter(box, box.rows, cols, pointer.row, col)
+      const start = at(pointer.col)
+      const mouse = (type: string, point: { x: number; y: number }, extra: Record<string, unknown> = {}) =>
+        send("Input.dispatchMouseEvent", { type, x: point.x, y: point.y, modifiers, ...extra })
+      await mouse("mouseMoved", start)
+      await mouse("mousePressed", start, { button: "left", buttons: 1, clickCount: 1 })
+      let end = start
+      if (parsed.command === "drag") {
+        end = at(pointer.toCol!)
+        for (let step = 1; step <= 8; step++) {
+          const point = { x: start.x + ((end.x - start.x) * step) / 8, y: start.y + ((end.y - start.y) * step) / 8 }
+          await mouse("mouseMoved", point, { button: "left", buttons: 1 })
+          await new Promise((resolve) => setTimeout(resolve, 16))
+        }
+      }
+      await mouse("mouseReleased", end, { button: "left", buttons: 0, clickCount: 1 })
+      console.log(`${parsed.command} nel pannello ${parsed.pane}, riga ${pointer.row}, colonne ${pointer.col}${pointer.toCol === undefined ? "" : `-${pointer.toCol}`}${pointer.modifier ? ` con ${pointer.modifier}` : ""}`)
       break
     }
     case "shot": {

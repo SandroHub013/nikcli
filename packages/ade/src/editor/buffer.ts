@@ -84,6 +84,17 @@ export function saveBlockedReason(buffer: Buffer): string | undefined {
   return undefined
 }
 
+/** Where 1-based `line` begins in `text`; past the end, where the last line begins. */
+export function offsetOfLine(text: string, line: number): number {
+  let offset = 0
+  for (let current = 1; current < line; current++) {
+    const next = text.indexOf("\n", offset)
+    if (next < 0) break
+    offset = next + 1
+  }
+  return offset
+}
+
 /**
  * Calcola il numero totale di righe nel testo.
  */

@@ -7,6 +7,7 @@ import {
   saveBlockedReason,
   lineCount,
   positionOf,
+  offsetOfLine,
 } from "./buffer"
 
 describe("editor buffer model", () => {
@@ -173,5 +174,21 @@ describe("editor buffer model", () => {
 
     // Negative offset clamps to start
     expect(positionOf(sample, -10)).toEqual({ line: 1, column: 1 })
+  })
+})
+
+describe("offsetOfLine (S76)", () => {
+  const text = "uno\ndue\ntre"
+
+  test("line 1 starts at 0", () => {
+    expect(offsetOfLine(text, 1)).toBe(0)
+  })
+
+  test("a later line starts after its newline", () => {
+    expect(offsetOfLine(text, 3)).toBe(8)
+  })
+
+  test("past the end is the start of the last line", () => {
+    expect(offsetOfLine(text, 99)).toBe(8)
   })
 })

@@ -862,6 +862,47 @@ async fn ade_open_release(app: tauri::AppHandle, url: String) -> Result<(), Stri
         .map_err(|e| e.to_string())
 }
 
+/// Whether `url` may be handed to the system browser: http or https only, no
+/// whitespace or control characters, at most 2048 bytes. Anything else — a
+/// `file:` URL, a `javascript:` one — could run something on the user's machine.
+fn is_external_url(url: &str) -> bool {
+    (url.starts_with("http://") || url.starts_with("https://"))
+        && url.len() <= 2048
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+/// Opens a link clicked in a session in the system browser (Ctrl+click).
+///
+/// A plain click opens ADE's own browser pane; this is for the logins that do
+/// not work there. Only web URLs: see `is_external_url`.
+#[tauri::command]
+async fn ade_open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    if !is_external_url(&url) {
+        return Err("non è un indirizzo web".into());
+    }
+    #[allow(deprecated)]
+    tauri_plugin_shell::ShellExt::shell(&app)
+        .open(url, None)
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod external_url_tests {
+    use super::is_external_url;
+
+    #[test]
+    fn only_web_urls_reach_the_system_browser() {
+        assert!(is_external_url("https://example.com/a?b=c"));
+        assert!(!is_external_url("file:///C:/x"));
+        assert!(!is_external_url("javascript:alert(1)"));
+        assert!(!is_external_url("https://a b"));
+        assert!(!is_external_url("https://x\n"));
+        let long = format!("https://{}", "a".repeat(2049 - "https://".len()));
+        assert_eq!(long.len(), 2049);
+        assert!(!is_external_url(&long));
+    }
+}
+
 #[tauri::command]
 fn ade_window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
@@ -1229,6 +1270,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
+            ade_open_external,
             browse::ade_browser_framing,
             browse::ade_open_in_browser,
             browse::ade_forget_site,

@@ -352,7 +352,8 @@ import {
   type VoiceSettings,
 } from "@nikcli-ai/voice"
 import { ShotTray, createShotSource } from "../shots"
-import { disposeTerminal, noteInTerminal, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
+import { disposeTerminal, hasTerminal, noteInTerminal, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
+import type { LinkRequest } from "../terminal/links"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
 import { createRawWindows } from "../session/raw-window"
@@ -4922,8 +4923,9 @@ export function Workbench() {
    * open is focused rather than opened twice: two panes over one path would
    * let the user edit the same file against itself.
    */
-  const openFile = async (path: string) => {
+  const openFile = async (path: string, line?: number) => {
     setSelectedFile(path)
+    const goTo = line ? { line, at: Date.now() } : undefined
 
     // A model or a video is looked at, not edited as text: each opens in its panel.
     const route = routeForFile(path)
@@ -4938,7 +4940,7 @@ export function Workbench() {
 
     const existing = wb().panes.find((pane) => pane.filePath === path)
     if (existing) {
-      setWb((w) => ({ ...w, focusedId: existing.id }))
+      setWb((w) => ({ ...updatePane(w, existing.id, goTo ? { fileGoTo: goTo } : {}), focusedId: existing.id }))
       return
     }
 
@@ -4954,6 +4956,7 @@ export function Workbench() {
         model: "—",
         mode: "file",
         filePath: path,
+        fileGoTo: goTo,
         lines: [],
         workspaceId: project()?.name ?? "workspace",
       }),
@@ -4968,6 +4971,42 @@ export function Workbench() {
     } finally {
       bufferLoading.set(id, false)
     }
+  }
+
+  /*
+   * A click on a link in a session's terminal (`terminal/links.ts`).
+   *
+   * A URL opens in the browser panel tied to the session, like the offers do;
+   * with Ctrl, in the system browser, for the logins that do not work in the
+   * panel. A path is read against the folder the session works in and opens in
+   * the editor at its line.
+   */
+  const openLink = async (paneId: string, request: LinkRequest) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    const say = (text: string) => (hasTerminal(paneId) ? noteInTerminal(paneId, text) : appendLine(paneId, text, "note"))
+    if (request.kind === "url") {
+      if (!request.external) {
+        openOwnedBrowser(request.target, { id: paneId, title: pane?.title ?? "" }, true)
+        return
+      }
+      try {
+        const { invoke } = await import("@tauri-apps/api/core")
+        await invoke("ade_open_external", { url: request.target })
+      } catch (error) {
+        say(String(error))
+      }
+      return
+    }
+    const absolute = /^(?:[A-Za-z]:)?[\\/]/.test(request.target)
+    const base = activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root
+    const path =
+      absolute || !base
+        ? request.target
+        : `${base.replace(/[\\/]+$/, "")}/${request.target.replace(/^\.[\\/]/, "")}`
+    const host = await getHost()
+    const found = host?.readTextFile ? await host.readTextFile(path, 1).then(() => true, () => false) : false
+    if (!found) return say(t("pane.link.missing", path))
+    await openFile(path, request.line)
   }
 
   const saveFile = async (paneId: string) => {
@@ -6035,6 +6074,7 @@ export function Workbench() {
     panels,
     mailWaiting,
     showMail,
+    openLink: (id, request) => void openLink(id, request),
     typeAsUser,
     announceToAll,
     pluginRuntime,

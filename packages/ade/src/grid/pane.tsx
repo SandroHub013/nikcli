@@ -4,6 +4,7 @@ import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
+import type { LinkRequest } from "../terminal/links"
 import { isQuotaUnavailable, quotaForAgent, type SessionQuota } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 
@@ -217,6 +218,8 @@ export interface SessionPaneProps {
   onDropPath?: (paths: string[]) => void
   /** The terminal's size in cells, whenever the pane changes shape. */
   onResize?: (cols: number, rows: number) => void
+  /** A URL or a file path in the terminal was clicked. */
+  onLink?: (request: LinkRequest) => void
 }
 
 /*
@@ -298,6 +301,23 @@ export function SessionPane(props: SessionPaneProps) {
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
   let root: HTMLElement | undefined
+
+  /*
+   * The terminal's mouse, said out loud. A selection copies itself on release
+   * and the pane says so for a moment; while the program has the mouse, the
+   * header says how to give it a click. See `configureTerminalSelection`.
+   */
+  const [copied, setCopied] = createSignal(false)
+  const [mouseReporting, setMouseReporting] = createSignal(false)
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  const flashCopied = () => {
+    setCopied(true)
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => setCopied(false), 1500)
+  }
+  onCleanup(() => {
+    if (copiedTimer) clearTimeout(copiedTimer)
+  })
 
   /*
    * Following means: new output pulls the view down. It stops the moment the
@@ -748,6 +768,12 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
+        <Show when={props.terminalId && mouseReporting()}>
+          <span class="tok" data-slot="pane-mouse-hint" title={t("pane.mouseHint.tip")}>
+            {t("pane.mouseHint")}
+          </span>
+        </Show>
+
         <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
         <button
           type="button"
@@ -787,10 +813,18 @@ export function SessionPane(props: SessionPaneProps) {
             const detach = attachTerminal(id, element, {
               onInput: (data) => props.onInput?.(data),
               onResize: (cols, rows) => props.onResize?.(cols, rows),
+              onCopied: flashCopied,
+              onMouseMode: setMouseReporting,
+              onLink: (request) => props.onLink?.(request),
             })
             onCleanup(detach)
           }}
         />
+        <Show when={copied()}>
+          <div data-slot="pane-toast" role="status">
+            {t("pane.copied")}
+          </div>
+        </Show>
       </Show>
 
       <div
