@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   WATCH_MAX_GAP_MS,
   acceptsReport,
+  countingLines,
   followReports,
   newNonce,
   parseReport,
@@ -237,5 +238,50 @@ describe("followReports", () => {
 
   test("the same id reported again is not a move", async () => {
     expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
+  })
+})
+describe("followReports slows down when nothing comes (P1-C2b)", () => {
+  const expected = { pane: "pane-7", nonce: "a1b2c3" }
+  const first = JSON.stringify({ ...JSON.parse(good), source: "startup" })
+
+  /** Runs until `until` ms; returns the times the drop file was read after the first report. */
+  async function reads(until: number, lineAt: number[] = []) {
+    let at = 0
+    const readAt: number[] = []
+    await followReports({
+      ...expected,
+      read: async () => {
+        if (at > 0) readAt.push(at)
+        return at === 0 ? first : null
+      },
+      clear: async () => {},
+      cancelled: () => at >= until,
+      onReport: () => {},
+      linesSent: () => lineAt.filter((line) => line <= at).length,
+      now: () => at,
+      sleep: async (ms) => void (at += ms),
+    })
+    return readAt
+  }
+
+  test("2, 4, 8, then every 15 seconds", async () => {
+    expect(await reads(60_000)).toEqual([2_000, 6_000, 14_000, 29_000, 44_000, 59_000])
+  })
+
+  test("a line sent into the pane brings it back to 2 seconds, within 2 seconds", async () => {
+    // The user types /resume at 30 s, in the middle of a 15 s gap.
+    expect(await reads(40_000, [30_000])).toEqual([2_000, 6_000, 14_000, 29_000, 31_000, 35_000])
+  })
+
+  test("countingLines counts the lines a session submits, and keeps the session itself", () => {
+    const written: string[] = []
+    let lines = 0
+    const session = { write: (data: string) => void written.push(data) }
+    const counted = countingLines(session, () => lines++)
+    expect(counted).toBe(session)
+    counted.write("/res")
+    counted.write("ume\r")
+    expect(lines).toBe(1)
+    expect(written).toEqual(["/res", "ume\r"])
   })
 })

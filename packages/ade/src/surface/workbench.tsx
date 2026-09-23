@@ -47,7 +47,7 @@ import {
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { followReports, newNonce } from "../session-new/agent-link"
+import { countingLines, followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -1839,6 +1839,8 @@ export function Workbench() {
 
   /** The activity files, one call a pass; a delivery reuses the pass's read for a second (P1-C2a). */
   let activityReads: { host: object; reads: ActivityReads } | undefined
+  /** Lines sent into each pane, so the hook report's check speeds up after one (P1-C2b). */
+  const linesSent = new Map<string, number>()
   const readsOf = (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, readOne: (nonce: string) => Promise<string | null>) => {
     if (activityReads?.host !== host) {
       activityReads = { host, reads: createActivityReads({ readOne, ...(host.readAgentActivities ? { readMany: host.readAgentActivities } : {}) }) }
@@ -5717,7 +5719,7 @@ export function Workbench() {
         ...(secretNames.length > 0 ? { secrets: secretNames } : {}),
       })
 
-      spawned = session
+      spawned = countingLines(session, () => linesSent.set(paneId, (linesSent.get(paneId) ?? 0) + 1))
       running.set(paneId, session)
       touchRunning()
       resyncSize(paneId, session, bornAt)
@@ -5781,6 +5783,7 @@ export function Workbench() {
             await host.clearAgentLink?.(n)
           },
           cancelled: () => running.get(paneId) !== session,
+          linesSent: () => linesSent.get(paneId) ?? 0,
           onReport: (report) => {
             if (running.get(paneId) !== session) return
             setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
