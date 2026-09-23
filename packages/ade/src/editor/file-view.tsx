@@ -71,9 +71,7 @@ export function FileView(props: FileViewProps) {
   return (
     <Switch fallback={editor()}>
       <Match when={props.kind === "svg" && !props.asText}>
-        <div data-slot="file-view" data-kind="svg">
-          <img data-slot="file-image" src={src()} alt={props.path} />
-        </div>
+        <SvgView src={src()} path={props.path} />
       </Match>
       <Match when={props.kind === "image"}>
         <ImageView src={src()} path={props.path} />
@@ -88,6 +86,17 @@ export function FileView(props: FileViewProps) {
         <AudioView src={src()} />
       </Match>
     </Switch>
+  )
+}
+
+export function SvgView(props: { src: string; path: string }) {
+  const [failed, setFailed] = createSignal(false)
+  return (
+    <div data-slot="file-view" data-kind="svg">
+      <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
+        <img data-slot="file-image" src={props.src} alt={props.path} onError={() => setFailed(true)} />
+      </Show>
+    </div>
   )
 }
 

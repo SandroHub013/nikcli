@@ -193,4 +193,18 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     expect(view).toContain('data-slot="file-view" data-kind="svg"')
     expect(video).toContain('data-slot="video-element"')
   })
+
+  test("SVG viewer handles load errors with the same message as images (Punto 10)", () => {
+    const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
+    // SVG viewer must have onError handler and render file.imageFailed fallback on error
+    const svgViewIndex = view.indexOf("function SvgView")
+    expect(svgViewIndex).toBeGreaterThan(-1)
+    const svgViewSlice = view.slice(svgViewIndex)
+    const svgBody = svgViewSlice.slice(0, svgViewSlice.indexOf("\n}"))
+    expect(svgBody).toContain("onError={() => setFailed(true)}")
+    expect(svgBody).toContain('data-slot="file-message"')
+    expect(svgBody).toContain('t("file.imageFailed")')
+    expect(svgBody).toContain('data-slot="file-view" data-kind="svg"')
+    expect(svgBody).toContain('data-slot="file-image"')
+  })
 })
