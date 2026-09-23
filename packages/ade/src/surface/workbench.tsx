@@ -357,7 +357,7 @@ import {
   type VoiceSettings,
 } from "@nikcli-ai/voice"
 import { ShotTray, createShotSource } from "../shots"
-import { disposeTerminal, hasTerminal, noteInTerminal, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
+import { disposeTerminal, hasTerminal, noteInTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
@@ -1525,6 +1525,16 @@ export function Workbench() {
    * one since it was queued: the caller then does not count it as given.
    */
   const lineQueue = createLineQueue()
+  /*
+   * A fit that came while `host.spawn` was awaited went to `sessionFor`,
+   * found nothing in `running` and was lost; the cell does not change size
+   * again, so nothing sent it later (S77). Called right after `running.set`.
+   */
+  const resyncSize = (paneId: string, session: SpawnedSession, bornAt: { cols: number; rows: number } | undefined) => {
+    const now = ptySize(paneId)
+    if (now && (now.cols !== bornAt?.cols || now.rows !== bornAt?.rows)) session.resize(now.cols, now.rows)
+  }
+
   const typeLine = (session: SpawnedSession, text: string, options: { unlessTyping?: boolean } = {}): Promise<boolean> => {
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     const job = async () => {
@@ -5598,7 +5608,10 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
+      const bornAt = ptySize(paneId)
       const session = await host.spawn({
+        ...bornAt,
         command: agent.command,
         args: extraArgs,
         cwd: workDir,
@@ -5643,6 +5656,7 @@ export function Workbench() {
       spawned = session
       running.set(paneId, session)
       touchRunning()
+      resyncSize(paneId, session, bornAt)
 
       /*
        * Learning the id from the CLI's own record, for the ones that keep one.
@@ -5826,7 +5840,10 @@ export function Workbench() {
     let spawned: SpawnedSession | undefined
     try {
       startOnCleanScreen(paneId)
+      // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
+      const bornAt = ptySize(paneId)
       const session = await host.spawn({
+        ...bornAt,
         command: "ssh",
         args,
         ...(home ? { cwd: home } : {}),
@@ -5846,6 +5863,7 @@ export function Workbench() {
       spawned = session
       running.set(paneId, session)
       touchRunning()
+      resyncSize(paneId, session, bornAt)
 
       const steps = [...(shellOnly ? [] : [command]), ...(task.trim() ? [task] : [])]
       if (steps.length === 0) return
