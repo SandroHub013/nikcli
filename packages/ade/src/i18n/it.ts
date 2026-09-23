@@ -875,6 +875,8 @@ export const it = {
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",
+  "note.enterHeld": "Digitata, Invio non premuto: c'è un permesso aperto",
+  "note.enterHeldFor": (to: string) => `Digitata a ${to}, Invio non premuto: c'è un permesso aperto`,
   "note.inboxLost": (id: string) => `Messaggio ${id} sparito dalla casella prima di essere letto: il mittente è avvisato`,
   "note.rang": (rings: number) => `Avviso ripetuto: messaggio non ancora letto (${rings}/3)`,
   "note.mailWaiting": (what: string) => `Posta in attesa (la sessione sta scrivendo): ${what}`,
