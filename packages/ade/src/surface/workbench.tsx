@@ -196,6 +196,10 @@ import {
   byProject,
   formatCancel,
   formatNudge,
+  updatesAnsweredBy,
+  formatElapsed,
+  formatTimeNote,
+  timeNoteDue,
   formatUpdate,
   parseActivity,
   keptActivity,
@@ -239,6 +243,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { createLineQueue } from "../session/line-queue"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -1512,7 +1517,24 @@ export function Workbench() {
    * for someone to press Enter. A keystroke that arrives after the paste has
    * settled is a keystroke. False when the session went away in between.
    */
-  const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
+  /*
+   * One line at a time per session (`session/line-queue.ts`): the next line
+   * starts once the one before has had its Enter, or two texts share one
+   * Enter. With `unlessTyping`, the draft check is made in the queue, at the
+   * moment of writing, and the line is dropped (false) if the user has begun
+   * one since it was queued: the caller then does not count it as given.
+   */
+  const lineQueue = createLineQueue()
+  const typeLine = (session: SpawnedSession, text: string, options: { unlessTyping?: boolean } = {}): Promise<boolean> => {
+    const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
+    const job = async () => {
+      if (options.unlessTyping && paneId !== undefined && isTyping(records.typed.get(paneId))) return false
+      return typeLineNow(session, text)
+    }
+    return paneId === undefined ? job() : lineQueue(paneId, job)
+  }
+
+  const typeLineNow = async (session: SpawnedSession, text: string): Promise<boolean> => {
     const line = asOneLine(text)
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
@@ -2044,6 +2066,8 @@ export function Workbench() {
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
+    // A line the user began there: nothing is typed over it (the reminders and the time notes).
+    typing: isTyping(records.typed.get(request.to)),
     ...(folderChanges.has(request.to) ? { lastWriteAt: folderChanges.get(request.to)!.changedAt } : {}),
   })
 
@@ -2374,6 +2398,24 @@ export function Workbench() {
         await host.mailboxState?.(request.id, state === "in corso" ? "" : state).catch(() => {})
       }
       const session = running.get(request.to)
+      /*
+       * The budget (D73): half-way and at the end, one line each, typed like
+       * the reminders. Information for whoever works: it closes nothing and
+       * leaves the reminders below as they were.
+       */
+      // Not while the user has a line begun there: not given either, so it comes on a later round.
+      const timeNote = session ? timeNoteDue(request, now, isTyping(records.typed.get(request.to))) : undefined
+      if (session && timeNote) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = request.timeNotes
+        request.timeNotes = timeNote
+        saveRequests()
+        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessTyping: true }).then((typed) => {
+          if (typed || request.timeNotes !== timeNote) return
+          request.timeNotes = before
+          saveRequests()
+        })
+      }
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         request.rings = (request.rings ?? 0) + 1
@@ -2384,11 +2426,18 @@ export function Workbench() {
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
       if (session && shouldNudge(request, targetOf(request), now)) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = { nudges: request.nudges, nudgedAt: request.nudgedAt }
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
         saveRequests()
-        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)))
-        appendLine(request.to, t("note.nudged", request.id), "note")
+        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessTyping: true }).then((typed) => {
+          if (typed) return appendLine(request.to, t("note.nudged", request.id), "note")
+          if (request.nudgedAt !== now) return
+          request.nudges = before.nudges
+          request.nudgedAt = before.nudgedAt
+          saveRequests()
+        })
       }
     }
 
@@ -2497,7 +2546,8 @@ export function Workbench() {
       const line = formatUpdate(request.id, message.state, message.text, sender)
       await host.mailboxState?.(request.id, line, "update").catch(() => {})
       if (caller) appendLine(caller.id, t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text), "note")
-      await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta`)
+      const elapsed = formatElapsed(request, Date.now())
+      await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta${elapsed ? `; ${elapsed}` : ""}`)
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
@@ -2846,6 +2896,7 @@ export function Workbench() {
         ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
         depth,
         maxDepth: maxDepth(),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       const created = addAgent(
         { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
@@ -2859,6 +2910,7 @@ export function Workbench() {
         at: Date.now(),
         brief: briefOf(message.text),
         ...(message.autoClose ? { autoClose: true } : {}),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       saveRequests()
       if (message.from) {
@@ -3035,12 +3087,13 @@ export function Workbench() {
         ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
         depth: depthOf(target.pane.id, parentOf),
         maxDepth: maxDepth(),
+        ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
       }
       const line = message.kind === "ask" ? formatRequest(id, message.text, sender, nativeContext) : formatDelivery(message, sender)
       const full = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...nativeContext, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
       if (message.kind === "ask") {
         const at = Date.now()
-        openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa" })
+        openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa", ...(message.budget ? { budget: message.budget } : {}) })
         saveRequests()
       }
       const ask = message.kind === "ask"
@@ -3092,6 +3145,7 @@ export function Workbench() {
       ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
       depth: targetDepth,
       maxDepth: maxDepth(),
+      ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
     }
     const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
     // The inbox copy, read and never typed, keeps the sender's line breaks.
@@ -3100,16 +3154,14 @@ export function Workbench() {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
-    // The caller has spoken to a session that said it was blocked on it: that is the answer it was waiting for.
-    for (const request of openRequests.values()) {
-      if (request.update && request.from === message.from && request.to === target.pane.id) {
-        delete request.update
-        saveRequests()
-      }
+    // The caller has written to a session that said it was blocked on it: that note is the answer it was waiting for.
+    for (const request of updatesAnsweredBy(openRequests.values(), message, target.pane.id)) {
+      delete request.update
+      saveRequests()
     }
     if (message.kind === "ask") {
       const at = Date.now()
-      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "digitata" })
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "digitata", ...(message.budget ? { budget: message.budget } : {}) })
       saveRequests()
     }
     const ask = message.kind === "ask"

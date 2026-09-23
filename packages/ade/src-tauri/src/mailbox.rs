@@ -378,6 +378,7 @@ $effort = $null
 $profile = $null
 $file = $null
 $via = $null
+$budget = $null
 # update takes an id and a state before its text, kv an operation and a key, memory an operation and a type,
 # registro a register and an operation; everything else one word.
 $lead = if ($cmd -eq 'update' -or $cmd -eq 'kv' -or $cmd -eq 'memory' -or $cmd -eq 'registro') { 2 } else { 1 }
@@ -395,6 +396,8 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--note' -and $hasNext) { $note = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--effort' -and $hasNext) { $effort = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--profile' -and $hasNext) { $profile = $all[$i + 1]; $i++; continue }
+    # D73: seconds, a whole number from 60 to 14400; anything else is a usage error.
+    elseif ($a -eq '--budget' -and $hasNext) { $b = 0; if ($all[$i + 1] -notmatch '^[1-9][0-9]*$' -or -not [int]::TryParse($all[$i + 1], [ref]$b) -or $b -lt 60 -or $b -gt 14400) { Usage }; $budget = $b; $i++; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -643,6 +646,7 @@ switch ($cmd) {
       $fields = [ordered]@{ kind = 'ask'; to = $head; text = $text }
       if ($effort) { $fields['effort'] = $effort }
       if ($via) { $fields['via'] = $via }
+      if ($budget) { $fields['budget'] = $budget }
     } else {
       $fields = [ordered]@{ kind = 'spawn'; agent = $head; close = $close; worktree = $worktree; fork = $fork }
       if ($name) { $fields['name'] = $name }
@@ -650,6 +654,7 @@ switch ($cmd) {
       if ($base) { $fields['base'] = $base }
       if ($effort) { $fields['effort'] = $effort }
       if ($profile) { $fields['profile'] = $profile }
+      if ($budget) { $fields['budget'] = $budget }
       $fields['text'] = $text
     }
     $id = Post $fields
@@ -690,7 +695,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""
 lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -706,6 +711,7 @@ while [ $# -gt 0 ]; do
       --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
       --effort) [ $# -ge 2 ] && { effort="$2"; shift 2; continue; } ;;
       --profile) [ $# -ge 2 ] && { profile="$2"; shift 2; continue; } ;;
+      --budget) [ $# -ge 2 ] && { budget="$2"; shift 2; continue; } ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -878,8 +884,16 @@ case "$cmd" in
     confirm "\"kind\":\"relaunch\",\"to\":\"$(esc "$head")\",\"fresh\":$fresh,\"note\":\"$(esc "$note")\"$extra" ;;
   ask|spawn)
     [ -n "$head" ] && [ -n "$text" ] || usage
+    # D73: seconds, a whole number from 60 to 14400, no leading zero; anything else is a usage error.
+    bextra=""
+    if [ -n "$budget" ]; then
+      case "$budget" in *[!0-9]*|0*) usage ;; esac
+      { [ ${#budget} -le 5 ] && [ "$budget" -ge 60 ] && [ "$budget" -le 14400 ]; } || usage
+      bextra=",\"budget\":$budget"
+    fi
     if [ "$cmd" = ask ]; then
       extra=""; [ -n "$effort" ] && extra=",\"effort\":\"$(esc "$effort")\""
+      extra="$extra$bextra"
       [ -n "$via" ] && extra="$extra,\"via\":\"$via\""
       post "\"kind\":\"ask\",\"to\":\"$(esc "$head")\"$extra"
     else
@@ -889,6 +903,7 @@ case "$cmd" in
       [ -n "$base" ] && extra="$extra,\"base\":\"$(esc "$base")\""
       [ -n "$effort" ] && extra="$extra,\"effort\":\"$(esc "$effort")\""
       [ -n "$profile" ] && extra="$extra,\"profile\":\"$(esc "$profile")\""
+      extra="$extra$bextra"
       post "\"kind\":\"spawn\",\"agent\":\"$(esc "$head")\",\"close\":$close,\"worktree\":$worktree,\"fork\":$fork$extra"
     fi
     if receipt; then
@@ -1013,6 +1028,16 @@ mod tests {
         assert_eq!(choose_root(false, env(), default.clone()), default);
         assert_eq!(choose_root(true, Some("relativa".into()), default.clone()), default);
         assert_eq!(choose_root(true, None, default.clone()), default);
+    }
+
+    #[test]
+    fn both_scripts_take_a_budget_for_ask_and_spawn_and_check_its_range() {
+        // D73: parsed in both, written on ask and on spawn, and held to 60..14400 before anything is posted.
+        assert!(PS1.contains("$a -eq '--budget'") && PS1.contains("$b -lt 60 -or $b -gt 14400) { Usage }"));
+        assert_eq!(PS1.matches("if ($budget) { $fields['budget'] = $budget }").count(), 2);
+        assert!(SH.contains("--budget) [ $# -ge 2 ]") && SH.contains("[ \"$budget\" -ge 60 ] && [ \"$budget\" -le 14400 ]"));
+        assert!(SH.contains("bextra=\",\\\"budget\\\":$budget\""));
+        assert_eq!(SH.matches("extra=\"$extra$bextra\"").count(), 2);
     }
 
     #[test]
