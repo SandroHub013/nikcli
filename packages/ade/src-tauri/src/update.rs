@@ -37,6 +37,20 @@ pub const STALL_AFTER_SECS: u32 = 60;
 /// same way out.
 pub const FIRST_BYTE_AFTER_SECS: u32 = 180;
 
+/// How long asking the manifest may take. It is a few hundred bytes: a network
+/// that does not answer for a minute will not answer, and without a limit the
+/// window stayed on "downloading" with no way out (audit 0.7.7, MEDIO 14). Not
+/// the plugin's own timeout, which would also cut a slow download that keeps
+/// arriving: that one has its watch below.
+pub const CHECK_AFTER: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// `future`, or an error once `limit` has passed without an answer.
+async fn within<T>(limit: std::time::Duration, future: impl std::future::Future<Output = Result<T, String>>) -> Result<T, String> {
+    tokio::time::timeout(limit, future)
+        .await
+        .unwrap_or_else(|_| Err(format!("nessuna risposta dal server degli aggiornamenti per {} secondi", limit.as_secs())))
+}
+
 /// Downloads the newest signed ADE release, installs it and restarts into it.
 ///
 /// Everything happens here rather than through the updater plugin's JavaScript
@@ -49,12 +63,9 @@ pub const FIRST_BYTE_AFTER_SECS: u32 = 180;
 #[tauri::command]
 pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
-    let update = app
-        .updater()
-        .map_err(|e| e.to_string())?
-        .check()
-        .await
-        .map_err(|e| e.to_string())?
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = within(CHECK_AFTER, async { updater.check().await.map_err(|e| e.to_string()) })
+        .await?
         .ok_or_else(|| "nessun aggiornamento installabile per questa piattaforma".to_string())?;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::Arc;
@@ -132,6 +143,16 @@ pub async fn ade_update_install(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_check_that_never_answers_ends_in_an_error() {
+        let limit = std::time::Duration::from_millis(50);
+        let never = super::within::<()>(limit, std::future::pending());
+        let answer = tauri::async_runtime::block_on(never);
+        assert!(answer.unwrap_err().starts_with("nessuna risposta dal server degli aggiornamenti"));
+        let quick = tauri::async_runtime::block_on(super::within(limit, async { Ok::<_, String>(7) }));
+        assert_eq!(quick, Ok(7));
+    }
+
     /// The plugin reads this section when ADE starts: a key or endpoint it
     /// cannot parse stops every installed copy from opening, not just from
     /// updating.
