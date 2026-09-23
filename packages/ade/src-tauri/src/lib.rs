@@ -1322,10 +1322,6 @@ fn webview_on_screen(visible: bool, minimized: bool) -> bool {
  */
 #[cfg(windows)]
 fn follow_window_visibility(window: &tauri::WebviewWindow) {
-    // Temporary, for the P1-C1 A/B: the old behaviour on demand. Remove before merging.
-    if std::env::var("ADE_P1_NO_HIDE").as_deref() == Ok("1") {
-        return;
-    }
     use std::sync::atomic::{AtomicU8, Ordering};
     use std::sync::Arc;
 
