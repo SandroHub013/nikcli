@@ -80,10 +80,10 @@ export function VoiceOrb(props: VoiceOrbProps) {
       onClick={() => void props.engine.toggle()}
     >
       <OrbMark
-        awake={isRunning()}
+        awake={props.engine.hearing()}
         status={status()}
         mode={mode()}
-        level={orbLevel(props.engine.micLevel(), isRunning())}
+        level={orbLevel(props.engine.micLevel(), props.engine.hearing())}
       />
     </button>
   )

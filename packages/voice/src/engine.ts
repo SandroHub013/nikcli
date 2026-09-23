@@ -126,6 +126,17 @@ export interface VoiceEngine {
   readonly dialogState: () => DialogState
   readonly lastParseResult: () => ParseResult | undefined
   readonly isRunning: () => boolean
+  /**
+   * Whether the next sentence would be heard, not only recorded (D74).
+   *
+   * `isRunning` says the microphone is open, and with always-on listening it
+   * always is: an orb reading it lit up while the next sentence, said without
+   * the name, was about to be dropped. This is the program's own rule
+   * (`nameGate`), true while the name, the button or an answer holds a
+   * window, a question waits, a turn is at work or a key is held — and false
+   * whenever the microphone is closed.
+   */
+  readonly hearing: () => boolean
   readonly settings: () => VoiceSettings
   /**
    * Which of the two the microphone is doing right now.
@@ -382,6 +393,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
   const [lastParseResult, setLastParseResult] = createSignal<ParseResult | undefined>(undefined)
   const [isRunning, setIsRunning] = createSignal<boolean>(false)
+  const [hearing, setHearing] = createSignal<boolean>(false)
   const [parakeetProgress, setParakeetProgress] = createSignal<ParakeetProgress | undefined>(undefined)
   /*
    * The last few dictated sentences, newest last.
@@ -415,6 +427,24 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let transcriberScope: Scope.CloseableScope | null = null
   let programScope: Scope.CloseableScope | null = null
   let programHandle: VoiceProgramHandle | null = null
+
+  /*
+   * `hearing`, read again from the program.
+   *
+   * Every write of the gate raises a callback (`onNameGate`, or the state,
+   * cue, follow-up and outcome ones); only a window running out does not, so
+   * that one gets a single timer at its end. No polling.
+   */
+  let hearingTimer: ReturnType<typeof setTimeout> | undefined
+  const refreshHearing = (): void => {
+    if (hearingTimer !== undefined) clearTimeout(hearingTimer)
+    hearingTimer = undefined
+    const gate = isRunning() && programHandle ? programHandle.nameGate() : undefined
+    setHearing(gate?.open === true)
+    if (gate?.open && gate.until !== undefined) {
+      hearingTimer = setTimeout(refreshHearing, Math.max(0, gate.until - now()) + 1)
+    }
+  }
   let activeTranscriber: Transcriber | null = null
   let hasOverriddenTranscriber = Boolean(options.transcriber)
 
@@ -746,6 +776,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     heldDictation = false
 
     setIsRunning(false)
+    refreshHearing()
     setFollowUp(undefined)
     clearTimeout(idleTimer)
     if (!keepAgent) host.releaseAgent?.()
@@ -1005,13 +1036,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     getSettings: effectiveSettings,
     getHistory: () => history(),
     isPushToTalkActive: () => chordHeld || openedWithoutChord,
-    onStateChange: (state) => setDialogState(state),
+    onStateChange: (state) => {
+      setDialogState(state)
+      refreshHearing()
+    },
+    onNameGate: () => refreshHearing(),
     onPartialTranscript: (text) => setPartialTranscript(text),
     onSpeaking: (text) => {
       if (activeMode() !== "transcription") setLastSpoken(text)
     },
-    onFollowUp: (until) => setFollowUp(until),
+    onFollowUp: (until) => {
+      setFollowUp(until)
+      refreshHearing()
+    },
     onCue: (kind) => {
+      refreshHearing()
       if (activeMode() !== "transcription") (options.cue ?? playCue)(kind)
     },
     onSpoken: (text) => {
@@ -1021,6 +1060,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     },
     onOutcome: (outcome) => {
       setLastOutcome(outcome)
+      refreshHearing()
       /*
        * Only outcomes that say something are worth a line. A successful
        * action whose `spoken` is empty has already been announced by the
@@ -1173,6 +1213,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     dialogState,
     lastParseResult,
     isRunning,
+    hearing,
     settings: currentSettings,
     activeMode,
     parakeetProgress,
@@ -1268,6 +1309,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           } else {
             setDialogState((prev) => ({ ...prev, status: "idle" }))
           }
+          // The session is up, with its program: what it hears starts now.
+          refreshHearing()
         } catch (err: unknown) {
           const message =
             typeof err === "string"
@@ -1574,6 +1617,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
 
       setCurrentSettings(normalized)
+      // Mode and activation are half of the name gate.
+      refreshHearing()
 
       if (backendChanged) {
         if (prev.backend === "parakeet" && normalized.backend !== "parakeet") {

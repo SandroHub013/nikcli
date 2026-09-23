@@ -35,6 +35,7 @@ import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
+import { takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -151,6 +152,12 @@ export interface VoiceProgramOptions {
   onCue?: (kind: CueKind) => void
   /** Until when a sentence needs no name after an answer, or undefined once that is over. */
   onFollowUp?: (until: number | undefined) => void
+  /**
+   * The name gate may have changed: the assistant woke, or a window was spent
+   * or dropped. Some of those writes raise no other callback, and whoever
+   * shows `nameGate()` would otherwise go on showing the old one (D74).
+   */
+  onNameGate?: () => void
   /** Notification hook fired when an ADE action finishes dispatching. */
   onOutcome?: (outcome: DispatchOutcome) => void
   /** Notification hook fired when an error occurs. */
@@ -239,6 +246,13 @@ export interface VoiceProgramHandle {
    * sends them whole. A turn at work does not count: see `waitingForName`.
    */
   readonly waitingForName: (spokenAt?: number) => boolean
+  /**
+   * Whether a sentence said now would be taken without the name, the rule
+   * that drops the others (`takesWithoutName`). `until` is set when only a
+   * window holds it open: then it closes by itself at that time, with no
+   * callback, and a reader has to look again (D74).
+   */
+  readonly nameGate: () => { open: boolean; until?: number }
 }
 
 export type ExternalCommand =
@@ -938,6 +952,7 @@ export function makeVoiceProgram(
       inFollowUp = false
       isWakeWordAwake = true
       wakeUntil = clockMs() + WAKE_WINDOW_MS
+      options.onNameGate?.()
       options.onCue?.("listening")
     }
 
@@ -959,6 +974,7 @@ export function makeVoiceProgram(
       isWakeWordAwake = true
       wakeUntil = until
       inFollowUp = true
+      options.onNameGate?.()
       options.onFollowUp?.(until)
       options.onCue?.("listening")
       followUpTimer = setTimeout(() => {
@@ -966,6 +982,7 @@ export function makeVoiceProgram(
         if (wakeUntil !== until) return
         isWakeWordAwake = false
         wakeUntil = undefined
+        options.onNameGate?.()
         options.onFollowUp?.(undefined)
         options.onCue?.("closed")
       }, FOLLOW_UP_MS)
@@ -977,6 +994,7 @@ export function makeVoiceProgram(
       followUpTimer = undefined
       isWakeWordAwake = false
       wakeUntil = undefined
+      options.onNameGate?.()
       options.onFollowUp?.(undefined)
     }
     let isPushToTalkPressed = false
@@ -1279,7 +1297,18 @@ export function makeVoiceProgram(
            */
           const thinking = currentState.status === "executing" && agentAbort !== null
 
-          if (!awake && !awaitingAnswer && !thinking) {
+          // The same rule the orb shows: see `nameGate` and `dialog/name-gate.ts`.
+          if (
+            !takesWithoutName({
+              mode: currentSettings.mode,
+              activation: currentSettings.activation,
+              awake,
+              awaitingAnswer,
+              thinking,
+              // The held key, as `waitingForName` reads it: not a microphone opened by a button.
+              pressed: isPushToTalkPressed,
+            })
+          ) {
             const match = matchesWakeWord(trimmed, currentSettings.wakeWord)
             if (!match.matched) {
               /*
@@ -1330,6 +1359,7 @@ export function makeVoiceProgram(
              */
             isWakeWordAwake = false
             wakeUntil = undefined
+            options.onNameGate?.()
             // A conversation goes on: the answer to this one opens the next window.
             followUpDue = !typed && !thinking && !followingUp
             return
@@ -1470,6 +1500,7 @@ export function makeVoiceProgram(
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         options.onPartialTranscript?.("")
         yield* speaker.cancel
         /* A press that only cut the voice is not an operation to cancel: said
@@ -1487,6 +1518,7 @@ export function makeVoiceProgram(
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         if (currentState.status === "asleep") {
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
@@ -1497,6 +1529,7 @@ export function makeVoiceProgram(
         isWakeWordAwake = false
         followUpDue = false
         closeFollowUp()
+        options.onNameGate?.()
         yield* applyDialogEvent({ type: "sleep" })
       }),
 
@@ -1504,11 +1537,13 @@ export function makeVoiceProgram(
 
       pressToTalk: Effect.gen(function* () {
         isPushToTalkPressed = true
+        options.onNameGate?.()
         yield* speaker.cancel
       }),
 
       releaseToTalk: Effect.sync(() => {
         isPushToTalkPressed = false
+        options.onNameGate?.()
       }),
 
       waitingForName: (spokenAt?: number) => {
@@ -1518,6 +1553,19 @@ export function makeVoiceProgram(
         // A question is answered without the name. A turn at work is not: a
         // stop is short enough to go whole, and the rest has to call it.
         return !(currentState.status === "confirming" || pendingDisambiguation !== null)
+      },
+
+      nameGate: () => {
+        const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
+        const at = clockMs()
+        const awake = awakeAt(at)
+        const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+        const thinking = currentState.status === "executing" && agentAbort !== null
+        const gate = { mode: settings.mode, activation: settings.activation, awake, awaitingAnswer, thinking, pressed: isPushToTalkPressed }
+        const open = takesWithoutName(gate)
+        // Held only by the window: it closes at `wakeUntil` with nobody writing.
+        const windowOnly = open && awake && !takesWithoutName({ ...gate, awake: false })
+        return windowOnly && wakeUntil !== undefined ? { open, until: wakeUntil } : { open }
       },
 
       isIdle: Effect.gen(function* () {
