@@ -37,6 +37,68 @@ struct Session {
 #[derive(Default)]
 pub struct Registry(Mutex<HashMap<String, Session>>);
 
+impl Registry {
+    /// Takes every session out, so nothing can reach them any more.
+    fn take_all(&self) -> Vec<Session> {
+        let mut sessions = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        sessions.drain().map(|(_, session)| session).collect()
+    }
+
+    /*
+     * Ends every session: for when the page that started them is gone.
+     *
+     * The page is the only owner of a pty. It holds the ids, the listeners
+     * and the panes; Rust holds the process. A reload (F5, Ctrl+R and the
+     * context menu's Reload all work in a release: WebView2's accelerator
+     * keys and default menus are left on) throws the page away and the new
+     * one restores its panes by spawning again, so every process of the old
+     * page ran on with no one to read it or kill it: four cmd for two panes.
+     * Closing ADE did not end them either, beyond what ConPTY's own
+     * teardown does to the direct child.
+     *
+     * The whole tree, as closing a pane does: an agent's own children
+     * outlive a kill of the agent alone.
+     */
+    pub fn end_all(&self) -> usize {
+        let sessions = self.take_all();
+        let count = sessions.len();
+        for session in sessions {
+            end_session(session);
+        }
+        count
+    }
+
+    /*
+     * The same, with the killing off the calling thread.
+     *
+     * The sessions are taken at once, on the caller's thread: a page-load
+     * handler that only started a thread could have that thread take a
+     * session the new page had already spawned. Walking the process table
+     * for each tree is what takes time, and that is what moves off.
+     */
+    pub fn end_all_in_background(&self) -> usize {
+        let sessions = self.take_all();
+        let count = sessions.len();
+        if count > 0 {
+            std::thread::spawn(move || {
+                for session in sessions {
+                    end_session(session);
+                }
+            });
+        }
+        count
+    }
+}
+
+fn end_session(mut session: Session) {
+    if let Some(pid) = session.child.process_id() {
+        kill_tree(pid);
+    }
+    let _ = session.child.kill();
+    // Reaped here: the reader thread's lookup now misses, and nobody else will wait on it.
+    let _ = session.child.wait();
+}
+
 #[derive(Clone, serde::Serialize)]
 struct Chunk {
     id: String,
@@ -1261,6 +1323,68 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A session like `pty_spawn`'s, running a shell whose own child sleeps.
+    fn sleeping_session() -> (Session, u32) {
+        let pair = native_pty_system()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = if cfg!(windows) { CommandBuilder::new("cmd") } else { CommandBuilder::new("sh") };
+        if cfg!(windows) {
+            cmd.args(["/c", "ping -n 60 127.0.0.1 >NUL"]);
+        } else {
+            cmd.args(["-c", "sleep 60; true"]);
+        }
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id().unwrap();
+        let writer = Arc::new(Mutex::new(pair.master.take_writer().unwrap()));
+        (Session { master: Some(pair.master), writer, child }, pid)
+    }
+
+    /// Whether `pid`, or any process it started, is still running.
+    fn tree_alive(pid: u32) -> bool {
+        use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+        sys.processes().values().any(|process| {
+            process.pid().as_u32() == pid || process.parent().map(|parent| parent.as_u32()) == Some(pid)
+        })
+    }
+
+    #[test]
+    fn a_reloaded_page_leaves_no_pty_of_the_old_one_running() {
+        let registry = Registry::default();
+        let (first, first_pid) = sleeping_session();
+        let (second, second_pid) = sleeping_session();
+        registry.0.lock().unwrap().insert("pty-old-1".into(), first);
+        registry.0.lock().unwrap().insert("pty-old-2".into(), second);
+        // Give the shells a moment to start their own child.
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(tree_alive(first_pid) && tree_alive(second_pid));
+
+        assert_eq!(registry.end_all(), 2);
+        assert!(registry.0.lock().unwrap().is_empty());
+        assert!(!tree_alive(first_pid), "the first shell or its child is still running");
+        assert!(!tree_alive(second_pid), "the second shell or its child is still running");
+        // Nothing left: a second page load ends nothing.
+        assert_eq!(registry.end_all(), 0);
+    }
+
+    #[test]
+    fn ending_in_the_background_empties_the_registry_at_once() {
+        let registry = Registry::default();
+        let (session, pid) = sleeping_session();
+        registry.0.lock().unwrap().insert("pty-old".into(), session);
+        assert_eq!(registry.end_all_in_background(), 1);
+        // Taken before the call returned: a spawn of the new page cannot be caught by it.
+        assert!(registry.0.lock().unwrap().is_empty());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while tree_alive(pid) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(!tree_alive(pid));
+    }
 
     #[test]
     fn only_claude_runs_on_pipes() {

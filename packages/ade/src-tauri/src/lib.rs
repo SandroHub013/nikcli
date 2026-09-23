@@ -1033,6 +1033,15 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         // The window shows ADE and nothing else: see `is_own_page`. The browser
         // pane's frames are not top-level navigations and are not seen here.
         .on_navigation(move |url| is_own_page(url, dev_url.as_ref()))
+        // A new document in the window is a new page: the old one's ptys have
+        // no owner left. See `pty::Registry::end_all`. Only the top document
+        // raises this, and on the first load there is nothing to end.
+        .on_page_load(|window, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                use tauri::Manager;
+                window.state::<pty::Registry>().end_all_in_background();
+            }
+        })
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
@@ -1426,6 +1435,7 @@ pub fn run() {
                 use tauri::Manager;
                 app.state::<serve::Server>().shutdown();
                 app.state::<frontend::DevServer>().shutdown();
+                app.state::<pty::Registry>().end_all();
             }
         });
 }
