@@ -19,6 +19,7 @@ describe("the design register and the hub", () => {
       append: async (event) => {
         appended.push(event)
       },
+      tick: async () => {},
       watch: () => () => {},
     }
 
@@ -65,6 +66,7 @@ describe("the design register and the hub", () => {
       error: () => undefined,
       refresh: async () => {},
       append: async () => {},
+      tick: async () => {},
       watch: () => () => {},
     }
 
@@ -101,6 +103,7 @@ describe("«Altro giro» in the hub", () => {
       append: async (event: DesignEvent) => {
         appended.push(event)
       },
+      tick: async () => {},
       watch: () => () => {},
     } as unknown as DesignRegister
     const hub = createDesignHub({
@@ -153,6 +156,7 @@ describe("«Altro giro» with nobody to receive it", () => {
       append: async (event: DesignEvent) => {
         calls.push(`append:${(event as { again?: boolean }).again ? "again" : event.type}`)
       },
+      tick: async () => {},
       watch: () => () => {},
     } as unknown as DesignRegister
     const hub = createDesignHub({

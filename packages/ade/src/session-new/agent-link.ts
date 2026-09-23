@@ -236,6 +236,34 @@ export function acceptsLaterReport(report: LinkReport, current: string): boolean
 export interface LinkFollow extends LinkWatch {
   /** Every conversation the pane moves to, the first one included. */
   readonly onReport: (report: LinkReport) => void
+  /**
+   * How many lines have been sent into the pane so far. A change brings the
+   * check back to every {@link WATCH_MAX_GAP_MS}: `/resume` and `/clear` are
+   * lines, and nothing else writes a later report.
+   */
+  readonly linesSent?: () => number
+}
+
+/**
+ * The gaps between checks after the first report (P1-C2b), longer each time
+ * nothing is there. The report after it only follows a `/resume` or `/clear`
+ * the user types, and polling every pane every two seconds for that was 1.95
+ * invokes a second, minimised or not.
+ */
+export const FOLLOW_GAPS_MS = [2_000, 4_000, 8_000, 15_000] as const
+
+/**
+ * Wraps a session's `write` so every line it submits is counted, for
+ * {@link LinkFollow.linesSent}. The same object is returned, since panes are
+ * matched to their session by identity.
+ */
+export function countingLines<T extends { write: (data: string) => void }>(session: T, counted: () => void): T {
+  const write = session.write.bind(session)
+  session.write = (data: string) => {
+    if (data.includes("\r")) counted()
+    write(data)
+  }
+  return session
 }
 
 /**
@@ -258,13 +286,29 @@ export async function followReports(follow: LinkFollow): Promise<void> {
   if (first) follow.onReport(first)
   if (!follow.cancelled) return
 
+  let step = 0
+  let waited = 0
+  let lines = follow.linesSent?.()
   while (!follow.cancelled()) {
-    await sleep(WATCH_MAX_GAP_MS)
+    const gap = FOLLOW_GAPS_MS[step]!
+    // Short sleeps, and no read until the gap is over: a line sent meanwhile is seen within two seconds.
+    const nap = Math.min(WATCH_MAX_GAP_MS, gap - waited)
+    await sleep(nap)
     if (follow.cancelled()) return
+    waited += nap
+    const sent = follow.linesSent?.()
+    if (sent !== lines) {
+      lines = sent
+      step = 0
+    } else if (waited < gap) continue
+    waited = 0
     const text = await follow.read(follow.nonce)
-    if (text === null) continue
-    const report = parseReport(text)
-    if (report === undefined) continue
+    const report = text === null ? undefined : parseReport(text)
+    if (report === undefined) {
+      step = Math.min(step + 1, FOLLOW_GAPS_MS.length - 1)
+      continue
+    }
+    step = 0
     await follow.clear(follow.nonce)
     if (!acceptsReport(report, follow)) continue
     if (current !== undefined && !acceptsLaterReport(report, current)) continue

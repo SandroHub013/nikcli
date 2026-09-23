@@ -266,6 +266,8 @@ export interface Host {
   clearAgentLink?: (nonce: string) => Promise<void>
   /** The last turn start or end the CLI's hook wrote for this spawn, as text, or null. */
   readAgentActivity?: (nonce: string) => Promise<string | null>
+  /** The same for several spawns in one call, in order: what the mail pass reads each round. */
+  readAgentActivities?: (nonces: string[]) => Promise<(string | null)[]>
   /**
    * One CLI's hook configuration, so ADE can show its state and merge into it.
    *
@@ -808,6 +810,16 @@ export async function getHost(): Promise<Host | undefined> {
       } catch {
         // Unknown, which is what it is: never read as idle.
         return null
+      }
+    },
+
+    async readAgentActivities(nonces) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<(string | null)[]>("agent_activity_read_many", { nonces })
+      } catch {
+        // Unknown for all of them, as for one.
+        return nonces.map(() => null)
       }
     },
 

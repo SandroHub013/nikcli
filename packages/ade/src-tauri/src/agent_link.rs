@@ -151,6 +151,34 @@ pub async fn agent_activity_read(app: tauri::AppHandle, nonce: String) -> Result
     }
 }
 
+/// The most nonces one `agent_activity_read_many` reads: more panes than a grid holds.
+const ACTIVITY_BATCH_MAX: usize = 64;
+
+/// Every hooked session's activity in one call, in the order asked (P1-C2a).
+///
+/// The mail pass read each pane's file with its own `agent_activity_read`: 4.2
+/// invokes a second with seven panes open, for files of a few bytes. The same
+/// reads, one round trip. An unreadable file or a nonce that is not one is
+/// `None` at its place, as the single read's error is `null` to the frontend.
+#[tauri::command]
+pub async fn agent_activity_read_many(app: tauri::AppHandle, nonces: Vec<String>) -> Result<Vec<Option<String>>, String> {
+    if nonces.len() > ACTIVITY_BATCH_MAX {
+        return Err("troppe sessioni in una lettura".to_string());
+    }
+    let dir = link_dir(&app).ok_or_else(|| "cartella sessioni non disponibile".to_string())?;
+    Ok(read_activities(&dir, &nonces))
+}
+
+fn read_activities(dir: &Path, nonces: &[String]) -> Vec<Option<String>> {
+    nonces
+        .iter()
+        .map(|nonce| {
+            let name = nonce_file(nonce).ok()?;
+            fs::read_to_string(dir.join(name).with_extension("activity")).ok()
+        })
+        .collect()
+}
+
 /// Forgets a report the frontend has taken.
 #[tauri::command]
 pub async fn agent_link_clear(app: tauri::AppHandle, nonce: String) -> Result<(), String> {
@@ -598,6 +626,23 @@ mod tests {
         ));
         fs::create_dir_all(&dir).unwrap();
         (dir.join("settings.json"), dir.join("hooks").join(SCRIPT_NAME), dir)
+    }
+
+    #[test]
+    fn many_activities_are_read_in_one_call_each_at_its_place() {
+        let (_, _, dir) = hook_scratch("activities");
+        let busy = "aaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let idle = "bbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+        let silent = "cccccccccccccccccccccccc".to_string();
+        fs::write(dir.join(format!("{busy}.activity")), r#"{"state":"busy"}"#).unwrap();
+        fs::write(dir.join(format!("{idle}.activity")), r#"{"state":"idle"}"#).unwrap();
+        // A report is not an activity, and a path is not a nonce.
+        fs::write(dir.join(format!("{silent}.json")), "{}").unwrap();
+        let read = read_activities(&dir, &[idle, silent, "..\\..\\x".to_string(), busy]);
+        assert_eq!(
+            read,
+            vec![Some(r#"{"state":"idle"}"#.to_string()), None, None, Some(r#"{"state":"busy"}"#.to_string())]
+        );
     }
 
     #[test]

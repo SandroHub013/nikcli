@@ -1,6 +1,7 @@
 import { createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
+import type { ReadDir } from "../host/register-watch"
 import type { DesignEvent } from "./log"
 import { foldProposals, type DesignState } from "./state"
 import { appendDesignEvent, loadDesign, type DesignIo, type LoadedRegister } from "./store"
@@ -20,6 +21,8 @@ export interface DesignRegister {
   readonly error: Accessor<string | undefined>
   refresh: () => Promise<void>
   append: (event: DesignEvent) => Promise<void>
+  /** One look at the file, with a listing shared with the other register (P1-C2c). */
+  tick: (listing?: ReadDir) => Promise<void>
   watch: () => () => void
 }
 
@@ -33,13 +36,13 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   let loadedPath: string | undefined
   let stamp: string | undefined
 
-  const stampOf = async (path: string): Promise<string | undefined> => {
-    const io = await deps.io()
-    if (!io?.readDir) return undefined
+  const stampOf = async (path: string, listing?: ReadDir): Promise<string | undefined> => {
+    const readDir = listing ?? (await deps.io())?.readDir
+    if (!readDir) return undefined
     const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
     const dir = path.slice(0, slash)
     const name = path.slice(slash + 1)
-    const entries = await io.readDir(dir).catch(() => [] as DirEntry[])
+    const entries = await readDir(dir).catch(() => [] as DirEntry[])
     const entry = entries.find((item) => item.name === name)
     return entry ? `${entry.size}:${entry.modified_ms}` : "assente"
   }
@@ -76,11 +79,11 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
     await refresh()
   }
 
-  const tick = async () => {
+  const tick = async (listing?: ReadDir) => {
     const path = deps.path()
     if (path !== loadedPath) return refresh()
     if (!path) return
-    const next = await stampOf(path)
+    const next = await stampOf(path, listing)
     if (next === undefined || next !== stamp) await refresh()
   }
 
@@ -91,6 +94,7 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
     error,
     refresh,
     append,
+    tick,
     watch: () => every(REGISTER_WATCH_MS, tick, { immediate: true }),
   }
 }
