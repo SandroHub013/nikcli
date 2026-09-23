@@ -130,7 +130,7 @@ export function DesignCard(props: {
         <button type="button" data-slot="design-submit" disabled={props.control.disabled} onClick={() => props.onSubmit()}>
           {props.control.label}
         </button>
-        <button type="button" data-slot="design-ghost" data-action="again" disabled={props.busy} onClick={() => props.onAgain()}>
+        <button type="button" data-slot="design-ghost" data-action="again" disabled={props.control.disabled} onClick={() => props.onAgain()}>
           {t("design.again")}
         </button>
         <Show when={props.control.recordOnly}>

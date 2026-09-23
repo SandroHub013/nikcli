@@ -46,8 +46,10 @@ export interface DesignHub {
    */
   submit: (proposal: DesignProposal, press: "primary" | "record") => Promise<boolean>
   /**
-   * «Altro giro»: records the note as a request for another round. Like the
-   * main button, a session picked inline is chosen first.
+   * «Altro giro»: records the note as a request for another round. It goes
+   * where the main button goes: with nobody to receive it and no running
+   * session picked inline it records nothing, like «Scegli e invia»; with one
+   * picked, that session is chosen first.
    */
   again: (proposal: DesignProposal) => Promise<boolean>
   fullPreview: Accessor<FullPreviewState>
@@ -164,7 +166,10 @@ export function createDesignHub(deps: {
         busy: busyKeys().has(proposal.k),
         label: "",
       })
-      const chosen = submitSteps(control, deps.sessions(), inline(), "primary").find((step) => step.kind === "choose")
+      const steps = submitSteps(control, deps.sessions(), inline(), "primary")
+      // Nobody would read it: not a silent write to the outbox (S75 point 1).
+      if (steps.length === 0) return Promise.resolve(false)
+      const chosen = steps.find((step) => step.kind === "choose")
       if (chosen?.kind === "choose") {
         deps.choose(chosen.id)
         setInline(undefined)

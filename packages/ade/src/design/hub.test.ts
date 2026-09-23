@@ -139,3 +139,52 @@ describe("«Altro giro» in the hub", () => {
     expect((answered[0] as { choice?: string }).choice).toBeUndefined()
   })
 })
+
+describe("«Altro giro» with nobody to receive it", () => {
+  const setup = () => {
+    const calls: string[] = []
+    const register = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async (event: DesignEvent) => {
+        calls.push(`append:${(event as { again?: boolean }).again ? "again" : event.type}`)
+      },
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    const hub = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [{ id: "p1", title: "Master", running: true }],
+      choose: (id) => calls.push(`choose:${id}`),
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+    })
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Tasto",
+      variants: [{ name: "A", description: "", preview: "" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    hub.setDraft("DS1", { note: "meno vetro" })
+    return { hub, calls, proposal }
+  }
+
+  test("with the inline select empty it writes nothing, like «Scegli e invia»", async () => {
+    const { hub, calls, proposal } = setup()
+    expect(await hub.again(proposal)).toBe(false)
+    expect(calls).toEqual([])
+  })
+
+  test("with a running session picked inline it chooses it, then writes", async () => {
+    const { hub, calls, proposal } = setup()
+    hub.setInlineRecipient("p1")
+    expect(await hub.again(proposal)).toBe(true)
+    expect(calls).toEqual(["choose:p1", "append:again"])
+  })
+})

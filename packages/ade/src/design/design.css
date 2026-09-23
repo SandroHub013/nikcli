@@ -505,7 +505,9 @@
   transform: var(--ade-press);
 }
 
-[data-slot="design-submit"]:disabled {
+/* A ghost button is spent like the main one: «Altro giro» off with «Scegli e invia», as Decisions already does. */
+[data-slot="design-submit"]:disabled,
+[data-slot="design-ghost"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -522,7 +524,7 @@
   cursor: pointer;
 }
 
-[data-slot="design-ghost"]:hover {
+[data-slot="design-ghost"]:hover:not(:disabled) {
   background: var(--ade-hover);
   color: var(--ade-text);
 }
