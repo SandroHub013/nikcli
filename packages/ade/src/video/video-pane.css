@@ -13,9 +13,9 @@
  * (index.css). What is this pane's own is the size container: the header's
  * queries read the pane's width, and the shell's `flex: 1` is what lets a
  * size container still grow into its cell instead of collapsing to its
- * content. No border, unlike before S67.2: the grid's one-pixel gap is the
- * line between two tiles, and this pane's hairline doubled it — the visible
- * symptom of five panes each rewriting the same frame.
+ * content. No border, unlike before S67.2: every other pane is edged by its
+ * corners and shadow against the gutter, and this pane's hairline and focus
+ * glow were what was left of its own copy of the frame.
  */
 [data-component="video-pane"] {
   container-type: inline-size;

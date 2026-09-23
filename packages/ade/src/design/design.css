@@ -543,14 +543,13 @@
 }
 
 /*
- * The shell (index.css) lays the tile out; design keeps the two differences
- * it was built with and says both here: the page colour as ground, and no
- * focus line — it has never drawn one, and the shell's default would add it
- * silently. Delete the variable to adopt the standard line.
+ * The shell (index.css) lays the tile out and draws the focus line; design
+ * keeps the one difference it was built with, the page colour as ground.
+ * It had no focus line before the shell, but by omission: the root sets
+ * `data-focused` like every other pane.
  */
 [data-component="design-pane"] {
   --ade-pane-ground: var(--ade-bg);
-  --ade-pane-focus: none;
 }
 
 [data-slot="design-body"] {

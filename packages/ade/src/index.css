@@ -578,14 +578,14 @@ body,
 /*
  * Whatever sits in a cell — a session, a file, a browser, a video, a model,
  * a simulator, decisions, design, a plugin — gets the whole shell: the
- * column flex that fills the tile, the ground, framelessness (the grid's
- * one-pixel gap is the only line between two tiles, and a border here would
- * double it), and the focus line painted inside the first pixel row. On the
- * cell's child rather than on each component, so a pane kind added tomorrow
- * is laid out and focusable before anybody remembers to copy its fifteen
- * lines — five panes had copied them and the video had diverged into a
- * second border against the gap. What the shell contains is still each
- * component's own business: container queries, stages, status edges.
+ * column flex that fills the tile, the ground, framelessness (a tile is
+ * edged by its corners and shadow against the gutter, not by a line), and
+ * the focus line painted inside the first pixel row. On the cell's child
+ * rather than on each component, so a pane kind added tomorrow is laid out
+ * and focusable before anybody remembers to copy its fifteen lines — five
+ * panes had copied them, and the copies drifted: the video alone kept a
+ * hairline border and a focus of its own. What the shell contains is still
+ * each component's own business: container queries, stages, status edges.
  *
  * The ground is the one thing that legitimately differs — the session is the
  * terminal's colour, design sits on the page colour — so it arrives as
@@ -595,7 +595,7 @@ body,
  * Focus likewise: `--ade-pane-focus: none` opts a pane out of the line
  * rather than the shell growing a list of exceptions. The session opts out
  * because its focus is a ring on the shell (the gutter gives it room
- * outside), design has never drawn one, and both say so where they live.
+ * outside), and says so where it lives.
  */
 [data-slot="grid-cell"] > [data-component] {
   position: relative;
