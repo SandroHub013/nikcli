@@ -21,6 +21,14 @@ export const CLEAN_ATTRIBUTE = "data-ade-clean"
 
 let rules: RegExp[] | undefined
 
+/*
+ * How a password is named in a shell, and only there: `DB_PASS`, `MYSQL_PWD`.
+ * Not in `SECRET_WORDS`, which also picks the fields to cover by name, where
+ * `pass` would cover «passo» and «bypass» too. Here it is a whole name or the
+ * last word of one, so `bypass=1` stays clean.
+ */
+const TERMINAL_PASSWORD_NAMES = ["passwd", "pass", "pwd"]
+
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 /*
@@ -38,6 +46,9 @@ function secretRules(): RegExp[] {
     // A credential's name given a value: `API_KEY=…`, `token: …`, `Authorization: Bearer …`.
     new RegExp(`[A-Za-z0-9_-]*(?:${words})[A-Za-z0-9_-]*["']?\\s*[:=]\\s*\\S`, "i"),
     new RegExp(`(?:^|[^A-Za-z0-9_])(?:${exact})["']?\\s*[:=]\\s*\\S`, "i"),
+    new RegExp(`(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9_-]*_)?(?:${TERMINAL_PASSWORD_NAMES.join("|")})["']?\\s*[:=]\\s*\\S`, "i"),
+    // A password inside a URL: `postgresql://admin:…@`, `https://user:…@github.com`.
+    /[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/i,
     /-----BEGIN/,
   ]
   return rules

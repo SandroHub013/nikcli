@@ -4,6 +4,8 @@ import { FileView } from "./file-view"
 import { flashRefusal, viewKind } from "../surface/open-route"
 import "./file-pane.css"
 import { t } from "../i18n"
+import { coveringSecrets } from "../record/sensitive"
+import { createFileCover } from "./sensitive-file"
 
 export interface FilePaneProps {
   path: string
@@ -49,6 +51,17 @@ export function FilePane(props: FilePaneProps) {
    */
   const [asText, setAsText] = createSignal(kind() === "markdown" || Boolean(props.goTo))
   const switchable = () => kind() === "svg" || kind() === "markdown"
+
+  /*
+   * During a take the whole view is covered when the file holds a secret: see
+   * `sensitive-file.ts`. Judged at once when the text arrives, the path changes
+   * or the take begins; only typing into a text already shown is throttled.
+   */
+  const sensitive = createFileCover(() => ({
+    path: props.path,
+    text: props.buffer?.draft,
+    covering: coveringSecrets(),
+  }))
 
   /* A link the preview refused says why here, for a moment, like «Copiato» on a session: this pane has no transcript. */
   const [note, setNote] = createSignal<string>()
@@ -108,7 +121,8 @@ export function FilePane(props: FilePaneProps) {
         </div>
       </header>
 
-      <div data-slot="pane-editor">
+      {/* The header stays usable: only what the file shows is covered. */}
+      <div data-slot="pane-editor" data-sensitive={sensitive() ? "" : undefined}>
         <FileView
           path={props.path}
           kind={kind()}

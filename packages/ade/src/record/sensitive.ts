@@ -50,6 +50,7 @@
  * terminal has one now (D68): every row blurred unless judged clean, with
  * the same words and prefixes as here — see `terminal/recording-cover.ts`.
  */
+import { createSignal } from "solid-js"
 import { coverTerminals } from "../terminal/registry"
 
 /** The zones that hold credentials. Everything inside is covered. */
@@ -109,6 +110,11 @@ export const SENSITIVE_SELECTOR = SENSITIVE_PARTS.join(", ")
 
 export const RECORDING_ATTRIBUTE = "data-ade-recording"
 
+const [covering, setCovering] = createSignal(false)
+
+/** Whether a take is covering secrets now: for the covers that need to judge, like a file pane's. */
+export const coveringSecrets = covering
+
 /**
  * Covers or uncovers the secret fields and the terminals; the user sees them
  * covered too while filming.
@@ -117,4 +123,5 @@ export function coverSecrets(on: boolean, root: HTMLElement = document.documentE
   if (on) root.setAttribute(RECORDING_ATTRIBUTE, "")
   else root.removeAttribute(RECORDING_ATTRIBUTE)
   coverTerminals(on)
+  setCovering(on)
 }
