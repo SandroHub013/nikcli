@@ -199,7 +199,8 @@ import {
   updatesAnsweredBy,
   formatElapsed,
   formatTimeNote,
-  timeNoteDue,
+  timeNoteFor,
+  lineIsTaken,
   formatUpdate,
   parseActivity,
   keptActivity,
@@ -244,6 +245,7 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { createLineQueue } from "../session/line-queue"
+import { lineGiven, pressEnter, typeThenEnter, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -1520,9 +1522,10 @@ export function Workbench() {
   /*
    * One line at a time per session (`session/line-queue.ts`): the next line
    * starts once the one before has had its Enter, or two texts share one
-   * Enter. With `unlessTyping`, the draft check is made in the queue, at the
-   * moment of writing, and the line is dropped (false) if the user has begun
-   * one since it was queued: the caller then does not count it as given.
+   * Enter. With `unlessBusy`, the check is made in the queue, at the moment of
+   * writing, and the line is dropped (false) if the user has begun a draft or
+   * a permission prompt has opened since it was queued (`lineIsTaken`): the
+   * caller then does not count it as given.
    */
   const lineQueue = createLineQueue()
   /*
@@ -1535,16 +1538,29 @@ export function Workbench() {
     if (now && (now.cols !== bornAt?.cols || now.rows !== bornAt?.rows)) session.resize(now.cols, now.rows)
   }
 
-  const typeLine = (session: SpawnedSession, text: string, options: { unlessTyping?: boolean } = {}): Promise<boolean> => {
+  /*
+   * True when the text reached the input box, with its Enter or without
+   * (`lineGiven`): a line held back by a permission prompt is given all the
+   * same, and typing it again would put it there twice.
+   */
+  const typeLine = async (session: SpawnedSession, text: string, options: { unlessBusy?: boolean } = {}): Promise<boolean> =>
+    lineGiven(await typeLineOutcome(session, text, options))
+
+  const typeLineOutcome = (session: SpawnedSession, text: string, options: { unlessBusy?: boolean } = {}): Promise<LineOutcome> => {
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
-    const job = async () => {
-      if (options.unlessTyping && paneId !== undefined && isTyping(records.typed.get(paneId))) return false
+    const job = async (): Promise<LineOutcome> => {
+      if (
+        options.unlessBusy &&
+        paneId !== undefined &&
+        lineIsTaken({ typing: isTyping(records.typed.get(paneId)), permissionPending: Boolean(permissions()[paneId]) })
+      )
+        return "not-typed"
       return typeLineNow(session, text)
     }
     return paneId === undefined ? job() : lineQueue(paneId, job)
   }
 
-  const typeLineNow = async (session: SpawnedSession, text: string): Promise<boolean> => {
+  const typeLineNow = async (session: SpawnedSession, text: string): Promise<LineOutcome> => {
     const line = asOneLine(text)
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
@@ -1564,21 +1580,31 @@ export function Workbench() {
       panels.typed(paneId, line)
     }
     const typedAt = Date.now()
-    session.write(bracketed ? `${ESC}[200~${line}${ESC}[201~` : line)
-    if (bracketed) {
-      while (!pasteSettled({ typedAt, lastOutputAt: lastOutputAt.get(paneId), now: Date.now() })) {
-        if (![...running.values()].includes(session)) return false
-        await new Promise((resolve) => setTimeout(resolve, 25))
-      }
-    } else await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length)))
-    if (![...running.values()].includes(session)) return false
-    session.write("\r")
-    if (paneId !== undefined) {
+    const alive = () => [...running.values()].includes(session)
+    /*
+     * The Enter is pressed only if no permission prompt opened during the
+     * wait (B1 bis): it would confirm the selected choice. The text stays in
+     * the box, and the pane says why it was not sent.
+     */
+    const outcome = await typeThenEnter({
+      text: bracketed ? `${ESC}[200~${line}${ESC}[201~` : line,
+      write: (data) => session.write(data),
+      wait: async () => {
+        if (!bracketed) return void (await new Promise((resolve) => setTimeout(resolve, Math.min(2500, SUBMIT_DELAY_MS + line.length))))
+        while (alive() && !pasteSettled({ typedAt, lastOutputAt: lastOutputAt.get(paneId), now: Date.now() })) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+      },
+      alive,
+      permissionOpen: () => paneId !== undefined && Boolean(permissions()[paneId]),
+    })
+    if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
     }
-    return true
+    if (paneId !== undefined && outcome === "typed-no-enter") appendLine(paneId, t("note.enterHeld"), "note")
+    return outcome
   }
 
   const ESC = String.fromCharCode(27)
@@ -1631,7 +1657,8 @@ export function Workbench() {
           continue
         }
         if (check === "resend") {
-          session.write("\r")
+          // A prompt may have opened during the read above: its Enter is not ours to press (B1 bis).
+          if (!pressEnter((data) => session.write(data), () => Boolean(permissions()[paneId]))) return
           appendLine(paneId, t("note.resent"), "note")
           break
         }
@@ -1904,17 +1931,24 @@ export function Workbench() {
   ): Promise<boolean> => {
     const session = running.get(paneId)
     if (!session) return false
-    if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return typeLine(session, line)
+    // Given even when a prompt held its Enter back; the sender is told it is waiting.
+    const given = (outcome: LineOutcome) => {
+      if (outcome === "typed-no-enter" && meta.from) {
+        appendLine(meta.from, t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId), "note")
+      }
+      return lineGiven(outcome)
+    }
+    if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return given(await typeLineOutcome(session, line))
     const at = Date.now()
     const entry: InboxEntry = { id: meta.id, paneId, name: inboxName(meta.id, at), from: meta.from, kind: meta.kind, chars: full.length, at, ringAt: at, rings: 0 }
     const stored = await host.mailboxInboxPut(paneId, entry.name, full).then(
       () => true,
       () => false,
     )
-    if (!stored) return typeLine(session, line)
+    if (!stored) return given(await typeLineOutcome(session, line))
     inboxPending.push(entry)
     saveInbox()
-    return typeLine(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length))
+    return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)))
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -2413,14 +2447,14 @@ export function Workbench() {
        * the reminders. Information for whoever works: it closes nothing and
        * leaves the reminders below as they were.
        */
-      // Not while the user has a line begun there: not given either, so it comes on a later round.
-      const timeNote = session ? timeNoteDue(request, now, isTyping(records.typed.get(request.to))) : undefined
+      // Not over a line begun there, nor over a permission prompt (B1): not given either, so it comes on a later round.
+      const timeNote = session ? timeNoteFor(request, now, targetOf(request)) : undefined
       if (session && timeNote) {
         // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
         const before = request.timeNotes
         request.timeNotes = timeNote
         saveRequests()
-        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessTyping: true }).then((typed) => {
+        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessBusy: true }).then((typed) => {
           if (typed || request.timeNotes !== timeNote) return
           request.timeNotes = before
           saveRequests()
@@ -2441,7 +2475,7 @@ export function Workbench() {
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
         saveRequests()
-        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessTyping: true }).then((typed) => {
+        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessBusy: true }).then((typed) => {
           if (typed) return appendLine(request.to, t("note.nudged", request.id), "note")
           if (request.nudgedAt !== now) return
           request.nudges = before.nudges

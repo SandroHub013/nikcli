@@ -868,6 +868,8 @@ export const en: Messages = {
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
+  "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
+  "note.enterHeldFor": (to: string) => `Typed to ${to}, Enter not pressed: a permission prompt is open`,
   "note.inboxLost": (id) => `Message ${id} vanished from the inbox before it was read: the sender is told`,
   "note.rang": (rings) => `Reminder sent again: message not read yet (${rings}/3)`,
   "note.mailWaiting": (what) => `Mail waiting (the session is typing): ${what}`,
