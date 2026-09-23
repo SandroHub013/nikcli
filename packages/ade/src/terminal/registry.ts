@@ -138,15 +138,20 @@ function isTranslucent(theme: ITheme): boolean {
 /**
  * The contrast xterm enforces between a cell's text and its background.
  *
- * 4.5 in the light theme only: Claude Code draws in the truecolour of its own
- * dark theme, and on ADE's light background its text measured 1.83:1 («❯ No,
- * exit»); ADE had never set the option (audit 0.7.7, Architect). Dark keeps 1,
- * because those colours were chosen for that background. Glass keeps 1,
- * because its background is transparent: xterm would compute the contrast
- * against a colour that is not the one on screen.
+ * 4.5 in the light theme and in the dark one. Claude Code draws in the
+ * truecolour of the theme it started in, not ADE's: on ADE's light background
+ * its text measured 1.83:1 («❯ No, exit»), and in dark its prompt measured
+ * 1.92:1 in auto mode after starting while ADE was light. ADE had never set
+ * the option (audit 0.7.7, Architect). xterm only changes colours below the
+ * threshold, so the ones already readable stay as they are.
+ *
+ * Glass keeps 1: its background is transparent, and xterm would compute the
+ * contrast against the background colour it was given, not the window seen
+ * through it — the correction would be a guess, and could make text worse.
+ * An unknown theme keeps 1 too: nothing to measure against.
  */
 export function contrastFor(theme: string | undefined): number {
-  return theme === "light" ? 4.5 : 1
+  return theme === "light" || theme === "dark" ? 4.5 : 1
 }
 
 /** The theme ADE's shell is drawn in now, as `data-theme` on it says. */

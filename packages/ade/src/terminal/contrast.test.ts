@@ -3,9 +3,10 @@ import type { ITheme } from "@xterm/xterm"
 import { contrastFor, paintTerminals } from "./registry"
 
 describe("contrastFor (audit 0.7.7, Architect)", () => {
-  it("asks xterm for 4.5:1 in the light theme only", () => {
+  it("asks xterm for 4.5:1 in light and dark, not in glass", () => {
     expect(contrastFor("light")).toBe(4.5)
-    expect(contrastFor("dark")).toBe(1)
+    // Claude's prompt measured 1.92:1 in dark, drawn for the light theme it started in.
+    expect(contrastFor("dark")).toBe(4.5)
     // The glass background is transparent: xterm would measure against a colour that is not on screen.
     expect(contrastFor("glass")).toBe(1)
     expect(contrastFor(undefined)).toBe(1)
@@ -32,6 +33,6 @@ describe("paintTerminals", () => {
     }
 
     paintTerminals(registry, { background: "rgb(16, 16, 16)" }, "dark")
-    for (const session of registry) expect(session.terminal.options.minimumContrastRatio).toBe(1)
+    for (const session of registry) expect(session.terminal.options.minimumContrastRatio).toBe(4.5)
   })
 })
