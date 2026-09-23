@@ -283,6 +283,8 @@ export interface Host {
    * CLI's list of its live sessions, which native mail delivery is routed on.
    */
   claudeAgents?: (cwd?: string) => Promise<RunResult>
+  /** The first line of `claude --version`, or null: which hook form Claude Code can read (C3). */
+  claudeVersion?: () => Promise<string | null>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
@@ -394,6 +396,11 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
       }
+    },
+
+    async claudeVersion() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<string | null>("claude_version").catch(() => null)
     },
 
     async deleteBotFile(path) {
