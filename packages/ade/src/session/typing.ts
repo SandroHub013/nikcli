@@ -17,6 +17,8 @@
  * and can be tested without mounting anything.
  */
 
+import type { Activity } from "./mailbox"
+
 /**
  * Everything a terminal or a line discipline can read as "the line ends here",
  * collapsed to a single space.
@@ -67,3 +69,24 @@ export function pasteSettled(input: { typedAt: number; lastOutputAt?: number; no
   if (now - typedAt >= PASTE_SETTLE_MAX_MS) return true
   return lastOutputAt !== undefined && lastOutputAt > typedAt && now - lastOutputAt >= PASTE_QUIET_MS
 }
+
+export const CONFIRM_MARGIN_MS = 2000
+
+export function confirmDeadline(sentAt: number, hookTimeoutSeconds: number): number {
+  return sentAt + hookTimeoutSeconds * 1000 + CONFIRM_MARGIN_MS
+}
+
+export type SubmitCheck = "confirmed" | "queued" | "wait" | "resend"
+
+export function submitCheck(input: {
+  typedAt: number
+  activity: Activity | undefined
+  now: number
+  deadline: number
+}): SubmitCheck {
+  if (input.activity && input.activity.at >= input.typedAt) return "confirmed"
+  if (input.activity?.state === "busy") return "queued"
+  if (input.now < input.deadline) return "wait"
+  return "resend"
+}
+

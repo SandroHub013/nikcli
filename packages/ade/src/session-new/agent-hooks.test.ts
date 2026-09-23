@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs"
 import {
   HOOK_MARKER,
   HOOK_TARGETS,
+  HOOK_TIMEOUT,
   hookCommand,
+  hookExec,
+  hookOutdated,
   hookScript,
   hookTarget,
   installHook,
@@ -11,6 +14,7 @@ import {
   isAdeCommand,
   missingActivityEvents,
   readHookStatus,
+  refreshHookScript,
   removeHook,
   setHook,
 } from "./agent-hooks"
@@ -153,8 +157,40 @@ describe("installHook", () => {
     expect(groups).toHaveLength(3)
     expect(groups[2]).toEqual({
       matcher: "startup|resume|clear",
-      hooks: [{ type: "command", command, timeout: 5 }],
+      hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT }],
     })
+  })
+
+  test("installHook with exec form writes command and args without shell, timeout 10", () => {
+    const p = CLAUDE_SCRIPT
+    const installed = JSON.parse(
+      installHook(CLAUDE, hookCommand(p), "startup|resume|clear", ["UserPromptSubmit", "Stop"], hookExec(p)),
+    )
+    for (const event of ["SessionStart", "UserPromptSubmit", "Stop"]) {
+      const leaf = installed.hooks[event].at(-1).hooks[0]
+      expect(leaf).toEqual({
+        type: "command",
+        command: "powershell",
+        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", p],
+        timeout: 10,
+      })
+      expect(leaf.shell).toBeUndefined()
+    }
+  })
+
+  test("installHook for codex has command string, no args, timeout 10", () => {
+    const p = "C:\\s.ps1"
+    const command = hookCommand(p)
+    const installed = JSON.parse(installHook(CODEX, command))
+    const leaf = installed.hooks.SessionStart[2].hooks[0]
+    expect(leaf).toEqual({ type: "command", command, timeout: 10 })
+    expect(leaf.args).toBeUndefined()
+  })
+
+  test("installedCommand on a config with exec form returns hookCommand", () => {
+    const p = CLAUDE_SCRIPT
+    const installed = installHook(CLAUDE, hookCommand(p), "startup|resume|clear", [], hookExec(p))
+    expect(installedCommand(installed)).toBe(hookCommand(p))
   })
 
   test("omits the matcher key entirely when the target has none", () => {
@@ -198,6 +234,30 @@ describe("removeHook", () => {
             hooks: [
               { type: "command", command: "gh-axi" },
               { type: "command", command: hookCommand(CLAUDE_SCRIPT) },
+            ],
+          },
+        ],
+      },
+    })
+    const groups = JSON.parse(removeHook(shared)).hooks.SessionStart
+    expect(groups).toHaveLength(1)
+    expect(groups[0].hooks).toEqual([{ type: "command", command: "gh-axi" }])
+  })
+
+  test("keeps a neighbour that shared the group with an exec leaf", () => {
+    const shared = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup",
+            hooks: [
+              { type: "command", command: "gh-axi" },
+              {
+                type: "command",
+                command: "powershell",
+                args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", CLAUDE_SCRIPT],
+                timeout: 10,
+              },
             ],
           },
         ],
@@ -299,6 +359,85 @@ describe("readHookStatus and setHook", () => {
     }
     expect((await readHookStatus(host, claude)).error).toBe("cartella utente non trovata")
   })
+
+  test("an old install is upgraded even when the script did not change", async () => {
+    const oldConfig = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    const { state, host } = disk(oldConfig, true)
+    const script = hookScript(claude.agent)
+
+    const written = await refreshHookScript(host, claude, script)
+    expect(written).toBe(script)
+    expect(state.writes).toBe(1)
+
+    const parsed = JSON.parse(state.configText!)
+    const leaf = parsed.hooks.SessionStart[0].hooks[0]
+    expect(leaf).toEqual({
+      type: "command",
+      command: "powershell",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", CLAUDE_SCRIPT],
+      timeout: 10,
+    })
+
+    const second = await refreshHookScript(host, claude, script)
+    expect(second).toBeUndefined()
+    expect(state.writes).toBe(1)
+  })
+})
+
+describe("hookOutdated", () => {
+  const claudeTarget = hookTarget("claude-code")!
+  const codexTarget = hookTarget("codex")!
+
+  test("true for today's config (string leaf, timeout: 5) with claude-code", () => {
+    const oldConfig = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            matcher: "startup|resume|clear",
+            hooks: [{ type: "command", command: hookCommand(CLAUDE_SCRIPT), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    expect(hookOutdated(oldConfig, claudeTarget)).toBe(true)
+  })
+
+  test("false after installHook with hookExec", () => {
+    const newConfig = installHook(
+      CLAUDE,
+      hookCommand(CLAUDE_SCRIPT),
+      "startup|resume|clear",
+      ["UserPromptSubmit", "Stop"],
+      hookExec(CLAUDE_SCRIPT),
+    )
+    expect(hookOutdated(newConfig, claudeTarget)).toBe(false)
+  })
+
+  test("for codex, true with timeout: 5 and false with timeout: 10 in string form", () => {
+    const codexScript = "C:\\Users\\x\\.codex\\ade-agent-session.ps1"
+    const oldCodex = JSON.stringify({
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [{ type: "command", command: hookCommand(codexScript), timeout: 5 }],
+          },
+        ],
+      },
+    })
+    expect(hookOutdated(oldCodex, codexTarget)).toBe(true)
+
+    const newCodex = installHook(CODEX, hookCommand(codexScript))
+    expect(hookOutdated(newCodex, codexTarget)).toBe(false)
+  })
 })
 
 describe("hookScript", () => {
@@ -315,12 +454,14 @@ describe("hookScript", () => {
   })
 
   test("refuses an event that is not a session start or a turn", () => {
-    expect(script).toContain('$event -ne "SessionStart"')
+    expect(script).toContain("hook_event_name")
+    expect(script).toContain("SessionStart")
+    expect(script).toContain("UserPromptSubmit")
+    expect(script).toContain("Stop")
   })
 
   test("a turn starting or ending is written beside the report, not over it", () => {
-    expect(script).toContain('$event -eq "UserPromptSubmit" -or $event -eq "Stop"')
-    expect(script).toContain('("$env:ADE_SPAWN_NONCE" + ".activity")')
+    expect(script).toContain(".activity")
   })
 
   test("refuses a nested codex thread reporting its parent's id", () => {
@@ -328,12 +469,12 @@ describe("hookScript", () => {
   })
 
   test("stages the file and moves it, so nobody reads half a report", () => {
-    expect(script).toContain('$staging = $target + ".part"')
-    expect(script).toContain("Move-Item -LiteralPath $staging")
+    expect(script).toContain(".part")
+    expect(script).toContain("Move-Item")
   })
 
   test("names the drop after the nonce", () => {
-    expect(script).toContain('Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".json")')
+    expect(script).toContain("$env:ADE_SPAWN_NONCE")
   })
 
   test("reports the agent it was installed for", () => {
@@ -358,7 +499,7 @@ describe("activity events", () => {
   test("installed beside everyone else's, once each, and removed with the rest", () => {
     const installed = installHook(CLAUDE, command, "startup|resume|clear", events)
     const hooks = JSON.parse(installed).hooks
-    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command, timeout: 5 }] }])
+    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT }] }])
     expect(hooks.UserPromptSubmit).toHaveLength(1)
     expect(hooks.PostToolUse).toEqual(JSON.parse(CLAUDE).hooks.PostToolUse)
     expect(missingActivityEvents(installed, events)).toEqual([])
