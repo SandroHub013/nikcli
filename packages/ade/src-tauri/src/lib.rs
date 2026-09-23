@@ -1023,8 +1023,16 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
         }
     }
+    // The dev server is ADE's page only in a debug build; a release has none.
+    #[cfg(debug_assertions)]
+    let dev_url = app.config().build.dev_url.clone();
+    #[cfg(not(debug_assertions))]
+    let dev_url: Option<tauri::Url> = None;
     let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title(title)
+        // The window shows ADE and nothing else: see `is_own_page`. The browser
+        // pane's frames are not top-level navigations and are not seen here.
+        .on_navigation(move |url| is_own_page(url, dev_url.as_ref()))
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
@@ -1119,6 +1127,62 @@ pub(crate) fn own_origin(dev_url: Option<&tauri::Url>) -> String {
         .map(|url| url.origin().ascii_serialization())
         .filter(|origin| origin != "null")
         .unwrap_or_else(|| "http://tauri.localhost".to_string())
+}
+
+/// Whether the main window may go to `url`: ADE's own page and nothing else.
+///
+/// Tauri's scheme in a release (`tauri://localhost`, and `http(s)://tauri.localhost`
+/// on Windows), plus the dev server's origin in development. Every other
+/// top-level navigation is refused. A click in a markdown preview once took
+/// the whole window to the page a README's form named; whatever lets a page
+/// do that next, the window stays ADE.
+pub(crate) fn is_own_page(url: &tauri::Url, dev_url: Option<&tauri::Url>) -> bool {
+    match url.scheme() {
+        "tauri" => url.host_str() == Some("localhost"),
+        "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
+        _ => dev_url.is_some_and(|dev| {
+            let origin = dev.origin();
+            origin.is_tuple() && origin == url.origin()
+        }),
+    }
+}
+
+#[cfg(test)]
+mod own_page_tests {
+    use super::is_own_page;
+
+    fn url(text: &str) -> tauri::Url {
+        tauri::Url::parse(text).unwrap()
+    }
+
+    #[test]
+    fn a_release_allows_only_tauris_own_scheme() {
+        for allowed in ["tauri://localhost/", "tauri://localhost/index.html", "http://tauri.localhost/", "https://tauri.localhost/a?b"] {
+            assert!(is_own_page(&url(allowed), None), "{allowed}");
+        }
+        for refused in [
+            "https://example.com/form?",
+            "http://localhost:5177/",
+            "http://tauri.localhost.example.com/",
+            "tauri://example.com/",
+            "file:///C:/x",
+            "about:blank",
+            "data:text/html,x",
+        ] {
+            assert!(!is_own_page(&url(refused), None), "{refused}");
+        }
+    }
+
+    #[test]
+    fn development_adds_the_dev_server_origin_only() {
+        let dev = url("http://localhost:5177");
+        assert!(is_own_page(&url("http://localhost:5177/"), Some(&dev)));
+        assert!(is_own_page(&url("http://localhost:5177/src/index.html?x"), Some(&dev)));
+        assert!(is_own_page(&url("tauri://localhost/"), Some(&dev)));
+        assert!(!is_own_page(&url("http://localhost:5178/"), Some(&dev)));
+        assert!(!is_own_page(&url("https://localhost:5177/"), Some(&dev)));
+        assert!(!is_own_page(&url("https://example.com/"), Some(&dev)));
+    }
 }
 
 #[cfg(test)]
