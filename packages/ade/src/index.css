@@ -1369,10 +1369,12 @@ html[data-ade-recording] .xterm .composition-view {
 
 /*
  * The same text where no reader reaches it: the transcript a session without
- * a live terminal shows instead, and the screenshots in the tray, which can
- * hold a terminal in the clear. Blurred whole for the length of a take.
+ * a live terminal shows instead, and the screenshots, which can hold a
+ * terminal in the clear: the tray's thumbnails and the full-size viewer, which
+ * is the tray's sibling and not its child, draw the same `shot-image`.
+ * Blurred whole for the length of a take.
  */
 html[data-ade-recording] [data-slot="pane-transcript"],
-html[data-ade-recording] [data-component="shot-tray"] [data-slot="shot-image"] {
+html[data-ade-recording] [data-slot="shot-image"] {
   filter: blur(0.8em);
 }

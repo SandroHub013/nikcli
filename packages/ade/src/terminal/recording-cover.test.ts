@@ -174,7 +174,8 @@ describe("where no reader reaches, during a take (D68, Architect)", () => {
     const rule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="pane-transcript"]`))
     const header = rule.slice(0, rule.indexOf("{"))
     expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] [data-slot="pane-transcript"]`)
-    expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] [data-component="shot-tray"] [data-slot="shot-image"]`)
+    // Not scoped to the tray: the full-size viewer is its sibling, and draws the same image.
+    expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] [data-slot="shot-image"]`)
     expect(rule.slice(rule.indexOf("{"), rule.indexOf("}"))).toMatch(/filter:\s*blur\(0\.8em\)/)
   })
 
@@ -184,6 +185,15 @@ describe("where no reader reaches, during a take (D68, Architect)", () => {
     expect(pane).toContain('data-slot="pane-transcript"')
     expect(tray).toContain('data-component="shot-tray"')
     expect(tray).toContain('data-slot="shot-image"')
+  })
+
+  test("the full-size viewer draws its screenshot with the same shot-image, so the rule reaches it", () => {
+    const tray = readFileSync(join(import.meta.dir, "..", "shots", "tray.tsx"), "utf8")
+    const viewer = tray.slice(tray.indexOf('data-component="shot-viewer"'))
+    expect(tray).toContain('data-component="shot-viewer"')
+    // The viewer renders the same <Thumb>, whose <img> is the shot-image.
+    expect(viewer).toMatch(/<Thumb/)
+    expect(tray.slice(tray.indexOf("function Thumb"), tray.indexOf("function Thumb") + 1200)).toContain('data-slot="shot-image"')
   })
 })
 
