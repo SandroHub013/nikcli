@@ -233,11 +233,12 @@ describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
     })
   })
 
-  test("file-view uses margin auto on child instead of justify-content center to avoid top clipping on overflow (Punto 11)", () => {
+  test("file-view uses safe center alignment instead of margin auto on children (Punto 11 bis)", () => {
     const css = readFileSync(join(import.meta.dir, "file-pane.css"), "utf8")
     const fileViewBlock = css.slice(css.indexOf('[data-slot="file-view"]'))
     const fileViewRule = fileViewBlock.slice(0, fileViewBlock.indexOf("}"))
-    expect(fileViewRule).not.toContain("justify-content: center")
-    expect(css).toMatch(/\[data-slot="file-view"\]\s*>\s*\*[^}]*margin:\s*auto/)
+    expect(fileViewRule).toContain("justify-content: safe center")
+    expect(fileViewRule).toContain("align-items: safe center")
+    expect(css).not.toMatch(/\[data-slot="file-view"\]\s*>\s*\*[^}]*margin:\s*auto/)
   })
 })
