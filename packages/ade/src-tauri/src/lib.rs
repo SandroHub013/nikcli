@@ -972,7 +972,7 @@ async fn ade_open_external(app: tauri::AppHandle, url: String) -> Result<(), Str
 
 #[cfg(test)]
 mod external_url_tests {
-    use super::is_external_url;
+    use super::{is_external_url, webview_on_screen};
 
     #[test]
     fn only_web_urls_reach_the_system_browser() {
@@ -984,6 +984,14 @@ mod external_url_tests {
         let long = format!("https://{}", "a".repeat(2049 - "https://".len()));
         assert_eq!(long.len(), 2049);
         assert!(!is_external_url(&long));
+    }
+
+    #[test]
+    fn the_page_is_on_screen_only_while_the_window_is_shown_and_not_minimised() {
+        assert!(webview_on_screen(true, false));
+        assert!(!webview_on_screen(true, true));
+        assert!(!webview_on_screen(false, false));
+        assert!(!webview_on_screen(false, true));
     }
 }
 
@@ -1193,6 +1201,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         let origin = own_origin(None);
         browse::refuse_ade_in_frames(&window, origin);
         allow_own_microphone(&window);
+        follow_window_visibility(&window);
     }
 
     window.show()?;
@@ -1293,6 +1302,56 @@ mod own_origin_tests {
         assert_eq!(own_origin(Some(&dev)), "http://localhost:5270");
         assert_eq!(own_origin(None), "http://tauri.localhost");
     }
+}
+
+/// Whether the page should count as on screen: the window is shown and not minimised.
+fn webview_on_screen(visible: bool, minimized: bool) -> bool {
+    visible && !minimized
+}
+
+/*
+ * A minimised ADE kept working as hard as a focused one (P1-C1): WebView2 is
+ * not told the window went away, so the page stayed `visible` and Chromium
+ * slowed neither its timers nor its drawing, and every poll in ADE that
+ * pauses while hidden (`host/every.ts`) never did. The controller is told
+ * instead: `put_IsVisible(false)` when the window is minimised or hidden, and
+ * true again when it comes back, so the page gets `visibilitychange`.
+ *
+ * Minimising and restoring arrive as a move and a resize; the answer is read
+ * from the window then, and the controller only touched when it changes.
+ */
+#[cfg(windows)]
+fn follow_window_visibility(window: &tauri::WebviewWindow) {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::sync::Arc;
+
+    // 0 unknown, 1 on screen, 2 off screen.
+    let applied = Arc::new(AtomicU8::new(0));
+    let target = window.clone();
+    window.on_window_event(move |event| {
+        if !matches!(
+            event,
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Focused(_)
+        ) {
+            return;
+        }
+        let on_screen = webview_on_screen(
+            target.is_visible().unwrap_or(true),
+            target.is_minimized().unwrap_or(false),
+        );
+        let state = if on_screen { 1 } else { 2 };
+        if applied.swap(state, Ordering::SeqCst) == state {
+            return;
+        }
+        let result = target.with_webview(move |webview| unsafe {
+            if let Err(error) = webview.controller().SetIsVisible(on_screen) {
+                eprintln!("ADE: visibilità della webview non cambiata: {error}");
+            }
+        });
+        if let Err(error) = result {
+            eprintln!("ADE: webview non raggiunta per la visibilità: {error}");
+        }
+    });
 }
 
 #[cfg(windows)]

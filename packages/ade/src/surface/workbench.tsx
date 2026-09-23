@@ -1,7 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
-import { every } from "../host/every"
+import { every, pageHidden, watchDue } from "../host/every"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
@@ -1497,6 +1497,8 @@ export function Workbench() {
   /** Long enough for a TUI's paste detection to close before Enter arrives. */
   const SUBMIT_DELAY_MS = 400
   let delivering = false
+  // When the watch half of the last pass ran: see `watchDue`.
+  let watchedAt = 0
 
   const deliverMail = async () => {
     // One pass at a time: a pass now waits between text and Enter, and two
@@ -2408,6 +2410,13 @@ export function Workbench() {
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
 
+    /*
+     * Minimised (P1-C1): the messages above move on every pass; what follows —
+     * activity, open requests and their reminders, the inbox — only keeps
+     * watch, and runs once every `HIDDEN_WATCH_MS` until the window is back.
+     */
+    if (!watchDue(pageHidden(), Date.now(), watchedAt)) return
+    watchedAt = Date.now()
     await readActivities(host)
     const now = Date.now()
     const panes = mailPanes()
@@ -3453,9 +3462,10 @@ export function Workbench() {
   onMount(() => {
     /*
      * Mail has to keep moving while ADE is minimised — agents message each
-     * other whether or not anyone is watching — but a hidden window can wait
-     * longer, and with no session running a pass every three seconds is
-     * plenty for a request arriving from outside.
+     * other whether or not anyone is watching — so a hidden window delivers
+     * at the same pace (P1-C1): only the watch half of the pass slows down,
+     * inside `deliverPending`. With no session running a pass every three
+     * seconds is plenty for a request arriving from outside.
      */
     let mailPass = 0
     onCleanup(
@@ -3466,7 +3476,7 @@ export function Workbench() {
           if (running.size === 0 && mailPass % 4 !== 0) return
           return deliverMail()
         },
-        { whenHidden: 2_000 },
+        { whenHidden: 700 },
       ),
     )
     // Usage only feeds what is on screen and `ade-msg stats`: paused while hidden.
