@@ -57,12 +57,32 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
+/**
+ * What the preview may contain: what `marked` produces, and nothing else.
+ *
+ * An allowlist, not DOMPurify's html profile. That profile keeps `<form>`,
+ * `<button>` and `<area href>`, and a click on a button in a README took ADE's
+ * whole window to the page its form named. No `style` either: a
+ * `background:url(https://…)` is a tracking pixel the image rule cannot see.
+ */
+export const ALLOWED_TAGS = [
+  "p", "h1", "h2", "h3", "h4", "h5", "h6", "a", "em", "strong", "del", "code", "pre", "blockquote",
+  "ul", "ol", "li", "table", "thead", "tbody", "tr", "th", "td",
+  "img", "hr", "br", "span", "div", "details", "summary", "input",
+]
+export const ALLOWED_ATTR = ["href", "src", "alt", "title", "align", "colspan", "rowspan", "start", "type", "checked", "disabled"]
+
 export function renderMarkdown(text: string, resolve: ResolveImage): string {
   // No cleaning, no HTML: the text as text.
   if (!sanitizerWorks()) return `<pre>${escapeHtml(text)}</pre>`
   const html = marked.parse(text, { async: false, gfm: true }) as string
   // Hooks are global in DOMPurify: added for this call only, then removed.
   DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    // gfm's task boxes are the one input there is reason for.
+    if (node.nodeName === "INPUT" && node.getAttribute("type") !== "checkbox") {
+      node.parentNode?.removeChild(node)
+      return
+    }
     if (node.nodeName !== "IMG") return
     const local = imageSource(node.getAttribute("src") ?? "", resolve)
     node.removeAttribute("srcset")
@@ -70,7 +90,7 @@ export function renderMarkdown(text: string, resolve: ResolveImage): string {
     else node.parentNode?.removeChild(node)
   })
   try {
-    return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) as string
+    return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR, ALLOW_DATA_ATTR: false }) as string
   } finally {
     DOMPurify.removeHook("afterSanitizeAttributes")
   }
@@ -92,6 +112,23 @@ export function linkTarget(href: string, base: string): LinkTarget {
   const path = trimmed.split("#")[0].split("?")[0]
   if (!path) return { kind: "none" }
   return { kind: "file", path: joinPath(base, decodeURI(path)) }
+}
+
+/**
+ * A click in the preview: anything with an `href`, not only `<a>`, goes
+ * through `linkTarget` and never navigates the window itself.
+ */
+export function handlePreviewClick(
+  event: Event,
+  base: string,
+  open: { url?: (url: string) => void; file?: (path: string) => void },
+): void {
+  const element = (event.target as Element | null)?.closest?.("[href]")
+  if (!element) return
+  event.preventDefault()
+  const target = linkTarget(element.getAttribute("href") ?? "", base)
+  if (target.kind === "web") open.url?.(target.url)
+  else if (target.kind === "file") open.file?.(target.path)
 }
 
 /** The folder a file is in, with its own separator. */

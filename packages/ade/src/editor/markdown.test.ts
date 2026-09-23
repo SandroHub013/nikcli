@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { folderOf, imageSource, joinPath, linkTarget, renderMarkdown, sanitizerWorks } from "./markdown"
+import { ALLOWED_ATTR, ALLOWED_TAGS, folderOf, handlePreviewClick, imageSource, joinPath, linkTarget, renderMarkdown, sanitizerWorks } from "./markdown"
 
 /*
  * happy-dom and DOMPurify 3.4. The known trap is that `sanitize` drops the
@@ -49,6 +49,57 @@ describe.skipIf(!sanitizerWorks())("renderMarkdown with a DOM that cleans (S56)"
     })
     expect(seen).toEqual(["img/a.png"])
     expect(html).toContain('src="http://ade-media.localhost/C:/p/img/a.png"')
+  })
+})
+
+describe.skipIf(!sanitizerWorks())("what the preview may contain, with a DOM that cleans (S56, Architect's ALTO)", () => {
+  test("form, button, area, audio, video, source and style are removed", () => {
+    const html = renderMarkdown(
+      SACRIFICE +
+        [
+          '<form action="https://example.com/form"><button>vai</button><input type="text" name="q"></form>',
+          '<map name="m"><area href="https://example.com/area" shape="rect" coords="0,0,9,9"></map>',
+          '<audio src="https://example.com/a.mp3"></audio><video><source src="https://example.com/v.mp4"></video>',
+          '<p style="background:url(https://example.com/sfondo.png)" id="x">testo</p>',
+          "- [x] fatto",
+        ].join("\n\n"),
+      noImages,
+    )
+    for (const gone of ["<form", "<button", "<area", "<map", "<audio", "<video", "<source", "style=", "sfondo.png", 'type="text"', "id=", "name="]) {
+      expect(html).not.toContain(gone)
+    }
+    expect(html).toContain("testo")
+    expect(html).toContain('type="checkbox"')
+  })
+})
+
+describe("the preview's allowlist and clicks (S56, Architect's ALTO)", () => {
+  test("nothing that submits, navigates by itself, plays or styles is allowed", () => {
+    for (const tag of ["form", "button", "area", "map", "audio", "video", "source", "iframe", "object", "embed", "svg", "style", "script"]) {
+      expect(ALLOWED_TAGS).not.toContain(tag)
+    }
+    for (const attribute of ["style", "id", "name", "usemap", "action", "formaction", "srcset"]) {
+      expect(ALLOWED_ATTR).not.toContain(attribute)
+    }
+  })
+
+  test("a click on an area goes through linkTarget and does not navigate", () => {
+    const root = document.createElement("div")
+    root.innerHTML = '<map><area href="https://example.com/area"></map><span href="../a.md">s</span>'
+    document.body.appendChild(root)
+    const urls: string[] = []
+    const files: string[] = []
+    const events: Event[] = []
+    root.addEventListener("click", (event) => {
+      events.push(event)
+      handlePreviewClick(event, "C:/p/docs", { url: (url) => urls.push(url), file: (path) => files.push(path) })
+    })
+    root.querySelector("area")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    root.querySelector("span")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    root.remove()
+    expect(events.map((event) => event.defaultPrevented)).toEqual([true, true])
+    expect(urls).toEqual(["https://example.com/area"])
+    expect(files).toEqual(["C:/p/a.md"])
   })
 })
 

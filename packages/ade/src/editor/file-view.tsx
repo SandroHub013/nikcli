@@ -9,7 +9,7 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
-import { folderOf, joinPath, linkTarget, renderMarkdown } from "./markdown"
+import { folderOf, handlePreviewClick, joinPath, renderMarkdown } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
 import { t } from "../i18n"
@@ -123,14 +123,9 @@ function MarkdownView(props: FileViewProps) {
         data-slot="file-markdown"
         // Cleaned by DOMPurify in `renderMarkdown`: no script, no handler, no frame.
         innerHTML={html()}
-        onClick={(event) => {
-          const anchor = (event.target as Element | null)?.closest?.("a[href]")
-          if (!anchor) return
-          event.preventDefault()
-          const target = linkTarget(anchor.getAttribute("href") ?? "", base())
-          if (target.kind === "web") props.openUrl?.(target.url)
-          else if (target.kind === "file") props.openFile?.(target.path)
-        }}
+        onClick={(event) => handlePreviewClick(event, base(), { url: props.openUrl, file: props.openFile })}
+        // Nothing in the preview submits: the allowlist has no form, and this holds if one slips in.
+        onSubmit={(event) => event.preventDefault()}
       />
     </Show>
   )
