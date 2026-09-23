@@ -247,14 +247,18 @@ fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str) -> Result<
     }
     let out = scratch.join(format!("{}.wav", SENTENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let result = synthesize(guard.as_mut().expect("started above"), &text, &out);
-    if result.is_err() {
-        // A process that failed once is not trusted with the next sentence.
-        *guard = None;
-    }
+    forget_on_error(&mut guard, &result);
     drop(guard);
     let bytes = result.and_then(|_| std::fs::read(&out).map_err(|e| e.to_string()));
     let _ = std::fs::remove_file(&out);
     bytes
+}
+
+/// A process that failed once is not trusted with the next sentence: dropped, which kills it.
+fn forget_on_error<T, R, E>(slot: &mut Option<T>, result: &Result<R, E>) {
+    if result.is_err() {
+        *slot = None;
+    }
 }
 
 /// Opens the model's page in the browser: only the pages listed in `VOICES`, never a URL from the caller.
@@ -523,14 +527,19 @@ mod tests {
     }
 
     #[test]
-    fn resident_mutex_is_freed_and_cleared_after_failure() {
-        let piper = Piper::default();
+    fn a_failed_sentence_drops_the_process_and_frees_the_lock() {
+        let slot = Mutex::new(Some(7_u8));
         {
-            let mut guard = piper.resident.lock().unwrap();
-            *guard = None;
+            let mut guard = slot.lock().unwrap();
+            let failed: Result<(), String> = Err("Piper non ha risposto entro il timeout (30 s).".into());
+            forget_on_error(&mut guard, &failed);
         }
-        let guard2 = piper.resident.try_lock();
-        assert!(guard2.is_ok());
-        assert!(guard2.unwrap().is_none());
+        let guard = slot.try_lock().expect("the lock is free after a failure");
+        assert!(guard.is_none());
+        drop(guard);
+
+        let kept = Mutex::new(Some(7_u8));
+        forget_on_error(&mut kept.lock().unwrap(), &Ok::<(), String>(()));
+        assert_eq!(*kept.lock().unwrap(), Some(7));
     }
 }
