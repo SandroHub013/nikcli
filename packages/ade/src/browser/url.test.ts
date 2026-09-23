@@ -211,6 +211,17 @@ describe("isAdeOrigin", () => {
     expect(isAdeOrigin("https://tauri.localhost/app", "http://localhost:5270")).toBe(true)
   })
 
+  test("the media scheme is ADE in all three spellings (audit 0.7.7, C1)", () => {
+    for (const host of ["http://tauri.localhost", "http://localhost:5177"]) {
+      expect(isAdeOrigin("http://ade-media.localhost/C%3A%2Fp%2Fvariant.html", host)).toBe(true)
+      expect(isAdeOrigin("https://ade-media.localhost/C%3A%2Fp%2F.env", host)).toBe(true)
+      expect(isAdeOrigin("ade-media://localhost/C%3A%2Fp%2Fdrawing.svg", host)).toBe(true)
+      expect(isAdeOrigin("HTTP://ADE-MEDIA.LOCALHOST/x", host)).toBe(true)
+    }
+    // A site whose name only contains it is not.
+    expect(isAdeOrigin("https://ade-media.localhost.example.com/", "http://tauri.localhost")).toBe(false)
+  })
+
   test("another origin is not ADE", () => {
     expect(isAdeOrigin("http://localhost:5173/", "http://localhost:5177")).toBe(false)
     expect(isAdeOrigin("https://bastelli-cmp.vercel.app/", "http://tauri.localhost")).toBe(false)
