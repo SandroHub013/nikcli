@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { pruneOutbox, submitGate } from "./delivery"
+import { previewSize } from "./design-preview"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
 import { bucketProposals, describeProblems, foldProposals, nextDesignKey, resolvedMessage } from "./state"
 import { appendDesignEvent, designPath, loadDesign, type DesignIo } from "./store"
@@ -269,5 +270,26 @@ describe("multiple answers (S75 point 6)", () => {
   test("the message says scelte: A + C", () => {
     const { proposals } = foldProposals([open(), answer({ choices: ["A", "C"] })])
     expect(resolvedMessage(proposals[0]!)).toBe('design [k=DS40] Titolo DS40 — scelte: A + C — parole: "A + C" — spec: S54')
+  })
+})
+
+describe("a preview's size (S75 point 3)", () => {
+  test("read from the ade-size meta", () => {
+    expect(previewSize('<head><meta name="ade-size" content="520x300"></head>')).toEqual({ width: 520, height: 300 })
+    expect(previewSize("<meta content='200x120' name='ade-size'>")).toEqual({ width: 200, height: 120 })
+  })
+
+  test("absent: 360×240", () => {
+    expect(previewSize("<html><body>x</body></html>")).toEqual({ width: 360, height: 240 })
+  })
+
+  test("out of range: 360×240", () => {
+    expect(previewSize('<meta name="ade-size" content="100x240">')).toEqual({ width: 360, height: 240 })
+    expect(previewSize('<meta name="ade-size" content="1700x240">')).toEqual({ width: 360, height: 240 })
+  })
+
+  test("malformed: 360×240", () => {
+    expect(previewSize('<meta name="ade-size" content="largo">')).toEqual({ width: 360, height: 240 })
+    expect(previewSize('<meta name="ade-size" content="360 per 240">')).toEqual({ width: 360, height: 240 })
   })
 })

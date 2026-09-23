@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js"
 import { formatDay, isPicked, type Picked } from "./answer"
-import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
+import { DesignPreview, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
 import type { DesignVariant } from "./log"
@@ -58,6 +58,10 @@ export function DesignCard(props: {
         <p data-slot="design-context">{props.proposal.context}</p>
       </Show>
 
+      <Show when={sharedPreview(props.proposal.variants)}>
+        <div data-slot="design-shared-preview" role="alert">{t("design.preview.shared")}</div>
+      </Show>
+
       <div data-slot="design-variants" role={props.proposal.multi ? "group" : "radiogroup"} aria-label={t("design.variants")}>
         <For each={props.proposal.variants}>
           {(variant, index) => (
@@ -87,6 +91,7 @@ export function DesignCard(props: {
                 <div data-slot="variant-preview-wrap">
                   <DesignPreview
                     preview={variant.preview}
+                    k={props.proposal.k}
                     name={variant.name}
                     projectRoot={props.projectRoot}
                     onToggleFullScreen={() => props.onOpenFullPreview?.(variant)}

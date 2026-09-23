@@ -74,7 +74,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     else if (action.kind === "expand") {
       const pickedIndex = firstPick(props.hub.draft(proposal.k).picked) ?? 0
       const variant = proposal.variants[pickedIndex]
-      if (variant) props.hub.openFullPreview(variant, proposal.title)
+      if (variant) props.hub.openFullPreview(variant, proposal.title, proposal.k)
     }
   }
 
@@ -144,7 +144,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                 onPick={(index) => pick(proposal.k, index, Boolean(proposal.multi))}
                 onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
                 onSubmit={() => void submit()}
-                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
+                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
                 noteRef={(element) => (note = element)}
               />
             )}
@@ -192,6 +192,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             <div data-slot="full-preview-container">
               <DesignPreview
                 preview={props.hub.fullPreview().variant!.preview}
+                k={props.hub.fullPreview().k ?? ""}
                 name={props.hub.fullPreview().variant!.name}
                 projectRoot={root()}
                 fullScreen

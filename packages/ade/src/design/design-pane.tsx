@@ -60,7 +60,7 @@ export function DesignPane(props: {
       }}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
-      onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
+      onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
     />
   )
 
@@ -248,6 +248,7 @@ export function DesignPane(props: {
           <div data-slot="full-preview-container">
             <DesignPreview
               preview={props.hub.fullPreview().variant!.preview}
+              k={props.hub.fullPreview().k ?? ""}
               name={props.hub.fullPreview().variant!.name}
               projectRoot={root()}
               fullScreen

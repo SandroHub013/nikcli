@@ -16,6 +16,8 @@ export interface FullPreviewState {
   readonly open: boolean
   readonly variant?: DesignVariant
   readonly title?: string
+  /** The proposal's key, for the folder an error points to. */
+  readonly k?: string
 }
 
 export function projectRootFromRegisterPath(registerPath: string | undefined): string | undefined {
@@ -49,7 +51,7 @@ export interface DesignHub {
    */
   again: (proposal: DesignProposal) => Promise<boolean>
   fullPreview: Accessor<FullPreviewState>
-  openFullPreview: (variant: DesignVariant, title?: string) => void
+  openFullPreview: (variant: DesignVariant, title?: string, k?: string) => void
   closeFullPreview: () => void
 }
 
@@ -170,7 +172,7 @@ export function createDesignHub(deps: {
       return record(proposal, event)
     },
     fullPreview,
-    openFullPreview: (variant, title) => setFullPreview({ open: true, variant, title }),
+    openFullPreview: (variant, title, k) => setFullPreview({ open: true, variant, title, k }),
     closeFullPreview: () => setFullPreview({ open: false }),
   }
 }

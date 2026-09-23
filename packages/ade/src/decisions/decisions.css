@@ -555,9 +555,11 @@ button[data-slot="decision-row"]:hover {
 }
 
 /* The inline "who receives" select, when the answer would otherwise go nowhere. */
+/* The select above its sentence, as S75 asks; in the DOM the sentence comes first, as its label. */
 [data-slot="recipient-inline-wrap"] {
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
+  align-items: flex-start;
   gap: 4px;
   margin-top: 6px;
 }

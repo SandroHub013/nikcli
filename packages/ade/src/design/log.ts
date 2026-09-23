@@ -10,6 +10,19 @@ import { t } from "../i18n"
  * A proposal carries a key, title, author, reference spec, short text/context,
  * and one or more variants, each with a name, a two-line description, and a
  * preview (an image path/URL or a standalone HTML page).
+ *
+ * The team's format for a variant's page (S75 point 3):
+ * - one self-contained `.html` file per variant: CSS in `<style>`, JS in
+ *   `<script>`, images and fonts as `data:` or inline SVG, nothing beside it;
+ * - in the project, relative in the register: `.ade/design/<k>/<n>.html`,
+ *   `n` the variant's number from 1. `ade-media` serves only files inside the
+ *   open projects, and the frame loads it from there;
+ * - its size at the top: `<meta name="ade-size" content="360x240">`, width by
+ *   height in CSS px, 120 to 1600; without it, 360×240. The card shows it at
+ *   exactly that size;
+ * - a comparison page with every variant may exist, but it does not go in a
+ *   `preview`: every variant would show the same page. `ade-msg registro`
+ *   refuses two variants with the same preview.
  */
 
 export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "riaperta", "chiusa"] as const

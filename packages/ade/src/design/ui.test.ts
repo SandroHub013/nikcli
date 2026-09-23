@@ -21,7 +21,8 @@ import {
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
-import { isHtmlPreview, isImagePreview, resolvePreviewPath, shortenPath } from "./design-preview"
+import { frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
+import { mediaUrl } from "../video/video"
 import type { DesignProposal } from "./state"
 import type { DesignEvent } from "./log"
 import { readFileSync } from "node:fs"
@@ -484,5 +485,70 @@ describe("a multiple question", () => {
     expect(togglePick(0, 2, false)).toBe(2)
     expect(enterReady(false, 1, "", false)).toBe(false)
     expect(enterReady(false, 1, "", true)).toBe(true)
+  })
+})
+
+/*
+ * The previews (S75 point 3). The frame's attributes are `frameProps`, spread
+ * as they are on the iframe; the error texts are `previewPlan` and
+ * `loadFailure`. Solid is not rendered in bun test here, so these and a look
+ * at the component's source stand in for the spec's DOM checks.
+ */
+describe("a variant's preview", () => {
+  const root = "C:/p"
+  const html = previewPlan(".ade/design/DS-PROVA/2.html", root, "DS-PROVA", true)
+
+  test("an HTML page is a frame whose src is the ade-media URL, sized from its meta, with no srcdoc", () => {
+    expect(html).toEqual({ kind: "html", path: "C:/p/.ade/design/DS-PROVA/2.html", src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true) })
+    const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
+    expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
+    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "allow-scripts allow-forms" })
+    expect("srcdoc" in props).toBe(false)
+    expect("style" in props).toBe(false)
+  })
+
+  test("the component loads by src and never scales: no srcdoc, transform, zoom or scale", () => {
+    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
+    const code = tsx.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\/.*$/gm, "")
+    expect(code).not.toContain("srcdoc")
+    expect(code).toContain("{...frameProps(current, measured(), title())}")
+    expect(code).not.toMatch(/transform|zoom|scale\(/)
+    expect(code).not.toContain("allow-same-origin")
+    const css = readFileSync(join(__dirname, "design.css"), "utf-8")
+    const blocks = css.split("}").filter((block) => /preview|design-variant/.test(block))
+    expect(blocks.some((block) => /transform|zoom|scale\(/.test(block))).toBe(false)
+  })
+
+  test("a page outside the project root gets no frame: Fuori dal progetto", () => {
+    expect(previewPlan("C:/altrove/confronto.html", root, "DS1", true)).toEqual({
+      kind: "error",
+      text: "Fuori dal progetto: C:/altrove/confronto.html — le anteprime stanno in .ade/design/DS1/",
+    })
+    expect(previewPlan("../fuori.html", root, "DS1", true).kind).toBe("error")
+    expect(isInsideRoot(String.raw`C:\P\.ade\design\x.html`, "c:/p")).toBe(true)
+  })
+
+  test("a failure names the path: Non si carica", () => {
+    expect(loadFailure("C:/p/.ade/design/DS1/4.html", new Error("file non trovato"))).toBe(
+      "Non si carica: C:/p/.ade/design/DS1/4.html — file non trovato",
+    )
+    // The host repeats the path in its message (seen live in ADE Test): said once.
+    expect(loadFailure("C:/p/x.html", "C:/p/x.html: Impossibile trovare il file specificato. (os error 2)")).toBe(
+      "Non si carica: C:/p/x.html — Impossibile trovare il file specificato. (os error 2)",
+    )
+    const image = previewPlan("shots/a.png", root, "DS1", true)
+    expect(image).toMatchObject({ kind: "image", path: "C:/p/shots/a.png" })
+    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
+    expect(tsx).toContain('onError={() => setFailure(loadFailure(current.path, t("design.preview.imageBroken")))}')
+  })
+
+  test("two variants on the same page are flagged", () => {
+    expect(sharedPreview([{ preview: "results/c.html#a" }, { preview: "results/c.html#b" }])).toBe(true)
+    expect(sharedPreview([{ preview: ".ade/design/DS1/1.html" }, { preview: ".ade/design/DS1/2.html" }])).toBe(false)
+    expect(sharedPreview([{ preview: "" }, { preview: "" }])).toBe(false)
+  })
+
+  test("HTML written into the register is an error, not a srcdoc", () => {
+    expect(previewPlan("<!doctype html><p>x</p>", root, "DS1", true).kind).toBe("error")
   })
 })
