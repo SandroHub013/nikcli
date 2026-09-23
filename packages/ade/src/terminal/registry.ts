@@ -135,13 +135,47 @@ function isTranslucent(theme: ITheme): boolean {
   return alpha ? Number(alpha[1]) < 1 : false
 }
 
+/**
+ * The contrast xterm enforces between a cell's text and its background.
+ *
+ * 4.5 in the light theme only: Claude Code draws in the truecolour of its own
+ * dark theme, and on ADE's light background its text measured 1.83:1 («❯ No,
+ * exit»); ADE had never set the option (audit 0.7.7, Architect). Dark keeps 1,
+ * because those colours were chosen for that background. Glass keeps 1,
+ * because its background is transparent: xterm would compute the contrast
+ * against a colour that is not the one on screen.
+ */
+export function contrastFor(theme: string | undefined): number {
+  return theme === "light" ? 4.5 : 1
+}
+
+/** The theme ADE's shell is drawn in now, as `data-theme` on it says. */
+function currentThemeName(): string | undefined {
+  if (typeof document === "undefined") return undefined
+  return document.querySelector('[data-component="ade-shell"]')?.getAttribute("data-theme") ?? undefined
+}
+
+/** What a repaint touches of a terminal: its options, nothing else. */
+interface Paintable {
+  terminal: { options: { theme?: ITheme; allowTransparency?: boolean; minimumContrastRatio?: number } }
+}
+
+/**
+ * Paints each terminal in `palette` for the theme named `themeName`: the
+ * colours, the transparency and the contrast, always together, so a terminal
+ * already open follows a theme change the same way a new one starts in it.
+ */
+export function paintTerminals(sessions: Iterable<Paintable>, palette: ITheme, themeName: string | undefined): void {
+  for (const session of sessions) {
+    session.terminal.options.theme = palette
+    session.terminal.options.allowTransparency = isTranslucent(palette)
+    session.terminal.options.minimumContrastRatio = contrastFor(themeName)
+  }
+}
+
 export function refreshTerminalThemes(): void {
   if (terminals.size === 0) return
-  const theme = readTheme()
-  for (const session of terminals.values()) {
-    session.terminal.options.theme = theme
-    session.terminal.options.allowTransparency = isTranslucent(theme)
-  }
+  paintTerminals(terminals.values(), readTheme(), currentThemeName())
 }
 
 /**
@@ -357,6 +391,7 @@ export function getTerminal(id: string): SessionTerminal {
     convertEol: false,
     theme: initialTheme,
     allowTransparency: isTranslucent(initialTheme),
+    minimumContrastRatio: contrastFor(currentThemeName()),
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
   })
@@ -511,9 +546,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const session = getTerminal(id)
   session.detach?.()
 
-  const current = readTheme()
-  session.terminal.options.theme = current
-  session.terminal.options.allowTransparency = isTranslucent(current)
+  paintTerminals([session], readTheme(), currentThemeName())
 
   const drawn = session.terminal.element
   const placement = placementFor(drawn, element)
