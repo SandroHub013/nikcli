@@ -152,11 +152,84 @@ fn parse_range(header: &str, length: u64) -> Option<(u64, u64)> {
 }
 
 /// Whether `path` sits inside one of the roots the user has opened.
-fn within(roots: &[PathBuf], path: &Path) -> bool {
-    let Ok(resolved) = path.canonicalize() else {
+///
+/// `roots` are canonical; `opened` are the same roots as the user opened
+/// them, before a junction, a symlink or a mapped drive was followed.
+fn within(roots: &[PathBuf], opened: &[String], path: &Path) -> bool {
+    within_with(roots, opened, path, |path| path.canonicalize().ok())
+}
+
+/*
+ * The same, with the resolution handed in so a test can see whether it ran.
+ *
+ * Resolving is not harmless (audit 0.7.7, C2-2). `canonicalize` on
+ * `\\host\x` — which `%5C%5Chost%5Cx` decodes to — opens a connection to
+ * that host: Windows sends the user's NTLM hash to it, and this handler,
+ * which is synchronous, waits for the network. So nothing is resolved until
+ * the text alone says the path is local and inside a root:
+ *
+ * - two separators at the start, in any mix, are UNC or a device path
+ *   (`\\host`, `//host`, `\\?\`, `\\.\`) and are refused outright;
+ * - the path must then begin with one of the roots, compared as text,
+ *   separators unified and case ignored, on a component boundary. A root
+ *   counts in either of its forms, canonical or as it was opened: the URL
+ *   carries the path as opened, so a project under a junction (`C:\dev`
+ *   pointing to `D:\src`) or on a mapped drive (`Z:`, whose canonical form
+ *   is `\\?\UNC\server\…`) matches only the second.
+ *
+ * Only then the resolution, and the check that was here before: `..` and
+ * links can still lead out, and that is what it catches.
+ */
+fn within_with(
+    roots: &[PathBuf],
+    opened: &[String],
+    path: &Path,
+    resolve: impl Fn(&Path) -> Option<PathBuf>,
+) -> bool {
+    let text = path.to_string_lossy();
+    let mut start = text.chars();
+    let is_separator = |c: Option<char>| matches!(c, Some('/') | Some('\\'));
+    if is_separator(start.next()) && is_separator(start.next()) {
+        return false;
+    }
+    let wanted = comparable(&text);
+    let canonical = roots.iter().map(|root| comparable(&root_text(root)));
+    let as_opened = opened.iter().map(|root| comparable(root));
+    if !canonical.chain(as_opened).any(|root| begins_with_root(&wanted, &root)) {
+        return false;
+    }
+    let Some(resolved) = resolve(path) else {
         return false;
     };
     roots.iter().any(|root| resolved.starts_with(root))
+}
+
+/// A root as the user would write it: without the `\\?\` a canonical Windows path carries.
+fn root_text(root: &Path) -> String {
+    let text = root.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        // A share, `\\?\UNC\host\x`: its paths are refused above anyway.
+        Some(rest) if rest.len() >= 4 && rest[..4].eq_ignore_ascii_case(r"UNC\") => format!(r"\\{}", &rest[4..]),
+        Some(rest) => rest.to_owned(),
+        None => text.into_owned(),
+    }
+}
+
+/// Forward slashes, lower case, no trailing separator: two spellings of one path compare equal.
+fn comparable(text: &str) -> String {
+    let unified = text.replace('\\', "/").to_lowercase();
+    match unified.trim_end_matches('/') {
+        "" => unified,
+        trimmed => trimmed.to_owned(),
+    }
+}
+
+/// Whether `path` is `root` or lies under it, a whole component at a time: `C:/p` is not under `C:/pro`.
+fn begins_with_root(path: &str, root: &str) -> bool {
+    match path.strip_prefix(root) {
+        Some(rest) => rest.is_empty() || rest.starts_with('/') || root.ends_with('/'),
+        None => false,
+    }
 }
 
 /*
@@ -210,14 +283,14 @@ fn deny(status: StatusCode) -> Response<Vec<u8>> {
 /// `allow-same-origin` read the file. With `allow-same-origin` (S52) the
 /// pane sends the site's own origin (`https://example.com`), which still
 /// must not match ADE's window, so the same filter keeps the file out.
-pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option<&str>) -> Response<Vec<u8>> {
+pub fn respond(roots: &[PathBuf], opened: &[String], request: &Request<Vec<u8>>, app_origin: Option<&str>) -> Response<Vec<u8>> {
     let raw = request.uri().path().trim_start_matches('/');
     if raw.is_empty() {
         return deny(StatusCode::BAD_REQUEST);
     }
     let path = PathBuf::from(urldecode(raw));
 
-    if !within(roots, &path) {
+    if !within(roots, opened, &path) {
         // Not "not found": the file may well exist. It is outside every
         // project this window has opened, and that is the whole rule.
         return deny(StatusCode::FORBIDDEN);
@@ -330,7 +403,7 @@ mod tests {
     fn serves_a_file_inside_an_open_project() {
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
+        let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), None);
 
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"0123456789");
@@ -347,7 +420,7 @@ mod tests {
         let other = tempdir::Dir::new("ade-media-altro");
         let roots = vec![other.path().canonicalize().expect("radice")];
 
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
+        let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert!(response.body().is_empty());
         drop(dir);
@@ -356,7 +429,7 @@ mod tests {
     #[test]
     fn with_no_project_open_nothing_is_served() {
         let (_dir, path) = fixture(b"x");
-        let response = respond(&[], &request(&url_for(&path.to_string_lossy()), None), None);
+        let response = respond(&[], &[], &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -366,7 +439,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let outside = dir.path().join("..").join("..").join("windows");
 
-        let response = respond(&roots, &request(&url_for(&outside.to_string_lossy()), None), None);
+        let response = respond(&roots, &[], &request(&url_for(&outside.to_string_lossy()), None), None);
         assert_ne!(response.status(), StatusCode::PARTIAL_CONTENT);
     }
 
@@ -376,6 +449,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let response = respond(
             &roots,
+            &[],
             &request(&url_for(&path.to_string_lossy()), Some("bytes=3-5")),
             None,
         );
@@ -393,6 +467,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let response = respond(
             &roots,
+            &[],
             &request(&url_for(&path.to_string_lossy()), Some("bytes=-3")),
             None,
         );
@@ -405,6 +480,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let response = respond(
             &roots,
+            &[],
             &request(&url_for(&path.to_string_lossy()), Some("bytes=7-")),
             None,
         );
@@ -418,7 +494,7 @@ mod tests {
         std::fs::write(&path, b"ok").expect("scrittura");
         let roots = vec![dir.path().canonicalize().expect("radice")];
 
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
+        let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"ok");
     }
@@ -489,7 +565,7 @@ mod tests {
         ] {
             let (dir, path) = fixture_named(name, bytes);
             let roots = vec![dir.path().canonicalize().unwrap()];
-            let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
+            let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), None);
             assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT, "{name}");
             assert_eq!(response.headers().get("Content-Type").unwrap(), mime, "{name}");
             assert_hardened(&response);
@@ -500,14 +576,105 @@ mod tests {
     fn a_refusal_is_sandboxed_too() {
         let (dir, _) = fixture(b"x");
         let roots = vec![dir.path().canonicalize().unwrap()];
-        let response = respond(&roots, &request("ade-media://localhost/C%3A%2FWindows%2Fwin.ini", None), None);
+        let response = respond(&roots, &[], &request("ade-media://localhost/C%3A%2FWindows%2Fwin.ini", None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert_hardened(&response);
     }
 
+    /// A resolver that never touches the disk or the network, and says whether it was asked.
+    fn counting() -> (std::cell::Cell<u32>, impl Fn(&std::cell::Cell<u32>, &Path) -> Option<PathBuf>) {
+        (std::cell::Cell::new(0), |calls: &std::cell::Cell<u32>, path: &Path| {
+            calls.set(calls.get() + 1);
+            Some(path.to_path_buf())
+        })
+    }
+
+    #[test]
+    fn a_unc_path_is_refused_before_anything_resolves_it() {
+        let roots = vec![PathBuf::from(r"\\?\C:\Users\me\project")];
+        for raw in [
+            r"%5C%5Chost%5Cx",
+            r"//host/x",
+            r"%2F%2Fhost%2Fshare%2Fx",
+            r"%5C/host/x",
+            r"%5C%5C%3F%5CC:%5CUsers%5Cme%5Cproject%5Ca.png",
+            r"%5C%5C.%5Cpipe%5Cx",
+        ] {
+            let (calls, resolve) = counting();
+            let path = PathBuf::from(urldecode(raw));
+            assert!(!within_with(&roots, &[], &path, |p| resolve(&calls, p)), "{raw} was let through");
+            assert_eq!(calls.get(), 0, "{raw} was resolved");
+        }
+    }
+
+    #[test]
+    fn a_unc_path_in_a_request_is_a_403() {
+        let (dir, _) = fixture(b"x");
+        let roots = vec![dir.path().canonicalize().unwrap()];
+        for uri in ["ade-media://localhost/%5C%5Chost%5Cx", "ade-media://localhost///host/x"] {
+            let response = respond(&roots, &[], &request(uri, None), None);
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri}");
+        }
+    }
+
+    // Windows spellings: on unix a backslash is part of a name, not a separator.
+    #[cfg(windows)]
+    #[test]
+    fn only_a_path_that_begins_with_a_root_is_resolved() {
+        let roots = vec![PathBuf::from(r"\\?\C:\Users\me\project")];
+        let (calls, resolve) = counting();
+        // Another folder, and one that only shares the root's first letters.
+        for raw in [r"C:/Windows/win.ini", r"C:/Users/me/projector/a.png", r"relative/a.png"] {
+            assert!(!within_with(&roots, &[], Path::new(raw), |p| resolve(&calls, p)), "{raw}");
+        }
+        assert_eq!(calls.get(), 0);
+        // Inside, in either spelling and any case: resolved, then checked as before.
+        for raw in [r"C:/Users/me/project/a.png", r"c:\users\ME\Project\a.png", r"C:/Users/me/project"] {
+            let resolve_to_root = |_: &Path| Some(PathBuf::from(r"\\?\C:\Users\me\project\a.png"));
+            assert!(within_with(&roots, &[], Path::new(raw), resolve_to_root), "{raw}");
+        }
+        // Inside as text, outside once `..` is resolved: the old check still refuses it.
+        let climbs = |_: &Path| Some(PathBuf::from(r"\\?\C:\Windows\win.ini"));
+        assert!(!within_with(&roots, &[], Path::new(r"C:/Users/me/project/../../../Windows/win.ini"), climbs));
+    }
+
+    // A project opened through a junction: opened as `C:/dev/app`, canonical `D:\src\app`.
+    #[cfg(windows)]
+    #[test]
+    fn a_root_opened_through_a_link_matches_in_either_form() {
+        let roots = vec![PathBuf::from(r"\\?\D:\src\app")];
+        let opened = vec!["C:/dev/app".to_owned()];
+        let resolved = |_: &Path| Some(PathBuf::from(r"\\?\D:\src\app\a.png"));
+        for raw in [r"C:/dev/app/a.png", r"D:/src/app/a.png"] {
+            let calls = std::cell::Cell::new(0);
+            let resolve = |p: &Path| {
+                calls.set(calls.get() + 1);
+                resolved(p)
+            };
+            assert!(within_with(&roots, &opened, Path::new(raw), resolve), "{raw}");
+            assert_eq!(calls.get(), 1, "{raw}");
+        }
+    }
+
+    // A mapped drive: opened as `Z:/proj`, canonical a share.
+    #[cfg(windows)]
+    #[test]
+    fn a_root_on_a_mapped_drive_matches_as_opened() {
+        let roots = vec![PathBuf::from(r"\\?\UNC\server\share\proj")];
+        let opened = vec!["Z:/proj".to_owned()];
+        let resolve = |_: &Path| Some(PathBuf::from(r"\\?\UNC\server\share\proj\a.png"));
+        assert!(within_with(&roots, &opened, Path::new(r"Z:/proj/a.png"), resolve));
+        // The share itself, asked for directly, is still refused unresolved.
+        for raw in [r"//server/share/proj/a.png", r"\\server\share\proj\a.png", r"\\?\UNC\server\share\proj\a.png"] {
+            let (calls, resolve) = counting();
+            assert!(!within_with(&roots, &opened, Path::new(raw), |p| resolve(&calls, p)), "{raw}");
+            assert_eq!(calls.get(), 0, "{raw} was resolved");
+        }
+    }
+
     #[test]
     fn an_empty_path_is_a_bad_request() {
-        let response = respond(&[], &request("ade-media://localhost/", None), None);
+        let response = respond(&[], &[], &request("ade-media://localhost/", None), None);
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -524,7 +691,7 @@ mod tests {
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let url = url_for(&path.to_string_lossy());
-        let response = respond(&roots, &with_origin(&url, "http://tauri.localhost"), Some("http://tauri.localhost"));
+        let response = respond(&roots, &[], &with_origin(&url, "http://tauri.localhost"), Some("http://tauri.localhost"));
         assert_eq!(
             response.headers().get("Access-Control-Allow-Origin").unwrap(),
             "http://tauri.localhost"
@@ -536,7 +703,7 @@ mod tests {
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let url = url_for(&path.to_string_lossy());
-        let response = respond(&roots, &with_origin(&url, "https://example.com"), Some("http://tauri.localhost"));
+        let response = respond(&roots, &[], &with_origin(&url, "https://example.com"), Some("http://tauri.localhost"));
         assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 
@@ -548,7 +715,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let url = url_for(&path.to_string_lossy());
         for app in [Some("http://tauri.localhost"), Some("null"), None] {
-            let response = respond(&roots, &with_origin(&url, "null"), app);
+            let response = respond(&roots, &[], &with_origin(&url, "null"), app);
             assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
         }
     }
@@ -561,6 +728,7 @@ mod tests {
         let url = url_for(&path.to_string_lossy());
         let response = respond(
             &roots,
+            &[],
             &with_origin(&url, "https://bastelli-cmp.vercel.app"),
             Some("http://tauri.localhost"),
         );
@@ -571,7 +739,7 @@ mod tests {
     fn a_request_without_origin_gets_no_cors_header() {
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), Some("http://tauri.localhost"));
+        let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), None), Some("http://tauri.localhost"));
         assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 }

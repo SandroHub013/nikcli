@@ -57,8 +57,12 @@ use std::time::UNIX_EPOCH;
  * Nothing is writable until it does, which is the safe direction to fail: an
  * editor that refuses to save says so, while a silent grant says nothing.
  */
+///
+/// The roots are canonical. The second list holds them as they were opened,
+/// separators unified: ade-media compares a URL's text with both before it
+/// resolves anything, and a URL carries the path as opened (`media.rs`).
 #[derive(Default)]
-pub struct WriteRoots(Mutex<Vec<PathBuf>>);
+pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 
 /*
  * Every command in this file is `async`, and none of them awaits anything.
@@ -88,6 +92,12 @@ async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> 
     let mut allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
     if !allowed.contains(&resolved) {
         allowed.push(resolved);
+    }
+    drop(allowed);
+    let as_opened = path.replace('\\', "/");
+    let mut opened = roots.1.lock().map_err(|_| "radici bloccate")?;
+    if !opened.contains(&as_opened) {
+        opened.push(as_opened);
     }
     Ok(())
 }
@@ -1326,7 +1336,8 @@ pub fn run() {
                 .get_webview_window(ctx.webview_label())
                 .and_then(|webview| webview.url().ok())
                 .map(|url| url.origin().ascii_serialization());
-            media::respond(&roots, &request, origin.as_deref())
+            let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
+            media::respond(&roots, &opened, &request, origin.as_deref())
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
