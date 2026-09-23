@@ -117,8 +117,24 @@ fn model_path(root: &Path, id: &str) -> PathBuf {
 }
 
 /// How long a sentence may keep the synthesizer waiting before the resident
-/// process is considered stalled and dropped. 15 s, matching the JS client.
-pub const SYNTHESIS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+/// process is considered stalled and dropped: twice the JS client's 15 s. The
+/// client decides when to stop waiting; this decides when to kill, and has to
+/// be the wider of the two.
+pub const SYNTHESIS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The first sentence after a start: piper reads stdin only once it has loaded
+/// its 63 MB model, and the first «Pronto.» took 22 s live. With the short
+/// limit a cold piper was killed before it was warm, the wake-up prepare too.
+pub const FIRST_SYNTHESIS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The limit for the next sentence: the long one until the process has answered once.
+fn synthesis_timeout(fresh: bool) -> std::time::Duration {
+    if fresh {
+        FIRST_SYNTHESIS_TIMEOUT
+    } else {
+        SYNTHESIS_TIMEOUT
+    }
+}
 
 /// The piper process for one voice, with its pipes. Sentences go through it one at a time.
 struct Resident {
@@ -126,6 +142,8 @@ struct Resident {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
     rx: std::sync::mpsc::Receiver<std::io::Result<String>>,
+    /// True from start until the first answer: the model may still be loading.
+    fresh: bool,
 }
 
 impl Drop for Resident {
@@ -302,7 +320,7 @@ fn start(root: &Path, voice_id: &str) -> Result<Resident, String> {
     let stdin = child.stdin.take().ok_or("Piper senza stdin")?;
     let stdout = child.stdout.take().ok_or("Piper senza stdout")?;
     let rx = spawn_stdout_reader(stdout);
-    Ok(Resident { voice: voice_id.to_string(), child, stdin, rx })
+    Ok(Resident { voice: voice_id.to_string(), child, stdin, rx, fresh: true })
 }
 
 fn spawn_stdout_reader<R: std::io::Read + Send + 'static>(
@@ -355,7 +373,8 @@ fn read_response_with_timeout(
 
 /// Piper writes the sentence to `out` and prints that path when it is done.
 fn synthesize(resident: &mut Resident, text: &str, out: &Path) -> Result<(), String> {
-    synthesize_with_timeout(resident, text, out, SYNTHESIS_TIMEOUT)
+    let timeout = synthesis_timeout(resident.fresh);
+    synthesize_with_timeout(resident, text, out, timeout)
 }
 
 fn synthesize_with_timeout(
@@ -369,6 +388,7 @@ fn synthesize_with_timeout(
     writeln!(resident.stdin, "{line}").map_err(|e| format!("Piper non risponde: {e}"))?;
     resident.stdin.flush().map_err(|e| format!("Piper non risponde: {e}"))?;
     read_response_with_timeout(&resident.rx, timeout)?;
+    resident.fresh = false;
     if !out.is_file() {
         return Err("Piper non ha scritto l'audio.".into());
     }
@@ -524,6 +544,15 @@ mod tests {
         let res = read_response_with_timeout(&rx, std::time::Duration::from_millis(500));
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), "Piper si è chiuso.");
+    }
+
+    #[test]
+    fn the_first_sentence_after_a_start_waits_longer() {
+        assert_eq!(synthesis_timeout(true), FIRST_SYNTHESIS_TIMEOUT);
+        assert_eq!(synthesis_timeout(false), SYNTHESIS_TIMEOUT);
+        // Wider than the JS client's 15 s, which decides when to stop waiting.
+        assert!(SYNTHESIS_TIMEOUT >= std::time::Duration::from_secs(30));
+        assert!(FIRST_SYNTHESIS_TIMEOUT > std::time::Duration::from_secs(22));
     }
 
     #[test]
