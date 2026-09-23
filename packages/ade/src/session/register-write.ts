@@ -91,6 +91,14 @@ export async function registerWrite(deps: RegisterWriteDeps, message: RegisterMe
     const problems = book.problems(after, deps.now())
     return `errore: scritta ma non risulta ${expected.word}: ${problems.length > 0 ? problems.join("; ") : "la riga non è nel file"}`
   }
+  /*
+   * The key's state says what the register holds, not whose event put it
+   * there: two answers written a moment apart both find the key answered, and
+   * the one the fold refused was told «ok» (audit 0.7.7, MEDIO 5). So the
+   * event is looked for by its own `at` and `by`, and must be one the fold kept.
+   */
+  const own = book.own(after, { k, type: message.op, at: event.at, by: event.by }, deps.now())
+  if (own !== true) return `errore: scritta ma non conta: ${own}`
   return `ok: ${k} ${expected.word}, nel tasto ${message.register === "design" ? "Design" : "Decisioni"} entro 3 s`
 }
 
@@ -130,6 +138,26 @@ interface Book {
   refusal: (text: string, event: unknown, now: Date) => string | undefined
   holds: (text: string, k: string, where: Where, now: Date) => boolean
   problems: (text: string, now: Date) => string[]
+  /** True when this very event is in the file and the fold kept it; otherwise why not. */
+  own: (text: string, event: OwnEvent, now: Date) => true | string
+}
+
+interface OwnEvent {
+  readonly k: string
+  readonly type: string
+  readonly at: string
+  readonly by: string
+}
+
+/** Finds `event` among `events` by key, type, time and author, and says whether the fold refused it. */
+function ownVerdict<E extends { k?: unknown; type?: unknown; at?: unknown; by?: unknown }>(
+  events: readonly E[],
+  rejected: readonly { event: unknown; reason: string }[],
+  event: OwnEvent,
+): true | string {
+  const found = events.find((item) => item.k === event.k && item.type === event.type && item.at === event.at && item.by === event.by)
+  if (!found) return "la riga non è nel file"
+  return rejected.find((item) => item.event === found)?.reason ?? true
 }
 
 const decisions: Book = {
@@ -148,6 +176,10 @@ const decisions: Book = {
   problems: (text, now) => {
     const parsed = parseDecisionLog(text)
     return describeDecisionProblems(parsed.problems, foldDecisions(parsed.events, now).rejected)
+  },
+  own: (text, event, now) => {
+    const events = parseDecisionLog(text).events
+    return ownVerdict(events, foldDecisions(events, now).rejected, event)
   },
 }
 
@@ -168,4 +200,36 @@ const design: Book = {
     const parsed = parseDesignLog(text)
     return describeDesignProblems(parsed.problems, foldProposals(parsed.events).rejected)
   },
+  own: (text, event) => {
+    const events = parseDesignLog(text).events
+    return ownVerdict(events, foldProposals(events).rejected, event)
+  },
+}
+
+/** Where a register event went: the project written, the one the bar shows, the one the sending session belongs to. */
+export interface RegisterPlace {
+  readonly written: string
+  readonly shown?: string
+  readonly asked?: string
+}
+
+/**
+ * The reply, saying which project's register was written.
+ *
+ * The event goes to the register of the sender's project, and the Decisions
+ * and Design buttons read the open project's: «nel tasto entro 3 s» was false
+ * whenever the two differ. And a session whose project is not among the
+ * recents fell back to the open one in silence (audit 0.7.7, MEDIO 4).
+ */
+export function withPlace(reply: string, register: RegisterName, place: RegisterPlace): string {
+  if (!reply.startsWith("ok")) return reply
+  const button = register === "design" ? "Design" : "Decisioni"
+  let text =
+    place.shown !== undefined && place.shown !== place.written
+      ? `${reply.replace(`, nel tasto ${button} entro 3 s`, "")}, nel progetto ${place.written}: il tasto ${button} ora mostra ${place.shown}, lo vedi aprendo ${place.written}`
+      : `${reply} (progetto ${place.written})`
+  if (place.asked !== undefined && place.asked !== place.written) {
+    text += `; la sessione è del progetto ${place.asked}, che non è fra i recenti: scritto in ${place.written}`
+  }
+  return text
 }

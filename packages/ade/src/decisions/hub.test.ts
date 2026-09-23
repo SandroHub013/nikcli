@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createDecisionsHub } from "./hub"
+import { isFormField, sheetKey } from "./answer"
+import { t } from "../i18n"
 import type { DecisionEvent } from "./log"
 import { createDecisionsRegister } from "./register"
 import type { Decision } from "./state"
@@ -70,5 +72,40 @@ describe("the register and the hub", () => {
       expect(register.loaded()).toBeUndefined()
       dispose()
     })
+  })
+})
+
+describe("Enter with nobody to receive the answer (audit 0.7.7, MEDIO 7)", () => {
+  test("the window says to choose who receives, instead of doing nothing", async () => {
+    const { io } = memory(opened("D1"))
+    await createRoot(async (dispose) => {
+      const register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      const hub = createDecisionsHub({ register, recipient: () => ({ state: "non scelta" }), sessions: () => [], choose: () => {}, delivery: () => ({ state: "in coda" }), onAnswered: () => {} })
+      await register.refresh()
+      const decision = register.state()!.decisions[0] as Decision
+      hub.setDraft("D1", { picked: 0, note: "" })
+
+      expect(await hub.submit(decision, "primary")).toBe(false)
+      expect(hub.problem("D1")).toBe(t("decisions.sheet.needRecipient"))
+      // A session picked in the select: the note goes.
+      hub.setInlineRecipient("p1")
+      expect(hub.problem("D1")).toBeUndefined()
+      dispose()
+    })
+  })
+})
+
+describe("keys aimed at a field of the window (audit 0.7.7, MEDIO 7)", () => {
+  test("arrows, digits and Enter on the «who receives» select stay the select's; Escape still closes", () => {
+    const select = { tagName: "SELECT" }
+    expect(isFormField(select)).toBe(true)
+    for (const key of ["ArrowRight", "ArrowLeft", "1", "Enter"]) expect(sheetKey({ key }, 2, false, true, isFormField(select))).toBeUndefined()
+    expect(sheetKey({ key: "Escape" }, 2, false, true, true)).toEqual({ kind: "close" })
+  })
+
+  test("on the window itself they work as before", () => {
+    expect(isFormField({ tagName: "DIV" })).toBe(false)
+    expect(sheetKey({ key: "1" }, 2, false, false, false)).toEqual({ kind: "pick", index: 0 })
+    expect(sheetKey({ key: "Enter" }, 2, false, true, false)).toEqual({ kind: "submit" })
   })
 })

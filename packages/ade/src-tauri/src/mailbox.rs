@@ -369,6 +369,7 @@ $worktree = $false
 $force = $false
 $fresh = $false
 $fork = $false
+$fromStdin = $false
 $ttl = 0
 $name = $null
 $model = $null
@@ -405,6 +406,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--force') { $force = $true; continue }
     elseif ($a -eq '--fresh') { $fresh = $true; continue }
     elseif ($a -eq '--fork') { $fork = $true; continue }
+    elseif ($a -eq '--stdin') { $fromStdin = $true; continue }
     elseif ($a -eq '--digita') { $via = 'typed'; continue }
     elseif ($a -eq '--ttl' -and $hasNext) { try { $ttl = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
   }
@@ -423,6 +425,15 @@ if ($file) {
     $content = "Il contenuto completo e' nel file $($item.FullName) ($($item.Length) byte); leggilo da li'. Inizio:`n" + $content.Substring(0, 1500)
   }
   $text = if ($text) { "$text`n`n$content" } else { $content }
+}
+
+# registro --stdin: the JSON from stdin, as UTF-8, where no quoting can reach it. Through ade-msg.cmd
+# and -File, PowerShell 5.1 drops the inner quotes of a '<json>' argument. A lone '-' cannot say it:
+# PowerShell takes it for a parameter with no name.
+if ($cmd -eq 'registro' -and $fromStdin) {
+  $ms = New-Object IO.MemoryStream
+  [Console]::OpenStandardInput().CopyTo($ms)
+  $text = $utf8.GetString($ms.ToArray()).TrimStart([char]0xFEFF).Trim()
 }
 
 function Post($fields) {
@@ -695,7 +706,7 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""
+timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""
 lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
@@ -719,6 +730,7 @@ while [ $# -gt 0 ]; do
       --force) force=true; shift; continue ;;
       --fresh) fresh=true; shift; continue ;;
       --fork) fork=true; shift; continue ;;
+      --stdin) stdin=1; shift; continue ;;
       --digita) via=typed; shift; continue ;;
       --ttl) [ $# -ge 2 ] && { ttl="$2"; shift 2; continue; } ;;
     esac
@@ -742,6 +754,9 @@ $(head -c 1500 "$file")"
 
 $content"; else text="$content"; fi
 fi
+
+# registro --stdin: the JSON from stdin, where no quoting can reach it.
+if [ "$cmd" = "registro" ] && [ "$stdin" = 1 ]; then text="$(cat)"; fi
 
 post() {
   id="$(date +%s)000-$$"
@@ -1048,6 +1063,87 @@ mod tests {
         assert!(PS1.contains("kind = 'interrupt'") && SH.contains("interrupt) [ -n"));
         assert!(PS1.contains("$fields['effort'] = $effort") && SH.contains("--effort)") && SH.contains("--profile)"));
         assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
+    }
+
+    /// A folder under the test TEMP, removed when dropped: on a failed assertion too.
+    #[cfg(windows)]
+    struct Scratch(PathBuf);
+
+    #[cfg(windows)]
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!("ade-msg-{tag}-{}-{nanos}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Runs the real `ade-msg.ps1` on `args`, answers its receipt with "ok", and returns the JSON it posted.
+    #[cfg(windows)]
+    fn posted_by_ps1(tag: &str, args: &[&str], stdin: Option<&[u8]>) -> serde_json::Value {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let scratch = Scratch::new(tag);
+        let base = scratch.0.clone();
+        for dir in ["outbox", "receipts", "results", "bin"] {
+            fs::create_dir_all(base.join(dir)).unwrap();
+        }
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::write(&script, PS1).unwrap();
+        let mut child = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(&base)
+            .env("ADE_MAILBOX", &base)
+            .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        if let Some(bytes) = stdin {
+            let mut pipe = child.stdin.take().unwrap();
+            pipe.write_all(bytes).unwrap();
+        }
+        // ADE's part: take the posted message and answer it, so the script does not wait out its receipt.
+        let started = std::time::Instant::now();
+        let posted = loop {
+            let found = fs::read_dir(base.join("outbox")).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "json"));
+            if let Some(path) = found {
+                let id = path.file_stem().unwrap().to_string_lossy().into_owned();
+                let body = fs::read_to_string(&path).unwrap();
+                fs::write(base.join("receipts").join(format!("{id}.txt")), "ok").unwrap();
+                break body;
+            }
+            assert!(started.elapsed().as_secs() < 30, "ade-msg.ps1 posted nothing");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        let _ = child.wait();
+        serde_json::from_str(posted.trim_start_matches('\u{feff}')).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn registro_takes_its_json_from_a_file_or_stdin_with_the_quotes_intact() {
+        // Audit 0.7.7, MEDIO 8: as an argument, PowerShell 5.1 drops these quotes on the way to the script.
+        let json = r#"{"k":"D1","words":"ha detto \"sì, ma dopo\""}"#;
+        let dir = Scratch::new("json");
+        let file = dir.0.join("evento.json");
+        fs::write(&file, json).unwrap();
+        let from_file = posted_by_ps1("file", &["registro", "decisioni", "risposta", "--file", file.to_str().unwrap()], None);
+        assert_eq!(from_file["kind"], "registro");
+        assert_eq!(from_file["text"], json);
+        let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
+        assert_eq!(from_stdin["text"], json);
+        assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
     }
 
     #[test]

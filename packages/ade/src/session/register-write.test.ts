@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { registerWrite, type RegisterWriteDeps } from "./register-write"
+import { registerWrite, withPlace, type RegisterWriteDeps } from "./register-write"
 
 const NOW = new Date("2026-09-23T12:00:00.000Z")
 
@@ -110,5 +110,54 @@ describe("ade-msg registro", () => {
     const { deps, appended } = file(`${JSON.stringify({ type: "aperta", k: "D1", at: NOW.toISOString(), by: "x", title: "t" })}`)
     await registerWrite(deps, { register: "decisioni", op: "chiusa", text: JSON.stringify({ k: "D1", evidence: "commit" }) })
     expect(appended[0]).toStartWith("\n{")
+  })
+})
+
+describe("the check after the write looks for this very event (audit 0.7.7, MEDIO 5)", () => {
+  const opened = JSON.stringify({ type: "aperta", k: "D1", at: "2026-09-23T11:00:00.000Z", by: "Master", title: "Quale?", options: ["A", "B"] })
+
+  test("another answer lands just before this one: the key is answered, but not by this write", async () => {
+    let text = `${opened}\n`
+    const deps: RegisterWriteDeps = {
+      read: async () => text,
+      append: async (line) => {
+        // Someone else's answer reaches the file a moment earlier.
+        text += `${JSON.stringify({ type: "risposta", k: "D1", at: "2026-09-23T11:59:59.900Z", by: "Dario", words: "A" })}\n${line.replace(/^\n/, "")}`
+      },
+      now: () => NOW,
+      sender: "fable",
+    }
+    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    expect(reply).toStartWith("errore: scritta ma non conta: ")
+  })
+
+  test("its own answer, alone: ok as before", async () => {
+    const { deps } = file(`${opened}\n`)
+    const reply = await registerWrite(deps, { register: "decisioni", op: "risposta", text: JSON.stringify({ k: "D1", words: "B" }) })
+    expect(reply).toStartWith("ok: D1 risposta")
+  })
+})
+
+describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () => {
+  const ok = "ok: D3 aperta, nel tasto Decisioni entro 3 s"
+
+  test("the open project: said, and the button promise stands", () => {
+    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "nikcli" })).toBe(`${ok} (progetto nikcli)`)
+  })
+
+  test("another project: the button does not show it, and the reply says where to look", () => {
+    const reply = withPlace(ok, "decisioni", { written: "sito", shown: "nikcli", asked: "sito" })
+    expect(reply).not.toContain("entro 3 s")
+    expect(reply).toBe("ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra nikcli, lo vedi aprendo sito")
+  })
+
+  test("a session whose project is not among the recents: the fallback is said, not silent", () => {
+    expect(withPlace(ok, "decisioni", { written: "nikcli", shown: "nikcli", asked: "vecchio" })).toBe(
+      `${ok} (progetto nikcli); la sessione è del progetto vecchio, che non è fra i recenti: scritto in nikcli`,
+    )
+  })
+
+  test("an error is left as it is", () => {
+    expect(withPlace("errore: manca la chiave k", "design", { written: "a", shown: "b" })).toBe("errore: manca la chiave k")
   })
 })

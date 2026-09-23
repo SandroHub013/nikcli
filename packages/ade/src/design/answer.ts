@@ -18,8 +18,15 @@ export function sheetKey(
   variantCount: number,
   inText: boolean,
   picked: boolean,
+  /**
+   * The key is aimed at another field — the «who receives» select above all:
+   * its arrows, letters and Enter are its own. Only Escape still closes
+   * (audit 0.7.7, MEDIO 7).
+   */
+  inField = false,
 ): SheetKey | undefined {
   if (event.key === "Escape") return { kind: "close" }
+  if (inField) return undefined
   if (event.key === "Enter") {
     if (event.ctrlKey || event.metaKey) return { kind: "submit" }
     if (inText) return undefined
