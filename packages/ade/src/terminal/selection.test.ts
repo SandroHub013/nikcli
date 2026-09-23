@@ -6,7 +6,11 @@ import {
   createTerminalKeyHandler,
   getTerminal,
   disposeTerminal,
+  selectionText,
+  copyOnRelease,
 } from "./registry"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 
 describe("terminal selection & copy (S50)", () => {
   describe("isCopyShortcut", () => {
@@ -170,45 +174,120 @@ describe("terminal selection & copy (S50)", () => {
     })
   })
 
-  describe("configureTerminalSelection", () => {
-    it("configures shouldForceSelection on terminal selection service for left-click with modifiers only", () => {
-      // Create mock terminal structure
-      const mockSelectionService = {
-        shouldForceSelection: (_e: MouseEvent) => false,
+  describe("configureTerminalSelection (S76)", () => {
+    const force = () => {
+      const service = { shouldForceSelection: (_e: MouseEvent) => false }
+      configureTerminalSelection({ _core: { _selectionService: service } } as any)
+      return (init: Partial<MouseEvent>) =>
+        service.shouldForceSelection({ button: 0, shiftKey: false, altKey: false, ...init } as MouseEvent)
+    }
+
+    it("the left button selects with no modifier", () => {
+      expect(force()({})).toBe(true)
+    })
+
+    it("the left button with Alt goes to the program", () => {
+      expect(force()({ altKey: true })).toBe(false)
+    })
+
+    it("the right and middle buttons go to the program", () => {
+      expect(force()({ button: 2 })).toBe(false)
+      expect(force()({ button: 1 })).toBe(false)
+    })
+
+    it("the left button with Shift still selects", () => {
+      expect(force()({ shiftKey: true })).toBe(true)
+    })
+  })
+
+  describe("selectionText (S76)", () => {
+    const line = (text: string, isWrapped = false) => ({
+      isWrapped,
+      translateToString: (trim?: boolean, start = 0, end = text.length) => {
+        const cut = text.slice(start, end)
+        return trim ? cut.replace(/\s+$/, "") : cut
+      },
+    })
+
+    it("keeps xterm's text in the normal buffer, where the pane's wraps are already joined", () => {
+      const terminal = {
+        cols: 20,
+        buffer: { active: { type: "normal", getLine: () => undefined } },
+        getSelection: () => "una riga lunga che il pannello ha mandato a capo",
+        getSelectionPosition: () => undefined,
       }
-      const mockTerminal = {
-        _core: {
-          _selectionService: mockSelectionService,
+      const text = selectionText(terminal as any)
+      expect(text).toBe("una riga lunga che il pannello ha mandato a capo")
+      expect(text).not.toContain("\n")
+    })
+
+    it("gives one line per screen row in the alternate buffer, wrapped or not, padding cut", () => {
+      const rows = [line("prima riga     ", true), line("seconda   ", true), line("terza          ", true)]
+      const terminal = {
+        cols: 15,
+        buffer: { active: { type: "alternate", getLine: (y: number) => rows[y] } },
+        getSelection: () => "prima riga     seconda   terza",
+        getSelectionPosition: () => ({ start: { x: 0, y: 0 }, end: { x: 15, y: 2 } }),
+      }
+      expect(selectionText(terminal as any)).toBe("prima riga\nseconda\nterza")
+    })
+
+    it("drops the empty lines at the end", () => {
+      const terminal = {
+        cols: 10,
+        buffer: { active: { type: "normal", getLine: () => undefined } },
+        getSelection: () => "testo\n   \n\n",
+        getSelectionPosition: () => undefined,
+      }
+      expect(selectionText(terminal as any)).toBe("testo")
+    })
+  })
+
+  describe("copyOnRelease (S76)", () => {
+    const setup = (selected: boolean) => {
+      const listeners: Array<() => void> = []
+      const terminal = {
+        hasSelection: () => selected,
+        onSelectionChange: (listener: () => void) => {
+          listeners.push(listener)
+          return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) }
         },
       }
+      const element = new EventTarget()
+      const release = new EventTarget()
+      let copies = 0
+      const stop = copyOnRelease(terminal as any, element, release, () => copies++)
+      const drag = () => {
+        element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
+        if (selected) for (const listener of listeners) listener()
+        release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
+      }
+      return { drag, copies: () => copies, stop }
+    }
 
-      configureTerminalSelection(mockTerminal as any)
-
-      // Shift + Left click forces selection
-      expect(
-        mockSelectionService.shouldForceSelection({ shiftKey: true, altKey: false, button: 0 } as MouseEvent),
-      ).toBe(true)
-
-      // Alt/Option + Left click forces selection
-      expect(
-        mockSelectionService.shouldForceSelection({ shiftKey: false, altKey: true, button: 0 } as MouseEvent),
-      ).toBe(true)
-
-      // Right click (button 2) does NOT force selection, passes to application in mouse mode
-      expect(
-        mockSelectionService.shouldForceSelection({ shiftKey: false, altKey: false, button: 2 } as MouseEvent),
-      ).toBe(false)
-
-      // Right click even with modifiers does NOT force selection
-      expect(
-        mockSelectionService.shouldForceSelection({ shiftKey: true, altKey: false, button: 2 } as MouseEvent),
-      ).toBe(false)
-
-      // Plain left click without modifiers does not force selection (delegates to app in mouse mode)
-      expect(
-        mockSelectionService.shouldForceSelection({ shiftKey: false, altKey: false, button: 0 } as MouseEvent),
-      ).toBe(false)
+    it("copies once when a selection is released", () => {
+      const { drag, copies } = setup(true)
+      drag()
+      expect(copies()).toBe(1)
     })
+
+    it("copies nothing when there is no selection", () => {
+      const { drag, copies } = setup(false)
+      drag()
+      expect(copies()).toBe(0)
+    })
+
+    it("stops listening when detached", () => {
+      const { drag, copies, stop } = setup(true)
+      stop()
+      drag()
+      expect(copies()).toBe(0)
+    })
+  })
+
+  it("the registry never reads the clipboard", () => {
+    const source = readFileSync(join(import.meta.dir, "registry.ts"), "utf8")
+    expect(source).not.toContain("readText(")
   })
 
   describe("copyToClipboard", () => {

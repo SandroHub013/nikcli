@@ -300,6 +300,23 @@ export function SessionPane(props: SessionPaneProps) {
   let root: HTMLElement | undefined
 
   /*
+   * The terminal's mouse, said out loud. A selection copies itself on release
+   * and the pane says so for a moment; while the program has the mouse, the
+   * header says how to give it a click. See `configureTerminalSelection`.
+   */
+  const [copied, setCopied] = createSignal(false)
+  const [mouseReporting, setMouseReporting] = createSignal(false)
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+  const flashCopied = () => {
+    setCopied(true)
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => setCopied(false), 1500)
+  }
+  onCleanup(() => {
+    if (copiedTimer) clearTimeout(copiedTimer)
+  })
+
+  /*
    * Following means: new output pulls the view down. It stops the moment the
    * user scrolls up, because reading three screens back while a build streams
    * is impossible if the pane keeps yanking itself to the bottom — and it
@@ -748,6 +765,12 @@ export function SessionPane(props: SessionPaneProps) {
           </span>
         </Show>
 
+        <Show when={props.terminalId && mouseReporting()}>
+          <span class="tok" data-slot="pane-mouse-hint" title={t("pane.mouseHint.tip")}>
+            {t("pane.mouseHint")}
+          </span>
+        </Show>
+
         <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
         <button
           type="button"
@@ -787,10 +810,17 @@ export function SessionPane(props: SessionPaneProps) {
             const detach = attachTerminal(id, element, {
               onInput: (data) => props.onInput?.(data),
               onResize: (cols, rows) => props.onResize?.(cols, rows),
+              onCopied: flashCopied,
+              onMouseMode: setMouseReporting,
             })
             onCleanup(detach)
           }}
         />
+        <Show when={copied()}>
+          <div data-slot="pane-toast" role="status">
+            {t("pane.copied")}
+          </div>
+        </Show>
       </Show>
 
       <div

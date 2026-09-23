@@ -383,6 +383,9 @@ export const en: Messages = {
 
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",
+  "pane.copied": "Copied",
+  "pane.mouseHint": "Alt+click to the program",
+  "pane.mouseHint.tip": "The left click selects and copies. To send a click to the program, hold Alt.",
   "pane.close": "Close",
   "bar.nikcliVersion": (v) => `nikcli ${v}, the one new sessions start`,
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,

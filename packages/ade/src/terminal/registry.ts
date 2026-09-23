@@ -139,6 +139,10 @@ export function refreshTerminalThemes(): void {
 /**
  * Copies text to the system clipboard.
  * Uses navigator.clipboard when available, falling back to a hidden textarea execCommand.
+ *
+ * Writing only. Never `navigator.clipboard.readText`: in WebView2 it opens a
+ * permission dialog that blocks the page until someone answers it, and ADE Test
+ * can only be restarted to get out of it.
  */
 export async function copyToClipboard(text: string): Promise<boolean> {
   if (!text) return false
@@ -185,20 +189,91 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
 }
 
 /**
- * Configures the terminal emulator's selection behavior:
- * - When in mouse events mode, holding Shift or Alt/Option bypasses mouse reporting
- *   and forces normal text selection, matching standard terminal expectations.
- * - Right clicks (button 2) pass through to the application in mouse mode.
+ * The left button is ADE's: it selects, even when the program has asked for the mouse.
+ *
+ * xterm consults this only while the program has mouse reporting on, so a shell
+ * or Codex keeps Alt+drag as today's column selection.
+ *
+ * The trade-off: a program that uses the left click, a clickable menu for
+ * instance, gets it only with Alt held. Claude Code and Codex are driven from
+ * the keyboard, and a plain drag in Claude Code was measured to do nothing at
+ * all. The wheel and the right and middle buttons stay the program's, because
+ * in the alternate buffer scrolling is the program's to do, not xterm's.
  */
 export function configureTerminalSelection(terminal: Terminal): void {
   const core = (terminal as any)._core
   const sel = core?._selectionService
   if (sel && typeof sel.shouldForceSelection === "function") {
-    sel.shouldForceSelection = (event: MouseEvent) => {
-      // Bypass mouse mode only on left click (button 0) when holding Shift or Alt/Option
-      const isLeft = event.button === 0 || event.button === undefined
-      return Boolean(isLeft && (event.shiftKey || event.altKey))
+    sel.shouldForceSelection = (event: MouseEvent) => (event.button === 0 || event.button === undefined) && !event.altKey
+  }
+}
+
+/**
+ * What a selection copies as text.
+ *
+ * In the normal buffer xterm's own text is right: it already joins the lines
+ * the pane wrapped. In the alternate buffer every line is put there by the
+ * program, which marks most of them as wrapped; joining those turned four
+ * copied lines into one, padded with spaces. So there it is one line per
+ * screen row, with the padding cut.
+ */
+export function selectionText(terminal: Terminal): string {
+  const buffer = terminal.buffer.active
+  let text: string
+  if (buffer.type === "alternate") {
+    // Zero-based cells, end exclusive: xterm's typings say otherwise, its code does this.
+    const range = terminal.getSelectionPosition()
+    if (!range) return ""
+    const rows: string[] = []
+    for (let y = range.start.y; y <= range.end.y; y++) {
+      const start = y === range.start.y ? range.start.x : 0
+      const end = y === range.end.y ? range.end.x : terminal.cols
+      rows.push((buffer.getLine(y)?.translateToString(true, start, end) ?? "").trimEnd())
     }
+    text = rows.join("\n")
+  } else {
+    text = terminal.getSelection()
+  }
+  return text.replace(/(?:\r?\n[^\S\r\n]*)+$/, "")
+}
+
+/** What `copyOnRelease` needs from a terminal: little enough to fake in a test. */
+export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange">
+
+/**
+ * Copies a selection the moment the button that made it comes up.
+ *
+ * Only a selection that changed during this press: a click that selects
+ * nothing new must not copy an old selection again. The release is listened
+ * for on `release` (the document), because a drag often ends outside the pane.
+ */
+export function copyOnRelease(
+  terminal: CopySource,
+  element: EventTarget,
+  release: EventTarget,
+  copy: () => void,
+): () => void {
+  let pressed = false
+  let changed = false
+  const down = (event: Event) => {
+    if ((event as MouseEvent).button !== 0) return
+    pressed = true
+    changed = false
+  }
+  const up = (event: Event) => {
+    if (!pressed || (event as MouseEvent).button !== 0) return
+    pressed = false
+    if (changed && terminal.hasSelection()) copy()
+  }
+  const selection = terminal.onSelectionChange(() => {
+    if (pressed) changed = true
+  })
+  element.addEventListener("mousedown", down, true)
+  release.addEventListener("mouseup", up, true)
+  return () => {
+    selection.dispose()
+    element.removeEventListener("mousedown", down, true)
+    release.removeEventListener("mouseup", up, true)
   }
 }
 
@@ -221,7 +296,7 @@ export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEv
     if (isCopyShortcut(event)) {
       if (terminal.hasSelection()) {
         if (event.type === "keydown") {
-          void copyToClipboard(terminal.getSelection())
+          void copyToClipboard(selectionText(terminal))
           terminal.clearSelection()
         }
         return false
@@ -315,6 +390,10 @@ export interface AttachOptions {
   onInput?: (data: string) => void
   /** The terminal's new size after a fit, in character cells. */
   onResize?: (cols: number, rows: number) => void
+  /** A selection was copied on release; the pane says so for a moment. */
+  onCopied?: () => void
+  /** Whether the program has mouse reporting on, whenever that changes. */
+  onMouseMode?: (reporting: boolean) => void
 }
 
 /**
@@ -371,6 +450,34 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 
+  const terminal = session.terminal
+  const stopCopy =
+    typeof document === "undefined"
+      ? undefined
+      : copyOnRelease(terminal, element, document, () => {
+          void copyToClipboard(selectionText(terminal)).then((copied) => {
+            if (copied) options.onCopied?.()
+          })
+        })
+
+  // xterm has no event for a mode change, so the mode is read after parsed
+  // output, at most every 500 ms.
+  let reporting: boolean | undefined
+  let modeTimer: ReturnType<typeof setTimeout> | undefined
+  const readMode = () => {
+    modeTimer = undefined
+    const now = terminal.modes.mouseTrackingMode !== "none"
+    if (now === reporting) return
+    reporting = now
+    options.onMouseMode?.(now)
+  }
+  readMode()
+  const modeWatch = options.onMouseMode
+    ? terminal.onWriteParsed(() => {
+        if (!modeTimer) modeTimer = setTimeout(readMode, 500)
+      })
+    : undefined
+
   const applyFit = () => {
     // A pane can be zero-sized for a frame — collapsed, or mid-layout — and
     // fitting against that throws inside xterm's renderer.
@@ -390,6 +497,9 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const detach = () => {
     observer.disconnect()
     inputHandler?.dispose()
+    stopCopy?.()
+    modeWatch?.dispose()
+    if (modeTimer) clearTimeout(modeTimer)
     session.element = undefined
     session.detach = undefined
   }
