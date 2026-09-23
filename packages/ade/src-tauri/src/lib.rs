@@ -1034,15 +1034,12 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         }
     }
     // The dev server is ADE's page only in a debug build; a release has none.
-    #[cfg(debug_assertions)]
+    #[cfg(all(windows, debug_assertions))]
     let dev_url = app.config().build.dev_url.clone();
-    #[cfg(not(debug_assertions))]
+    #[cfg(all(windows, not(debug_assertions)))]
     let dev_url: Option<tauri::Url> = None;
     let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title(title)
-        // The window shows ADE and nothing else: see `is_own_page`. The browser
-        // pane's frames are not top-level navigations and are not seen here.
-        .on_navigation(move |url| is_own_page(url, dev_url.as_ref()))
         // A new document in the window is a new page: the old one's ptys have
         // no owner left. See `pty::Registry::end_all`. Only the top document
         // raises this, and on the first load there is nothing to end.
@@ -1061,6 +1058,14 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         // a browser pane's frame. See `src/browser/frame-script.ts`.
         .initialization_script_for_all_frames(include_str!("../scripts/browser-frame.js"))
         .center();
+
+    // On macOS and Linux, `on_navigation` with `is_own_page` is also called for subframes:
+    // - on macOS, wry 0.55.1 wkwebview/navigation.rs:50-81 does not check targetFrame.isMainFrame;
+    // - on Linux, webkitgtk decide-policy also triggers for child frames.
+    // This leaves the browser panel and Design preview frames white. This does not happen on Windows.
+    // macOS and Linux revert to the 0.7.6 behavior (no on_navigation).
+    #[cfg(windows)]
+    let builder = builder.on_navigation(move |url| is_own_page(url, dev_url.as_ref()));
 
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -1155,6 +1160,7 @@ pub(crate) fn own_origin(dev_url: Option<&tauri::Url>) -> String {
 /// top-level navigation is refused. A click in a markdown preview once took
 /// the whole window to the page a README's form named; whatever lets a page
 /// do that next, the window stays ADE.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) fn is_own_page(url: &tauri::Url, dev_url: Option<&tauri::Url>) -> bool {
     match url.scheme() {
         "tauri" => url.host_str() == Some("localhost"),
@@ -1714,5 +1720,47 @@ mod tests {
         assert_eq!(read.text, "ciao");
         assert!(!read.truncated);
         assert_eq!(read.bytes, 4);
+    }
+
+    #[test]
+    fn frame_src_csp_allows_ade_media() {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let csp = config["app"]["security"]["csp"]
+            .as_str()
+            .expect("app.security.csp");
+        let frame_src = csp
+            .split(';')
+            .map(str::trim)
+            .find(|directive| directive.starts_with("frame-src"))
+            .expect("frame-src directive in CSP");
+        let tokens: Vec<&str> = frame_src.split_whitespace().collect();
+        assert!(
+            tokens.contains(&"ade-media:"),
+            "frame-src must contain ade-media:, found: {frame_src}"
+        );
+    }
+
+    #[test]
+    fn on_navigation_is_conditioned_to_windows() {
+        let source = include_str!("lib.rs");
+        let test_fn_marker = "fn on_navigation_is_conditioned_to_windows()";
+        let test_start = source.find(test_fn_marker).expect("test function found");
+        let non_test_source = &source[..test_start];
+
+        let nav_call = ".on_navigation(";
+        let count = non_test_source.matches(nav_call).count();
+        assert_eq!(count, 1, "expected exactly one on_navigation call in lib.rs");
+
+        let nav_idx = non_test_source.find(nav_call).expect("on_navigation call found");
+        let before_nav = &non_test_source[..nav_idx];
+        let last_cfg = before_nav
+            .rfind("#[cfg(windows)]")
+            .expect("on_navigation must be preceded by #[cfg(windows)]");
+        let between = &before_nav[last_cfg..nav_idx];
+        assert!(
+            !between.contains("fn ") && !between.contains("struct ") && !between.contains("enum "),
+            "#[cfg(windows)] must guard the on_navigation call directly"
+        );
     }
 }
