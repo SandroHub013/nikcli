@@ -192,8 +192,9 @@ describe("where no reader reaches, during a take (D68, Architect)", () => {
     const viewer = tray.slice(tray.indexOf('data-component="shot-viewer"'))
     expect(tray).toContain('data-component="shot-viewer"')
     // The viewer renders the same <Thumb>, whose <img> is the shot-image.
-    expect(viewer).toMatch(/<Thumb/)
-    expect(tray.slice(tray.indexOf("function Thumb"), tray.indexOf("function Thumb") + 1200)).toContain('data-slot="shot-image"')
+    expect(viewer).toMatch(/<Thumb[\s/>]/)
+    const thumb = tray.slice(tray.indexOf("function Thumb"))
+    expect(thumb.slice(0, thumb.indexOf("\n}\n"))).toContain('data-slot="shot-image"')
   })
 })
 
