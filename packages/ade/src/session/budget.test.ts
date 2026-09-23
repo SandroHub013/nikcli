@@ -8,6 +8,7 @@ import {
   parseMessage,
   parseOpenRequests,
   requestsTable,
+  shouldNudge,
   timeNoteDue,
   type OpenRequest,
 } from "./mailbox"
@@ -92,6 +93,39 @@ describe("the budget on a request (D73)", () => {
     expect(parseOpenRequests(saved)).toEqual([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x" }])
     const kept = JSON.stringify([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 }])
     expect(parseOpenRequests(kept)).toEqual([{ id: "a1", kind: "ask", from: "", to: "b", at: 1, brief: "x", budget: 600, timeNotes: 1 }])
+  })
+
+  test("with a draft open the time note does not go and is not given; once the line is empty it goes once", () => {
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    // What the workbench does each round: type and mark only what is due.
+    const round = (now: number, typing: boolean) => {
+      const due = timeNoteDue(request, now, typing)
+      if (due) request.timeNotes = due
+      return due
+    }
+    expect(round(61_000, true)).toBeUndefined()
+    expect(request.timeNotes).toBeUndefined()
+    expect(round(62_000, true)).toBeUndefined()
+    expect(round(63_000, false)).toBe(1)
+    expect(round(64_000, false)).toBeUndefined()
+    expect(request.timeNotes).toBe(1)
+  })
+
+  test("with a draft open the reminder does not go either; with the line empty it does (Architect, same defect)", () => {
+    const request: OpenRequest = { id: "171-ab", kind: "ask", from: "", to: "b", at: 0, brief: "x" }
+    const quiet = { running: true, permissionPending: false, lastOutputAt: 10_000 }
+    expect(shouldNudge(request, { ...quiet, typing: true }, 900_000)).toBe(false)
+    expect(shouldNudge(request, { ...quiet, typing: false }, 900_000)).toBe(true)
+    expect(shouldNudge(request, quiet, 900_000)).toBe(true)
+  })
+
+  test("the last note is neutral for a request that is blocked or waits on a decision", () => {
+    const request = { id: "171-ab", at: 0, budget: 1200 }
+    for (const state of ["bloccata", "decisione"] as const) {
+      const line = formatTimeNote({ ...request, update: { state, text: "serve una chiave", at: 1 } }, 1_200_000, 2)
+      expect(line).toBe("[Tempo] 171-ab: elapsed 1200s / 1200s, budget finito")
+      expect(line).not.toContain("chiudi")
+    }
   })
 
   test("the help names --budget and warns against it on security reviews and releases", () => {

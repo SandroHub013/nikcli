@@ -2047,6 +2047,8 @@ export function Workbench() {
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
     waitingOnOthers: [...openRequests.values()].some((other) => other.from === request.to),
+    // A line the user began there: nothing is typed over it (the reminders and the time notes).
+    typing: isTyping(records.typed.get(request.to)),
     ...(folderChanges.has(request.to) ? { lastWriteAt: folderChanges.get(request.to)!.changedAt } : {}),
   })
 
@@ -2382,7 +2384,8 @@ export function Workbench() {
        * the reminders. Information for whoever works: it closes nothing and
        * leaves the reminders below as they were.
        */
-      const timeNote = session ? timeNoteDue(request, now) : undefined
+      // Not while the user has a line begun there: not given either, so it comes on a later round.
+      const timeNote = session ? timeNoteDue(request, now, isTyping(records.typed.get(request.to))) : undefined
       if (session && timeNote) {
         request.timeNotes = timeNote
         saveRequests()

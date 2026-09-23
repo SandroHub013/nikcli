@@ -669,10 +669,17 @@ export function formatElapsed(request: Pick<OpenRequest, "at" | "deliveredAt" | 
 
 /**
  * Which time note is due now: 1 at half the budget, 2 at its end, each once.
- * Past the end with neither given, only the end is said.
+ * Past the end with neither given, only the end is said. Never while the user
+ * has a line begun in that session (`typing`): typed over a draft, the note's
+ * Enter would send the draft with it. Not due is not given, so it comes on a
+ * later round, once the line is empty.
  */
-export function timeNoteDue(request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes">, now: number): 1 | 2 | undefined {
-  if (!request.budget) return undefined
+export function timeNoteDue(
+  request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes">,
+  now: number,
+  typing = false,
+): 1 | 2 | undefined {
+  if (!request.budget || typing) return undefined
   const given = request.timeNotes ?? 0
   const elapsed = now - (request.deliveredAt ?? request.at)
   if (given < 2 && elapsed >= request.budget * 1000) return 2
@@ -681,11 +688,16 @@ export function timeNoteDue(request: Pick<OpenRequest, "at" | "deliveredAt" | "b
 }
 
 /** The line typed to the session doing the work when a time note is due. */
-export function formatTimeNote(request: Pick<OpenRequest, "id" | "at" | "deliveredAt" | "budget">, now: number, which: 1 | 2): string {
+export function formatTimeNote(
+  request: Pick<OpenRequest, "id" | "at" | "deliveredAt" | "budget" | "update">,
+  now: number,
+  which: 1 | 2,
+): string {
   const elapsed = formatElapsed(request, now) ?? ""
-  return which === 1
-    ? `[Tempo] ${request.id}: ${elapsed}`
-    : `[Tempo] ${request.id}: ${elapsed}, budget finito: chiudi con ade-msg reply ${request.id}, o chiedi tempo con ade-msg update ${request.id} decisione "<motivo>"`
+  if (which === 1) return `[Tempo] ${request.id}: ${elapsed}`
+  // Blocked, or waiting on a decision: the session is waiting on its caller, and «chiudi» would push it to.
+  if (request.update) return `[Tempo] ${request.id}: ${elapsed}, budget finito`
+  return `[Tempo] ${request.id}: ${elapsed}, budget finito: chiudi con ade-msg reply ${request.id}, o chiedi tempo con ade-msg update ${request.id} decisione "<motivo>"`
 }
 
 export type RequestState =
@@ -978,10 +990,17 @@ export function shouldNudge(
      * would only cost it a turn.
      */
     waitingOnOthers?: boolean
+    /**
+     * The user has begun a line in that session and not sent it. A reminder
+     * typed now lands on the draft and its Enter sends the two together; it
+     * waits, and is not counted, until the line is empty again.
+     */
+    typing?: boolean
   },
   now: number,
 ): boolean {
   if (!target.running || target.permissionPending) return false
+  if (target.typing) return false
   if (target.waitingOnOthers) return false
   // A session that said it is blocked is waiting on its caller, not forgetting to answer.
   if (request.update) return false
