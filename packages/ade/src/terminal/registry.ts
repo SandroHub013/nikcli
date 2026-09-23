@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
+import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
 export interface SessionTerminal {
   terminal: Terminal
@@ -20,6 +21,8 @@ export interface SessionTerminal {
   /** Where it is currently drawn, if anywhere. */
   element?: HTMLElement
   detach?: () => void
+  /** Stops the take's row reader, while one runs. See `coverTerminals`. */
+  uncover?: () => void
 }
 
 const terminals = new Map<string, SessionTerminal>()
@@ -311,7 +314,7 @@ export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEv
     if (isCopyShortcut(event)) {
       if (terminal.hasSelection()) {
         if (event.type === "keydown") {
-          void copyToClipboard(selectionText(terminal))
+          if (!copyIsCovered(terminal)) void copyToClipboard(selectionText(terminal))
           terminal.clearSelection()
         }
         return false
@@ -472,12 +475,16 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     typeof document === "undefined"
       ? undefined
       : copyOnRelease(terminal, element, document, () => {
+          if (copyIsCovered(terminal)) return
           void copyToClipboard(selectionText(terminal)).then((copied) => {
             if (copied) options.onCopied?.()
           })
         })
 
   const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+
+  // A pane drawn or moved during a take is born covered, with a reader of its own.
+  if (covering) cover(session)
 
   // xterm has no event for a mode change, so the mode is read after parsed
   // output, at most every 500 ms.
@@ -520,11 +527,57 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     stopLinks?.()
     modeWatch?.dispose()
     if (modeTimer) clearTimeout(modeTimer)
+    session.uncover?.()
+    session.uncover = undefined
     session.element = undefined
     session.detach = undefined
   }
   session.detach = detach
   return detach
+}
+
+/*
+ * The take (D68). While one runs, every row of every terminal is blurred by
+ * the CSS in `index.css`, and a reader per terminal (`recording-cover.ts`)
+ * shows the rows it judges clean. A terminal with no rows drawn has nothing to
+ * read and stays blurred as a whole.
+ */
+let covering = false
+
+function cover(session: SessionTerminal): void {
+  session.uncover?.()
+  session.uncover = undefined
+  const rows = session.terminal.element?.querySelector(".xterm-rows")
+  if (!rows || typeof MutationObserver === "undefined") return
+  session.uncover = watchRows(rows, () => session.terminal.buffer.active as unknown as CoverBuffer)
+}
+
+/** Starts or stops the readers of every open terminal; `coverSecrets` calls it. */
+export function coverTerminals(on: boolean): void {
+  covering = on
+  for (const session of terminals.values()) {
+    if (on && session.element) cover(session)
+    else {
+      session.uncover?.()
+      session.uncover = undefined
+    }
+  }
+}
+
+/**
+ * Whether copying the selection now would take a blurred line off the screen
+ * in the clear: during a take, a selection that reaches a line the reader
+ * would not show is not copied.
+ */
+function copyIsCovered(terminal: Terminal): boolean {
+  if (!covering) return false
+  const range = terminal.getSelectionPosition()
+  if (!range) return false
+  try {
+    return selectionReachesSecret(terminal.buffer.active as unknown as CoverBuffer, range.start.y, range.end.y)
+  } catch {
+    return true
+  }
 }
 
 /** Ends a terminal for good. Called when its pane closes, not when it hides. */
