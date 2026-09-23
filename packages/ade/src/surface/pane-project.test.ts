@@ -76,3 +76,10 @@ describe("the grid and the pane counts with two projects called app", () => {
     expect(sameProject(panes[0]!, panes[3]!)).toBe(true)
   })
 })
+
+describe("folders are compared as host/path.ts compares them", () => {
+  test("a drive root keeps its slash: C:/ is the root, C: is not the same folder", () => {
+    expect(paneProject({ workspaceId: "C:", projectRoot: "C:/" }, { name: "C:", root: "C:" }, [])).toEqual({ kind: "root", root: "C:/" })
+    expect(belongsTo({ projectRoot: "d:/" }, { name: "D:", root: "D:/" })).toBe(true)
+  })
+})

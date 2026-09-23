@@ -7,6 +7,8 @@
  * now remembers the folder too; the name is only for panes saved before.
  */
 
+import { pathEquals } from "../host/path"
+
 export interface ProjectRef {
   readonly name: string
   readonly root: string
@@ -20,7 +22,7 @@ export function paneProject(
   recents: readonly ProjectRef[],
 ): PaneProject {
   if (pane?.projectRoot) {
-    return open && samePath(pane.projectRoot, open.root) ? { kind: "open" } : { kind: "root", root: pane.projectRoot }
+    return open && pathEquals(pane.projectRoot, open.root) ? { kind: "open" } : { kind: "root", root: pane.projectRoot }
   }
   const owner = pane?.workspaceId
   if (!owner || owner === open?.name) return { kind: "open" }
@@ -37,7 +39,7 @@ export function belongsTo(
   pane: { readonly workspaceId?: string; readonly projectRoot?: string },
   project: ProjectRef,
 ): boolean {
-  return pane.projectRoot ? samePath(pane.projectRoot, project.root) : pane.workspaceId === project.name
+  return pane.projectRoot ? pathEquals(pane.projectRoot, project.root) : pane.workspaceId === project.name
 }
 
 /** Whether two panes are of the same project; by name only when either lacks a folder. */
@@ -45,11 +47,5 @@ export function sameProject(
   a: { readonly workspaceId?: string; readonly projectRoot?: string },
   b: { readonly workspaceId?: string; readonly projectRoot?: string },
 ): boolean {
-  return a.projectRoot && b.projectRoot ? samePath(a.projectRoot, b.projectRoot) : a.workspaceId === b.workspaceId
-}
-
-/** Windows paths: the same folder may come back with the other slash or another case. */
-function samePath(a: string, b: string): boolean {
-  const norm = (path: string) => path.replace(/[\\/]+/g, "/").replace(/\/$/, "").toLowerCase()
-  return norm(a) === norm(b)
+  return a.projectRoot && b.projectRoot ? pathEquals(a.projectRoot, b.projectRoot) : a.workspaceId === b.workspaceId
 }
