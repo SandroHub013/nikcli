@@ -27,14 +27,6 @@
   transition: var(--ade-btn-transition);
 }
 
-[data-slot="decisions-badge"]::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
 /*
  * `filter: brightness` was doing the work of a hover here, which is why the
  * badge changed in a way nothing else in the app did: it lightens the border,

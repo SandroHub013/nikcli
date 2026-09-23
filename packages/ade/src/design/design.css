@@ -30,12 +30,11 @@
   box-sizing: border-box;
 }
 
+/* Holds the vial (S62): its size is the vial's, see `surface/vial/vial.css`. */
 [data-slot="design-badge-icon"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 11px;
-  height: 11px;
   flex-shrink: 0;
 }
 
@@ -85,10 +84,6 @@
     gap: 0;
     justify-content: center;
     border-radius: 6px;
-  }
-  [data-slot="design-badge-icon"] {
-    width: 12px;
-    height: 12px;
   }
   [data-slot="design-badge-count"] {
     position: absolute;

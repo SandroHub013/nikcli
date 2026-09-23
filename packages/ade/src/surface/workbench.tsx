@@ -1,4 +1,5 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
+import { VialMark } from "./vial/vial-mark"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every, pageHidden, watchDue } from "../host/every"
@@ -6391,6 +6392,7 @@ export function Workbench() {
             onClick={() => setDecisionsOpen(true)}
             title={t("decisions.waiting")}
           >
+            <VialMark fam="dec" count={decisionsWaiting()} theme={theme()} />
             {countLabel(decisionsWaiting())}
             <Show when={queuedBadge(decisionsQueued())}>
               {(text) => <span data-slot="badge-queued" data-tone="warn">{` ${text()}`}</span>}
@@ -6412,10 +6414,7 @@ export function Workbench() {
             aria-label={designCountLabel(designWaiting())}
           >
             <span data-slot="design-badge-icon" aria-hidden="true">
-              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M10 4l2 2" stroke-linecap="round" />
-              </svg>
+              <VialMark fam="design" count={designWaiting()} theme={theme()} />
             </span>
             <span data-slot="design-badge-count">{designWaiting()}</span>
             <span data-slot="design-badge-label">{t("design.title")}</span>
