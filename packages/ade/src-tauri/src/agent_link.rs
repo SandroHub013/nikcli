@@ -259,15 +259,16 @@ pub async fn agent_hook_write(
     if let Some(text) = script.as_ref() {
         let on_disk = fs::read_to_string(&script_path).ok();
         if on_disk.as_deref() != Some(text.as_str()) {
+            let brand = crate::brand::name();
             let question = format!(
-                "ADE vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire ad ADE quale conversazione ha aperto. Consentire?",
+                "{brand} vuole installare o aggiornare il suo hook per {agent}:\n\n{}\n\nLo script viene eseguito da {agent} a ogni sessione, per dire a {brand} quale conversazione ha aperto. Consentire?",
                 script_path.display()
             );
             let allowed = tauri::async_runtime::spawn_blocking(move || {
                 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
                 app.dialog()
                     .message(question)
-                    .title("Hook di ADE")
+                    .title(format!("Hook di {}", crate::brand::name()))
                     .kind(MessageDialogKind::Warning)
                     .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
                     .blocking_show()
@@ -395,7 +396,7 @@ fn check_hook_config(current: Option<&str>, next: &str, command: &str) -> Result
     let before = parse(current.unwrap_or(""))?;
     let after = parse(next)?;
     if without_ade(&before) != without_ade(&after) {
-        return Err("la configurazione cambia più degli hook di ADE: scrittura rifiutata".to_string());
+        return Err(format!("la configurazione cambia più degli hook di {}: scrittura rifiutata", crate::brand::name()));
     }
     let mut commands = Vec::new();
     ade_commands(&after, &mut commands);

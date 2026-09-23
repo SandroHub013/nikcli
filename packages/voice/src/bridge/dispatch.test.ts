@@ -189,10 +189,78 @@ describe("dispatch", () => {
     test("ma li esegue sul pannello a fuoco", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "process.kill")!
-      const outcome = await dispatch(makeParseResult(spec), host, { focusedPaneId: "pane-2" })
+      const outcome = await dispatch(makeParseResult(spec), host, { focusedPaneId: "pane-1" })
 
       expect(outcome.success).toBe(true)
-      expect(host.calls.some((c) => c.method === "focusPane" && c.args[0] === "pane-2")).toBe(true)
+      expect(host.calls.some((c) => c.method === "focusPane" && c.args[0] === "pane-1")).toBe(true)
+    })
+  })
+
+  test("«tema chiaro» imposta il tema chiaro, «cambia tema» lo inverte", async () => {
+    const spec = VOCABULARY.find((v) => v.intent === "theme.toggle")!
+    const light = new MockVoiceHost()
+    const outcome = await dispatch(makeParseResult(spec, { text: "light" }), light)
+    expect(outcome.success).toBe(true)
+    expect(light.calls).toContainEqual({ method: "runCommand", args: ["theme.set.light"] })
+
+    const dark = new MockVoiceHost()
+    await dispatch(makeParseResult(spec, { text: "dark" }), dark)
+    expect(dark.calls).toContainEqual({ method: "runCommand", args: ["theme.set.dark"] })
+
+    const flip = new MockVoiceHost()
+    await dispatch(makeParseResult(spec, {}), flip)
+    expect(flip.calls).toContainEqual({ method: "runCommand", args: ["theme.toggle"] })
+  })
+
+  describe("non dice fatto quando non ha fatto nulla", () => {
+    const run = async (intent: string, slots: Record<string, any>, host = new MockVoiceHost()) => {
+      const spec = VOCABULARY.find((v) => v.intent === intent)!
+      const outcome = await dispatch(makeParseResult(spec, slots), host)
+      return { outcome, host }
+    }
+
+    test("terminare un pannello senza processo attivo", async () => {
+      const { outcome, host } = await run("process.kill", { paneIndex: 2 })
+      expect(outcome.success).toBe(false)
+      expect(outcome.spoken).toContain("non ha un processo attivo")
+      expect(host.calls.some((c) => c.method === "runCommand")).toBe(false)
+    })
+
+    test.each([
+      ["permission.allow", "answerPermission"],
+      ["permission.deny", "answerPermission"],
+      ["pane.view.set", "setPaneView"],
+      ["browser.navigate", "browserNavigate"],
+    ] as const)("%s quando l'host non ha fatto nulla", async (intent, method) => {
+      const host = new MockVoiceHost()
+      ;(host as any)[method] = () => false
+      const { outcome } = await run(intent, { paneIndex: 1, text: "diff", url: "http://localhost:5173" }, host)
+      expect(outcome.success).toBe(false)
+    })
+
+    test.each(["dialog.confirm", "dialog.cancel", "dictation.finish"])(
+      "%s senza nulla in corso",
+      async (intent) => {
+        const { outcome } = await run(intent, {})
+        expect(outcome.success).toBe(false)
+        expect(outcome.spoken).toStartWith("Non c'è")
+      },
+    )
+
+    test("progetto recente senza nome apre la scelta del progetto", async () => {
+      const { outcome, host } = await run("project.recent", {})
+      expect(outcome.success).toBe(true)
+      expect(host.calls).toContainEqual({ method: "runCommand", args: ["project.open"] })
+    })
+
+    test("una ricerca che non può partire è un errore, non zero risultati", async () => {
+      const host = new MockVoiceHost()
+      host.searchProject = async () => {
+        throw new Error("non c'è nessun progetto aperto in cui cercare")
+      }
+      const { outcome } = await run("project.search", { text: "x" }, host)
+      expect(outcome.success).toBe(false)
+      expect(outcome.spoken).toContain("nessun progetto aperto")
     })
   })
 
@@ -309,6 +377,21 @@ describe("dispatch", () => {
       expect(host.calls.some((c) => c.method === "setView" && c.args[0] === "bot")).toBe(true)
     })
 
+    test("a section the host has hidden is refused and said, not switched to", async () => {
+      const host = new MockVoiceHost()
+      const hiding = Object.assign(host, { availableViews: () => ["agent", "code"] as const })
+      const spec = VOCABULARY.find((v) => v.intent === "view.set")!
+
+      const chat = await dispatch(makeParseResult(spec, { text: "chat" }), hiding)
+      expect(chat.success).toBe(false)
+      expect(chat.spoken).toBe("La sezione chat non è disponibile per ora.")
+      expect(host.calls.some((c) => c.method === "setView")).toBe(false)
+
+      const code = await dispatch(makeParseResult(spec, { text: "code" }), hiding)
+      expect(code.success).toBe(true)
+      expect(host.calls.some((c) => c.method === "setView" && c.args[0] === "code")).toBe(true)
+    })
+
     test("dispatches scrollTranscript", async () => {
       const host = new MockVoiceHost()
       const spec = VOCABULARY.find((v) => v.intent === "transcript.scroll")!
@@ -343,10 +426,34 @@ describe("dispatch", () => {
 
         const outcome = await dispatch(makeParseResult(spec, dummySlots), host)
 
-        expect(outcome.success).toBe(true)
+        // Outside a confirmation or a dictation these have nothing to act on.
+        const nothingPending = ["dialog.confirm", "dialog.cancel", "dictation.finish"].includes(spec.intent)
+        expect(outcome.success).toBe(!nothingPending)
         expect(outcome.spoken).toBeDefined()
         expect(outcome.spoken.length).toBeGreaterThan(0)
       }
     })
+  })
+})
+
+describe("a command that threw", () => {
+  test("is said in plain words, never with the raw error", async () => {
+    const { plainFailure } = await import("./dispatch")
+    expect(plainFailure("TypeError: Cannot read properties of undefined (reading 'id')")).toBe(
+      "Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.",
+    )
+    expect(plainFailure("Failed to fetch")).toBe("Non sono riuscito a farlo. Non ho rete in questo momento: ti sento appena torna.")
+    expect(plainFailure(undefined)).not.toContain("undefined")
+    expect(plainFailure("ENOENT: no such file, open 'C:/x'")).toBe("Non sono riuscito a farlo in ADE: trovi il dettaglio nella console.")
+    expect(plainFailure("non c'è nessun progetto aperto")).toBe("Non sono riuscito a farlo: non c'è nessun progetto aperto")
+
+    // English
+    expect(plainFailure("TypeError: Cannot read properties of undefined", "en")).toBe(
+      "Could not complete action in ADE: see console for details.",
+    )
+    expect(plainFailure("Failed to fetch", "en")).toBe(
+      "Could not complete action. No network connection right now: I'll listen as soon as it returns.",
+    )
+    expect(plainFailure("no project open", "en")).toBe("Could not complete action: no project open")
   })
 })

@@ -56,8 +56,8 @@ export async function getAllSessions(): Promise<Session.Info[]> {
   const sessions: Session.Info[] = []
 
   try {
-    for (const project of ProjectRepo.list()) {
-      sessions.push(...SessionRepo.getByProject(project.id))
+    for (const project of Effect.runSync(ProjectRepo.list())) {
+      sessions.push(...Effect.runSync(SessionRepo.getByProject(project.id)))
     }
   } catch (error) {
     log.error("Failed to get all sessions", { error })

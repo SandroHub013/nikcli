@@ -44,7 +44,7 @@ export async function maybeStartRemoteSync(): Promise<{ stop(): Promise<void> } 
  * last durable step. See `specs/v2/session-restart-continuation.md`.
  */
 export async function resumeSuspendedSessions(): Promise<number> {
-  const claimed = SessionRepo.consumeSuspended()
+  const claimed = Effect.runSync(SessionRepo.consumeSuspended())
   if (claimed.length === 0) return 0
 
   const { InstanceBootstrap } = await import("@/project/bootstrap")
@@ -84,7 +84,7 @@ export function suspendActiveSessions(): number {
   try {
     const ids = PromptState.activeSessions()
     if (ids.length === 0) return 0
-    SessionRepo.suspend(ids)
+    Effect.runSync(SessionRepo.suspend(ids))
     log.info("suspended active sessions", { count: ids.length })
     return ids.length
   } catch (error) {

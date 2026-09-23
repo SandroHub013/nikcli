@@ -21,6 +21,7 @@
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
 import type { VoiceMode, VoiceSettings } from "@nikcli-ai/voice/core"
+import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */
 export const GLOBAL_VOICE_EVENT = "nikcli-global-voice"
@@ -129,6 +130,94 @@ export function modeForGlobalChord(
   if (sameChord(pressed, parseChord(settings.agentChord, platform))) return "agent"
   if (sameChord(pressed, parseChord(settings.transcriptionChord, platform))) return "transcription"
   return undefined
+}
+
+/**
+ * What the window should do about one event from a system-wide voice hotkey.
+ *
+ * A separate function because the answer has to be testable without a webview:
+ * this event is the *whole* keyboard for a registered chord, and if the chord
+ * the native side names is not recognised, the safe answer is to say so. It is
+ * never to fall back on a mode — falling back would open the microphone in
+ * whichever mode happens to be stored, and the user who pressed the
+ * assistant's chord would get dictation with no idea why.
+ */
+export type GlobalVoiceAction =
+  | { kind: "press"; mode: VoiceMode }
+  | { kind: "release" }
+  | { kind: "unknown"; chord: string }
+  | { kind: "ignore" }
+
+export function globalVoiceAction(
+  rawPayload: unknown,
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord">,
+  platform: Platform,
+): GlobalVoiceAction {
+  const payload = readGlobalVoicePayload(rawPayload)
+  if (!payload) return { kind: "ignore" }
+  const mode = modeForGlobalChord(payload.chord, settings, platform)
+  if (!mode) return { kind: "unknown", chord: payload.chord }
+  return payload.state === "released" ? { kind: "release" } : { kind: "press", mode }
+}
+
+/** What to say when the system reports a chord ADE cannot place. */
+export function unknownChordMessage(chord: string): string {
+  return t("voice.shortcut.unknown", chord)
+}
+
+export interface RegisterVoiceShortcutsDeps {
+  /** Drops every hotkey ADE holds, so a changed chord stops answering. */
+  unregisterAll: () => Promise<void>
+  /** Claims one chord, in the grammar `toTauriChord` produces. */
+  register: (chord: string) => Promise<void>
+  /** Says what could not be claimed, in the interface rather than the console. */
+  report?: (message: string) => void
+}
+
+/**
+ * Claims both voice chords system-wide, each on its own.
+ *
+ * One `try` around both used to mean the first refusal — a chord another
+ * application already holds, which is common for Ctrl+Space — skipped the
+ * registration of the other one, so a single busy chord silently turned off
+ * both shortcuts. The failure was a `console.warn` nobody sees, and from the
+ * outside the feature simply did not work.
+ */
+export async function registerVoiceShortcuts(
+  settings: Pick<VoiceSettings, "agentChord" | "transcriptionChord">,
+  deps: RegisterVoiceShortcutsDeps,
+): Promise<{ registered: VoiceMode[]; failed: { mode: VoiceMode; chord: string; problem: string }[] }> {
+  try {
+    await deps.unregisterAll()
+  } catch {
+    // Nothing held, or the plugin is gone: the registrations below say so themselves.
+  }
+
+  const registered: VoiceMode[] = []
+  const failed: { mode: VoiceMode; chord: string; problem: string }[] = []
+  const wanted: { mode: VoiceMode; chord: string }[] = [
+    { mode: "transcription", chord: settings.transcriptionChord },
+    { mode: "agent", chord: settings.agentChord },
+  ]
+
+  for (const { mode, chord } of wanted) {
+    try {
+      await deps.register(toTauriChord(chord))
+      registered.push(mode)
+    } catch (err) {
+      const problem = err instanceof Error ? err.message : String(err)
+      failed.push({ mode, chord, problem })
+      deps.report?.(
+        t(
+          "voice.shortcut.busy",
+          chord,
+          t(mode === "agent" ? "voice.shortcut.feature.agent" : "voice.shortcut.feature.transcription"),
+        ),
+      )
+    }
+  }
+
+  return { registered, failed }
 }
 
 /**

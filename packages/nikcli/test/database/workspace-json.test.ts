@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { withIsolatedDatabase } from "../helpers/sqlite"
@@ -30,12 +31,12 @@ describe("workspace JSON backfill", () => {
       const { WorkspaceDB } = await import("@/workspace/db")
       Database.syncDb()
 
-      expect(WorkspaceDB.get(record.id)?.name).toBe("json workspace")
-      expect(WorkspaceDB.get(record.id)?.config).toEqual(record.config)
+      expect(Effect.runSync(WorkspaceDB.get(record.id))?.name).toBe("json workspace")
+      expect(Effect.runSync(WorkspaceDB.get(record.id))?.config).toEqual(record.config)
 
       const workspaceJson = (await import("@/database/migration/20260814090000_workspace_json")).default
       workspaceJson.up(Database.syncNative())
-      expect(WorkspaceDB.list(record.projectID)).toHaveLength(1)
+      expect(Effect.runSync(WorkspaceDB.list(record.projectID))).toHaveLength(1)
 
       expect(await fs.readFile(path.join(storage, "workspace", `${record.id}.json`), "utf8")).toContain(
         "json workspace",
@@ -50,7 +51,7 @@ describe("workspace JSON backfill", () => {
       Database.syncDb()
 
       const record = workspaceRecord("wrk_trap")
-      WorkspaceDB.upsert({ ...record, name: "sql-title" })
+      Effect.runSync(WorkspaceDB.upsert({ ...record, name: "sql-title" }))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "workspace"), { recursive: true })
@@ -59,11 +60,11 @@ describe("workspace JSON backfill", () => {
         JSON.stringify({ ...record, name: "json-title" }),
       )
 
-      expect(WorkspaceDB.get(record.id)?.name).toBe("sql-title")
+      expect(Effect.runSync(WorkspaceDB.get(record.id))?.name).toBe("sql-title")
 
       const onlyJson = workspaceRecord("wrk_json_only")
       await fs.writeFile(path.join(storage, "workspace", `${onlyJson.id}.json`), JSON.stringify(onlyJson))
-      expect(WorkspaceDB.get(onlyJson.id)).toBeUndefined()
+      expect(Effect.runSync(WorkspaceDB.get(onlyJson.id))).toBeUndefined()
     })
   })
 })

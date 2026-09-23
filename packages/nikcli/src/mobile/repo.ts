@@ -1,4 +1,5 @@
 import { and, desc, eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { routine } from "./routine.sql"
 import type { Routine } from "./routine"
@@ -10,9 +11,7 @@ import type { Routine } from "./routine"
  * happens on the way out: a corrupt row is dropped rather than surfaced.
  */
 export namespace RoutineRepo {
-  function db() {
-    return Database.syncDb()
-  }
+  type Executor = Database.TxOrDb
 
   function toRow(projectId: string, record: Routine.Record) {
     return {
@@ -38,29 +37,40 @@ export namespace RoutineRepo {
     }
   }
 
-  export function get(projectId: string, id: string): Routine.Record | undefined {
-    const row = db()
-      .select({ data: routine.data })
-      .from(routine)
-      .where(and(eq(routine.projectId, projectId), eq(routine.id, id)))
-      .get()
-    return row ? readRecord(row.data) : undefined
+  export function get(projectId: string, id: string, executor?: Executor) {
+    return Database.query(
+      "RoutineRepo.get",
+      (db) => {
+        const row = db
+          .select({ data: routine.data })
+          .from(routine)
+          .where(and(eq(routine.projectId, projectId), eq(routine.id, id)))
+          .get()
+        return row ? readRecord(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function upsert(projectId: string, record: Routine.Record): void {
-    const row = toRow(projectId, record)
-    db()
-      .insert(routine)
-      .values(row)
-      .onConflictDoUpdate({
-        target: [routine.projectId, routine.id],
-        set: {
-          paused: row.paused,
-          data: row.data,
-          updatedAt: row.updatedAt,
-        },
-      })
-      .run()
+  export function upsert(projectId: string, record: Routine.Record, executor?: Executor) {
+    return Database.query(
+      "RoutineRepo.upsert",
+      (db) => {
+        const row = toRow(projectId, record)
+        db.insert(routine)
+          .values(row)
+          .onConflictDoUpdate({
+            target: [routine.projectId, routine.id],
+            set: {
+              paused: row.paused,
+              data: row.data,
+              updatedAt: row.updatedAt,
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
   /** Mutate-in-place, matching `Storage.update`. Returns undefined when missing. */
@@ -68,34 +78,49 @@ export namespace RoutineRepo {
     projectId: string,
     id: string,
     fn: (draft: Routine.Record) => void,
-  ): Routine.Record | undefined {
-    const current = get(projectId, id)
-    if (!current) return undefined
-    const draft = structuredClone(current)
-    fn(draft)
-    upsert(projectId, draft)
-    return draft
-  }
-
-  /** Newest first, matching the previous JSON-list sort. */
-  export function list(projectId: string): Routine.Record[] {
-    const rows = db()
-      .select({ data: routine.data })
-      .from(routine)
-      .where(eq(routine.projectId, projectId))
-      .orderBy(desc(routine.createdAt))
-      .all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
+    executor?: Executor,
+  ): Effect.Effect<Routine.Record | undefined, Database.QueryError> {
+    return Effect.gen(function* () {
+      const current = yield* get(projectId, id, executor)
+      if (!current) return undefined
+      const draft = structuredClone(current)
+      fn(draft)
+      yield* upsert(projectId, draft, executor)
+      return draft
     })
   }
 
-  export function remove(projectId: string, id: string): boolean {
-    const result = db()
-      .delete(routine)
-      .where(and(eq(routine.projectId, projectId), eq(routine.id, id)))
-      .run()
-    return (result as any).changes > 0
+  /** Newest first, matching the previous JSON-list sort. */
+  export function list(projectId: string, executor?: Executor) {
+    return Database.query(
+      "RoutineRepo.list",
+      (db) => {
+        const rows = db
+          .select({ data: routine.data })
+          .from(routine)
+          .where(eq(routine.projectId, projectId))
+          .orderBy(desc(routine.createdAt))
+          .all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
+  }
+
+  export function remove(projectId: string, id: string, executor?: Executor) {
+    return Database.query(
+      "RoutineRepo.remove",
+      (db) => {
+        const result = db
+          .delete(routine)
+          .where(and(eq(routine.projectId, projectId), eq(routine.id, id)))
+          .run()
+        return (result as { changes: number }).changes > 0
+      },
+      executor,
+    )
   }
 }

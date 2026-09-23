@@ -21,6 +21,12 @@ describe("onboarding account step", () => {
     expect(appSource).toMatch(/runOnboarding:\s*\(\)\s*=>\s*DialogOnboarding\.run\(dialog\)/)
     expect(appSource).toMatch(/currentUser:\s*\(\)\s*=>\s*UserApi\.me\(sdk\)/)
     expect(appSource).not.toMatch(/while\s*\(!postUser\)/)
+    // Account dialogs are on the startup path. Lazy-importing them during
+    // plugin load flashed the sign-in chooser over "Loading plugins...".
+    expect(appSource).toContain('import { DialogOnboarding } from "@tui/component/dialog-onboarding"')
+    expect(appSource).toContain('import { DialogLogin } from "@tui/component/dialog-login"')
+    expect(appSource).toContain('import { DialogAccountLogin } from "@tui/component/dialog-account-login"')
+    expect(appSource).not.toMatch(/import\(["']@tui\/component\/dialog-(onboarding|login|account-login)["']\)/)
   })
 
   test("never records onboarding as complete without an account", async () => {

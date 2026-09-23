@@ -72,7 +72,7 @@ class PlanningHost implements VoiceHost {
   }
 }
 
-function setup(answer: string | (() => Promise<string>)) {
+function setup(answer: string | ((prompt: { signal?: AbortSignal }) => Promise<string>)) {
   const host = new PlanningHost()
   const transcriber = createFakeTranscriber()
   const speaker = createFakeSpeaker()
@@ -85,9 +85,8 @@ function setup(answer: string | (() => Promise<string>)) {
     now: () => 10_000,
     plan: async (prompt) => {
       prompts.push({ system: prompt.system, user: prompt.user })
-      return typeof answer === "string" ? answer : answer()
-    },
-  })
+      return typeof answer === "string" ? answer : answer(prompt)
+    }, settings: { activation: "toggle" } })
 
   return { engine, host, transcriber, speaker, prompts }
 }
@@ -99,6 +98,111 @@ async function settle() {
 }
 
 describe("il pianificatore dentro il motore", () => {
+  test("un agente che non può rispondere lascia la frase al pianificatore, e il problema resta scritto", async () => {
+    const { engine, host, transcriber, speaker, prompts } = setup(
+      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
+    )
+    ;(host as VoiceHost).askAgent = async () => ({ ok: false, text: "Per rispondere mi serve Claude Code o Codex.", ran: false })
+
+    await engine.start()
+    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    await settle()
+
+    expect(prompts).toHaveLength(1)
+    expect(host.started).toHaveLength(1)
+    expect(speaker.lastSpoken).toBe("Ho avviato una sessione Claude Code.")
+    expect(engine.history().some((entry) => entry.kind === "error" && entry.text.includes("mi serve Claude Code"))).toBe(true)
+    await engine.stop()
+  })
+
+  test("un turno che è partito e poi fallisce non passa la frase al pianificatore: niente sessioni doppie", async () => {
+    const { engine, host, transcriber, prompts } = setup(
+      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
+    )
+    ;(host as VoiceHost).askAgent = async () => {
+      // The turn opened the session itself, then its CLI timed out.
+      host.started.push({ agent: "claude" })
+      return { ok: false, text: "L'agente non ha risposto in tempo.", ran: true }
+    }
+
+    await engine.start()
+    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    await settle()
+
+    expect(prompts).toHaveLength(0)
+    expect(host.started).toHaveLength(1)
+    expect(engine.history().some((entry) => entry.kind === "error" && entry.text.includes("non ha risposto in tempo"))).toBe(true)
+    await engine.stop()
+  })
+
+  test("«annulla» mentre il pianificatore pensa ferma il piano: niente parte", async () => {
+    let aborted = false
+    const { engine, host } = setup(
+      (prompt) =>
+        new Promise((resolve) => {
+          prompt.signal?.addEventListener("abort", () => (aborted = true))
+          setTimeout(() => resolve(JSON.stringify([{ action: "start_session", agent: "claude", task: "x", project: "nikcli" }])), 60)
+        }),
+    )
+
+    void engine.submitText("avvia una sessione claude sul parser nel progetto nikcli")
+    await settle()
+    expect(engine.status()).toBe("executing")
+    await engine.submitText("annulla")
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(aborted).toBe(true)
+    expect(host.started).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("addormentato, una frase sconosciuta non va né all'agente né al pianificatore", async () => {
+    const { engine, host, transcriber, prompts } = setup("[]")
+    let asked = 0
+    ;(host as VoiceHost).askAgent = async () => {
+      asked++
+      return { ok: true, text: "no" }
+    }
+
+    await engine.start()
+    transcriber.emit("vai a dormire", true)
+    await settle()
+    transcriber.emit("riassumimi il progetto in una frase", true)
+    await settle()
+
+    expect(asked).toBe(0)
+    expect(prompts).toHaveLength(0)
+    await engine.stop()
+  })
+
+  test("con una risposta testuale, quello che il piano rifiuta viene detto lo stesso", async () => {
+    const { engine, host, transcriber, speaker } = setup(
+      JSON.stringify({ speech: "Va bene.", steps: [{ action: "start_session", agent: "copilot" }] }),
+    )
+
+    await engine.start()
+    transcriber.emit("avvia una sessione di copilot e dimmi quando", true)
+    await settle()
+
+    expect(host.started).toEqual([])
+    expect(speaker.lastSpoken).toContain("Va bene.")
+    expect(speaker.lastSpoken).toContain("copilot")
+    await engine.stop()
+  })
+
+  test("«elenca pannelli» risponde a voce: è un'informazione, non un'azione da vedere", async () => {
+    const { engine, host, transcriber, speaker } = setup("[]")
+    host.panes.push({ id: "p1", title: "Parser", status: "working", index: 1, hasLiveProcess: true, isBrowser: false, isFile: false })
+
+    await engine.start()
+    transcriber.emit("elenca pannelli", true)
+    await settle()
+
+    expect(speaker.lastSpoken).toContain("Parser")
+    expect(engine.history().filter((entry) => entry.kind === "action")).toHaveLength(0)
+    await engine.stop()
+  })
+
   test("«avvia 4 sessioni claude, una per argomento» avvia quattro sessioni", async () => {
     const { engine, host, transcriber, speaker } = setup(
       JSON.stringify([

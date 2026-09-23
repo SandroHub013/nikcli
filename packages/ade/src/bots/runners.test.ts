@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, enforcesDisabledTools, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
+import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -231,5 +231,59 @@ describe("lo stato di accesso", () => {
       "\u001b[90m└\u001b[39m  2 credentials",
     ].join("\r\n")
     expect(readLoginStatus(runnerById("nikcli"), output, 0)).toEqual({ state: "in", detail: "OpenAI, Z.AI Coding Plan" })
+  })
+})
+
+describe("la risposta mentre Claude Code la scrive", () => {
+  const ev = (event: object, parent: string | null = null) =>
+    JSON.stringify({ type: "stream_event", event, session_id: "s", parent_tool_use_id: parent })
+  const delta = (text: string, parent: string | null = null) =>
+    ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }, parent)
+
+  test("chiesta con --include-partial-messages", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot, message: "ciao", partial: true })
+    expect(args).toContain("--include-partial-messages")
+    expect(turnCommand(runnerById("claude"), { bot, message: "ciao" }).args).not.toContain("--include-partial-messages")
+  })
+
+  test("cresce a ogni pezzo, e il messaggio completo la sostituisce senza ripeterla", () => {
+    const seen: string[] = []
+    let talk = fold("claude", ['{"type":"system","subtype":"init","session_id":"s"}'])
+    const lines = [
+      ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+      delta("Roma è la capitale d"),
+      delta("'Italia. È antica"),
+      delta("x", "toolu_sub"),
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Roma è la capitale d\u0027Italia. È antica."}]},"session_id":"s","parent_tool_use_id":null}',
+    ]
+    for (const line of lines) {
+      talk = applyRunnerLine(runnerById("claude"), talk, line, 0)
+      seen.push(answerSoFar(talk))
+    }
+    expect(seen).toEqual([
+      "",
+      "Roma è la capitale d",
+      "Roma è la capitale d'Italia. È antica",
+      "Roma è la capitale d'Italia. È antica",
+      "Roma è la capitale d'Italia. È antica.",
+    ])
+    expect(talk.streaming).toBeUndefined()
+    expect(talk.messages.filter((m) => m.role === "bot")).toHaveLength(1)
+  })
+
+  test("un secondo messaggio si aggiunge al primo", () => {
+    let talk = fold("claude", ['{"type":"assistant","message":{"content":[{"type":"text","text":"Controllo."}]},"session_id":"s"}'])
+    talk = applyRunnerLine(runnerById("claude"), talk, ev({ type: "content_block_start", index: 0 }), 0)
+    talk = applyRunnerLine(runnerById("claude"), talk, delta("Ci sono due"), 0)
+    expect(answerSoFar(talk)).toBe("Controllo.\n\nCi sono due")
+  })
+})
+
+describe("Claude Code reading its messages from stdin", () => {
+  test("asks for stream-json input and passes no message", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot, message: "ignorato", stdin: true })
+    expect(args.slice(0, 6)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--input-format", "stream-json"])
+    expect(args).not.toContain("--")
+    expect(args).not.toContain("ignorato")
   })
 })

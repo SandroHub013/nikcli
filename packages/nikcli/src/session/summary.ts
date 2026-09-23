@@ -137,7 +137,7 @@ export namespace SessionSummary {
           }),
           ctx,
         )
-        SessionDiffRepo.upsert(input.sessionID, diffs)
+        Effect.runSync(SessionDiffRepo.upsert(input.sessionID, diffs))
         await Bus.publish(Session.Event.Diff, {
           sessionID: input.sessionID,
           diff: diffs,
@@ -263,7 +263,10 @@ export namespace SessionSummary {
             yield* sessionSvc.get(input.sessionID)
 
             if (!input.messageID) {
-              return SessionDiffRepo.get(input.sessionID)
+              // The synchronous call this replaces threw out of the generator,
+              // which is a defect, not a value on the typed channel. `orDie`
+              // keeps that behaviour rather than widening the service's errors.
+              return yield* SessionDiffRepo.get(input.sessionID).pipe(Effect.orDie)
             }
 
             const ctx = yield* InstanceState.context

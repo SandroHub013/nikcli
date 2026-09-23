@@ -557,6 +557,7 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 ### Mobile companion
 
 - `packages/mobile` (Expo / React Native) with realtime SSE, iOS and Android support (`ios/`, `android/`, `eas.json`).
+- Installing a release build: [`packages/mobile/README.md`](packages/mobile/README.md). Android ships a plain `.apk`; iOS ships an **unsigned** `.ipa` that you re-sign yourself with SideStore/Sideloadly, because the project has no Apple Developer Program membership.
 - Pairing: `nikcli mobile` shows a QR + deep link `nikcli://connect?server=...&token=...&directory=...`.
 - `MobileAuth` server-side (`packages/nikcli/src/mobile/auth.ts`) handles tokens, device id, scope.
 

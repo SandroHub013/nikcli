@@ -104,7 +104,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Chiudo il pannello",
-    confirmPrompt: "Vuoi davvero chiudere il pannello?",
+    confirmPrompt: "Chiudo il pannello, va bene?",
   },
   {
     intent: "pane.expand",
@@ -260,6 +260,39 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     destructive: false,
     readback: "Apro un nuovo pannello browser",
   },
+  /*
+   * The other panels of the «+» menu. The agent behind the voice cannot open
+   * a panel — it has no tool for it, and an `@ade` line in its answer is read
+   * aloud, not run — so without these, «apri il simulatore» had no way in.
+   */
+  {
+    intent: "video.new",
+    phrases: ["apri il video", "apri un video", "nuovo video", "apri il lettore video", "mostra un video"],
+    slots: [],
+    destructive: false,
+    readback: "Apro il pannello video",
+  },
+  {
+    intent: "model.new",
+    phrases: ["apri il modello 3d", "nuovo modello 3d", "apri il visore 3d", "mostra il modello 3d", "apri un modello 3d"],
+    slots: [],
+    destructive: false,
+    readback: "Apro il pannello del modello 3D",
+  },
+  {
+    intent: "app.new",
+    phrases: ["apri il simulatore", "apri il simulatore app", "nuovo simulatore", "apri l'emulatore", "apri il telefono simulato"],
+    slots: [],
+    destructive: false,
+    readback: "Apro il simulatore",
+  },
+  {
+    intent: "decisions.open",
+    phrases: ["apri le decisioni", "mostra le decisioni", "decisioni da prendere", "cosa devo decidere", "apri la finestra delle decisioni"],
+    slots: [],
+    destructive: false,
+    readback: "Apro le decisioni",
+  },
   {
     intent: "browser.navigate",
     phrases: [
@@ -288,7 +321,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Termino il processo attivo",
-    confirmPrompt: "Vuoi davvero terminare il processo?",
+    confirmPrompt: "Fermo il processo, va bene?",
   },
 
   // 5. Files, search, prompt, transcript scroll
@@ -378,7 +411,7 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
     slots: ["paneIndex", "paneTitle"],
     destructive: true,
     readback: "Permesso negato",
-    confirmPrompt: "Vuoi davvero negare il permesso all'agente?",
+    confirmPrompt: "Nego il permesso all'agente, va bene?",
   },
 
   // 7. System state and assistance

@@ -76,7 +76,7 @@ export type DialogEvent =
   | { type: "wake" }
   | { type: "sleep" }
   | { type: "utterance"; text: string }
-  | { type: "permission_requested"; paneId: string; what: string }
+  | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
@@ -160,21 +160,27 @@ export function transition(
     const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
     const prompt = `L'agente richiede il permesso per: ${event.what}. Vuoi consentire?`
 
-    return withSpoken(
-      {
-        ...state,
-        status: "confirming",
-        timeoutAt,
-        pendingAction: {
-          intent: permAllowSpec,
-          slots: { paneId: event.paneId },
-          confirmPrompt: prompt,
-          isPermission: true,
-          paneId: event.paneId,
-        },
+    const nextState: DialogState = {
+      ...state,
+      status: "confirming",
+      timeoutAt,
+      pendingAction: {
+        intent: permAllowSpec,
+        slots: { paneId: event.paneId },
+        confirmPrompt: prompt,
+        isPermission: true,
+        paneId: event.paneId,
       },
-      prompt
-    )
+    }
+
+    if (event.silent) {
+      return {
+        state: nextState,
+        effects,
+      }
+    }
+
+    return withSpoken(nextState, prompt)
   }
 
   // 2. State: ASLEEP
@@ -254,7 +260,7 @@ export function transition(
           pendingAction: undefined,
           timeoutAt: undefined,
         },
-        "Tempo scaduto. Operazione annullata."
+        "Non ho sentito risposta: lascio stare."
       )
     }
 
@@ -267,7 +273,7 @@ export function transition(
           pendingAction: undefined,
           timeoutAt: undefined,
         },
-        "Operazione annullata."
+        "Va bene, lascio stare."
       )
     }
 
@@ -349,7 +355,7 @@ export function transition(
               pendingAction: undefined,
               timeoutAt: undefined,
             },
-            "Operazione annullata."
+            "Va bene, lascio stare."
           )
         }
       }
@@ -357,7 +363,7 @@ export function transition(
       // Unrecognized confirmation answer
       return withSpoken(
         state,
-        "Per favore rispondi 'sì' per confermare oppure 'no' per annullare."
+        "Sì o no?"
       )
     }
 
@@ -374,10 +380,9 @@ export function transition(
     }
 
     if (event.type === "command_failed") {
-      return withSpoken(
-        { ...state, status: "idle" },
-        `Errore durante l'esecuzione: ${event.error}`
-      )
+      // The dispatcher's sentence already says what went wrong, to the user:
+      // «Errore durante l'esecuzione: Non c'è niente da annullare» said it twice.
+      return withSpoken({ ...state, status: "idle" }, event.error)
     }
 
     return { state, effects: [] }
@@ -390,7 +395,7 @@ export function transition(
     }
 
     if (event.type === "cancel") {
-      return withSpoken(state, "Nessuna operazione da annullare.")
+      return withSpoken(state, "Non c'è niente da fermare.")
     }
 
     if (event.type === "utterance") {
@@ -450,8 +455,8 @@ export function transition(
         // The intent carries its own question. The fallback stays generic on
         // purpose: a wrong-sounding sentence at a destructive prompt is worse
         // than a plain one, and the readback is not a question.
-        const question = intent.confirmPrompt ?? "Vuoi davvero eseguire questo comando?"
-        const prompt = `${question} Di' sì o no.`
+        const question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+        const prompt = `${question} Dimmi sì o no.`
 
         return withSpoken(
           {

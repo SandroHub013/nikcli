@@ -129,14 +129,33 @@ export interface PanelVerb {
 }
 
 /**
+ * The panels section of `ade-msg help`: one line per panel.
+ *
+ * How an agent learns the channel exists, now that nothing is typed into its
+ * pty. The sentinel is never followed by a real panel and command, not even
+ * mid-line: the help is printed in the agent's own output, and a narrow
+ * pane that wraps it there would hand `onLine` a request.
+ */
+export function panelsHelp(panels: readonly { panel: string; verbs: readonly PanelVerb[] }[]): string {
+  const width = Math.max(0, ...panels.map(({ panel }) => panel.length)) + 1
+  return [
+    `pannelli (se aperti in ADE): scrivi da sola nella tua risposta la riga ${REQUEST_PREFIX} <pannello> <comando>;`,
+    `  ADE risponde con una riga "${REPLY_PREFIX} <pannello> <comando> ok|errore — …"`,
+    ...panels.map(({ panel, verbs }) =>
+      `  ${`${panel}:`.padEnd(width + 1)}${verbs.map((verb) => verb.usage).join(" | ")}`,
+    ),
+  ].join("\n") + "\n"
+}
+
+/**
  * What ADE tells a session so its agent knows any of this exists.
  *
- * Typed into the session once, when a panel it can drive is opened. Without
- * it the protocol is a door with no handle: the agent has no way to discover
- * a channel that no CLI documents and no model was trained on.
+ * Noted in the session's transcript when a panel it can drive is opened,
+ * never typed into its pty: every typed line is a prompt the agent must
+ * answer, and a TUI redrawing the usage lines handed them back to `onLine`
+ * as requests. See `announcePanels` in `workbench.tsx`.
  *
- * Returned as an array of lines for the caller to type one at a time —
- * a pty submits on every line break, so this cannot be one string.
+ * Returned as an array of lines, one transcript line each.
  */
 export function describeCapabilities(panel: string, verbs: readonly PanelVerb[]): string[] {
   if (verbs.length === 0) return []

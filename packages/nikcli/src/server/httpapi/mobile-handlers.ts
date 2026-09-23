@@ -153,6 +153,30 @@ const MobileHandlers = HttpApiBuilder.group(MobileHttpApi.Api, "mobile", (handle
     .handle("githubBranches", ({ params }) =>
       route(() => github.githubBranches(params.owner, params.repo), catchBadOrUnauthorized),
     )
+    .handle("githubWorkflows", ({ params }) =>
+      route(() => github.githubWorkflows(params.owner, params.repo), catchBadOrUnauthorized),
+    )
+    .handle("githubWorkflowRuns", ({ params, query }) =>
+      route(() => github.githubWorkflowRuns(params.owner, params.repo, query), catchBadOrUnauthorized),
+    )
+    .handle("githubWorkflowRunJobs", ({ params }) =>
+      route(() => github.githubWorkflowRunJobs(params.owner, params.repo, params.runID), catchBadOrUnauthorized),
+    )
+    .handle("githubWorkflowRunRerun", ({ params, payload }) =>
+      route(
+        () => github.githubWorkflowRunRerun(params.owner, params.repo, params.runID, mutable(payload)),
+        catchBadOrUnauthorized,
+      ),
+    )
+    .handle("githubWorkflowRunCancel", ({ params }) =>
+      route(() => github.githubWorkflowRunCancel(params.owner, params.repo, params.runID), catchBadOrUnauthorized),
+    )
+    .handle("githubWorkflowDispatch", ({ params, payload }) =>
+      route(
+        () => github.githubWorkflowDispatch(params.owner, params.repo, params.workflowID, mutable(payload)),
+        catchBadOrUnauthorized,
+      ),
+    )
     .handle("githubImports", () => fromPromise(() => github.githubImportsList()))
     .handle("githubOauthClient", ({ payload }) => fromPromise(() => github.githubOauthClient(mutable(payload))))
     .handle("githubOauthDeviceStart", () => route(() => github.githubOauthDeviceStart(), catchBad))

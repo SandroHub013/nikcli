@@ -30,11 +30,12 @@
  */
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
+import { t } from "../i18n"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
-import { applyRunnerLine, runnerById, RUNNERS, type Runner } from "./runners"
-import { PLAN_RUNNERS, TERMS_NOTICE } from "./terms"
+import { applyRunnerLine, runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
+import { PLAN_RUNNERS } from "./terms"
 import { startTurn, type TurnHandle } from "./session"
 import {
   createBot,
@@ -236,7 +237,7 @@ export function BotsRoster(props: BotsRosterProps) {
   return (
     <div data-component="ade-bots-roster">
       <header data-slot="bots-roster-head">
-        <span data-slot="bots-roster-title">bot</span>
+        <span data-slot="bots-roster-title">{t("bots.roster.title")}</span>
         <button
           type="button"
           data-slot="bots-new"
@@ -244,8 +245,8 @@ export function BotsRoster(props: BotsRosterProps) {
             shared.setComposing(true)
             shared.setOpenId(undefined)
           }}
-          aria-label="Nuovo bot"
-          title="Nuovo bot"
+          aria-label={t("bots.newBot")}
+          title={t("bots.newBot")}
         >
           +
         </button>
@@ -274,8 +275,8 @@ export function BotsRoster(props: BotsRosterProps) {
         when={(roster() ?? []).length > 0}
         fallback={
           <p data-slot="bots-roster-empty">
-            <Show when={!roster.loading} fallback={<>Lettura…</>}>
-              Nessun agente nikcli. Creane uno.
+            <Show when={!roster.loading} fallback={<>{t("bots.roster.loading")}</>}>
+              {t("bots.roster.empty")}
             </Show>
           </p>
         }
@@ -295,7 +296,7 @@ export function BotsRoster(props: BotsRosterProps) {
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
                   <span data-slot="bots-row-text">
                     <span data-slot="bots-row-name">{bot.identifier}</span>
-                    <span data-slot="bots-row-line">{lastLine(talk(), bot.description || "Nessuna descrizione.")}</span>
+                    <span data-slot="bots-row-line">{lastLine(talk(), bot.description || t("bots.noDescription"))}</span>
                   </span>
                   <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
                 </button>
@@ -427,8 +428,8 @@ export function BotsMain(props: BotsMainProps) {
 
         <Show when={!composing() && !current()}>
           <p data-slot="bots-blank">
-            <Show when={(roster() ?? []).length > 0} fallback={<>Nessun bot ancora. Premi + nella barra laterale per crearne uno.</>}>
-              Scegli un bot nella barra laterale, o creane un altro.
+            <Show when={(roster() ?? []).length > 0} fallback={<>{t("bots.blank.empty")}</>}>
+              {t("bots.blank.pick")}
             </Show>
           </p>
         </Show>
@@ -497,7 +498,7 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
     <div data-slot="bots-picker">
       <Face identifier={props.identifier} avatar={props.value} size={64} />
       <div data-slot="bots-picker-rows">
-        <div data-slot="bots-picker-row" role="radiogroup" aria-label="Forma">
+        <div data-slot="bots-picker-row" role="radiogroup" aria-label={t("bots.face.shape")}>
           <For each={SHAPES}>
             {(shape) => (
               <button
@@ -514,7 +515,7 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
             )}
           </For>
         </div>
-        <div data-slot="bots-picker-row" role="radiogroup" aria-label="Colore">
+        <div data-slot="bots-picker-row" role="radiogroup" aria-label={t("bots.face.color")}>
           <For each={COLORS}>
             {(color) => (
               <button
@@ -531,10 +532,10 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
           </For>
         </div>
         <span data-slot="bots-hint">
-          <Show when={props.value} fallback={<>Forma e colore vengono dal nome finché non li scegli.</>}>
-            Scelta tua.{" "}
+          <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
+            {t("bots.face.custom")}{" "}
             <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
-              Torna a quella del nome
+              {t("bots.face.reset")}
             </button>
           </Show>
         </span>
@@ -592,12 +593,11 @@ function Thread(props: {
             <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
             <p data-slot="bots-thread-empty-name">{props.bot.identifier}</p>
             <p data-slot="bots-thread-empty-text">
-              {props.bot.description || "Nessuna descrizione."}
+              {props.bot.description || t("bots.noDescription")}
             </p>
             <Show when={subagent()}>
               <p data-slot="bots-hint">
-                È un <strong>subagente</strong>: non risponde da solo, lo chiama un altro agente. Puoi
-                comunque scrivergli, ma nikcli userà l'agente predefinito al suo posto.
+                {t("bots.subagent.isA")}<strong>{t("bots.subagent.label")}</strong>{t("bots.subagent.desc")}
               </p>
             </Show>
           </div>
@@ -607,24 +607,24 @@ function Thread(props: {
 
         <Show when={props.talk.permission}>
           {(asked) => (
-            <div data-slot="bots-permission" role="group" aria-label="Richiesta di permesso">
+            <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
               <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression="waiting" size={20} />
               <span data-slot="bots-permission-text">
-                Vuole usare <code>{asked().permission}</code>
+                {t("bots.permission.wantsToUse")} <code>{asked().permission}</code>
                 <Show when={asked().patterns}>
                   {" "}
-                  su <code>{asked().patterns}</code>
+                  {t("bots.permission.on")} <code>{asked().patterns}</code>
                 </Show>
               </span>
               <span data-slot="bots-permission-actions">
                 <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
-                  Rifiuta
+                  {t("bots.permission.reject")}
                 </button>
                 <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
-                  Sempre
+                  {t("bots.permission.always")}
                 </button>
                 <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
-                  Consenti
+                  {t("bots.permission.allow")}
                 </button>
               </span>
             </div>
@@ -634,9 +634,9 @@ function Thread(props: {
         <Show when={props.talk.status === "working"}>
           <div data-slot="bots-typing">
             <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression="busy" size={20} />
-            <span>sta rispondendo…</span>
+            <span>{t("bots.status.replying")}</span>
             <button type="button" data-slot="bots-link" onClick={() => props.onStop()}>
-              Ferma
+              {t("bots.stop")}
             </button>
           </div>
         </Show>
@@ -655,7 +655,7 @@ function Thread(props: {
                   setDraft((text) => (text.trim().length > 0 ? `${text.trimEnd()} @${name} ` : `@${name} `))
                   field?.focus()
                 }}
-                title={`Passa il messaggio a ${name}`}
+                title={t("bots.mention.switch", name)}
               >
                 @{name}
               </button>
@@ -678,8 +678,8 @@ function Thread(props: {
           value={draft()}
           placeholder={
             props.others.length > 0
-              ? `Scrivi a ${props.bot.identifier}, o @ per passare a un altro bot`
-              : `Scrivi a ${props.bot.identifier}`
+              ? t("bots.composer.placeholderOthers", props.bot.identifier)
+              : t("bots.composer.placeholder", props.bot.identifier)
           }
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {
@@ -692,12 +692,12 @@ function Thread(props: {
         />
         <span data-slot="bots-composer-cap">
           <Show when={props.talk.tokens > 0}>
-            {formatCount(props.talk.tokens)} token
+            {t("bots.tokens", formatCount(props.talk.tokens))}
             <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
           </Show>
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
-          Invia
+          {t("bots.send")}
         </button>
       </form>
     </div>
@@ -779,11 +779,11 @@ function BotCard(props: {
       <header data-slot="bots-card-head">
         <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
         <h2 data-slot="bots-card-name">{props.bot.identifier}</h2>
-        <p data-slot="bots-card-desc">{props.bot.description || "Nessuna descrizione."}</p>
+        <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
         <span data-slot="bots-card-meta">
-          {runnerById(props.bot.runner).label} · {props.bot.model ?? "modello predefinito"}
+          {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
-          {props.bot.scope === "project" ? "progetto" : "globale"}
+          {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
       </header>
 
@@ -797,23 +797,23 @@ function BotCard(props: {
               onClick={() => launch()(props.bot)}
               title={
                 props.bot.mode === "subagent"
-                  ? "Un subagente non si avvia da solo: lo chiama un altro agente"
-                  : "Apre la TUI di nikcli con questo bot in un pannello"
+                  ? t("bots.terminal.subagentTip")
+                  : t("bots.terminal.launchTip")
               }
             >
-              Terminale
+              {t("bots.terminal.button")}
             </button>
           )}
         </Show>
         <Show when={props.onOpenFile}>
           {(open) => (
             <button type="button" data-slot="bots-btn" onClick={() => open()(props.bot.path)}>
-              Apri il file
+              {t("bots.openFile")}
             </button>
           )}
         </Show>
         <button type="button" data-slot="bots-btn" data-active={editing() ? "true" : undefined} onClick={() => setEditing((v) => !v)}>
-          {editing() ? "Chiudi" : "Modifica"}
+          {editing() ? t("bots.edit.close") : t("bots.edit.open")}
         </button>
       </div>
 
@@ -822,7 +822,7 @@ function BotCard(props: {
       <Show when={!editing()}>
         <Show when={parts().objectives.length > 0}>
           <section data-slot="bots-card-section">
-            <span data-slot="bots-label">Obiettivi</span>
+            <span data-slot="bots-label">{t("bots.card.objectives")}</span>
             <ul data-slot="bots-card-objectives">
               <For each={parts().objectives}>{(objective) => <li>{objective}</li>}</For>
             </ul>
@@ -830,29 +830,31 @@ function BotCard(props: {
         </Show>
 
         <section data-slot="bots-card-section">
-          <span data-slot="bots-label">Conversazione</span>
+          <span data-slot="bots-label">{t("bots.card.conversation")}</span>
           <span data-slot="bots-card-stat">
-            {props.talk.messages.length} messaggi
+            {t("bots.card.messages", props.talk.messages.length)}
             <Show when={props.talk.tokens > 0}>
               {" "}
-              · {formatCount(props.talk.tokens)} token
+              · {t("bots.tokens", formatCount(props.talk.tokens))}
             </Show>
             <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
           </span>
           <Show when={props.talk.sessionId}>
-            <span data-slot="bots-card-path" title={props.talk.sessionId}>
-              sessione {props.talk.sessionId}
-            </span>
+            {(sessionId) => (
+              <span data-slot="bots-card-path" title={sessionId()}>
+                {t("bots.card.session", sessionId())}
+              </span>
+            )}
           </Show>
           <Show when={props.talk.messages.length > 0}>
             <button type="button" data-slot="bots-link" onClick={() => props.onForget()}>
-              Nuova conversazione
+              {t("bots.card.newTalk")}
             </button>
           </Show>
         </section>
 
         <section data-slot="bots-card-section">
-          <span data-slot="bots-label">File</span>
+          <span data-slot="bots-label">{t("bots.card.file")}</span>
           <span data-slot="bots-card-path" title={props.bot.path}>
             {props.bot.path}
           </span>
@@ -863,19 +865,19 @@ function BotCard(props: {
             when={confirming()}
             fallback={
               <button type="button" data-slot="bots-link" data-tone="danger" onClick={() => setConfirming(true)}>
-                Elimina il bot
+                {t("bots.delete.button")}
               </button>
             }
           >
             {/* Confirmed, because this deletes a file: the persona is the bot as
                 much as the name is, and nothing else in ADE holds a copy. */}
             <span data-slot="bots-confirm">
-              <span>Eliminare {props.bot.identifier}?</span>
+              <span>{t("bots.delete.confirm", props.bot.identifier)}</span>
               <button type="button" data-slot="bots-btn" onClick={() => setConfirming(false)}>
-                No
+                {t("bots.delete.cancel")}
               </button>
               <button type="button" data-slot="bots-btn" data-tone="danger" onClick={() => void remove()}>
-                Elimina
+                {t("bots.delete.confirmBtn")}
               </button>
             </span>
           </Show>
@@ -936,11 +938,11 @@ function BotForm(props: {
     if (busy()) return
 
     if (description().trim().length === 0) {
-      setProblem("Serve una descrizione: è quello che nikcli usa per decidere quando chiamarlo.")
+      setProblem(t("bots.form.problemDesc"))
       return
     }
     if (!generating() && name().trim().length === 0) {
-      setProblem("Serve un nome: diventa l'identificativo del file.")
+      setProblem(t("bots.form.problemName"))
       return
     }
 
@@ -974,10 +976,10 @@ function BotForm(props: {
 
   return (
     <form data-slot="bots-form" onSubmit={(e) => void submit(e)}>
-      <h2 data-slot="bots-form-title">Nuovo bot</h2>
+      <h2 data-slot="bots-form-title">{t("bots.form.title")}</h2>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Nome</span>
+        <span data-slot="bots-label">{t("bots.form.name")}</span>
         <input
           ref={(el) => (nameField = el)}
           data-slot="bots-input"
@@ -986,24 +988,24 @@ function BotForm(props: {
             setName(event.currentTarget.value)
             setProblem(undefined)
           }}
-          placeholder="Revisore"
+          placeholder={t("bots.form.namePlaceholder")}
         />
         <span data-slot="bots-hint">
           {/* Said plainly, because the two routes name the bot differently and
               a field that is sometimes ignored is worse than one that says so. */}
           {generating()
-            ? "Con la persona vuota è nikcli a scegliere l'identificativo: questo nome è solo un promemoria."
-            : "Diventa il nome del file e l'identificativo passato a --agent."}
+            ? t("bots.form.hintGenerating")
+            : t("bots.form.hintNamed")}
         </span>
       </label>
 
       <div data-slot="bots-field">
-        <span data-slot="bots-label">Logo</span>
+        <span data-slot="bots-label">{t("bots.form.logo")}</span>
         <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
       </div>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">A cosa serve</span>
+        <span data-slot="bots-label">{t("bots.form.description")}</span>
         <input
           data-slot="bots-input"
           value={description()}
@@ -1011,7 +1013,7 @@ function BotForm(props: {
             setDescription(event.currentTarget.value)
             setProblem(undefined)
           }}
-          placeholder="Revisiona le pull request e segnala i rischi"
+          placeholder={t("bots.form.descPlaceholder")}
         />
       </label>
 
@@ -1031,40 +1033,40 @@ function BotForm(props: {
       />
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Dove</span>
+        <span data-slot="bots-label">{t("bots.form.where")}</span>
         <select
           data-slot="bots-input"
           value={scope()}
           onChange={(event) => setScope(event.currentTarget.value === "project" ? "project" : "global")}
         >
           <option value="project" disabled={!props.hasProject}>
-            Nel progetto (.nikcli/agent)
+            {t("bots.form.scopeProject")}
           </option>
-          <option value="global">Globale (per tutti i progetti)</option>
+          <option value="global">{t("bots.form.scopeGlobal")}</option>
         </select>
       </label>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Obiettivi</span>
+        <span data-slot="bots-label">{t("bots.form.objectives")}</span>
         <textarea
           data-slot="bots-input"
           data-multiline="true"
           rows="3"
           value={objectives()}
-          placeholder="Uno per riga. Restano veri in ogni conversazione."
+          placeholder={t("bots.form.objectivesPlaceholder")}
           onInput={(event) => setObjectives(event.currentTarget.value)}
         />
       </label>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Persona</span>
+        <span data-slot="bots-label">{t("bots.form.persona")}</span>
         <textarea
           data-slot="bots-input"
           data-multiline="true"
           rows="6"
           value={persona()}
           onInput={(event) => setPersona(event.currentTarget.value)}
-          placeholder="Lascia vuoto e la scrive nikcli dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare."
+          placeholder={t("bots.form.personaPlaceholder")}
         />
       </label>
 
@@ -1072,16 +1074,16 @@ function BotForm(props: {
 
       <div data-slot="bots-form-actions">
         <button type="button" data-slot="bots-btn" onClick={() => props.onCancel()} disabled={busy()}>
-          Annulla
+          {t("bots.form.cancel")}
         </button>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy()}>
-          {busy() ? "Creazione…" : generating() ? "Genera con nikcli" : "Crea"}
+          {busy() ? t("bots.form.creating") : generating() ? t("bots.form.generateWithNikcli") : t("bots.form.create")}
         </button>
       </div>
       <Show when={busy() && generating()}>
         {/* The generation is a model call: several seconds with nothing on
             screen reads as a button that did nothing. */}
-        <p data-slot="bots-hint">nikcli sta scrivendo l'agente. Ci vuole qualche secondo.</p>
+        <p data-slot="bots-hint">{t("bots.form.generatingHint")}</p>
       </Show>
     </form>
   )
@@ -1097,6 +1099,7 @@ function BotForm(props: {
  * suggestions: Claude Code and Codex accept aliases and new model names long
  * before a list here learns them, and refuse a wrong one in their own words.
  */
+
 function EngineFields(props: {
   listId: string
   runner: string
@@ -1113,7 +1116,7 @@ function EngineFields(props: {
   return (
     <>
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Motore</span>
+        <span data-slot="bots-label">{t("bots.engine.label")}</span>
         <select
           data-slot="bots-input"
           value={runner().id}
@@ -1122,18 +1125,18 @@ function EngineFields(props: {
           <For each={RUNNERS}>{(option) => <option value={option.id}>{option.label}</option>}</For>
         </select>
         <span data-slot="bots-hint">
-          {runner().account} Gli accessi si controllano in Impostazioni › Provider.
+          {runnerAccount(runner().id)} {t("bots.engine.accountHint")}
         </span>
         <Show when={PLAN_RUNNERS.includes(runner().id)}>
           <span data-slot="bots-hint" data-terms="">
-            {TERMS_NOTICE}
+            {t("bots.terms.notice")}
           </span>
         </Show>
       </label>
 
       <div data-slot="bots-row-fields">
         <label data-slot="bots-field">
-          <span data-slot="bots-label">Modello</span>
+          <span data-slot="bots-label">{t("bots.engine.model")}</span>
           <Show
             when={runner().id === "nikcli"}
             fallback={
@@ -1142,7 +1145,7 @@ function EngineFields(props: {
                   data-slot="bots-input"
                   list={`${props.listId}-models`}
                   value={props.model}
-                  placeholder={`predefinito di ${runner().label}`}
+                  placeholder={t("bots.engine.modelDefaultOf", runner().label)}
                   onInput={(event) => props.onModel(event.currentTarget.value.trim())}
                 />
                 <datalist id={`${props.listId}-models`}>
@@ -1156,7 +1159,7 @@ function EngineFields(props: {
               value={props.model}
               onChange={(event) => props.onModel(event.currentTarget.value)}
             >
-              <option value="">Predefinito di nikcli</option>
+              <option value="">{t("bots.engine.nikcliDefault")}</option>
               {/* The bot's own model stays offered when it is not in the list:
                   dropping the pin would silently move the bot to another model. */}
               <Show when={props.pinned && !props.nikcliModels.includes(props.pinned)}>
@@ -1166,25 +1169,24 @@ function EngineFields(props: {
             </select>
             <Show when={props.nikcliModels.length === 0}>
               <span data-slot="bots-hint">
-                Elenco dei modelli non disponibile: serve nikcli nel PATH. Il bot userà il modello
-                predefinito.
+                {t("bots.engine.modelsUnavailable")}
               </span>
             </Show>
           </Show>
         </label>
 
         <label data-slot="bots-field">
-          <span data-slot="bots-label">Sforzo</span>
+          <span data-slot="bots-label">{t("bots.engine.effort")}</span>
           <Show
             when={runner().efforts.length > 0}
-            fallback={<input data-slot="bots-input" value="" placeholder="non previsto" disabled />}
+            fallback={<input data-slot="bots-input" value="" placeholder={t("bots.engine.effortNotSupported")} disabled />}
           >
             <select
               data-slot="bots-input"
               value={props.effort}
               onChange={(event) => props.onEffort(event.currentTarget.value)}
             >
-              <option value="">predefinito</option>
+              <option value="">{t("bots.engine.effortDefault")}</option>
               <Show when={props.effort && !runner().efforts.includes(props.effort)}>
                 <option value={props.effort}>{props.effort}</option>
               </Show>
@@ -1277,20 +1279,19 @@ function BotSettings(props: {
   return (
     <form data-slot="bots-form" data-compact="true" onSubmit={(e) => void save(e)}>
       <div data-slot="bots-field">
-        <span data-slot="bots-label">Logo</span>
+        <span data-slot="bots-label">{t("bots.form.logo")}</span>
         <FacePicker identifier={props.bot.identifier} value={avatar()} onChange={setAvatar} />
       </div>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Quando usarlo</span>
+        <span data-slot="bots-label">{t("bots.settings.whenToUse")}</span>
         <input
           data-slot="bots-input"
           value={description()}
           onInput={(event) => setDescription(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          È il <code>description</code> del file: nikcli lo legge per decidere quando chiamare questo
-          bot come subagente.
+          {t("bots.settings.whenToUseHint1")} <code>{"description"}</code> {t("bots.settings.whenToUseHint2")}
         </span>
       </label>
 
@@ -1316,22 +1317,22 @@ function BotSettings(props: {
       />
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Obiettivi</span>
+        <span data-slot="bots-label">{t("bots.card.objectives")}</span>
         <textarea
           data-slot="bots-input"
           data-multiline="true"
           rows="4"
           value={objectives()}
-          placeholder={"Uno per riga.\nEs. Segnala i rischi prima delle opinioni"}
+          placeholder={t("bots.settings.objectivesPlaceholder")}
           onInput={(event) => setObjectives(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          Uno per riga. Finiscono nel prompt sotto <code>{OBJECTIVES_HEADING}</code>.
+          {t("bots.settings.objectivesHint")} <code>{OBJECTIVES_HEADING}</code>.
         </span>
       </label>
 
       <label data-slot="bots-field">
-        <span data-slot="bots-label">Persona</span>
+        <span data-slot="bots-label">{t("bots.form.persona")}</span>
         <textarea
           data-slot="bots-input"
           data-multiline="true"
@@ -1345,10 +1346,10 @@ function BotSettings(props: {
 
       <div data-slot="bots-form-actions">
         <span data-slot="bots-hint" data-state={saved() && !dirty() ? "saved" : undefined}>
-          {saved() && !dirty() ? "Salvato." : dirty() ? "Modifiche non salvate." : ""}
+          {saved() && !dirty() ? t("bots.settings.saved") : dirty() ? t("bots.settings.unsaved") : ""}
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || !dirty()}>
-          {busy() ? "Salvataggio…" : "Salva"}
+          {busy() ? t("bots.settings.saving") : t("bots.settings.save")}
         </button>
       </div>
     </form>

@@ -13,6 +13,7 @@ import {
   type NormalizedVoiceSettings,
   type VoiceSettings,
 } from "./model"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
 
@@ -31,6 +32,11 @@ export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
  * `exportVoiceSettings` below can hand out settings that provably exclude it.
  */
 export const VOICE_API_KEY_STORAGE_KEY = "voice.openrouter.key"
+
+/** The browser's storage, or nothing where there is none: see `resolveStorage`. */
+export function voiceStorage(customStorage?: Storage): Storage | null {
+  return resolveStorage(customStorage)
+}
 
 function resolveStorage(customStorage?: Storage): Storage | null {
   if (customStorage) return customStorage
@@ -78,9 +84,41 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
         ? null
         : { ...(typeof parsed === "object" && parsed !== null ? parsed : {}), openRouterApiKey: apiKey }
 
-    return normalizeSettings(merged)
+    const normalized = normalizeSettings(merged)
+
+    /*
+     * A profile the loader had to migrate is written back at once.
+     *
+     * Otherwise the migration runs again at every start: the stored blob keeps
+     * the old version, and the sentence explaining what changed is shown to
+     * the user each time as though it had just happened.
+     */
+    const storedVersion = typeof parsed === "object" && parsed !== null ? (parsed as { version?: unknown }).version : undefined
+    if (merged !== null && storedVersion !== normalized.settings.version) {
+      writeSettings(store, normalized.settings)
+    }
+
+    return normalized
   } catch {
     return normalizeSettings(null)
+  }
+}
+
+/** Writes the blob and the credential, each in its own slot. Never throws. */
+function writeSettings(store: Storage, settings: VoiceSettings): boolean {
+  try {
+    // The blob never carries the credential again, including for a profile
+    // that had it inline before the split.
+    const { openRouterApiKey, ...withoutKey } = settings
+    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(withoutKey))
+    if (openRouterApiKey) {
+      store.setItem(VOICE_API_KEY_STORAGE_KEY, openRouterApiKey)
+    } else {
+      store.removeItem(VOICE_API_KEY_STORAGE_KEY)
+    }
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -112,31 +150,18 @@ export function saveVoiceSettings(
       ...normalized,
       corrections: [
         ...normalized.corrections,
-        "Archiviazione locale non accessibile; le modifiche rimarranno solo in memoria.",
+        t("vui.fix.noStorage"),
       ],
     }
   }
 
-  try {
-    // The blob never carries the credential again, including for a profile
-    // that had it inline before the split.
-    const { openRouterApiKey, ...withoutKey } = normalized.settings
-    store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(withoutKey))
-
-    if (openRouterApiKey) {
-      store.setItem(VOICE_API_KEY_STORAGE_KEY, openRouterApiKey)
-    } else {
-      store.removeItem(VOICE_API_KEY_STORAGE_KEY)
-    }
-    return normalized
-  } catch {
-    return {
-      ...normalized,
-      corrections: [
-        ...normalized.corrections,
-        "Impossibile salvare le impostazioni nell'archiviazione locale.",
-      ],
-    }
+  if (writeSettings(store, normalized.settings)) return normalized
+  return {
+    ...normalized,
+    corrections: [
+      ...normalized.corrections,
+      t("vui.fix.saveFailed"),
+    ],
   }
 }
 

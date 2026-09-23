@@ -254,7 +254,7 @@ describe("asr/openrouter", () => {
 
     expect(errors).toHaveLength(1)
     const err401 = errors[0].message
-    expect(err401).toContain("non valida o revocata")
+    expect(err401).toContain("chiave OpenRouter non funziona")
 
     // Test 402
     currentStatus = 402
@@ -266,7 +266,7 @@ describe("asr/openrouter", () => {
 
     expect(errors).toHaveLength(2)
     const err402 = errors[1].message
-    expect(err402).toContain("Credito OpenRouter esaurito")
+    expect(err402).toContain("credito OpenRouter è finito")
 
     // Must be completely distinct messages
     expect(err401).not.toBe(err402)
@@ -311,7 +311,7 @@ describe("asr/openrouter", () => {
     })
 
     expect(errors).toHaveLength(1)
-    expect(errors[0].message).toContain("scaduta per timeout")
+    expect(errors[0].message).toContain("non ha risposto")
 
     // Transcriber should not be locked; stop() can be called cleanly
     transcriber.stop()
@@ -419,6 +419,26 @@ describe("asr/openrouter", () => {
     expect(attempts.some((a) => a.model === OPENROUTER_FALLBACK_MODEL)).toBe(true)
     expect(finals).toHaveLength(1)
     expect(finals[0].text).toBe("trascrizione recuperata da whisper")
+  })
+
+  test("a rate-limited primary model (429) goes straight to the fallback model", async () => {
+    const attempts: any[] = []
+    const finals: any[] = []
+    const mockFetch = async (_url: any, opts: any) => {
+      const body = JSON.parse(opts.body)
+      attempts.push(body.model)
+      if (body.model === OPENROUTER_MODEL) {
+        return new Response(JSON.stringify({ error: { message: "Provider returned 429" } }), { status: 429 })
+      }
+      return new Response(JSON.stringify({ text: "capitale dell'Australia" }), { status: 200 })
+    }
+    let segmentCb: any = null
+    const capture = { start: async () => {}, stop: () => {}, onSegment: (cb: any) => { segmentCb = cb }, onError: () => {} } as any
+    const transcriber = createOpenRouterTranscriber({ apiKey: "test-key", capture, fetch: mockFetch as any, onFinal: (evt) => finals.push(evt) })
+    await transcriber.start()
+    await segmentCb({ blob: new Blob(["audio-bytes"]), format: "wav", durationMs: 1500 })
+    expect(attempts).toEqual([OPENROUTER_MODEL, OPENROUTER_FALLBACK_MODEL])
+    expect(finals.map((f) => f.text)).toEqual(["capitale dell'Australia"])
   })
 
   test("extracts text from segments array when text field is missing", async () => {

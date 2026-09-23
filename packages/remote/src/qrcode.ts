@@ -26,11 +26,50 @@ export async function generateQRMatrix(value: string): Promise<boolean[][] | nul
   }
 }
 
+/**
+ * Compact (`█▀▄`) terminal QR, except on Windows consoles whose fonts cannot
+ * be trusted with those glyphs. GPU terminals on Windows (WezTerm, WT, …)
+ * keep the compact renderer — the ASCII fallback is two cells per module and
+ * overflows a typical pane.
+ *
+ * Kept local: `@nikcli-ai/util` already depends on this package.
+ */
+export function shouldRenderCompactTerminalQR(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.Dict<string> = process.env,
+): boolean {
+  if (platform !== "win32") return true
+  // Keep in sync with `terminalRendersHalfBlockQR` in packages/util/src/win32.ts.
+  if (
+    env.WEZTERM_EXECUTABLE ||
+    env.WEZTERM_PANE ||
+    env.WT_SESSION ||
+    env.WT_PROFILE_ID ||
+    env.ALACRITTY_SOCKET ||
+    env.ALACRITTY_WINDOW_ID ||
+    env.GHOSTTY_RESOURCES_DIR ||
+    env.GHOSTTY_BIN_DIR ||
+    env.KITTY_WINDOW_ID ||
+    env.KITTY_PID ||
+    env.HERDR_PANE_ID ||
+    env.HERDR_ENV ||
+    env.HERDR_SOCKET_PATH
+  ) {
+    return true
+  }
+  const identity = `${env.TERM_PROGRAM ?? ""} ${env.TERM ?? ""}`.toLowerCase()
+  return /wezterm|alacritty|ghostty|kitty|iterm|mintty|warp|vscode|herdr/.test(identity)
+}
+
 export async function generateQR(url: string, options: QROptions = {}): Promise<string> {
   try {
     const qrString = await QRCode.toString(url, {
       type: "terminal",
-      small: options.small ?? true,
+      // Windows cmd/conhost: two spaces + 16-color background, no `█▀▄`.
+      // Those glyphs are missing from raster fonts and measure two columns
+      // under a CJK code page. WezTerm and Windows Terminal render them
+      // correctly, so they keep the compact half-block path.
+      small: options.small ?? shouldRenderCompactTerminalQR(),
       margin: options.margin ?? 1,
     })
     return qrString

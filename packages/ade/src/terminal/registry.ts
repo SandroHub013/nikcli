@@ -113,11 +113,123 @@ function readTheme(): ITheme {
  * except the part of it the user is actually reading, until the launch screen
  * happened to unmount the grid.
  */
+/**
+ * Whether the resolved background lets what is behind it through.
+ *
+ * In the glass theme the background token is `transparent`, and xterm draws
+ * an opaque cell layer unless it is told otherwise — a terminal painted black
+ * over a window the user asked to see through.
+ */
+function isTranslucent(theme: ITheme): boolean {
+  const background = theme.background
+  if (!background) return false
+  const alpha = /rgba?\([^)]*,\s*([\d.]+)\s*\)/.exec(background)
+  return alpha ? Number(alpha[1]) < 1 : false
+}
+
 export function refreshTerminalThemes(): void {
   if (terminals.size === 0) return
   const theme = readTheme()
   for (const session of terminals.values()) {
     session.terminal.options.theme = theme
+    session.terminal.options.allowTransparency = isTranslucent(theme)
+  }
+}
+
+/**
+ * Copies text to the system clipboard.
+ * Uses navigator.clipboard when available, falling back to a hidden textarea execCommand.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false
+  if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      /* fallback below */
+    }
+  }
+
+  if (typeof document !== "undefined" && document.body) {
+    try {
+      const active = document.activeElement as HTMLElement | null
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.left = "-9999px"
+      textarea.style.top = "-9999px"
+      textarea.style.opacity = "0"
+      document.body.appendChild(textarea)
+      textarea.select()
+      const success = document.execCommand("copy")
+      textarea.remove()
+      active?.focus?.()
+      return success
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * Identifies if a keyboard event is a Copy shortcut (Ctrl+C, Cmd+C, or Ctrl+Shift+C).
+ */
+export function isCopyShortcut(event: KeyboardEvent): boolean {
+  const isMod = event.ctrlKey || event.metaKey
+  if (!isMod) return false
+  const key = event.key?.toLowerCase()
+  return key === "c" || event.code === "KeyC"
+}
+
+/**
+ * Configures the terminal emulator's selection behavior:
+ * - When in mouse events mode, holding Shift or Alt/Option bypasses mouse reporting
+ *   and forces normal text selection, matching standard terminal expectations.
+ * - Right clicks (button 2) pass through to the application in mouse mode.
+ */
+export function configureTerminalSelection(terminal: Terminal): void {
+  const core = (terminal as any)._core
+  const sel = core?._selectionService
+  if (sel && typeof sel.shouldForceSelection === "function") {
+    sel.shouldForceSelection = (event: MouseEvent) => {
+      // Bypass mouse mode only on left click (button 0) when holding Shift or Alt/Option
+      const isLeft = event.button === 0 || event.button === undefined
+      return Boolean(isLeft && (event.shiftKey || event.altKey))
+    }
+  }
+}
+
+/**
+ * Key event handler for terminal emulator:
+ * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
+ * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and clears selection
+ * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
+ */
+export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEvent) => boolean {
+  return (event: KeyboardEvent) => {
+    const isMod = event.ctrlKey || event.metaKey
+    if (isMod && event.shiftKey) {
+      const k = event.key?.toLowerCase()
+      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
+        return false
+      }
+    }
+
+    if (isCopyShortcut(event)) {
+      if (terminal.hasSelection()) {
+        if (event.type === "keydown") {
+          void copyToClipboard(terminal.getSelection())
+          terminal.clearSelection()
+        }
+        return false
+      }
+      return true
+    }
+
+    return true
   }
 }
 
@@ -125,6 +237,7 @@ export function getTerminal(id: string): SessionTerminal {
   const existing = terminals.get(id)
   if (existing) return existing
 
+  const initialTheme = readTheme()
   const terminal = new Terminal({
     /*
      * Scrollback is what makes a session reviewable after the fact. Agents are
@@ -144,23 +257,16 @@ export function getTerminal(id: string): SessionTerminal {
     cursorStyle: "block",
     allowProposedApi: true,
     convertEol: false,
-    theme: readTheme(),
+    theme: initialTheme,
+    allowTransparency: isTranslucent(initialTheme),
+    macOptionClickForcesSelection: true,
+    rightClickSelectsWord: true,
   })
 
   const fit = new FitAddon()
   terminal.loadAddon(fit)
 
-  terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-    // Allow voice shortcuts (Mod+Shift+J / Mod+Shift+K) to bypass xterm and bubble to window
-    const isMod = event.ctrlKey || event.metaKey
-    if (isMod && event.shiftKey) {
-      const k = event.key.toLowerCase()
-      if (k === "j" || k === "k" || event.code === "KeyJ" || event.code === "KeyK") {
-        return false
-      }
-    }
-    return true
-  })
+  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal))
 
   const created: SessionTerminal = { terminal, fit }
   terminals.set(id, created)
@@ -173,6 +279,30 @@ export function hasTerminal(id: string): boolean {
 
 export function writeToTerminal(id: string, chunk: string): void {
   getTerminal(id).terminal.write(chunk)
+}
+
+/**
+ * What moves a written screen into the scrollback and puts the cursor home.
+ *
+ * A process started in a pane begins at 1;1: that is what `pty.rs` tells
+ * ConPTY, which asks before it lets the child speak. A pane reused by a
+ * restart still shows the last run with the cursor somewhere below it, and the
+ * new shell drew over it from the top. One newline per row, from wherever the
+ * cursor is, scrolls every visible line out; nothing is erased.
+ */
+export function cleanScreenSequence(rows: number, written: boolean): string {
+  return written ? "\r\n".repeat(Math.max(1, rows)) + "[H" : ""
+}
+
+/** Gives the next process in `id` an empty screen at 1;1, the old one kept in the scrollback. */
+export function startOnCleanScreen(id: string): void {
+  const session = terminals.get(id)
+  if (!session) return
+  const { terminal } = session
+  const buffer = terminal.buffer.active
+  const written = buffer.baseY > 0 || buffer.cursorY > 0 || buffer.cursorX > 0
+  const sequence = cleanScreenSequence(terminal.rows, written)
+  if (sequence) terminal.write(sequence)
 }
 
 /** Prints a line of ADE's own, marked so it cannot be mistaken for the agent. */
@@ -217,7 +347,9 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
   const session = getTerminal(id)
   session.detach?.()
 
-  session.terminal.options.theme = readTheme()
+  const current = readTheme()
+  session.terminal.options.theme = current
+  session.terminal.options.allowTransparency = isTranslucent(current)
 
   const drawn = session.terminal.element
   const placement = placementFor(drawn, element)
@@ -235,6 +367,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     }
   }
   session.element = element
+  configureTerminalSelection(session.terminal)
 
   const inputHandler = options.onInput ? session.terminal.onData(options.onInput) : undefined
 

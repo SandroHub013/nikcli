@@ -42,6 +42,237 @@
   color-scheme: light dark;
 }
 
+/*
+ * Glass: a low floor for the window, a reading ground where the text is.
+ *
+ * Two mistakes, one after the other.
+ *
+ * The first: the veil was a property of every container — each painted
+ * `--ade-bg` — and a closed list of components was excused from it with
+ * `background: transparent !important`. Anything off that list painted a
+ * second veil over the first: measured in ADE Test at the slider's minimum,
+ * the shell read alpha 0.73 while the sidebar and the shot tray read 0.99.
+ * A panel written next week would have been born opaque, because being
+ * transparent meant being remembered in this file.
+ *
+ * The second: with that fixed, the window still could not read as glass,
+ * because the veil ran from 0.68 to 0.96. There is no position of the slider
+ * at which two thirds of the desktop is not painted over. But dropping the
+ * floor on a single uniform veil breaks the rule S49 drew — the three text
+ * levels above 4.5:1 on a white desktop — and the numbers are unforgiving:
+ * on a uniform veil that line needs alpha 0.68, exactly where the floor was.
+ *
+ * So the veil stops being uniform. The window gets a floor low enough to see
+ * through (`--ade-glass-veil`, 0.10 at the minimum); where text lives, the
+ * shell's own slots add `--ade-glass-read` once, which brings that ground
+ * back to the 0.68 readability needs. Empty space is glass, text is legible,
+ * and no zone carries more than those two layers.
+ *
+ * `--ade-glass-read` is added by the shell's structural slots — the sidebar,
+ * the bar, whatever a grid cell holds — never by components. A new panel
+ * dropped into a cell is legible without being named here, and a panel inside
+ * a panel cannot stack a third layer, because the container tokens stay
+ * transparent.
+ *
+ * Two written exceptions:
+ *
+ *   --ade-overlay   menus, the command palette, dialogs — they cover the
+ *                   content they sit on, so they keep a veil of their own.
+ *   --ade-raised    a 6% white lift, not a veil: chrome that must read as
+ *                   lifted brightens the glass instead of darkening the
+ *                   desktop behind it.
+ *
+ * The session pane's header pill is the third, written below: it floats over
+ * the terminal's own scrolling lines, so in glass it takes the overlay level.
+ *
+ * What this cannot do is blur the desktop. A `backdrop-filter` only sees what
+ * is behind the element inside the page, and in WebView2 the desktop is not
+ * in that tree: from CSS the honest ceiling is translucency, not frost. The
+ * real blur is a window effect (Acrylic or Mica) and belongs to the Rust side.
+ */
+[data-component="ade-shell"][data-theme="glass"],
+:root[data-theme="glass"] {
+  color-scheme: dark;
+  --ade-text: #ffffff;
+  --ade-text-soft: #f0ece9;
+  /*
+   * Lighter than the other palettes' weak step, because here it is measured
+   * against the brightest ground in the theme: the reading ground plus the 6%
+   * lift. At #dedad8 that came to 4.11:1 — under the line S49 drew.
+   */
+  --ade-text-weak: #ebe7e5;
+
+  /*
+   * The floor and the reading ground. Both follow the slider, and opacity is
+   * tuned in these two declarations and nowhere else.
+   *
+   * The reading ground used to be fixed at 0.64, which made the slider a
+   * choice between a legible window and a slightly more legible one: the
+   * ground under text never went below 0.68 however far down it was dragged.
+   * The user had seen the version where those areas were still on the bare
+   * floor and wanted it back — beautiful, and unreadable at 1.23:1. So the
+   * ground follows the slider too, and how readable the window is becomes
+   * the thing the slider chooses.
+   *
+   * Veil:    0.06 → 0.40, the window's own floor.
+   * Reading: 0.05 → 0.90, on a fourth root — it climbs fast over the first
+   *          few percent and then slowly, which is what puts the 4.5:1 line
+   *          at 20% of the slider instead of halfway up it.
+   *
+   * Composited on a white desktop, the ground under text is alpha 0.11 at 0
+   * (1.25:1 — the glass the user asked for), 0.67 at 20% (5.39 / 4.59 / 4.39
+   * on the lift, the worst ground in the theme), 0.89 at the default 75% and
+   * 0.94 at the top. Below 20% the settings panel says so, and lets the user
+   * carry on.
+   *
+   * The linear line is a fallback: an engine without `pow()` gets a
+   * reasonable ground rather than no declaration at all.
+   */
+  --ade-glass-veil: rgba(19, 17, 17, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
+
+  /* Containers hold; they do not paint. */
+  --ade-bg: transparent;
+  --ade-sunken: transparent;
+  --ade-surface: transparent;
+  --ade-terminal-bg: transparent;
+
+  /*
+   * The two written exceptions.
+   *
+   * `raised` is a lift, not a veil: chrome that must read as raised brightens
+   * the glass instead of darkening the desktop behind it.
+   *
+   * `overlay` is the ground for anything that floats over content, and it is
+   * the one value here that does NOT follow the slider. A menu is opened to be
+   * read, over whatever happens to be underneath — a terminal mid-scroll, a
+   * transcript — and dragging the glass to its most extreme must not take that
+   * away. 0.92 keeps a hint of translucency and still hides what is below.
+   */
+  --ade-raised: rgba(255, 255, 255, 0.06);
+  --ade-overlay: rgba(28, 25, 25, 0.92);
+
+  --ade-border-subtle: rgba(255, 255, 255, 0.08);
+  --ade-border: rgba(255, 255, 255, 0.12);
+  --ade-border-strong: rgba(255, 255, 255, 0.22);
+  --ade-highlight: rgba(255, 255, 255, 0.15);
+  /*
+   * Here hover and press darken. Everywhere else they lighten.
+   *
+   * White is spent. Chrome already carries the 6% lift, and on the bar that
+   * puts weak text at 4.51:1 — above the line by a hundredth. Measured on a
+   * white desktop with the slider at its floor, adding the 9% white wash this
+   * theme used to inherit drops that text to 3.72:1, and 15% to 3.27:1: the
+   * hover state would have been the one place the type failed.
+   *
+   * Darkening spends nothing, because the text here is light: the same ground
+   * goes 4.53 → 5.31 → 6.04:1 through rest, hover and press. And the amount
+   * lands where the eye already expects it — at the slider's top the hover
+   * moves the ground by 0.82 of a point of luminance against the dark theme's
+   * 0.85, so it feels like the hover everyone knows. Toward the floor it grows
+   * to 2.75, which is right: there the desktop shows through and a quieter
+   * wash would be lost in it.
+   */
+  --ade-hover: rgba(0, 0, 0, 0.10);
+  --ade-active: rgba(0, 0, 0, 0.18);
+}
+
+/*
+ * The document around the shell has no tokens to make transparent, so it is
+ * still named here — and only it. This is not the old exception list: nothing
+ * below `ade-shell` appears, and nothing needs to.
+ */
+html[data-theme="glass"],
+html[data-theme="glass"] body,
+html[data-theme="glass"] #root,
+body[data-theme="glass"],
+body[data-theme="glass"] #root,
+:root[data-theme="glass"],
+:root[data-theme="glass"] body,
+:root[data-theme="glass"] #root {
+  background: transparent !important;
+}
+
+/*
+ * The one place the floor is painted — and the one place it is blurred.
+ *
+ * The blur used to sit on the bar, the sidebar and every grid cell. A
+ * `backdrop-filter` samples what is behind the element, and behind these there
+ * is nothing but the window itself: measured on white, blurring an empty
+ * backdrop came back as rgb(53,51,51) against the rgb(80,79,79) of the glass
+ * beside it — the blur was painting its own grey. It belongs to the veil.
+ */
+[data-component="ade-shell"][data-theme="glass"] {
+  background: var(--ade-glass-veil);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/*
+ * The reading ground, added once, by the shell's structural slots.
+ *
+ * These are places in the shell, not components: whatever a grid cell holds is
+ * legible without this file knowing its name.
+ *
+ * The main area needs its own line, because not everything that fills it is a
+ * grid cell: the agent console, the chat, the bots view, the new-session
+ * screen and the empty-project screen are children of `ade-main` directly, and
+ * with only the grid-cell line they sat on the bare floor — 1.2:1 at the
+ * slider's minimum, which is text you cannot read.
+ *
+ * `:not(:has([data-slot="grid-cell"]))` is what keeps that from becoming a
+ * second ground: a component that holds cells (the session grid) is a
+ * container, and lets its cells do the painting; one that holds content paints
+ * for itself. Written as a shape rather than as a name, so a new full-area
+ * view is legible and a new kind of grid does not double up.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-component="ade-sidebar"],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="grid-cell"] > [data-component],
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-main"] > [data-component]:not(:has([data-slot="grid-cell"])) {
+  background: var(--ade-glass-read);
+}
+
+[data-component="ade-shell"][data-theme="glass"] [data-slot="ade-bar"] {
+  background: linear-gradient(var(--ade-raised), var(--ade-raised)), var(--ade-glass-read);
+}
+
+/*
+ * Anything that floats over content carries its own ground.
+ *
+ * The new-pane menu used `--ade-raised`, which in this theme is a 6% lift, so
+ * it opened as a sheet of nearly clear glass over the panes: the user's
+ * screenshot has terminal lines and session titles running straight through
+ * the words «Sessione», «Browser», «Decisioni». Measured over a full terminal,
+ * the menu's own ground was alpha 0.06 and its items read 1.4:1 against what
+ * showed through.
+ *
+ * The rule is written as a shape, not as a list of menus: an element that
+ * floats over other content announces itself, because it has to be reachable —
+ * a menu says `role="menu"`, a dialog `role="dialog"`, a picker
+ * `role="listbox"`, a tip `role="tooltip"`, and the platform's own layer is
+ * `[popover]`. A menu written next week is covered because it is a menu, not
+ * because someone remembered this file.
+ *
+ * `--ade-overlay` deliberately ignores the glass slider: see the token block.
+ */
+[data-component="ade-shell"][data-theme="glass"] [role="menu"],
+[data-component="ade-shell"][data-theme="glass"] [role="dialog"],
+[data-component="ade-shell"][data-theme="glass"] [role="listbox"],
+[data-component="ade-shell"][data-theme="glass"] [role="tooltip"],
+[data-component="ade-shell"][data-theme="glass"] [popover] {
+  background: var(--ade-overlay);
+}
+
+/*
+ * Written exception: the header pill floats over the terminal's own lines, so
+ * a 6% lift would leave text over text. In glass it takes the overlay level.
+ */
+[data-component="ade-shell"][data-theme="glass"] [data-component="session-pane"] > [data-slot="pane-header"] {
+  background: color-mix(in srgb, var(--ade-overlay) 88%, transparent);
+}
+
+
 :root {
   /* ── surfaces ──────────────────────────────────────────────────────────── */
   /*
@@ -146,6 +377,34 @@
   --ade-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ade-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --ade-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── buttons ────────────────────────────────────────────────────────────── */
+  /*
+   * What a press looks like, everywhere, in one value.
+   *
+   * There were seven `:active` rules in the whole app and not one of them moved
+   * anything: pressing a button changed nothing until the result arrived. A
+   * scale rather than a lift with a shadow, because a shadow is unreadable in
+   * the glass theme — the surfaces are translucent, so it stacks with the
+   * panel's own and the desktop shows through it. Geometry reads the same in
+   * all three themes.
+   *
+   * Chrome buttons under 24px do not take it: at 18px three per cent is half a
+   * pixel, which reads as a flicker rather than a press. They answer with the
+   * ground alone.
+   */
+  --ade-press: scale(0.97);
+
+  /*
+   * The one transition a button gets. Every sheet was writing its own — nine
+   * said `background 120ms`, four forgot `color`, and `bots-btn` had none at
+   * all, so its hover snapped.
+   */
+  --ade-btn-transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease),
+    transform var(--ade-dur-fast) var(--ade-ease);
 
   /* ── focus ──────────────────────────────────────────────────────────────── */
   /* One ring, applied everywhere through :focus-visible. The second, softer
@@ -273,6 +532,11 @@ body,
   scrollbar-color: var(--ade-border-strong) transparent;
 }
 
+/* Themed text selection matching the ADE accent */
+::selection {
+  background: var(--ade-selection);
+}
+
 /* ── reduced motion ────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -334,9 +598,111 @@ body,
 }
 
 [data-slot="grid-cell"] {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+
+/*
+ * Arranging the grid: a pane is picked up by its header, shows where it will
+ * land on the tile under the pointer, and is resized from its corner.
+ *
+ * The header says it can be grabbed only while the grid holds two panes or
+ * more — with one there is nowhere to put it. While a drag or a resize is in
+ * progress nothing inside the panes may select text or take the pointer, or a
+ * terminal under the cursor swallows the move and the drop never arrives.
+ */
+[data-component="session-grid"]:has(> [data-slot="grid-cell"] + [data-slot="grid-cell"])
+  [data-slot="pane-header"] {
+  cursor: grab;
+}
+
+[data-component="session-grid"][data-arranging] {
+  user-select: none;
+  cursor: grabbing;
+}
+
+[data-component="session-grid"][data-arranging] [data-slot="grid-cell"] > [data-component] {
+  pointer-events: none;
+}
+
+[data-slot="grid-cell"][data-dragging] > [data-component] {
+  opacity: 0.45;
+}
+
+[data-slot="drop-zone"] {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px dashed var(--ade-accent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ade-accent) 18%, transparent);
+}
+
+/*
+ * Each overlay is the exact shape `dropZone` in grid/arrange.ts answers to:
+ * the middle 40% square swaps, and each edge owns the trapezoid between it,
+ * the two diagonals and that square. Half-pane rectangles were simpler and
+ * wrong near a corner, where the highlight showed one side and the drop used
+ * the other. The dashed border is dropped for the edges, because a border
+ * follows the box and not the clip.
+ */
+[data-slot="drop-zone"] { inset: 0; }
+[data-slot="drop-zone"][data-zone="swap"] { inset: 30%; border-radius: var(--ade-radius-lg); }
+[data-slot="drop-zone"]:not([data-zone="swap"]) { border: none; border-radius: 0; }
+[data-slot="drop-zone"][data-zone="before"] { clip-path: polygon(0 0, 30% 30%, 30% 70%, 0 100%); justify-content: flex-start; padding-left: 4%; }
+[data-slot="drop-zone"][data-zone="after"] { clip-path: polygon(100% 0, 70% 30%, 70% 70%, 100% 100%); justify-content: flex-end; padding-right: 4%; }
+[data-slot="drop-zone"][data-zone="above"] { clip-path: polygon(0 0, 100% 0, 70% 30%, 30% 30%); align-items: flex-start; padding-top: 6%; }
+[data-slot="drop-zone"][data-zone="below"] { clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%); align-items: flex-end; padding-bottom: 6%; }
+
+[data-slot="drop-zone-label"] {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ade-accent-fg);
+  background: var(--ade-accent);
+}
+
+/* A corner grip, visible when the tile is hovered or focused, so resting
+   panes show no extra chrome. */
+[data-slot="tile-resize"] {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 6;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  opacity: 0;
+  border-right: 2px solid var(--ade-text-weak);
+  border-bottom: 2px solid var(--ade-text-weak);
+  border-bottom-right-radius: 10px;
+  transition: opacity 120ms ease;
+}
+
+[data-slot="grid-cell"]:hover > [data-slot="tile-resize"],
+[data-slot="grid-cell"][data-focused] > [data-slot="tile-resize"],
+[data-component="session-grid"][data-arranging] [data-slot="tile-resize"] {
+  opacity: 1;
+}
+
+/*
+ * A press still says something when movement is turned down: the ground
+ * changes, only the geometry stops. One token, so no button has to remember.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ade-press: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="tile-resize"] { transition: none; }
 }
 
 /* Pane rules live in grid/pane.css — the card owns its own stylesheet. */
@@ -575,26 +941,15 @@ body,
 }
 
 /*
- * Selection is position (the accent bar) plus fill, never accent-colored text:
- * the accent hue is reserved for focus and interactive affordances, and
- * recoloring content made a selected row compete with the status dots.
+ * Selection adds fill and weight, never accent-colored text: the accent hue
+ * is reserved for focus and interactive affordances, and recoloring content
+ * made a selected row compete with the status dots. The sidebar paints its
+ * own accent veil over this fill from sidebar.css.
  */
 [data-slot="session-row"][data-selected] {
   background: var(--ade-active);
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);
-}
-
-/* Accent bar on the leading edge for the selected row. */
-[data-slot="session-row"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--ade-space-1);
-  bottom: var(--ade-space-1);
-  width: 3px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="session-row"]:focus-visible {
@@ -669,17 +1024,6 @@ body,
   background: var(--ade-active);
   color: var(--ade-text);
   font-weight: var(--ade-weight-medium);
-}
-
-[data-slot="tree-row"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 3px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="tree-row"]:focus-visible {
@@ -778,3 +1122,235 @@ body,
   font-family: var(--ade-sans);
 }
 
+
+/* Registrazione in corso (S36): sopra ogni cosa, perché nessuno deve filmare
+   senza saperlo. Il punto pulsa solo mentre si registra davvero. Sta nella
+   barra, prima dei pulsanti della finestra: fisso nell'angolo li copriva.
+   La barra non crea un contesto di impilamento, quindi lo z-index vale per
+   tutta la finestra. */
+[data-slot="ade-rec"] {
+  position: relative;
+  z-index: 60;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklab, red 45%, var(--ade-border));
+  border-radius: 999px;
+  background: color-mix(in oklab, red 12%, var(--ade-surface));
+  color: var(--ade-text);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+[data-slot="ade-rec-dot"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: red;
+  animation: ade-rec-pulse 1.4s ease-in-out infinite;
+}
+
+[data-slot="ade-rec"][data-stopping] [data-slot="ade-rec-dot"] {
+  animation: none;
+  opacity: 0.5;
+}
+
+@keyframes ade-rec-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="ade-rec-dot"] { animation: none; }
+}
+
+/* An agent asks to record (S36): one question, the microphone as its own switch. */
+[data-component="record-consent"] [data-slot="record-consent-body"] {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+}
+[data-component="record-consent"] [data-slot="record-consent-note"] {
+  color: var(--ade-text-weak);
+}
+[data-component="record-consent"] [data-slot="record-consent-mic"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+[data-component="record-consent"] [data-slot="record-consent-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+
+/*
+ * ADE asks before updating itself (S71): the same sheet as the other
+ * questions, with the version in the head and the download in the body. On
+ * glass the overlay colour already reads without blur, so nothing more here.
+ */
+[data-component="update-dialog"] [data-slot="update-dialog-mark"] {
+  display: inline-flex;
+  color: var(--ade-accent);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-version"] {
+  margin-left: auto;
+  font-family: var(--ade-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ade-text-weak);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-version"] b {
+  color: var(--ade-accent);
+  font-weight: 600;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-body"] {
+  display: grid;
+  gap: 8px;
+  padding: 0 16px 8px;
+  font-size: 12.5px;
+  color: var(--ade-text-soft);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-body"] p {
+  margin: 0;
+}
+[data-component="update-dialog"] [data-stage="error"] [data-slot="update-dialog-body"] p {
+  color: var(--ade-error, #e5484d);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-problem"] {
+  font-family: var(--ade-mono);
+  font-size: 11px;
+  color: var(--ade-text-weak);
+  overflow-wrap: anywhere;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-link"] {
+  width: fit-content;
+  font-size: 11.5px;
+  color: var(--ade-accent);
+  text-decoration: none;
+  border-radius: 3px;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-link"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-track"] {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ade-hover);
+  overflow: hidden;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-fill"] {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ade-accent);
+  transition: width var(--ade-dur-fast) var(--ade-ease-out);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-fill"][data-indeterminate] {
+  width: 40% !important;
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-actions"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 16px 14px;
+}
+[data-component="update-dialog"] [data-slot="update-dialog-hint"] {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--ade-text-weak);
+}
+[data-component="update-dialog"] [data-slot="update-dialog-hint"] kbd {
+  font-family: var(--ade-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+[data-component="update-dialog"] [data-slot="decision-submit"]:focus-visible,
+[data-component="update-dialog"] [data-slot="decision-ghost"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-component="update-dialog"] [data-slot="update-dialog-fill"][data-indeterminate] {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.5;
+  }
+}
+
+
+/*
+ * While a take runs (S36), secrets are not drawn at all, so no frame of the
+ * video can hold one. The user sees them covered too, which says why.
+ *
+ * These rules are the list in `record/sensitive.ts`, written out: a test fails
+ * if the two drift apart, in either direction, so a cover added here by hand
+ * and nowhere else is caught too. It used to end in `#openrouter-key-field`:
+ * one id, for one field. Now a value is covered for being a password, for
+ * carrying a credential autocomplete token, for being marked, for calling
+ * itself a key — whatever kind of field it is, not only an `<input>` — or,
+ * the net that matters, for standing inside a zone marked `data-secrets`,
+ * which covers fields nobody has written yet.
+ *
+ * Out of reach from here: the terminal and the browser pane. Neither is a
+ * field, and inside the pane's `<iframe>` this stylesheet does not apply at
+ * all; both want a cover over the pane.
+ */
+html[data-ade-recording] [data-sensitive],
+html[data-ade-recording] input[type="password"],
+html[data-ade-recording] input[autocomplete="current-password"],
+html[data-ade-recording] input[autocomplete="new-password"],
+html[data-ade-recording] input[autocomplete="one-time-code"],
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i]),
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i]),
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i]),
+html[data-ade-recording] [data-secrets],
+html[data-ade-recording] [data-secrets] * {
+  color: transparent !important;
+  text-shadow: none !important;
+  caret-color: transparent !important;
+  background: #2a2a2a !important;
+  -webkit-text-security: disc;
+}
+html[data-ade-recording] [data-sensitive]::selection,
+html[data-ade-recording] input[type="password"]::selection,
+html[data-ade-recording] input[autocomplete="current-password"]::selection,
+html[data-ade-recording] input[autocomplete="new-password"]::selection,
+html[data-ade-recording] input[autocomplete="one-time-code"]::selection,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i])::selection,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i])::selection,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i])::selection,
+html[data-ade-recording] [data-secrets]::selection,
+html[data-ade-recording] [data-secrets] *::selection {
+  color: transparent !important;
+  background: transparent !important;
+}
+html[data-ade-recording] [data-sensitive]::placeholder,
+html[data-ade-recording] input[type="password"]::placeholder,
+html[data-ade-recording] input[autocomplete="current-password"]::placeholder,
+html[data-ade-recording] input[autocomplete="new-password"]::placeholder,
+html[data-ade-recording] input[autocomplete="one-time-code"]::placeholder,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id*="key" i], [name*="key" i], [aria-label*="key" i], [placeholder*="key" i], [data-testid*="key" i], [id*="chiave" i], [name*="chiave" i], [aria-label*="chiave" i], [placeholder*="chiave" i], [data-testid*="chiave" i], [id*="token" i], [name*="token" i], [aria-label*="token" i], [placeholder*="token" i], [data-testid*="token" i], [id*="secret" i], [name*="secret" i], [aria-label*="secret" i], [placeholder*="secret" i], [data-testid*="secret" i], [id*="segreto" i], [name*="segreto" i], [aria-label*="segreto" i], [placeholder*="segreto" i], [data-testid*="segreto" i], [id*="credential" i], [name*="credential" i], [aria-label*="credential" i], [placeholder*="credential" i], [data-testid*="credential" i], [id*="credenziale" i], [name*="credenziale" i], [aria-label*="credenziale" i], [placeholder*="credenziale" i], [data-testid*="credenziale" i], [id*="passphrase" i], [name*="passphrase" i], [aria-label*="passphrase" i], [placeholder*="passphrase" i], [data-testid*="passphrase" i], [id*="password" i], [name*="password" i], [aria-label*="password" i], [placeholder*="password" i], [data-testid*="password" i], [id*="bearer" i], [name*="bearer" i], [aria-label*="bearer" i], [placeholder*="bearer" i], [data-testid*="bearer" i], [id*="authorization" i], [name*="authorization" i], [aria-label*="authorization" i], [placeholder*="authorization" i], [data-testid*="authorization" i], [id*="dsn" i], [name*="dsn" i], [aria-label*="dsn" i], [placeholder*="dsn" i], [data-testid*="dsn" i], [id*="otp" i], [name*="otp" i], [aria-label*="otp" i], [placeholder*="otp" i], [data-testid*="otp" i])::placeholder,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([id="pat" i], [name="pat" i], [aria-label="pat" i], [placeholder="pat" i], [data-testid="pat" i])::placeholder,
+html[data-ade-recording] :is(input, textarea, select, [contenteditable]):is([placeholder^="sk-" i], [placeholder^="ghp_" i], [placeholder^="gho_" i], [placeholder^="ghs_" i], [placeholder^="github_pat_" i], [placeholder^="xox" i], [placeholder^="AKIA" i], [placeholder^="AIza" i], [placeholder^="glpat-" i], [placeholder^="hf_" i], [placeholder^="eyJ" i])::placeholder,
+html[data-ade-recording] [data-secrets]::placeholder,
+html[data-ade-recording] [data-secrets] *::placeholder {
+  visibility: hidden !important;
+  color: transparent !important;
+}
+html[data-ade-recording] [data-sensitive] *,
+html[data-ade-recording] [data-secrets] * {
+  visibility: hidden !important;
+  color: transparent !important;
+}

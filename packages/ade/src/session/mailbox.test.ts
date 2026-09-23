@@ -3,11 +3,16 @@ import {
   MAX_TEXT,
   formatDelivery,
   formatLateReply,
+  formatLost,
   formatRequest,
   isFree,
   statusFromActivity,
+  holdsForAnswer,
+  quietOutcome,
+  ANSWER_HOLD_MS,
   WEDGE_MS,
   formatWedged,
+  relaunchRefusal,
   interruptKeys,
   openDecisions,
   INLINE_MAX,
@@ -16,6 +21,9 @@ import {
   formatBell,
   formatUnread,
   goesToInbox,
+  formatHeld,
+  formatHeldReceipt,
+  HELD_TELL_MS,
   inboxAction,
   inboxName,
   parseInbox,
@@ -30,6 +38,7 @@ import {
   formatNudge,
   formatUpdate,
   parseActivity,
+  keptActivity,
   parseOpenRequests,
   shouldRering,
   requestState,
@@ -56,6 +65,10 @@ describe("parseMessage", () => {
 
   test("ask, spawn and reply carry what each needs", () => {
     expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x"}')).toMatchObject({ kind: "ask", to: "2" })
+    expect(parseMessage('{"kind":"ask","from":"a","to":"2","text":"fai x","via":"typed"}')).toMatchObject({ kind: "ask", via: "typed" })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":true,"text":""}')).toMatchObject({ kind: "delivered", ok: true })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"1790000000000-aaaa","ok":false,"text":"trattenuto"}')).toMatchObject({ kind: "delivered", ok: false, text: "trattenuto" })
+    expect(parseMessage('{"kind":"delivered","from":"a","ref":"","ok":true}')).toBeUndefined()
     expect(parseMessage('{"kind":"spawn","from":"a","agent":"codex","text":"fai x"}')).toMatchObject({
       kind: "spawn",
       agent: "codex",
@@ -171,6 +184,16 @@ describe("when a session can be written to", () => {
     expect(isFree({ hooked: true, permissionPending: false, lastOutputAt: now - UNKNOWN_FREE_MS }, now)).toBe(true)
   })
 
+  test("an activity that cannot be read mid-turn keeps the turn busy", () => {
+    const busy = { state: "busy" as const, at: now - 60_000 }
+    const idle = { state: "idle" as const, at: now - 60_000 }
+    const kept = keptActivity(busy, undefined)
+    expect(kept).toEqual(busy)
+    expect(isFree({ hooked: true, permissionPending: false, activity: kept, lastOutputAt: now - 10 * UNKNOWN_FREE_MS }, now)).toBe(false)
+    expect(keptActivity(idle, undefined)).toBeUndefined()
+    expect(keptActivity(busy, idle)).toEqual(idle)
+  })
+
   test("a busy that never ended, in a silent session, stops holding messages", () => {
     const busy = { state: "busy" as const, at: now - 31 * 60_000 }
     expect(isFree({ hooked: true, permissionPending: false, activity: busy, lastOutputAt: now - 120_000 }, now)).toBe(true)
@@ -190,21 +213,21 @@ describe("when a session can be written to", () => {
 describe("what lands in the terminal", () => {
   test("a note arrives on one line, with the way to answer", () => {
     expect(formatDelivery({ text: "riga uno\nriga due" }, panes[1])).toBe(
-      '[Messaggio da "Sessione 2 — codex" (codex)]: riga uno riga due — per rispondere: ade-msg send n2-1 "<testo>"',
+      '[Messaggio da "Sessione 2 — codex"]: riga uno riga due — rispondi: ade-msg send n2-1 "<testo>"',
     )
   })
 
   test("a request ends with the reply command the caller is blocked on", () => {
     const line = formatRequest("171-ab", "trova i test lenti", panes[0])
-    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code" (claude-code)]: trova i test lenti')).toBe(true)
+    expect(line.startsWith('[Richiesta 171-ab da "Sessione 1 — claude-code"]: trova i test lenti')).toBe(true)
     expect(line).toContain('ade-msg reply 171-ab "<sintesi>"')
-    expect(line.length).toBeLessThan(300)
+    expect(line.length).toBeLessThan(260)
     expect(line).toContain("ade-msg update 171-ab")
   })
 
   test("a late reply names the request it answers", () => {
     expect(formatLateReply("171-ab", "fatto", panes[1])).toBe(
-      '[Risposta alla richiesta 171-ab da "Sessione 2 — codex" (codex)]: fatto',
+      '[Risposta a 171-ab da "Sessione 2 — codex"]: fatto',
     )
   })
 
@@ -331,11 +354,28 @@ describe("spawn options, updates and the request contract", () => {
       depth: 1,
       maxDepth: 2,
     })
-    expect(line).toContain("worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
-    expect(line).toContain("ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO")
+    expect(line).toContain("Worktree C:\\p\\app-ade\\revisore (branch ade/revisore)")
+    expect(line).toContain("ESITO, FILE, PROBLEMI, PROSSIMO PASSO")
     expect(line).toContain("C:\\p\\app-ade\\revisore\\.ade\\results\\171-ab.md")
     expect(line).not.toContain("livello 1 di 2")
-    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare altre sessioni")
+    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth: 2 })).toContain("Non avviare sessioni")
+  })
+
+  test("a vanished inbox file is said as lost, never as read", () => {
+    const reader = { id: "p2", title: "Sessione 2", agent: "claude-code" } as Parameters<typeof formatLost>[1]
+    expect(formatLost({ id: "171-ab", kind: "ask" }, reader)).toBe(
+      '[ade-msg] errore: la richiesta 171-ab risulta persa, non ignorata: il file nella casella di "Sessione 2" è sparito prima di essere letto. Rimandala.',
+    )
+    expect(formatLost({ id: "x", kind: "send" }, undefined)).toContain("il tuo messaggio risulta persa")
+  })
+
+  /** The typed line is one line; the copy read with `ade-msg inbox` keeps the sender's structure. */
+  test("keeps the sender's line breaks only for the inbox copy", () => {
+    const text = "Due cose:\n(1) la prima\r\n(2) la seconda\u0007"
+    expect(formatRequest("x", text, undefined)).toContain("Due cose: (1) la prima (2) la seconda —")
+    expect(formatRequest("x", text, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda —")
+    expect(formatDelivery({ text }, undefined, { keepLines: true })).toContain("Due cose:\n(1) la prima\n(2) la seconda")
+    expect(formatDelivery({ text }, undefined)).not.toContain("\n")
   })
 
   test("an update tells the caller how to unblock and resume waiting", () => {
@@ -408,7 +448,7 @@ describe("long messages travel through the inbox", () => {
     expect(goesToInbox("x".repeat(20_000))).toBe(true)
     const bell = formatBell(entry, sender, 20_000)
     expect(bell).toContain("ade-msg inbox")
-    expect(bell.length).toBeLessThan(120)
+    expect(bell.length).toBeLessThan(80)
     expect(inboxName("a/b", 5)).toBe("0000000000005-a_b")
   })
 
@@ -459,6 +499,15 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(interruptKeys("nikcli")).toBe(String.fromCharCode(3))
   })
 
+  test("relaunch without --note, or of a session somebody else spawned, is refused with the reason", () => {
+    const target = { id: "p2", title: "Revisore" }
+    expect(relaunchRefusal({ from: "p1", note: "" }, target, "p1")).toContain('relaunch richiede --note "')
+    expect(relaunchRefusal({ from: "p1", note: "   " }, target, "p1")).toContain("richiede --note")
+    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p9")).toContain('"Revisore" non lo è')
+    expect(relaunchRefusal({ from: "", note: "x" }, target, undefined)).toContain("avviate da questa sessione")
+    expect(relaunchRefusal({ from: "p1", note: "test verdi, manca il commit" }, target, "p1")).toBeUndefined()
+  })
+
   test("relaunch carries its note and interrupt its target", () => {
     expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2", note: " rifai i test " }))).toMatchObject({ kind: "relaunch", note: "rifai i test" })
     expect(parseMessage(JSON.stringify({ kind: "relaunch", to: "2" }))).toMatchObject({ kind: "relaunch", note: "" })
@@ -476,5 +525,122 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     const open = openDecisions([{ spec: "S25", text: log }])
     expect(open).toEqual([{ spec: "S25", key: "quota", session: "Sessione 1 — agy", text: "soglia del 10%?", at: "2026-09-15T16:41" }])
     expect(requestsTable([], [], () => "in corso", now, open)).toContain("decisioni aperte:\n  S25 [k=quota]")
+  })
+})
+
+describe("holdsForAnswer: a session without hooks is working until it answers", () => {
+  const request = (to: string, deliveredAt: number) => ({ to, at: deliveredAt, deliveredAt })
+
+  test("holds while the request it was given is still open", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("lets go as soon as the request is gone, which is what the answer does", () => {
+    expect(holdsForAnswer([], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("holds nobody else: another session's request says nothing about this one", () => {
+    expect(holdsForAnswer([request("p2", 1_000)], "p1", 1_000 + 60_000)).toBe(false)
+  })
+
+  test("gives up after the hold, so a session that never answers is not at work forever", () => {
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS - 1)).toBe(true)
+    expect(holdsForAnswer([request("p1", 1_000)], "p1", 1_000 + ANSWER_HOLD_MS)).toBe(false)
+  })
+
+  test("a spawn counts from when the session was opened, before any line was typed", () => {
+    expect(holdsForAnswer([{ to: "p1", at: 1_000 }], "p1", 1_000 + 60_000)).toBe(true)
+  })
+
+  test("any of several requests holds it", () => {
+    const old = { to: "p1", at: 0, deliveredAt: 0 }
+    expect(holdsForAnswer([old, request("p1", 1_000)], "p1", 1_000 + 60_000)).toBe(true)
+  })
+})
+
+describe("quietOutcome: what silence means for a pane marked working", () => {
+  test("without hooks and owing nothing, silence ends the turn", () => {
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("with hooks the turn ends when the hook says so, not when the terminal goes quiet", () => {
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false })).toBe("wait")
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: false })).toBe("settle")
+  })
+
+  test("a session with hooks is not held by a request: its own turn says when", () => {
+    expect(quietOutcome({ hooked: true, busy: false, owesAnswer: true })).toBe("settle")
+  })
+
+  test("while it owes an answer the check is asked again, never dropped", () => {
+    // Dropping it here was the bug: the pane was left held with no timer and no
+    // output coming, so the end of the hold was never noticed and the session
+    // stayed at work for good.
+    expect(quietOutcome({ hooked: false, busy: false, owesAnswer: true })).toBe("recheck")
+  })
+
+  test("the recheck is what makes the hold expire: after it, silence settles the pane", () => {
+    const given = [{ to: "p1", at: 1_000, deliveredAt: 1_000 }]
+    const owesAnswer = (now: number) => holdsForAnswer(given, "p1", now)
+    const asked = (now: number) => quietOutcome({ hooked: false, busy: false, owesAnswer: owesAnswer(now) })
+    expect(asked(1_000 + ANSWER_HOLD_MS - 1)).toBe("recheck")
+    expect(asked(1_000 + ANSWER_HOLD_MS)).toBe("settle")
+  })
+})
+
+describe("una riga iniziata dall'utente", () => {
+  const entry = (over: Partial<Parameters<typeof inboxAction>[0]> = {}) => ({
+    id: "1790000000000-aaaa",
+    paneId: "p1",
+    name: "1790000000000-1790000000000-aaaa.msg",
+    from: "p2",
+    kind: "send" as const,
+    chars: 42,
+    at: 1_000,
+    ringAt: 1_000,
+    rings: 0,
+    ...over,
+  })
+
+  /** Non e' una questione di agente: vale per qualunque pannello. */
+  test("una sessione ferma con del digitato non e' libera", () => {
+    const now = 100_000
+    const idle = { hooked: true, permissionPending: false, activity: { state: "idle" as const, at: now - 5 } }
+    expect(isFree(idle, now)).toBe(true)
+    expect(isFree({ ...idle, typing: true }, now)).toBe(false)
+    // Anche senza hook, dove la quiete dello schermo basterebbe.
+    expect(isFree({ hooked: false, permissionPending: false, lastOutputAt: now - 5000, typing: true }, now)).toBe(false)
+  })
+
+  test("la posta aspetta, e non viene mai consegnata a forza", () => {
+    const held = { running: true, free: false, read: false, typing: true }
+    expect(inboxAction(entry(), held, 1_000)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS - 1)).toBe("wait")
+    expect(inboxAction(entry(), held, 1_000 + HELD_TELL_MS)).toBe("tell")
+    // Detto una volta sola, e dopo si torna ad aspettare, non a consegnare.
+    expect(inboxAction(entry({ told: true }), held, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  /** Il ritardo e' una condizione in piu, mai un permesso che scavalca le altre. */
+  test("il campanello di riserva vuole sessione libera e riga pulita", () => {
+    const late = 1_000 + 10 * HELD_TELL_MS
+    expect(inboxAction(entry(), { running: true, free: false, read: false }, late)).toBe("wait")
+    expect(inboxAction(entry(), { running: true, free: false, read: false, typing: true }, late)).toBe("tell")
+    expect(inboxAction(entry(), { running: true, free: true, read: false }, late)).toBe("ring")
+  })
+
+  test("occupata non e' lo stesso di riga sporca: al mittente non si dice niente", () => {
+    const busy = { running: true, free: false, read: false, typing: false }
+    expect(inboxAction(entry(), busy, 1_000 + 10 * HELD_TELL_MS)).toBe("wait")
+  })
+
+  test("l'avviso dice che ADE non ha consegnato, non che l'altra non risponde", () => {
+    const text = formatHeld(entry(), { id: "p1", title: "Dario", agent: "claude-code" })
+    expect(text).toContain("non la consegna ancora")
+    expect(text).toContain("non ti sta ignorando")
+    expect(text).not.toContain("non ha letto")
+    // A reply held back is named as such: the caller knows its answer exists.
+    expect(formatHeld({ id: "1790000000000-bbbb", kind: "reply" }, undefined)).toContain("la tua risposta alla richiesta 1790000000000-bbbb")
+    expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe('ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera')
   })
 })

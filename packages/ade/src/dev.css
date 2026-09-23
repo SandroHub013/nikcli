@@ -30,6 +30,8 @@
   border-bottom: 1px solid var(--ade-border);
   background: var(--ade-raised);
   box-shadow: inset 0 -1px 0 var(--ade-highlight);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /*
@@ -128,6 +130,7 @@
   gap: var(--ade-space-2);
   /* Above the sides, which may otherwise overlap it at narrow widths. */
   z-index: 1;
+  max-width: calc(100% - var(--ade-space-6) * 2);
 }
 
 /* ── menus hung off an icon ───────────────────────────────────────────────── */
@@ -226,6 +229,30 @@
   color: var(--ade-text-weak);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
+}
+
+/* An action at the top of a menu, above what the menu lists. */
+[data-slot="ade-menu-action"] {
+  display: block;
+  width: 100%;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 0;
+  border-bottom: 1px solid var(--ade-border);
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="ade-menu-action"]:hover:not(:disabled) {
+  background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+[data-slot="ade-menu-action"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
 }
 
 /* ── the voice orb ────────────────────────────────────────────────────────── */
@@ -350,6 +377,73 @@
 
 [data-slot="ade-notice-link"]:hover {
   background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+/* The download, where the «Aggiorna» button was: text above, a bar below. */
+[data-slot="ade-notice-progress"] {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 128px;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="ade-notice-progress-text"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+  white-space: nowrap;
+}
+
+/* Brings the hidden dialog back; only there while it is hidden. */
+[data-slot="ade-notice-progress-show"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="ade-notice-progress-show"]:hover {
+  text-decoration: underline;
+}
+
+[data-slot="ade-notice-progress-track"] {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ade-hover);
+  overflow: hidden;
+}
+
+[data-slot="ade-notice-progress-fill"] {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ade-accent);
+  transition: width var(--ade-dur-fast) var(--ade-ease-out);
+}
+
+[data-slot="ade-notice-progress-fill"][data-indeterminate] {
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+  width: 40% !important;
+}
+
+@keyframes ade-notice-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="ade-notice-progress-fill"][data-indeterminate] {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.5;
+  }
 }
 
 /* ── command field ────────────────────────────────────────────────────────── */
@@ -623,6 +717,24 @@
   color: var(--ade-text);
 }
 
+@media (max-width: 640px) {
+  [data-slot="ade-bar"] {
+    padding: 0 var(--ade-space-3);
+    gap: var(--ade-space-2);
+  }
+  [data-slot="ade-window-controls"] {
+    margin-right: calc(-1 * var(--ade-space-3));
+  }
+  [data-slot="ade-bar-center"] {
+    gap: 2px;
+    max-width: calc(100% - 16px);
+  }
+  [data-slot="ade-view-tab"] {
+    padding: 0 var(--ade-space-3);
+    font-size: 11px;
+  }
+}
+
 
 /* ── bar actions ──────────────────────────────────────────────────────────── */
 /*
@@ -642,10 +754,7 @@
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
   white-space: nowrap;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition), box-shadow var(--ade-dur-fast) var(--ade-ease);
 }
 
 [data-slot="ade-add"]:hover {
@@ -667,7 +776,8 @@
 }
 
 [data-slot="ade-add"]:active {
-  filter: brightness(0.9);
+  background: var(--ade-active);
+  transform: var(--ade-press);
 }
 
 [data-slot="ade-add"]:focus-visible {
@@ -693,17 +803,44 @@
   text-overflow: ellipsis;
 }
 
-[data-slot="ade-project-branch"] {
+/*
+ * Which nikcli is installed, where the branch used to be.
+ *
+ * Same typeface and the same 22ch ceiling as the branch it replaces — a
+ * version never reaches it, a future build with a hash appended might — but a
+ * step stronger in ink. The branch wore `--ade-text-weak`, and in the glass
+ * theme with the veil at its most transparent that is very nearly the
+ * backdrop: the digits were there and could not be read. `soft` raises the
+ * contrast rather than lowering it, so the ceiling the bar has on the white
+ * lift is untouched.
+ */
+[data-slot="ade-nikcli-version"] {
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-2);
-  color: var(--ade-text-weak);
+  min-width: 0;
+  color: var(--ade-text-soft);
   font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   max-width: 22ch;
   white-space: nowrap;
+}
+
+/*
+ * Clipped from the left, not from the right.
+ *
+ * The end of a version is the part that identifies it, so the ellipsis has to
+ * eat the `v` and leave the `0`. `direction: rtl` puts the ellipsis at the
+ * start; the element is a `<bdi>`, so the digits and dots inside are still
+ * laid out in the order they were written instead of being reordered by the
+ * bidirectional algorithm.
+ */
+[data-slot="ade-nikcli-number"] {
+  direction: rtl;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The one warning the bar can carry, so it is allowed to look like one. */

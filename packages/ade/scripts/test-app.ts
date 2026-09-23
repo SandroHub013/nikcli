@@ -3,6 +3,8 @@
  *
  *   bun run test:app            start this worktree's ADE Test (or say it is running)
  *   bun run test:app --cdp      same, with WebView2 remote debugging for an agent to drive
+ *   bun run test:app --watch    same, rebuilding and restarting on every Rust change
+ *                               (the window closes and reopens: only while writing Rust)
  *   bun run test:app stop       stop this worktree's instance, and nothing else
  *   bun run test:app status     this worktree's instance
  *   bun run test:app list       every worktree's instance
@@ -49,6 +51,12 @@ const plan = planTestApp({ root, branch: git(["branch", "--show-current"]) })
 const args = process.argv.slice(2)
 const command = args.find((arg) => !arg.startsWith("-")) ?? "start"
 const wantCdp = args.includes("--cdp")
+/*
+ * A change to the Rust sources rebuilds and restarts the app, which closes
+ * the window whoever is using it is looking at. Off unless asked for: see
+ * `tauriDevArgs`.
+ */
+const wantWatch = args.includes("--watch")
 
 // ---------------------------------------------------------------------------
 
@@ -185,7 +193,7 @@ async function start(): Promise<void> {
   const startedAt = Date.now()
   const child = spawn(
     process.execPath,
-    tauriDevArgs(plan.configPath, readFileSync(join(adeDir, "src-tauri", "Cargo.toml"), "utf8")),
+    tauriDevArgs(plan.configPath, readFileSync(join(adeDir, "src-tauri", "Cargo.toml"), "utf8"), { watch: wantWatch }),
     {
       cwd: adeDir,
       detached: true,
@@ -214,6 +222,11 @@ async function start(): Promise<void> {
   writeFileSync(plan.recordPath, JSON.stringify(record, null, 2))
 
   console.log(`ADE Test in avvio (la prima compilazione Rust di una cartella nuova richiede minuti):\n${describe(record)}`)
+  console.log(
+    wantWatch
+      ? "  --watch: ogni modifica al Rust ricompila e riapre la finestra, chiudendo quella aperta"
+      : "  le modifiche al Rust non riaprono la finestra: per ricompilare, stop e riavvio",
+  )
 
   // Overridable so the timeout's cleanup can be tried without waiting 20 minutes.
   const timeoutMs = Number(process.env.ADE_TEST_START_TIMEOUT_MS) || 20 * 60_000
@@ -271,6 +284,31 @@ function stop(quiet = false): void {
       }
     },
     removeRecord: () => rmSync(plan.recordPath, { force: true }),
+    // Without /F taskkill sends the window a close, as its X button does.
+    close: (pid) => {
+      if (isWindows) spawnSync("taskkill", ["/PID", String(pid)], { stdio: "ignore" })
+      else {
+        try {
+          process.kill(pid, "SIGTERM")
+        } catch {
+          // already gone
+        }
+      }
+    },
+    waitExit: (pids, timeoutMs) => {
+      const alive = () => pids.filter((pid) => {
+        try {
+          process.kill(pid, 0)
+          return true
+        } catch {
+          return false
+        }
+      })
+      const deadline = Date.now() + timeoutMs
+      while (alive().length > 0 && Date.now() < deadline) Bun.sleepSync(200)
+      return alive()
+    },
+    reread: processTable,
   })
   if (result.outcome === "refused") {
     console.error(

@@ -905,7 +905,7 @@ export namespace SessionHttpApi {
       Effect.gen(function* () {
         const session = yield* Session.Service
         yield* session.get(params.sessionID)
-        return SessionPending.list(params.sessionID)
+        return Effect.runSync(SessionPending.list(params.sessionID))
       }).pipe(declaredErrors),
     pendingSteer: ({ params }: { params: typeof PendingPath.Type }) =>
       Effect.gen(function* () {

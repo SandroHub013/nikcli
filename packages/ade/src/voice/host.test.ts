@@ -69,6 +69,18 @@ function makePane(overrides: Partial<Pane> = {}): Pane {
 }
 
 describe("createAdeVoiceHost", () => {
+  test("a command that opens a pane brings the Code view up; one that does not leaves the view alone", async () => {
+    const { deps, commandsRun, currentWb } = createMockDeps()
+    deps.setWb((w) => ({ ...w, view: "agent" }))
+    const host = createAdeVoiceHost(deps)
+
+    await host.runCommand("decisions.open")
+    expect(currentWb().view).toBe("agent")
+    await host.runCommand("app.new")
+    expect(currentWb().view).toBe("code")
+    expect(commandsRun).toEqual(["decisions.open", "app.new"])
+  })
+
   test("listPanes produces 1-based indices and consistent flags", () => {
     const { deps, currentWb } = createMockDeps()
     deps.setWb((w) => ({
@@ -238,10 +250,11 @@ describe("createAdeVoiceHost", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    host.answerPermission("p1", "allow")
+    // `false` is what lets the voice say so instead of «Permesso concesso».
+    expect(host.answerPermission("p1", "allow")).toBe(false)
     expect(answered).toBe(false)
 
-    host.answerPermission("p1", "deny")
+    expect(host.answerPermission("p1", "deny")).toBe(false)
     expect(answered).toBe(false)
   })
 
@@ -264,7 +277,7 @@ describe("createAdeVoiceHost", () => {
     })
     const host = createAdeVoiceHost(deps)
 
-    host.answerPermission("p1", "allow")
+    expect(host.answerPermission("p1", "allow")).toBe(true)
     expect(answered).toHaveLength(1)
     expect(answered[0].send).toBe("y")
 
@@ -341,6 +354,31 @@ describe("createAdeVoiceHost", () => {
     })
   })
 
+  test("describeState counts sessions, not panels: video, 3D, simulator, file, browser and plugin tiles do not count", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", status: "working" }),
+        // An empty player: no path yet, so only its mode says what it is.
+        makePane({ id: "p2", status: "done", mode: "video", videoPath: "" }),
+        makePane({ id: "p3", status: "done", modelPath: "/m.glb" }),
+        makePane({ id: "p4", status: "done", appUrl: "http://localhost:5173" }),
+        makePane({ id: "p5", status: "done", filePath: "/src/index.ts" }),
+        makePane({ id: "p6", status: "done", browserUrl: "http://localhost:3000" }),
+        makePane({ id: "p7", status: "done", plugin: { pluginId: "x", name: "Tile" } }),
+        // A panel is known by its mode as well: Decisioni has no path at all,
+        // and its status is the session's «working» until it is answered.
+        makePane({ id: "p8", status: "working", mode: "decisions" }),
+        makePane({ id: "p9", status: "working", mode: "app" }),
+      ],
+    }))
+    const state = createAdeVoiceHost(deps).describeState()
+    expect(state.totalSessions).toBe(1)
+    expect(state.workingSessions).toBe(1)
+    expect(state.spokenSummary.toLowerCase()).toContain("una sessione")
+  })
+
   test("describeState produces correct Italian grammatical number for 0, 1 and 3 sessions", () => {
     // 0 sessions
     const { deps: deps0 } = createMockDeps()
@@ -378,6 +416,45 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("in esecuzione")
     expect(state3.spokenSummary).toContain("in attesa")
     expect(state3.spokenSummary).toContain("completata")
+  })
+
+  test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
+    // 0 sessions
+    const { deps: deps0 } = createMockDeps({ locale: () => "en" })
+    const host0 = createAdeVoiceHost(deps0)
+    const state0 = host0.describeState()
+    expect(state0.totalSessions).toBe(0)
+    expect(state0.spokenSummary.toLowerCase()).toContain("no open sessions")
+
+    // 1 session
+    const { deps: deps1 } = createMockDeps({ locale: () => "en" })
+    deps1.setWb((w) => ({
+      ...w,
+      panes: [makePane({ id: "p1", status: "working" })],
+    }))
+    const host1 = createAdeVoiceHost(deps1)
+    const state1 = host1.describeState()
+    expect(state1.totalSessions).toBe(1)
+    expect(state1.spokenSummary.toLowerCase()).toContain("one session")
+    expect(state1.spokenSummary).toContain("running")
+
+    // 3 sessions
+    const { deps: deps3 } = createMockDeps({ locale: () => "en" })
+    deps3.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "p1", status: "working" }),
+        makePane({ id: "p2", status: "waiting" }),
+        makePane({ id: "p3", status: "done" }),
+      ],
+    }))
+    const host3 = createAdeVoiceHost(deps3)
+    const state3 = host3.describeState()
+    expect(state3.totalSessions).toBe(3)
+    expect(state3.spokenSummary.toLowerCase()).toContain("three open sessions")
+    expect(state3.spokenSummary).toContain("running")
+    expect(state3.spokenSummary).toContain("waiting")
+    expect(state3.spokenSummary).toContain("completed")
   })
 
   test("focusPane and browserNavigate update workbench state", () => {

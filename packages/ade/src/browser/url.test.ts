@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isValidBrowserUrl, normalizeUrl } from "./url"
+import { isAdeOrigin, isValidBrowserUrl, normalizeUrl } from "./url"
 
 describe("normalizeUrl", () => {
   describe("port shorthands", () => {
@@ -196,5 +196,24 @@ describe("isValidBrowserUrl", () => {
     expect(isValidBrowserUrl("file:///etc/passwd")).toBe(false)
     expect(isValidBrowserUrl("65536")).toBe(false)
     expect(isValidBrowserUrl("ftp://example.com")).toBe(false)
+  })
+})
+
+describe("isAdeOrigin", () => {
+  test("the window's own origin is ADE, including a nested path", () => {
+    expect(isAdeOrigin("http://localhost:5177/", "http://localhost:5177")).toBe(true)
+    expect(isAdeOrigin("http://localhost:5177/index.html", "http://localhost:5177")).toBe(true)
+    expect(isAdeOrigin("http://tauri.localhost/x", "http://tauri.localhost")).toBe(true)
+  })
+
+  test("tauri.localhost is ADE even when the window is the Vite server", () => {
+    expect(isAdeOrigin("http://tauri.localhost/", "http://localhost:5177")).toBe(true)
+    expect(isAdeOrigin("https://tauri.localhost/app", "http://localhost:5270")).toBe(true)
+  })
+
+  test("another origin is not ADE", () => {
+    expect(isAdeOrigin("http://localhost:5173/", "http://localhost:5177")).toBe(false)
+    expect(isAdeOrigin("https://bastelli-cmp.vercel.app/", "http://tauri.localhost")).toBe(false)
+    expect(isAdeOrigin("not a url", "http://tauri.localhost")).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -32,12 +33,12 @@ describe("session goal SQL", () => {
       const { GoalRepo } = await import("@/session/goal-repo")
       Database.syncDb()
 
-      expect(GoalRepo.get(state.sessionID)?.objective).toBe("move goals off JSON")
-      expect(GoalRepo.get(state.sessionID)?.tokensUsed).toBe(12)
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.objective).toBe("move goals off JSON")
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.tokensUsed).toBe(12)
 
       const sessionGoal = (await import("@/database/migration/20260814050000_session_goal")).default
       sessionGoal.up(Database.syncNative())
-      expect(GoalRepo.get(state.sessionID)?.goalID).toBe("gol_sql_1")
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.goalID).toBe("gol_sql_1")
 
       expect(await fs.readFile(path.join(storage, "goal", `${state.sessionID}.json`), "utf8")).toContain(
         "move goals off JSON",
@@ -52,11 +53,11 @@ describe("session goal SQL", () => {
       Database.syncDb()
 
       const state = goalState("ses_no_json")
-      GoalRepo.upsert(state)
+      Effect.runSync(GoalRepo.upsert(state))
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(path.join(storage, "goal"))).toBe(false)
-      expect(GoalRepo.get(state.sessionID)?.objective).toBe("move goals off JSON")
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.objective).toBe("move goals off JSON")
     })
   })
 
@@ -67,7 +68,7 @@ describe("session goal SQL", () => {
       Database.syncDb()
 
       const state = goalState("ses_trap")
-      GoalRepo.upsert({ ...state, objective: "sql-objective" })
+      Effect.runSync(GoalRepo.upsert({ ...state, objective: "sql-objective" }))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "goal"), { recursive: true })
@@ -76,11 +77,11 @@ describe("session goal SQL", () => {
         JSON.stringify({ ...state, objective: "json-objective" }),
       )
 
-      expect(GoalRepo.get(state.sessionID)?.objective).toBe("sql-objective")
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.objective).toBe("sql-objective")
 
       const onlyJson = goalState("ses_json_only")
       await fs.writeFile(path.join(storage, "goal", `${onlyJson.sessionID}.json`), JSON.stringify(onlyJson))
-      expect(GoalRepo.get(onlyJson.sessionID)).toBeUndefined()
+      expect(Effect.runSync(GoalRepo.get(onlyJson.sessionID))).toBeUndefined()
     })
   })
 
@@ -91,21 +92,25 @@ describe("session goal SQL", () => {
       Database.syncDb()
 
       const state = goalState("ses_mutate")
-      GoalRepo.upsert(state)
-      const updated = GoalRepo.update(state.sessionID, (draft) => {
-        draft.status = "paused"
-        draft.iterationCount += 1
-      })
+      Effect.runSync(GoalRepo.upsert(state))
+      const updated = Effect.runSync(
+        GoalRepo.update(state.sessionID, (draft) => {
+          draft.status = "paused"
+          draft.iterationCount += 1
+        }),
+      )
       expect(updated?.status).toBe("paused")
       expect(updated?.iterationCount).toBe(3)
-      expect(GoalRepo.get(state.sessionID)?.status).toBe("paused")
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))?.status).toBe("paused")
 
-      expect(GoalRepo.remove(state.sessionID)).toBe(true)
-      expect(GoalRepo.get(state.sessionID)).toBeUndefined()
+      expect(Effect.runSync(GoalRepo.remove(state.sessionID))).toBe(true)
+      expect(Effect.runSync(GoalRepo.get(state.sessionID))).toBeUndefined()
       expect(
-        GoalRepo.update(state.sessionID, (draft) => {
-          draft.status = "active"
-        }),
+        Effect.runSync(
+          GoalRepo.update(state.sessionID, (draft) => {
+            draft.status = "active"
+          }),
+        ),
       ).toBeUndefined()
     })
   })

@@ -114,7 +114,7 @@ export default function LoopsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      void load(true)
     }, [load]),
   )
 

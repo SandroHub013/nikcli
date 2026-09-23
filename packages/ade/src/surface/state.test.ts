@@ -1,5 +1,12 @@
 import { describe, test, expect } from "bun:test"
 import {
+  ADE_VIEWS,
+  CHAT_AND_BOT_ENABLED,
+  VISIBLE_VIEWS,
+  visibleViews,
+  isViewVisible,
+  nextView,
+  reachableView,
   createWorkbench,
   addPane,
   closePane,
@@ -117,4 +124,28 @@ describe("panes of several projects, and spawned worktrees, survive a restart", 
     expect(back.panes[1]?.spawnArgs).toEqual(["--model", "gemini-3.1-pro-high"])
     expect(back.panes[1]?.tree?.fidelity).toBe("full")
   })
+})
+describe("the Chat and Bot switch (S40)", () => {
+  test("the visible sections follow the switch, and agent and code are always there", () => {
+    expect(visibleViews(false)).toEqual(["agent", "code"])
+    expect(visibleViews(true)).toEqual([...ADE_VIEWS])
+    expect(VISIBLE_VIEWS).toEqual(visibleViews(CHAT_AND_BOT_ENABLED))
+  })
+
+  for (const enabled of [false, true]) {
+    test(`a hidden section is never where the cycle or an outside request lands (switch ${enabled ? "on" : "off"})`, () => {
+      const views = visibleViews(enabled)
+      const visited = new Set<string>()
+      let view = nextView("code", views)
+      for (let i = 0; i < ADE_VIEWS.length * 2; i++) {
+        expect(isViewVisible(view, views)).toBe(true)
+        visited.add(view)
+        view = nextView(view, views)
+      }
+      expect(visited.size).toBe(views.length)
+      for (const asked of ADE_VIEWS) expect(isViewVisible(reachableView(asked, views), views)).toBe(true)
+      expect(reachableView("chat", views)).toBe(enabled ? "chat" : "code")
+      expect(reachableView("bot", views)).toBe(enabled ? "bot" : "code")
+    })
+  }
 })

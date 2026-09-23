@@ -106,12 +106,27 @@
 
 /* ── sections ─────────────────────────────────────────────────────────────── */
 
+/*
+ * As tall as the sections it holds, and never taller.
+ *
+ * It used to be `flex: 1`, which handed it the whole column: with "File" shut
+ * — three headers and nothing else — the box ran to the foot of the sidebar
+ * and half the column was an empty card. `0 1 auto` keeps the shrink that
+ * lets the scrolling section give way when the content is taller than the
+ * column, and drops the growth that was filling the sidebar with nothing.
+ */
 [data-slot="sidebar-sections"] {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-sections"]::-webkit-scrollbar {
+  display: none;
 }
 
 /*
@@ -136,12 +151,13 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: fit-content;
   border-bottom: 1px solid var(--ade-border-subtle);
 }
 
 [data-slot="sidebar-section"][data-scrolls] {
   flex: 0 1 auto;
+  min-height: fit-content;
   overflow: hidden;
 }
 
@@ -167,8 +183,11 @@
 [data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"] {
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="sidebar-section"][data-open]:not([data-scrolls]) [data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── project search results ───────────────────────────────────────────────── */
@@ -177,6 +196,11 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+[data-component="file-results"]::-webkit-scrollbar {
+  display: none;
 }
 
 [data-slot="file-result"] {
@@ -204,17 +228,6 @@
 
 [data-slot="file-result"][data-selected] {
   background: var(--ade-active);
-}
-
-[data-slot="file-result"][data-selected]::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--ade-space-1);
-  bottom: var(--ade-space-1);
-  width: 2px;
-  background: var(--ade-accent);
-  border-radius: 0 var(--ade-radius-sm) var(--ade-radius-sm) 0;
 }
 
 [data-slot="file-result"]:focus-visible {
@@ -450,8 +463,11 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+  scrollbar-width: none;
+}
+
+[data-slot="section-content"]::-webkit-scrollbar {
+  display: none;
 }
 
 /* A closed section is a header and nothing else, with no border doubling up
@@ -694,9 +710,6 @@
   color: var(--ade-text);
   box-shadow: none;
 }
-[data-slot="tree-row"][data-selected]::before {
-  content: none;
-}
 [data-slot="tree-guide"]::before {
   background: var(--ade-border-subtle);
 }
@@ -706,12 +719,8 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
 }
-/* Anche la riga di un risultato di ricerca perde la striscia colorata. */
 [data-slot="file-result"] {
   border-radius: 6px;
-}
-[data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 /* Il pezzo che corrisponde a quanto è stato digitato: in grassetto e in
    inchiostro pieno, non in tinta. Su una riga tenue il contrasto basta a
@@ -809,6 +818,19 @@
   align-items: stretch;
   gap: var(--ade-space-2);
   flex: 0 0 auto;
+  /*
+   * In fondo alla colonna, non sotto l'ultima sezione.
+   *
+   * Finché il riquadro delle sezioni era `flex: 1` il fondo ci finiva per
+   * conseguenza: le sezioni si prendevano tutto l'avanzo e spingevano giù il
+   * piede. Quando quel `flex: 1` è stato tolto — perché con "File" chiusa il
+   * riquadro diventava mezza colonna di carta vuota — nessuno spingeva più
+   * niente, e il vassoio risaliva fin sotto l'ultima sezione, con l'avanzo
+   * sotto di lui. Il margine automatico si prende l'avanzo senza darlo a
+   * nessuno: le sezioni restano alte quanto il loro contenuto e il piede
+   * resta in fondo in ogni combinazione di sezioni aperte e chiuse.
+   */
+  margin-top: auto;
   padding: var(--ade-space-3) var(--ade-space-4);
   border-top: 1px solid var(--ade-border);
   background: var(--ade-sunken);
@@ -942,11 +964,6 @@
   flex: 1 1 auto;
   min-width: 0;
   gap: 1px;
-}
-
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected]::before {
-  display: none !important;
-  content: none !important;
 }
 
 [data-slot="session-row"],
@@ -1443,33 +1460,27 @@ aside[data-component="ade-sidebar"] {
   gap: 0;
 }
 
-[data-component="ade-sidebar"] [data-slot="workspace-header"]:hover,
-[data-component="ade-sidebar"] [data-slot="tree-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="session-row"]:hover,
-[data-component="ade-sidebar"] [data-slot="active-agent-card"]:hover {
+/*
+ * L'hover e la selezione si agganciano alla forma che la riga dichiara dove
+ * nasce (`data-selectable`), non al suo slot: una riga nuova entra
+ * abilitandosi una volta nel markup, senza che un elenco di nomi vada
+ * cercato e aggiornato di nuovo nella busta. Il prefisso del componente
+ * resta: vale un punto di specificità in più su index.css, che altrimenti
+ * vince il pari e rimetterebbe i vecchi fondi sopra questo velo.
+ */
+[data-component="ade-sidebar"] [data-selectable]:hover {
   background: var(--ade-hover);
   border-color: transparent;
 }
 
 /* La selezione è un velo, non un anello: il colore dice già quale riga è
-   quella, e il contorno lo direbbe una seconda volta. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected],
-[data-component="ade-sidebar"] [data-slot="workspace-header"][data-active],
-[data-component="ade-sidebar"] [data-slot="session-row"][data-selected],
-[data-component="ade-sidebar"] [data-slot="active-agent-card"][data-selected] {
+   quella, e il contorno lo direbbe una seconda volta. La stessa forma
+   dell'hover porta lo stato: `data-selectable` con `data-selected`. */
+[data-component="ade-sidebar"] [data-selectable][data-selected] {
   background: var(--ade-accent-soft);
   border-color: transparent;
   box-shadow: none;
   color: var(--ade-text);
-}
-
-/* E niente barretta sul bordo sinistro: era il segno della selezione quando
-   la riga non cambiava fondo, e sopra il velo diventa una seconda risposta
-   alla stessa domanda. */
-[data-component="ade-sidebar"] [data-slot="tree-row"][data-selected]::before,
-[data-component="ade-sidebar"] [data-slot="file-result"][data-selected]::before {
-  content: none;
 }
 
 /* Il segno dell'agente è tondo come tutto il resto, e senza contorno: il
@@ -1628,12 +1639,27 @@ aside[data-component="ade-sidebar"] {
   gap: 1px;
 }
 
+/*
+ * The readings give way; the buttons never do.
+ *
+ * This row was `flex: 0 0 auto` with `nowrap`, so at the column's minimum
+ * width — 180px, where the gear, the theme, the bell and three readings want
+ * 173 of the 164 available — it simply ran past the rounded edge of the
+ * sidebar and the last reading was cut in half. Measured in ADE Test: the
+ * strip overflowed by 15px and `sidebar-stats` stuck 7px out of the column.
+ *
+ * What yields is decided below rather than by the order the browser happens to
+ * reach: a reading is something you can also find in the panel, a button is
+ * the only way to reach what it opens.
+ */
 [data-slot="sidebar-stats"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   margin-left: auto;
   font-family: var(--ade-mono);
   font-size: 10px;
@@ -1677,6 +1703,37 @@ aside[data-component="ade-sidebar"] {
 
   [data-slot="sidebar-stats"] {
     gap: 5px;
+  }
+}
+
+/*
+ * Below this width the readings go to a line of their own.
+ *
+ * They used to leave one at a time — disk, then memory — and at the column's
+ * 180px minimum that left the processor alone on the row, which reads as a
+ * truncated line rather than as a decision. So the form changes instead of the
+ * contents: the buttons keep the first line, the three readings take the
+ * second, and all of them stay inside the rounded edge.
+ *
+ * Measured in ADE Test: the three buttons want 68px, the three readings 105,
+ * and with the 6px between them the row needs 179. The query is on the
+ * footer's content box, which is 16px narrower than the column, so 184 here is
+ * a column of 200 — the row's real limit is 195, and the five spare pixels
+ * keep the buttons and the numbers from touching.
+ */
+@container (max-width: 184px) {
+  [data-slot="sidebar-settings-strip"] {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  [data-slot="sidebar-stats"] {
+    /* A whole line of its own, read from the left like everything else on
+       this column, rather than pushed to the edge by a margin. */
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    gap: 10px;
   }
 }
 

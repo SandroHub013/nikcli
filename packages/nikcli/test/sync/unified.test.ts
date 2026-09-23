@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { describe, expect, it, afterAll } from "bun:test"
 import { Database } from "@/database/database"
@@ -278,28 +279,28 @@ describe("SyncReducer — replay with snapshot cache", () => {
 describe("Outbox — pending push queue", () => {
   it("enqueues and reports counts", () => {
     const target = "https://s.nikcli.store"
-    Outbox.enqueue("syn_aaa", target)
-    Outbox.enqueue("syn_bbb", target)
-    Outbox.enqueue("syn_ccc", target)
+    Effect.runSync(Outbox.enqueue("syn_aaa", target))
+    Effect.runSync(Outbox.enqueue("syn_bbb", target))
+    Effect.runSync(Outbox.enqueue("syn_ccc", target))
 
-    const status = Outbox.status(target)
+    const status = Effect.runSync(Outbox.status(target))
     expect(status.pending).toBeGreaterThanOrEqual(3)
   })
 
   it("is idempotent on (eventId, target)", () => {
     const target = "https://s.nikcli.store"
-    const before = Outbox.status(target).pending
-    Outbox.enqueue("syn_idempotent", target)
-    Outbox.enqueue("syn_idempotent", target)
-    Outbox.enqueue("syn_idempotent", target)
-    const after = Outbox.status(target).pending
+    const before = Effect.runSync(Outbox.status(target)).pending
+    Effect.runSync(Outbox.enqueue("syn_idempotent", target))
+    Effect.runSync(Outbox.enqueue("syn_idempotent", target))
+    Effect.runSync(Outbox.enqueue("syn_idempotent", target))
+    const after = Effect.runSync(Outbox.status(target)).pending
     expect(after - before).toBe(1)
   })
 
   it("drain marks sent on successful push", async () => {
     const target = "https://s.nikcli.store"
     const eventId = "syn_drain_test"
-    Outbox.enqueue(eventId, target)
+    Effect.runSync(Outbox.enqueue(eventId, target))
 
     const result = await Outbox.drain(target, async () => ({ ok: true }), 10)
     expect(result.sent).toBeGreaterThanOrEqual(1)

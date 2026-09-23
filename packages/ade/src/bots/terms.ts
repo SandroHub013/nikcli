@@ -19,10 +19,6 @@ export const PLAN_RUNNERS: readonly string[] = ["claude", "codex"]
 /** How many turns on one plan may run at the same time. */
 export const MAX_PARALLEL_TURNS = 3
 
-export const TERMS_NOTICE =
-  "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. " +
-  "L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI."
-
 const running = new Map<string, number>()
 
 /**

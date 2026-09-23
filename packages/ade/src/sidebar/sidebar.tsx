@@ -73,6 +73,8 @@ import {
 } from "./workspace-tree"
 import { mergeChildren, markDirectoryError } from "./fs-tree"
 import { describeStats, type StatView } from "./system-stats"
+import { t } from "../i18n"
+import { activityLabel, isReadyActivity } from "../grid/activity"
 
 export interface SidebarProps {
   workspaces: Workspace[]
@@ -169,8 +171,10 @@ function WorkspaceHeaderRow(props: {
       role="treeitem"
       aria-level={1}
       data-slot="workspace-header"
+      data-selectable="true"
       data-expanded={props.row.isExpanded ? "true" : undefined}
       data-active={props.isActive ? "true" : undefined}
+      data-selected={props.isActive ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
     >
@@ -197,7 +201,7 @@ function WorkspaceHeaderRow(props: {
         <Badge tone="accent" data-slot="space-badge" title={props.row.workspace.path}>ssh</Badge>
       </Show>
       <Show when={props.isActive}>
-        <Badge tone="waiting" data-slot="space-badge">attivo</Badge>
+        <Badge tone="waiting" data-slot="space-badge">{t("sidebar.active")}</Badge>
       </Show>
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>
         {props.row.sessionCount}
@@ -245,7 +249,7 @@ function SessionChildRow(props: {
       const base = basename(props.row.session.cwd)
       if (base && base !== "/" && base !== ".") return base
     }
-    return props.row.session.workspaceId || props.row.workspaceId || "progetto"
+    return props.row.session.workspaceId || props.row.workspaceId || t("sidebar.project")
   }
   const branch = () => props.row.session.branch
 
@@ -255,14 +259,15 @@ function SessionChildRow(props: {
       role="treeitem"
       aria-level={2}
       data-slot="session-row"
+      data-selectable="true"
       data-status={props.row.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.row.isSelected ? "true" : undefined}
       aria-selected={props.row.isSelected}
       onClick={() => props.onSelect?.(props.row.id)}
       title={
-        props.row.session.activity && props.row.session.activity !== "Disponibile"
-          ? `${props.row.session.title} — ${props.row.session.activity}`
+        props.row.session.activity && !isReadyActivity(props.row.session.activity)
+          ? `${props.row.session.title} — ${activityLabel(props.row.session.activity)}`
           : props.row.session.title
       }
     >
@@ -297,7 +302,7 @@ function SessionChildRow(props: {
             </Show>
           </span>
           <Show when={props.row.session.startTime}>
-            <span data-slot="agent-card-time" title="Tempo trascorso">
+            <span data-slot="agent-card-time" title={t("sidebar.elapsed")}>
               {formatDuration(elapsed(props.row.session.startTime!, props.now))}
             </span>
           </Show>
@@ -320,7 +325,7 @@ function ActiveAgentRow(props: {
       const base = basename(props.session.cwd)
       if (base && base !== "/" && base !== ".") return base
     }
-    return props.workspaceName || props.session.workspaceId || "progetto"
+    return props.workspaceName || props.session.workspaceId || t("sidebar.project")
   }
   const branch = () => props.session.branch
 
@@ -329,14 +334,15 @@ function ActiveAgentRow(props: {
       type="button"
       role="listitem"
       data-slot="active-agent-card"
+      data-selectable="true"
       data-status={props.session.status}
       data-agent-status={displayStatus()}
       data-selected={props.isSelected ? "true" : undefined}
       aria-selected={props.isSelected}
       onClick={() => props.onSelect?.(props.session.id)}
       title={
-        props.session.activity && props.session.activity !== "Disponibile"
-          ? `${props.session.title} — ${props.session.activity}`
+        props.session.activity && !isReadyActivity(props.session.activity)
+          ? `${props.session.title} — ${activityLabel(props.session.activity)}`
           : props.session.title
       }
     >
@@ -371,7 +377,7 @@ function ActiveAgentRow(props: {
             </Show>
           </span>
           <Show when={props.session.startTime}>
-            <span data-slot="agent-card-time" title="Tempo trascorso">
+            <span data-slot="agent-card-time" title={t("sidebar.elapsed")}>
               {formatDuration(elapsed(props.session.startTime!, props.now))}
             </span>
           </Show>
@@ -432,6 +438,7 @@ function FileTreeRow(props: {
       tabindex={0}
       aria-level={props.item.depth + 1}
       data-slot="tree-row"
+      data-selectable="true"
       data-kind={props.item.kind}
       data-expanded={props.item.isExpanded ? "true" : undefined}
       data-selected={props.item.isSelected ? "true" : undefined}
@@ -1026,7 +1033,7 @@ export function Sidebar(props: SidebarProps) {
               <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span data-slot="section-label">Spaces</span>
+              <span data-slot="section-label">{t("sidebar.spaces")}</span>
               <span data-slot="section-count">{props.workspaces.length}</span>
             </button>
             <div data-slot="section-actions">
@@ -1034,8 +1041,8 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 data-slot="section-add"
-                aria-label="Aggiungi space"
-                title="Aggiungi space"
+                aria-label={t("sidebar.addSpace")}
+                title={t("sidebar.addSpace")}
                 onClick={() => props.onAddProject?.()}
               >
                 <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -1047,8 +1054,8 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 data-slot="section-add"
-                aria-label="Aggiungi ambiente remoto (ssh)"
-                title="Aggiungi ambiente remoto (ssh)"
+                aria-label={t("sidebar.addRemote")}
+                title={t("sidebar.addRemote")}
                 onClick={() => props.onAddRemote?.()}
               >
                 <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -1065,7 +1072,7 @@ export function Sidebar(props: SidebarProps) {
               {/* An empty box teaches nothing. The list says what would be in it. */}
               <Show
                 when={keyedWorkspaces().length > 0}
-                fallback={<p data-slot="section-empty">Nessuno space aperto.</p>}
+                fallback={<p data-slot="section-empty">{t("sidebar.noSpaces")}</p>}
               >
                 <For each={keyedWorkspaces()}>
                   {(entry) => {
@@ -1121,7 +1128,7 @@ export function Sidebar(props: SidebarProps) {
               <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span data-slot="section-label">Agenti attivi</span>
+              <span data-slot="section-label">{t("sidebar.agents")}</span>
               <span data-slot="section-count">{allSessions().length}</span>
             </button>
             <div data-slot="section-actions">
@@ -1129,8 +1136,8 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 data-slot="section-add"
-                aria-label="Nuova sessione agente"
-                title="Nuova sessione agente"
+                aria-label={t("sidebar.newAgentSession")}
+                title={t("sidebar.newAgentSession")}
                 onClick={() => props.onNewSession?.()}
               >
                 <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -1147,14 +1154,14 @@ export function Sidebar(props: SidebarProps) {
                 when={allSessions().length > 0}
                 fallback={
                   <div data-slot="active-agents-empty">
-                    <p data-slot="section-empty">Nessun agente attivo.</p>
+                    <p data-slot="section-empty">{t("sidebar.noAgents")}</p>
                     <Show when={props.onNewSession}>
                       <button
                         type="button"
                         data-slot="empty-action-btn"
                         onClick={() => props.onNewSession?.()}
                       >
-                        + Avvia nuovo agente
+                        {t("sidebar.startAgent")}
                       </button>
                     </Show>
                   </div>
@@ -1194,7 +1201,7 @@ export function Sidebar(props: SidebarProps) {
               <svg data-slot="section-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
                 <path d="M2.5 4.5l3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              <span data-slot="section-label">File</span>
+              <span data-slot="section-label">{t("sidebar.files")}</span>
             </button>
             <div data-slot="section-actions" />
           </div>
@@ -1223,8 +1230,8 @@ export function Sidebar(props: SidebarProps) {
               <input
                 type="text"
                 data-slot="search-input"
-                placeholder={props.searchFiles ? "Cerca nel progetto…" : "Cerca fra i file aperti…"}
-                title="Più parole: devono comparire tutte. Una parola con / cerca nel percorso (es. grid/pane)."
+                placeholder={props.searchFiles ? t("sidebar.search.project") : t("sidebar.search.open")}
+                title={t("sidebar.search.help")}
                 value={searchQuery()}
                 onInput={onSearchInput}
                 onKeyDown={onSearchKeyDown}
@@ -1233,7 +1240,7 @@ export function Sidebar(props: SidebarProps) {
                 <button
                   type="button"
                   data-slot="search-clear"
-                  aria-label="Cancella la ricerca"
+                  aria-label={t("sidebar.search.clear")}
                   onClick={() => setSearchQuery("")}
                 >
                   ×
@@ -1242,7 +1249,7 @@ export function Sidebar(props: SidebarProps) {
             </div>
             {/* Two chips that cannot both be off: turning off the last one
                 turns the other on (`toggleKind`). */}
-            <div data-slot="search-kinds" role="group" aria-label="Mostra">
+            <div data-slot="search-kinds" role="group" aria-label={t("sidebar.search.show")}>
               <button
                 type="button"
                 data-slot="search-kind"
@@ -1250,7 +1257,7 @@ export function Sidebar(props: SidebarProps) {
                 data-active={kinds().has("file") ? "true" : undefined}
                 onClick={() => flipKind("file")}
               >
-                File
+                {t("sidebar.search.files")}
               </button>
               <button
                 type="button"
@@ -1259,7 +1266,7 @@ export function Sidebar(props: SidebarProps) {
                 data-active={kinds().has("directory") ? "true" : undefined}
                 onClick={() => flipKind("directory")}
               >
-                Cartelle
+                {t("sidebar.search.folders")}
               </button>
               <Show when={props.searchFiles && searchQuery().trim() && !searching()}>
                 <span data-slot="search-count">
@@ -1279,12 +1286,12 @@ export function Sidebar(props: SidebarProps) {
                 fallback={
                   <p data-slot="section-empty">
                     {searching()
-                      ? "Cerco nel progetto…"
+                      ? t("sidebar.search.searching")
                       : kinds().size === 2
-                        ? "Nessun file o cartella corrisponde."
+                        ? t("sidebar.search.noMatch")
                         : kinds().has("file")
-                          ? "Nessun file corrisponde."
-                          : "Nessuna cartella corrisponde."}
+                          ? t("sidebar.search.noFile")
+                          : t("sidebar.search.noFolder")}
                   </p>
                 }
               >
@@ -1299,6 +1306,7 @@ export function Sidebar(props: SidebarProps) {
                         role="option"
                         tabindex={-1}
                         data-slot="file-result"
+                        data-selectable="true"
                         data-kind={hit.kind}
                         data-index={index()}
                         data-active={activeHit() === index() ? "true" : undefined}
@@ -1361,8 +1369,8 @@ export function Sidebar(props: SidebarProps) {
                   {/* Two different absences: nothing matched, or there is no
                       disk to read at all. Saying "vuoto" for both is a lie. */}
                   {searchQuery()
-                    ? "Nessun file corrisponde."
-                    : "Apri un progetto per vedere i file."}
+                    ? t("sidebar.search.noFile")
+                    : t("sidebar.files.noProject")}
                 </p>
               }
             >
@@ -1416,8 +1424,8 @@ export function Sidebar(props: SidebarProps) {
               type="button"
               data-slot="sidebar-settings"
               onClick={() => props.onOpenSettings?.()}
-              aria-label="Impostazioni"
-              title="Impostazioni"
+              aria-label={t("sidebar.settings")}
+              title={t("sidebar.settings")}
             >
               <svg
                 viewBox="0 0 24 24"
@@ -1433,7 +1441,7 @@ export function Sidebar(props: SidebarProps) {
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
-              <span data-slot="sidebar-settings-label">Impostazioni</span>
+              <span data-slot="sidebar-settings-label">{t("sidebar.settings")}</span>
             </button>
             </Show>
             <Show when={props.footerActions}>
@@ -1442,11 +1450,11 @@ export function Sidebar(props: SidebarProps) {
             </div>
             <Show when={stats()}>
               {(view) => (
-                <div data-slot="sidebar-stats" aria-label="Risorse usate da ADE">
+                <div data-slot="sidebar-stats" aria-label={t("sidebar.stats")}>
                   {/* Marks instead of words: three labels were most of the
                       row's width. The words stay in the tooltip and in
                       aria-label for whoever does not read the marks. */}
-                  <span data-slot="sidebar-stat" data-load={view().cpu.load} title={view().cpu.title} aria-label={view().cpu.title}>
+                  <span data-slot="sidebar-stat" data-kind="cpu" data-load={view().cpu.load} title={view().cpu.title} aria-label={view().cpu.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="4" y="4" width="8" height="8" rx="1.2" />
                       <rect x="6.5" y="6.5" width="3" height="3" rx="0.4" />
@@ -1454,14 +1462,14 @@ export function Sidebar(props: SidebarProps) {
                     </svg>
                     {view().cpu.text}
                   </span>
-                  <span data-slot="sidebar-stat" data-load={view().ram.load} title={view().ram.title} aria-label={view().ram.title}>
+                  <span data-slot="sidebar-stat" data-kind="ram" data-load={view().ram.load} title={view().ram.title} aria-label={view().ram.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="1.5" y="4.5" width="13" height="6" rx="1" />
                       <path d="M4.5 6.8v1.4M7 6.8v1.4M9.5 6.8v1.4M12 6.8v1.4M3.5 10.5v2M6.5 10.5v2M9.5 10.5v2M12.5 10.5v2" />
                     </svg>
                     {view().ram.text}
                   </span>
-                  <span data-slot="sidebar-stat" data-load={view().mem.load} title={view().mem.title} aria-label={view().mem.title}>
+                  <span data-slot="sidebar-stat" data-kind="mem" data-load={view().mem.load} title={view().mem.title} aria-label={view().mem.title}>
                     <svg data-slot="sidebar-stat-icon" viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="8" cy="8" r="6" />
                       <path d="M8 2v6h6" />
@@ -1480,7 +1488,7 @@ export function Sidebar(props: SidebarProps) {
         onPointerDown={onResizePointerDown}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Ridimensiona barra laterale"
+        aria-label={t("sidebar.resize")}
       />
     </aside>
   )

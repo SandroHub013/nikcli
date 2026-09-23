@@ -121,10 +121,38 @@ export {
   type Speaker,
   type WebSpeechSpeakerOptions,
 } from "./tts/speaker"
+export {
+  createNaturalSpeaker,
+  splitSentences,
+  type NaturalSpeaker,
+  type NaturalSpeakerDeps,
+} from "./tts/natural-speaker"
+export { cleanForSpeech } from "./tts/clean"
+export {
+  createPlaybackMeter,
+  levelAt,
+  syntheticSpeechLevel,
+  wavEnvelope,
+  type Envelope,
+  type PlaybackMeter,
+} from "./tts/playback-level"
+export {
+  MAX_PUSH,
+  ORB_CENTER_SIZE,
+  ORB_DOCK_SIZE,
+  orbCentered,
+  orbColor,
+  orbPhase,
+  projectPoint,
+  spherePoints,
+  type OrbPhase,
+  type OrbPhaseInput,
+} from "./ui/agent-orb-state"
 
 // Voice orchestration engine
 export {
   createVoiceEngine,
+  holdsToTalk,
   type VoiceEngine,
   type VoiceEngineOptions,
 } from "./engine"
@@ -271,8 +299,19 @@ export {
 export {
   CURRENT_SETTINGS_VERSION,
   AGENT_ENGINES,
+  REPLY_VOICES,
+  type ReplyVoice,
   DEFAULT_VOICE_SETTINGS,
+  WAKE_PHRASE,
+  WAKE_WORD_ENABLED,
+  wakeWordEnabled,
+  setWakeWordEnabledForTests,
+  SHORTCUT_ACTIVATION_ENABLED,
+  shortcutActivationEnabled,
+  setShortcutActivationEnabledForTests,
   type AgentEngine,
+  AGENT_SPEEDS,
+  type AgentSpeed,
   normalizeSettings,
   type NormalizedVoiceSettings,
   type ParakeetExecutionBackend,
@@ -281,6 +320,12 @@ export {
   type VoiceMode,
   type VoiceSettings,
 } from "./settings/model"
+
+export {
+  REPLY_VOICE_CHOICES,
+  activeReplyVoice,
+  replyVoiceChoicesForLocale,
+} from "./settings/reply-voices"
 
 export {
   VOICE_SETTINGS_STORAGE_KEY,

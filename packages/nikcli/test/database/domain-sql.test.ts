@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -125,14 +126,14 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
 
       Database.syncDb()
 
-      expect(MissionRepo.get("proj_sql", def.id)?.name).toBe("sql mission")
-      expect(MissionRepo.listExecs("proj_sql", def.id).map((row) => row.id)).toEqual([exec.id])
-      expect(MonitorRepo.get(monitor.sessionID, monitor.id)?.title).toBe("echo")
-      expect(ShareRepo.get(local.sessionID)?.url).toBe(share.url)
-      expect(ShareRepo.getLocal(local.id)?.sessionID).toBe(local.sessionID)
-      const stored = ArtifactRepo.get(artifact.sessionID, artifact.id)
+      expect(Effect.runSync(MissionRepo.get("proj_sql", def.id))?.name).toBe("sql mission")
+      expect(Effect.runSync(MissionRepo.listExecs("proj_sql", def.id)).map((row) => row.id)).toEqual([exec.id])
+      expect(Effect.runSync(MonitorRepo.get(monitor.sessionID, monitor.id))?.title).toBe("echo")
+      expect(Effect.runSync(ShareRepo.get(local.sessionID))?.url).toBe(share.url)
+      expect(Effect.runSync(ShareRepo.getLocal(local.id))?.sessionID).toBe(local.sessionID)
+      const stored = Effect.runSync(ArtifactRepo.get(artifact.sessionID, artifact.id))
       expect(stored?.secret).toBe("sekrit")
-      expect(ArtifactRepo.list(artifact.sessionID).map((row) => row.id)).toEqual([artifact.id])
+      expect(Effect.runSync(ArtifactRepo.list(artifact.sessionID)).map((row) => row.id)).toEqual([artifact.id])
 
       const { Artifact } = await import("@/artifact")
       const listed = await Artifact.list(artifact.sessionID)
@@ -142,8 +143,8 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
 
       const domainSql = (await import("@/database/migration/20260814020000_domain_sql")).default
       domainSql.up(Database.syncNative())
-      expect(MissionRepo.list("proj_sql")).toHaveLength(1)
-      expect(MonitorRepo.listRunning().map((row) => row.id)).toEqual([monitor.id])
+      expect(Effect.runSync(MissionRepo.list("proj_sql"))).toHaveLength(1)
+      expect(Effect.runSync(MonitorRepo.listRunning()).map((row) => row.id)).toEqual([monitor.id])
 
       // Downgrade fallback: the JSON tree is left in place.
       expect(await fs.readFile(path.join(storage, "mission", "proj_sql", `${def.id}.json`), "utf8")).toContain(def.name)
@@ -172,49 +173,57 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       Database.syncDb()
 
       const def = missionDef("mission_no_json")
-      MissionRepo.upsert("proj_live", def)
-      MissionRepo.putExec("proj_live", missionExec(def.id, "mission_exec_no_json"))
-      MonitorRepo.upsert({
-        id: "mon_no_json",
-        sessionID: "ses_no_json",
-        messageID: "msg_no_json",
-        callID: "call_no_json",
-        title: "ping",
-        command: "echo ping",
-        cwd: "/tmp",
-        agent: "build",
-        wake: false,
-        status: "running",
-        logPath: "/tmp/out.log",
-        commandPath: "/tmp/command",
-        pidPath: "/tmp/pid",
-        exitCodePath: "/tmp/exit",
-        preview: "",
-        bytes: 0,
-        time: { created: 1, updated: 1 },
-      })
-      ShareRepo.put("ses_no_json", { url: "http://local/share/no-json", mode: "local", id: "share_no_json" })
-      ShareRepo.putLocal({
-        id: "share_no_json",
-        sessionID: "ses_no_json",
-        url: "http://local/share/no-json",
-        time: { created: 1, updated: 1 },
-        items: {},
-      })
-      ArtifactRepo.upsert({
-        id: "art_no_json",
-        title: "page",
-        filename: "index.html",
-        contentType: "text/html",
-        kind: "html",
-        url: "https://example.test/art_no_json",
-        viewKey: "view",
-        secret: "sekrit",
-        version: 1,
-        sessionID: "ses_no_json",
-        size: 4,
-        time: { created: 1, updated: 1 },
-      })
+      Effect.runSync(MissionRepo.upsert("proj_live", def))
+      Effect.runSync(MissionRepo.putExec("proj_live", missionExec(def.id, "mission_exec_no_json")))
+      Effect.runSync(
+        MonitorRepo.upsert({
+          id: "mon_no_json",
+          sessionID: "ses_no_json",
+          messageID: "msg_no_json",
+          callID: "call_no_json",
+          title: "ping",
+          command: "echo ping",
+          cwd: "/tmp",
+          agent: "build",
+          wake: false,
+          status: "running",
+          logPath: "/tmp/out.log",
+          commandPath: "/tmp/command",
+          pidPath: "/tmp/pid",
+          exitCodePath: "/tmp/exit",
+          preview: "",
+          bytes: 0,
+          time: { created: 1, updated: 1 },
+        }),
+      )
+      Effect.runSync(
+        ShareRepo.put("ses_no_json", { url: "http://local/share/no-json", mode: "local", id: "share_no_json" }),
+      )
+      Effect.runSync(
+        ShareRepo.putLocal({
+          id: "share_no_json",
+          sessionID: "ses_no_json",
+          url: "http://local/share/no-json",
+          time: { created: 1, updated: 1 },
+          items: {},
+        }),
+      )
+      Effect.runSync(
+        ArtifactRepo.upsert({
+          id: "art_no_json",
+          title: "page",
+          filename: "index.html",
+          contentType: "text/html",
+          kind: "html",
+          url: "https://example.test/art_no_json",
+          viewKey: "view",
+          secret: "sekrit",
+          version: 1,
+          sessionID: "ses_no_json",
+          size: 4,
+          time: { created: 1, updated: 1 },
+        }),
+      )
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(storage)).toBe(false)
@@ -231,49 +240,55 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       Database.syncDb()
 
       const def = missionDef("mission_trap")
-      MissionRepo.upsert("proj_trap", def)
-      MissionRepo.putExec("proj_trap", missionExec(def.id, "mission_exec_trap"))
-      MonitorRepo.upsert({
-        id: "mon_trap",
-        sessionID: "ses_trap",
-        messageID: "msg_trap",
-        callID: "call_trap",
-        title: "sql-title",
-        command: "echo sql",
-        cwd: "/tmp",
-        agent: "build",
-        wake: false,
-        status: "running",
-        logPath: "/tmp/out.log",
-        commandPath: "/tmp/command",
-        pidPath: "/tmp/pid",
-        exitCodePath: "/tmp/exit",
-        preview: "",
-        bytes: 0,
-        time: { created: 1, updated: 1 },
-      })
-      ShareRepo.put("ses_trap", { url: "http://sql/share", mode: "local", id: "share_sql_trap" })
-      ShareRepo.putLocal({
-        id: "share_sql_trap",
-        sessionID: "ses_trap",
-        url: "http://sql/share",
-        time: { created: 1, updated: 1 },
-        items: {},
-      })
-      ArtifactRepo.upsert({
-        id: "art_trap",
-        title: "sql-page",
-        filename: "index.html",
-        contentType: "text/html",
-        kind: "html",
-        url: "https://example.test/art_trap",
-        viewKey: "view",
-        secret: "sql-secret",
-        version: 1,
-        sessionID: "ses_trap",
-        size: 4,
-        time: { created: 1, updated: 1 },
-      })
+      Effect.runSync(MissionRepo.upsert("proj_trap", def))
+      Effect.runSync(MissionRepo.putExec("proj_trap", missionExec(def.id, "mission_exec_trap")))
+      Effect.runSync(
+        MonitorRepo.upsert({
+          id: "mon_trap",
+          sessionID: "ses_trap",
+          messageID: "msg_trap",
+          callID: "call_trap",
+          title: "sql-title",
+          command: "echo sql",
+          cwd: "/tmp",
+          agent: "build",
+          wake: false,
+          status: "running",
+          logPath: "/tmp/out.log",
+          commandPath: "/tmp/command",
+          pidPath: "/tmp/pid",
+          exitCodePath: "/tmp/exit",
+          preview: "",
+          bytes: 0,
+          time: { created: 1, updated: 1 },
+        }),
+      )
+      Effect.runSync(ShareRepo.put("ses_trap", { url: "http://sql/share", mode: "local", id: "share_sql_trap" }))
+      Effect.runSync(
+        ShareRepo.putLocal({
+          id: "share_sql_trap",
+          sessionID: "ses_trap",
+          url: "http://sql/share",
+          time: { created: 1, updated: 1 },
+          items: {},
+        }),
+      )
+      Effect.runSync(
+        ArtifactRepo.upsert({
+          id: "art_trap",
+          title: "sql-page",
+          filename: "index.html",
+          contentType: "text/html",
+          kind: "html",
+          url: "https://example.test/art_trap",
+          viewKey: "view",
+          secret: "sql-secret",
+          version: 1,
+          sessionID: "ses_trap",
+          size: 4,
+          time: { created: 1, updated: 1 },
+        }),
+      )
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "mission", "proj_trap"), { recursive: true })
@@ -307,14 +322,14 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
         JSON.stringify({ title: "json-page", secret: "json-secret" }),
       )
 
-      expect(MissionRepo.get("proj_trap", def.id)?.name).toBe("sql mission")
-      expect(MissionRepo.listExecs("proj_trap", def.id)[0]?.targetName).toBe("feature-1")
-      expect(MonitorRepo.get("ses_trap", "mon_trap")?.title).toBe("sql-title")
-      expect(MonitorRepo.listRunning().map((row) => row.title)).toEqual(["sql-title"])
-      expect(ShareRepo.get("ses_trap")?.url).toBe("http://sql/share")
-      expect(ShareRepo.getLocal("share_sql_trap")?.sessionID).toBe("ses_trap")
-      expect(ArtifactRepo.get("ses_trap", "art_trap")?.title).toBe("sql-page")
-      expect(ArtifactRepo.get("ses_trap", "art_trap")?.secret).toBe("sql-secret")
+      expect(Effect.runSync(MissionRepo.get("proj_trap", def.id))?.name).toBe("sql mission")
+      expect(Effect.runSync(MissionRepo.listExecs("proj_trap", def.id))[0]?.targetName).toBe("feature-1")
+      expect(Effect.runSync(MonitorRepo.get("ses_trap", "mon_trap"))?.title).toBe("sql-title")
+      expect(Effect.runSync(MonitorRepo.listRunning()).map((row) => row.title)).toEqual(["sql-title"])
+      expect(Effect.runSync(ShareRepo.get("ses_trap"))?.url).toBe("http://sql/share")
+      expect(Effect.runSync(ShareRepo.getLocal("share_sql_trap"))?.sessionID).toBe("ses_trap")
+      expect(Effect.runSync(ArtifactRepo.get("ses_trap", "art_trap"))?.title).toBe("sql-page")
+      expect(Effect.runSync(ArtifactRepo.get("ses_trap", "art_trap"))?.secret).toBe("sql-secret")
     })
   })
 
@@ -345,46 +360,52 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
         bytes: 0,
         time: { created: 1, updated: 2 },
       }
-      MonitorRepo.upsert(monitor)
-      expect(MonitorRepo.get("ses_live", "mon_live")?.title).toBe("ping")
-      expect(MonitorRepo.listRunning().map((row) => row.id)).toEqual(["mon_live"])
-      MonitorRepo.upsert({ ...monitor, status: "complete", time: { ...monitor.time, completed: 3, updated: 3 } })
-      expect(MonitorRepo.listRunning()).toEqual([])
+      Effect.runSync(MonitorRepo.upsert(monitor))
+      expect(Effect.runSync(MonitorRepo.get("ses_live", "mon_live"))?.title).toBe("ping")
+      expect(Effect.runSync(MonitorRepo.listRunning()).map((row) => row.id)).toEqual(["mon_live"])
+      Effect.runSync(
+        MonitorRepo.upsert({ ...monitor, status: "complete", time: { ...monitor.time, completed: 3, updated: 3 } }),
+      )
+      expect(Effect.runSync(MonitorRepo.listRunning())).toEqual([])
 
       const share = { url: "http://local/share/x", mode: "local" as const, id: "share_live" }
-      ShareRepo.put("ses_share_live", share)
-      ShareRepo.putLocal({
-        id: "share_live",
-        sessionID: "ses_share_live",
-        url: share.url,
-        time: { created: 1, updated: 1 },
-        items: {},
-      })
-      expect(ShareRepo.get("ses_share_live")?.id).toBe("share_live")
-      expect(ShareRepo.getLocal("share_live")?.sessionID).toBe("ses_share_live")
-      ShareRepo.remove("ses_share_live")
-      ShareRepo.removeLocal("share_live")
-      expect(ShareRepo.get("ses_share_live")).toBeUndefined()
-      expect(ShareRepo.getLocal("share_live")).toBeUndefined()
+      Effect.runSync(ShareRepo.put("ses_share_live", share))
+      Effect.runSync(
+        ShareRepo.putLocal({
+          id: "share_live",
+          sessionID: "ses_share_live",
+          url: share.url,
+          time: { created: 1, updated: 1 },
+          items: {},
+        }),
+      )
+      expect(Effect.runSync(ShareRepo.get("ses_share_live"))?.id).toBe("share_live")
+      expect(Effect.runSync(ShareRepo.getLocal("share_live"))?.sessionID).toBe("ses_share_live")
+      Effect.runSync(ShareRepo.remove("ses_share_live"))
+      Effect.runSync(ShareRepo.removeLocal("share_live"))
+      expect(Effect.runSync(ShareRepo.get("ses_share_live"))).toBeUndefined()
+      expect(Effect.runSync(ShareRepo.getLocal("share_live"))).toBeUndefined()
 
-      ArtifactRepo.upsert({
-        id: "art_live",
-        title: "page",
-        filename: "index.html",
-        contentType: "text/html",
-        kind: "html",
-        url: "https://example.test/art_live",
-        viewKey: "view",
-        secret: "sekrit",
-        version: 1,
-        sessionID: "ses_art_live",
-        size: 4,
-        time: { created: 1, updated: 1 },
-      })
-      expect(ArtifactRepo.get("ses_art_live", "art_live")?.secret).toBe("sekrit")
-      expect(ShareRepo.get("ses_missing")).toBeUndefined()
-      expect(MonitorRepo.get("ses_missing", "mon_missing")).toBeUndefined()
-      expect(ArtifactRepo.get("ses_missing", "art_missing")).toBeUndefined()
+      Effect.runSync(
+        ArtifactRepo.upsert({
+          id: "art_live",
+          title: "page",
+          filename: "index.html",
+          contentType: "text/html",
+          kind: "html",
+          url: "https://example.test/art_live",
+          viewKey: "view",
+          secret: "sekrit",
+          version: 1,
+          sessionID: "ses_art_live",
+          size: 4,
+          time: { created: 1, updated: 1 },
+        }),
+      )
+      expect(Effect.runSync(ArtifactRepo.get("ses_art_live", "art_live"))?.secret).toBe("sekrit")
+      expect(Effect.runSync(ShareRepo.get("ses_missing"))).toBeUndefined()
+      expect(Effect.runSync(MonitorRepo.get("ses_missing", "mon_missing"))).toBeUndefined()
+      expect(Effect.runSync(ArtifactRepo.get("ses_missing", "art_missing"))).toBeUndefined()
     })
   })
 
@@ -395,19 +416,21 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       Database.syncDb()
 
       const def = missionDef("mission_live")
-      MissionRepo.upsert("proj_live", def)
-      expect(MissionRepo.get("proj_live", def.id)?.brief).toBe(def.brief)
+      Effect.runSync(MissionRepo.upsert("proj_live", def))
+      expect(Effect.runSync(MissionRepo.get("proj_live", def.id))?.brief).toBe(def.brief)
 
       const exec = missionExec(def.id, "mission_exec_live")
-      MissionRepo.putExec("proj_live", exec)
-      const touched = MissionRepo.updateExec("proj_live", def.id, exec.id, (draft) => {
-        draft.heartbeatAt = 99
-      })
+      Effect.runSync(MissionRepo.putExec("proj_live", exec))
+      const touched = Effect.runSync(
+        MissionRepo.updateExec("proj_live", def.id, exec.id, (draft) => {
+          draft.heartbeatAt = 99
+        }),
+      )
       expect(touched?.heartbeatAt).toBe(99)
 
-      MissionRepo.remove("proj_live", def.id)
-      expect(MissionRepo.get("proj_live", def.id)).toBeUndefined()
-      expect(MissionRepo.listExecs("proj_live", def.id)).toEqual([])
+      Effect.runSync(MissionRepo.remove("proj_live", def.id))
+      expect(Effect.runSync(MissionRepo.get("proj_live", def.id))).toBeUndefined()
+      expect(Effect.runSync(MissionRepo.listExecs("proj_live", def.id))).toEqual([])
     })
   })
 
@@ -418,15 +441,17 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       Database.syncDb()
 
       const def = missionDef("mission_trim")
-      MissionRepo.upsert("proj_trim", def)
+      Effect.runSync(MissionRepo.upsert("proj_trim", def))
       for (let i = 0; i < 5; i++) {
-        MissionRepo.putExec("proj_trim", {
-          ...missionExec(def.id, `mission_exec_trim_${i}`),
-          startedAt: 1_000 + i,
-        })
+        Effect.runSync(
+          MissionRepo.putExec("proj_trim", {
+            ...missionExec(def.id, `mission_exec_trim_${i}`),
+            startedAt: 1_000 + i,
+          }),
+        )
       }
-      MissionRepo.trimExecs("proj_trim", def.id, 2)
-      expect(MissionRepo.listExecs("proj_trim", def.id).map((row) => row.id)).toEqual([
+      Effect.runSync(MissionRepo.trimExecs("proj_trim", def.id, 2))
+      expect(Effect.runSync(MissionRepo.listExecs("proj_trim", def.id)).map((row) => row.id)).toEqual([
         "mission_exec_trim_4",
         "mission_exec_trim_3",
       ])
@@ -475,14 +500,14 @@ describe("loop SQL", () => {
       const { LoopRepo } = await import("@/loop/repo")
       Database.syncDb()
 
-      expect(LoopRepo.get("proj_loop", def.id)?.name).toBe("sql loop")
-      expect(LoopRepo.startedRuns("proj_loop", def.id)).toBe(7)
-      expect(LoopRepo.listRuns("proj_loop", def.id).map((row) => row.id)).toEqual([run.id])
+      expect(Effect.runSync(LoopRepo.get("proj_loop", def.id))?.name).toBe("sql loop")
+      expect(Effect.runSync(LoopRepo.startedRuns("proj_loop", def.id))).toBe(7)
+      expect(Effect.runSync(LoopRepo.listRuns("proj_loop", def.id)).map((row) => row.id)).toEqual([run.id])
 
       const loopSql = (await import("@/database/migration/20260814000000_loop_sql")).default
       loopSql.up(Database.syncNative())
-      expect(LoopRepo.list("proj_loop")).toHaveLength(1)
-      expect(LoopRepo.startedRuns("proj_loop", def.id)).toBe(7)
+      expect(Effect.runSync(LoopRepo.list("proj_loop"))).toHaveLength(1)
+      expect(Effect.runSync(LoopRepo.startedRuns("proj_loop", def.id))).toBe(7)
 
       expect(await fs.readFile(path.join(storage, "loop", "proj_loop", `${def.id}.json`), "utf8")).toContain(def.name)
       expect(await fs.readFile(path.join(storage, "loop_meta", "proj_loop", `${def.id}.json`), "utf8")).toContain("7")
@@ -496,9 +521,9 @@ describe("loop SQL", () => {
       Database.syncDb()
 
       const def = loopDef("loop_no_json")
-      LoopRepo.upsert("proj_live", def)
-      LoopRepo.putRun("proj_live", loopRun(def.id, "loop_run_no_json"))
-      LoopRepo.setStartedRuns("proj_live", def.id, 3)
+      Effect.runSync(LoopRepo.upsert("proj_live", def))
+      Effect.runSync(LoopRepo.putRun("proj_live", loopRun(def.id, "loop_run_no_json")))
+      Effect.runSync(LoopRepo.setStartedRuns("proj_live", def.id, 3))
 
       expect(existsSync(path.join(home, "data", "storage"))).toBe(false)
     })
@@ -511,9 +536,9 @@ describe("loop SQL", () => {
       Database.syncDb()
 
       const def = loopDef("loop_trap")
-      LoopRepo.upsert("proj_trap", def)
-      LoopRepo.putRun("proj_trap", loopRun(def.id, "loop_run_trap"))
-      LoopRepo.setStartedRuns("proj_trap", def.id, 4)
+      Effect.runSync(LoopRepo.upsert("proj_trap", def))
+      Effect.runSync(LoopRepo.putRun("proj_trap", loopRun(def.id, "loop_run_trap")))
+      Effect.runSync(LoopRepo.setStartedRuns("proj_trap", def.id, 4))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "loop", "proj_trap"), { recursive: true })
@@ -532,9 +557,9 @@ describe("loop SQL", () => {
         JSON.stringify({ startedRuns: 99 }),
       )
 
-      expect(LoopRepo.get("proj_trap", def.id)?.name).toBe("sql loop")
-      expect(LoopRepo.listRuns("proj_trap", def.id)[0]?.status).toBe("running")
-      expect(LoopRepo.startedRuns("proj_trap", def.id)).toBe(4)
+      expect(Effect.runSync(LoopRepo.get("proj_trap", def.id))?.name).toBe("sql loop")
+      expect(Effect.runSync(LoopRepo.listRuns("proj_trap", def.id))[0]?.status).toBe("running")
+      expect(Effect.runSync(LoopRepo.startedRuns("proj_trap", def.id))).toBe(4)
     })
   })
 })

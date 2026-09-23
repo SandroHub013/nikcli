@@ -343,7 +343,7 @@ export namespace Session {
   }
 
   async function getImpl(ctx: InstanceContext, id: string) {
-    const read = SessionRepo.get(id)
+    const read = Effect.runSync(SessionRepo.get(id))
     if (!read)
       throw new SessionError.NotFoundError({
         message: `Session not found: ${id}`,
@@ -364,7 +364,7 @@ export namespace Session {
   ) {
     // The event carries the whole session, and its projector performs the
     // write: the edit is applied here only to compute what the event says.
-    const existing = SessionRepo.get(id)
+    const existing = Effect.runSync(SessionRepo.get(id))
     if (!existing)
       throw new SessionError.NotFoundError({
         message: `Session not found: ${id}`,
@@ -457,7 +457,7 @@ export namespace Session {
         })
       }
     }
-    InstructionRepo.inherit(original.id, session.id)
+    Effect.runSync(InstructionRepo.inherit(original.id, session.id))
     return session
   }
 
@@ -493,7 +493,7 @@ export namespace Session {
     log.info("created", result)
     SessionSync.install()
     SyncEvent.run(SessionSync.Created, { sessionID: result.id, info: result }, { projectID: ctx.project.id })
-    if (result.workspaceID) WorkspaceDB.touch(result.workspaceID, result.time.created)
+    if (result.workspaceID) Effect.runSync(WorkspaceDB.touch(result.workspaceID, result.time.created))
     const cfg = await configGet(ctx)
     if (!result.parentID && (Flag.NIKCLI_AUTO_SHARE || cfg.share === "auto"))
       shareImpl(ctx, result.id)
@@ -529,7 +529,7 @@ export namespace Session {
 
   async function getAnyProjectImpl(ctx: InstanceContext, id: string) {
     // SessionRepo.get searches across all projects
-    const session = SessionRepo.get(id)
+    const session = Effect.runSync(SessionRepo.get(id))
     if (session) return session as Info
 
     throw new SessionError.NotFoundError({
@@ -538,7 +538,7 @@ export namespace Session {
   }
 
   async function diffImpl(sessionID: string) {
-    return SessionDiffRepo.get(sessionID)
+    return Effect.runSync(SessionDiffRepo.get(sessionID))
   }
 
   async function messagesImpl(ctx: InstanceContext, input: MessagesInput) {
@@ -561,7 +561,7 @@ export namespace Session {
 
   async function* listImpl(ctx: InstanceContext) {
     const activeWorkspaceID = WorkspaceContext.workspaceID
-    for (const session of SessionRepo.list(ctx.project.id)) {
+    for (const session of Effect.runSync(SessionRepo.list(ctx.project.id))) {
       if (activeWorkspaceID && session.workspaceID !== activeWorkspaceID) continue
       yield session
     }
@@ -578,19 +578,21 @@ export namespace Session {
    */
   function queryImpl(ctx: InstanceContext, input: QueryInput): Info[] {
     const activeWorkspaceID = WorkspaceContext.workspaceID
-    return SessionRepo.query({
-      projectId: ctx.project.id,
-      ...(activeWorkspaceID ? { workspaceId: activeWorkspaceID } : {}),
-      ...(input.directory !== undefined ? { directoryKey: Filesystem.comparisonKey(input.directory) } : {}),
-      ...(input.roots !== undefined ? { roots: input.roots } : {}),
-      ...(input.start !== undefined ? { start: input.start } : {}),
-      ...(input.search !== undefined ? { search: input.search } : {}),
-      ...(input.limit !== undefined ? { limit: input.limit } : {}),
-    })
+    return Effect.runSync(
+      SessionRepo.query({
+        projectId: ctx.project.id,
+        ...(activeWorkspaceID ? { workspaceId: activeWorkspaceID } : {}),
+        ...(input.directory !== undefined ? { directoryKey: Filesystem.comparisonKey(input.directory) } : {}),
+        ...(input.roots !== undefined ? { roots: input.roots } : {}),
+        ...(input.start !== undefined ? { start: input.start } : {}),
+        ...(input.search !== undefined ? { search: input.search } : {}),
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+      }),
+    )
   }
 
   async function childrenImpl(ctx: InstanceContext, parentID: string) {
-    return SessionRepo.getChildren(parentID)
+    return Effect.runSync(SessionRepo.getChildren(parentID))
   }
 
   async function removeImpl(ctx: InstanceContext, sessionID: string) {
@@ -598,7 +600,7 @@ export namespace Session {
       const session = await getImpl(ctx, sessionID)
 
       // Record session end analytics before removing
-      const sessionMessages = MessageRepo.listMessages(sessionID)
+      const sessionMessages = Effect.runSync(MessageRepo.listMessages(sessionID))
       let totalInput = 0,
         totalOutput = 0,
         totalReasoning = 0,
@@ -629,7 +631,7 @@ export namespace Session {
       // Count tool parts
       for (const msg of sessionMessages) {
         try {
-          const parts = MessageRepo.listParts(msg.id)
+          const parts = Effect.runSync(MessageRepo.listParts(msg.id))
           for (const part of parts) {
             try {
               if (part.type === "tool") toolCalls++
@@ -676,15 +678,15 @@ export namespace Session {
       })
       // Remove all messages and their parts via SQL
       for (const msg of sessionMessages) {
-        MessageRepo.removeMessage(sessionID, msg.id)
+        Effect.runSync(MessageRepo.removeMessage(sessionID, msg.id))
       }
       try {
-        SessionDiffRepo.remove(sessionID)
+        Effect.runSync(SessionDiffRepo.remove(sessionID))
       } catch (err) {
         log.error("Failed to remove session diff", { error: err })
       }
       try {
-        GoalRepo.remove(sessionID)
+        Effect.runSync(GoalRepo.remove(sessionID))
       } catch (err) {
         log.error("Failed to remove session goal", { error: err })
       }
@@ -1032,7 +1034,7 @@ export namespace Session {
       getShare: (id) =>
         Effect.tryPromise({
           try: async () => {
-            const share = ShareRepo.get(id)
+            const share = Effect.runSync(ShareRepo.get(id))
             if (!share)
               throw new SessionError.NotFoundError({
                 message: `Share not found: ${id}`,

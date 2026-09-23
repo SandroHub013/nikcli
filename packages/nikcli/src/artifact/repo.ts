@@ -11,10 +11,6 @@ import type { Artifact } from "./index"
  * the way out, as they did before.
  */
 export namespace ArtifactRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   type Executor = Database.TxOrDb
 
   type StoredRecord = Artifact.Info & { secret: string }
@@ -31,46 +27,63 @@ export namespace ArtifactRepo {
     }
   }
 
-  export function get(sessionId: string, id: string): StoredRecord | undefined {
-    const row = db()
-      .select({ data: artifact.data })
-      .from(artifact)
-      .where(and(eq(artifact.sessionId, sessionId), eq(artifact.id, id)))
-      .get()
-    return row ? readRecord(row.data) : undefined
+  export function get(sessionId: string, id: string, executor?: Executor) {
+    return Database.query(
+      "ArtifactRepo.get",
+      (db) => {
+        const row = db
+          .select({ data: artifact.data })
+          .from(artifact)
+          .where(and(eq(artifact.sessionId, sessionId), eq(artifact.id, id)))
+          .get()
+        return row ? readRecord(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function upsert(record: StoredRecord, executor: Executor = db()): void {
-    executor
-      .insert(artifact)
-      .values({
-        id: record.id,
-        sessionId: record.sessionID,
-        data: JSON.stringify(record),
-        createdAt: record.time.created,
-        updatedAt: record.time.updated,
-      })
-      .onConflictDoUpdate({
-        target: [artifact.sessionId, artifact.id],
-        set: {
-          data: JSON.stringify(record),
-          updatedAt: record.time.updated,
-        },
-      })
-      .run()
+  export function upsert(record: StoredRecord, executor?: Executor) {
+    return Database.query(
+      "ArtifactRepo.upsert",
+      (db) =>
+        db
+          .insert(artifact)
+          .values({
+            id: record.id,
+            sessionId: record.sessionID,
+            data: JSON.stringify(record),
+            createdAt: record.time.created,
+            updatedAt: record.time.updated,
+          })
+          .onConflictDoUpdate({
+            target: [artifact.sessionId, artifact.id],
+            set: {
+              data: JSON.stringify(record),
+              updatedAt: record.time.updated,
+            },
+          })
+          .run(),
+      executor,
+    )
   }
 
   /** Newest-updated first. Secrets still present; the manager strips them. */
-  export function list(sessionId: string): StoredRecord[] {
-    const rows = db()
-      .select({ data: artifact.data })
-      .from(artifact)
-      .where(eq(artifact.sessionId, sessionId))
-      .orderBy(desc(artifact.updatedAt))
-      .all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
-    })
+  export function list(sessionId: string, executor?: Executor) {
+    return Database.query(
+      "ArtifactRepo.list",
+      (db) => {
+        const rows = db
+          .select({ data: artifact.data })
+          .from(artifact)
+          .where(eq(artifact.sessionId, sessionId))
+          .orderBy(desc(artifact.updatedAt))
+          .all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
   }
 }

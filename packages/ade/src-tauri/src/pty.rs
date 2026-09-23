@@ -22,7 +22,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// One live pseudo-terminal, kept only so later calls can reach it.
 struct Session {
-    master: Box<dyn MasterPty + Send>,
+    /// Absent for a piped process (`pipe`), which has no terminal to resize.
+    master: Option<Box<dyn MasterPty + Send>>,
     /*
      * Behind a lock of its own, so writing to one session never holds the lock
      * that every other session's spawn, resize and kill has to take. A write to
@@ -65,17 +66,37 @@ struct Exit {
  * form offers: a name added there and not here cannot start.
  */
 const ALLOWED_AGENTS: &[&str] = &[
-    "claude", "codex", "opencode", "nikcli", "agy", "kimi", "prime", "pi", "ohmypi",
+    "claude", "codex", "opencode", "nikcli", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
 ];
+
+/// Environment ADE sets for one agent CLI, whatever the user's shell has.
+///
+/// nikcli attaches to a shared background server by default (`nikcli serve
+/// --service`), started by whichever nikcli ran first, even from another pane
+/// or another day. Its tools then run in that server's process, with that
+/// process's environment: `ade-msg` answered for the wrong pane (a reply was
+/// refused as "not made to this session"), read another pane's inbox (the
+/// reminders never stopped), or was not on PATH at all. `NIKCLI_SERVICE=0` is
+/// nikcli's own switch for a private in-process server, which is the pane's
+/// process and carries the pane's `ADE_PANE_ID`, token and PATH.
+fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
+    if command_stem(command.trim()).eq_ignore_ascii_case("nikcli") {
+        &[("NIKCLI_SERVICE", "0")]
+    } else {
+        &[]
+    }
+}
 
 /// Environment an agent must not inherit from whatever launched ADE.
 ///
 /// Prefixes, matched from the start of the name: a session marker set by one
 /// agent CLI is not something the next one should read, and the messaging
 /// socket and token under `CLAUDE_CODE_` are credentials scoped to a session
-/// that is not this one.
-const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID"];
+/// that is not this one. `ADE_MAILBOX_ROOT` is `test:app`'s choice for one
+/// ADE Test: a `native:dev` started from a session inside it would otherwise
+/// share that mailbox.
+const INHERITED_SESSION_MARKERS: &[&str] = &["CLAUDE_CODE_", "CLAUDECODE", "CLAUDE_PID", "ADE_MAILBOX_ROOT"];
 
 /// Colour switches that describe the output of whatever launched ADE, not the
 /// pty an agent is given.
@@ -149,6 +170,82 @@ const SHELL_SWITCHES: &[(&str, &[&str])] = &[
     ("zsh", &["-l", "-i", "--login"]),
     ("fish", &["-l", "-i", "--login"]),
 ];
+
+/// The only CLI that may run without a terminal: see `pipe` in `pty_spawn`.
+fn is_pipe_command(command: &str) -> bool {
+    command_stem(command).eq_ignore_ascii_case("claude")
+}
+
+/// What a started process gives back, whichever way it was started.
+struct Spawned {
+    child: Box<dyn Child + Send + Sync>,
+    master: Option<Box<dyn MasterPty + Send>>,
+    reader: Result<Box<dyn Read + Send>, String>,
+    writer: Result<Box<dyn Write + Send>, String>,
+    errors: Option<Box<dyn Read + Send>>,
+}
+
+fn spawn_in_pty(builder: CommandBuilder, rows: u16, cols: u16) -> Result<Spawned, String> {
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows: rows.max(1),
+            cols: cols.max(1),
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| format!("pty non creata: {e}"))?;
+    let child = pair.slave.spawn_command(builder).map_err(|e| e.to_string())?;
+    // The slave handle has done its job; holding it open would keep the pty
+    // alive after the child dies and the reader would never see EOF.
+    drop(pair.slave);
+    let reader = pair.master.try_clone_reader().map_err(|e| e.to_string());
+    let writer = pair.master.take_writer().map_err(|e| e.to_string());
+    Ok(Spawned {
+        child,
+        master: Some(pair.master),
+        reader,
+        writer,
+        errors: None,
+    })
+}
+
+/// The same command, environment and folder the terminal would have had, on pipes.
+fn spawn_piped(program: &str, builder: &CommandBuilder) -> Result<Spawned, String> {
+    use std::process::Stdio;
+    let mut command = std::process::Command::new(program);
+    command.args(builder.get_argv().iter().skip(1));
+    if let Some(dir) = builder.get_cwd() {
+        command.current_dir(dir);
+    }
+    command.env_clear();
+    command.envs(builder.iter_full_env_as_str());
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let writer = child
+        .stdin
+        .take()
+        .map(|stdin| Box::new(stdin) as Box<dyn Write + Send>)
+        .ok_or_else(|| "stdin assente".to_string());
+    let reader = child
+        .stdout
+        .take()
+        .map(|stdout| Box::new(stdout) as Box<dyn Read + Send>)
+        .ok_or_else(|| "stdout assente".to_string());
+    let errors = child.stderr.take().map(|stderr| Box::new(stderr) as Box<dyn Read + Send>);
+    Ok(Spawned {
+        child: Box::new(child),
+        master: None,
+        reader,
+        writer,
+        errors,
+    })
+}
 
 /// The name `command` is known by: no directory, one executable extension off.
 fn command_stem(command: &str) -> &str {
@@ -299,6 +396,80 @@ fn is_executable_extension(ext: &str) -> bool {
         .any(|known| known.eq_ignore_ascii_case(ext))
 }
 
+/*
+ * The two questions ConPTY asks before it lets a process speak.
+ *
+ * portable-pty opens the pseudo console with `PSEUDOCONSOLE_INHERIT_CURSOR`,
+ * and with it ConPTY starts by asking the terminal where the cursor is
+ * (`ESC[6n`) and what it is (`ESC[c`), and holds every byte of the child's
+ * output until both are answered or three seconds pass. Nobody answers a voice
+ * or bot turn, which has no terminal, and a pane's xterm answers only after
+ * the round trip through the window: `cmd /c echo` took 3.04 s to print in a
+ * pty and 32 ms once answered here, and a spoken question waited those three
+ * seconds before Claude Code even started.
+ *
+ * So the first of each, within `STARTUP_QUERY_WINDOW` of the spawn, is
+ * answered here and taken out of the output: a fresh terminal's cursor is at
+ * 1;1. The device attributes must claim VT level 61 or above: xterm's own
+ * `ESC[?1;2c` does not release the output (measured, still 3 s), which is why
+ * panes waited too although xterm answers. The window never sees the
+ * question, so it never sends a second answer into the child's input.
+ * Later queries (an agent asking for itself) pass through untouched.
+ *
+ * Only ConPTY asks these on its own. Elsewhere the same bytes come from the
+ * child itself (Codex, nvim asking where the cursor is), and a made-up answer
+ * would be a lie told to a program that then draws by it: off Windows
+ * nothing is answered. Level 61 with no extensions (`ESC[?61c`) is enough to
+ * release ConPTY; claiming sixel (`;4`) would invite an agent to send images
+ * the pane may not draw.
+ */
+const STARTUP_QUERY_WINDOW: Duration = Duration::from_secs(5);
+const CURSOR_QUERY: &str = "\x1b[6n";
+const CURSOR_REPLY: &str = "\x1b[1;1R";
+const DEVICE_QUERY: &str = "\x1b[c";
+const DEVICE_REPLY: &str = "\x1b[?61c";
+
+struct StartupQueries {
+    cursor_answered: bool,
+    device_answered: bool,
+}
+
+impl StartupQueries {
+    /// `conpty`: whether the pty is ConPTY, whose questions these are. When not,
+    /// there is nothing to answer and everything passes through.
+    fn new(conpty: bool) -> Self {
+        Self {
+            cursor_answered: !conpty,
+            device_answered: !conpty,
+        }
+    }
+
+    fn done(&self) -> bool {
+        self.cursor_answered && self.device_answered
+    }
+
+    /// `text` without the startup questions it answered, and the answer to send.
+    fn take(&mut self, text: &str) -> (String, String) {
+        let mut forward = text.to_string();
+        let mut reply = String::new();
+        if !self.cursor_answered {
+            if let Some(at) = forward.find(CURSOR_QUERY) {
+                forward.replace_range(at..at + CURSOR_QUERY.len(), "");
+                reply.push_str(CURSOR_REPLY);
+                self.cursor_answered = true;
+            }
+        }
+        if !self.device_answered {
+            if let Some(at) = forward.find(DEVICE_QUERY) {
+                forward.replace_range(at..at + DEVICE_QUERY.len(), "");
+                reply.push_str(DEVICE_REPLY);
+                self.device_answered = true;
+            }
+        }
+        (forward, reply)
+    }
+}
+
 /// Takes everything decodable out of `tail`, leaving at most one incomplete
 /// character behind for the next read to finish.
 ///
@@ -399,21 +570,32 @@ pub async fn pty_spawn(
      * really comes from this pane.
      */
     pane_token: Option<String>,
+    /*
+     * API keys for this session, by name. Only names cross the IPC: the values
+     * are read here from the system keychain (`secrets.rs`) and go straight
+     * into the child's environment. Which keys a session gets is chosen per
+     * key, per agent, in Impostazioni › Chiavi API, and checked again here
+     * against the agent the command starts; bot turns pass none.
+     */
+    secrets: Option<Vec<String>>,
+    /*
+     * Pipes instead of a terminal, for Claude Code only.
+     *
+     * The top of this file explains why agents get a terminal. The exception
+     * is a Claude Code kept running between spoken requests, which reads one
+     * JSON message per line on stdin (`--input-format stream-json`) and
+     * refuses to when stdin is a terminal. See `src/bots/warm.ts`.
+     */
+    pipe: Option<bool>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
     check_args(&command, &args)?;
-
-    let pty = native_pty_system();
-    let pair = pty
-        .openpty(PtySize {
-            rows: rows.max(1),
-            cols: cols.max(1),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("pty non creata: {e}"))?;
+    let pipe = pipe == Some(true);
+    if pipe && !is_pipe_command(&command) {
+        return Err(format!("{command} non si avvia senza terminale"));
+    }
 
     /*
      * Resolved here rather than left to the spawner, so the binary that starts
@@ -438,6 +620,14 @@ pub async fn pty_spawn(
      */
     builder.env("TERM", "xterm-256color");
     builder.env("COLORTERM", "truecolor");
+    /*
+     * The user's keys, before ADE's own variables so those always win. A key
+     * that cannot be read fails the launch: an agent started without the key
+     * it was meant to have fails later, somewhere less obvious.
+     */
+    for (name, value) in crate::secrets::env_for(&app, &command, secrets.as_deref().unwrap_or_default())? {
+        builder.env(name, value);
+    }
 
     /*
      * Somebody else's session does not come along.
@@ -511,6 +701,11 @@ pub async fn pty_spawn(
             builder.env("ADE_PANE_TOKEN", token);
         }
     }
+    // After the scrub too: a `NIKCLI_SERVICE=1` in the user's shell would
+    // otherwise send this pane's tools back to the shared server.
+    for (key, value) in agent_env(&command) {
+        builder.env(key, value);
+    }
 
     if let Some(link) = link.as_ref() {
         if let Some(dir) = crate::agent_link::link_dir(&app) {
@@ -520,13 +715,12 @@ pub async fn pty_spawn(
         }
     }
 
-    let mut child = pair
-        .slave
-        .spawn_command(builder)
-        .map_err(|e| format!("{command} non parte: {e}"))?;
-    // The slave handle has done its job; holding it open would keep the pty
-    // alive after the child dies and the reader below would never see EOF.
-    drop(pair.slave);
+    let spawned = if pipe {
+        spawn_piped(&resolved, &builder).map_err(|e| format!("{command} non parte: {e}"))?
+    } else {
+        spawn_in_pty(builder, rows, cols).map_err(|e| format!("{command} non parte: {e}"))?
+    };
+    let Spawned { mut child, master, reader, writer, errors } = spawned;
 
     /*
      * The process is running now, so every failure below has to take it with
@@ -542,14 +736,14 @@ pub async fn pty_spawn(
         }};
     }
 
-    let mut reader = match pair.master.try_clone_reader() {
-        Ok(reader) => reader,
-        Err(e) => abort_with!(format!("pty non leggibile: {e}")),
+    let (mut reader, writer) = match (reader, writer) {
+        (Ok(reader), Ok(writer)) => (reader, Arc::new(Mutex::new(writer))),
+        (Err(e), _) => abort_with!(format!("uscita non leggibile: {e}")),
+        (_, Err(e)) => abort_with!(format!("ingresso non scrivibile: {e}")),
     };
-    let writer = match pair.master.take_writer() {
-        Ok(writer) => writer,
-        Err(e) => abort_with!(format!("pty non scrivibile: {e}")),
-    };
+    // The reader answers ConPTY's startup questions with it: see `StartupQueries`.
+    let answerer = Arc::clone(&writer);
+    let spawned_at = Instant::now();
 
     {
         let mut sessions = match registry.0.lock() {
@@ -559,8 +753,8 @@ pub async fn pty_spawn(
         sessions.insert(
             id.clone(),
             Session {
-                master: pair.master,
-                writer: Arc::new(Mutex::new(writer)),
+                master,
+                writer,
                 child,
             },
         );
@@ -585,6 +779,24 @@ pub async fn pty_spawn(
      * such problem: the wait ends on its own.
      */
     let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<String>();
+    // A piped process's errors go to the same stream: that is where a terminal would have shown them.
+    if let Some(mut errors) = errors {
+        let error_tx = chunk_tx.clone();
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 8192];
+            let mut tail: Vec<u8> = Vec::new();
+            while let Ok(n) = errors.read(&mut buffer) {
+                if n == 0 {
+                    break;
+                }
+                tail.extend_from_slice(&buffer[..n]);
+                let text = decode_stream_chunk(&mut tail);
+                if !text.is_empty() && error_tx.send(text).is_err() {
+                    break;
+                }
+            }
+        });
+    }
     std::thread::spawn(move || {
         // See `decode_stream_chunk`.
         let mut buffer = [0u8; 8192];
@@ -595,12 +807,23 @@ pub async fn pty_spawn(
          * completes. Carrying the tail over keeps the split invisible.
          */
         let mut tail: Vec<u8> = Vec::new();
+        // Only ConPTY asks its startup questions; a pipe has nobody to ask.
+        let mut queries = StartupQueries::new(cfg!(windows) && !pipe);
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     tail.extend_from_slice(&buffer[..n]);
-                    let text = decode_stream_chunk(&mut tail);
+                    let mut text = decode_stream_chunk(&mut tail);
+                    if !queries.done() && spawned_at.elapsed() < STARTUP_QUERY_WINDOW {
+                        let (forward, reply) = queries.take(&text);
+                        if !reply.is_empty() {
+                            if let Ok(mut writer) = answerer.lock() {
+                                let _ = writer.write_all(reply.as_bytes()).and_then(|_| writer.flush());
+                            }
+                        }
+                        text = forward;
+                    }
                     if text.is_empty() {
                         continue;
                     }
@@ -834,8 +1057,10 @@ pub async fn pty_resize(
 ) -> Result<(), String> {
     let sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
     let session = sessions.get(&id).ok_or("sessione non trovata")?;
-    session
-        .master
+    let Some(master) = session.master.as_ref() else {
+        return Ok(());
+    };
+    master
         .resize(PtySize {
             rows: rows.max(1),
             cols: cols.max(1),
@@ -845,17 +1070,87 @@ pub async fn pty_resize(
         .map_err(|e| format!("resize fallito: {e}"))
 }
 
+/// One row of the process table, as far as walking a tree needs.
+#[derive(Clone, Copy)]
+struct ProcRow {
+    pid: u32,
+    parent: Option<u32>,
+    /// Seconds since the epoch.
+    started: u64,
+}
+
+/// `root` and every process below it, children before their parents.
+///
+/// Walked down from `root`, and a child counts only if it started no earlier
+/// than its parent. Windows reuses pids and keeps a dead parent's id in its
+/// children's records, so a process whose recorded parent id is ours but which
+/// predates that parent is someone else's — `taskkill /T` follows the id alone
+/// and could take an unrelated tree with it, ADE's own included.
+fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
+    let started = |pid: u32| rows.iter().find(|row| row.pid == pid).map(|row| row.started);
+    let Some(_) = started(root) else { return Vec::new() };
+    let mut order = vec![root];
+    let mut next = 0;
+    while next < order.len() {
+        let parent = order[next];
+        let parent_started = started(parent).unwrap_or(u64::MAX);
+        for row in rows {
+            if row.parent == Some(parent) && row.pid != parent && row.started >= parent_started && !order.contains(&row.pid) {
+                order.push(row.pid);
+            }
+        }
+        next += 1;
+    }
+    order.reverse();
+    order
+}
+
+/// Kills `pid` and the processes it started, one by one (see `tree_of`).
+///
+/// A CLI turn that runs past its time has children of its own — a shell, an
+/// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
+/// running, holding the turn's mailbox identity and its files.
+fn kill_tree(pid: u32) {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    let rows: Vec<ProcRow> = sys
+        .processes()
+        .values()
+        .map(|process| ProcRow {
+            pid: process.pid().as_u32(),
+            parent: process.parent().map(|parent| parent.as_u32()),
+            started: process.start_time(),
+        })
+        .collect();
+    for member in tree_of(pid, &rows) {
+        if let Some(process) = sys.process(Pid::from_u32(member)) {
+            process.kill();
+        }
+    }
+}
+
 /// Ends the session. Safe to call on one that already ended.
+///
+/// With `tree`, the processes the child started go too (see `kill_tree`).
+/// Panes do not ask for it: closing a pane has always ended the agent, not a
+/// dev server it left running on purpose.
 ///
 /// `async` because `wait()` below is exactly as blocking as the write is: a
 /// child that takes its time dying would otherwise take the window with it.
 #[tauri::command]
-pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String) -> Result<(), String> {
+pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Option<bool>) -> Result<(), String> {
     let mut session = {
         let mut sessions = registry.0.lock().map_err(|_| "registro bloccato")?;
         sessions.remove(&id)
     };
     if let Some(session) = session.as_mut() {
+        if tree == Some(true) {
+            if let Some(pid) = session.child.process_id() {
+                // Reading the process table takes a moment: off the async worker.
+                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree(pid)).await;
+            }
+        }
         let _ = session.child.kill();
         /*
          * Reaped here rather than left to the reader thread, which cannot do it:
@@ -886,6 +1181,25 @@ pub async fn pty_which(command: String) -> Option<String> {
         return None;
     }
     which_on_path(&command)
+}
+
+/// Whether CreateProcess would accept this file as a program.
+///
+/// On Windows an extensionless file on PATH is not a program, it is the shell
+/// shim an installer left for Git Bash, and `CreateProcessW` refuses it with
+/// "not a valid Win32 application" (193). Answering with it reports the agent
+/// installed and fails every launch — which is what grok did on this machine,
+/// where `~/bin/grok` (a `#!/usr/bin/env bash` shim) sits on PATH ahead of
+/// `~/.grok/bin/grok.exe`. A PE image is recognised by its first two bytes,
+/// `MZ`, which is the whole test: a script with the execute bit has neither.
+#[cfg(windows)]
+fn runnable_on_windows(candidate: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut file) = std::fs::File::open(candidate) else {
+        return false;
+    };
+    let mut magic = [0u8; 2];
+    file.read_exact(&mut magic).is_ok() && magic == *b"MZ"
 }
 
 /// Shared with `serve`, which has to find the same `nikcli` this module would
@@ -926,6 +1240,17 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
             }
         }
         let base = dir.join(command);
+        /*
+         * The bare name, on the platforms where it means a program. On Windows
+         * it is checked rather than trusted: a directory may hold nothing but a
+         * Git Bash shim under that name, and taking it is the failure this
+         * function's comment above describes.
+         */
+        #[cfg(windows)]
+        if runnable_on_windows(&base) {
+            return Some(base.to_string_lossy().into_owned());
+        }
+        #[cfg(not(windows))]
         if base.is_file() {
             return Some(base.to_string_lossy().into_owned());
         }
@@ -936,6 +1261,38 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_claude_runs_on_pipes() {
+        assert!(is_pipe_command("claude"));
+        assert!(is_pipe_command("claude.exe"));
+        assert!(is_pipe_command("CLAUDE.cmd"));
+        assert!(!is_pipe_command("codex"));
+        assert!(!is_pipe_command("powershell"));
+        assert!(!is_pipe_command("claude-evil"));
+    }
+
+    /*
+     * The shim that hid grok. `~/bin/grok` is a bash script with no extension
+     * and it comes before `~/.grok/bin/grok.exe` on PATH, so the lookup
+     * answered with a file Windows cannot start: the card said "installato",
+     * the launch said "non è un'applicazione di Win32 valida".
+     */
+    #[cfg(windows)]
+    #[test]
+    fn an_extensionless_shell_script_is_not_a_program() {
+        let dir = std::env::temp_dir().join("ade-which-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shim = dir.join("grok");
+        std::fs::write(&shim, "#!/usr/bin/env bash\nexec \"$HOME/.grok/bin/grok.exe\" \"$@\"\n").unwrap();
+        let binary = dir.join("grok.exe");
+        std::fs::write(&binary, b"MZ\x90\x00\x03\x00\x00\x00\x04\x00\x00\x00").unwrap();
+
+        assert!(!runnable_on_windows(&shim), "a shell script is not a PE image");
+        assert!(runnable_on_windows(&binary), "an .exe is");
+        assert!(!runnable_on_windows(&dir.join("nothing-here")), "a missing file is neither");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn decodes_a_whole_chunk_and_keeps_nothing() {
@@ -1114,6 +1471,7 @@ mod tests {
             "CLAUDE_CODE_ENTRYPOINT",
             "CLAUDECODE",
             "CLAUDE_PID",
+            "ADE_MAILBOX_ROOT",
         ] {
             assert!(
                 INHERITED_SESSION_MARKERS
@@ -1125,10 +1483,46 @@ mod tests {
     }
 
     #[test]
+    fn a_tree_is_walked_down_by_start_time_and_killed_children_first() {
+        let row = |pid, parent, started| ProcRow { pid, parent, started };
+        let rows = [
+            row(100, Some(1), 1_000),
+            row(110, Some(100), 1_001),
+            row(111, Some(110), 1_002),
+            row(120, Some(100), 1_000),
+            // Claims 100 as its parent but started before it: an older process
+            // whose real parent died and left the id to be reused.
+            row(130, Some(100), 900),
+            row(131, Some(130), 950),
+            // Unrelated.
+            row(200, Some(1), 500),
+        ];
+        let tree = tree_of(100, &rows);
+        assert_eq!(tree.len(), 4);
+        for pid in [100, 110, 111, 120] {
+            assert!(tree.contains(&pid));
+        }
+        assert!(!tree.contains(&130) && !tree.contains(&131) && !tree.contains(&200));
+        let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
+        assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
+        assert!(tree_of(999, &rows).is_empty());
+    }
+
+    #[test]
+    fn nikcli_runs_its_tools_in_the_pane_not_in_the_shared_server() {
+        for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
+            assert_eq!(agent_env(name), &[("NIKCLI_SERVICE", "0")], "{name}");
+        }
+        for name in ["claude", "codex", "opencode", "agy", "pwsh", "nikcli-island"] {
+            assert!(agent_env(name).is_empty(), "{name}");
+        }
+    }
+
+    #[test]
     fn scrubbing_leaves_the_rest_of_the_environment_alone() {
         // An agent needs the environment it would have had in a terminal —
         // PATH above all, plus whatever the user configured for it.
-        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM"] {
+        for kept in ["PATH", "HOME", "USERPROFILE", "ANTHROPIC_API_KEY", "TERM", "ADE_MAILBOX", "ADE_PANE_ID"] {
             assert!(
                 !INHERITED_SESSION_MARKERS
                     .iter()
@@ -1207,5 +1601,86 @@ mod tests {
         assert!(!is_allowed_command("evil.exe.cmd"));
         // Stripping one known extension must not uncover a second name.
         assert!(!is_allowed_command("claude.evil"));
+    }
+
+    #[test]
+    fn conpty_startup_questions_are_answered_once_and_kept_from_the_window() {
+        let mut queries = StartupQueries::new(true);
+        let (forward, reply) = queries.take("\x1b[1t\x1b[6n\x1b[c\x1b[?1004h");
+        assert_eq!(forward, "\x1b[1t\x1b[?1004h");
+        assert_eq!(reply, "\x1b[1;1R\x1b[?61c");
+        assert!(queries.done());
+        // An agent asking later gets its question through, to the real terminal.
+        let (forward, reply) = queries.take("\x1b[6n");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n", ""));
+        // A secondary device-attributes query is not the startup one.
+        let mut fresh = StartupQueries::new(true);
+        let (forward, reply) = fresh.take("\x1b[>c");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[>c", ""));
+    }
+
+    #[test]
+    fn without_conpty_a_child_asking_for_the_cursor_gets_the_real_terminal() {
+        // On unix the question is Codex's or nvim's own, not the pty's.
+        let mut queries = StartupQueries::new(false);
+        assert!(queries.done());
+        let (forward, reply) = queries.take("\x1b[6n\x1b[c");
+        assert_eq!((forward.as_str(), reply.as_str()), ("\x1b[6n\x1b[c", ""));
+    }
+
+    /// How long a process in a pty takes to print, answering the startup questions as
+    /// `pty_spawn` does or not. `cargo test --lib pty::tests::startup_probe -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn startup_probe() {
+        for answer in [false, true] {
+            let pty = native_pty_system();
+            let pair = pty.openpty(PtySize { rows: 30, cols: 120, pixel_width: 0, pixel_height: 0 }).unwrap();
+            let mut cmd = if cfg!(windows) { CommandBuilder::new("cmd") } else { CommandBuilder::new("sh") };
+            // PROBE_CMD: another command whose output ends in "pronto", e.g. `claude --version & echo pronto`.
+            let line = std::env::var("PROBE_CMD").unwrap_or_else(|_| "echo pronto".into());
+            if cfg!(windows) {
+                cmd.args(["/c", &line]);
+            } else {
+                cmd.args(["-c", &line]);
+            }
+            let start = Instant::now();
+            let mut child = pair.slave.spawn_command(cmd).unwrap();
+            drop(pair.slave);
+            let mut reader = pair.master.try_clone_reader().unwrap();
+            let mut writer = pair.master.take_writer().unwrap();
+            let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            if tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+            let mut queries = StartupQueries::new(true);
+            let mut seen = String::new();
+            while let Ok(chunk) = rx.recv_timeout(Duration::from_secs(10)) {
+                let text = String::from_utf8_lossy(&chunk).into_owned();
+                if answer {
+                    let (_, reply) = queries.take(&text);
+                    if !reply.is_empty() {
+                        writer.write_all(reply.as_bytes()).unwrap();
+                        writer.flush().unwrap();
+                    }
+                }
+                seen.push_str(&text);
+                if seen.contains("pronto") {
+                    break;
+                }
+            }
+            println!("answer={answer} pronto={:?}", start.elapsed());
+            let _ = child.kill();
+        }
     }
 }

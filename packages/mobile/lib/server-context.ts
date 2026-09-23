@@ -101,6 +101,8 @@ export type ServerContextValue = {
   config: ServerConfig | null
   loading: boolean
   ready: boolean
+  connectivity: "disconnected" | "connecting" | "online" | "offline" | "auth-required" | "error" | "background"
+  connectionError: string | null
   client: MobileClient | null
   bootstrap: MobileBootstrap | null
   bootstrapLoading: boolean

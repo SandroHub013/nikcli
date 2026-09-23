@@ -1,4 +1,5 @@
 import { Show } from "solid-js"
+import { t } from "../i18n"
 
 export interface EmptyProjectProps {
   /** False in the browser build, where nothing can be read or run. */
@@ -23,23 +24,21 @@ export function EmptyProject(props: EmptyProjectProps) {
           </svg>
         </span>
 
-        <h2 data-slot="empty-title">Nessun progetto aperto</h2>
+        <h2 data-slot="empty-title">{t("empty.title")}</h2>
 
         <Show
           when={props.hasHost}
           fallback={
             <p data-slot="empty-text">
-              Nel browser ADE non può leggere il disco né avviare processi: gli alberi di lavoro e
-              le sessioni reali esistono solo nell'app desktop.
+              {t("empty.browser")}
             </p>
           }
         >
           <p data-slot="empty-text">
-            Scegli una cartella per iniziare. Se è un repository git, ogni sessione riceve una copia
-            di lavoro isolata; altrimenti gli agenti scrivono direttamente nella cartella.
+            {t("empty.desktop")}
           </p>
           <button type="button" data-slot="empty-action" onClick={() => props.onOpenProject?.()}>
-            Apri progetto
+            {t("empty.open")}
           </button>
         </Show>
       </div>

@@ -14,6 +14,7 @@
  * and journaling them twice would inflate the log with duplicates.
  */
 import { Bus } from "@/bus"
+import { Effect } from "effect"
 import type { InstanceContext } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
 import { Sync } from "@/sync"
@@ -83,7 +84,7 @@ export namespace SessionSyncBridge {
       // Workspace-bound sessions are journaled by the workspace event loop
       // under the workspace aggregate; a missing row (already-deleted
       // session emitting session.deleted) is journaled as local.
-      const session = SessionRepo.get(sessionID)
+      const session = Effect.runSync(SessionRepo.get(sessionID))
       if (session?.workspaceID) return
 
       void Sync.emitRaw(projectID, sessionID, {

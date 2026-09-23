@@ -25,13 +25,13 @@ preserveTestEnv([
 /**
  * The registration invariant of the CLI surface
  * ([specs/v2/cli-command-surface.md](../../../../specs/v2/cli-command-surface.md)):
- * a file under `src/cli/cmd/` is not a command until it is registered, and the
- * document's table is the list of what is registered.
+ * a handler under `src/cli/handlers/` is not a command until it is registered,
+ * and the document's table is the list of what is registered.
  *
  * This used to read `cli-main.ts` with regexes, because the list was implicit in
  * a chain of `.command(...)` calls. There is no such file any more — the tree is
- * `src/cli/commands.ts`, generated from `src/cli/registry.ts` — so the check
- * reads the tree directly. Same invariant, no parsing.
+ * declared directly in `src/cli/commands.ts` — so the check reads the tree
+ * itself. Same invariant, no parsing.
  */
 const { Commands } = await import("@/cli/commands")
 const docPath = path.join(import.meta.dir, "../../../../specs/v2/cli-command-surface.md")

@@ -1,9 +1,19 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import type { AgentFile } from "../bots/nikcli"
 import { providerState, type ProviderState } from "../bots/providers"
-import { RUNNERS, type Runner } from "../bots/runners"
+import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
+import {
+  LOCALE_PREFERENCES,
+  locale,
+  localePreference,
+  setLocalePreference,
+  t,
+  type LocalePreference,
+} from "../i18n"
+import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
+import type { GlassStatus } from "../surface/glass-window"
 import "./sections.css"
 
 /**
@@ -39,7 +49,7 @@ export function NotBuiltYet(props: { title: string; what: string; instead?: stri
         <p data-slot="section-desc">{props.what}</p>
       </div>
       <p data-slot="settings-empty">
-        Non c'è ancora niente da configurare qui: la sezione esiste, la funzione no.
+        {t("settings.notBuilt")}
         <Show when={props.instead}>{(instead) => <> {instead()}</>}</Show>
       </p>
     </>
@@ -50,9 +60,9 @@ export function NotBuiltYet(props: { title: string; what: string; instead?: stri
 export function RoutineSection() {
   return (
     <NotBuiltYet
-      title="Routine"
-      what="Cose che ADE fa da sé: a un orario, all'apertura di un progetto, o quando una sessione finisce."
-      instead="Per ora una sessione si avvia a mano, dalla schermata di lancio."
+      title={t("settings.routine")}
+      what={t("settings.routine.desc")}
+      instead={t("settings.routine.instead")}
     />
   )
 }
@@ -92,11 +102,10 @@ export function BotSection(props: BotSectionProps) {
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Bot
+          {t("settings.bots.title")}
         </h3>
         <p data-slot="section-desc">
-          Gli agenti di nikcli che questa macchina conosce: con quale modello girano, e se
-          appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.
+          {t("settings.bots.desc")}
         </p>
       </div>
 
@@ -105,8 +114,8 @@ export function BotSection(props: BotSectionProps) {
         fallback={
           <p data-slot="settings-empty">
             {ready()
-              ? "Nessun agente nikcli. Se ne crea uno dalla vista Bot."
-              : "Lettura delle cartelle di nikcli…"}
+              ? t("settings.bots.empty")
+              : t("settings.bots.reading")}
           </p>
         }
       >
@@ -118,9 +127,9 @@ export function BotSection(props: BotSectionProps) {
                   {bot.identifier.slice(0, 1).toUpperCase()}
                 </span>
                 <span data-slot="settings-name">{bot.identifier}</span>
-                <span data-slot="settings-meta">{bot.model ?? "modello di nikcli"}</span>
+                <span data-slot="settings-meta">{bot.model ?? t("settings.bots.defaultModel")}</span>
                 <span data-slot="settings-meta">
-                  {bot.scope === "project" ? "progetto" : "globale"}
+                  {bot.scope === "project" ? t("settings.bots.scopeProject") : t("settings.bots.scopeGlobal")}
                 </span>
               </li>
             )}
@@ -156,11 +165,10 @@ export function SkillsSection(props: SkillsSectionProps) {
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Strumenti
+          {t("settings.skills.title")}
         </h3>
         <p data-slot="section-desc">
-          Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: nikcli
-          registra nel file solo le rinunce.
+          {t("settings.skills.desc")}
         </p>
       </div>
 
@@ -168,7 +176,7 @@ export function SkillsSection(props: SkillsSectionProps) {
         when={restricted().length > 0}
         fallback={
           <p data-slot="settings-empty">
-            Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.
+            {t("settings.skills.empty")}
           </p>
         }
       >
@@ -177,12 +185,170 @@ export function SkillsSection(props: SkillsSectionProps) {
             {(bot) => (
               <li data-slot="settings-row">
                 <span data-slot="settings-name">{bot.identifier}</span>
-                <span data-slot="settings-meta">senza {bot.disabledTools.join(", ")}</span>
+                <span data-slot="settings-meta">{t("settings.skills.without", bot.disabledTools.join(", "))}</span>
               </li>
             )}
           </For>
         </ul>
       </Show>
+    </>
+  )
+}
+
+export interface ThemeSectionProps {
+  /** Defaults to the app's own state; a test passes its own to watch the choice. */
+  value?: () => Theme
+  onChange?: (next: Theme) => void
+  opacity?: () => number
+  onOpacityChange?: (next: number) => void
+  glassStatus?: () => GlassStatus | undefined
+}
+
+/**
+ * Which theme ADE's interface renders (S49).
+ *
+ * Light, dark, or transparent glass with native blur effect, plus system fallback.
+ * When glass is active, an opacity slider controls transparency while keeping
+ * text contrast legible.
+ */
+export function ThemeSection(props: ThemeSectionProps) {
+  const value = () => (props.value ? props.value() : "system")
+  const choose = (next: Theme) => props.onChange?.(next)
+  const opacity = () => (props.opacity ? props.opacity() : DEFAULT_GLASS_OPACITY)
+  const status = () => props.glassStatus?.()
+
+  const label = (choice: Theme) => {
+    switch (choice) {
+      case "light":
+        return t("settings.theme.light")
+      case "dark":
+        return t("settings.theme.dark")
+      case "glass":
+        return t("settings.theme.glass")
+      case "system":
+        return t("settings.theme.system")
+    }
+  }
+
+  return (
+    <>
+      <div data-slot="section-head">
+        <h3 data-slot="section-title" tabIndex={-1}>
+          {t("settings.theme.title")}
+        </h3>
+        <p data-slot="section-desc">{t("settings.theme.desc")}</p>
+      </div>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.theme.group")}>
+        <For each={THEME_CHOICES}>
+          {(choice) => (
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-theme-choice={choice}
+              data-active={value() === choice ? "true" : undefined}
+              aria-pressed={value() === choice}
+              onClick={() => choose(choice)}
+            >
+              {label(choice)}
+            </button>
+          )}
+        </For>
+      </div>
+
+      <Show when={status() && status()!.supported === false}>
+        <p data-slot="settings-notice" data-state="warning">
+          {status()!.reason ?? t("settings.theme.unsupported")}
+        </p>
+      </Show>
+
+      <Show when={value() === "glass"}>
+        <div data-slot="settings-slider-group">
+          <div data-slot="settings-slider-header">
+            <label for="glass-opacity-slider" data-slot="settings-slider-label">
+              {t("settings.theme.opacity")}
+            </label>
+            <span data-slot="settings-slider-value">{opacity()}%</span>
+          </div>
+          <input
+            id="glass-opacity-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={opacity()}
+            data-slot="settings-slider"
+            aria-label={t("settings.theme.opacity")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={opacity()}
+            aria-valuetext={`${opacity()}%`}
+            onInput={(e) => props.onOpacityChange?.(Number(e.currentTarget.value))}
+          />
+          {/*
+            * One line, which changes rather than accumulating: under the
+            * readable minimum it says what the user is trading away, and does
+            * not stop them doing it.
+            */}
+          <p data-slot="settings-slider-desc">
+            {isGlassReadable(opacity())
+              ? t("settings.theme.opacityDesc", GLASS_READABLE_MIN)
+              : t("settings.theme.opacityLow", GLASS_READABLE_MIN)}
+          </p>
+        </div>
+      </Show>
+    </>
+  )
+}
+
+export interface LanguageSectionProps {
+  /** Defaults to the app's own state; a test passes its own to watch the choice. */
+  value?: () => LocalePreference
+  onChange?: (next: LocalePreference) => void
+}
+
+/**
+ * Which language ADE's interface speaks (S41).
+ *
+ * Three choices rather than two: "System" is what a fresh install uses, and
+ * showing it with the language it resolves to answers "why is this English?"
+ * without a trip to the OS settings. Each language is named in itself, so a
+ * person who cannot read the current one still finds their own.
+ */
+export function LanguageSection(props: LanguageSectionProps) {
+  const value = () => (props.value ?? localePreference)()
+  const choose = (next: LocalePreference) => (props.onChange ?? setLocalePreference)(next)
+  const label = (choice: LocalePreference) =>
+    choice === "system"
+      ? t("settings.language.systemNow", t(locale() === "it" ? "settings.language.it" : "settings.language.en"))
+      : t(choice === "it" ? "settings.language.it" : "settings.language.en")
+
+  return (
+    <>
+      <div data-slot="section-head">
+        <h3 data-slot="section-title" tabIndex={-1}>
+          {t("settings.language.title")}
+        </h3>
+        <p data-slot="section-desc">{t("settings.language.desc")}</p>
+      </div>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.language.group")}>
+        <For each={LOCALE_PREFERENCES}>
+          {(choice) => (
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-locale={choice}
+              data-active={value() === choice ? "true" : undefined}
+              aria-pressed={value() === choice}
+              lang={choice === "system" ? undefined : choice}
+              onClick={() => choose(choice)}
+            >
+              {label(choice)}
+            </button>
+          )}
+        </For>
+      </div>
     </>
   )
 }
@@ -211,16 +377,14 @@ export function GridSection(props: GridSectionProps) {
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Griglia
+          {t("settings.grid.title")}
         </h3>
         <p data-slot="section-desc">
-          Su quante colonne stanno i pannelli nella vista Codice. In automatico ADE le sceglie
-          dalla larghezza della finestra e da quanti pannelli sono aperti, in modo che nessuno
-          scenda sotto la larghezza minima leggibile.
+          {t("settings.grid.desc")}
         </p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label="Colonne della griglia">
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.grid.columns")}>
         <For each={GRID_COLUMN_CHOICES}>
           {(value) => (
             <button
@@ -230,7 +394,7 @@ export function GridSection(props: GridSectionProps) {
               aria-pressed={props.columns === value}
               onClick={() => props.onChange(value)}
             >
-              {value === undefined ? "Auto" : value}
+              {value === undefined ? t("settings.grid.auto") : value}
             </button>
           )}
         </For>
@@ -269,30 +433,26 @@ export function ProviderSection(props: ProviderSectionProps) {
   onMount(check)
 
   const label = (state: ProviderState | undefined) => {
-    if (!state) return "Controllo…"
-    if (!state.installed) return "Non installato"
-    if (state.login.state === "in") return "Collegato"
-    if (state.login.state === "out") return "Non collegato"
-    return "Da verificare"
+    if (!state) return t("settings.providers.checking")
+    if (!state.installed) return t("settings.providers.notInstalled")
+    if (state.login.state === "in") return t("settings.providers.connected")
+    if (state.login.state === "out") return t("settings.providers.notConnected")
+    return t("settings.providers.unverified")
   }
 
   return (
     <>
       <div data-slot="section-head">
         <h3 data-slot="section-title" tabIndex={-1}>
-          Provider
+          {t("settings.providers.title")}
         </h3>
         <p data-slot="section-desc">
-          I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento
-          Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti
-          da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.
+          {t("settings.providers.desc1")}
         </p>
         <p data-slot="section-desc">
-          ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli
-          abbonamenti sono per uso personale e ADE tiene al massimo {MAX_PARALLEL_TURNS} turni insieme
-          per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API
-          (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con{" "}
-          <code>codex login --with-api-key</code>).
+          {t("settings.providers.desc2Before", MAX_PARALLEL_TURNS)}
+          <code>{"codex login --with-api-key"}</code>
+          {t("settings.providers.desc2After")}
         </p>
       </div>
 
@@ -312,11 +472,11 @@ export function ProviderSection(props: ProviderSectionProps) {
                       onClick={() => props.onLogin?.(runner)}
                       title={`${runner.command} ${runner.login.join(" ")}`}
                     >
-                      {state()?.login.state === "in" ? "Cambia account" : "Accedi"}
+                      {state()?.login.state === "in" ? t("settings.providers.switchAccount") : t("settings.providers.login")}
                     </button>
                   </Show>
                 </div>
-                <span data-slot="provider-detail">{runner.account}</span>
+                <span data-slot="provider-detail">{runnerAccount(runner.id)}</span>
                 <Show when={state()?.login.detail}>
                   <span data-slot="settings-meta">{state()!.login.detail}</span>
                 </Show>
@@ -328,7 +488,7 @@ export function ProviderSection(props: ProviderSectionProps) {
 
       <div data-slot="settings-choices">
         <button type="button" data-slot="settings-choice" disabled={checking()} onClick={check}>
-          {checking() ? "Controllo…" : "Controlla di nuovo"}
+          {checking() ? t("settings.providers.checking") : t("settings.providers.checkAgain")}
         </button>
       </div>
     </>
@@ -340,8 +500,8 @@ export function McpSection() {
   return (
     <NotBuiltYet
       title="MCP"
-      what="I server a cui ADE si collega col Model Context Protocol, e quali strumenti espongono."
-      instead="Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale."
+      what={t("settings.mcp.desc")}
+      instead={t("settings.mcp.instead")}
     />
   )
 }

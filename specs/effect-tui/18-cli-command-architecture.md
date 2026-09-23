@@ -1,37 +1,51 @@
 # EOT-18: CLI Command Architecture and Dispatch
 
-Status: proposed. Tier: 2. Phase: P3. Dependencies: EOT-02, EOT-08.
-Owner: `packages/nikcli/src/cli/cmd/*` and `packages/nikcli/src/cli/effect/*` maintainers. [Roadmap](../ROADMAP.md).
+Status: partially landed — the parser and lifecycle requirements shipped; the policy requirements have not.
+Tier: 2. Phase: P3. Dependencies: EOT-02, EOT-08.
+Owner: `packages/nikcli/src/cli/framework/*`, `packages/nikcli/src/cli/handlers/*` and
+`packages/nikcli/src/cli/effect/*` maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
-Evidence B34, B35 in the [register](../README.md): `packages/nikcli/src/cli-main.ts` registers 45+ commands through yargs
-(account, acp, ads, agent, analytics, api, artifact, auth, brain-model, chatbot, companion, connectors, debug, doctor,
-export, generate, github, goal, heap, image-model, import, locale, mcp, mission, mobile, models, plug, pr, quickstart,
-remote, routine, run, serve, session, speak-model, stats, sync, teleport, tui, uninstall, upgrade, usage, web,
-workspace-serve). Each command is a `yargs` `CommandModule`; subcommands are nested under `cmd/debug/` and `cmd/tui/`.
-`cli/effect/prompt.ts` wraps `@clack/prompts` in Effect. The registered set is
-already gated: [`specs/v2/cli-command-surface.md`](../v2/cli-command-surface.md) is the inventory and
-`test/cli/command-surface.test.ts` fails if a command is added or removed without updating it. The opportunity is a single architectural spec covering
-command routing, plugin command registration, daemon/attach coordination, and the dispatch lifecycle (parse → bootstrap
-→ service → teardown). Right now each command is an independent module with no shared command lifecycle spec.
+Evidence B34, B35 in the [register](../README.md). This spec was written against a yargs command surface that no
+longer exists. [`specs/cli-framework.md`](../cli-framework.md) records the migration that replaced it, and that
+document — not this one — is the reference for how the parser works today.
+
+What shipped, and what this spec can therefore stop asking for:
+
+- The parser is `effect/unstable/cli`. `yargs` is not a dependency of any package. The surviving `yargs` mentions in
+  `src/cli/` are comments explaining why a shape is what it is.
+- The command tree is data: `src/cli/commands.ts` declares **147 commands (46 top level, the rest nested) and 254
+  parameters** through `src/cli/framework/spec.ts`, and `src/cli/framework/runtime.ts` binds them. Handler bodies live
+  under `src/cli/handlers/**`, each behind a `() => import()`, so `--help` no longer evaluates the TUI.
+- The command lifecycle is declared rather than hand-rolled: `src/cli/cmd/cmd.ts` exports `cmd()` with optional
+  `bootstrap`/`teardown`, and the teardown runs in a `finally` that reports its own failure without masking the
+  handler's. That is requirement 1 below, shipped.
+- `src/cli/cmd/argv.ts` is the yargs-shaped type shim (`CommandModule`, `ArgumentsCamelCase`) the handler bodies are
+  written against; `src/cli/framework/args.ts` reconstructs the `--` passthrough that effect drops.
+- The registered set stays gated: [`specs/v2/cli-command-surface.md`](../v2/cli-command-surface.md) is the inventory and
+  `test/cli/command-surface.test.ts` fails if a command is added or removed without updating it.
+
+What remains open is dispatch-adjacent **policy**, which the parser migration did not address and which is still decided
+per command: there is no exit-code mapping (no `NIKCLI_HEADLESS`, no documented `64`/`66`/`69` contract in `src/`), no
+plugin command scoping, and no shared daemon/attach lifecycle. `cli/effect/prompt.ts` wraps `@clack/prompts` in Effect
+but its non-TTY fallback is implicit. Those are the requirements below that are still proposed.
 
 ## Scope and Non-Goals
 
-Define the canonical CLI command architecture: command shape, dispatch lifecycle, bootstrap/teardown, plugin command
-registration, and the typed boundary between yargs and the application services. Preserve the existing yargs binding and
-the existing 45+ commands. Do not invent a second parser, replace yargs, change the on-disk layout, or break existing
-command flags.
+Define the canonical CLI command **policy**: exit-code mapping, headless posture, plugin command registration, and
+daemon/attach coordination, on top of the dispatch lifecycle that has already landed. Preserve the shipped
+`effect/unstable/cli` binding and the existing command surface. Do not invent a second parser, reintroduce yargs, change
+the on-disk layout, or break existing command flags.
 
 ## Design and Requirements
 
-1. A command is a typed module: `{ name, description, builder, handler, bootstrap?, teardown? }`. `builder` returns the
-   yargs definition; `handler` is a typed Effect that yields the parsed args and the bootstrap context. `bootstrap?` runs
-   before `handler` and may install global state (e.g. install the plugin installer). `teardown?` runs in `finally` and
-   releases resources.
-2. The dispatcher is one Effect module: it parses args via yargs, resolves the command, runs `bootstrap`, then runs the
-   `handler` Effect with the runtime layer, then runs `teardown`. The dispatcher catches `Exit` causes (defect,
-   interruption, failure) and surfaces them through the existing `FormatError` and `Log` sinks.
+1. **(landed)** A command is a typed module: `{ command, describe, builder, handler, bootstrap?, teardown? }`.
+   `bootstrap?` runs before `handler` and may install global state (e.g. the plugin installer). `teardown?` runs in a
+   `finally` and releases resources. Implemented in `src/cli/cmd/cmd.ts`.
+2. **(landed)** The dispatcher is one module: `src/cli/framework/runtime.ts` resolves the command from the
+   `src/cli/commands.ts` spec tree, runs `bootstrap`, runs the handler, then runs `teardown`. It surfaces failures
+   through the existing `FormatError` and `Log` sinks.
 3. Bootstrap is the standard pre-handler step: install globals, set up logging, initialize the plugin installer, open the
    database connection, and prepare the runtime layer. Bootstrap failures are fatal: the command does not run. Bootstrap
    is idempotent within a process so subcommands can re-bootstrap safely (e.g. debug/wait).
@@ -60,8 +74,8 @@ command flags.
 10. Long-running commands (`serve`, `run --watch`, `mobile connect`) coordinate shutdown via `Effect.scoped` plus a
     shutdown signal handler. The handler catches `SIGINT`/`SIGTERM`, signals the scope to close, and runs finalizers
     with a deadline. Commands that ignore the shutdown signal are defects.
-11. Subcommands under `cmd/debug/` and `cmd/tui/` follow the same shape as top-level commands; the dispatcher recurses
-    through nested `builder` declarations. There is no special-cased path for subcommands.
+11. **(landed)** Nested commands follow the same shape as top-level ones: `Spec.make` carries a `commands` field and
+    the runtime recurses through it. There is no special-cased path for subcommands.
 12. Headless mode: a `NIKCLI_HEADLESS=1` flag disables interactive prompts. The handler that needs a prompt falls back
     to its documented non-interactive default; the runtime fails closed for prompts that have no default. Headless mode
     never silently picks "yes".
@@ -69,7 +83,7 @@ command flags.
 ## Command Topology
 
 ```text
-yargs parse
+effect/unstable/cli parse
   -> Command resolver
   -> bootstrap (install globals, log, db, runtime layer)
   -> handler (typed Effect)
@@ -88,8 +102,9 @@ a non-zero code and a typed message; it never silently continues.
 
 ## Acceptance and Verification
 
-- All 45+ commands dispatch through the new architecture; command shape is consistent; bootstrap/teardown are exercised
-  on at least one example from each top-level group (`run`, `serve`, `auth`, `plugin`, `mobile`, `debug`).
+- Bootstrap/teardown are exercised on at least one example from each top-level group (`run`, `serve`, `auth`, `plugin`,
+  `mobile`, `debug`). The whole surface already dispatches through the shipped architecture; the parity harness in
+  `test/cli/` holds it there.
 - Daemon lifecycle: `serve` starts, `mobile connect` attaches, shutdown via SIGINT exits cleanly within the deadline,
   PID/socket state is cleaned up, and a second `serve` reuses or restarts as documented.
 - Plugin commands appear under `<plugin-id>:<command>`; conflicts resolve by documented priority, not by registration
@@ -98,7 +113,7 @@ a non-zero code and a typed message; it never silently continues.
   redacted.
 - Exit codes follow the documented mapping; stack traces honor `NIKCLI_DEBUG`; `FormatError` covers all reported
   failures.
-- Extend `packages/nikcli/test/cli/cmd/`, `packages/nikcli/test/cli/`, `packages/nikcli/test/plugin/`, and the existing
+- Extend `packages/nikcli/test/cli/`, `packages/nikcli/test/cli/cmd/`, `packages/nikcli/test/plugin/`, and the existing
   command tests.
 - From `packages/nikcli`: `bun test test/cli/`. One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; command dispatch overhead below 50 ms p95 on the warm fixture; bootstrap shared with the TUI
@@ -106,7 +121,9 @@ a non-zero code and a typed message; it never silently continues.
 
 ## Migration and Rollback
 
-Migrate commands in groups: top-level lifecycle (`run`, `serve`, `session`), then identity (`auth`, `account`), then
-plugin (`plug`), then the rest. Each migration PR flips a single command; legacy commands continue to dispatch. Roll
-back by flipping the command's handler back to the legacy module; the dispatcher shape stays. Bootstrap changes are
-additive; never delete a previously-installed global or DB connection as part of a dispatch refactor.
+The parser migration is done; see [`specs/cli-framework.md`](../cli-framework.md) for how it was staged and for the
+four parser divergences it documents. What remains is policy, and it lands per concern rather than per command: the
+exit-code mapping first (it is observable and cheap to test), then headless posture, then plugin command scoping, then
+daemon/attach. Each is additive and independently revertible — a command that has not adopted the new policy keeps its
+current behaviour. Bootstrap changes stay additive; never delete a previously-installed global or DB connection as part
+of a dispatch refactor.

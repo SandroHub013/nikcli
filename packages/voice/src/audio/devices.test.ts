@@ -91,3 +91,18 @@ describe("listAudioDevices", () => {
     expect(listed.labelled).toBe(false)
   })
 })
+
+describe("device names follow the language", () => {
+  test("the system device and unnamed devices are named in English under English", async () => {
+    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    resetLocaleForTests("en")
+    try {
+      expect(SYSTEM_DEFAULT.label).toBe("System device")
+      const shaped = shapeDevices([device({ deviceId: "a" }), device({ deviceId: "b", kind: "audiooutput" })])
+      expect(shaped.inputs[1]?.label).toBe("Microphone 1")
+      expect(shaped.outputs[1]?.label).toBe("Audio output 1")
+    } finally {
+      resetLocaleForTests("it")
+    }
+  })
+})

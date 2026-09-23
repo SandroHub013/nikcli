@@ -102,7 +102,10 @@ function extractSlotsFromUtterance(
   }
 
   // 2. File path extraction: e.g. "apri file src/bridge/host.ts"
-  const fileMatch = cleaned.match(/\b(?:file)\s+([^\s]+)/i)
+  //
+  // Not after "cerca": "cerca file parser" is a search, and taking "parser"
+  // as a path here left step 7 with no query, so the search ran on nothing.
+  const fileMatch = cleaned.match(/(?<!\b(?:cerca|trova|ricerca)\s(?:(?:il|un|i|dei|del|lo)\s)?)\bfile\s+([^\s]+)/i)
   if (fileMatch) {
     slots.path = fileMatch[1]
     cleaned = cleaned.replace(fileMatch[0], "").replace(/\s+/g, " ").trim()
@@ -168,7 +171,7 @@ function extractSlotsFromUtterance(
 
   // 7. Search query extraction: e.g. "cerca nel progetto parseUtterance"
   const searchMatch = cleaned.match(
-    /\b(cerca nel progetto|trova nel progetto|cerca file|ricerca nel progetto|trova simbolo)\s+(.+)$/i
+    /\b(cerca nel progetto|trova nel progetto|cerca (?:(?:il|un|i|dei|del|lo)\s)?file|ricerca nel progetto|trova simbolo)\s+(.+)$/i
   )
   if (searchMatch) {
     slots.text = searchMatch[2].trim()
@@ -196,6 +199,9 @@ function extractSlotsFromUtterance(
     else if (word("alberi")) slots.text = "alberi"
     else if (word("diff") || word("differenze")) slots.text = "diff"
     else if (word("trascrizione")) slots.text = "transcript"
+    // «tema chiaro» names the theme it wants; without this it only flipped it.
+    else if (word("chiaro") || word("chiara") || word("light")) slots.text = "light"
+    else if (word("scuro") || word("scura") || word("dark")) slots.text = "dark"
     else if (/\b(scorri|scorrere|scrolla|sposta|risali|torna)\b/i.test(cleaned)) {
       // A direction only means a direction next to a verb of movement. Without
       // this guard "vai su Bastelli" arrives carrying a scroll instruction.

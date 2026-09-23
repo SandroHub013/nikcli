@@ -31,7 +31,7 @@ export interface MailPane {
 /** `token` is what proves `from`; see {@link verifySender}. */
 export type Message = { from: string; token?: string; text: string } & (
   /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
-  | { kind: "send" | "ask"; to: string; effort?: string }
+  | { kind: "send" | "ask"; to: string; effort?: string; via?: "typed" }
   /**
    * `autoClose`: closed once it has replied, unless it has work not yet
    * integrated. `name` titles it; `worktree` gives it its own checkout;
@@ -75,6 +75,8 @@ export type Message = { from: string; token?: string; text: string } & (
   | { kind: "interrupt"; to: string }
   /** Withdraws a request the sender made. `text` is empty. */
   | { kind: "cancel"; ref: string }
+  /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
+  | { kind: "delivered"; ref: string; ok: boolean }
 )
 
 export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
@@ -128,6 +130,10 @@ export function parseMessage(body: string): Message | undefined {
     const ref = str("ref")
     return isRequestId(ref) ? { kind, from, token, ref, text: "" } : undefined
   }
+  if (kind === "delivered") {
+    const ref = str("ref")
+    return isRequestId(ref) ? { kind, from, token, ref, ok: record.ok !== false, text } : undefined
+  }
   if (kind === "kv") {
     const op = KV_OPS.find((known) => known === str("op"))
     const key = str("key")
@@ -148,7 +154,9 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "send" || kind === "ask") {
     const to = str("to")
     const effort = str("effort")
-    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}) } : undefined
+    // `--digita`: the sender wants the keyboard, whatever the route would be.
+    const via = str("via") === "typed" ? ("typed" as const) : undefined
+    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}), ...(via ? { via } : {}) } : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
@@ -315,16 +323,27 @@ export function resolveAgent(
 
 /** Control characters out, line breaks to spaces, and a ceiling on length. */
 function oneLine(text: string): string {
+  return cleanText(text.replace(/\r?\n|\r/g, " "))
+}
+
+/**
+ * The text as the sender wrote it, minus control characters, for the copy that
+ * goes to the inbox file and is read with `ade-msg inbox`: nobody types that
+ * copy, so nothing there has to be one line. S72 found the sender's numbered
+ * points flattened into one paragraph on the way, and the sender writing
+ * longer to compensate.
+ */
+function cleanText(text: string): string {
   const clean = text
-    .replace(/\r?\n|\r/g, " ")
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, "")
+    .replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, "")
+    .replace(/\r\n?/g, "\n")
     .trim()
   return clean.length > MAX_TEXT ? `${clean.slice(0, MAX_TEXT)}… [troncato]` : clean
 }
 
 function who(sender: MailPane | undefined): string {
-  return sender ? `"${sender.title}"${sender.agent ? ` (${sender.agent})` : ""}` : "una sessione ADE"
+  return sender ? `"${sender.title}"` : "una sessione ADE"
 }
 
 /**
@@ -334,9 +353,9 @@ function who(sender: MailPane | undefined): string {
  * a keystroke in somebody else's terminal — and line breaks become spaces,
  * because Enter is what submits the line and a message must arrive whole.
  */
-export function formatDelivery(message: { text: string }, sender: MailPane | undefined): string {
-  const reply = sender ? ` — per rispondere: ade-msg send ${sender.id} "<testo>"` : ""
-  return `[Messaggio da ${who(sender)}]: ${oneLine(message.text)}${reply}`
+export function formatDelivery(message: { text: string }, sender: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+  const reply = sender ? ` — rispondi: ade-msg send ${sender.id} "<testo>"` : ""
+  return `[Messaggio da ${who(sender)}]: ${options.keepLines ? cleanText(message.text) : oneLine(message.text)}${reply}`
 }
 
 /**
@@ -353,7 +372,7 @@ export function formatRequest(
   context: RequestContext = {},
 ): string {
   const where = context.worktree
-    ? ` Lavori nella worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica solo lì, fai commit sul branch, non toccare il progetto principale.`
+    ? ` Worktree ${context.worktree.path} (branch ${context.worktree.branch}): modifica e committa solo lì.`
     : ""
   const results = context.resultsDir ? `${context.resultsDir}${context.resultsDir.includes("\\") ? "\\" : "/"}${id}.md` : undefined
   /*
@@ -363,17 +382,19 @@ export function formatRequest(
    */
   const delegate =
     context.depth !== undefined && context.maxDepth !== undefined && context.depth >= context.maxDepth
-      ? " Non avviare altre sessioni: sei all'ultimo livello consentito."
+      ? " Non avviare sessioni (ultimo livello)."
       : ""
   return (
-    `[Richiesta ${id} da ${who(sender)}]: ${oneLine(text)} —${where}${delegate} ` +
-    `Rispondi con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE toccati, PROBLEMI, PROSSIMO PASSO` +
+    `[Richiesta ${id} da ${who(sender)}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
+    `Rispondi solo con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
-    `); se sei bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
+    `); se bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
   )
 }
 
 export interface RequestContext {
+  /** For the inbox copy, which nobody types: the sender's line breaks stay. */
+  keepLines?: boolean
   worktree?: { path: string; branch: string }
   /** Where detail that does not belong in the reply goes. */
   resultsDir?: string
@@ -386,14 +407,14 @@ export interface RequestContext {
 export function formatUpdate(id: string, state: UpdateState, text: string, replier: MailPane | undefined): string {
   const what = state === "bloccata" ? "è bloccata" : "chiede una decisione"
   return (
-    `[Aggiornamento richiesta ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
-    `La richiesta resta aperta. Rispondi alla sessione con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi riprendi con ade-msg wait ${id}.`
+    `[Aggiornamento ${id}] ${who(replier)} ${what}: ${text.trim()}\n` +
+    `Resta aperta: rispondi con ade-msg send ${replier?.id ?? "<sessione>"} "<risposta>", poi ade-msg wait ${id}.`
   )
 }
 
 /** Typed into a session that went quiet with a request still unanswered. */
 export function formatNudge(id: string, caller: MailPane | undefined): string {
-  return `[Promemoria] ${who(caller)} aspetta la richiesta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
+  return `[Promemoria] ${who(caller)} aspetta ${id}: ade-msg reply ${id} "<risultato o motivo>"`
 }
 
 // ---------------------------------------------------------------------------
@@ -412,10 +433,21 @@ export function formatNudge(id: string, caller: MailPane | undefined): string {
 export const INLINE_MAX = 600
 /** A bell nobody answered, in a session free to answer, rings again after this long. */
 export const REBELL_AFTER_MS = 120_000
+
+/**
+ * How long mail waits on a half-written line before the sender is told.
+ *
+ * Only the sender is told. The bell itself still needs a free session *and* a
+ * clean line: the wait is one more condition, never one that overrules the
+ * other two.
+ */
+export const HELD_TELL_MS = 10 * 60_000
 /** Rings after the first; then the sender is told the message was not read. */
 export const MAX_REBELLS = 3
 
 export interface InboxEntry {
+  /** The sender has been told, once, that ADE is holding this back. */
+  told?: boolean
   /** The message or request id, as the sender knows it. */
   id: string
   paneId: string
@@ -447,11 +479,11 @@ export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailP
     entry.kind === "ask" || entry.kind === "spawn"
       ? `Richiesta ${entry.id} da ${who(sender)}`
       : entry.kind === "reply"
-        ? `Risposta alla richiesta ${entry.id} da ${who(sender)}`
+        ? `Risposta a ${entry.id} da ${who(sender)}`
         : entry.kind === "update"
-          ? `Aggiornamento della richiesta ${entry.id} da ${who(sender)}`
+          ? `Aggiornamento ${entry.id} da ${who(sender)}`
           : `Messaggio da ${who(sender)}`
-  return `[${what}, ${chars} caratteri] in attesa: leggilo con ade-msg inbox`
+  return `[${what}, ${chars}c] leggi: ade-msg inbox`
 }
 
 /**
@@ -464,18 +496,67 @@ export function formatBell(entry: Pick<InboxEntry, "id" | "kind">, sender: MailP
  */
 export function inboxAction(
   entry: InboxEntry,
-  target: { running: boolean; free: boolean; read: boolean },
+  target: { running: boolean; free: boolean; read: boolean; typing?: boolean },
   now: number,
-): "done" | "wait" | "ring" | "warn" {
+): "done" | "wait" | "ring" | "warn" | "tell" {
   if (target.read || !target.running) return "done"
-  if (!target.free || now - entry.ringAt < REBELL_AFTER_MS) return "wait"
+  if (!target.free) {
+    /*
+     * Held, not ignored. A pane whose line the user began keeps the mail for
+     * as long as it takes — the wait is never turned into a delivery, because
+     * time does not make a half-written line any cleaner. What it does turn
+     * into, once, is a word to the sender, so nobody sits on `ade-msg wait`
+     * believing the other session is refusing to answer.
+     */
+    return target.typing && !entry.told && now - entry.at >= HELD_TELL_MS ? "tell" : "wait"
+  }
+  if (now - entry.ringAt < REBELL_AFTER_MS) return "wait"
   return entry.rings < MAX_REBELLS ? "ring" : "warn"
+}
+
+/**
+ * Told to the sender, once, while ADE holds mail back from a half-written line.
+ *
+ * It says what is true — ADE has it and is not typing it — and not what the
+ * sender would otherwise conclude, that the other session is refusing to
+ * answer. Whoever waits on `ade-msg wait` has to know why they are waiting.
+ */
+export function formatHeld(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what =
+    entry.kind === "ask" || entry.kind === "spawn"
+      ? `la richiesta ${entry.id}`
+      : entry.kind === "reply"
+        ? `la tua risposta alla richiesta ${entry.id}`
+        : "il tuo messaggio"
+  return (
+    `[ade-msg] ADE ha ${what} per ${who(reader)} ma non la consegna ancora: ` +
+    `in quella sessione c'è una riga iniziata e non inviata, e consegnare ora la rovinerebbe. ` +
+    `Arriva da sola appena la riga è libera: la sessione non ti sta ignorando.`
+  )
+}
+
+/** What a waiter is told, in the state of its request, while its target has a line half-written. */
+export const HELD_BY_LINE: RequestState = "trattenuta: riga a metà"
+
+/** The receipt a sender gets for mail held back from a half-written line. */
+export function formatHeldReceipt(target: MailPane | undefined): string {
+  return `ok: in coda, "${target?.title ?? "la sessione"}" ha una riga iniziata e non inviata: arriva appena è libera`
 }
 
 /** Told to the sender when a long message was never read. */
 export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
   const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
   return `[ade-msg] ${who(reader)} non ha letto ${what} dopo ${entry.rings + 1} avvisi: resta nella sua inbox; ricordaglielo o annulla la richiesta`
+}
+
+/**
+ * Told to the sender when the inbox file is gone before it was read: lost,
+ * not ignored, and said as such. For a request it is also the answer the
+ * waiter gets, so `ade-msg wait` ends instead of running out.
+ */
+export function formatLost(entry: Pick<InboxEntry, "id" | "kind">, reader: MailPane | undefined): string {
+  const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
+  return `[ade-msg] errore: ${what} risulta persa, non ignorata: il file nella casella di ${who(reader)} è sparito prima di essere letto. Rimandala.`
 }
 
 /** Entries restored from storage; anything malformed is dropped. */
@@ -528,10 +609,15 @@ export interface OpenRequest {
   rings?: number
   /** Its caller was told the session may be stuck; said once. */
   wedgeWarned?: boolean
+  /** How it reached the session: typed by ADE, or sent by the caller over the CLI's own channel. */
+  via?: "nativa" | "digitata"
+  /** The caller confirmed its `SendMessage`, or the target's turn showed it arrived. */
+  acked?: boolean
 }
 
 export type RequestState =
   | "in corso"
+  | "trattenuta: riga a metà"
   | "attende un permesso"
   | "sessione chiusa"
   | "in avvio"
@@ -598,12 +684,20 @@ export const STALE_BUSY_MS = 30 * 60_000
  * working TUI keeps repainting its spinner, and a few quiet seconds are the
  * end of the turn. A standing permission prompt would take the Enter as its
  * answer, so it is never free.
+ *
+ * `typing` is the other half, and it has nothing to do with the agent: the
+ * user has begun a line in this pane and not sent it. Free meant "the agent
+ * is not busy", which is not the same as "ready to be typed into" — a
+ * delivery there lands inside the user's sentence and submits it. It is a
+ * property of the pane, not of the CLI running in it, so it holds for every
+ * agent ADE can start and for a plain shell, including whatever is added to
+ * the catalogue next.
  */
 export function isFree(
-  target: { hooked: boolean; permissionPending: boolean; activity?: Activity; lastOutputAt?: number },
+  target: { hooked: boolean; permissionPending: boolean; typing?: boolean; activity?: Activity; lastOutputAt?: number },
   now: number,
 ): boolean {
-  if (target.permissionPending) return false
+  if (target.permissionPending || target.typing) return false
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
     // Nothing known at all, neither a turn nor a byte of output: not a reason to type.
@@ -631,6 +725,16 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   } catch {
     return undefined
   }
+}
+
+/**
+ * The activity to keep after a read: what was read, or, when nothing could be
+ * read, a busy seen before. A read that fails mid-turn does not end the turn;
+ * the stale-busy rule of `isFree` still frees a session whose Stop never came.
+ * An old idle is dropped: it would let mail in mid-turn.
+ */
+export function keptActivity(previous: Activity | undefined, read: Activity | undefined): Activity | undefined {
+  return read ?? (previous?.state === "busy" ? previous : undefined)
 }
 
 /** How long a freshly spawned session has to come up before "not running" means closed. */
@@ -666,6 +770,27 @@ export function requestState(
     return "forse bloccata"
   }
   return "in corso"
+}
+
+/**
+ * Why `ade-msg relaunch` is refused, or `undefined` when it may go ahead.
+ *
+ * Only the session that spawned the target may relaunch it, and only with a
+ * note: the replacement starts from its brief and that note. Without one it
+ * redoes the job, or resumes the loop that got it relaunched.
+ */
+export function relaunchRefusal(
+  message: { from: string; note: string },
+  target: { id: string; title: string },
+  spawner: string | undefined,
+): string | undefined {
+  if (!message.from || spawner !== message.from) {
+    return `errore: puoi riavviare solo le sessioni avviate da questa sessione con spawn ("${target.title}" non lo è)`
+  }
+  if (!message.note.trim()) {
+    return `errore: relaunch richiede --note "<a che punto è e cosa fare adesso>": la sessione riparte da quella nota`
+  }
+  return undefined
 }
 
 /** Told once to the caller of a request whose session may be stuck. */
@@ -817,7 +942,7 @@ export function requestsTable(
   const title = (id: string) => (id ? panes.find((pane) => pane.id === id)?.title ?? id : "anonima")
   const rows = requests.map((request) => [
     request.id,
-    request.kind + (request.autoClose ? "+close" : ""),
+    request.kind + (request.autoClose ? "+close" : "") + (request.via === "nativa" ? (request.acked ? "·nativa✓" : "·nativa?") : ""),
     age(now - request.at),
     request.update && stateOf(request) === "in corso" ? `${request.update.state}: ${briefOf(request.update.text, 40)}` : stateOf(request),
     `${title(request.from)} → ${title(request.to)}`,
@@ -859,8 +984,8 @@ export function briefOf(text: string, length = 60): string {
 }
 
 /** The answer to a request, typed into the caller when nothing was waiting for it any more. */
-export function formatLateReply(ref: string, text: string, replier: MailPane | undefined): string {
-  return `[Risposta alla richiesta ${ref} da ${who(replier)}]: ${oneLine(text)}`
+export function formatLateReply(ref: string, text: string, replier: MailPane | undefined, options: { keepLines?: boolean } = {}): string {
+  return `[Risposta a ${ref} da ${who(replier)}]: ${options.keepLines ? cleanText(text) : oneLine(text)}`
 }
 
 /**
@@ -904,6 +1029,7 @@ export const USAGE =
   "  ade-msg wait   <id> [<id>...] [--any]     aspetta le risposte (tutte, o la prima con --any)\n" +
   "  ade-msg status                          richieste in corso\n" +
   "  ade-msg cancel <id>                     annulla una tua richiesta\n" +
+  "  ade-msg delivered <id> [no [motivo]]    dopo una consegna nativa: l'hai mandata (o no, e ADE la digita)\n" +
   "  ade-msg close  <sessione> [--force]     chiude una sessione avviata da te con spawn e le sue figlie;\n" +
   "                                          rifiuta se una worktree ha lavoro non integrato, salvo --force\n" +
   "  ade-msg relaunch <sessione> --note \"<a che punto è>\" [--model <id>] [--fresh]\n" +
@@ -937,3 +1063,68 @@ export const USAGE =
   "  --timeout <sec>  ask/spawn/wait: quanto aspettare (predefinito 110)\n" +
   "<sessione> = numero, id, titolo o nome dell'agente; progetto/nome cerca solo in quel progetto,\n" +
   "  un nome da solo preferisce le sessioni del tuo progetto.\n"
+
+/**
+ * How long a session without turn hooks is believed to be still working on a
+ * request it has not answered.
+ *
+ * Long on purpose. It is not a guess at how long the work takes — it is how
+ * long the "still working" claim may go unchecked before ADE stops making it.
+ * Thirty minutes matches `STALE_BUSY_MS`, which is where a hooked session's
+ * unclosed turn is given up on for the same reason.
+ */
+export const ANSWER_HOLD_MS = STALE_BUSY_MS
+
+/**
+ * Whether a quiet session is still in the turn a request opened.
+ *
+ * Silence ends a turn only for a session that owes nobody an answer. Without
+ * turn hooks (agy, and Codex until it installs its own) the end of a turn is
+ * read from the terminal going quiet for a couple of seconds — which a long
+ * tool call, a wait on the network or a model thinking also look like. For
+ * work the user started that is a harmless flicker; for work another session
+ * asked for it it is a wrong answer to a question somebody is acting on: the
+ * sidebar, the header bar and `ade-msg list` all say the session is free while
+ * it is still working, so the caller stops waiting and asks someone else.
+ *
+ * This is about what the state *says*. Delivery is decided separately, by
+ * `isFree`, which for a session without hooks still goes by the quiet
+ * terminal alone: holding the state here does not keep the mailbox from
+ * typing into it.
+ *
+ * The turn ends when the answer goes out — the request is no longer open —
+ * or when the hold expires, so a session that dies without answering does not
+ * stay "at work" forever.
+ */
+export function holdsForAnswer(
+  requests: readonly Pick<OpenRequest, "to" | "at" | "deliveredAt">[],
+  paneId: string,
+  now: number,
+): boolean {
+  return requests.some((request) => {
+    if (request.to !== paneId) return false
+    const reached = request.deliveredAt ?? request.at
+    return now - reached < ANSWER_HOLD_MS
+  })
+}
+
+/** What a couple of seconds of silence mean for a pane marked working. */
+export type QuietOutcome =
+  /** The turn is over: the pane goes back to available. */
+  | "settle"
+  /** The turn is not over, and something else — a hook's Stop — will end it. */
+  | "wait"
+  /**
+   * The turn is not over, and nothing else will end it: ask again after the
+   * next quiet spell. Without this the pane is left held with no timer and no
+   * output coming, so an expired hold is never noticed and the session stays
+   * "at work" for good.
+   */
+  | "recheck"
+
+export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer: boolean }): QuietOutcome {
+  // With turn hooks silence is not the end of a turn (a long tool call is
+  // silent): the hook says when, and its `idle` settles the pane on its own.
+  if (pane.hooked) return pane.busy ? "wait" : "settle"
+  return pane.owesAnswer ? "recheck" : "settle"
+}

@@ -135,7 +135,7 @@ export namespace SessionRevert {
           return yield* summary.computeDiff({ messages: rangeMessages })
         }),
       )
-      SessionDiffRepo.upsert(input.sessionID, diffs)
+      Effect.runSync(SessionDiffRepo.upsert(input.sessionID, diffs))
       Bus.publish(Session.Event.Diff, {
         sessionID: input.sessionID,
         diff: diffs,
@@ -256,7 +256,7 @@ export namespace SessionRevert {
         })
       }),
     )
-    InstructionRepo.removeSession(sessionID)
+    Effect.runSync(InstructionRepo.removeSession(sessionID))
   }
 
   const layer = Layer.succeed(

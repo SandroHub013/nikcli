@@ -160,6 +160,18 @@ import type {
   MobileGithubReposOutput,
   MobileGithubBranchesInput,
   MobileGithubBranchesOutput,
+  MobileGithubWorkflowsInput,
+  MobileGithubWorkflowsOutput,
+  MobileGithubWorkflowRunsInput,
+  MobileGithubWorkflowRunsOutput,
+  MobileGithubWorkflowRunJobsInput,
+  MobileGithubWorkflowRunJobsOutput,
+  MobileGithubWorkflowRunRerunInput,
+  MobileGithubWorkflowRunRerunOutput,
+  MobileGithubWorkflowRunCancelInput,
+  MobileGithubWorkflowRunCancelOutput,
+  MobileGithubWorkflowDispatchInput,
+  MobileGithubWorkflowDispatchOutput,
   MobileGithubImportsOutput,
   MobileGithubOauthClientInput,
   MobileGithubOauthClientOutput,
@@ -1739,6 +1751,75 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/branches`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflows: (input: MobileGithubWorkflowsInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowsOutput>(
+          {
+            method: "GET",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/workflows`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflowRuns: (input: MobileGithubWorkflowRunsInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowRunsOutput>(
+          {
+            method: "GET",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/runs`,
+            query: { branch: input["branch"], limit: input["limit"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflowRunJobs: (input: MobileGithubWorkflowRunJobsInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowRunJobsOutput>(
+          {
+            method: "GET",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/runs/${encodeURIComponent(input.runID)}/jobs`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflowRunRerun: (input: MobileGithubWorkflowRunRerunInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowRunRerunOutput>(
+          {
+            method: "POST",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/runs/${encodeURIComponent(input.runID)}/rerun`,
+            body: { failedOnly: input["failedOnly"] },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflowRunCancel: (input: MobileGithubWorkflowRunCancelInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowRunCancelOutput>(
+          {
+            method: "POST",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/runs/${encodeURIComponent(input.runID)}/cancel`,
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      githubWorkflowDispatch: (input: MobileGithubWorkflowDispatchInput, requestOptions?: RequestOptions) =>
+        request<MobileGithubWorkflowDispatchOutput>(
+          {
+            method: "POST",
+            path: `/mobile/github/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/actions/workflows/${encodeURIComponent(input.workflowID)}/dispatch`,
+            body: { ref: input["ref"], inputs: input["inputs"] },
             successStatus: 200,
             declaredStatuses: [401, 400],
             empty: false,

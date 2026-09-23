@@ -1,6 +1,7 @@
 import { createSignal, createMemo, Show, For } from "solid-js"
 import { type Buffer, saveBlockedReason, lineCount, positionOf } from "./buffer"
 import "./editor.css"
+import { t } from "../i18n"
 
 export interface EditorProps {
   buffer: Buffer | undefined
@@ -16,7 +17,7 @@ export function Editor(props: EditorProps) {
 
   const [cursor, setCursor] = createSignal({ line: 1, column: 1 })
 
-  const saveBlocked = () => (props.buffer ? saveBlockedReason(props.buffer) : "Nessun file aperto.")
+  const saveBlocked = () => (props.buffer ? saveBlockedReason(props.buffer) : t("editor.noFile"))
 
   const totalLines = () => (props.buffer ? lineCount(props.buffer.draft) : 1)
   const lineNumbers = createMemo(() => {
@@ -56,11 +57,11 @@ export function Editor(props: EditorProps) {
   return (
     <div data-component="editor" onKeyDown={handleKeyDown} tabIndex={-1}>
       <Show when={props.loading}>
-        <div data-slot="empty">Caricamento file in corso...</div>
+        <div data-slot="empty">{t("editor.loading")}</div>
       </Show>
 
       <Show when={!props.loading && !props.buffer}>
-        <div data-slot="empty">Nessun file aperto.</div>
+        <div data-slot="empty">{t("editor.noFile")}</div>
       </Show>
 
       <Show when={!props.loading && props.buffer}>
@@ -68,7 +69,7 @@ export function Editor(props: EditorProps) {
           <>
             <Show when={buf().truncated}>
               <div data-slot="banner">
-                Il file è troppo grande ed è stato troncato in lettura. Il salvataggio è disabilitato per proteggere il file su disco.
+                {t("editor.truncatedBanner")}
               </div>
             </Show>
 
@@ -81,7 +82,7 @@ export function Editor(props: EditorProps) {
                   data-slot="dirty-badge"
                   data-dirty={buf().dirty ? "true" : "false"}
                 >
-                  {buf().dirty ? "Modificato" : "Salvato"}
+                  {buf().dirty ? t("editor.modified") : t("editor.saved")}
                 </span>
               </div>
 
@@ -92,9 +93,9 @@ export function Editor(props: EditorProps) {
                     data-slot="btn"
                     onClick={() => props.onRevert?.()}
                     disabled={!buf().dirty}
-                    title={buf().dirty ? "Ripristina le modifiche non salvate" : "Nessuna modifica da ripristinare"}
+                    title={buf().dirty ? t("editor.revert.tip") : t("editor.revert.none")}
                   >
-                    Ripristina
+                    {t("editor.revert")}
                   </button>
                 </Show>
 
@@ -104,9 +105,9 @@ export function Editor(props: EditorProps) {
                   data-variant="primary"
                   onClick={() => props.onSave()}
                   disabled={saveBlocked() !== undefined}
-                  title={saveBlocked() ?? "Salva su disco (Ctrl+S)"}
+                  title={saveBlocked() ?? t("editor.save.tip")}
                 >
-                  Salva
+                  {t("editor.save")}
                 </button>
               </div>
             </div>
@@ -129,7 +130,7 @@ export function Editor(props: EditorProps) {
                   onKeyUp={updateCursor}
                   onSelect={updateCursor}
                   spellcheck={false}
-                  aria-label={`Editor per ${buf().path}`}
+                  aria-label={t("editor.label", buf().path)}
                 />
               </div>
             </div>
@@ -141,7 +142,7 @@ export function Editor(props: EditorProps) {
                 </span>
                 <Show when={buf().truncated}>
                   <span data-slot="status-item" style={{ color: "var(--ade-working)" }}>
-                    Troncato
+                    {t("editor.truncated")}
                   </span>
                 </Show>
               </div>
@@ -149,12 +150,12 @@ export function Editor(props: EditorProps) {
               <div data-slot="status-section">
                 <span data-slot="status-item">
                   <span data-slot="status-mono">
-                    Ln {cursor().line}, Col {cursor().column}
+                    {t("editor.cursor", cursor().line, cursor().column)}
                   </span>
                 </span>
                 <span data-slot="status-item">
                   <span data-slot="status-mono">
-                    {lineNumbers().length} {lineNumbers().length === 1 ? "riga" : "righe"}
+                    {t("editor.lines", lineNumbers().length)}
                   </span>
                 </span>
               </div>

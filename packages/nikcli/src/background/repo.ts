@@ -1,4 +1,5 @@
 import { and, asc, eq } from "drizzle-orm"
+import { Effect } from "effect"
 import { Database } from "@/database/database"
 import { backgroundRun } from "./run.sql"
 import type { BackgroundRun } from "./run"
@@ -10,9 +11,7 @@ import type { BackgroundRun } from "./run"
  * happens on the way out: a corrupt row is dropped rather than surfaced.
  */
 export namespace BackgroundRunRepo {
-  function db() {
-    return Database.syncDb()
-  }
+  type Executor = Database.TxOrDb
 
   function toRow(projectId: string, record: BackgroundRun.Record) {
     return {
@@ -38,30 +37,41 @@ export namespace BackgroundRunRepo {
     }
   }
 
-  export function get(projectId: string, id: string): BackgroundRun.Record | undefined {
-    const row = db()
-      .select({ data: backgroundRun.data })
-      .from(backgroundRun)
-      .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.id, id)))
-      .get()
-    return row ? readRecord(row.data) : undefined
+  export function get(projectId: string, id: string, executor?: Executor) {
+    return Database.query(
+      "BackgroundRunRepo.get",
+      (db) => {
+        const row = db
+          .select({ data: backgroundRun.data })
+          .from(backgroundRun)
+          .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.id, id)))
+          .get()
+        return row ? readRecord(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function upsert(projectId: string, record: BackgroundRun.Record): void {
-    const row = toRow(projectId, record)
-    db()
-      .insert(backgroundRun)
-      .values(row)
-      .onConflictDoUpdate({
-        target: [backgroundRun.projectId, backgroundRun.id],
-        set: {
-          status: row.status,
-          parentSessionId: row.parentSessionId,
-          data: row.data,
-          updatedAt: row.updatedAt,
-        },
-      })
-      .run()
+  export function upsert(projectId: string, record: BackgroundRun.Record, executor?: Executor) {
+    return Database.query(
+      "BackgroundRunRepo.upsert",
+      (db) => {
+        const row = toRow(projectId, record)
+        db.insert(backgroundRun)
+          .values(row)
+          .onConflictDoUpdate({
+            target: [backgroundRun.projectId, backgroundRun.id],
+            set: {
+              status: row.status,
+              parentSessionId: row.parentSessionId,
+              data: row.data,
+              updatedAt: row.updatedAt,
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
   /** Mutate-in-place, matching `Storage.update`. Returns undefined when missing. */
@@ -69,52 +79,73 @@ export namespace BackgroundRunRepo {
     projectId: string,
     id: string,
     fn: (draft: BackgroundRun.Record) => void,
-  ): BackgroundRun.Record | undefined {
-    const current = get(projectId, id)
-    if (!current) return undefined
-    const draft = structuredClone(current)
-    fn(draft)
-    upsert(projectId, draft)
-    return draft
+    executor?: Executor,
+  ): Effect.Effect<BackgroundRun.Record | undefined, Database.QueryError> {
+    return Effect.gen(function* () {
+      const current = yield* get(projectId, id, executor)
+      if (!current) return undefined
+      const draft = structuredClone(current)
+      fn(draft)
+      yield* upsert(projectId, draft, executor)
+      return draft
+    })
   }
 
   /** Oldest first, matching the previous JSON-list sort. */
-  export function list(projectId: string): BackgroundRun.Record[] {
-    const rows = db()
-      .select({ data: backgroundRun.data })
-      .from(backgroundRun)
-      .where(eq(backgroundRun.projectId, projectId))
-      .orderBy(asc(backgroundRun.createdAt))
-      .all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
-    })
+  export function list(projectId: string, executor?: Executor) {
+    return Database.query(
+      "BackgroundRunRepo.list",
+      (db) => {
+        const rows = db
+          .select({ data: backgroundRun.data })
+          .from(backgroundRun)
+          .where(eq(backgroundRun.projectId, projectId))
+          .orderBy(asc(backgroundRun.createdAt))
+          .all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
   }
 
-  export function listRunning(projectId: string): BackgroundRun.Record[] {
-    const rows = db()
-      .select({ data: backgroundRun.data })
-      .from(backgroundRun)
-      .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.status, "running")))
-      .orderBy(asc(backgroundRun.createdAt))
-      .all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
-    })
+  export function listRunning(projectId: string, executor?: Executor) {
+    return Database.query(
+      "BackgroundRunRepo.listRunning",
+      (db) => {
+        const rows = db
+          .select({ data: backgroundRun.data })
+          .from(backgroundRun)
+          .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.status, "running")))
+          .orderBy(asc(backgroundRun.createdAt))
+          .all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
   }
 
-  export function listForParent(projectId: string, parentSessionId: string): BackgroundRun.Record[] {
-    const rows = db()
-      .select({ data: backgroundRun.data })
-      .from(backgroundRun)
-      .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.parentSessionId, parentSessionId)))
-      .orderBy(asc(backgroundRun.createdAt))
-      .all()
-    return rows.flatMap((row) => {
-      const record = readRecord(row.data)
-      return record ? [record] : []
-    })
+  export function listForParent(projectId: string, parentSessionId: string, executor?: Executor) {
+    return Database.query(
+      "BackgroundRunRepo.listForParent",
+      (db) => {
+        const rows = db
+          .select({ data: backgroundRun.data })
+          .from(backgroundRun)
+          .where(and(eq(backgroundRun.projectId, projectId), eq(backgroundRun.parentSessionId, parentSessionId)))
+          .orderBy(asc(backgroundRun.createdAt))
+          .all()
+        return rows.flatMap((row) => {
+          const record = readRecord(row.data)
+          return record ? [record] : []
+        })
+      },
+      executor,
+    )
   }
 }

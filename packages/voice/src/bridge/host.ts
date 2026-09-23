@@ -87,7 +87,8 @@ export interface VoiceHost {
   /**
    * Run an existing ADE command by identifier:
    * "palette.open", "session.new", "project.open", "pane.close", "pane.expand",
-   * "view.toggle", "theme.toggle", "browser.new", "process.kill",
+   * "view.toggle", "theme.toggle", "theme.set.light", "theme.set.dark",
+   * "browser.new", "process.kill",
    * and "project.recent.<root>".
    */
   runCommand(id: string): Promise<void>
@@ -172,8 +173,35 @@ export interface VoiceHost {
     text: string
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
     engine: "auto" | "claude" | "codex" | "nikcli"
+    /* `VoiceSettings.agentSpeed`; absent is the CLI's own settings. */
+    speed?: "fast" | "cli"
     signal?: AbortSignal
-  }): Promise<{ ok: boolean; text: string }>
+    /**
+     * The answer so far, each time it grows. Each call extends the one
+     * before, and the returned `text` extends the last: the assistant reads
+     * the finished sentences while the rest is still being written.
+     */
+    onText?: (soFar: string) => void
+  }): Promise<{
+    ok: boolean
+    text: string
+    /**
+     * `false` only when no agent ran at all (none installed, none allowed), so
+     * nothing can have been done yet. A turn that started may have opened
+     * sessions before it failed, and handing the sentence to the planner then
+     * would do it twice. Absent is read as "it ran".
+     */
+    ran?: boolean
+  }>
+
+  /**
+   * Get the agent ready for a sentence that may come soon: started ahead, it
+   * answers the first one without the cost of starting. Optional.
+   */
+  prepareAgent?(request: { engine: "auto" | "claude" | "codex" | "nikcli"; speed?: "fast" | "cli" }): void
+
+  /** The voice is off: what `prepareAgent` started can go. Optional. */
+  releaseAgent?(): void
 
   /**
    * Insert text into a pane's composer without submitting it.
@@ -199,17 +227,17 @@ export interface VoiceHost {
   /**
    * Switch the view inside a pane between transcript stream and diff inspector.
    */
-  setPaneView(paneId: string, view: "transcript" | "diff"): void
+  setPaneView(paneId: string, view: "transcript" | "diff"): boolean | void
 
   /**
    * Navigate an embedded browser pane to a target URL.
    */
-  browserNavigate(paneId: string, url: string): void
+  browserNavigate(paneId: string, url: string): boolean | void
 
   /**
    * Respond to an agent's interactive permission confirmation.
    */
-  answerPermission(paneId: string, answer: "allow" | "deny"): void
+  answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
 
   /**
    * Configure the number of grid columns on the workbench.
@@ -220,6 +248,15 @@ export interface VoiceHost {
    * Switch the workbench to one of ADE's top-level sections.
    */
   setView(view: AdeView): void
+
+  /**
+   * The sections a person can reach right now.
+   *
+   * Optional: a host without it offers all four. ADE hides some while they are
+   * not ready (Chat and Bot, S40), and a voice command naming one must be told
+   * so rather than land somewhere else and say it went there.
+   */
+  availableViews?(): readonly AdeView[]
 
   /**
    * Scroll the transcript in a target pane up (negative delta) or down (positive delta).

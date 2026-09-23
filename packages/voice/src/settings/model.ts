@@ -7,6 +7,7 @@
 
 import { describeChordRisk } from "./shortcuts"
 import type { TranscriberBackend } from "../asr/select"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export type VoiceMode = "agent" | "transcription"
 
@@ -19,7 +20,92 @@ export type ParakeetExecutionBackend = "webgpu" | "wasm" | "auto"
 export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
 export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
-export const CURRENT_SETTINGS_VERSION = 1
+/**
+ * How the agent is asked to think. `fast`: Sonnet 5 with little effort on
+ * Claude Code, little effort on Codex, which is what a spoken answer needs.
+ * `cli`: whatever the CLI is set to, for someone who wants its own model.
+ */
+export const AGENT_SPEEDS = ["fast", "cli"] as const
+export type AgentSpeed = (typeof AGENT_SPEEDS)[number]
+
+/**
+ * The voice replies are read in: a Piper voice ADE downloads on first use, or
+ * `system` for the Web Speech voice. The user's choice (D19): «ugo per
+ * maschile, e piper per femminile, selezionabile dalle impostazioni» — Ugo,
+ * the default, and Paola.
+ */
+export const REPLY_VOICES = ["ugo", "paola", "lessac", "system"] as const
+export type ReplyVoice = (typeof REPLY_VOICES)[number]
+
+/**
+ * 2: the assistant answers when it is called by name.
+ *
+ * With the microphone open and no name to wait for, everything the room said
+ * was a request — a television in the background ran up a bill and opened
+ * sessions. A profile written before this is moved to the wake word once; the
+ * switch in the voice settings turns it back off.
+ *
+ * 3: the assistant listens all the time and answers to one fixed phrase,
+ * «ei nik». The name is no longer a setting, so every profile is moved to it,
+ * and a profile on the wake word is told once that listening is now always on.
+ *
+ * 4: the user's decision for 0.7.0 — the assistant is started only by its
+ * shortcut, or the button that does the same. With `WAKE_WORD_ENABLED` off, a
+ * profile on the wake word is moved to push-to-talk once, and told.
+ *
+ * 5: the same for "toggle": a microphone left open hears the television and
+ * the room. One press, one turn.
+ *
+ * 6: the user's decision after 0.7.0 — the assistant is started only by
+ * voice, a sentence that begins with «ei nik» or «nik». A profile on the
+ * shortcut or on toggle is moved to always-on listening for the name once,
+ * and told. The shortcut and the button stay, as a manual way to call it.
+ *
+ * 7: the user's rule after 0.7.2 — listening for the name without being
+ * asked spends money in the background: every noise the detector takes for
+ * speech is a paid transcription. Listening on its own is now off unless it
+ * is chosen, and a profile that had it is turned off once, and told.
+ */
+export const CURRENT_SETTINGS_VERSION = 7
+
+/**
+ * Whether the wake word and always-on listening exist. The switch, like Chat
+ * and Bot's: off, they cannot be chosen, nothing opens the microphone by
+ * itself, and a stored choice of them becomes the shortcut. On since 0.7.1.
+ */
+export const WAKE_WORD_ENABLED = true
+
+/**
+ * Whether push-to-talk and toggle can be chosen as the way the assistant is
+ * started. Off: the name is the only way, and a stored choice of either moves
+ * to it. The code and its tests stay behind this switch.
+ */
+export const SHORTCUT_ACTIVATION_ENABLED = false
+
+let shortcutActivationSwitch = SHORTCUT_ACTIVATION_ENABLED
+export function shortcutActivationEnabled(): boolean {
+  return shortcutActivationSwitch
+}
+export function setShortcutActivationEnabledForTests(on: boolean): void {
+  shortcutActivationSwitch = on
+}
+
+let wakeWordSwitch = WAKE_WORD_ENABLED
+/** The switch as it reads now. Only tests move it, to keep the dormant path checked. */
+export function wakeWordEnabled(): boolean {
+  return wakeWordSwitch
+}
+export function setWakeWordEnabledForTests(on: boolean): void {
+  wakeWordSwitch = on
+}
+
+/**
+ * The name that calls the assistant. Fixed, by the user's decision: «nik» or
+ * «ei nik» at the start of the sentence. The greeting is accepted in front of
+ * the name, and what the recogniser makes of either — «ehi nik», «hey nick» —
+ * by `settings/wake-word.ts`.
+ */
+export const WAKE_PHRASE = "nik"
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */
@@ -32,8 +118,17 @@ export interface VoiceSettings {
   readonly transcriptionSend: TranscriptionSendMode
   /** Target recognition language as an ISO-639-1 code (e.g. 'it'). */
   readonly language: string
-  /** Spoken wake-phrase waking the assistant in wake-word mode. */
+  /** Spoken wake-phrase waking the assistant in wake-word mode; always `WAKE_PHRASE`. */
   readonly wakeWord: string
+  /**
+   * Whether ADE opens the microphone by itself and waits for `WAKE_PHRASE`.
+   *
+   * Only meaningful with the wake word: a microphone that is always open and
+   * obeys everything would obey the television. While it waits, only the
+   * first second and a half of each sentence goes to the cloud; see
+   * `asr/openrouter.ts`.
+   */
+  readonly alwaysListen: boolean
   /** Keyboard chord triggering or toggling agent command mode. */
   readonly agentChord: string
   /** Keyboard chord triggering or toggling transcription mode. */
@@ -66,6 +161,16 @@ export interface VoiceSettings {
    */
   readonly speakReplies: boolean
   /**
+   * Whether the assistant announces session events on its own: permissions,
+   * task completions, or open decisions.
+   *
+   * Off by default to avoid unexpected speech or consumption (S48). When on,
+   * it speaks a brief announcement and opens a single 6-8s response window.
+   */
+  readonly spokenAlerts: boolean
+  /** Which voice reads them; see `REPLY_VOICES`. */
+  readonly replyVoice: ReplyVoice
+  /**
    * What answers a sentence the grammar does not know.
    *
    * The grammar covers what people say often, instantly and offline. The rest
@@ -77,6 +182,15 @@ export interface VoiceSettings {
    * key is set).
    */
   readonly agentEngine: AgentEngine
+  /** See `AGENT_SPEEDS`. */
+  readonly agentSpeed: AgentSpeed
+  /**
+   * Whether to retry a request on Codex if Claude Code hits its plan rate limit.
+   *
+   * Off by default. When on, if agentEngine is "auto" and Claude Code returns a plan
+   * rate limit error, the request is retried once on Codex after announcing the switch.
+   */
+  readonly codexFallback: boolean
   /**
    * Which microphone to listen on. Absent means the system default.
    *
@@ -102,10 +216,18 @@ export interface VoiceSettings {
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
   version: CURRENT_SETTINGS_VERSION,
   mode: "agent",
-  activation: "toggle",
+  activation: WAKE_WORD_ENABLED && !SHORTCUT_ACTIVATION_ENABLED ? "wake-word" : "push-to-talk",
   transcriptionSend: "manual",
   language: "it",
-  wakeWord: "hei nik",
+  wakeWord: WAKE_PHRASE,
+  /*
+   * Off: an open microphone that sends the start of every sentence it hears
+   * to the cloud costs the user money for a room they are not talking to.
+   * Measured in a room with a television on: about 330 paid requests an
+   * hour. It is a choice now, made in the voice settings, where what it
+   * costs is written.
+   */
+  alwaysListen: false,
   agentChord: "mod+shift+k",
   transcriptionChord: "mod+shift+j",
   /*
@@ -131,7 +253,11 @@ export const DEFAULT_VOICE_SETTINGS: VoiceSettings = Object.freeze({
    */
   customWords: Object.freeze([]),
   speakReplies: true,
+  spokenAlerts: false,
+  replyVoice: "ugo",
   agentEngine: "auto",
+  agentSpeed: "fast",
+  codexFallback: false,
 })
 
 export interface NormalizedVoiceSettings extends VoiceSettings {
@@ -139,6 +265,36 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
   readonly settings: VoiceSettings
   /** List of repair descriptions applied in Italian for UI feedback. */
   readonly corrections: readonly string[]
+  /**
+   * What this load changed under the user, named rather than described.
+   *
+   * The interface has to find these to show them where they can be undone,
+   * and finding them by searching the Italian sentence for a word breaks the
+   * first time the sentence is reworded.
+   */
+  readonly migrations: readonly VoiceMigration[]
+}
+
+/**
+ * `wake-word`: a profile that answered everything now waits to be called.
+ * `always-listen`: a profile on the wake word now listens without being opened.
+ * `shortcut-only`: a profile on the wake word is back on the shortcut.
+ * `name-only`: a profile on the shortcut or toggle now listens for the name.
+ * `listening-off`: a profile that listened on its own no longer does.
+ */
+export type VoiceMigration = "wake-word" | "always-listen" | "shortcut-only" | "name-only" | "listening-off"
+
+/**
+ * A profile on the shortcut or toggle, moved to listening for the name: the
+ * assistant's default, always on. Its default mode becomes the agent's, since
+ * the name only calls the agent; dictation keeps its own shortcut.
+ */
+function toName(candidate: Record<string, unknown>, migrations: VoiceMigration[]): Record<string, unknown> {
+  if (!wakeWordEnabled() || shortcutActivationEnabled()) return candidate
+  if (candidate.activation !== "push-to-talk" && candidate.activation !== "toggle") return candidate
+  migrations.push("name-only")
+  // Not `alwaysListen`: the name works in a microphone the user opened.
+  return { ...candidate, activation: "wake-word", mode: "agent" }
 }
 
 /**
@@ -156,11 +312,11 @@ export interface NormalizedVoiceSettings extends VoiceSettings {
  */
 function chordProblem(chordStr: unknown): string | undefined {
   if (typeof chordStr !== "string" || chordStr.trim().length === 0) {
-    return "Manca un tasto principale."
+    return t("vui.fix.noMainKey")
   }
   const risk = describeChordRisk(chordStr.trim(), "other")
   if (risk.level !== "refuse") return undefined
-  return risk.message ?? "Scorciatoia non valida."
+  return risk.message ?? t("vui.shortcut.invalid")
 }
 
 /**
@@ -175,23 +331,74 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   const corrections: string[] = []
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    corrections.push("Impostazioni non valide o assenti: ripristinati i valori predefiniti.")
+    corrections.push(t("vui.fix.defaults"))
     return {
       ...DEFAULT_VOICE_SETTINGS,
       settings: DEFAULT_VOICE_SETTINGS,
       corrections,
+      migrations: [],
     }
   }
 
-  const candidate = raw as Record<string, unknown>
+  let candidate = raw as Record<string, unknown>
 
   // 1. Version migration
+  const migrations: VoiceMigration[] = []
   let version = candidate.version
   if (typeof version !== "number" || Number.isNaN(version)) {
-    corrections.push("Versione impostazioni mancante: impostata alla versione 1.")
+    corrections.push(t("vui.fix.noVersion"))
+    /* A profile with no version is older than any of them: a "toggle" in it
+       goes back to the shortcut like a versioned one. */
+    if (!wakeWordEnabled() && candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "push-to-talk" }
+      migrations.push("shortcut-only")
+    }
+    candidate = toName(candidate, migrations)
+    if (candidate.alwaysListen === true) {
+      candidate = { ...candidate, alwaysListen: false }
+      if (wakeWordEnabled()) migrations.push("listening-off")
+    }
     version = CURRENT_SETTINGS_VERSION
   } else if (version < CURRENT_SETTINGS_VERSION) {
-    corrections.push(`Migrata versione impostazioni da ${version} a ${CURRENT_SETTINGS_VERSION}.`)
+    // Not a repair: a newer version is not something that went wrong, and
+    // a correction is shown at startup in the warning strip.
+    /*
+     * The one migration this version carries: an assistant that answered
+     * everything it heard now waits to be called. Only "toggle" is moved —
+     * push-to-talk already has a key holding the microphone open, and a
+     * profile already on the wake word is left alone.
+     */
+    if (wakeWordEnabled() && version < 2 && candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "wake-word" }
+      migrations.push("wake-word")
+      corrections.push(
+        t("vui.fix.wakeDefault"),
+      )
+    }
+    /*
+     * Version 3: listening is always on for whoever waits for the name. Told
+     * once, where the switch that turns it off is.
+     */
+    if (wakeWordEnabled() && version < 3 && candidate.activation === "wake-word" && candidate.mode !== "transcription") {
+      migrations.push("always-listen")
+    }
+    /* Version 5: a stored "toggle" goes back to the shortcut too. */
+    if (!wakeWordEnabled() && version < 5 && candidate.activation === "toggle") {
+      candidate = { ...candidate, activation: "push-to-talk" }
+      migrations.push("shortcut-only")
+    }
+    /* Version 6: the name is the only way to start it. */
+    if (version < 6) candidate = toName(candidate, migrations)
+    /*
+     * Version 7: listening on its own is off until it is chosen. Every
+     * profile until now had it, by default or by choice, so it is turned off
+     * once and said where to turn it back on.
+     */
+    if (version < 7 && candidate.alwaysListen === true) {
+      candidate = { ...candidate, alwaysListen: false }
+      // Nothing to tell where listening for the name does not exist at all.
+      if (wakeWordEnabled()) migrations.push("listening-off")
+    }
     version = CURRENT_SETTINGS_VERSION
   }
 
@@ -201,9 +408,18 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     mode = candidate.mode
   } else {
     corrections.push(
-      `Modalità '${String(candidate.mode)}' non riconosciuta: ripristinata '${DEFAULT_VOICE_SETTINGS.mode}'.`,
+      t("vui.fix.mode", String(candidate.mode), DEFAULT_VOICE_SETTINGS.mode),
     )
     mode = DEFAULT_VOICE_SETTINGS.mode
+  }
+
+  /*
+   * Version 4, and any profile that still names the wake word while it is
+   * switched off: back to the shortcut, quietly — nothing went wrong.
+   */
+  if (!wakeWordEnabled() && candidate.activation === "wake-word") {
+    candidate = { ...candidate, activation: "push-to-talk" }
+    if (!migrations.includes("shortcut-only")) migrations.push("shortcut-only")
   }
 
   // 3. Activation
@@ -216,7 +432,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     activation = candidate.activation
   } else {
     corrections.push(
-      `Attivazione '${String(candidate.activation)}' non riconosciuta: ripristinata '${DEFAULT_VOICE_SETTINGS.activation}'.`,
+      t("vui.fix.activation", String(candidate.activation), DEFAULT_VOICE_SETTINGS.activation),
     )
     activation = DEFAULT_VOICE_SETTINGS.activation
   }
@@ -227,7 +443,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionSend = candidate.transcriptionSend
   } else {
     corrections.push(
-      `Invio trascrizione '${String(candidate.transcriptionSend)}' non valido: ripristinato '${DEFAULT_VOICE_SETTINGS.transcriptionSend}'.`,
+      t("vui.fix.send", String(candidate.transcriptionSend), DEFAULT_VOICE_SETTINGS.transcriptionSend),
     )
     transcriptionSend = DEFAULT_VOICE_SETTINGS.transcriptionSend
   }
@@ -237,18 +453,15 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (typeof candidate.language === "string" && candidate.language.trim().length > 0) {
     language = candidate.language.trim().toLowerCase()
   } else {
-    corrections.push(`Lingua non specificata: ripristinata '${DEFAULT_VOICE_SETTINGS.language}'.`)
+    corrections.push(t("vui.fix.language", DEFAULT_VOICE_SETTINGS.language))
     language = DEFAULT_VOICE_SETTINGS.language
   }
 
-  // 6. Wake word
-  let wakeWord: string
-  if (typeof candidate.wakeWord === "string" && candidate.wakeWord.trim().length > 0) {
-    wakeWord = candidate.wakeWord.trim()
-  } else {
-    corrections.push(`Parola di richiamo non valida: ripristinata '${DEFAULT_VOICE_SETTINGS.wakeWord}'.`)
-    wakeWord = DEFAULT_VOICE_SETTINGS.wakeWord
-  }
+  // 6. Wake word: fixed. Whatever was stored — "hei nik", a name the user
+  // typed — is replaced without a word; the phrase is not theirs to set now.
+  const wakeWord = WAKE_PHRASE
+  let alwaysListen = DEFAULT_VOICE_SETTINGS.alwaysListen
+  if (typeof candidate.alwaysListen === "boolean") alwaysListen = candidate.alwaysListen
 
   // 7. Agent chord shortcut
   let agentChord: string
@@ -257,7 +470,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     agentChord = String(candidate.agentChord).trim()
   } else {
     corrections.push(
-      `Scorciatoia modalità agente non utilizzabile ('${String(candidate.agentChord)}'). ${agentChordProblem} Ripristinata '${DEFAULT_VOICE_SETTINGS.agentChord}'.`,
+      t("vui.fix.agentChord", String(candidate.agentChord), agentChordProblem, DEFAULT_VOICE_SETTINGS.agentChord),
     )
     agentChord = DEFAULT_VOICE_SETTINGS.agentChord
   }
@@ -269,7 +482,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionChord = String(candidate.transcriptionChord).trim()
   } else {
     corrections.push(
-      `Scorciatoia modalità trascrizione non utilizzabile ('${String(candidate.transcriptionChord)}'). ${transcriptionChordProblem} Ripristinata '${DEFAULT_VOICE_SETTINGS.transcriptionChord}'.`,
+      t("vui.fix.transcriptionChord", String(candidate.transcriptionChord), transcriptionChordProblem, DEFAULT_VOICE_SETTINGS.transcriptionChord),
     )
     transcriptionChord = DEFAULT_VOICE_SETTINGS.transcriptionChord
   }
@@ -284,7 +497,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     backend = candidate.backend
   } else {
     corrections.push(
-      `Backend '${String(candidate.backend)}' non valido: ripristinato '${DEFAULT_VOICE_SETTINGS.backend}'.`,
+      t("vui.fix.backend", String(candidate.backend), DEFAULT_VOICE_SETTINGS.backend),
     )
     backend = DEFAULT_VOICE_SETTINGS.backend
   }
@@ -305,7 +518,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend = candidate.parakeetBackend
   } else {
     corrections.push(
-      `Backend Parakeet '${String(candidate.parakeetBackend)}' non riconosciuto: ripristinato '${DEFAULT_VOICE_SETTINGS.parakeetBackend}'.`,
+      t("vui.fix.parakeetBackend", String(candidate.parakeetBackend), DEFAULT_VOICE_SETTINGS.parakeetBackend),
     )
     parakeetBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
   }
@@ -335,10 +548,10 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
       customWords.push(word)
     }
     if (dropped > 0) {
-      corrections.push(`Parole personalizzate non testuali ignorate: ${dropped}.`)
+      corrections.push(t("vui.fix.wordsDropped", String(dropped)))
     }
   } else if (candidate.customWords !== undefined) {
-    corrections.push("Elenco di parole personalizzate non valido: svuotato.")
+    corrections.push(t("vui.fix.wordsInvalid"))
   }
 
   /*
@@ -352,7 +565,19 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (typeof candidate.speakReplies === "boolean") {
     speakReplies = candidate.speakReplies
   } else if (candidate.speakReplies !== undefined) {
-    corrections.push("Lettura delle risposte non valida: ripristinata attiva.")
+    corrections.push(t("vui.fix.speakReplies"))
+  }
+  let spokenAlerts = DEFAULT_VOICE_SETTINGS.spokenAlerts
+  if (typeof candidate.spokenAlerts === "boolean") {
+    spokenAlerts = candidate.spokenAlerts
+  } else if (candidate.spokenAlerts !== undefined) {
+    corrections.push(t("vui.fix.spokenAlerts"))
+  }
+  let replyVoice = DEFAULT_VOICE_SETTINGS.replyVoice
+  if (REPLY_VOICES.includes(candidate.replyVoice as ReplyVoice)) {
+    replyVoice = candidate.replyVoice as ReplyVoice
+  } else if (candidate.replyVoice !== undefined) {
+    corrections.push(t("vui.fix.replyVoice", String(candidate.replyVoice)))
   }
 
   /*
@@ -390,7 +615,23 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
   if (AGENT_ENGINES.includes(candidate.agentEngine as AgentEngine)) {
     agentEngine = candidate.agentEngine as AgentEngine
   } else if (candidate.agentEngine !== undefined) {
-    corrections.push(`Motore dell'agente '${String(candidate.agentEngine)}' non riconosciuto: ripristinato automatico.`)
+    corrections.push(t("vui.fix.agentEngine", String(candidate.agentEngine)))
+  }
+
+  // 16. The agent's speed: absent in older profiles, which get the fast one.
+  let agentSpeed = DEFAULT_VOICE_SETTINGS.agentSpeed
+  if (AGENT_SPEEDS.includes(candidate.agentSpeed as AgentSpeed)) {
+    agentSpeed = candidate.agentSpeed as AgentSpeed
+  } else if (candidate.agentSpeed !== undefined) {
+    corrections.push(t("vui.fix.agentSpeed", String(candidate.agentSpeed)))
+  }
+
+  // 17. The fallback to Codex on Claude plan limit: absent in older profiles, which get the default (false).
+  let codexFallback = DEFAULT_VOICE_SETTINGS.codexFallback
+  if (typeof candidate.codexFallback === "boolean") {
+    codexFallback = candidate.codexFallback
+  } else if (candidate.codexFallback !== undefined) {
+    corrections.push(t("vui.fix.codexFallback"))
   }
 
   const cleanSettings: VoiceSettings = {
@@ -400,6 +641,7 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     transcriptionSend,
     language,
     wakeWord,
+    alwaysListen,
     agentChord,
     transcriptionChord,
     backend,
@@ -407,7 +649,11 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     parakeetBackend,
     customWords,
     speakReplies,
+    spokenAlerts,
+    replyVoice,
     agentEngine,
+    agentSpeed,
+    codexFallback,
     ...(inputDeviceId ? { inputDeviceId } : {}),
     ...(outputDeviceId ? { outputDeviceId } : {}),
   }
@@ -416,5 +662,6 @@ export function normalizeSettings(raw: unknown): NormalizedVoiceSettings {
     ...cleanSettings,
     settings: cleanSettings,
     corrections,
+    migrations,
   }
 }

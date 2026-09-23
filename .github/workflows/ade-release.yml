@@ -86,6 +86,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          NAME="$(jq -r .name packages/ade/brand.json)"
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release $TAG already exists; builds will upload into it"
             exit 0
@@ -94,11 +96,11 @@ jobs:
           if [ -n "$PREVIOUS" ]; then
             NOTES="$(bun packages/ade/script/release-plan.ts notes "$PREVIOUS" "$TAG")"
           else
-            NOTES="Prima release di ADE."
+            NOTES="Prima release di $NAME."
           fi
           printf '%s\n' "$NOTES" > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
-            --title "ADE ${TAG#ade-v}" --notes-file notes.md --verify-tag
+            --title "$NAME ${TAG#ade-v}" --notes-file notes.md --verify-tag
 
   build:
     needs: draft
@@ -237,20 +239,22 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.draft.outputs.version }}"
+          NAME="$(jq -r .name packages/ade/brand.json)"
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           BUNDLE="packages/ade/src-tauri/target/${{ matrix.target }}/release/bundle"
           STAGE="ade-release"
           mkdir -p "$STAGE"
           case "${{ matrix.target }}" in
             *-apple-darwin)
               ARCH="${{ matrix.target }}"; ARCH="${ARCH%%-*}"
-              ditto -c -k --keepParent "$BUNDLE/macos/ADE.app" "$STAGE/ADE_${VERSION}_${ARCH}.app.zip"
+              ditto -c -k --keepParent "$BUNDLE/macos/$NAME.app" "$STAGE/${NAME}_${VERSION}_${ARCH}.app.zip"
               DMGROOT="$(mktemp -d)"
-              cp -R "$BUNDLE/macos/ADE.app" "$DMGROOT/"
+              cp -R "$BUNDLE/macos/$NAME.app" "$DMGROOT/"
               ln -s /Applications "$DMGROOT/Applications"
-              hdiutil create -volname ADE -srcfolder "$DMGROOT" -ov -format UDZO "$STAGE/ADE_${VERSION}_${ARCH}.dmg"
+              hdiutil create -volname "$NAME" -srcfolder "$DMGROOT" -ov -format UDZO "$STAGE/${NAME}_${VERSION}_${ARCH}.dmg"
               # The updater's bundle has no architecture in its name: give it one.
-              cp "$BUNDLE/macos/ADE.app.tar.gz" "$STAGE/ADE_${VERSION}_${ARCH}.app.tar.gz"
-              cp "$BUNDLE/macos/ADE.app.tar.gz.sig" "$STAGE/ADE_${VERSION}_${ARCH}.app.tar.gz.sig"
+              cp "$BUNDLE/macos/$NAME.app.tar.gz" "$STAGE/${NAME}_${VERSION}_${ARCH}.app.tar.gz"
+              cp "$BUNDLE/macos/$NAME.app.tar.gz.sig" "$STAGE/${NAME}_${VERSION}_${ARCH}.app.tar.gz.sig"
               ;;
             *)
               # Installers, plus the signatures of the two the updater installs:
@@ -271,6 +275,96 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          sparse-checkout: packages/ade/brand.json
+          sparse-checkout-cone-mode: false
+
+      # The page a person downloads from says what Windows will say to them,
+      # and gives them a way to check the file. Both are written while the
+      # release is still a draft, so nobody sees it without them. The Windows
+      # paragraph is keyed on the file itself: it goes away only when every
+      # Windows installer that was uploaded carries an embedded Authenticode
+      # signature, not when a secret happens to be set (see CODE_SIGNING.md).
+      # "Carries a signature" is all this checks: the certificate table is
+      # there. Whether it is valid, trusted and matches the file is not
+      # verified here; SignPath does not produce broken ones, and a real
+      # verification needs signtool or osslsigncode. The checksums cover every
+      # bundle, the updater's .app.tar.gz included, since the macOS and Linux
+      # bundles are not signed either. SHA256SUMS.txt is also an asset.
+      - name: Checksums and the warning Windows will show
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p sums && cd sums
+          for pattern in '*.exe' '*.msi' '*.dmg' '*.app.zip' '*.app.tar.gz' '*.deb' '*.rpm' '*.AppImage'; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$pattern" || true
+          done
+          NAME="$(jq -r .name "$GITHUB_WORKSPACE/packages/ade/brand.json")"
+          jq -e '.name | type == "string" and length > 0' "$GITHUB_WORKSPACE/packages/ade/brand.json" >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
+          if ! ls "${NAME}"_* >/dev/null 2>&1; then
+            echo "no bundles to sum in $TAG"
+            exit 1
+          fi
+          sha256sum "${NAME}"_* > SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+
+          # HAS_SIGNATURE: every Windows installer uploaded (the setup, and an
+          # .msi if one is ever published) has a certificate table, data
+          # directory 4 of the PE optional header. An unsigned build has none.
+          # Presence only, see above; no installer at all counts as unsigned.
+          HAS_SIGNATURE=true
+          WINDOWS_INSTALLERS=0
+          for installer in *-setup.exe *.msi; do
+            [ -f "$installer" ] || continue
+            WINDOWS_INSTALLERS=$((WINDOWS_INSTALLERS + 1))
+            python3 - "$installer" <<'PY' || HAS_SIGNATURE=false
+          import struct, sys
+          data = open(sys.argv[1], "rb").read()
+          pe = struct.unpack_from("<I", data, 0x3C)[0]
+          assert data[pe:pe + 4] == b"PE\0\0", "not a PE file"
+          optional = pe + 24
+          magic = struct.unpack_from("<H", data, optional)[0]
+          directories = optional + (112 if magic == 0x20B else 96)
+          address, size = struct.unpack_from("<II", data, directories + 4 * 8)
+          sys.exit(0 if address and size else 1)
+          PY
+          done
+          [ "$WINDOWS_INSTALLERS" -gt 0 ] || HAS_SIGNATURE=false
+          echo "windows installers: $WINDOWS_INSTALLERS, all carrying a signature: $HAS_SIGNATURE"
+
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
+          {
+            printf '\n## Prima di installare\n\n'
+            if [ "$HAS_SIGNATURE" != "true" ]; then
+              printf '%s\n\n' '**Windows.** Il setup non è ancora firmato, quindi Windows lo ferma con «PC protetto da Windows»: premi *Ulteriori informazioni* e poi *Esegui comunque*. Gli aggiornamenti dall'"'"'app non lo chiedono.'
+            fi
+            printf '%s\n\n' '**macOS.** L'"'"'app non è notarizzata: la prima volta, tasto destro sull'"'"'app e *Apri*.'
+            printf '%s\n\n' '**Impronte SHA-256** dei file qui sopra, anche in `SHA256SUMS.txt`. Per confrontare un file scaricato: su Windows `certutil -hashfile <file> SHA256`, su macOS e Linux `shasum -a 256 <file>`.'
+            printf '```\n'
+            cat SHA256SUMS.txt
+            printf '```\n'
+          } >> notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+
+      # The copyright's last year is written in brand.json, never read from
+      # the clock (a check that goes red on the first of January by itself is
+      # worse than none). This is the one moment somebody is looking at a
+      # release, so it is where a year left behind gets pointed out: a
+      # warning, not a failure.
+      - name: Copyright year
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNTIL="$(jq -r .until packages/ade/brand.json)"
+          YEAR="$(date -u +%Y)"
+          if ! [[ "$UNTIL" =~ ^[0-9]{4}$ ]] || [ "$UNTIL" -lt "$YEAR" ]; then
+            echo "::warning file=packages/ade/brand.json::copyright runs to $UNTIL and it is $YEAR: raise \"until\" and run bun run brand"
+          fi
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -286,6 +380,8 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${TAG#ade-v}"
+          NAME="$(jq -r .name packages/ade/brand.json)"
+          jq -e '.name | type == "string" and length > 0' packages/ade/brand.json >/dev/null || { echo "brand.json: name must be a non-empty string"; exit 1; }
           mkdir -p manifest && cd manifest
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig'
           BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
@@ -295,10 +391,10 @@ jobs:
               '{($key): {url: $url, signature: ($sig | rtrimstr("\n"))}}'
           }
           {
-            entry darwin-aarch64 "ADE_${VERSION}_aarch64.app.tar.gz"
-            entry darwin-x86_64 "ADE_${VERSION}_x86_64.app.tar.gz"
-            entry windows-x86_64 "ADE_${VERSION}_x64-setup.exe"
-            entry linux-x86_64 "ADE_${VERSION}_amd64.AppImage"
+            entry darwin-aarch64 "${NAME}_${VERSION}_aarch64.app.tar.gz"
+            entry darwin-x86_64 "${NAME}_${VERSION}_x86_64.app.tar.gz"
+            entry windows-x86_64 "${NAME}_${VERSION}_x64-setup.exe"
+            entry linux-x86_64 "${NAME}_${VERSION}_amd64.AppImage"
           } > entries.json
           if [ ! -s entries.json ]; then
             echo "no signed bundles in $TAG"
@@ -310,6 +406,6 @@ jobs:
           gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
           if ! gh release view ade-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create ade-updater --repo "$GITHUB_REPOSITORY" --target feat/ade --prerelease --latest=false \
-              --title "ADE updater" --notes "Manifest read by installed copies of ADE to update themselves. Not a release: see the ade-v* releases."
+              --title "$NAME updater" --notes "Manifest read by installed copies of $NAME to update themselves. Not a release: see the ade-v* releases."
           fi
           gh release upload ade-updater latest.json --clobber --repo "$GITHUB_REPOSITORY"

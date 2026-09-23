@@ -1,4 +1,5 @@
 import { AccountDB } from "./db"
+import { Effect } from "effect"
 import { normalizeServerUrl } from "./url"
 import type { AccountRow, Info, RefreshToken } from "./schema"
 
@@ -17,7 +18,7 @@ export namespace AccountRepo {
     refreshToken: RefreshToken,
     expiresIn: number,
   ): void {
-    AccountDB.persistToken(accountId, accessToken, refreshToken, expiresIn)
+    Effect.runSync(AccountDB.persistToken(accountId, accessToken, refreshToken, expiresIn))
   }
 
   // ============================================================================
@@ -28,7 +29,7 @@ export namespace AccountRepo {
    * Get an account row by ID
    */
   export function getRow(accountId: string): AccountRow | undefined {
-    return AccountDB.getAccount(accountId)
+    return Effect.runSync(AccountDB.getAccount(accountId))
   }
 
   /**
@@ -36,8 +37,8 @@ export namespace AccountRepo {
    * Consolidates config reads — reads config once instead of twice.
    */
   export function get(accountId: string): Info | undefined {
-    const config = AccountDB.getConfig()
-    const row = AccountDB.getAccount(accountId)
+    const config = Effect.runSync(AccountDB.getConfig())
+    const row = Effect.runSync(AccountDB.getAccount(accountId))
     if (!row) return undefined
 
     return {
@@ -55,8 +56,8 @@ export namespace AccountRepo {
    * Reads config once instead of a separate getActiveOrgId call.
    */
   export function list(): Info[] {
-    const config = AccountDB.getConfig()
-    return AccountDB.listAccounts().map((row) => ({
+    const config = Effect.runSync(AccountDB.getConfig())
+    return Effect.runSync(AccountDB.listAccounts()).map((row) => ({
       id: row.id as Info["id"],
       email: row.email,
       url: row.url,
@@ -79,32 +80,34 @@ export namespace AccountRepo {
     expiresIn: number,
   ): void {
     const now = Date.now()
-    AccountDB.upsertAccount({
-      id: accountId,
-      email,
-      url: normalizeServerUrl(serverUrl),
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      token_expiry: now + expiresIn * 1000,
-      created_at: now,
-      updated_at: now,
-    })
+    Effect.runSync(
+      AccountDB.upsertAccount({
+        id: accountId,
+        email,
+        url: normalizeServerUrl(serverUrl),
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_expiry: now + expiresIn * 1000,
+        created_at: now,
+        updated_at: now,
+      }),
+    )
 
     // Set as active account
-    AccountDB.setActiveAccount(accountId)
+    Effect.runSync(AccountDB.setActiveAccount(accountId))
   }
 
   /**
    * Remove an account.
    */
   export function remove(accountId: string): boolean {
-    const deleted = AccountDB.deleteAccount(accountId)
+    const deleted = Effect.runSync(AccountDB.deleteAccount(accountId))
     if (deleted) {
       // If this was the active account, clear it
-      const config = AccountDB.getConfig()
+      const config = Effect.runSync(AccountDB.getConfig())
       if (config.active_account_id === accountId) {
-        AccountDB.setActiveAccount(null)
-        AccountDB.setActiveOrg(null)
+        Effect.runSync(AccountDB.setActiveAccount(null))
+        Effect.runSync(AccountDB.setActiveOrg(null))
       }
     }
     return deleted
@@ -119,10 +122,10 @@ export namespace AccountRepo {
    * Consolidates config reads — reads config once instead of twice.
    */
   export function active(): Info | undefined {
-    const config = AccountDB.getConfig()
+    const config = Effect.runSync(AccountDB.getConfig())
     if (!config.active_account_id) return undefined
 
-    const row = AccountDB.getAccount(config.active_account_id)
+    const row = Effect.runSync(AccountDB.getAccount(config.active_account_id))
     if (!row) return undefined
 
     return {
@@ -139,7 +142,7 @@ export namespace AccountRepo {
    * Set the active account and optionally the org.
    */
   export function use(accountId: string | null, orgId?: string | null): void {
-    AccountDB.setActiveAccount(accountId)
-    AccountDB.setActiveOrg(orgId ?? null)
+    Effect.runSync(AccountDB.setActiveAccount(accountId))
+    Effect.runSync(AccountDB.setActiveOrg(orgId ?? null))
   }
 }

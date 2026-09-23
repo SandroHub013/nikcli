@@ -2,6 +2,7 @@ import { Show } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
 import "./file-pane.css"
+import { t } from "../i18n"
 
 export interface FilePaneProps {
   path: string
@@ -46,18 +47,18 @@ export function FilePane(props: FilePaneProps) {
         <h2 data-slot="pane-title" title={props.path}>
           {name()}
           <Show when={props.buffer?.dirty}>
-            <span data-slot="pane-dirty" title="Modifiche non salvate">
+            <span data-slot="pane-dirty" title={t("editor.unsaved")}>
               •
             </span>
           </Show>
         </h2>
         <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
+          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label={t("pane.close")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>

@@ -52,7 +52,7 @@ export type SessionMessageInput = Omit<SessionPending.PromptInput, "sessionID">
 export async function sessionList(query: { limit?: number; search?: string }) {
   const term = query.search?.toLowerCase(),
     sessions = []
-  for (const info of SessionRepo.listAll()) {
+  for (const info of Effect.runSync(SessionRepo.listAll())) {
     const haystack = [info.title, info.github?.fullName, info.github?.baseBranch, info.github?.headBranch]
       .filter(Boolean)
       .join(" ")
@@ -391,5 +391,5 @@ async function questionRoute(
 
 export async function sessionTodo(sessionID: string) {
   await getSession(sessionID)
-  return { todos: TodoRepo.get(sessionID) }
+  return { todos: Effect.runSync(TodoRepo.get(sessionID)) }
 }

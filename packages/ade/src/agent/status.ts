@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 /**
  * How the agent console describes what the assistant is doing right now.
  *
@@ -22,18 +23,20 @@ export interface PresenceLabel {
   tone: "idle" | "working" | "waiting" | "done" | "error"
 }
 
-const LABELS: Record<AgentPresence, PresenceLabel> = {
-  off: { text: "Microfono spento", tone: "idle" },
-  asleep: { text: "In attesa della parola di richiamo", tone: "idle" },
-  idle: { text: "In ascolto", tone: "done" },
-  listening: { text: "Ti sto ascoltando", tone: "done" },
-  confirming: { text: "Aspetto una conferma", tone: "waiting" },
-  dictating: { text: "Dettatura in corso", tone: "waiting" },
-  executing: { text: "Sto eseguendo", tone: "working" },
-}
+// Keys, not texts: the label is read in the language of the moment it is shown.
+const LABELS = {
+  off: { key: "presence.off", tone: "idle" },
+  asleep: { key: "presence.asleep", tone: "idle" },
+  idle: { key: "presence.idle", tone: "done" },
+  listening: { key: "presence.listening", tone: "done" },
+  confirming: { key: "presence.confirming", tone: "waiting" },
+  dictating: { key: "presence.dictating", tone: "waiting" },
+  executing: { key: "presence.executing", tone: "working" },
+} as const satisfies Record<AgentPresence, { key: string; tone: PresenceLabel["tone"] }>
 
 export function presenceLabel(presence: AgentPresence): PresenceLabel {
-  return LABELS[presence]
+  const { key, tone } = LABELS[presence]
+  return { text: t(key), tone }
 }
 
 /**

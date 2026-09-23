@@ -2,6 +2,7 @@ import { createSignal, Show, For } from "solid-js"
 import type { SessionDiff } from "./load"
 import type { FileDiff, Hunk } from "./diff"
 import "./diff-view.css"
+import { t } from "../i18n"
 
 export interface DiffViewProps {
   diff: SessionDiff | undefined
@@ -33,7 +34,7 @@ export function DiffView(props: DiffViewProps) {
   return (
     <div data-component="diff-view">
       <Show when={props.loading}>
-        <div data-slot="empty">Caricamento modifiche in corso...</div>
+        <div data-slot="empty">{t("review.loading")}</div>
       </Show>
       
       <Show when={!props.loading && props.diff?.error}>
@@ -41,13 +42,13 @@ export function DiffView(props: DiffViewProps) {
       </Show>
 
       <Show when={!props.loading && !props.diff?.error && (!props.diff || props.diff.files.length === 0)}>
-        <div data-slot="empty">Nessuna modifica da mostrare.</div>
+        <div data-slot="empty">{t("review.empty")}</div>
       </Show>
 
       <Show when={!props.loading && !props.diff?.error && props.diff && props.diff.files.length > 0}>
         <div data-slot="sidebar">
           <div data-slot="header">
-            Modifiche ({props.diff?.added} aggiunte, {props.diff?.removed} rimozioni)
+            {t("review.header", props.diff?.added ?? 0, props.diff?.removed ?? 0)}
           </div>
           <div data-slot="file-list">
             <For each={props.diff?.files}>
@@ -76,7 +77,7 @@ export function DiffView(props: DiffViewProps) {
         <div data-slot="content">
           <Show when={props.diff?.truncated}>
             <div data-slot="banner">
-              Il diff è troppo grande ed è stato troncato. Stai visualizzando solo l'elenco dei file.
+              {t("review.truncated")}
             </div>
           </Show>
 
@@ -86,25 +87,25 @@ export function DiffView(props: DiffViewProps) {
                 <div data-slot="file-header">
                   {file().path}
                   <Show when={file().oldPath}>
-                    <span data-slot="rename"> (rinominato da {file().oldPath})</span>
+                    <span data-slot="rename"> {t("review.renamedFrom", file().oldPath ?? "")}</span>
                   </Show>
                 </div>
                 
                 <Show when={file().binary}>
                   <div data-slot="placeholder">
-                    Il file è binario, impossibile mostrare le differenze testuali.
+                    {t("review.binary")}
                   </div>
                 </Show>
 
                 <Show when={!file().binary && props.diff?.truncated}>
                   <div data-slot="placeholder">
-                    Contenuto non disponibile (diff troppo grande).
+                    {t("review.tooLarge")}
                   </div>
                 </Show>
 
                 <Show when={!file().binary && !props.diff?.truncated && file().hunks.length === 0 && (file().added > 0 || file().removed > 0 || file().status === 'modified')}>
                    <div data-slot="placeholder">
-                    Modifiche non analizzabili o file vuoto.
+                    {t("review.unparsable")}
                   </div>
                 </Show>
 
@@ -137,7 +138,7 @@ export function DiffView(props: DiffViewProps) {
           </Show>
           <Show when={!selectedFile() && !props.diff?.truncated}>
             <div data-slot="placeholder">
-              Seleziona un file per visualizzarne il contenuto.
+              {t("review.pick")}
             </div>
           </Show>
         </div>

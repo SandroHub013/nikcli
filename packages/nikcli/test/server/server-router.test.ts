@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { companionResponse } from "../../src/server/companion"
 import { ServerRouter } from "../../src/server/server-router"
 import { Server } from "../../src/server/server"
@@ -49,14 +50,16 @@ async function withContextFixture(fn: (fixture: { directory: string; session: Se
 }
 
 function putWorkspace(session: Session.Info, config: WorkspaceDB.Info["config"]) {
-  return WorkspaceDB.upsert({
-    id: "wrk_router_context",
-    projectID: session.projectID,
-    name: "router-context",
-    branch: null,
-    timeUsed: 1,
-    config,
-  })
+  return Effect.runSync(
+    WorkspaceDB.upsert({
+      id: "wrk_router_context",
+      projectID: session.projectID,
+      name: "router-context",
+      branch: null,
+      timeUsed: 1,
+      config,
+    }),
+  )
 }
 
 describe("framework-neutral server router", () => {
@@ -140,7 +143,7 @@ describe("server request context", () => {
   it("pins concurrent session requests to their rows despite stale query and header directories", async () => {
     await withContextFixture(async ({ directory, session }) => {
       const other = { ...session, id: "ses_router_other", directory }
-      SessionRepo.upsert(other)
+      Effect.runSync(SessionRepo.upsert(other))
       const requests = [
         contextRequest(`/session/${session.id}/message`, directory),
         new Request(`http://nikcli.local/session/${session.id}`, {
@@ -183,7 +186,7 @@ describe("server request context", () => {
         type: "worktree",
         directory: path.join(directory, "workspace"),
       })
-      SessionRepo.upsert({ ...session, workspaceID: space.id })
+      Effect.runSync(SessionRepo.upsert({ ...session, workspaceID: space.id }))
       expect(await ServerRouter.context(contextRequest(`/session/${session.id}`, directory))).toEqual({
         directory: space.config.directory,
         workspaceID: space.id,
@@ -203,7 +206,7 @@ describe("server request context", () => {
         port: 4096,
         serverUrl: "http://127.0.0.1:4096",
       })
-      SessionRepo.upsert({ ...session, workspaceID: space.id })
+      Effect.runSync(SessionRepo.upsert({ ...session, workspaceID: space.id }))
       const resolved = await ServerRouter.context(contextRequest(`/session/${session.id}`, directory))
       expect(resolved.target?.type).toBe("remote")
       expect(resolved.workspaceID).toBe(space.id)
@@ -257,7 +260,12 @@ describe("server request context", () => {
       const space = putWorkspace(session, { type: "worktree", directory })
       Database.syncDb().update(workspace).set({ config: "{" }).where(eq(workspace.id, space.id)).run()
       const request = contextRequest("/path", directory, space.id)
-      await expect(ServerRouter.context(request)).rejects.toBeInstanceOf(SyntaxError)
+      // The decode failure used to reach here as the `SyntaxError` that
+      // `JSON.parse` threw. `WorkspaceDB.get` is an Effect now, so it travels
+      // as a defect and arrives wrapped. What this test is actually about is
+      // unchanged, and asserted below: a malformed record must not be served
+      // as a missing workspace.
+      await expect(ServerRouter.context(request)).rejects.toThrow()
       const response = await Server.fetch(request)
       expect(response.status).toBe(500)
       expect(await response.json()).toMatchObject({ name: "Unknown" })

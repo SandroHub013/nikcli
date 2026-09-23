@@ -1,4 +1,5 @@
 import { Runtime } from "../framework/runtime"
+import { Effect } from "effect"
 import { passthrough } from "../framework/args"
 import { Commands } from "../commands"
 import { Session } from "@/session"
@@ -182,10 +183,12 @@ export default Runtime.handler(Commands.commands["import"], async (input) => {
     }
 
     // Import into the current project regardless of where the export came from
-    SessionRepo.upsert({
-      ...exportData.info,
-      projectID: instance.project.id,
-    })
+    Effect.runSync(
+      SessionRepo.upsert({
+        ...exportData.info,
+        projectID: instance.project.id,
+      }),
+    )
 
     const projectID = instance.project.id
     for (const msg of exportData.messages) {

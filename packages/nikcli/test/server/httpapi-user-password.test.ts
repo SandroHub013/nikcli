@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -65,12 +66,12 @@ describe("POST /user/me/password", () => {
       email: "rotator@example.com",
       password: "Password1!",
     })
-    const token = UserDB.createSession(user.id, 30)
+    const token = Effect.runSync(UserDB.createSession(user.id, 30))
 
     const wrong = await post("/user/me/password", token, { current: "not-it", next: "Password2!" })
     expect(wrong.status).toBe(403)
 
-    const record = UserDB.findById(user.id)!
+    const record = Effect.runSync(UserDB.findById(user.id))!
     expect(await UserDB.verifyPassword(record, "Password1!")).toBe(true)
   })
 
@@ -80,7 +81,7 @@ describe("POST /user/me/password", () => {
       email: "shorty@example.com",
       password: "Password1!",
     })
-    const token = UserDB.createSession(user.id, 30)
+    const token = Effect.runSync(UserDB.createSession(user.id, 30))
 
     const short = await post("/user/me/password", token, { current: "Password1!", next: "short" })
     expect(short.status).toBe(400)
@@ -92,12 +93,12 @@ describe("POST /user/me/password", () => {
       email: "changer@example.com",
       password: "Password1!",
     })
-    const token = UserDB.createSession(user.id, 30)
+    const token = Effect.runSync(UserDB.createSession(user.id, 30))
 
     const changed = await post("/user/me/password", token, { current: "Password1!", next: "Password2!" })
     expect(changed.status).toBe(200)
 
-    const record = UserDB.findById(user.id)!
+    const record = Effect.runSync(UserDB.findById(user.id))!
     expect(await UserDB.verifyPassword(record, "Password2!")).toBe(true)
     expect(await UserDB.verifyPassword(record, "Password1!")).toBe(false)
   })

@@ -10,6 +10,7 @@
  * replay (capped at `SNAPSHOT_INTERVAL` events on a healthy cache).
  */
 import { Sync, type SyncEventRecord } from "./index"
+import { Effect } from "effect"
 import { SyncSnapshot, SNAPSHOT_INTERVAL, type SnapshotKey } from "./snapshot"
 import { detectSequenceGap, type SequenceGap } from "./gap"
 import { Log } from "@nikcli-ai/util/log"
@@ -30,7 +31,7 @@ export namespace SyncReducer {
     initial: S,
     projectors: Projector<S>[],
   ): Promise<{ state: S; lastSeq: number; gap?: SequenceGap }> {
-    const cached = SyncSnapshot.load(key)
+    const cached = Effect.runSync(SyncSnapshot.load(key))
     // SAFETY: the snapshot is loaded under the same `key` the projectors for
     // `S` write it under, so a cached state for this key is an `S`.
     let state: S = cached ? (cached.state as S) : initial
@@ -79,7 +80,7 @@ export namespace SyncReducer {
     if (!incomplete && (eventsSinceSnapshot >= SNAPSHOT_INTERVAL || !cached)) {
       // Persist a fresh snapshot so the next cold start can skip these
       // events entirely.
-      SyncSnapshot.save(key, lastSeq, state)
+      Effect.runSync(SyncSnapshot.save(key, lastSeq, state))
     }
 
     return incomplete ? { state, lastSeq, gap: incomplete } : { state, lastSeq }

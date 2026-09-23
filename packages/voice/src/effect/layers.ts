@@ -104,13 +104,13 @@ export function mapToVoiceError(err: unknown): VoiceError {
   if (lower.includes("chiave api openrouter mancante")) {
     return new ApiKeyMissing({ message: msg })
   }
-  if (lower.includes("autenticazione openrouter fallita") || lower.includes("401")) {
+  if (lower.includes("autenticazione openrouter fallita") || lower.includes("la chiave openrouter non funziona") || lower.includes("401")) {
     return new ApiKeyInvalid({ message: msg, cause: err })
   }
-  if (lower.includes("credito openrouter esaurito") || lower.includes("402")) {
+  if (lower.includes("credito openrouter esaurito") || lower.includes("credito openrouter è finito") || lower.includes("402")) {
     return new QuotaExhausted({ message: msg, cause: err })
   }
-  if (lower.includes("timeout") || lower.includes("scaduta per timeout")) {
+  if (lower.includes("timeout") || lower.includes("scaduta per timeout") || lower.includes("non ha risposto in")) {
     return new RequestTimeout({ message: msg })
   }
   if (lower.includes("parakeet")) {

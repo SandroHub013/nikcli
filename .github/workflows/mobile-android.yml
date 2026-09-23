@@ -101,8 +101,16 @@ jobs:
         with:
           node-version: "20"
 
+      # `packages` is pinned because the action's own default is `tools
+      # platform-tools`, and `tools` was withdrawn from the SDK repository —
+      # sdkmanager then exits 1 ("Failed to find package 'tools'") and takes the
+      # whole build with it. Gradle needs platform-tools and the command-line
+      # tools; it resolves the platform and build-tools itself from the module's
+      # compileSdk.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools cmdline-tools;latest"
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun

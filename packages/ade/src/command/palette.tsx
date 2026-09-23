@@ -3,6 +3,7 @@ import { type Command, type CommandHit, filterCommands, moveSelection } from "./
 import { groupHits, type GroupedHits } from "./group-hits"
 import { Overlay, Surface } from "../ui/layout"
 import "./palette.css"
+import { t } from "../i18n"
 
 export type { GroupedHits }
 
@@ -129,7 +130,7 @@ export function CommandPalette(props: CommandPaletteProps) {
   return (
     <Show when={props.open}>
       <Overlay data-component="palette" onClose={props.onClose}>
-        <Surface size="lg" data-slot="dialog" role="dialog" aria-modal="true" aria-label="Command Palette">
+        <Surface size="lg" data-slot="dialog" role="dialog" aria-modal="true" aria-label={t("palette.label")}>
           <div data-slot="input-wrap">
             <input
               ref={inputRef}
@@ -141,7 +142,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={onKeyDown}
-              placeholder="Cerca un comando…"
+              placeholder={t("palette.search")}
             />
           </div>
           <div data-slot="listbox" role="listbox" id="ade-cp-listbox" ref={listboxRef}>

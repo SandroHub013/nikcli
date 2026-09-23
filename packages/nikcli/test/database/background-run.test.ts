@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { Effect } from "effect"
 import { existsSync } from "fs"
 import fs from "fs/promises"
 import path from "path"
@@ -34,12 +35,12 @@ describe("background run SQL", () => {
       const { BackgroundRunRepo } = await import("@/background/repo")
       Database.syncDb()
 
-      expect(BackgroundRunRepo.get(projectID, record.id)?.prompt).toBe("Inspect the tree")
-      expect(BackgroundRunRepo.listRunning(projectID).map((row) => row.id)).toEqual([record.id])
+      expect(Effect.runSync(BackgroundRunRepo.get(projectID, record.id))?.prompt).toBe("Inspect the tree")
+      expect(Effect.runSync(BackgroundRunRepo.listRunning(projectID)).map((row) => row.id)).toEqual([record.id])
 
       const migration = (await import("@/database/migration/20260814060000_background_run")).default
       migration.up(Database.syncNative())
-      expect(BackgroundRunRepo.list(projectID)).toHaveLength(1)
+      expect(Effect.runSync(BackgroundRunRepo.list(projectID))).toHaveLength(1)
 
       expect(await fs.readFile(path.join(storage, "background_run", projectID, `${record.id}.json`), "utf8")).toContain(
         "Inspect the tree",
@@ -55,11 +56,11 @@ describe("background run SQL", () => {
 
       const projectID = "proj_no_json"
       const record = runRecord("quiet-red-owl")
-      BackgroundRunRepo.upsert(projectID, record)
+      Effect.runSync(BackgroundRunRepo.upsert(projectID, record))
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(path.join(storage, "background_run"))).toBe(false)
-      expect(BackgroundRunRepo.get(projectID, record.id)?.title).toBe("Inspect the tree")
+      expect(Effect.runSync(BackgroundRunRepo.get(projectID, record.id))?.title).toBe("Inspect the tree")
     })
   })
 
@@ -71,7 +72,7 @@ describe("background run SQL", () => {
 
       const projectID = "proj_trap"
       const record = runRecord("stale-json-run")
-      BackgroundRunRepo.upsert(projectID, { ...record, prompt: "sql-prompt" })
+      Effect.runSync(BackgroundRunRepo.upsert(projectID, { ...record, prompt: "sql-prompt" }))
 
       const storage = path.join(home, "data", "storage")
       await fs.mkdir(path.join(storage, "background_run", projectID), { recursive: true })
@@ -80,14 +81,14 @@ describe("background run SQL", () => {
         JSON.stringify({ ...record, prompt: "json-prompt" }),
       )
 
-      expect(BackgroundRunRepo.get(projectID, record.id)?.prompt).toBe("sql-prompt")
+      expect(Effect.runSync(BackgroundRunRepo.get(projectID, record.id))?.prompt).toBe("sql-prompt")
 
       const onlyJson = runRecord("json-only-run")
       await fs.writeFile(
         path.join(storage, "background_run", projectID, `${onlyJson.id}.json`),
         JSON.stringify(onlyJson),
       )
-      expect(BackgroundRunRepo.get(projectID, onlyJson.id)).toBeUndefined()
+      expect(Effect.runSync(BackgroundRunRepo.get(projectID, onlyJson.id))).toBeUndefined()
     })
   })
 
@@ -100,17 +101,21 @@ describe("background run SQL", () => {
       const projectID = "proj_mutate"
       const running = runRecord("keep-running", "ses_a")
       const other = runRecord("other-parent", "ses_b")
-      BackgroundRunRepo.upsert(projectID, running)
-      BackgroundRunRepo.upsert(projectID, other)
+      Effect.runSync(BackgroundRunRepo.upsert(projectID, running))
+      Effect.runSync(BackgroundRunRepo.upsert(projectID, other))
 
-      const updated = BackgroundRunRepo.update(projectID, running.id, (draft) => {
-        draft.status = "orphaned"
-        draft.heartbeatAt = 1
-      })
+      const updated = Effect.runSync(
+        BackgroundRunRepo.update(projectID, running.id, (draft) => {
+          draft.status = "orphaned"
+          draft.heartbeatAt = 1
+        }),
+      )
       expect(updated?.status).toBe("orphaned")
-      expect(BackgroundRunRepo.listRunning(projectID).map((row) => row.id)).toEqual([other.id])
-      expect(BackgroundRunRepo.listForParent(projectID, "ses_a").map((row) => row.id)).toEqual([running.id])
-      expect(BackgroundRunRepo.get(projectID, running.id)?.heartbeatAt).toBe(1)
+      expect(Effect.runSync(BackgroundRunRepo.listRunning(projectID)).map((row) => row.id)).toEqual([other.id])
+      expect(Effect.runSync(BackgroundRunRepo.listForParent(projectID, "ses_a")).map((row) => row.id)).toEqual([
+        running.id,
+      ])
+      expect(Effect.runSync(BackgroundRunRepo.get(projectID, running.id))?.heartbeatAt).toBe(1)
     })
   })
 })

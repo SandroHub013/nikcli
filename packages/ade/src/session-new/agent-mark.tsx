@@ -35,6 +35,8 @@
  *   pi           `pi.dev/logo-auto.svg`
  *   ohmypi       can1357/oh-my-pi, `assets/icon.svg`
  *   nikcli       `packages/console/app/src/asset/brand/nikcli-logo-dark.svg`
+ *   grok         xAI's Grok mark, from `@lobehub/icons-static-svg`, kept in
+ *                `vendor-paths.ts`. The product's mark, not the company's
  *   hermes       Nous Research's profile portrait, from `@lobehub/icons-static-svg`,
  *                kept in `vendor-paths.ts`. What stood here was the word NOUS
  *                set in a serif inside a red ring — a description of the logo,
@@ -70,6 +72,7 @@ import {
   ANTIGRAVITY_BLOBS,
   CODEX_GRADIENT,
   CODEX_PATH,
+  GROK_PATH,
   NOUS_PATHS,
 } from "./vendor-paths"
 
@@ -370,6 +373,27 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
       </svg>
     )
   },
+
+  /*
+   * xAI's Grok mark, in ink.
+   *
+   * The set ships it `currentColor` and nothing else, so there is no vendor
+   * colour to be faithful to and the theme's ink is the honest fill — the
+   * same treatment Prime, pi and Nous get.
+   */
+  grok: (size, colored) => (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill={colored() ? INK : "currentColor"}
+      fill-rule="evenodd"
+      aria-hidden="true"
+      data-mark="grok"
+    >
+      <path d={GROK_PATH} />
+    </svg>
+  ),
 
   /*
    * Nous Research's profile portrait, which is what Hermes ships under.

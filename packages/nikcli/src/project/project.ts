@@ -148,9 +148,9 @@ export namespace Project {
   }
 
   async function readDirectories(projectID: string): Promise<Directory[]> {
-    const stored = ProjectRepo.directories(projectID)
+    const stored = Effect.runSync(ProjectRepo.directories(projectID))
     if (stored) return stored
-    const project = ProjectRepo.get(projectID)
+    const project = Effect.runSync(ProjectRepo.get(projectID))
     if (!project) return []
     const canonical = await canonicalDirectory(project.canonical ?? project.worktree)
     const items: Directory[] = [{ directory: canonical }]
@@ -158,7 +158,7 @@ export namespace Project {
       const directory = await canonicalDirectory(sandbox)
       if (directory !== canonical) items.push({ directory, strategy: "git_worktree" })
     }
-    ProjectRepo.setDirectories(projectID, items)
+    Effect.runSync(ProjectRepo.setDirectories(projectID, items))
     return items
   }
 
@@ -179,7 +179,7 @@ export namespace Project {
     } else {
       items.push(item)
     }
-    ProjectRepo.setDirectories(projectID, items)
+    Effect.runSync(ProjectRepo.setDirectories(projectID, items))
     return true
   }
 
@@ -189,7 +189,7 @@ export namespace Project {
     const items = await readDirectories(projectID)
     const next = items.filter((item) => item.directory !== directory)
     if (next.length === items.length) return false
-    ProjectRepo.setDirectories(projectID, next)
+    Effect.runSync(ProjectRepo.setDirectories(projectID, next))
     return true
   }
 
@@ -371,7 +371,7 @@ export namespace Project {
       }
     })
 
-    let existing = ProjectRepo.get(id)
+    let existing = Effect.runSync(ProjectRepo.get(id))
     if (!existing) {
       existing = {
         id,
@@ -411,7 +411,7 @@ export namespace Project {
     }
     if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
     result.sandboxes = result.sandboxes.filter((x: string) => existsSync(x))
-    ProjectRepo.upsert(result)
+    Effect.runSync(ProjectRepo.upsert(result))
     await trackDirectoryImpl(id, worktree)
     if (sandbox !== worktree) await trackDirectoryImpl(id, sandbox, vcs === "git" ? "git_worktree" : undefined)
     GlobalBus.emit("event", {
@@ -454,13 +454,13 @@ export namespace Project {
   }
 
   async function migrateFromGlobal(newProjectID: string, worktree: string) {
-    const globalProject = ProjectRepo.get("global")
+    const globalProject = Effect.runSync(ProjectRepo.get("global"))
     if (!globalProject) return
 
     // Lazy: the session repo pulls the drizzle/database chain, which client
     // processes loading project.ts must not evaluate at module load.
     const { SessionRepo } = await import("../session/repo")
-    const globalSessions = SessionRepo.getByProject("global")
+    const globalSessions = Effect.runSync(SessionRepo.getByProject("global"))
     if (globalSessions.length === 0) return
 
     log.info("migrating sessions from global", {
@@ -477,7 +477,7 @@ export namespace Project {
           from: "global",
           to: newProjectID,
         })
-        SessionRepo.upsert({ ...session, projectID: newProjectID })
+        Effect.runSync(SessionRepo.upsert({ ...session, projectID: newProjectID }))
       }
     } catch (error) {
       log.error("failed to migrate sessions from global to project", {
@@ -488,13 +488,15 @@ export namespace Project {
   }
 
   async function setInitializedImpl(projectID: string) {
-    ProjectRepo.update(projectID, (draft) => {
-      draft.time.initialized = Date.now()
-    })
+    Effect.runSync(
+      ProjectRepo.update(projectID, (draft) => {
+        draft.time.initialized = Date.now()
+      }),
+    )
   }
 
   async function listImpl() {
-    const projects = ProjectRepo.list()
+    const projects = Effect.runSync(ProjectRepo.list())
     return projects.map((project: Info) => ({
       ...project,
       canonical: project.canonical ?? project.worktree,
@@ -503,18 +505,20 @@ export namespace Project {
   }
 
   async function updateImpl(input: UpdateInput) {
-    const result = ProjectRepo.update(input.projectID, (draft) => {
-      if (input.name !== undefined) draft.name = input.name
-      if (input.icon !== undefined) {
-        draft.icon = {
-          ...draft.icon,
+    const result = Effect.runSync(
+      ProjectRepo.update(input.projectID, (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.icon !== undefined) {
+          draft.icon = {
+            ...draft.icon,
+          }
+          if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
+          if (input.icon.color !== undefined) draft.icon.color = input.icon.color
         }
-        if (input.icon.url !== undefined) draft.icon.url = input.icon.url
-        if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
-        if (input.icon.color !== undefined) draft.icon.color = input.icon.color
-      }
-      draft.time.updated = Date.now()
-    })
+        draft.time.updated = Date.now()
+      }),
+    )
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
@@ -525,7 +529,7 @@ export namespace Project {
   }
 
   async function sandboxesImpl(projectID: string) {
-    const project = ProjectRepo.get(projectID)
+    const project = Effect.runSync(ProjectRepo.get(projectID))
     if (!project) return []
     const canonical = await canonicalDirectory(project.canonical ?? project.worktree)
     const valid: string[] = []
@@ -540,11 +544,13 @@ export namespace Project {
 
   async function removeSandboxImpl(projectID: string, directory: string) {
     await removeDirectoryImpl(projectID, directory)
-    const result = ProjectRepo.update(projectID, (draft) => {
-      const sandboxes = draft.sandboxes ?? []
-      draft.sandboxes = sandboxes.filter((sandbox: string) => sandbox !== directory)
-      draft.time.updated = Date.now()
-    })
+    const result = Effect.runSync(
+      ProjectRepo.update(projectID, (draft) => {
+        const sandboxes = draft.sandboxes ?? []
+        draft.sandboxes = sandboxes.filter((sandbox: string) => sandbox !== directory)
+        draft.time.updated = Date.now()
+      }),
+    )
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,

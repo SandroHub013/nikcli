@@ -65,11 +65,29 @@ export function shouldNotifyUpdate(current: string, latest: string): boolean {
 }
 
 /**
- * Checks for available updates and publishes an event so the TUI can
- * show an interactive upgrade dialog. The actual upgrade is triggered
- * by the user from the dialog (see upgradeNow).
+ * What a completed update check found, or `undefined` when there is
+ * nothing to offer (check disabled, registry unreachable, already current).
  */
-export async function upgrade(): Promise<void> {
+export type UpdateAvailable = {
+  version: string
+  method?: InstallationMethod
+  current: string
+}
+
+/**
+ * Checks for available updates and *returns* what it found, as well as
+ * publishing the event other clients (desktop, mobile, SDK consumers)
+ * subscribe to. The actual upgrade is triggered by the user from the
+ * dialog (see upgradeNow).
+ *
+ * The return value is what the TUI acts on, and it has to be: since the
+ * background service became the default, this runs in the *client*
+ * process — the upgrade replaces the installed binary, so it cannot run
+ * in the long-lived service — while the TUI's event stream comes over
+ * HTTP from that service. `Bus` is per-process, so the published event
+ * never crossed the gap and the dialog stopped appearing.
+ */
+export async function upgrade(): Promise<UpdateAvailable | undefined> {
   log.debug("Starting upgrade check")
 
   const config = await runConfig(
@@ -84,12 +102,12 @@ export async function upgrade(): Promise<void> {
 
   if (config === null) {
     log.debug("Skipping upgrade - no config available")
-    return
+    return undefined
   }
 
   if (config.autoupdate === false || Flag.NIKCLI_DISABLE_AUTOUPDATE) {
     log.debug("Auto-update disabled in config or env")
-    return
+    return undefined
   }
 
   const method = await runInstallation(
@@ -118,7 +136,7 @@ export async function upgrade(): Promise<void> {
 
   if (!latest) {
     log.debug("No latest version available")
-    return
+    return undefined
   }
 
   if (!shouldNotifyUpdate(Installation.VERSION, latest)) {
@@ -126,7 +144,7 @@ export async function upgrade(): Promise<void> {
       current: Installation.VERSION,
       latest,
     })
-    return
+    return undefined
   }
 
   log.info("Update available", {
@@ -135,12 +153,18 @@ export async function upgrade(): Promise<void> {
     method,
   })
 
-  // Always notify the TUI — it surfaces a dialog with the method-specific upgrade hint
-  await Bus.publish(Installation.Event.UpdateAvailable, {
+  const available: UpdateAvailable = {
     version: latest,
     method: method === "unknown" ? undefined : method,
     current: Installation.VERSION,
-  })
+  }
+
+  // Still published for the clients that only have the event stream (desktop,
+  // mobile, anything on the SDK). The TUI uses the return value instead — see
+  // this function's doc for why the event alone is not enough.
+  await Bus.publish(Installation.Event.UpdateAvailable, available)
+
+  return available
 }
 
 /**

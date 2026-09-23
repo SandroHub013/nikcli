@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -66,15 +67,15 @@ describe("GET /user/me/stats", () => {
       email: "friend@example.com",
       password: "Password1!",
     })
-    const token = UserDB.createSession(owner.id, 30)
+    const token = Effect.runSync(UserDB.createSession(owner.id, 30))
 
     const empty = await request("/user/me/stats", token)
     expect(empty.status).toBe(200)
     expect(await empty.json()).toEqual({ contacts: 0, unread: 0 })
 
     // `addContact` is bidirectional, so both accounts gain one.
-    UserDB.addContact(owner.id, friend.id)
-    UserDB.sendMessage(friend.id, owner.id, "hello")
+    Effect.runSync(UserDB.addContact(owner.id, friend.id))
+    Effect.runSync(UserDB.sendMessage(friend.id, owner.id, "hello"))
 
     // SAFETY: this is the body of `/user/me/stats`, the route under test.
     const filled = (await (await request("/user/me/stats", token)).json()) as {

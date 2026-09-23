@@ -10,14 +10,29 @@ import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
-import { asOneLine } from "../session/typing"
+import { typedAfter } from "../session/typed-line"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
 import { VideoPane } from "../video/video-pane"
+import { runModelCommand } from "../model3d/commands"
+import { MODEL_VERBS } from "../model3d/model"
+import { ModelPane } from "../model3d/model-pane"
+import type { DirEntry } from "../host/shell"
+import { runSimulatorCommand } from "../simulator/commands"
+import { SIMULATOR_VERBS, type DevServerGuess } from "../simulator/simulator"
+import { SimulatorPane } from "../simulator/simulator-pane"
+import { createPanelStack } from "../panels/stack"
+import { DecisionsPane } from "../decisions/decisions-pane"
+import type { DecisionsHub } from "../decisions/hub"
+import { DesignPane } from "../design/design-pane"
+import type { DesignHub } from "../design/hub"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
-import { expandPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+import { expandPane, isPanelPane, updatePane, type Pane, type Workbench as WorkbenchState } from "./state"
+import { bindChoices, ownerStatus, type BrowserController } from "../browser/binding"
+import type { BrowserRequest, Rect } from "../browser/request"
+import { t } from "../i18n"
 
 /**
  * What each tile in the grid actually draws.
@@ -55,18 +70,50 @@ export interface PaneRendererDeps {
   restart: (pane: Pane, line?: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
+  /** The native file picker, narrowed to the formats the 3D panel reads. */
+  pickModel: () => Promise<string | undefined>
+  /** A project file's bytes, for the 3D panel; absent when the host cannot. */
+  readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** A directory listing, for the 3D panel's change watcher. */
+  readDir?: (path: string) => Promise<DirEntry[]>
+  /** Where the open project's dev server probably is, for the simulator. */
+  guessServers: () => Promise<DevServerGuess[]>
+  /** The project's decisions register, shared with the bar's badge and window. */
+  decisions: DecisionsHub
+  /** The project's design proposals register, shared with the bar's badge and window. */
+  design: DesignHub
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
   /** Where an agent's `@ade …` requests are routed. */
   panels: PanelRouter
+  /** How many messages ADE is holding for each pane, for the header badge. */
+  mailWaiting: () => Record<string, number>
+  /** Shows a pane what is waiting for it, without typing anything. */
+  showMail: (id: string) => void
+  /** Writes into a session's input line on the user's behalf, and counts it as typed. */
+  typeAsUser: (id: string, text: string) => void
   /** Tells every running session that a panel it can drive has opened. */
   announceToAll: (panel: string) => void
   pluginRuntime: AdePluginRuntime
+  /** Each mounted browser pane's controls, for `@ade browser …`. */
+  browserControllers: Map<string, BrowserController>
+  /** Writes a browser request's details and picture, and queues its line for session `to` (S46). */
+  sendBrowserRequest: (
+    to: string,
+    request: BrowserRequest,
+    capture: { crop: Rect; redact: Rect[]; scale: number },
+  ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
 }
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
   const { buffers, bufferLoading, reports, permissions } = records
+  /* Panes of one kind share a panel name; see `panels/stack.ts`. */
+  const stacks = {
+    video: createPanelStack(panels, "video"),
+    model: createPanelStack(panels, "model"),
+    app: createPanelStack(panels, "app"),
+  }
 
   /*
    * The rendered tile is built once per pane and kept.
@@ -124,6 +171,11 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     const focus = () => setWb((w) => ({ ...w, focusedId: current().id }))
     const expand = () => setWb((w) => expandPane(w, current().id))
     const isFocused = () => current().id === wb().focusedId
+    /** The agent sessions of this pane's project, running or not. */
+    const projectSessions = () =>
+      wb()
+        .panes.filter((pane) => pane.workspaceId === current().workspaceId && !isPanelPane(pane) && (pane.agent ?? pane.model))
+        .map((pane) => ({ id: pane.id, title: pane.title, running: deps.isRunning(pane.id) }))
 
     const filePane = () => (
       <FilePane
@@ -149,30 +201,39 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         initialUrl={current().browserUrl}
+        initialHistory={current().browserHistory}
+        onNavigate={(url, history) =>
+          setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
+        }
         focused={isFocused()}
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}
-        /*
-         * A browser pane has no agent of its own, so what it collects goes to
-         * the session the user was last in. With nothing running there is
-         * nowhere for it to land, and saying so beats swallowing it.
-         */
-        onSendPrompt={(prompt, context) => {
-          const target = wb().panes.find((pane) => !pane.browserUrl && deps.isRunning(pane.id))
-          if (!target) return
-          const text = asOneLine(context || prompt)
-          deps.appendLine(target.id, `> ${text}`, "shell")
-          /*
-           * One line, and no terminator: the user still presses Enter
-           * themselves. `replace(/\n/g, " ")` used to stand here, which left
-           * carriage returns alone — and a CR is what a tty reads as Enter, so
-           * a page could put a second command in a style property and have it
-           * submitted along with the first.
-           */
-          deps.sessionFor(target.id)?.write(text)
-          setWb((w) => ({ ...w, focusedId: target.id }))
+        owner={ownerStatus(current().browserOwner, projectSessions())}
+        sessions={bindChoices(projectSessions())}
+        onBind={(sessionId) => {
+          const session = sessionId ? wb().panes.find((pane) => pane.id === sessionId) : undefined
+          setWb((w) =>
+            updatePane(w, current().id, {
+              browserOwner: session ? { id: session.id, title: session.title } : undefined,
+            }),
+          )
         }}
+        onFocusOwner={() => {
+          const ownerId = current().browserOwner?.id
+          if (ownerId) setWb((w) => ({ ...w, focusedId: ownerId }))
+        }}
+        onController={(controller) => {
+          if (controller) deps.browserControllers.set(current().id, controller)
+          else deps.browserControllers.delete(current().id)
+        }}
+        /*
+         * Goes to the session the pane chose: the one it is bound to, or the
+         * one the user picked when asked (S46). It arrives as a message, at
+         * the end of the session's turn; a session that stopped meanwhile
+         * reaches nobody, and the pane asks again.
+         */
+        onSendRequest={(request, capture, to) => deps.sendBrowserRequest(to, request, capture)}
       />
     )
 
@@ -195,13 +256,90 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * least surprising of the wrong answers available.
            */
           if (controller) {
-            panels.register("video", {
+            stacks.video.push(current().id, {
               verbs: VIDEO_VERBS,
               run: (request) => runVideoCommand(controller, request),
             })
             deps.announceToAll("video")
           } else {
-            panels.unregister("video")
+            stacks.video.remove(current().id)
+          }
+        }}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const modelPane = () => (
+      <ModelPane
+        id={current().id}
+        title={current().title}
+        path={current().modelPath ?? ""}
+        focused={isFocused()}
+        onOpen={(path) => setWb((w) => updatePane(w, current().id, { modelPath: path }))}
+        onPick={() => deps.pickModel()}
+        readBytes={deps.readBytes}
+        readDir={deps.readDir}
+        onCapture={(name, png) => deps.captureFrame(name, png)}
+        onController={(controller) => {
+          // One panel name for every 3D pane, as for video: the last opened answers.
+          if (controller) {
+            stacks.model.push(current().id, {
+              verbs: MODEL_VERBS,
+              run: (request) => runModelCommand(controller, request),
+            })
+            deps.announceToAll("model")
+          } else {
+            stacks.model.remove(current().id)
+          }
+        }}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const decisionsPane = () => (
+      <DecisionsPane
+        hub={deps.decisions}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const designPane = () => (
+      <DesignPane
+        hub={deps.design}
+        focused={isFocused()}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
+    const simulatorPane = () => (
+      <SimulatorPane
+        id={current().id}
+        title={current().title}
+        url={current().appUrl ?? ""}
+        deviceId={current().appDevice}
+        landscape={current().appLandscape}
+        windowSize={current().appWindow}
+        focused={isFocused()}
+        onChange={(patch) => setWb((w) => updatePane(w, current().id, patch))}
+        guessServers={() => deps.guessServers()}
+        onController={(controller) => {
+          if (controller) {
+            stacks.app.push(current().id, {
+              verbs: SIMULATOR_VERBS,
+              run: (request) => runSimulatorCommand(controller, request),
+            })
+            deps.announceToAll("app")
+          } else {
+            stacks.app.remove(current().id)
           }
         }}
         onFocus={focus}
@@ -237,14 +375,25 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         agent={current().agent}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
+        mail={deps.mailWaiting()[current().id]}
+        onMail={() => deps.showMail(current().id)}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}
         onInput={(data) => {
           const session = deps.sessionFor(current().id)
           if (!session) return
+          /*
+           * What the user has begun and not sent, counted here because here
+           * is where every keystroke passes on its way to the PTY. It holds
+           * for every agent in the catalogue and for a plain shell, since it
+           * never asks what is running: see `session/typing.ts`.
+           */
+          deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now()))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
+          // …and a turn of its own, after which a repeated `@ade` line is a new request.
+          if (data.includes("\r")) deps.panels.newTurn(current().id)
           if (data.includes("\r") && current().status === "idle") {
-            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+            deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
           }
           session.write(data)
         }}
@@ -268,14 +417,15 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
           focus()
 
-          const session = deps.sessionFor(current().id)
-          if (session) {
-            session.write(`${text} `)
+          if (deps.sessionFor(current().id)) {
+            // Into the line, not submitted: the user adds the instruction. So
+            // it is typing, and counts as such (`session/typed-line.ts`).
+            deps.typeAsUser(current().id, `${text} `)
             return
           }
           deps.appendLine(
             current().id,
-            `Nessun processo in ascolto: ${text} non è stato consegnato.`,
+            t("pane.notDelivered", text),
             "note",
           )
         }}
@@ -286,7 +436,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 // The composer types into the terminal like a keyboard would,
                 // carriage return included: the CLI cannot tell the
                 // difference, which is the point.
-                deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "In esecuzione" }))
+                deps.setWb((w) => updatePane(w, current().id, { status: "working", activity: "running" }))
                 deps.sessionFor(current().id)?.write(`${line}\r`)
               }
             : restartable()
@@ -346,7 +496,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         render={() => {
           const definition = pluginRuntime.registry.definitionFor(current().id)
           if (!definition) {
-            return <div data-slot="pane-plugin-error">Il plugin non è più caricato.</div>
+            return <div data-slot="pane-plugin-error">{t("pane.pluginGone")}</div>
           }
           const tile = pluginRuntime.registry.open().find((item) => item.id === current().id)
           return definition.render({ data: tile?.data })
@@ -364,7 +514,23 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
              * path drew a terminal in a pane with no session behind it and no
              * way to get one.
              */
-            <Show when={current().mode === "video"} fallback={sessionPane()}>
+            <Show when={current().mode === "video"} fallback={
+              <Show when={current().mode === "model"} fallback={
+                <Show when={current().mode === "app"} fallback={
+                  <Show when={current().mode === "decisions"} fallback={
+                    <Show when={current().mode === "design"} fallback={sessionPane()}>
+                      {designPane()}
+                    </Show>
+                  }>
+                    {decisionsPane()}
+                  </Show>
+                }>
+                  {simulatorPane()}
+                </Show>
+              }>
+                {modelPane()}
+              </Show>
+            }>
               {videoPane()}
             </Show>
           }>

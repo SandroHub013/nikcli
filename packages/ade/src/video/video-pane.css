@@ -18,6 +18,27 @@
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-surface);
+  /*
+   * The header's container queries drop what does not fit, as on a session.
+   * A size container no longer takes its width from its content, so the pane
+   * has to grow into its cell (`flex: 1`), or it collapses to nothing.
+   */
+  flex: 1;
+  container-type: inline-size;
+}
+
+/*
+ * The session's header pill, in the flow rather than over the content: over a
+ * terminal it covers blank lines, over a video it would cover the picture. In
+ * the flow is what a header is unless its pane lifts it (see `.pill.hA` in
+ * pane.css), so all this pane adds is the air around the pill.
+ */
+[data-component="video-pane"] > [data-slot="pane-header"] {
+  margin: 6px 6px 0;
+}
+
+[data-slot="video-header-gap"] {
+  flex: 1 1 auto;
 }
 
 [data-component="video-pane"][data-focused="true"] {

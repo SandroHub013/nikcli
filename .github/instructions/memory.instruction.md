@@ -1,8 +1,10 @@
 # nikcli Project Memory
 
-**Last updated**: 2026-06-26
-**Version**: 1.120.0 | **Branch**: `live-main` (working) / `nikoemme-main` (default per AGENTS.md)
-**Repo**: `github.com/nikomatt69/nikcli` — fork of [OpenCode](https://github.com/sst/opencode) (SST)
+**Last updated**: 2026-09-16
+**Default branch**: `live-main`
+**Repo**: `github.com/nikomatt69/nikcli` - fork of [OpenCode](https://github.com/anomalyco/opencode)
+
+Dependency versions and older module inventories below are historical notes from 2026-06-26, not a current manifest audit. Current repository AGENTS.md files take precedence.
 
 ## Overview
 
@@ -24,8 +26,8 @@
 
 ### Backend / Server
 
-- **Hono** 4.10.7 — HTTP framework (server, companion, cloud, functions, enterprise)
-- **hono-openapi** 1.1.2 — OpenAPI 3.1.1 spec generation with Zod
+- **Effect HttpApi on Bun.serve** - nikcli HTTP server; no Hono app. The contract generates OpenAPI and clients.
+- **Hono** - used by other packages historically (companion, cloud, functions, enterprise); not the nikcli server.
 - **WebSocket** (ws) — PTY, companion, remote
 - **SSH** (ssh2 1.17.0) — remote access
 - **mDNS** (bonjour-service) — server discovery
@@ -61,40 +63,43 @@
 - **Homebrew tap** — `homebrew-tap/nikcli.rb`
 - **Patched deps** — 5 active patches in `patches/` (openrouter, fff-bun, photon-node, expo-modules-jsi, ghostty-web)
 
-## Monorepo Structure (27 packages)
+## Monorepo Structure (Selected Packages)
 
-| Package                                                        | Name                             | Description                                                                                                           |
-| -------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `packages/nikcli`                                              | `nikcli`                         | **Core** — CLI (38+ subcommands), 60+ tools, Hono server + HTTP API, OpenTUI TUI, sessions, MCP/ACP, Effect migration |
-| `packages/sdk/js`                                              | `@nikcli-ai/sdk`                 | JS SDK (client/server/crypto/cloud/v2 — auto-generated from `packages/sdk/openapi.json` via `@hey-api/openapi-ts`)    |
-| `packages/llm`                                                 | `@nikcli-ai/llm`                 | LLM provider factories (modular, used by `provider/`)                                                                 |
-| `packages/util`                                                | `@nikcli-ai/util`                | Shared utilities (fn, error, retry, slug, path — Zod-based)                                                           |
-| `packages/app`                                                 | `@nikcli-ai/app`                 | Shared web UI (SolidJS)                                                                                               |
-| `packages/ui`                                                  | `@nikcli-ai/ui`                  | UI component library, icons, themes, i18n                                                                             |
-| `packages/nikcli-plugins/`                                     | `nikcli-plugins`                 | External TUI plugin package (music, greet, matrix, starwars, weather, win95, pomodoro, calcio, pills, crypto)         |
-| `packages/plugin`                                              | `@nikcli-ai/plugin`              | Plugin system core + bundled plugins (codex, cursor, github-copilot, openai, cloudflare, xai)                         |
-| `packages/desktop`                                             | `@nikcli-ai/desktop`             | Tauri v2 desktop app (16 languages)                                                                                   |
-| `packages/mobile`                                              | `@nikcli-ai/mobile`              | Expo/React Native mobile (iOS + Android) — companion with QR pairing                                                  |
-| `packages/enterprise`                                          | `@nikcli-ai/enterprise`          | Enterprise web app (SolidStart + Nitro)                                                                               |
-| `packages/cloud`                                               | `@nikcli-ai/cloud`               | Cloudflare Workers backend (D1, Durable Objects, jose JWT)                                                            |
-| `packages/companion`                                           | `@nikcli-ai/companion`           | Companion server (Hono + WebSocket + Cloudflare Workers)                                                              |
-| `packages/remote`                                              | `@nikcli-ai/remote`              | Remote terminal via WebSocket + QR code + tunnels                                                                     |
-| `packages/slack`                                               | `@nikcli-ai/slack`               | Slack bot (@slack/bolt + Cloudflare Workers)                                                                          |
-| `packages/discord`                                             | `@nikcli-ai/discord`             | Discord Gateway bot (discord.js) + invite helpers; TUI `/discord` wizard via HttpApi                                  |
-| `packages/web`                                                 | `@nikcli-ai/web`                 | Marketing/docs site at `nikcli.store` (Astro + React + Cloudflare)                                                    |
-| `packages/inference`                                           | `@nikcli-ai/inference`           | Inference service                                                                                                     |
-| `packages/inference-dashboard`                                 | `@nikcli-ai/inference-dashboard` | Analytics dashboard (Astro)                                                                                           |
-| `packages/webrenderer`                                         | `@opentui/webrenderer`           | Native Rust web renderer (wry/tao) for TUI bridge                                                                     |
-| `packages/tui-image`                                           | `@nikcli-ai/tui-image`           | TUI image rendering helpers                                                                                           |
-| `packages/terminal-control`                                    | `@nikcli-ai/terminal-control`    | Terminal control primitives                                                                                           |
-| `packages/bench-tui`                                           | `@nikcli-ai/bench-tui`           | TUI benchmarking                                                                                                      |
-| `packages/function`                                            | `@nikcli-ai/function`            | Serverless function (Hono + Cloudflare Workers)                                                                       |
-| `packages/script`                                              | `@nikcli-ai/script`              | Cross-package scripting helpers                                                                                       |
-| `packages/http-recorder`                                       | `@nikcli-ai/http-recorder`       | HTTP recording test fixture                                                                                           |
-| `packages/extensions/zed`                                      | `@nikcli-ai/zed`                 | Zed editor integration                                                                                                |
-| `packages/containers/{base,bun-node,publish,rust,tauri-linux}` | `@nikcli-ai/containers-*`        | Container build assets                                                                                                |
-| `packages/console/{app,core,function,mail,resource}`           | `@nikcli-ai/console-*`           | Console sub-monorepo (SolidStart + Drizzle + Stripe + jsx-email)                                                      |
-| `github/`                                                      | `github`                         | GitHub Action composite action                                                                                        |
+| Package                                                        | Name                             | Description                                                                                                   |
+| -------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `packages/nikcli`                                              | `nikcli`                         | Core CLI, Effect HttpApi server, sessions, tools, MCP/ACP                                                     |
+| `packages/sdk/js`                                              | `@nikcli-ai/sdk`                 | Generated HttpApi clients; consumers use `@nikcli-ai/sdk/httpapi`                                             |
+| `packages/tui`                                                 |                                  | Shared TUI components, including QR rendering                                                                 |
+| `packages/studio`                                              |                                  | Desktop UI                                                                                                    |
+| `packages/identity`                                            |                                  | Browser identity, database, and authentication contracts                                                      |
+| `packages/llm`                                                 | `@nikcli-ai/llm`                 | LLM provider factories (modular, used by `provider/`)                                                         |
+| `packages/util`                                                | `@nikcli-ai/util`                | Shared utilities (fn, error, retry, slug, path — Zod-based)                                                   |
+| `packages/app`                                                 | `@nikcli-ai/app`                 | Shared web UI (SolidJS)                                                                                       |
+| `packages/ui`                                                  | `@nikcli-ai/ui`                  | UI component library, icons, themes, i18n                                                                     |
+| `packages/nikcli-plugins/`                                     | `nikcli-plugins`                 | External TUI plugin package (music, greet, matrix, starwars, weather, win95, pomodoro, calcio, pills, crypto) |
+| `packages/plugin`                                              | `@nikcli-ai/plugin`              | Plugin system core + bundled plugins (codex, cursor, github-copilot, openai, cloudflare, xai)                 |
+| `packages/desktop`                                             | `@nikcli-ai/desktop`             | Tauri v2 desktop app (16 languages)                                                                           |
+| `packages/mobile`                                              | `@nikcli-ai/mobile`              | Expo/React Native mobile (iOS + Android) — companion with QR pairing                                          |
+| `packages/enterprise`                                          | `@nikcli-ai/enterprise`          | Enterprise web app (SolidStart + Nitro)                                                                       |
+| `packages/cloud`                                               | `@nikcli-ai/cloud`               | Cloudflare Workers backend (D1, Durable Objects, jose JWT)                                                    |
+| `packages/companion`                                           | `@nikcli-ai/companion`           | Companion server (Hono + WebSocket + Cloudflare Workers)                                                      |
+| `packages/remote`                                              | `@nikcli-ai/remote`              | Remote terminal via WebSocket + QR code + tunnels                                                             |
+| `packages/slack`                                               | `@nikcli-ai/slack`               | Slack bot (@slack/bolt + Cloudflare Workers)                                                                  |
+| `packages/discord`                                             | `@nikcli-ai/discord`             | Discord Gateway bot (discord.js) + invite helpers; TUI `/discord` wizard via HttpApi                          |
+| `packages/web`                                                 | `@nikcli-ai/web`                 | Marketing/docs site at `nikcli.store` (Astro + React + Cloudflare)                                            |
+| `packages/inference`                                           | `@nikcli-ai/inference`           | Inference service                                                                                             |
+| `packages/inference-dashboard`                                 | `@nikcli-ai/inference-dashboard` | Analytics dashboard (Astro)                                                                                   |
+| `packages/webrenderer`                                         | `@opentui/webrenderer`           | Native Rust web renderer (wry/tao) for TUI bridge                                                             |
+| `packages/tui-image`                                           | `@nikcli-ai/tui-image`           | TUI image rendering helpers                                                                                   |
+| `packages/terminal-control`                                    | `@nikcli-ai/terminal-control`    | Terminal control primitives                                                                                   |
+| `packages/bench-tui`                                           | `@nikcli-ai/bench-tui`           | TUI benchmarking                                                                                              |
+| `packages/function`                                            | `@nikcli-ai/function`            | Serverless function (Hono + Cloudflare Workers)                                                               |
+| `packages/script`                                              | `@nikcli-ai/script`              | Cross-package scripting helpers                                                                               |
+| `packages/http-recorder`                                       | `@nikcli-ai/http-recorder`       | HTTP recording test fixture                                                                                   |
+| `packages/extensions/zed`                                      | `@nikcli-ai/zed`                 | Zed editor integration                                                                                        |
+| `packages/containers/{base,bun-node,publish,rust,tauri-linux}` | `@nikcli-ai/containers-*`        | Container build assets                                                                                        |
+| `packages/console/{app,core,function,mail,resource}`           | `@nikcli-ai/console-*`           | Console sub-monorepo (SolidStart + Drizzle + Stripe + jsx-email)                                              |
+| `github/`                                                      | `github`                         | GitHub Action composite action                                                                                |
 
 ### Repository Root Structure
 
@@ -125,7 +130,7 @@
 - `--print-logs` and `--log-level` (DEBUG/INFO/WARN/ERROR) global options
 - Binary shim (`bin/nikcli`) locates platform package binary and forwards argv
 - Default command is TUI (registered as `$0 [project]` in `src/cli/cmd/tui/thread.ts:52`) — invoking `nikcli` with no subcommand lands there
-- Even local CLI execution goes through internal server API: `run` builds SDK client whose `fetch` points at `Server.App().fetch()` in `src/cli/cmd/run.ts:533`
+- Local CLI execution also uses the internal server API; do not assume legacy `Server.App().fetch()` integration still applies.
 - Uses `Installation.VERSION` (injected at build time via `NIKCLI_VERSION` env var) for `--version` flag
 
 ### CLI Startup & Auto-Upgrade Flow
@@ -178,7 +183,7 @@ Plus TUI subcommands: `tui/attach`, `tui/thread`, `debug`
 
 1. Create `src/cli/cmd/<name>.ts` exporting a yargs `CommandModule`
 2. Import it in `src/index.ts` and register via `.command(...)`
-3. For server/API-backed features: add route in `src/server/routes/` first, then call from CLI
+3. For server/API-backed features: edit the contract in `src/server/httpapi/`, regenerate clients, then call from CLI
 4. `process.on(SIGHUP)` ensures `serve` doesn't outlive its terminal
 
 ### Runtime Model
@@ -206,7 +211,7 @@ Thin wrappers over Effect 4 (`effect@4.0.0-beta.65`):
 runX<A, E>(effect) = runPromiseWithLayer(X.defaultLayer, withCurrentInstance(effect))
 ```
 
-**Bridge layer** (`src/server/httpapi/bridge.ts`): old Hono routes + new typed Hono `HttpApi` coexist during migration. The 9-epoch integration plan in `packages/nikcli/specs/integration-master-plan.md` is the authoritative sequencing — `effect/MASTER-PLAN.md` is kept for detail only.
+Architecture changes to Effect boundaries, TUI lifecycle, event delivery, rendering, or startup follow `specs/README.md` and `specs/ROADMAP.md`. Start with EOT-01 measurement; later specs are dependency-gated and remain proposed until acceptance tests land. The old Hono/HttpApi coexistence description is obsolete.
 
 ### Agent System (`src/agent/agent.ts`)
 
@@ -264,7 +269,7 @@ User-defined extensions auto-loaded from `.nikcli` directories:
 - Markdown commands from `{command,commands}/**/*.md`
 - Markdown agents from `{agent,agents}/**/*.md`
 - File-based plugins from `{plugin,plugins}/*.{ts,js}`
-- Tool plugins from `{tool,tools}/*.{js,ts}`
+- Config-dir custom tool autoload requires `NIKCLI_ALLOW_PLUGIN_AUTOLOAD=1` or `tool.allow`/`tool.pin`; see `packages/nikcli/AGENTS.md`.
 - Config plugins may trigger automatic npm package installation
 
 Runtime command catalog merges: built-ins, config commands, MCP prompts, connector prompts, skills.
@@ -274,7 +279,7 @@ Runtime command catalog merges: built-ins, config commands, MCP prompts, connect
 | Feature Type                            | Where to Add                                                                                                |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | CLI command (orchestration/UI)          | `src/cli/cmd/<name>.ts`, register in `src/index.ts`                                                         |
-| Server/API capability (CLI + TUI + SDK) | Add route in `src/server/routes/`                                                                           |
+| Server/API capability (CLI + TUI + SDK) | Edit group in `src/server/httpapi/`, then regenerate clients                                                |
 | Model-executable tool during sessions   | Add in `src/tool/<name>.ts`, register in `src/tool/registry.ts`                                             |
 | Connector-backed feature                | Extend `src/connectors/registry.ts` (surfaces in status/prompts/`use_connector` automatically)              |
 | Plugin-based extensibility              | Use config/plugin discovery from `src/config/config.ts:355` and hook lifecycle in `src/plugin/index.ts:585` |
@@ -360,48 +365,12 @@ Generic interval-based task scheduler with `Instance.state` scoping:
 - Auto-cleanup on instance disposal
 - `timer.unref()` to avoid keeping process alive
 
-### Server (`src/server/server.ts`)
+### Server and HTTP Contract
 
-Hono-based HTTP server (762 lines), `Bun.serve()` with WebSocket support:
-
-**Middleware chain:**
-
-1. Error handler (NamedError → JSON, HTTPException → response, Unknown → 500)
-2. Share redirects (`/s/:shareID` → `/share/:shareID`)
-3. Auth: mobile bearer JWT → Tailscale identity headers → HTTP Basic
-4. Request logging (except `/log`)
-5. CORS (localhost, Tailscale `.ts.net`, `*.nikcli.store`, Tauri, Capacitor, Expo)
-6. Instance/directory resolution from query params or `x-nikcli-*` headers
-7. Workspace context + Instance bootstrap
-
-**Route modules (18+):**
-| Mount | Module | Key Operations |
-|-------|--------|----------------|
-| `/global` | GlobalRoutes | health, event (SSE), dispose |
-| `/session` | SessionRoutes | CRUD, prompt, messages, fork, abort, share, revert, summarize, shell, command, init, todo, children, diff |
-| `/project` | ProjectRoutes | list, current, update |
-| `/pty` | PtyRoutes | CRUD + WebSocket connect |
-| `/config` | ConfigRoutes | get, update, providers |
-| `/experimental` | ExperimentalRoutes | tool/ids, tool/list, worktree CRUD, resource |
-| `/permission` | PermissionRoutes | list, reply |
-| `/dbedit` | DBEditRoutes | list, reply |
-| `/question` | QuestionRoutes | list, reply, reject |
-| `/provider` | ProviderRoutes | list, auth, oauth authorize/callback |
-| `/mcp` | McpRoutes | status, add, connect, disconnect, auth |
-| `/file` | FileRoutes | list, read, status, find text/files/symbols |
-| `/tui` | TuiRoutes | append-prompt, open-help/sessions/themes/models, submit/clear, execute-command, toast, publish, control |
-| `/companion` | CompanionRoutes | WebSocket chat |
-| `/mobile` | MobileRoutes | mobile-specific |
-| `/connectors` | ConnectorsRoutes | third-party integrations |
-| `/chatbot` | ChatBotRoutes | chatbot |
-| `/mcp` | McpRoutes | MCP server management |
-
-**Inline routes:** `/instance/dispose`, `/path`, `/vcs`, `/command`, `/log`, `/agent`, `/skill`, `/lsp`, `/formatter`, `/auth/:providerID` (PUT/DELETE), `/event` (SSE with 30s heartbeat)
-**Catch-all:** proxy to `app.nikcli.store` with CSP headers
-
-**Workspace Server** (`workspace-server/routes.ts`): separate Hono route for `/event` SSE endpoint with 10s heartbeat.
-
-**MDNS** (`src/server/mdns.ts`): optional mDNS publish/unpublish for server discovery.
+- `packages/nikcli/src/server/httpapi/` is the source of truth for endpoints, OpenAPI, and generated clients; runtime is Effect HttpApi on `Bun.serve`.
+- Endpoint changes require `bun run generate:httpapi-clients` from `packages/nikcli` and inclusion of generated output. Schema rules and verification are in `packages/nikcli/AGENTS.md`.
+- `bun run check:routes` runs route coverage there. `--strict` is honored as of 2026-08-17; it currently applies the same rules as default.
+- `Account.Service` and related Effect services are canonical authentication boundaries; identity changes can span `packages/nikcli` and `packages/identity`.
 
 ### Workspace System (`src/workspace/`)
 
@@ -413,12 +382,8 @@ Hono-based HTTP server (762 lines), `Bun.serve()` with WebSocket support:
 
 ### SDK (`packages/sdk/js`)
 
-Auto-generated from `packages/sdk/openapi.json` via `@hey-api/openapi-ts`:
-
-- `src/gen/` — v1 generated code
-- `src/v2/gen/` — v2 generated code (current, `NikcliClient` class)
-- Build: `packages/sdk/js/script/build.ts` runs `bun dev generate` then `@hey-api/openapi-ts`
-- Exports: `.`, `./client`, `./server`, `./crypto` (ECDH+AES-GCM), `./cloud` (multi-device sync), `./v2`, `./v2/client`, `./v2/server`
+- Consumers import `@nikcli-ai/sdk/httpapi`; there is no v2 client or hey-api generation step.
+- `packages/sdk/js/script/build.ts` regenerates from the HttpApi contract and emits `dist`.
 
 ### Plugin System (`src/plugin/`, `packages/plugin/`)
 
@@ -486,6 +451,17 @@ External TUI plugin package using OpenTUI SolidJS components:
 - `src/ide/` — IDE integration
 - `src/opentui/` — OpenTUI TUI integration (render.ts, context.ts, app.ts, dialog.ts, toast.ts)
 
+### Terminal QR Rendering (2026-09-15 Sessions)
+
+- `packages/util/src/win32.ts`: `shouldUseAsciiQR` consults `terminalRendersHalfBlockQR(env)`. Windows alone is not sufficient to force ASCII: recognized modern terminals such as WezTerm and Windows Terminal support compact half-block rendering; unknown/conhost environments retain ASCII fallback.
+- `packages/remote/src/qrcode.ts`: `generateQR` uses `shouldRenderCompactTerminalQR()` rather than a platform-only default. `packages/tui/src/component/qr.tsx` passes environment through `qrRenderMode`.
+- Terminal-detection tests must inject explicit environments (including `{}` for legacy Windows), avoiding host `process.env` contamination. Keep the Windows pairing-link fallback even when compact rendering is available.
+- The later pane-fit work adds `qrDialogBudget`, `qrFittedSize`, `qrImagePlacement`, `qrToPixelImage`, and a capability-gated Kitty image path. Both mobile-connect panels pass `maxColumns`/`maxRows` from the remaining pane budget rather than putting the QR in a scrollbox.
+- Image placement uses cell aspect `cell.height / cell.width`; a 106-column by 24-row budget at aspect 2 yields a 48-column by 24-row square image. Cell-art fallback must retain the complete symbol rather than clip modules to fit.
+- `QRCode` uses Solid `<Show>` for reactive image/cell-art switching; a one-time component-body `if (fitted().image)` does not track later changes.
+- Verification recorded on 2026-09-15: initial detection change had 12 pass, 0 fail (44 assertions) and nikcli typecheck exit 0. Later pane-fit suite had 14 pass, 0 fail (62 assertions), exit 0. The transcript ends after starting TUI typecheck: no final result or visual Windows verification is recorded. Herdr/WezTerm capability details should be rechecked before extending detection.
+- Targeted regression command: `bun test test/cli/mobile-pairing.test.ts` from `packages/nikcli`, not repository root.
+
 ### Mobile Package (`packages/mobile`)
 
 - Expo Router with routes: `index.tsx`, `connect.tsx`, `(app)/`, `+not-found.tsx`
@@ -541,27 +517,27 @@ External TUI plugin package using OpenTUI SolidJS components:
 - `bun dev` — run nikcli in dev mode (`bun run --cwd packages/nikcli --conditions=browser src/index.ts`)
 - `bun run typecheck` — `bun turbo typecheck`
 - `bun run build` per package — e.g., `bun run script/build.ts` for nikcli core
-- `./packages/sdk/js/script/build.ts` — regenerate JavaScript SDK from OpenAPI (always run after editing server endpoints in `src/server/server.ts`)
-- `bun test` — per-package tests (root explicitly exits with error; use `bun turbo test` or package-level)
+- `bun run generate:httpapi-clients` from `packages/nikcli` - regenerate clients after HTTP contract edits.
+- `bun test test/path/file.test.ts` from the relevant package - targeted tests; root `bun test` is deliberately blocked even with a package-relative file argument.
+- `bun run test:ci` from `packages/nikcli` - full CLI suite, sharded across short-lived Bun processes with `--parallel=1` and isolation; do not replace with one `bun test` process.
 - Turborepo tasks: `typecheck`, `build`, `test`
 - `tsc --noEmit` — typecheck for nikcli core (native TypeScript 7 compiler)
 - Husky pre-push hook configured
 - CI deploy: `bun sst deploy --stage=<branch>` on `dev` and `production`
-- CI tests: `bun turbo typecheck`, `bun turbo test`, plus Playwright/e2e app flow
+- `ci-pipeline` runs `script/ci-validate.ts`; the full nikcli suite is intentionally excluded because of memory growth. Keep the four targeted real-Windows suites in `windows-compat.yml`.
+- Generated client drift, formatting, lint, and typecheck are blocking validation. Every publish path validates; release deploy depends on publish, which depends on validate.
+- Railway `--detach` only confirms upload acceptance. Keep `check-railway-context.ts`, `check-docker-versions.ts`, and `railway-deploy.sh` preflight wired into validation; a missing required `RAILWAY_TOKEN` fails deployment.
 - Release/publish workflow: builds CLI artifacts first, then Tauri desktop artifacts, then completes release
 - Cross-platform CLI binary build matrix: `script/build.ts:22` (packages/nikcli)
-- Build long-running commands (archives, releases): use `timeout=3600000` (1 hour)
 
 ## Build Agent Risks / Patterns
 
-- **Root tests are blocked**: `bunfig.toml:4` redirects root test to fake path; use package-level tests or `bun turbo test`
+- **Root tests are blocked**: `bunfig.toml` redirects to `do-not-run-tests-from-root`; run targeted tests from the package and the full CLI suite via `test:ci`.
 - **Bun version pin enforced on push**: mismatched local Bun will fail pre-push/typecheck
-- **SDK is generated from CLI server/OpenAPI flow**: server endpoint edits in `src/server/server.ts` require SDK regeneration via `script/generate.ts:5` (runs `bun dev generate`, writes `openapi.json`, regenerates SDK)
+- **Generated HttpApi clients are blocking artifacts**: use the contract workflow in the Server and HTTP Contract section; do not hand-edit generated clients.
 - **Infra split across multiple deploy surfaces**: SST/Cloudflare, direct Wrangler packages, Tauri desktop, Expo mobile, Railway SSH serve, Nix packaging — edits can have cross-target consequences
 - **Nested manifests below declared workspace globs** (e.g., `packages/remote/web-client/package.json`) are internal/build-only, not first-class workspaces
 - **Config loading is side-effectful**: reading config can trigger npm package installation logic; `src/config/config.ts:203`
-- **Provider state is `Instance.state(...)` cached**: long-lived processes keep older resolved provider sets until instance disposal/recreation
-- **`models --refresh` only refreshes models.dev cache**: provider-specific catalogs like Ollama or GitHub Copilot come from their own runtime fetch paths
 
 ## Install/Release System (`packages/web/install`, `packages/web/public/install.sh`)
 
@@ -612,7 +588,7 @@ Mobile/perf specs:
 
 `packages/nikcli/specs/` (the CLI/TUI/server package — separate from the mobile specs above):
 
-- `integration-master-plan.md` — authoritative internal-refactor roadmap (9 epochs, dependency-ordered).
+- `integration-master-plan.md` - historical nine-epoch internal-refactor plan; current architecture sequencing follows `specs/README.md` and `specs/ROADMAP.md` per AGENTS.md.
 - `ux-roadmap.md` — user-facing UX / TUI / onboarding roadmap. 14+ themes (A–N) of UX items, plus 8 real bugs (theme M) found during the audit. Companion to the integration plan.
 - `tui-plugins.md`, `openapi-translation-cleanup.md` — targeted specs feeding the integration plan.
 - `effect/MASTER-PLAN.md` — Effect-migration master plan (superseded by `integration-master-plan.md` for sequencing; kept for detail).

@@ -18,6 +18,7 @@
  * thread. Pure, in a `.ts`, and tested against lines the real CLIs printed.
  */
 
+import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
@@ -38,8 +39,6 @@ export interface Runner {
   readonly label: string
   /** The executable, as the pty allowlist names it. */
   readonly command: string
-  /** Whose subscription or key it uses, said to the user in one line. */
-  readonly account: string
   /**
    * Models to offer. Empty for nikcli, whose list is asked of nikcli itself.
    * The field stays free text for the others: these CLIs accept aliases and
@@ -58,7 +57,6 @@ export const RUNNERS: readonly Runner[] = [
     id: "nikcli",
     label: "nikcli",
     command: NIKCLI_COMMAND,
-    account: "I provider collegati a nikcli (nikcli auth).",
     models: [],
     efforts: ["minimal", "low", "medium", "high", "max"],
     login: ["auth", "login"],
@@ -68,7 +66,6 @@ export const RUNNERS: readonly Runner[] = [
     id: "claude",
     label: "Claude Code",
     command: "claude",
-    account: "L'abbonamento Anthropic o la chiave API di Claude Code.",
     models: [
       "fable",
       "opus",
@@ -87,13 +84,23 @@ export const RUNNERS: readonly Runner[] = [
     id: "codex",
     label: "Codex",
     command: "codex",
-    account: "L'abbonamento ChatGPT o la chiave API di Codex.",
     models: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
     efforts: ["low", "medium", "high", "xhigh", "max"],
     login: ["login"],
     status: ["login", "status"],
   },
 ]
+
+export function runnerAccount(id: RunnerId | string): string {
+  switch (id) {
+    case "claude":
+      return t("bots.runner.account.claude")
+    case "codex":
+      return t("bots.runner.account.codex")
+    default:
+      return t("bots.runner.account.nikcli")
+  }
+}
 
 export function runnerById(id: string | undefined): Runner {
   return RUNNERS.find((runner) => runner.id === id) ?? RUNNERS[0]!
@@ -128,6 +135,13 @@ export interface TurnSpec {
    * and the project stays out of reach.
    */
   readonly outbox?: string
+  /** Claude Code sends the answer as it is written (`stream_event`), not only when each message is complete. */
+  readonly partial?: boolean
+  /**
+   * Claude Code reads its messages from stdin, one JSON line each, and stays
+   * up between them (`warm.ts`). `message` is then not passed.
+   */
+  readonly stdin?: boolean
 }
 
 /**
@@ -191,6 +205,8 @@ export function turnCommand(
        * write, and anything else refused and reported in the result.
        */
       const args = ["-p", "--output-format", "stream-json", "--verbose"]
+      if (spec.stdin) args.push("--input-format", "stream-json")
+      if (spec.partial) args.push("--include-partial-messages")
       if (bot.model) args.push("--model", bot.model)
       if (bot.effort) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
@@ -219,7 +235,7 @@ export function turnCommand(
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
-      args.push("--", message)
+      if (!spec.stdin) args.push("--", message)
       return { command: runner.command, args }
     }
     case "codex": {
@@ -309,7 +325,17 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
   let next = withSession(talk, event["session_id"])
   const message = rec(event["message"])
   switch (event["type"]) {
+    case "stream_event": {
+      // A subagent's text is not the answer.
+      if (event["parent_tool_use_id"]) return next
+      const inner = rec(event["event"])
+      if (inner?.["type"] === "content_block_start") return { ...next, streaming: "" }
+      const delta = rec(inner?.["delta"])
+      if (inner?.["type"] !== "content_block_delta" || delta?.["type"] !== "text_delta") return next
+      return { ...next, streaming: (next.streaming ?? "") + (str(delta["text"]) ?? "") }
+    }
     case "assistant": {
+      if (!event["parent_tool_use_id"]) next = { ...next, streaming: undefined }
       for (const raw of list(message?.["content"])) {
         const part = rec(raw)
         if (!part) continue
@@ -339,7 +365,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
     }
     case "result": {
       const cost = typeof event["total_cost_usd"] === "number" ? (event["total_cost_usd"] as number) : 0
-      next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost }
+      next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost, ended: true }
       const denials = list(event["permission_denials"])
       if (denials.length > 0) {
         const names = [...new Set(denials.map((d) => str(rec(d)?.["tool_name"]) ?? "tool"))].join(", ")
@@ -431,11 +457,11 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
     }
     case "turn.completed":
       /* `cached_input_tokens` is part of `input_tokens`, not on top of it. */
-      return { ...next, tokens: next.tokens + codexTokens(event["usage"]) }
+      return { ...next, tokens: next.tokens + codexTokens(event["usage"]), ended: true }
     case "turn.failed":
     case "error": {
       const text = errorText(event["error"] ?? event["message"] ?? event)
-      return { ...appendMessage(next, { role: "error", text }, at), status: "error" }
+      return { ...appendMessage(next, { role: "error", text }, at), status: "error", ...(event["type"] === "turn.failed" ? { ended: true } : {}) }
     }
     default:
       return next
@@ -455,6 +481,17 @@ export function finalText(talk: Talk): string {
     .map((message) => message.text.trim())
     .filter(Boolean)
     .join("\n\n")
+}
+
+/**
+ * The answer so far, while it is being written: `finalText` and the message
+ * still arriving. Each call extends the last one, until a message is complete.
+ */
+export function answerSoFar(talk: Talk): string {
+  const done = finalText(talk)
+  const writing = talk.streaming?.trim() ? talk.streaming.trimStart() : ""
+  if (!writing) return done
+  return done ? `${done}\n\n${writing}` : writing
 }
 
 /* ── signed in or not ───────────────────────────────────────────────────── */

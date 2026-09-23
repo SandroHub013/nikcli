@@ -20,6 +20,11 @@ import {
   MobileGithubSessionCreateResult,
   MobileGithubBranch,
   MobileGithubImport,
+  MobileGithubRerunInput,
+  MobileGithubWorkflow,
+  MobileGithubWorkflowDispatchInput,
+  MobileGithubWorkflowJob,
+  MobileGithubWorkflowRunList,
   MobileLoopGenerateInput,
   MobileLoopRuntime,
   MobileLoopRun,
@@ -155,6 +160,21 @@ export namespace MobileHttpApi {
   })
   const MobileGithubImportEffect = fromZod(MobileGithubImport).annotate({
     identifier: "MobileGithubImport",
+  })
+  const MobileGithubWorkflowEffect = fromZod(MobileGithubWorkflow).annotate({
+    identifier: "MobileGithubWorkflow",
+  })
+  const MobileGithubWorkflowRunListEffect = fromZod(MobileGithubWorkflowRunList).annotate({
+    identifier: "MobileGithubWorkflowRunList",
+  })
+  const MobileGithubWorkflowJobEffect = fromZod(MobileGithubWorkflowJob).annotate({
+    identifier: "MobileGithubWorkflowJob",
+  })
+  const MobileGithubRerunInputEffect = fromZod(MobileGithubRerunInput).annotate({
+    identifier: "MobileGithubRerunInput",
+  })
+  const MobileGithubWorkflowDispatchInputEffect = fromZod(MobileGithubWorkflowDispatchInput).annotate({
+    identifier: "MobileGithubWorkflowDispatchInput",
   })
   const MobileGithubDeviceAuthStartEffect = fromZod(MobileGithubDeviceAuthStart).annotate({
     identifier: "MobileGithubDeviceAuthStart",
@@ -502,6 +522,58 @@ export namespace MobileHttpApi {
         success: Schema.Array(MobileGithubBranchEffect),
         error: [Unauthorized, BadRequest],
       }).annotate(OpenApi.Identifier, "mobile.github.branches"),
+    )
+    .add(
+      HttpApiEndpoint.get("githubWorkflows", "/github/repos/:owner/:repo/actions/workflows", {
+        params: Schema.Struct({ owner: Schema.String, repo: Schema.String }),
+        success: Schema.Array(MobileGithubWorkflowEffect),
+        error: [Unauthorized, BadRequest],
+      }).annotate(OpenApi.Identifier, "mobile.github.actions.workflows"),
+    )
+    .add(
+      HttpApiEndpoint.get("githubWorkflowRuns", "/github/repos/:owner/:repo/actions/runs", {
+        params: Schema.Struct({ owner: Schema.String, repo: Schema.String }),
+        query: Schema.Struct({
+          branch: Schema.optional(Schema.String),
+          limit: Schema.optional(Schema.NumberFromString),
+        }),
+        success: MobileGithubWorkflowRunListEffect,
+        error: [Unauthorized, BadRequest],
+      }).annotate(OpenApi.Identifier, "mobile.github.actions.runs"),
+    )
+    .add(
+      HttpApiEndpoint.get("githubWorkflowRunJobs", "/github/repos/:owner/:repo/actions/runs/:runID/jobs", {
+        params: Schema.Struct({ owner: Schema.String, repo: Schema.String, runID: Schema.NumberFromString }),
+        success: Schema.Array(MobileGithubWorkflowJobEffect),
+        error: [Unauthorized, BadRequest],
+      }).annotate(OpenApi.Identifier, "mobile.github.actions.run.jobs"),
+    )
+    .add(
+      HttpApiEndpoint.post("githubWorkflowRunRerun", "/github/repos/:owner/:repo/actions/runs/:runID/rerun", {
+        params: Schema.Struct({ owner: Schema.String, repo: Schema.String, runID: Schema.NumberFromString }),
+        payload: MobileGithubRerunInputEffect,
+        success: Success,
+        error: [Unauthorized, BadRequest],
+      }).annotate(OpenApi.Identifier, "mobile.github.actions.run.rerun"),
+    )
+    .add(
+      HttpApiEndpoint.post("githubWorkflowRunCancel", "/github/repos/:owner/:repo/actions/runs/:runID/cancel", {
+        params: Schema.Struct({ owner: Schema.String, repo: Schema.String, runID: Schema.NumberFromString }),
+        success: Success,
+        error: [Unauthorized, BadRequest],
+      }).annotate(OpenApi.Identifier, "mobile.github.actions.run.cancel"),
+    )
+    .add(
+      HttpApiEndpoint.post(
+        "githubWorkflowDispatch",
+        "/github/repos/:owner/:repo/actions/workflows/:workflowID/dispatch",
+        {
+          params: Schema.Struct({ owner: Schema.String, repo: Schema.String, workflowID: Schema.String }),
+          payload: MobileGithubWorkflowDispatchInputEffect,
+          success: Success,
+          error: [Unauthorized, BadRequest],
+        },
+      ).annotate(OpenApi.Identifier, "mobile.github.actions.workflow.dispatch"),
     )
     .add(
       HttpApiEndpoint.get("githubImports", "/github/imports", {

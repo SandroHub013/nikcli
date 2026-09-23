@@ -14,7 +14,14 @@ export {
   probeTunnel,
   type TunnelResult,
 } from "./tunnel"
-export { generateQR, generateQRDataURL, generateQRMatrix, renderSessionCard, type QROptions } from "./qrcode"
+export {
+  generateQR,
+  generateQRDataURL,
+  generateQRMatrix,
+  renderSessionCard,
+  shouldRenderCompactTerminalQR,
+  type QROptions,
+} from "./qrcode"
 export type { RemoteSession, TunnelProvider } from "./types"
 
 export interface TerminalConnection {

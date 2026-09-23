@@ -11,6 +11,8 @@
  */
 
 import { existsSync, readFileSync } from "fs"
+import { homedir } from "os"
+import { delimiter, join } from "path"
 
 // ─── Redaction ──────────────────────────────────────────────────────────────
 
@@ -125,6 +127,18 @@ async function main() {
   }
   console.log("✅ nikcli installed")
 
+  // The installer drops the binary in ~/.nikcli/bin and appends that to the shell profile —
+  // which this already-running process never re-reads. Spawning "nikcli" by name therefore
+  // died with `Executable not found in $PATH` on every autofix run. Resolve the binary and
+  // prepend its directory, so nikcli and anything it shells out to both find it.
+  const nikcliBinDir = join(homedir(), ".nikcli", "bin")
+  const nikcliBin = join(nikcliBinDir, "nikcli")
+  if (!existsSync(nikcliBin)) {
+    console.error(`nikcli not found at ${nikcliBin} after install`)
+    process.exit(1)
+  }
+  const nikcliPath = `${nikcliBinDir}${delimiter}${process.env.PATH ?? ""}`
+
   // Step 3: Run nikcli headless repair
   const model = process.env.NIKCLI_AUTOFIX_MODEL || "minimax-coding-plan/MiniMax-M3"
   const prompt = [
@@ -141,11 +155,12 @@ async function main() {
 
   console.log(`▸ Running nikcli autofix with model: ${model}`)
 
-  const nikcliProc = Bun.spawn(["nikcli", "run", "--command", prompt, "--model", model, "--format", "json"], {
+  const nikcliProc = Bun.spawn([nikcliBin, "run", "--command", prompt, "--model", model, "--format", "json"], {
     stdout: "pipe",
     stderr: "pipe",
     env: {
       ...process.env,
+      PATH: nikcliPath,
       MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
       TERM: "dumb",
       CI: "true",

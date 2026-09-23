@@ -36,6 +36,7 @@ export function normalizeAgentId(raw?: string): string {
   if (s.includes("claude")) return "claude-code"
   if (s.includes("codex") || s.includes("openai")) return "codex"
   if (s.includes("opencode")) return "opencode"
+  if (s.includes("grok") || s.includes("xai")) return "grok"
   if (s.includes("agy") || s.includes("antigravity")) return "agy"
   if (s.includes("hermes") || s.includes("nous")) return "hermes"
   if (s.includes("kimi") || s.includes("moonshot")) return "kimi"

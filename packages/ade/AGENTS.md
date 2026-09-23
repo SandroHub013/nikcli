@@ -44,6 +44,22 @@ bun run test:app list     # every worktree's instance
 bun run test:app stop     # stop this worktree's instance, and only that
 ```
 
+To drive the open window from a terminal (type into a pane, read its
+terminal, read ADE's notes, screenshot), after `test:app --cdp`:
+
+```
+bun scripts/drive-test-app.ts panes
+bun scripts/drive-test-app.ts type 1 'Esegui: ade-msg ask 2 "rispondi PRONTA"'
+bun scripts/drive-test-app.ts text 2      # the pane's visible terminal rows
+bun scripts/drive-test-app.ts notes 2     # ADE's notes beside it
+```
+
+It finds the port in `.ade-test/record.json`, refuses any window that is not
+a test build, and exits 1 at once when nothing listens. The header of the
+script says the rest, including the two things that cost half an hour: a
+Rust change needs `stop` and a restart (about three minutes), and the panes
+are real sessions on the user's subscription.
+
 - Port, WebView2 profile, temp folder and log are derived from the worktree
   path and live in `.ade-test/` at its root. The window title and the TEST
   badge name the worktree, so several open instances can be told apart.
@@ -73,7 +89,7 @@ bun run test:app stop     # stop this worktree's instance, and only that
 ## Workflow
 
 1. Change the code on the ADE branch (`feat/ade`).
-2. Try it in ADE Test (`bun run native:dev` from this directory).
+2. Try it in ADE Test (`bun run test:app` from this directory: one instance per worktree, see below).
 3. Before committing, run from this directory: `bun run typecheck` and
    `bun run test`; from `../voice`: `bun run typecheck` and `bun run test`.
    For Rust changes, `cargo check` and `cargo test` in `src-tauri`.

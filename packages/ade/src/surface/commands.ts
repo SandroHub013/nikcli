@@ -1,8 +1,10 @@
+import { BRAND } from "../brand"
 import type { Command } from "../command/registry"
 import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
 import type { RecentEntry } from "../host/recent"
-import { ADE_VIEWS, ADE_VIEW_LABELS, nextView, type Workbench } from "./state"
+import { t } from "../i18n"
+import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type AdeView, type Workbench } from "./state"
 
 export interface SurfaceCommand extends Command {
   /** Why the command cannot run now. Shown instead of hiding the row. */
@@ -37,8 +39,16 @@ export interface CommandContext {
   voiceAvailable?: boolean
   voiceActive?: boolean
   voiceChord?: string
+  /** True while a take is being recorded (S36), so the palette offers to stop it. */
+  recording?: boolean
+  /** The chosen quality, written out with its size per minute. */
+  recordQuality?: string
+  /** The microphone is on for the takes the user starts. */
+  recordMic?: boolean
   /** Commands contributed by loaded plugins. Empty when none are loaded. */
   pluginCommands?: PluginCommandEntry[]
+  /** The sections that can be reached. `VISIBLE_VIEWS` unless a test injects the other branch. */
+  views?: readonly AdeView[]
 }
 
 /**
@@ -86,56 +96,57 @@ export function keepsPaletteOpen(commandId: string): boolean {
  */
 export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
   const { workbench, recents, hasHost, running, platform } = ctx
+  const views = ctx.views ?? VISIBLE_VIEWS
   const focusedPane = workbench.focusedId
     ? workbench.panes.find((pane) => pane.id === workbench.focusedId)
     : undefined
   const focusedRuns = !!focusedPane && running.has(focusedPane.id)
-  const desktopOnly = hasHost ? undefined : "Richiede l'app desktop"
+  const desktopOnly = hasHost ? undefined : t("palette.desktopOnly")
 
   const commands: SurfaceCommand[] = [
     {
       id: "session.new",
-      title: "Nuova sessione",
-      group: "Sessione",
-      keywords: ["avvia", "agente", "lancia"],
+      title: t("palette.session.new"),
+      group: t("palette.group.session"),
+      keywords: ["avvia", "agente", "lancia", "start", "agent", "launch"],
       shortcut: shortcutFor("session.new", platform),
     },
     {
       id: "project.open",
-      title: "Apri progetto",
-      group: "Progetto",
-      keywords: ["cartella", "repository"],
+      title: t("palette.project.open"),
+      group: t("palette.group.project"),
+      keywords: ["cartella", "repository", "folder"],
       enabled: hasHost,
       disabledReason: desktopOnly,
     },
     {
       id: "pane.close",
-      title: "Chiudi pannello",
-      group: "Pannello",
+      title: t("palette.pane.close"),
+      group: t("palette.group.pane"),
       enabled: !!focusedPane,
-      disabledReason: focusedPane ? undefined : "Nessun pannello a fuoco",
+      disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.close", platform),
     },
     {
       id: "pane.expand",
-      title: workbench.expandedId ? "Riduci pannello" : "Espandi pannello",
-      group: "Pannello",
+      title: workbench.expandedId ? t("palette.pane.shrink") : t("palette.pane.expand"),
+      group: t("palette.group.pane"),
       enabled: !!focusedPane,
-      disabledReason: focusedPane ? undefined : "Nessun pannello a fuoco",
+      disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.expand", platform),
     },
     {
       id: "pane.rename",
-      title: "Rinomina sessione",
-      group: "Pannello",
+      title: t("palette.pane.rename"),
+      group: t("palette.group.pane"),
       enabled: !!focusedPane,
-      disabledReason: focusedPane ? undefined : "Nessun pannello a fuoco",
+      disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.rename", platform),
     },
     {
       id: "view.toggle",
-      title: `Sezione successiva (${ADE_VIEW_LABELS[nextView(workbench.view)]})`,
-      group: "Vista",
+      title: t("palette.view.next", ADE_VIEW_LABELS[nextView(workbench.view, views)]),
+      group: t("palette.group.view"),
       shortcut: shortcutFor("view.toggle", platform),
     },
     /*
@@ -147,54 +158,138 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
      * already open is offered as disabled rather than hidden, so the list does
      * not change shape as you move around it.
      */
-    ...ADE_VIEWS.map((view) => ({
+    ...views.map((view) => ({
       id: `view.${view}`,
-      title: `Vai a ${ADE_VIEW_LABELS[view]}`,
-      group: "Vista",
+      title: t("palette.view.goTo", ADE_VIEW_LABELS[view]),
+      group: t("palette.group.view"),
       enabled: workbench.view !== view,
-      disabledReason: workbench.view === view ? "Sei già qui" : undefined,
+      disabledReason: workbench.view === view ? t("palette.view.here") : undefined,
     })),
     {
       id: "theme.toggle",
-      title: "Cambia tema",
-      group: "Vista",
-      keywords: ["chiaro", "scuro"],
+      title: t("palette.theme.toggle"),
+      group: t("palette.group.view"),
+      keywords: ["chiaro", "scuro", "vetro", "light", "dark", "glass", "theme"],
       shortcut: shortcutFor("theme.toggle", platform),
     },
     {
       id: "voice.toggle",
-      title: ctx.voiceActive ? "Disattiva il controllo vocale" : "Attiva il controllo vocale",
-      group: "Vista",
-      keywords: ["voce", "microfono", "audio", "parla"],
+      title: ctx.voiceActive ? t("palette.voice.off") : t("palette.voice.on"),
+      group: t("palette.group.view"),
+      keywords: ["voce", "microfono", "audio", "parla", "voice", "microphone", "speak"],
       enabled: ctx.voiceAvailable !== false,
-      disabledReason: ctx.voiceAvailable !== false ? undefined : "Riconoscimento vocale non supportato da questo browser",
+      disabledReason: ctx.voiceAvailable !== false ? undefined : t("palette.voice.unsupported"),
       shortcut: shortcutFor("voice.toggle", platform, ctx.voiceChord),
     },
     {
+      id: "record.toggle",
+      title: ctx.recording ? t("palette.record.stop") : t("palette.record.start"),
+      group: t("palette.group.view"),
+      keywords: ["video", "registra", "schermo", "cattura", "demo", "pubblicità", "record", "screen", "capture", "promo"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
+    },
+    {
+      id: "record.quality",
+      title: ctx.recordQuality ? t("palette.record.qualityIs", ctx.recordQuality) : t("palette.record.quality"),
+      group: t("palette.group.view"),
+      keywords: ["video", "qualità", "fps", "peso", "dimensione", "quality", "size"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
+    },
+    {
+      id: "record.export",
+      title: t("palette.record.export"),
+      group: t("palette.group.view"),
+      keywords: ["video", "esporta", "zoom", "clic", "pubblicità", "promo", "export", "click"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
+    },
+    {
+      id: "record.mic",
+      title: ctx.recordMic ? t("palette.record.micOff") : t("palette.record.micOn"),
+      group: t("palette.group.view"),
+      keywords: ["video", "registra", "microfono", "audio", "voce", "record", "microphone"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
+    },
+    {
+      id: "record.folder",
+      title: t("palette.record.folder"),
+      group: t("palette.group.view"),
+      keywords: ["video", "registra", "cartella", "salva", "folder", "save"],
+      enabled: ctx.hasHost,
+      disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
+    },
+    {
       id: "voice.settings",
-      title: "Impostazioni vocali",
-      group: "Vista",
-      keywords: ["voce", "impostazioni", "microfono", "audio", "configurazione"],
+      title: t("palette.voice.settings"),
+      group: t("palette.group.view"),
+      keywords: ["voce", "impostazioni", "microfono", "audio", "configurazione", "voice", "settings", "microphone"],
     },
     {
       id: "browser.new",
-      title: "Apri browser",
-      group: "Pannello",
-      keywords: ["anteprima", "localhost"],
+      title: t("palette.browser.new"),
+      group: t("palette.group.pane"),
+      keywords: ["anteprima", "localhost", "preview"],
     },
     {
       id: "video.new",
-      title: "Apri video",
-      group: "Pannello",
-      keywords: ["riproduttore", "player", "registrazione", "mp4", "fotogramma"],
+      title: t("palette.video.new"),
+      group: t("palette.group.pane"),
+      keywords: ["riproduttore", "player", "registrazione", "mp4", "fotogramma", "recording", "frame"],
+    },
+    {
+      id: "model.new",
+      title: t("palette.model.new"),
+      group: t("palette.group.pane"),
+      keywords: ["3d", "gltf", "glb", "obj", "stl", "fbx", "mesh", "visualizzatore", "model", "viewer"],
+    },
+    {
+      id: "app.new",
+      title: t("palette.app.new"),
+      group: t("palette.group.pane"),
+      keywords: ["simulatore", "emulatore", "telefono", "mobile", "expo", "tauri", "dispositivo", "finestra", "simulator", "emulator", "phone", "device", "window"],
+    },
+    {
+      id: "decisions.open",
+      title: t("palette.decisions.open"),
+      group: t("palette.group.pane"),
+      keywords: ["decisioni", "decidere", "scelte", "domande", "master", "bearings", "rispondi", "decisions", "questions", "answer"],
+    },
+    {
+      id: "decisions.pane",
+      title: t("palette.decisions.pane"),
+      group: t("palette.group.pane"),
+      keywords: ["decisioni", "registro", "risposte", "rimandate", "chiuse", "bearings", "decisions", "log", "answers"],
+    },
+    {
+      id: "design.open",
+      title: t("palette.design.open"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "proposte", "varianti", "anteprima", "mockup", "bozza", "proposals", "preview", "variants"],
+    },
+    {
+      id: "design.pane",
+      title: t("palette.design.pane"),
+      group: t("palette.group.pane"),
+      keywords: ["design", "pannello", "registro", "varianti", "anteprime", "panel", "log"],
+    },
+    {
+      id: "update.check",
+      title: t("palette.update.check"),
+      group: BRAND.name,
+      keywords: ["aggiornamento", "versione", "release", "novità", "installa", "update", "version", "install"],
+      enabled: hasHost,
+      disabledReason: desktopOnly,
     },
     {
       id: "process.kill",
-      title: "Uccidi processo",
-      group: "Processo",
-      keywords: ["ferma", "termina"],
+      title: t("palette.process.kill"),
+      group: t("palette.group.process"),
+      keywords: ["ferma", "termina", "stop", "kill", "terminate"],
       enabled: focusedRuns,
-      disabledReason: focusedRuns ? undefined : "Il pannello a fuoco non ha un processo vivo",
+      disabledReason: focusedRuns ? undefined : t("palette.process.none"),
     },
   ]
 
@@ -202,7 +297,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     commands.push({
       id: `project.recent.${recent.root}`,
       title: recent.name,
-      group: "Progetti recenti",
+      group: t("palette.group.recent"),
       enabled: hasHost,
       disabledReason: desktopOnly,
       description: recent.root,

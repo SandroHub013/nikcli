@@ -74,6 +74,17 @@ export interface Talk {
    * are kept here until they parse as one object again.
    */
   readonly partial?: string
+  /**
+   * The CLI has given its final event for the turn (Claude Code's `result`,
+   * Codex's `turn.completed`). What follows is the process tidying up.
+   */
+  readonly ended?: boolean
+  /**
+   * The answer being written, before its message is complete: Claude Code's
+   * text deltas, for a turn that asked for them. Gone once the whole message
+   * arrives.
+   */
+  readonly streaming?: string
 }
 
 export function emptyTalk(): Talk {
@@ -120,6 +131,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     updatedAt: at,
     problem: undefined,
     permission: undefined,
+    ended: undefined,
   }
 }
 

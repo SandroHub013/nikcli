@@ -204,11 +204,11 @@ export namespace Routine {
   export async function list(instance: InstanceContext): Promise<Record[]> {
     // Resolve the project id in the caller's instance scope, exactly like
     // `LoopManager.list` (`src/loop/manager.ts`).
-    return RoutineRepo.list(instance.project.id)
+    return Effect.runSync(RoutineRepo.list(instance.project.id))
   }
 
   export async function get(instance: InstanceContext, id: string): Promise<Record | undefined> {
-    return RoutineRepo.get(instance.project.id, id)
+    return Effect.runSync(RoutineRepo.get(instance.project.id, id))
   }
 
   export async function getByToken(instance: InstanceContext, token: string): Promise<Record | null> {
@@ -250,7 +250,7 @@ export namespace Routine {
       updatedAt: now,
     }
 
-    RoutineRepo.upsert(instance.project.id, record)
+    Effect.runSync(RoutineRepo.upsert(instance.project.id, record))
     log.info("created", { id, name: record.name })
     registerScheduler(record)
     return record
@@ -258,14 +258,16 @@ export namespace Routine {
 
   export async function update(instance: InstanceContext, id: string, input: UpdateInput): Promise<Record> {
     if (input.triggers) validateTriggers(input.triggers)
-    const record = RoutineRepo.update(instance.project.id, id, (draft) => {
-      if (input.name !== undefined) draft.name = input.name
-      if (input.prompt !== undefined) draft.prompt = input.prompt
-      if (input.triggers !== undefined) draft.triggers = input.triggers
-      if (input.paused !== undefined) draft.paused = input.paused
-      if (input.model !== undefined) draft.model = input.model
-      draft.updatedAt = Date.now()
-    })
+    const record = Effect.runSync(
+      RoutineRepo.update(instance.project.id, id, (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.prompt !== undefined) draft.prompt = input.prompt
+        if (input.triggers !== undefined) draft.triggers = input.triggers
+        if (input.paused !== undefined) draft.paused = input.paused
+        if (input.model !== undefined) draft.model = input.model
+        draft.updatedAt = Date.now()
+      }),
+    )
     if (!record) missing(id)
     registerScheduler(record)
     return record
@@ -273,7 +275,7 @@ export namespace Routine {
 
   export async function remove(instance: InstanceContext, id: string): Promise<void> {
     unregisterScheduler(id)
-    RoutineRepo.remove(instance.project.id, id)
+    Effect.runSync(RoutineRepo.remove(instance.project.id, id))
     log.info("removed", { id })
   }
 
@@ -320,11 +322,13 @@ export namespace Routine {
       }),
     )
 
-    const updated = RoutineRepo.update(instance.project.id, id, (draft) => {
-      draft.lastRunAt = Date.now()
-      draft.lastSessionID = session.id
-      draft.updatedAt = Date.now()
-    })
+    const updated = Effect.runSync(
+      RoutineRepo.update(instance.project.id, id, (draft) => {
+        draft.lastRunAt = Date.now()
+        draft.lastSessionID = session.id
+        draft.updatedAt = Date.now()
+      }),
+    )
     if (!updated) missing(id)
 
     return session

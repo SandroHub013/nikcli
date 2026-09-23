@@ -9,6 +9,9 @@ import { asOneLine, asSubmittedLine } from "../session/typing"
 import { findByName } from "../search/find"
 import { walkProject } from "../search/walk"
 import {
+  VISIBLE_VIEWS,
+  isPanelPane,
+  reachableView,
   setColumns as updateColumns,
   updatePane,
   type AdeView,
@@ -17,6 +20,7 @@ import {
 import { awaitPaneReply } from "./await-reply"
 import { createVoiceAgent, type VoiceAgent } from "./agent"
 import { listProjectsFrom, resolveAgentId, resolveProject } from "./resolve"
+import { locale, t } from "../i18n"
 
 /**
  * External dependencies provided by Workbench to avoid direct global state coupling.
@@ -43,6 +47,8 @@ export interface AdeVoiceHostDeps {
    * absent, see `listAgents`.
    */
   agentAvailability?: () => AgentStatus[] | undefined
+  /** Whether to retry on Codex when Claude hits its plan rate limit. */
+  codexFallback?: () => boolean
   /** Opens a project already on disk, keeping the panes of the one being left. */
   switchProject?: (root: string) => Promise<void>
   /**
@@ -53,6 +59,8 @@ export interface AdeVoiceHostDeps {
    * implementation of it grow here.
    */
   openAgentSession?: (input: { agentId: string; task: string }) => { paneId: string; title: string }
+  /** Explicit app locale resolver, defaults to global locale() */
+  locale?: () => "it" | "en"
 }
 
 const ITALIAN_NUMBERS: Record<number, string> = {
@@ -67,6 +75,20 @@ const ITALIAN_NUMBERS: Record<number, string> = {
   8: "otto",
   9: "nove",
   10: "dieci",
+}
+
+const ENGLISH_NUMBERS: Record<number, string> = {
+  0: "zero",
+  1: "one",
+  2: "two",
+  3: "three",
+  4: "four",
+  5: "five",
+  6: "six",
+  7: "seven",
+  8: "eight",
+  9: "nine",
+  10: "ten",
 }
 
 /**
@@ -87,6 +109,12 @@ function paneElement(paneId: string): HTMLElement | null {
 /**
  * Creates an implementation of VoiceHost wired to the ADE Workbench.
  */
+/** Commands whose result is a pane or the launch form, both shown only in the Code view. */
+const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model.new", "app.new", "pane.expand"])
+
+/** How long a warm agent waits for the project before starting without one. */
+const PREPARE_WAIT_MS = 30_000
+
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
    * The agent that answers what the grammar cannot, built on first use.
@@ -96,12 +124,19 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * gets that far.
    */
   let agent: Promise<VoiceAgent> | undefined
+  /* Closed with the window: a process left waiting would outlive the app until its idle timer. */
+  const warmClaude = <T extends { close: () => void }>(warm: T): T => {
+    if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
+    return warm
+  }
   const voiceAgent = () =>
-    (agent ??= import("../bots/turn").then(({ runTurn }) =>
+    (agent ??= Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
       createVoiceAgent({
         runTurn,
+        warm: warmClaude(createWarmClaude()),
         statuses: () => deps.agentAvailability?.(),
         cwd: () => deps.project()?.root,
+        codexFallback: () => deps.codexFallback?.() ?? false,
       }),
     ))
 
@@ -110,7 +145,31 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       return (await voiceAgent()).ask(request)
     },
 
+    prepareAgent(request) {
+      /*
+       * At start-up the project may not be open yet, and a process started
+       * without it would be replaced at the first sentence. Waited for, up to
+       * half a minute, then started where the turn will run.
+       */
+      void (async () => {
+        for (let waited = 0; !deps.project()?.root && waited < PREPARE_WAIT_MS; waited += 500) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+        ;(await voiceAgent()).prepare(request)
+      })()
+    },
+
+    releaseAgent() {
+      void agent?.then((ready) => ready.release())
+    },
+
     async runCommand(id: string): Promise<void> {
+      /*
+       * What these open lives in the grid, and the grid is only on screen in
+       * the Code view. Said from the Agent view, where the voice console is,
+       * «apri il browser» answered «aperto» and the user saw nothing change.
+       */
+      if (OPENS_IN_GRID.has(id) && deps.wb().view !== "code") deps.setWb((w) => ({ ...w, view: "code" }))
       await deps.runCommand(id)
     },
 
@@ -227,7 +286,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * as Enter — one dictated sentence could arrive as two submissions.
        */
       const singleLine = asOneLine(text)
-      deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "In esecuzione" }))
+      deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
       session.write(asSubmittedLine(singleLine))
     },
@@ -263,15 +322,16 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       }
       const host = await deps.getHost()
       const current = deps.project()
-      if (!host || !current) {
-        return []
-      }
+      // Thrown, not answered with an empty list: «0 risultati» and a search
+      // that could not run are different things to the person who asked.
+      if (!host) throw new Error("la ricerca nel progetto funziona solo nell'app desktop")
+      if (!current) throw new Error("non c'è nessun progetto aperto in cui cercare")
       try {
         const result = await walkProject({ host, root: current.root })
         const hits = findByName(result.files, query, 40)
         return hits.map((hit) => ({ path: hit.path }))
-      } catch {
-        return []
+      } catch (error) {
+        throw new Error(`non riesco a leggere i file del progetto (${error instanceof Error ? error.message : String(error)})`)
       }
     },
 
@@ -280,16 +340,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
      * the session pane, so there is nothing to switch to. The method stays
      * because `VoiceHost` (packages/voice) still declares it.
      */
-    setPaneView(): void {},
-
-    browserNavigate(paneId: string, url: string): void {
-      deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
+    setPaneView(): boolean {
+      return false
     },
 
-    answerPermission(paneId: string, answer: "allow" | "deny"): void {
+    browserNavigate(paneId: string, url: string): boolean {
+      if (!deps.wb().panes.some((pane) => pane.id === paneId)) return false
+      deps.setWb((w) => updatePane(w, paneId, { browserUrl: url }))
+      return true
+    },
+
+    answerPermission(paneId: string, answer: "allow" | "deny"): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {
-        return
+        return false
       }
 
       let chosen: PermissionAnswer | undefined
@@ -322,16 +386,17 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
       if (chosen) {
         deps.answerPermission(paneId, chosen)
-        return
+        return true
       }
 
       if (answer === "deny") {
         deps.appendLine(
           paneId,
-          "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
+          t("voice.permission.notRefusal"),
           "note",
         )
       }
+      return false
     },
 
     setColumns(columns?: number): void {
@@ -339,7 +404,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     setView(view: AdeView): void {
-      deps.setWb((w) => ({ ...w, view }))
+      // Chat and Bot may be hidden (S40); the dispatcher asks first, this is the backstop.
+      deps.setWb((w) => ({ ...w, view: reachableView(view) }))
+    },
+
+    availableViews(): readonly AdeView[] {
+      return VISIBLE_VIEWS
     },
 
     scrollTranscript(paneId: string, delta: number): void {
@@ -388,12 +458,13 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         return
       }
 
+      const currentLocale = deps.locale ? deps.locale() : locale()
       const session = deps.getRunningSession(paneId)
       if (!session) {
         throw new Error(
-          field
-            ? "Il pannello selezionato non ha un processo in ascolto."
-            : "Il pannello selezionato non ha dove ricevere il testo."
+          currentLocale === "en"
+            ? (field ? "The selected panel has no listening process." : "The selected panel cannot receive text.")
+            : (field ? "Il pannello selezionato non ha un processo in ascolto." : "Il pannello selezionato non ha dove ricevere il testo.")
         )
       }
       // A trailing space, not a carriage return: the next dictated phrase must
@@ -403,7 +474,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
     describeState(): VoiceStateSnapshot {
       const panes = this.listPanes()
-      const sessionPanes = panes.filter((p) => !p.isBrowser)
+      /*
+       * A session is an agent's terminal. The browser, a file, the video, 3D,
+       * simulator and decisions panels and a plugin's tile are all panes, and
+       * counting them said «ci sono tre sessioni» to someone with one session
+       * and two panels open. `isPanelPane` is the same question the sidebar
+       * and the restore ask, and it knows about the panel modes as well.
+       */
+      const sessionIds = new Set(
+        deps
+          .wb()
+          .panes.filter((pane) => !isPanelPane(pane))
+          .map((pane) => pane.id),
+      )
+      const sessionPanes = panes.filter((p) => sessionIds.has(p.id))
       const totalSessions = sessionPanes.length
       const workingSessions = sessionPanes.filter(
         (p) => p.status === "working" || p.status === "provisioning",
@@ -417,45 +501,73 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       const currentView = deps.wb().view
 
       let spokenSummary: string
-      if (totalSessions === 0) {
-        spokenSummary = "Al momento non c'è nessuna sessione aperta."
-      } else if (totalSessions === 1) {
-        const detail =
-          workingSessions > 0
-            ? " in esecuzione"
-            : waitingSessions > 0
-              ? " in attesa"
-              : doneSessions > 0
-                ? " completata"
-                : errorSessions > 0
-                  ? " in errore"
-                  : ""
-        spokenSummary = `C'è una sessione${detail}.`
+      const currentLocale = deps.locale ? deps.locale() : locale()
+      if (currentLocale === "en") {
+        if (totalSessions === 0) {
+          spokenSummary = "There are currently no open sessions."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " running"
+              : waitingSessions > 0
+                ? " waiting"
+                : doneSessions > 0
+                  ? " completed"
+                  : errorSessions > 0
+                    ? " in error"
+                    : ""
+          spokenSummary = `There is one session${detail}.`
+        } else {
+          const countWord = ENGLISH_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) details.push(`${workingSessions} running`)
+          if (waitingSessions > 0) details.push(`${waitingSessions} waiting`)
+          if (doneSessions > 0) details.push(`${doneSessions} completed`)
+          if (errorSessions > 0) details.push(`${errorSessions} in error`)
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `There are ${countWord} open sessions${detailsStr}`
+        }
       } else {
-        const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
-        const details: string[] = []
-        if (workingSessions > 0) {
-          details.push(
-            `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
-          )
+        if (totalSessions === 0) {
+          spokenSummary = "Al momento non c'è nessuna sessione aperta."
+        } else if (totalSessions === 1) {
+          const detail =
+            workingSessions > 0
+              ? " in esecuzione"
+              : waitingSessions > 0
+                ? " in attesa"
+                : doneSessions > 0
+                  ? " completata"
+                  : errorSessions > 0
+                    ? " in errore"
+                    : ""
+          spokenSummary = `C'è una sessione${detail}.`
+        } else {
+          const countWord = ITALIAN_NUMBERS[totalSessions] ?? String(totalSessions)
+          const details: string[] = []
+          if (workingSessions > 0) {
+            details.push(
+              `${workingSessions === 1 ? "una" : (ITALIAN_NUMBERS[workingSessions] ?? workingSessions)} in esecuzione`,
+            )
+          }
+          if (waitingSessions > 0) {
+            details.push(
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+            )
+          }
+          if (doneSessions > 0) {
+            const w =
+              doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
+            details.push(w)
+          }
+          if (errorSessions > 0) {
+            details.push(
+              `${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`,
+            )
+          }
+          const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
+          spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
         }
-        if (waitingSessions > 0) {
-          details.push(
-            `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
-          )
-        }
-        if (doneSessions > 0) {
-          const w =
-            doneSessions === 1 ? "una completata" : `${ITALIAN_NUMBERS[doneSessions] ?? doneSessions} completate`
-          details.push(w)
-        }
-        if (errorSessions > 0) {
-          details.push(
-            `${errorSessions === 1 ? "una" : (ITALIAN_NUMBERS[errorSessions] ?? errorSessions)} in errore`,
-          )
-        }
-        const detailsStr = details.length > 0 ? `: ${details.join(", ")}.` : "."
-        spokenSummary = `Ci sono ${countWord} sessioni${detailsStr}`
       }
 
       return {

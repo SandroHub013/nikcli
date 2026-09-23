@@ -234,34 +234,41 @@ export namespace SyncHttpApi {
         headers: { "retry-after": String(Math.ceil(rate.retryAfterMs / 1_000)) },
       })
     }
-    const db = Database.syncDb()
-    const existing = db.select({ id: syncEvent.id }).from(syncEvent).where(eq(syncEvent.id, body.event.id)).get()
+    const existing = Effect.runSync(
+      Database.query("SyncRoutes.ingest.existing", (db) =>
+        db.select({ id: syncEvent.id }).from(syncEvent).where(eq(syncEvent.id, body.event.id)).get(),
+      ),
+    )
     if (existing) return new Response(null, { status: 204 })
-    const inserted = db.transaction((tx) => {
-      const last = tx
-        .select({ seq: syncEvent.seq })
-        .from(syncEvent)
-        .where(and(eq(syncEvent.projectId, body.event.projectId), eq(syncEvent.aggregate, body.event.aggregate)))
-        .orderBy(syncEvent.seq)
-        .all()
-        .at(-1)
-      const nextSeq = (last?.seq ?? 0) + 1
-      tx.insert(syncEvent)
-        .values({
-          id: body.event.id,
-          projectId: body.event.projectId,
-          workspaceId: body.event.workspaceId,
-          aggregate: body.event.aggregate,
-          seq: nextSeq,
-          type: body.event.type,
-          data: JSON.stringify(body.event.data),
-          timestamp: body.event.timestamp,
-          origin: body.event.origin ?? "remote",
-          originSeq: body.event.seq,
-        })
-        .run()
-      return nextSeq
-    })
+    const inserted = Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          const last = tx
+            .select({ seq: syncEvent.seq })
+            .from(syncEvent)
+            .where(and(eq(syncEvent.projectId, body.event.projectId), eq(syncEvent.aggregate, body.event.aggregate)))
+            .orderBy(syncEvent.seq)
+            .all()
+            .at(-1)
+          const nextSeq = (last?.seq ?? 0) + 1
+          tx.insert(syncEvent)
+            .values({
+              id: body.event.id,
+              projectId: body.event.projectId,
+              workspaceId: body.event.workspaceId,
+              aggregate: body.event.aggregate,
+              seq: nextSeq,
+              type: body.event.type,
+              data: JSON.stringify(body.event.data),
+              timestamp: body.event.timestamp,
+              origin: body.event.origin ?? "remote",
+              originSeq: body.event.seq,
+            })
+            .run()
+          return nextSeq
+        }),
+      ),
+    )
     GlobalBus.emit("event", {
       directory: body.event.projectId,
       payload: { type: "sync.received", properties: { eventID: body.event.id, seq: inserted } },
@@ -283,13 +290,17 @@ export namespace SyncHttpApi {
     if (!projectID) return new Response("Invalid query", { status: 400 })
     const since = Number(url.searchParams.get("since") ?? 0)
     if (!Number.isInteger(since) || since < 0) return new Response("Invalid query", { status: 400 })
-    const rows = Database.syncDb()
-      .select()
-      .from(syncEvent)
-      .where(and(eq(syncEvent.projectId, projectID), gt(syncEvent.seq, since)))
-      .orderBy(syncEvent.seq)
-      .limit(500)
-      .all()
+    const rows = Effect.runSync(
+      Database.query("SyncRoutes.since", (db) =>
+        db
+          .select()
+          .from(syncEvent)
+          .where(and(eq(syncEvent.projectId, projectID), gt(syncEvent.seq, since)))
+          .orderBy(syncEvent.seq)
+          .limit(500)
+          .all(),
+      ),
+    )
     return Response.json({
       events: rows.map((row) => ({
         id: row.id,
@@ -319,7 +330,6 @@ export namespace SyncHttpApi {
 
   const stats = raw(async (request) => {
     const projectID = new URL(request.url).searchParams.get("projectID") ?? ""
-    const db = Database.syncDb()
     const remote = await SyncConfig.resolve()
     const url = remote.url
     const { RemoteSync } = await import("@/sync/remote-sync")
@@ -331,28 +341,42 @@ export namespace SyncHttpApi {
         log.warn("sync autostart failed", { error })
       })
     }
-    const pending = db
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(syncOutbox)
-      .where(eq(syncOutbox.status, "pending"))
-      .get()
-    const failed = db
-      .select({ count: sql<number>`cast(count(*) as integer)` })
-      .from(syncOutbox)
-      .where(eq(syncOutbox.status, "failed"))
-      .get()
+    const counts = Effect.runSync(
+      Database.query("SyncRoutes.stats.outbox", (db) => ({
+        pending: db
+          .select({ count: sql<number>`cast(count(*) as integer)` })
+          .from(syncOutbox)
+          .where(eq(syncOutbox.status, "pending"))
+          .get(),
+        failed: db
+          .select({ count: sql<number>`cast(count(*) as integer)` })
+          .from(syncOutbox)
+          .where(eq(syncOutbox.status, "failed"))
+          .get(),
+      })),
+    )
+    const pending = counts.pending
+    const failed = counts.failed
     const filterProjectID = await resolveStatsProjectID(projectID)
     const where = filterProjectID ? eq(syncEvent.projectId, filterProjectID) : undefined
-    const latestQuery = db.select().from(syncEvent)
-    const latest = (where ? latestQuery.where(where) : latestQuery)
-      .orderBy(sql`${syncEvent.seq} DESC`)
-      .limit(1)
-      .get()
-    const recentQuery = db.select().from(syncEvent)
-    const recent = (where ? recentQuery.where(where) : recentQuery)
-      .orderBy(sql`${syncEvent.seq} DESC`)
-      .limit(50)
-      .all()
+    const events = Effect.runSync(
+      Database.query("SyncRoutes.stats.events", (db) => {
+        const latestQuery = db.select().from(syncEvent)
+        const recentQuery = db.select().from(syncEvent)
+        return {
+          latest: (where ? latestQuery.where(where) : latestQuery)
+            .orderBy(sql`${syncEvent.seq} DESC`)
+            .limit(1)
+            .get(),
+          recent: (where ? recentQuery.where(where) : recentQuery)
+            .orderBy(sql`${syncEvent.seq} DESC`)
+            .limit(50)
+            .all(),
+        }
+      }),
+    )
+    const latest = events.latest
+    const recent = events.recent
     return Response.json({
       url,
       configured: remote.configured,

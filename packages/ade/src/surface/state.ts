@@ -1,3 +1,5 @@
+import { redactHistory, redactUrl, type BrowserHistory } from "../browser/history"
+import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
 import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
@@ -5,6 +7,7 @@ import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/trans
 import { cleanTranscript } from "../session/transcript-line"
 import type { TranscriptLine, PaneTree } from "../grid/pane"
 import type { Workspace, SidebarSession } from "../sidebar"
+import { t, translate } from "../i18n"
 
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
@@ -46,10 +49,55 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
   bot: "Bot",
 }
 
-/** Cycles forward through the sections, wrapping at the end. */
-export function nextView(current: AdeView): AdeView {
-  const index = ADE_VIEWS.indexOf(current)
-  return ADE_VIEWS[(index + 1) % ADE_VIEWS.length]
+/**
+ * Whether Chat and Bot can be reached. The one switch for both (S40).
+ *
+ * They are hidden for now, not removed: the code, the tests and the stored
+ * conversations all stay, and turning this back on brings back every way in —
+ * the section bar, the palette, the section shortcut, the voice command and a
+ * workbench restored into one of them. Nothing else in the app needs to change,
+ * because everything that lists or opens a section asks `VISIBLE_VIEWS` or
+ * `reachableView` rather than `ADE_VIEWS`.
+ */
+export const CHAT_AND_BOT_ENABLED = false
+
+/**
+ * The sections a person can get to: what the bar shows and the palette offers.
+ *
+ * Takes the switch as a parameter so the tests can check the "on" branch
+ * too; the app only ever calls it with the constant, through `VISIBLE_VIEWS`.
+ */
+export function visibleViews(enabled: boolean = CHAT_AND_BOT_ENABLED): readonly AdeView[] {
+  return ADE_VIEWS.filter((view) => enabled || (view !== "chat" && view !== "bot"))
+}
+
+export const VISIBLE_VIEWS: readonly AdeView[] = visibleViews()
+
+export function isViewVisible(view: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): boolean {
+  return views.includes(view)
+}
+
+/**
+ * The section to actually show for `view`.
+ *
+ * A hidden one lands on `code`, the grid, which is where every other "no such
+ * section" already goes. Applied where a view is set from outside the bar —
+ * a restored workbench, the voice command — so a stored `"chat"` does not
+ * open a section with no way back to it in the bar.
+ */
+export function reachableView(view: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): AdeView {
+  return isViewVisible(view, views) ? view : "code"
+}
+
+/** Cycles forward through the sections a person can reach, wrapping at the end. */
+export function nextView(current: AdeView, views: readonly AdeView[] = VISIBLE_VIEWS): AdeView {
+  const index = views.indexOf(current)
+  return views[(index + 1) % views.length] ?? "code"
+}
+
+/** The note every restore appends, in either language: the last launch may have used the other one. */
+function isRestoreNote(text: string): boolean {
+  return text.startsWith(translate("it", "restore.note")) || text.startsWith(translate("en", "restore.note"))
 }
 
 /**
@@ -66,7 +114,7 @@ export function nextView(current: AdeView): AdeView {
  */
 export function restoreView(raw: unknown): AdeView {
   if (raw === "plancia" || raw === "alberi") return "code"
-  return ADE_VIEWS.find((view) => view === raw) ?? "code"
+  return reachableView(ADE_VIEWS.find((view) => view === raw) ?? "code")
 }
 
 export interface Pane {
@@ -82,6 +130,20 @@ export interface Pane {
   lines: TranscriptLine[]
   browserUrl?: string
   /**
+   * The browser pane's back/forward list; its current entry is `browserUrl`.
+   *
+   * Kept here and not in the pane component, because the component is
+   * rebuilt whenever the pane is drawn again — switching project and back
+   * rebuilt it on the URL the pane was opened with.
+   */
+  browserHistory?: BrowserHistory
+  /**
+   * The session a browser pane belongs to (S46): what the inspector sends
+   * goes there. The title is the one it had when bound, for the chip once the
+   * session is gone. See `browser/binding.ts`.
+   */
+  browserOwner?: { id: string; title: string }
+  /**
    * The video panel's file, empty when the panel is open with nothing in it.
    *
    * Present rather than absent for an empty panel, because "" is what
@@ -89,6 +151,15 @@ export interface Pane {
    * the two are laid out by different components.
    */
   videoPath?: string
+  /** The 3D panel's model file; "" while the panel waits for one, like `videoPath`. */
+  modelPath?: string
+  /** The app simulator's dev server URL; "" while the panel waits for one. */
+  appUrl?: string
+  /** The simulator's device id, from `simulator/simulator.ts`. */
+  appDevice?: string
+  appLandscape?: boolean
+  /** A desktop window's size, once the user has dragged it. */
+  appWindow?: { width: number; height: number }
   cwd?: string
   tree?: PaneTree
   workspaceId: string
@@ -121,6 +192,23 @@ export interface Pane {
   worktree?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
+  /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
+  span?: Span
+}
+
+/**
+ * True for a pane that draws something other than an agent session.
+ *
+ * Asked by everything that counts, restores or messages sessions. The video
+ * and 3D panels are recognised by their mode, not by their path: both open
+ * with an empty path, and `!pane.videoPath` read "" as "no video here", so an
+ * empty player was listed as a session and offered to be restarted as one.
+ */
+export function isPanelPane(pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">): boolean {
+  return Boolean(
+    pane.browserUrl || pane.filePath || pane.videoPath || pane.modelPath || pane.appUrl || pane.plugin ||
+      pane.mode === "video" || pane.mode === "model" || pane.mode === "app" || pane.mode === "decisions" || pane.mode === "design",
+  )
 }
 
 export interface Workbench {
@@ -190,6 +278,33 @@ export function setColumns(workbench: Workbench, columns?: number): Workbench {
 }
 
 /**
+ * The grid's panes in a new order, as the user dragged them.
+ *
+ * `order` is the visible panes only; the other projects' panes keep their
+ * places. The order of `panes` is what is saved, so this is also what makes
+ * the arrangement survive a restart.
+ */
+export function reorderPanes(workbench: Workbench, order: readonly string[]): Workbench {
+  return { ...workbench, panes: applyOrder(workbench.panes, order) }
+}
+
+/**
+ * The size the user chose for a pane, or `undefined` to give it back its
+ * default. Once set it is kept, and survives restarts and layout changes,
+ * clamped to the grid but never rewritten by it.
+ */
+export function resizePane(workbench: Workbench, paneId: string, span: Span | undefined): Workbench {
+  return {
+    ...workbench,
+    panes: workbench.panes.map((p) => {
+      if (p.id !== paneId) return p
+      const { span: _previous, ...rest } = p
+      return span ? { ...rest, span: { columns: span.columns, rows: span.rows } } : rest
+    }),
+  }
+}
+
+/**
  * The projects to list, with their sessions nested under them.
  *
  * `known` is every project the user has opened, so one they opened and have not
@@ -202,6 +317,7 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("claude")) return "claude-code"
   if (t.includes("codex") || t.includes("openai")) return "codex"
   if (t.includes("opencode")) return "opencode"
+  if (t.includes("grok") || t.includes("xai")) return "grok"
   if (t.includes("agy") || t.includes("antigravity")) return "agy"
   if (t.includes("hermes") || t.includes("nous")) return "hermes"
   if (t.includes("kimi") || t.includes("moonshot")) return "kimi"
@@ -232,7 +348,7 @@ export function deriveWorkspaces(
     // Neither a browser nor a plugin tile is a session, and the sidebar is a
     // list of sessions: counting them there would make "3 sessioni" mean
     // something different from the number of agents running.
-    if (pane.browserUrl || pane.plugin) continue
+    if (isPanelPane(pane)) continue
 
     if (!workspaces[pane.workspaceId]) {
       workspaces[pane.workspaceId] = {
@@ -282,9 +398,9 @@ function lastSegment(path: string | undefined): string | undefined {
  * resuming a session, it is opening a new one that happens to share a name.
  */
 export function isResumable(
-  pane: Pick<Pane, "status" | "task" | "resumeId" | "browserUrl" | "filePath" | "plugin">,
+  pane: Pick<Pane, "status" | "task" | "resumeId" | "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">,
 ): boolean {
-  if (pane.browserUrl || pane.filePath || pane.plugin) return false
+  if (isPanelPane(pane)) return false
   const hasTask = (pane.task ?? "").trim().length > 0
   const hasConversation = (pane.resumeId ?? "").trim().length > 0
   if (!hasTask && !hasConversation) return false
@@ -300,7 +416,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * answer than no pane. The plugin opens its own tiles when it loads.
    */
   const saved = workbench.panes
-    .filter((p) => !p.browserUrl && !p.plugin)
+    .filter((p) => !isPanelPane(p))
     .map((p) => ({
       id: p.id,
       title: p.title,
@@ -315,6 +431,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.worktree ? { worktree: p.worktree } : {}),
       ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
+      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
       /*
        * Recorded at save time, not derived at restore time.
        *
@@ -328,9 +445,27 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       lines: boundPaneTranscript(cleanTranscript(p.lines.map((line) => ({ ...line })))),
     }))
 
+  /*
+   * Browser panes are saved as the page they show, so a restart reopens the
+   * same page rather than dropping the pane. A plugin tile is never one.
+   */
+  const browsers = workbench.panes
+    .filter((p) => p.browserUrl && !p.plugin)
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      // Saved without the parameters that carry credentials: see `redactUrl`.
+      url: redactUrl(p.browserUrl!),
+      ...(p.browserHistory ? { history: redactHistory(p.browserHistory) } : {}),
+      ...(p.browserOwner ? { owner: { id: p.browserOwner.id, title: p.browserOwner.title } } : {}),
+      ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
+    }))
+
   return {
     version: CURRENT_VERSION,
     panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
+    ...(browsers.length ? { browsers } : {}),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -406,7 +541,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         (p.lines ?? [])
           // The note below is appended on every launch; the previous launches'
           // copies say nothing the new one does not.
-          .filter((line) => !(line.kind === "note" && line.text.startsWith("Sessione ripristinata.")))
+          .filter((line) => !(line.kind === "note" && isRestoreNote(line.text)))
           .map((line): TranscriptLine => ({
           // Narrowed here as well as in the store's sanitiser: the kind reaches
           // the DOM as a class name, and the type that says so should not rest
@@ -421,12 +556,21 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         id: p.id,
         title: p.title,
         status: restoredStatus(p.status),
-        activity: p.wasRunning ? "Da riprendere" : "Ripristinato",
+        activity: p.wasRunning ? "toResume" : "restored",
         model: p.model ?? p.agent,
         mode: "auto",
         agent: p.agent,
         cwd: p.cwd,
         task: p.task,
+        /*
+         * The conversation the pane was in, carried across the restart.
+         *
+         * Forgotten here, the pane came back looking right and then opened a
+         * new conversation at the *next* start: the id lived only in the
+         * saved state, so the first restore used it and the save after that
+         * had none. That is the second half of the bug the user reported.
+         */
+        ...(p.resumeId ? { resumeId: p.resumeId } : {}),
         lines: [
           ...history,
           {
@@ -439,15 +583,16 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
              * user unable to tell which one they got.
              */
             text: !p.agent
-              ? "Sessione ripristinata. Il processo non è più attivo."
+              ? `${t("restore.note")} ${t("restore.note.gone")}`
               : p.resumeId
-                ? "Sessione ripristinata. Riapro la conversazione dell'agente dov'era rimasta."
-                : "Sessione ripristinata. Il processo non è sopravvissuto alla chiusura: riprendo il compito.",
+                ? `${t("restore.note")} ${t("restore.note.reopen")}`
+                : `${t("restore.note")} ${t("restore.note.rerun")}`,
           },
         ],
         workspaceId: p.project || owner,
         ...(p.worktree ? { worktree: p.worktree } : {}),
         ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
+        ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
         /*
          * Sessions run in the project itself, or in the worktree `spawn
          * --worktree` made for them; only a pane saved from one of the old
@@ -461,11 +606,26 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
                 : p.cwd && state.projectPath && !p.project && samePath(p.cwd, state.projectPath) === false
                   ? "stale"
                   : "project",
-              note: "Ripristinato",
+              note: t("activity.restored"),
             }
           : undefined
       }
-    }),
+    }).concat(
+      (state.browsers ?? []).map((b): Pane => ({
+        id: b.id,
+        title: b.title,
+        // As `browser.new` creates it: a page is never a finished session.
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl: b.url,
+        ...(b.history ? { browserHistory: { entries: [...b.history.entries], index: b.history.index } } : {}),
+        ...(b.owner ? { browserOwner: { id: b.owner.id, title: b.owner.title } } : {}),
+        workspaceId: b.project || owner,
+        ...(b.span ? { span: { columns: b.span.columns, rows: b.span.rows } } : {}),
+        lines: [],
+      })),
+    ),
     focusedId: state.focusedPaneId,
     pinnedColumns: state.pinnedColumns,
     expandedId: undefined,

@@ -1,3 +1,4 @@
+import { t } from "../i18n"
 /**
  * Modello del buffer dell'editor.
  *
@@ -75,10 +76,10 @@ export function revertBuffer(buffer: Buffer): Buffer {
  */
 export function saveBlockedReason(buffer: Buffer): string | undefined {
   if (buffer.truncated) {
-    return "Il file è troncato in lettura: il salvataggio distruggerebbe i dati non caricati."
+    return t("editor.truncatedSave")
   }
   if (!buffer.dirty) {
-    return "Nessuna modifica da salvare."
+    return t("editor.nothingToSave")
   }
   return undefined
 }

@@ -51,6 +51,12 @@ export interface SpeakerService {
   readonly speak: (text: string) => Effect.Effect<void, VoiceError>
   /** Immediately cancel active or queued speech. */
   readonly cancel: Effect.Effect<void>
+  /**
+   * Say this after whatever is being said, for a reply read in pieces as it is
+   * written. Completes when this piece has been said; an empty piece completes
+   * when everything queued has. A cancel drops the queue.
+   */
+  readonly append?: (text: string) => Effect.Effect<void, VoiceError>
 }
 
 export const Speaker = Context.GenericTag<SpeakerService>(

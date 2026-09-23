@@ -87,15 +87,19 @@ export namespace InstructionSync {
 
   export function commit(sessionID: string, projectID: string, reads: InstructionRead[]): CommitResult {
     SessionSync.install()
-    const current = InstructionRepo.get(sessionID)
+    const current = Effect.runSync(InstructionRepo.get(sessionID))
     const { delta, blobs, blocked } = diff(current ? current.data.values : undefined, reads)
     if (blocked) return { blocked: true }
     if (Object.keys(delta).length === 0) return { blocked: false }
 
-    Database.transaction((tx) => {
-      InstructionRepo.putBlobs(blobs, tx)
-      SyncEvent.run(SessionSync.InstructionsUpdated, { sessionID, delta }, { projectID })
-    })
+    Effect.runSync(
+      Database.transaction((tx) =>
+        Effect.sync(() => {
+          Effect.runSync(InstructionRepo.putBlobs(blobs, tx))
+          SyncEvent.run(SessionSync.InstructionsUpdated, { sessionID, delta }, { projectID })
+        }),
+      ),
+    )
     return { delta, blocked: false }
   }
 
@@ -175,11 +179,11 @@ export namespace InstructionSync {
   }
 
   export function render(sessionID: string, projectID?: string): Omit<AssembleResult, "delta" | "blocked"> {
-    const state = InstructionRepo.get(sessionID)
+    const state = Effect.runSync(InstructionRepo.get(sessionID))
     if (!state) return { system: [], skillMessages: [], updates: [] }
 
     const hashes = [...Object.values(state.data.epoch_values), ...Object.values(state.data.values)]
-    const blobs = InstructionRepo.getBlobs([...new Set(hashes)])
+    const blobs = Effect.runSync(InstructionRepo.getBlobs([...new Set(hashes)]))
     const prefix = renderKeys(state.data.epoch_order, state.data.epoch_values, blobs)
 
     const events = SyncEvent.history(sessionID, projectID).filter(
@@ -205,7 +209,7 @@ export namespace InstructionSync {
     if (latest.size > 0) {
       const delta = Object.fromEntries(latest)
       const needed = [...latest.values()].filter((value) => value !== INSTRUCTION_REMOVED)
-      const extra = InstructionRepo.getBlobs(needed)
+      const extra = Effect.runSync(InstructionRepo.getBlobs(needed))
       updates.push({ role: "user", content: renderUpdate(delta, { ...blobs, ...extra }) })
     }
 
@@ -352,11 +356,11 @@ export namespace InstructionSync {
   }
 
   export function clear(sessionID: string) {
-    InstructionRepo.removeSession(sessionID)
+    Effect.runSync(InstructionRepo.removeSession(sessionID))
   }
 
   export function inherit(parentID: string, childID: string) {
-    InstructionRepo.inherit(parentID, childID)
+    Effect.runSync(InstructionRepo.inherit(parentID, childID))
   }
 
   /**
@@ -371,15 +375,15 @@ export namespace InstructionSync {
    * prefix, where it is served from the prompt cache and never re-sent.
    */
   export function foldDelivered(sessionID: string): boolean {
-    const state = InstructionRepo.get(sessionID)
+    const state = Effect.runSync(InstructionRepo.get(sessionID))
     if (!state || state.updatedSeq <= state.epochSeq) return false
-    InstructionRepo.advanceEpoch(sessionID, state.updatedSeq)
+    Effect.runSync(InstructionRepo.advanceEpoch(sessionID, state.updatedSeq))
     return true
   }
 
   export function hydrate(delta: Record<string, string>): Record<string, string> {
     const hashes = Object.values(delta).filter((value) => value !== INSTRUCTION_REMOVED)
-    return InstructionRepo.getBlobs(hashes)
+    return Effect.runSync(InstructionRepo.getBlobs(hashes))
   }
 
   export function ingest(blobs: Record<string, string>) {
@@ -395,7 +399,7 @@ export namespace InstructionSync {
       if (actual !== hash) throw new Error(`instruction blob hash mismatch: claimed ${hash}, actual ${actual}`)
       rows.push({ hash, body: canonicalJson(parsed) })
     }
-    InstructionRepo.putBlobs(rows)
+    Effect.runSync(InstructionRepo.putBlobs(rows))
   }
 
   export function isEventType(type: string) {

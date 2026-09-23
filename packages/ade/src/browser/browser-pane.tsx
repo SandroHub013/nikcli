@@ -12,36 +12,87 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   onMount,
   type JSX,
 } from "solid-js"
-import { formatSelectionContext } from "./element-context"
+import {
+  captureArea,
+  editsFor,
+  elementSummary,
+  mergeEdit,
+  propertyName,
+  type BrowserRequest,
+  type EditRecord,
+  type Rect,
+} from "./request"
 import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
+  bridgelessChoice,
+  framingBlocked,
+  noticeWithoutCopy,
+  type PaneNotice,
   reduceFidelity,
   type Fidelity,
   type HandshakeEvent,
 } from "./handshake"
+import { type BridgeMessage, type InspectedElement } from "./protocol"
+import { FRAME_ASK, FRAME_NAME, FrameGate } from "./frame-script"
+import { planSend, type BrowserController, type OwnerStatus, type SessionChoice } from "./binding"
+import { withLoadToken } from "./frame-url"
 import {
-  INSPECTOR_BRIDGE_SCRIPT,
-  type BridgeMessage,
-  type InspectedElement,
-} from "./protocol"
-import { escapeAttribute, withLoadToken } from "./frame-url"
-import { normalizeUrl } from "./url"
+  canStep,
+  currentEntry,
+  restoreHistory,
+  step,
+  visit,
+  type BrowserHistory,
+} from "./history"
+import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
+import { isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
+import { t } from "../i18n"
+import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
 export interface BrowserPaneProps {
   id?: string
   title?: string
   initialUrl?: string
+  /** The back/forward list the pane had when it was last drawn. */
+  initialHistory?: BrowserHistory
   focused?: boolean
   onFocus?: () => void
   onClose?: () => void
   onExpand?: () => void
-  onSendPrompt?: (prompt: string, context?: string) => void
+  /**
+   * Sends the request to session `to`, with the area of the window to
+   * photograph. The pane decides `to`: the bound session, or the one the
+   * user picks. Resolves to why it could not, or nothing when it went.
+   */
+  onSendRequest?: (
+    request: BrowserRequest,
+    capture: { crop: Rect; redact: Rect[]; scale: number },
+    to: string,
+  ) => Promise<{ ok: true } | { ok: false; reason: string; stopped?: boolean }>
+  /** The session this pane is bound to (S46), see `binding.ts`. */
+  owner?: OwnerStatus
+  /** The running sessions a send can go to, for the chip's menu and the picker. */
+  sessions?: SessionChoice[]
+  /** Binds the pane to a session, or with `undefined` unbinds it. */
+  onBind?: (sessionId: string | undefined) => void
+  /** Brings the bound session into view. */
+  onFocusOwner?: () => void
+  /** What an agent's `@ade browser …` drives; `undefined` when the pane goes. */
+  onController?: (controller: BrowserController | undefined) => void
+  /**
+   * Every page the pane loads, with the history that led to it.
+   *
+   * The owner keeps both: this component is rebuilt whenever the pane is
+   * drawn again, and without them it came back on the URL it was opened with.
+   */
+  onNavigate?: (url: string, history: BrowserHistory) => void
 }
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
@@ -80,15 +131,68 @@ function DevicePresetIcon(props: { preset: DevicePreset }): JSX.Element {
   )
 }
 
+/** What a chip's edit fields change, in the order they are shown. */
+const EDIT_FIELDS: { property: string; styleKey?: keyof InspectedElement["styles"]; label: string }[] = [
+  { property: "text", label: "browser.edit.text" },
+  { property: "color", styleKey: "color", label: "browser.edit.color" },
+  { property: "backgroundColor", styleKey: "backgroundColor", label: "browser.edit.background" },
+  { property: "fontSize", styleKey: "fontSize", label: "browser.edit.fontSize" },
+  { property: "padding", styleKey: "padding", label: "browser.edit.padding" },
+  { property: "borderRadius", styleKey: "borderRadius", label: "browser.edit.radius" },
+]
+
+/**
+ * Change an element in the page, in place: its text when it has only text,
+ * and a few styles. Applied on Enter or when the field is left; the page
+ * reports what each change replaced, and that goes with the request.
+ */
+function EditFields(props: { element: InspectedElement; onApply: (property: string, value: string) => void }): JSX.Element {
+  const fields = () => EDIT_FIELDS.filter((entry) => entry.property !== "text" || props.element.textOnly)
+  return (
+    <div data-slot="browser-edit-fields">
+      <For each={fields()}>
+        {(entry) => {
+          const initial = () =>
+            entry.property === "text" ? props.element.innerText ?? "" : (entry.styleKey ? props.element.styles?.[entry.styleKey] : "") ?? ""
+          let last = initial()
+          const commit = (value: string) => {
+            if (value === last) return
+            last = value
+            props.onApply(entry.property, value)
+          }
+          return (
+            <label data-slot="browser-edit-field">
+              <span>{t(entry.label as never)}</span>
+              <input
+                type="text"
+                value={initial()}
+                spellcheck={false}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === "Enter") commit(e.currentTarget.value)
+                }}
+                onBlur={(e) => commit(e.currentTarget.value)}
+              />
+            </label>
+          )
+        }}
+      </For>
+    </div>
+  )
+}
+
 export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const defaultUrl = normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
 
   const [url, setUrl] = createSignal(defaultUrl)
   const [inputUrl, setInputUrl] = createSignal(url())
+  const [history, setHistory] = createSignal(restoreHistory(defaultUrl, props.initialHistory))
   const [srcdoc, setSrcdoc] = createSignal<string | null>(null)
   const [loadToken, setLoadToken] = createSignal(1)
   const [loadState, setLoadState] = createSignal<LoadState>("idle")
   const [loadError, setLoadError] = createSignal<string>()
+  const [notice, setNotice] = createSignal<PaneNotice>()
+  const [openError, setOpenError] = createSignal<string>()
   /*
    * Fidelity is decided by the reducer in `handshake.ts`, not here.
    *
@@ -109,11 +213,33 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const [selection, setSelection] = createSignal<InspectedElement[]>([])
   const [promptText, setPromptText] = createSignal("")
   const [containerBox, setContainerBox] = createSignal({ width: 0, height: 0 })
+  const [ownerMenu, setOwnerMenu] = createSignal(false)
+  /** A send waiting for the user to say which session gets it. */
+  const [asking, setAsking] = createSignal(false)
+  /** Edits made in the page from here, with the value each replaced. */
+  const [edits, setEdits] = createSignal<EditRecord[]>([])
+  /** The chip whose edit fields are open. */
+  const [editing, setEditing] = createSignal<string>()
+  const [sending, setSending] = createSignal(false)
+  /** What the last send did, in the footer. */
+  const [sendNote, setSendNote] = createSignal<{ ok: boolean; text: string }>()
+  const [forgetNote, setForgetNote] = createSignal<{ ok: boolean; text: string }>()
 
   let iframeRef: HTMLIFrameElement | undefined
   let viewportContainerRef: HTMLDivElement | undefined
   let handshakeTimer: ReturnType<typeof setTimeout> | undefined
   let loadGeneration = 0
+  /*
+   * The channel to the bridge in this pane's frame.
+   *
+   * The frame script asks for it with a port of its own, before the page
+   * runs; the bridge then speaks only on that port, signed (`frame-script.ts`).
+   * A page that posts `visual-editor:ready` or a selection on its own is not
+   * believed, and a page that asks for the secret itself gets it only if the
+   * document holding it is gone.
+   */
+  const frameGate = new FrameGate({ onMessage: (message) => handleBridge(message as BridgeMessage) })
+  onCleanup(() => frameGate.dispose())
 
   /**
    * Messages to the frame go to `"*"`, for a page loaded by URL too.
@@ -122,9 +248,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * it — mirror or live page — has an opaque origin, and a target origin of
    * `http://localhost:3000` matches nothing: the message is dropped without an
    * error. That is why Design Mode never switched on for a page carrying the
-   * bridge itself. `"*"` gives nothing away: what goes out is the mode and
-   * selectors the page itself sent, and what comes back is accepted only from
-   * this frame's own window (`handleMessage`).
+   * bridge itself. `"*"` gives nothing away: what goes out is the mode, the
+   * selectors the page itself sent; the secret goes on the frame script's own
+   * port, and what the bridge says comes back on it (`frameGate`).
    */
   const post = (message: unknown) => {
     try {
@@ -149,10 +275,21 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   })
 
   /**
-   * Loads a mirrored srcdoc copy when the native bridge does not announce itself.
+   * Decides what the pane shows when the page did not announce the bridge.
+   *
+   * The real page stays unless it cannot be framed: see `bridgelessChoice`.
+   * The fetch still runs, because it is what tells a missing page (404) or
+   * an unreachable server apart from a working one.
    */
-  const loadMirror = async (target: string, generation: number) => {
+  const settleWithoutBridge = async (target: string, generation: number) => {
     const isCurrent = () => generation === loadGeneration
+    /*
+     * The host reads the framing headers outside CORS, which a page's own
+     * fetch cannot: most servers that refuse framing do not expose the
+     * header that says so. Started now so it runs alongside the fetch.
+     */
+    const probe = probeFraming(target)
+    const hostSaysBlocked = async () => framingBlocked(readHeaders(await probe))
 
     try {
       const res = await fetch(target, { mode: "cors" })
@@ -160,35 +297,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       if (res.ok) {
         const html = await res.text()
-        if (!isCurrent()) return
-
-        // Inject base tag so relative asset URLs resolve against the target server,
-        // and inject the bridge script into the document head.
-        /*
-         * Escaped, because it goes into an attribute.
-         *
-         * `normalizeUrl` now returns the canonical form, in which a quote is
-         * already `%22`, so this is the belt to that braces: `target` also
-         * arrives here from a redirect the page chose, and one unescaped `"`
-         * closes the `href` and turns the rest into markup.
-         */
-        const baseHref = escapeAttribute(target.endsWith("/") ? target : `${target}/`)
-        const headInjection = `<meta charset="utf-8"><base href="${baseHref}"><script>${INSPECTOR_BRIDGE_SCRIPT}<\/script>`
-
-        let injected = html
-        if (injected.includes("<head>")) {
-          injected = injected.replace("<head>", `<head>${headInjection}\n`)
-        } else if (injected.includes("<html>")) {
-          injected = injected.replace("<html>", `<html>\n<head>${headInjection}\n</head>\n`)
-        } else {
-          injected = `${headInjection}\n${injected}`
-        }
-
-        handshake({ type: "ready", mode: "mirror" })
-        setSrcdoc(injected)
+        const blocked = framingBlocked((name) => res.headers.get(name))
+        // A bridge that announced itself meanwhile has already settled it.
+        if (!isCurrent() || fidelity() !== "pending") return
+        handshake({ type: "no-bridge" })
         setLoadState("ready")
         setLoadError(undefined)
-        setLoadToken((v) => v + 1)
+        if (blocked || bridgelessChoice({ blocked }) !== "keep-page") {
+          setNotice("blocked")
+        }
+        if (blocked) return
+        if (!(await hostSaysBlocked()) || !isCurrent()) return
+        setNotice("blocked")
         return
       }
       /*
@@ -215,15 +335,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     try {
       await fetch(target, { mode: "no-cors" })
       if (!isCurrent()) return
-      // Server is reachable, but cross-origin without bridge
+      // Reachable, but with no copy to fall back on. Settled now; the host's
+      // answer, when it comes, can only add the message about a refused frame.
       setLoadError(undefined)
       handshake({ type: "load-error" })
       setLoadState("ready")
+      setNotice(noticeWithoutCopy({ blocked: false, inspecting: mode() === "edit" }))
+      if ((await hostSaysBlocked()) && isCurrent()) setNotice(noticeWithoutCopy({ blocked: true, inspecting: false }))
     } catch {
       if (!isCurrent()) return
       handshake({ type: "load-error", error: "Server non raggiungibile" })
       setLoadState("unreachable")
-      setLoadError("Server non raggiungibile")
+      setLoadError(t("browser.unreachable"))
     }
   }
 
@@ -231,25 +354,31 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (handshakeTimer) clearTimeout(handshakeTimer)
     handshakeTimer = setTimeout(() => {
       if (generation !== loadGeneration) return
-      if (fidelity() === "pending") {
-        // The reducer's own demotion: pending → mirror. Dispatched before the
-        // fetch because the decision to mirror is what the timeout *is*; the
-        // fetch only decides whether the mirror succeeds, and a failure comes
-        // back through `load-error`.
-        handshake({ type: "timeout" })
-        void loadMirror(target, generation)
-      }
+      // Still pending while the page is fetched: whether it becomes the
+      // mirror, stays as it is or fails is what that fetch decides.
+      if (fidelity() === "pending") void settleWithoutBridge(target, generation)
     }, HANDSHAKE_TIMEOUT_MS)
   }
 
   const load = (target: string) => {
+    if (isAdeOrigin(target, window.location.origin)) {
+      setNotice("ade-origin")
+      setLoadState("ready")
+      return
+    }
     loadGeneration += 1
     const generation = loadGeneration
 
     if (handshakeTimer) clearTimeout(handshakeTimer)
+    setNotice(undefined)
+    setOpenError(undefined)
     setLoadState("loading")
     setLoadError(undefined)
     setSelection([])
+    // A new document: what was edited in the old one is gone with it.
+    setEdits([])
+    setEditing(undefined)
+    setSendNote(undefined)
     handshake({ type: "navigate", url: target })
     setSrcdoc(null)
     setLoadToken((v) => v + 1)
@@ -257,13 +386,64 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     startHandshake(target, generation)
   }
 
+  /*
+   * Inspect stays on the real page. A srcdoc copy with allow-same-origin
+   * would run as ADE; S46 already injects the bridge into the live frame.
+   */
+  createEffect(
+    on(
+      mode,
+      (next) => {
+        if (next !== "edit" && notice() === "no-copy") setNotice(undefined)
+      },
+      { defer: true },
+    ),
+  )
+
+  const show = (target: string, next: BrowserHistory) => {
+    setUrl(target)
+    setInputUrl(target)
+    load(target)
+    if (next === history()) return
+    setHistory(next)
+    props.onNavigate?.(target, next)
+  }
+
   const navigateTo = (raw: string) => {
     const normalized = normalizeUrl(raw)
     if (!normalized) return
-    setUrl(normalized)
-    setInputUrl(normalized)
-    load(normalized)
+    if (isAdeOrigin(normalized, window.location.origin)) {
+      setNotice("ade-origin")
+      return
+    }
+    show(normalized, visit(history(), normalized))
   }
+
+  /*
+   * Back and forward walk the pane's own list. They used to call the frame's
+   * `history`, which a frame sandboxed without `allow-same-origin` does not
+   * let ADE touch: the call threw and the buttons did nothing.
+   */
+  const go = (delta: -1 | 1) => {
+    const next = step(history(), delta)
+    if (next !== history()) show(currentEntry(next), next)
+  }
+
+  /*
+   * A URL set from outside (voice's `browserNavigate`) is a navigation too.
+   * The pane's own reports come back through here with the URL it already
+   * shows, and stop at the comparison.
+   */
+  createEffect(
+    on(
+      () => props.initialUrl,
+      (next) => {
+        const normalized = next ? normalizeUrl(next) : undefined
+        if (normalized && normalized !== url()) navigateTo(normalized)
+      },
+      { defer: true },
+    ),
+  )
 
   const onFrameLoad = () => {
     if (srcdoc() !== null) {
@@ -283,9 +463,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
      * sandbox denies it, and this frame is filled with HTML fetched from
      * whatever server the address bar names.
      *
-     * A page that does not ship the bridge itself still gets one: the handshake
-     * times out, `loadMirror` takes a copy, and the bridge is injected into that
-     * copy, where it belongs.
+     * A page that does not ship the bridge itself still gets one when the user
+     * inspects it: `settleWithoutBridge` keeps a copy, and the bridge is
+     * injected into that copy, where it belongs.
      */
     syncMode()
   }
@@ -293,8 +473,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const handleMessage = (event: MessageEvent) => {
     // Untrusted source guard: ignore any message not originating from our iframe
     if (!iframeRef?.contentWindow || event.source !== iframeRef.contentWindow) return
+    const raw = event.data as { type?: unknown } | null
+    // The only thing the frame's window may say: "here is my port".
+    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) frameGate.ask(event.ports[0])
+  }
 
-    const data = event.data as BridgeMessage
+  const handleBridge = (data: BridgeMessage | undefined) => {
     if (!data || typeof data !== "object" || typeof data.type !== "string") return
     if (!data.type.startsWith("visual-editor:")) return
 
@@ -324,6 +508,20 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           prev.some((item) => item.selector === element.selector) ? prev : [...prev, element],
         )
       }
+      return
+    }
+
+    if (data.type === "visual-editor:edit-applied") {
+      const edit = data as unknown as Partial<EditRecord>
+      if (typeof edit.selector !== "string" || typeof edit.property !== "string") return
+      setEdits((current) =>
+        mergeEdit(current, {
+          selector: edit.selector!,
+          property: edit.property!,
+          before: String(edit.before ?? ""),
+          after: String(edit.after ?? ""),
+        }),
+      )
       return
     }
 
@@ -365,15 +563,120 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     post({ type: "visual-editor:clear-selection" })
   }
 
-  const sendPromptWithContext = () => {
-    const text = promptText().trim()
-    const elements = selection()
-    const context = formatSelectionContext(elements, { url: url(), instruction: text || undefined })
+  const selectSection = (selector: string) => post({ type: "visual-editor:select-section", selector })
 
-    props.onSendPrompt?.(text, context)
+  /** An edit typed in a chip, applied to the page; the page reports it back. */
+  const applyEdit = (selector: string, property: string, value: string) => {
+    if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
+    else post({ type: "visual-editor:apply-style", selector, property, value })
+  }
+
+  const forgetThisSite = async () => {
+    setForgetNote(undefined)
+    const result = await forgetSite(url())
+    if (result.error || !result.report) {
+      setForgetNote({ ok: false, text: t("browser.forget.failed", result.error ?? "") })
+      return
+    }
+    const said = forgetMessage(result.report)
+    const text =
+      said.key === "browser.forget.done.all" ||
+      said.key === "browser.forget.done.cookies" ||
+      said.key === "browser.forget.unsure.cookies"
+        ? t(said.key, said.cookies)
+        : t(said.key)
+    setForgetNote({ ok: said.ok, text })
+  }
+
+  const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  /** Where to photograph: the selected boxes in the frame, without ADE's own secret fields. */
+  const captureRequest = () => {
+    const box = iframeRef?.getBoundingClientRect()
+    const frame: Rect = box ? { x: box.left, y: box.top, w: box.width, h: box.height } : { x: 0, y: 0, w: 0, h: 0 }
+    const scale = viewportFit().isResponsive ? 1 : viewportFit().scale
+    const crop = captureArea(frame, scale, selection().map((element) => element.rect).filter(Boolean))
+    const redact = Array.from(document.querySelectorAll(SENSITIVE_SELECTOR), (element) => {
+      const r = element.getBoundingClientRect()
+      return { x: r.left, y: r.top, w: r.width, h: r.height }
+    }).filter((r) => r.w > 0 && r.h > 0)
+    return { crop, redact, scale: window.devicePixelRatio || 1 }
+  }
+
+  const deliver = async (to: string) => {
+    if (sending() || !props.onSendRequest) return
+    const elements = selection()
+    const request: BrowserRequest = {
+      paneTitle: props.title || t("browser.preview"),
+      url: url(),
+      instruction: promptText().trim(),
+      elements,
+      edits: editsFor(edits(), elements),
+      viewport: {
+        width: viewportFit().isResponsive ? containerBox().width : viewportFit().viewportWidth,
+        height: viewportFit().isResponsive ? containerBox().height : viewportFit().viewportHeight,
+        device: DEVICE_LABELS[device()],
+      },
+    }
+    setSending(true)
+    setSendNote(undefined)
+    // ADE's own popover is over the page: out of the picture while it is taken.
+    await nextFrame()
+    await nextFrame()
+    const outcome = await props.onSendRequest(request, captureRequest(), to).catch((error: unknown) => ({
+      ok: false as const,
+      reason: error instanceof Error ? error.message : String(error),
+    }))
+    setSending(false)
+    if (!outcome.ok) {
+      if ("stopped" in outcome && outcome.stopped) setAsking(true)
+      setSendNote({ ok: false, text: t("browser.send.failed", outcome.reason) })
+      return
+    }
+    const title = props.sessions?.find((session) => session.id === to)?.title ?? ""
+    setSendNote({ ok: true, text: t("browser.send.sent", title) })
+    setAsking(false)
     setPromptText("")
+    setEditing(undefined)
     clearSelection()
   }
+
+  /*
+   * To the bound session, or ask. Never to whichever session happens to be
+   * running: see `planSend`. The text and the selection stay until it goes.
+   */
+  const sendPromptWithContext = () => {
+    if (!promptText().trim() && selection().length === 0) return
+    const plan = planSend(props.owner ?? { state: "none" })
+    if (plan.kind === "send") void deliver(plan.to)
+    else setAsking(true)
+  }
+
+  const sendTo = (sessionId: string) => {
+    props.onBind?.(sessionId)
+    void deliver(sessionId)
+  }
+
+  const ownerLabel = () => {
+    const owner = props.owner ?? { state: "none" as const }
+    if (owner.state === "ready") return t("browser.owner.ready", owner.title)
+    if (owner.state === "closed") return t("browser.owner.closed", owner.title)
+    return t("browser.owner.none")
+  }
+
+  onMount(() => {
+    props.onController?.({
+      reload: () => load(url()),
+      setInspect: (on) => setMode(on ? "edit" : "browse"),
+      state: () => ({
+        url: url(),
+        inspecting: mode() === "edit",
+        fidelity: fidelityLabel(),
+        selected: selection().length,
+      }),
+    })
+    onCleanup(() => props.onController?.(undefined))
+  })
 
   const viewportFit = createMemo(() =>
     fitViewport({
@@ -387,20 +690,20 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   const fidelityLabel = () => {
     switch (fidelity()) {
       case "native":
-        return "Nativo (Bridge attivo)"
+        return t("browser.fidelity.native")
       case "mirror":
-        return "Mirror (Copia isolata)"
+        return t("browser.fidelity.mirror")
       case "none":
-        return "Sola lettura"
+        return t("browser.fidelity.none")
       case "pending":
       default:
-        return "Connessione..."
+        return t("browser.fidelity.pending")
     }
   }
 
   const dimensionsLabel = () => {
     const fit = viewportFit()
-    if (fit.isResponsive) return "Fluido"
+    if (fit.isResponsive) return t("browser.fluid")
     const pct = Math.round(fit.scale * 100)
     return `${fit.viewportWidth}×${fit.viewportHeight} (${pct}%)`
   }
@@ -416,13 +719,27 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       onPointerDown={() => props.onFocus?.()}
     >
       <header data-slot="browser-header">
+        {/* Picked up by the grid (`grid/session-grid.tsx`); the toolbar is
+            full of controls, so the pane offers one place that is only a
+            handle. */}
+        <span data-slot="pane-grip" title={t("browser.grip")} aria-hidden="true">
+          <svg viewBox="0 0 8 12" width="8" height="12">
+            <circle cx="2" cy="2" r="1" />
+            <circle cx="6" cy="2" r="1" />
+            <circle cx="2" cy="6" r="1" />
+            <circle cx="6" cy="6" r="1" />
+            <circle cx="2" cy="10" r="1" />
+            <circle cx="6" cy="10" r="1" />
+          </svg>
+        </span>
         <div data-slot="browser-nav-group">
           <button
             type="button"
             data-slot="browser-nav-btn"
-            onClick={() => iframeRef?.contentWindow?.history.back()}
-            aria-label="Indietro"
-            title="Indietro"
+            disabled={!canStep(history(), -1)}
+            onClick={() => go(-1)}
+            aria-label={t("browser.back")}
+            title={t("browser.back")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -431,9 +748,10 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
-            onClick={() => iframeRef?.contentWindow?.history.forward()}
-            aria-label="Avanti"
-            title="Avanti"
+            disabled={!canStep(history(), 1)}
+            onClick={() => go(1)}
+            aria-label={t("browser.forward")}
+            title={t("browser.forward")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -443,8 +761,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-nav-btn"
             onClick={() => load(url())}
-            aria-label="Ricarica"
-            title="Ricarica"
+            aria-label={t("browser.reload")}
+            title={t("browser.reload")}
           >
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M2 6a4 4 0 1 1 1.2 2.8M2 9V6h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -468,7 +786,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                 navigateTo(inputUrl())
               }
             }}
-            placeholder="localhost:3000 o porta :5173"
+            placeholder={t("browser.address.placeholder")}
             spellcheck={false}
           />
         </div>
@@ -479,18 +797,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             data-slot="browser-mode-btn"
             data-active={mode() === "browse" ? "true" : undefined}
             onClick={() => setMode("browse")}
-            title="Modalità Navigazione"
+            title={t("browser.mode.browse.tip")}
           >
-            Naviga
+            {t("browser.mode.browse")}
           </button>
           <button
             type="button"
             data-slot="browser-mode-btn"
             data-active={mode() === "edit" ? "true" : undefined}
             onClick={() => setMode("edit")}
-            title="Modalità Ispezione ed Editing"
+            title={t("browser.mode.edit.tip")}
           >
-            Ispeziona
+            {t("browser.mode.edit")}
           </button>
         </div>
 
@@ -515,8 +833,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               data-slot="browser-rotate-btn"
               data-active={landscape() ? "true" : undefined}
               onClick={() => setLandscape((v) => !v)}
-              title="Ruota orientamento"
-              aria-label="Ruota orientamento"
+              title={t("browser.rotate")}
+              aria-label={t("browser.rotate")}
             >
               <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.5 1.83L14 5.33" />
@@ -526,13 +844,79 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           </Show>
         </div>
 
+        <Show when={props.onBind}>
+          <div
+            data-slot="browser-owner-wrap"
+            // A click anywhere else, the page included, closes the menu.
+            onFocusOut={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOwnerMenu(false)
+            }}
+          >
+            <button
+              type="button"
+              data-slot="browser-owner"
+              data-state={props.owner?.state ?? "none"}
+              aria-haspopup="menu"
+              aria-expanded={ownerMenu()}
+              title={t("browser.owner.tip")}
+              onClick={() => setOwnerMenu((open) => !open)}
+            >
+              {ownerLabel()}
+            </button>
+            <Show when={ownerMenu()}>
+              <div data-slot="browser-owner-menu" role="menu" onKeyDown={(e) => e.key === "Escape" && setOwnerMenu(false)}>
+                <Show when={props.owner?.state === "ready"}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOwnerMenu(false)
+                      props.onFocusOwner?.()
+                    }}
+                  >
+                    {t("browser.owner.focus")}
+                  </button>
+                </Show>
+                <span data-slot="browser-owner-heading">{t("browser.owner.bind")}</span>
+                <For each={props.sessions ?? []} fallback={<span data-slot="browser-owner-empty">{t("browser.send.none")}</span>}>
+                  {(session) => (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={props.owner?.state !== "none" && (props.owner as { id: string }).id === session.id}
+                      onClick={() => {
+                        setOwnerMenu(false)
+                        props.onBind?.(session.id)
+                      }}
+                    >
+                      {session.title}
+                    </button>
+                  )}
+                </For>
+                <Show when={props.owner && props.owner.state !== "none"}>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOwnerMenu(false)
+                      props.onBind?.(undefined)
+                    }}
+                  >
+                    {t("browser.owner.unbind")}
+                  </button>
+                </Show>
+              </div>
+            </Show>
+          </div>
+        </Show>
+
         <div data-slot="browser-actions">
           <Show when={props.onExpand}>
             <button
               type="button"
               data-slot="browser-action"
               onClick={() => props.onExpand?.()}
-              aria-label="Espandi pannello"
+              aria-label={t("palette.pane.expand")}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                 <path
@@ -550,7 +934,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               type="button"
               data-slot="browser-action"
               onClick={() => props.onClose?.()}
-              aria-label="Chiudi pannello"
+              aria-label={t("palette.pane.close")}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
                 <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -640,8 +1024,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
               src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
               srcdoc={srcdoc() ?? undefined}
               onLoad={onFrameLoad}
-              sandbox="allow-scripts allow-forms allow-popups allow-modals"
-              title={props.title || "Browser preview"}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              name={FRAME_NAME}
+              title={props.title || t("browser.preview")}
             />
           </div>
           </div>
@@ -655,34 +1040,97 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   <path d="M3.5 3.5l9 9" />
                 </svg>
               </span>
-              <span data-slot="browser-error-title">Impossibile caricare l'URL</span>
+              <span data-slot="browser-error-title">{t("browser.error.title")}</span>
               <span data-slot="browser-error-msg">
-                {loadError() || "Verifica che il server sia avviato e raggiungibile."}
+                {loadError() || t("browser.error.hint")}
               </span>
               <button
                 type="button"
                 data-slot="browser-retry-btn"
                 onClick={() => load(url())}
               >
-                Riprova
+                {t("browser.retry")}
               </button>
             </div>
           </Show>
           
-          <Show when={mode() === "edit" || selection().length > 0}>
+          <Show when={notice()}>
+            {(kind) => (
+              <div data-slot="browser-error-overlay" data-notice={kind()}>
+                <span data-slot="browser-error-title">
+                  {kind() === "blocked"
+                    ? t("browser.blocked.title")
+                    : kind() === "ade-origin"
+                      ? t("browser.adeOrigin")
+                      : t("browser.noCopy.title")}
+                </span>
+                <Show when={kind() !== "ade-origin"}>
+                  <span data-slot="browser-error-msg">
+                    {kind() === "blocked" ? t("browser.blocked.msg") : t("browser.noCopy.msg")}
+                  </span>
+                </Show>
+                <Show when={openError()}>
+                  {(problem) => <span data-slot="browser-error-msg">{t("browser.openExternal.failed", problem())}</span>}
+                </Show>
+                <div data-slot="browser-notice-actions">
+                  <Show when={canOpenExternally()}>
+                    <button
+                      type="button"
+                      data-slot="browser-retry-btn"
+                      onClick={async () => setOpenError(await openExternally(url()))}
+                    >
+                      {t("browser.openExternal")}
+                    </button>
+                  </Show>
+                  <Show
+                    when={kind() === "no-copy"}
+                    fallback={
+                      <button type="button" data-slot="browser-retry-btn" onClick={() => load(url())}>
+                        {t("browser.retry")}
+                      </button>
+                    }
+                  >
+                    <button type="button" data-slot="browser-retry-btn" onClick={() => setMode("browse")}>
+                      {t("browser.noCopy.back")}
+                    </button>
+                  </Show>
+                </div>
+              </div>
+            )}
+          </Show>
+
+          <Show when={!sending() && (mode() === "edit" || selection().length > 0)}>
             <div data-slot="browser-prompt-popover">
               <Show when={selection().length > 0}>
                 <div data-slot="browser-selection-list">
-                  <span data-slot="browser-selection-label">Contesto catturato:</span>
+                  <span data-slot="browser-selection-label">
+                    {t("browser.context")} <span data-slot="browser-section-hint">{t("browser.section.hint")}</span>
+                  </span>
                   <div data-slot="browser-context-blocks">
                     <For each={selection()}>
                       {(el) => (
                         <div data-slot="browser-context-block">
                           <div data-slot="browser-context-header">
-                            <span data-slot="browser-context-tag">&lt;{el.tagName}&gt;</span>
-                            <Show when={el.id}>
-                              <span data-slot="browser-context-id">#{el.id}</span>
+                            <span data-slot="browser-context-tag">&lt;{el.tagName.toLowerCase()}&gt;</span>
+                            <span data-slot="browser-context-name">{elementSummary(el)}</span>
+                            <Show when={el.section && !el.ownSection}>
+                              <button
+                                type="button"
+                                data-slot="browser-context-action"
+                                title={t("browser.section.whole.tip", el.section!.label)}
+                                onClick={() => selectSection(el.selector)}
+                              >
+                                {t("browser.section.whole", el.section!.name)}
+                              </button>
                             </Show>
+                            <button
+                              type="button"
+                              data-slot="browser-context-action"
+                              aria-expanded={editing() === el.selector}
+                              onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
+                            >
+                              {t("browser.edit.toggle")}
+                            </button>
                             <button
                               type="button"
                               data-slot="browser-context-remove"
@@ -694,6 +1142,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                               </svg>
                             </button>
                           </div>
+                          <Show when={editing() === el.selector}>
+                            <EditFields element={el} onApply={(property, value) => applyEdit(el.selector, property, value)} />
+                          </Show>
+                          <For each={edits().filter((edit) => edit.selector === el.selector)}>
+                            {(edit) => (
+                              <div data-slot="browser-edit-row">
+                                {propertyName(edit.property)}: <s>{edit.before}</s> → {edit.after}
+                              </div>
+                            )}
+                          </For>
                           <Show when={el.outerHTML}>
                             <pre data-slot="browser-context-code"><code>{el.outerHTML}</code></pre>
                           </Show>
@@ -706,8 +1164,30 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                     data-slot="browser-clear-selection"
                     onClick={clearSelection}
                   >
-                    Deseleziona tutto
+                    {t("browser.clearSelection")}
                   </button>
+                </div>
+              </Show>
+
+              <Show when={asking()}>
+                <div data-slot="browser-send-picker" role="dialog" aria-label={t("browser.send.ask")}>
+                  <span data-slot="browser-send-question">
+                    {props.owner?.state === "closed"
+                      ? t("browser.send.closed", props.owner.title)
+                      : t("browser.send.ask")}
+                  </span>
+                  <div data-slot="browser-send-choices">
+                    <For each={props.sessions ?? []} fallback={<span data-slot="browser-owner-empty">{t("browser.send.none")}</span>}>
+                      {(session) => (
+                        <button type="button" data-slot="browser-send-choice" onClick={() => sendTo(session.id)}>
+                          {session.title}
+                        </button>
+                      )}
+                    </For>
+                    <button type="button" data-slot="browser-clear-selection" onClick={() => setAsking(false)}>
+                      {t("new.cancel")}
+                    </button>
+                  </div>
                 </div>
               </Show>
 
@@ -733,8 +1213,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   }}
                   placeholder={
                     selection().length > 0
-                      ? "Descrivi cosa modificare..."
-                      : "Punta un elemento nella pagina o scrivi un'istruzione..."
+                      ? t("browser.prompt.selected")
+                      : t("browser.prompt.empty")
                   }
                   spellcheck={false}
                 />
@@ -744,7 +1224,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   onClick={sendPromptWithContext}
                   disabled={!promptText().trim() && selection().length === 0}
                 >
-                  Invia
+                  {t("agent.send")}
                 </button>
               </div>
             </div>
@@ -755,12 +1235,26 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
+        <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
+          {t("browser.storage.note")}
+        </span>
+        <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
+          {t("browser.forget")}
+        </button>
+        <Show when={forgetNote()}>
+          <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
+            {forgetNote()?.text}
+          </span>
+        </Show>
+        <Show when={sending() || sendNote()}>
+          <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">
+            {sending() ? t("browser.send.sending") : sendNote()?.text}
+          </span>
+        </Show>
         <span data-slot="browser-selection-count">
           {selection().length === 0
-            ? "Nessun elemento selezionato"
-            : selection().length === 1
-              ? "1 elemento selezionato"
-              : `${selection().length} elementi selezionati`}
+            ? t("browser.selection.none")
+            : t("browser.selection.count", selection().length)}
         </span>
       </footer>
     </article>

@@ -153,7 +153,19 @@ fn deny(status: StatusCode) -> Response<Vec<u8>> {
 ///
 /// Split from the registration below so the parts that can be wrong — the
 /// range arithmetic and the confinement — are reachable from a test.
-pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>) -> Response<Vec<u8>> {
+///
+/// `app_origin` is the origin of the page that asked, as the webview itself
+/// reports it. A request whose `Origin` header matches it gets that origin
+/// back as allowed, which is what lets the recording export draw a take into
+/// a canvas and still record the canvas: a frame drawn without CORS leaves the
+/// canvas unclean and `MediaRecorder` writes nothing.
+///
+/// Any other origin gets no CORS header at all. Not `null`: answering
+/// `Access-Control-Allow-Origin: null` would let a sandboxed page without
+/// `allow-same-origin` read the file. With `allow-same-origin` (S52) the
+/// pane sends the site's own origin (`https://example.com`), which still
+/// must not match ADE's window, so the same filter keeps the file out.
+pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>, app_origin: Option<&str>) -> Response<Vec<u8>> {
     let raw = request.uri().path().trim_start_matches('/');
     if raw.is_empty() {
         return deny(StatusCode::BAD_REQUEST);
@@ -199,15 +211,23 @@ pub fn respond(roots: &[PathBuf], request: &Request<Vec<u8>>) -> Response<Vec<u8
     body.truncate(read);
     let last = start + read as u64 - 1;
 
-    Response::builder()
+    let allowed = request
+        .headers()
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .filter(|origin| *origin != "null" && Some(*origin) == app_origin);
+
+    let mut response = Response::builder()
         .status(StatusCode::PARTIAL_CONTENT)
         .header("Content-Type", mime_of(&path))
         .header("Accept-Ranges", "bytes")
         .header("Content-Range", format!("bytes {start}-{last}/{length}"))
         .header("Content-Length", read.to_string())
-        // The window's own origin only; the browser pane's frame must not be
-        // able to fetch project files through this.
-        .header("Access-Control-Allow-Origin", "null")
+        .header("Vary", "Origin");
+    if let Some(origin) = allowed {
+        response = response.header("Access-Control-Allow-Origin", origin);
+    }
+    response
         .body(body)
         .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR))
 }
@@ -265,7 +285,7 @@ mod tests {
     fn serves_a_file_inside_an_open_project() {
         let (dir, path) = fixture(b"0123456789");
         let roots = vec![dir.path().canonicalize().expect("radice")];
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None));
+        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
 
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"0123456789");
@@ -282,7 +302,7 @@ mod tests {
         let other = tempdir::Dir::new("ade-media-altro");
         let roots = vec![other.path().canonicalize().expect("radice")];
 
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None));
+        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert!(response.body().is_empty());
         drop(dir);
@@ -291,7 +311,7 @@ mod tests {
     #[test]
     fn with_no_project_open_nothing_is_served() {
         let (_dir, path) = fixture(b"x");
-        let response = respond(&[], &request(&url_for(&path.to_string_lossy()), None));
+        let response = respond(&[], &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
@@ -301,7 +321,7 @@ mod tests {
         let roots = vec![dir.path().canonicalize().expect("radice")];
         let outside = dir.path().join("..").join("..").join("windows");
 
-        let response = respond(&roots, &request(&url_for(&outside.to_string_lossy()), None));
+        let response = respond(&roots, &request(&url_for(&outside.to_string_lossy()), None), None);
         assert_ne!(response.status(), StatusCode::PARTIAL_CONTENT);
     }
 
@@ -312,6 +332,7 @@ mod tests {
         let response = respond(
             &roots,
             &request(&url_for(&path.to_string_lossy()), Some("bytes=3-5")),
+            None,
         );
 
         assert_eq!(response.body(), b"345");
@@ -328,6 +349,7 @@ mod tests {
         let response = respond(
             &roots,
             &request(&url_for(&path.to_string_lossy()), Some("bytes=-3")),
+            None,
         );
         assert_eq!(response.body(), b"789");
     }
@@ -339,6 +361,7 @@ mod tests {
         let response = respond(
             &roots,
             &request(&url_for(&path.to_string_lossy()), Some("bytes=7-")),
+            None,
         );
         assert_eq!(response.body(), b"789");
     }
@@ -350,7 +373,7 @@ mod tests {
         std::fs::write(&path, b"ok").expect("scrittura");
         let roots = vec![dir.path().canonicalize().expect("radice")];
 
-        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None));
+        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), None);
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"ok");
     }
@@ -381,7 +404,71 @@ mod tests {
 
     #[test]
     fn an_empty_path_is_a_bad_request() {
-        let response = respond(&[], &request("ade-media://localhost/", None));
+        let response = respond(&[], &request("ade-media://localhost/", None), None);
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    fn with_origin(uri: &str, origin: &str) -> Request<Vec<u8>> {
+        Request::builder()
+            .uri(uri)
+            .header("origin", origin)
+            .body(Vec::new())
+            .expect("richiesta")
+    }
+
+    #[test]
+    fn the_window_itself_is_allowed_by_its_own_origin() {
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        let response = respond(&roots, &with_origin(&url, "http://tauri.localhost"), Some("http://tauri.localhost"));
+        assert_eq!(
+            response.headers().get("Access-Control-Allow-Origin").unwrap(),
+            "http://tauri.localhost"
+        );
+    }
+
+    #[test]
+    fn another_origin_is_not_allowed_to_read() {
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        let response = respond(&roots, &with_origin(&url, "https://example.com"), Some("http://tauri.localhost"));
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
+    }
+
+    #[test]
+    fn a_null_origin_is_not_allowed_to_read() {
+        // A sandbox without allow-same-origin sends `Origin: null`; answering
+        // `null` would let those pages in. Kept refused after S52.
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        for app in [Some("http://tauri.localhost"), Some("null"), None] {
+            let response = respond(&roots, &with_origin(&url, "null"), app);
+            assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
+        }
+    }
+
+    #[test]
+    fn a_same_origin_browser_pane_is_not_allowed_to_read() {
+        // With allow-same-origin the pane sends the site's origin, not null.
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let url = url_for(&path.to_string_lossy());
+        let response = respond(
+            &roots,
+            &with_origin(&url, "https://bastelli-cmp.vercel.app"),
+            Some("http://tauri.localhost"),
+        );
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
+    }
+
+    #[test]
+    fn a_request_without_origin_gets_no_cors_header() {
+        let (dir, path) = fixture(b"0123456789");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let response = respond(&roots, &request(&url_for(&path.to_string_lossy()), None), Some("http://tauri.localhost"));
+        assert!(response.headers().get("Access-Control-Allow-Origin").is_none());
     }
 }

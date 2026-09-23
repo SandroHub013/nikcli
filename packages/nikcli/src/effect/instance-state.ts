@@ -1,5 +1,5 @@
 import { Instance } from "@/project/instance"
-import { Duration, Effect, Option, ScopedCache, Scope } from "effect"
+import { Cause, Duration, Effect, Option, ScopedCache, Scope } from "effect"
 import { currentInstance, type InstanceContext } from "./instance-ref"
 
 /**
@@ -117,7 +117,15 @@ export function invalidateReloadable(directory: string): Effect.Effect<void> {
 
 export function get<S>(cache: ScopedCache.ScopedCache<string, S>): Effect.Effect<S> {
   const mirror = resolved.get(cache) as Map<string, S> | undefined
-  const lookup = (directory: string) => Effect.scoped(ScopedCache.get(cache, directory))
+  const lookup = (directory: string) =>
+    Effect.scoped(ScopedCache.get(cache, directory)).pipe(
+      // An interrupted lookup must not stick in the cache. `GET /config/providers`
+      // shares this path: a client abort (HTTP 499) used to poison the entry so
+      // every later TUI start failed instantly on the same 499.
+      Effect.catchCauseIf(Cause.hasInterruptsOnly, (cause) =>
+        ScopedCache.invalidate(cache, directory).pipe(Effect.andThen(Effect.failCause(cause))),
+      ),
+    )
   if (!mirror) return context.pipe(Effect.flatMap((ctx) => lookup(ctx.directory)))
   return context.pipe(
     Effect.flatMap((ctx) =>

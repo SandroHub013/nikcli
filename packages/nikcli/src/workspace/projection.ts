@@ -1,4 +1,5 @@
 import { Log } from "@nikcli-ai/util/log"
+import { Effect } from "effect"
 import { Sync, type SyncEventRecord } from "@/sync"
 import { SyncProjection } from "@/sync/projection"
 import { SyncEvents, type EventDef } from "@/sync/events"
@@ -46,7 +47,7 @@ export namespace WorkspaceProjection {
     const { state, lastSeq } = await SyncProjection.workspace(projectID, workspaceID)
 
     if (state.removed) {
-      WorkspaceDB.remove(workspaceID)
+      Effect.runSync(WorkspaceDB.remove(workspaceID))
       return { lastSeq, removed: true }
     }
 
@@ -62,7 +63,7 @@ export namespace WorkspaceProjection {
       return { lastSeq, removed: false }
     }
 
-    const existing = WorkspaceDB.get(workspaceID)
+    const existing = Effect.runSync(WorkspaceDB.get(workspaceID))
     const info: WorkspaceDB.Info = {
       id: workspaceID,
       projectID: state.projectID || projectID,
@@ -72,8 +73,8 @@ export namespace WorkspaceProjection {
       timeUsed: state.timeUsed ?? existing?.timeUsed ?? state.lastTouchedAt,
     }
 
-    WorkspaceDB.upsert(info)
-    if (state.status) WorkspaceDB.setStatusColumn(workspaceID, state.status)
+    Effect.runSync(WorkspaceDB.upsert(info))
+    if (state.status) Effect.runSync(WorkspaceDB.setStatusColumn(workspaceID, state.status))
     return { lastSeq, info, removed: false }
   }
 

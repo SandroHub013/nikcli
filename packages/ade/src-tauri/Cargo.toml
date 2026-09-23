@@ -41,7 +41,12 @@ devtools = ["tauri/devtools"]
 test-exe = []
 
 [dependencies]
-tauri = { version = "2.9.5", features = [] }
+# `macos-private-api`: the glass theme asks for a transparent window, and on
+# macOS `WebviewWindowBuilder::transparent` exists only behind this feature —
+# without it the release build failed with E0599 and 0.7.3 never shipped. It
+# is also what `window-vibrancy` asks for, together with `macOSPrivateApi` in
+# `tauri.conf.json`; Tauri refuses to build if only one of the two is set.
+tauri = { version = "2.9.5", features = ["macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
@@ -49,18 +54,42 @@ tauri-plugin-clipboard-manager = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
+# Only `time` and `select!`, for the updater's stall watchdog; the runtime is Tauri's.
+tokio = { version = "1", features = ["time", "macros"] }
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
 serde_json = "1"
 portable-pty = "0.9.0"
 # CPU, RAM and ADE's own memory for the sidebar footer, on every platform.
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
+# Cropping and blanking a capture before it reaches the disk (S35); PNG only.
+image = { version = "0.25", default-features = false, features = ["png"] }
+window-vibrancy = "0.6.0"
 
 [target.'cfg(windows)'.dependencies]
+windows-version = "0.1"
 # Directory junctions need no elevation, unlike symlinks. One small crate is a
 # far narrower grant than putting `cmd` on the shell allowlist, which would be
 # arbitrary execution for anything the page decides to run.
 junction = "1"
+# The WebView2 COM API Tauri already builds on (same versions as its lock), to
+# grant ADE's own page the microphone without the browser-style prompt.
+webview2-com = "0.38"
+windows-core = "0.61"
+# IStream for the window capture, same version Tauri builds with.
+windows = { version = "0.61", features = ["Win32_System_Com", "Win32_System_Com_StructuredStorage"] }
+# Windows.Graphics.Capture for S36: captures a window's composed pixels, which
+# includes the WebView2 content that a GDI grab misses, and brings its own
+# hardware H.264 encoder. MIT.
+windows-capture = "2"
+
+# windows-capture 2.0.1 with one change: the encoder can be told to use
+# software. Upstream always asks for a hardware MFT, and once the webview's
+# own H.264 encoding (the promo export) has been through this process, every
+# new take failed with 0xC00D6D60 until ADE restarted. MIT, see its LICENCE.
+[patch.crates-io]
+windows-capture = { path = "vendor/windows-capture" }
 
 [profile.release]
 # A desktop binary is built once and started many times, so the slower link

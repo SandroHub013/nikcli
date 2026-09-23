@@ -18,6 +18,7 @@ import type { PluginRegistry } from "../registry"
 import type { PluginStatus } from "../runtime"
 import { contributionLabel, managerRows, managerSummary, type ManagerRow } from "./manager-rows"
 import "./manager.css"
+import { t } from "../../i18n"
 
 export const MANAGER_ID = "ade.plugins"
 
@@ -25,7 +26,7 @@ function Rows(props: { rows: ManagerRow[]; dense?: boolean }) {
   return (
     <Show
       when={props.rows.length > 0}
-      fallback={<p data-slot="plugin-empty">Nessun plugin caricato.</p>}
+      fallback={<p data-slot="plugin-empty">{t("settings.noPlugins")}</p>}
     >
       <ul data-slot="plugin-list" data-dense={props.dense ? "true" : undefined}>
         <For each={props.rows}>

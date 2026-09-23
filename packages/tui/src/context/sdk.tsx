@@ -44,12 +44,18 @@ export type EventSource = {
  */
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting"
 
-export async function checkUpgradeWhenSubscriptionReady(
+/**
+ * Runs the update check once the TUI is actually up, and hands back what it
+ * found so the caller can open the dialog. The result is returned rather than
+ * awaited for an event: the check runs in the CLI process, not in the server
+ * this stream comes from.
+ */
+export async function checkUpgradeWhenSubscriptionReady<T>(
   subscriptionReady: Promise<void>,
-  checkUpgrade: (() => Promise<void>) | undefined,
-) {
+  checkUpgrade: (() => Promise<T>) | undefined,
+): Promise<T | undefined> {
   await subscriptionReady
-  await checkUpgrade?.()
+  return checkUpgrade?.()
 }
 
 export async function consumeGlobalEventStream(input: {

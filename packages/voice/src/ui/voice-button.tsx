@@ -18,6 +18,7 @@ import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
 import { NikMic } from "./nik-mic"
 import "./voice.css"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export interface VoiceButtonProps {
   /** The voice control engine instance. */
@@ -37,25 +38,25 @@ export interface VoiceButtonProps {
 
 function getAriaLabelForStatus(status: DialogStatus, isRunning: boolean): string {
   if (!isRunning || status === "asleep") {
-    return "Attiva controllo vocale (microfono disattivato)"
+    return t("vui.button.off")
   }
   switch (status) {
     case "idle":
     case "listening":
-      return "Controllo vocale attivo in ascolto (premi per disattivare)"
+      return t("vui.button.listening")
     case "confirming":
-      return "In attesa di conferma vocale (premi per annullare)"
+      return t("vui.button.confirming")
     case "executing":
-      return "Esecuzione comando vocale in corso"
+      return t("vui.button.executing")
     case "dictating":
-      return "Dettatura testo in corso (premi per terminare)"
+      return t("vui.button.dictating")
   }
 }
 
 function dictationLabel(mine: boolean, running: boolean): string {
-  if (mine) return "Dettatura attiva: quello che dici finisce nel pannello (premi per fermarla)"
-  if (running) return "Detta nel pannello (ora il microfono è dell'assistente)"
-  return "Detta nel pannello"
+  if (mine) return t("vui.dictation.mine")
+  if (running) return t("vui.dictation.busy")
+  return t("vui.dictation.idle")
 }
 
 export function VoiceButton(props: VoiceButtonProps) {

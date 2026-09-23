@@ -11,6 +11,7 @@
 
 import { calculateRms } from "./level"
 import { MicPermissionDenied, MicUnavailable } from "../effect/errors"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export type MicLevelCallback = (level: number) => void
 
@@ -155,7 +156,7 @@ export function createMicMeter(options: MicMeterOptions = {}): MicMeter {
         typeof navigator.mediaDevices.getUserMedia !== "function"
       ) {
         throw new MicUnavailable({
-          message: "L'accesso al microfono non è supportato in questo browser o ambiente.",
+          message: t("vui.mic.unsupported"),
         })
       }
 
@@ -175,18 +176,18 @@ export function createMicMeter(options: MicMeterOptions = {}): MicMeter {
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
           throw new MicPermissionDenied({
             message:
-              "Accesso al microfono negato. Verifica i permessi audio nelle impostazioni del browser.",
+              t("vui.mic.denied"),
             cause: err,
           })
         }
         if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
           throw new MicUnavailable({
-            message: "Nessun microfono rilevato. Collega un dispositivo audio e riprova.",
+            message: t("vui.mic.noneDevice"),
             cause: err,
           })
         }
         throw new MicUnavailable({
-          message: `Impossibile accedere al microfono: ${err?.message ?? "errore sconosciuto"}`,
+          message: t("vui.mic.failed", err?.message ?? t("vui.error.unknown")),
           cause: err,
         })
       }
@@ -200,7 +201,7 @@ export function createMicMeter(options: MicMeterOptions = {}): MicMeter {
       if (!AudioContextClass) {
         cleanup()
         throw new Error(
-          "AudioContext non supportato da questo browser per l'analisi dei livelli audio."
+          t("vui.mic.noAudioContext")
         )
       }
 

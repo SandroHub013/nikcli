@@ -10,8 +10,8 @@
  */
 
 export interface SpawnedSession {
-  /** Kills the process. Safe to call more than once. */
-  kill: () => void
+  /** Kills the process; with `tree`, the processes it started too. Safe to call more than once. */
+  kill: (options?: { tree?: boolean }) => void
   /**
    * Types into the session's terminal, exactly as given.
    *
@@ -99,7 +99,29 @@ export interface Host {
     pane?: string
     /** Proves a message comes from `pane`: set as `ADE_PANE_TOKEN`, sent back by `ade-msg`. */
     paneToken?: string
+    /**
+     * Pipes instead of a terminal: stdin is read as data, not keystrokes. Only
+     * Claude Code, for a process kept running between turns (`bots/warm.ts`).
+     * `resize` does nothing then.
+     */
+    pipe?: boolean
+    /**
+     * API keys to put in the process's environment, by name. The host reads
+     * the values from the system keychain; they never pass through here.
+     */
+    secrets?: string[]
   }) => Promise<SpawnedSession>
+
+  // -- API keys (see `src-tauri/src/secrets.rs`) ----------------------------
+  /** Names, variables, agents and a masked tail; never a value. */
+  listSecrets?: () => Promise<KeyInfo[]>
+  /** Saves a key; `value` absent keeps the stored one. Rejects with the reason. */
+  saveSecret?: (draft: KeyDraft) => Promise<void>
+  deleteSecret?: (name: string) => Promise<void>
+  /** The keys assigned to the agent `command` starts, from the index only: names and variables. */
+  assignedSecrets?: (command: string) => Promise<{ name: string; env: string }[]>
+  /** Copies a key to the clipboard from the host; resolves to the seconds before it is cleared. */
+  copySecret?: (name: string) => Promise<number>
 
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
@@ -108,25 +130,78 @@ export interface Host {
   mailboxReceipt?: (id: string, text: string) => Promise<void>
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
   mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage" | "stats") => Promise<void>
+  /**
+   * A PNG of ADE's own window, cropped and with the sensitive rectangles
+   * painted over before it reaches the disk (S35). ADE Test only for now.
+   */
+  /** Whether this build lets an agent see ADE at all (S35: ADE Test for now). */
+  visionAllowed?: () => Promise<boolean>
+  captureWindow?: (request: {
+    label: string
+    crop?: { x: number; y: number; w: number; h: number }
+    redact: { x: number; y: number; w: number; h: number }[]
+    scale: number
+  }) => Promise<{ path: string; width: number; height: number; bytes: number }>
+  /** The same capture, written to `path` in the project's `.ade/browser` (S46). */
+  browserShot?: (request: {
+    path: string
+    crop: { x: number; y: number; w: number; h: number }
+    redact: { x: number; y: number; w: number; h: number }[]
+    scale: number
+  }) => Promise<{ path: string; width: number; height: number }>
   /** Tokens a claude or codex session has spent so far, from its transcript; null when not found. */
   transcriptUsage?: (agent: string, sessionId: string, cwd: string) => Promise<TokenUsage | null>
   /** What request `id` is waiting on, printed by the `ade-msg wait` on it; empty removes it. */
   mailboxState?: (id: string, text: string, kind?: "state" | "update") => Promise<void>
+  /**
+   * Records the window, or a rectangle of it, to `dir/name.mp4` (S36).
+   *
+   * The system's own capture, so the frames are the window's composed pixels
+   * rather than a picture of the screen. Only one take at a time.
+   */
+  recordStart?: (
+    target: RecordTarget,
+    dir: string,
+    name: string,
+    quality?: { fps: number; width?: number; height?: number; bitrate?: number },
+  ) => Promise<RecordingState>
+  recordStop?: () => Promise<RecordingState>
+  recordState?: () => Promise<RecordingState>
+  /**
+   * Writes one track of a recent take (events, voice, microphone, promo).
+   * The take's folder is not a write root: this is the only way in.
+   */
+  recordWrite?: (path: string, contents: Uint8Array) => Promise<void>
   /** The mailbox folder (per worktree in ADE Test, see `ADE_MAILBOX_ROOT`). */
   mailboxDir?: () => Promise<string>
   /** Leaves a long message for pane `pane` to read with `ade-msg inbox`. */
   mailboxInboxPut?: (pane: string, name: string, text: string) => Promise<void>
   /** Whether pane `pane` has read message `name` (the file left its inbox). */
-  mailboxInboxRead?: (pane: string, name: string) => Promise<boolean>
+  /** Where a long message is: still in the inbox, moved to `handled/` by `ade-msg inbox`, or in neither. */
+  mailboxInboxRead?: (pane: string, name: string) => Promise<InboxFileState>
   /** The answer to request `id`, for the `ade-msg ask|spawn|wait` blocked on it. */
   mailboxResult?: (id: string, text: string) => Promise<void>
   /** Takes back an answer no waiter claimed; its text, or null if one did. */
   mailboxResultReclaim?: (id: string, kind?: "result" | "update") => Promise<string | null>
 
+  // -- The assistant's Piper voice (see `src-tauri/src/tts.rs`) ------------
+  ttsPiperStatus?: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
+  /** Downloads the Piper runtime and the voice, checked against pinned digests. */
+  ttsPiperInstall?: (voice: string) => Promise<void>
+  /** One sentence as WAV bytes, from the resident Piper process. */
+  ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+  /** Opens the model page of a known voice in the browser. */
+  ttsOpenVoiceSource?: (voice: string) => Promise<void>
+
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
   writeTextFile?: (path: string, contents: string) => Promise<string | null>
+  /**
+   * Adds `text` at the end of a project file, creating it; resolves to the
+   * failure. A real append: a line another process added meanwhile stays.
+   */
+  appendTextFile?: (path: string, text: string) => Promise<string | null>
   /**
    * The same write for content that is not text; resolves to the failure.
    *
@@ -134,6 +209,11 @@ export interface Host {
    * `writeTextFile` would write the text of the image rather than the image.
    */
   writeBytes?: (path: string, contents: Uint8Array) => Promise<string | null>
+  /**
+   * A project file's bytes, whole; rejects outside every open project or
+   * above `maxBytes`. For the 3D panel, whose models and textures are binary.
+   */
+  readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
@@ -198,11 +278,19 @@ export interface Host {
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** `nikcli models` or `nikcli agent create …`: the only nikcli commands the bots panel runs. */
   nikcliBot?: (args: string[], cwd?: string) => Promise<RunResult>
+  /**
+   * `claude agents --json`, the only claude command ADE runs by itself: the
+   * CLI's list of its live sessions, which native mail delivery is routed on.
+   */
+  claudeAgents?: (cwd?: string) => Promise<RunResult>
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /** What ADE and its processes spend, for the sidebar footer. Mirrors `stats.rs`. */
   systemStats?: () => Promise<SystemStats>
 }
+
+/** What `mailboxInboxRead` answers. Mirrors `mailbox_inbox_read` in `mailbox.rs`. */
+export type InboxFileState = "unread" | "read" | "lost"
 
 /** ADE only: this app, its webview and every agent it started. */
 export interface SystemStats {
@@ -229,6 +317,8 @@ export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
+import type { KeyDraft, KeyInfo } from "../secrets/keys"
+import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -297,6 +387,15 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
+    async claudeAgents(cwd) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<RunResult>("claude_agents", { cwd })
+      } catch (error) {
+        return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
+      }
+    },
+
     async deleteBotFile(path) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
@@ -318,7 +417,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -381,6 +480,8 @@ export async function getHost(): Promise<Host | undefined> {
           link: link ?? null,
           pane: pane ?? null,
           paneToken: paneToken ?? null,
+          secrets: secrets && secrets.length > 0 ? secrets : null,
+          pipe: pipe === true,
         })
       } catch (error) {
         dead = true
@@ -390,11 +491,11 @@ export async function getHost(): Promise<Host | undefined> {
       }
 
       return {
-        kill: () => {
+        kill: (options) => {
           if (dead) return
           dead = true
           stop()
-          void invoke("pty_kill", { id }).catch(() => undefined)
+          void invoke("pty_kill", { id, tree: options?.tree === true }).catch(() => undefined)
         },
         write: (data) => {
           if (dead) return
@@ -405,6 +506,30 @@ export async function getHost(): Promise<Host | undefined> {
           void invoke("pty_resize", { id, cols: nextCols, rows: nextRows }).catch(() => undefined)
         },
       }
+    },
+
+    // -- API keys ------------------------------------------------------------
+
+    async listSecrets() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<KeyInfo[]>("secret_list")
+    },
+    async saveSecret(draft) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // Rejects with the keychain's or the validator's reason, in Italian.
+      await invoke("secret_save", { name: draft.name, env: draft.env, agents: [...draft.agents], value: draft.value ?? null })
+    },
+    async assignedSecrets(command) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ name: string; env: string }[]>("secret_assigned", { command })
+    },
+    async deleteSecret(name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("secret_delete", { name })
+    },
+    async copySecret(name) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<number>("secret_copy", { name })
     },
 
     // -- Filesystem access (backed by dedicated Tauri commands) -------------
@@ -443,6 +568,16 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
+    async appendTextFile(path, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        await invoke("append_text_file", { path, text })
+        return null
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+    },
+
     async writeBytes(path, contents) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
@@ -454,6 +589,13 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         return error instanceof Error ? error.message : String(error)
       }
+    },
+
+    async readBytes(path, maxBytes) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      // A raw IPC response arrives as an ArrayBuffer, not as JSON numbers.
+      const buffer = await invoke<ArrayBuffer>("read_project_bytes", { path, maxBytes })
+      return new Uint8Array(buffer)
     },
 
     async currentDir() {
@@ -480,6 +622,26 @@ export async function getHost(): Promise<Host | undefined> {
       return invoke<SystemStats>("system_stats")
     },
 
+    async ttsPiperStatus(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ supported: boolean; installed: boolean }>("tts_piper_status", { voiceId: voice })
+    },
+
+    async ttsPiperInstall(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_piper_install", { voiceId: voice })
+    },
+
+    async ttsOpenVoiceSource(voice) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_open_voice_source", { voiceId: voice })
+    },
+
+    async ttsPiperSpeak(voice, text) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text })
+    },
+
     async mailboxTake() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<{ id: string; body: string }[]>("mailbox_take")
@@ -490,6 +652,23 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_receipt", { id, text })
     },
 
+    async visionAllowed() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<boolean>("vision_allowed")
+    },
+    async captureWindow(request) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ path: string; width: number; height: number; bytes: number }>("capture_window", {
+        label: request.label,
+        crop: request.crop ?? null,
+        redact: request.redact,
+        scale: request.scale,
+      })
+    },
+    async browserShot(request) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<{ path: string; width: number; height: number }>("browser_shot", request)
+    },
     async mailboxPublish(text, name) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("mailbox_publish", { text, name: name ?? null })
@@ -509,6 +688,26 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("mailbox_state", { id, text, kind: kind ?? null })
     },
 
+    async recordStart(target, dir, name, quality) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_start", { target, dir, name, quality: quality ?? null })
+    },
+
+    async recordWrite(path, contents) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("record_write", { path, contents: Array.from(contents) })
+    },
+
+    async recordStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_stop")
+    },
+
+    async recordState() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<RecordingState>("record_state")
+    },
+
     async mailboxDir() {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<string>("mailbox_dir")
@@ -521,7 +720,8 @@ export async function getHost(): Promise<Host | undefined> {
 
     async mailboxInboxRead(pane, name) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<boolean>("mailbox_inbox_read", { pane, name })
+      const state = await invoke<string>("mailbox_inbox_read", { pane, name })
+      return state === "read" || state === "lost" ? state : "unread"
     },
 
     async mailboxResult(id, text) {

@@ -3,7 +3,7 @@
 | Field  | Value                                                                                                                                                                                                                     |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status | **Accepted and implemented** (promoted 2026-09-10)                                                                                                                                                                        |
-| Scope  | `src/workspace/index.ts`, `src/workspace/connection.ts`, `src/workspace/session-proxy-middleware.ts`, `src/cli/cmd/workspace-serve.ts`                                                                                    |
+| Scope  | `src/workspace/index.ts`, `src/workspace/connection.ts`, `src/workspace/session-proxy-middleware.ts`, `src/cli/handlers/workspace-serve.ts`                                                                               |
 | Tests  | `test/workspace/session-proxy.test.ts` (GET never proxied, non-`wrk_` ignored, unresolvable falls through, missing id 404, remote target forwarded), `test/workspace/routes.test.ts`, `test/workspace/connection.test.ts` |
 
 The question this records: when a request is about a **remote** workspace, where it is forwarded, and what the local path does.

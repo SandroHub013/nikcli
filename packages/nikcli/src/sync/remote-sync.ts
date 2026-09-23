@@ -21,6 +21,7 @@
  * `createInMemoryRemoteTransport` + `createInMemoryScheduler`.
  */
 import type { JsonValue } from "@/util/json"
+import { Effect } from "effect"
 import { Log } from "@nikcli-ai/util/log"
 import { Database } from "@/database/database"
 import { eq } from "drizzle-orm"
@@ -57,7 +58,7 @@ export type RemoteSyncHandle = {
   status(): {
     connected: boolean
     lastSeq: number
-    outbox: ReturnType<typeof Outbox.status>
+    outbox: { pending: number; failed: number; total: number }
   }
 }
 
@@ -86,7 +87,7 @@ export namespace RemoteSync {
       if (meta.origin !== "local") return
       for (const target of enqueueTargets) {
         try {
-          Outbox.enqueue(record.id, target)
+          Effect.runSync(Outbox.enqueue(record.id, target))
         } catch (error) {
           log.warn("outbox enqueue failed", { target, error })
         }
@@ -103,8 +104,11 @@ export namespace RemoteSync {
   }
 
   function loadEvent(eventId: string): SyncEventRecord | undefined {
-    const db = Database.syncDb()
-    const row = db.select().from(syncEvent).where(eq(syncEvent.id, eventId)).get()
+    const row = Effect.runSync(
+      Database.query("RemoteSync.loadEvent", (db) =>
+        db.select().from(syncEvent).where(eq(syncEvent.id, eventId)).get(),
+      ),
+    )
     if (!row) return undefined
     const record: SyncEventRecord = {
       id: row.id,
@@ -122,7 +126,7 @@ export namespace RemoteSync {
     const delta = (record.data as { delta?: Record<string, string> } | null)?.delta
     if (!delta) return record
     const hashes = Object.values(delta).filter((value) => value !== "removed")
-    return { ...record, blobs: InstructionRepo.getBlobs(hashes) }
+    return { ...record, blobs: Effect.runSync(InstructionRepo.getBlobs(hashes)) }
   }
 
   async function ingestIncoming(event: SyncEventRecord): Promise<SyncEventRecord> {
@@ -293,7 +297,7 @@ export namespace RemoteSync {
       status: () => ({
         connected,
         lastSeq,
-        outbox: Outbox.status(opts.url),
+        outbox: Effect.runSync(Outbox.status(opts.url)),
       }),
     }
 

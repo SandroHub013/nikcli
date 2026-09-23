@@ -302,7 +302,9 @@ What is left pointing into the TUI is `cli-main.ts` registering `AttachCommand` 
 
 Sections 4–6 closed the leftovers that used to sit here (`@/effect` service calls, `@/config/*`, `@/plugin/*`). What remains under `src/cli/cmd/tui/` is host-only: `thread.ts`, `worker.ts`, `attach.ts`, `plugin/host-local.ts`. Ordered leftover work after this extraction is in [ROADMAP.md](./ROADMAP.md), not another TUI move.
 
-**4. Create the package and move the tree.** Landed 2026-08-16. `packages/tui` holds 264 files; `src/cli/cmd/tui/` keeps four host files — `thread.ts`, `worker.ts`, `attach.ts` and `plugin/host-local.ts` — so the literal `./src/cli/cmd/tui/worker.ts` in the three build scripts is still correct and the compiled binary still emits the worker chunk at the matching bunfs path.
+> Since the CLI framework migration ([`specs/cli-framework.md`](./cli-framework.md)) that set is two files: `worker.ts` and `plugin/host-local.ts`. `thread.ts` is gone — the default command is now `src/cli/handlers/default.ts` — and `attach.ts` moved to `src/cli/handlers/attach.ts`. The boundary argument below is unchanged; only the file list is.
+
+**4. Create the package and move the tree.** Landed 2026-08-16. `packages/tui` holds 264 files; `src/cli/cmd/tui/` keeps four host files — `thread.ts`, `worker.ts`, `attach.ts` and `plugin/host-local.ts` — so the literal `./src/cli/cmd/tui/worker.ts` in the three build scripts is still correct and the compiled binary still emits the worker chunk at the matching bunfs path. (Two of those four have since moved; `worker.ts` has not, so the build-script path and the bunfs claim still hold — see the note in section 3.)
 
 It was not only a `git mv`. What the move actually cost, in the order it surfaced:
 

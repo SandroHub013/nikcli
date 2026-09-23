@@ -9,6 +9,7 @@ import {
   normalizePublicUrl,
   resolveServerUrl,
 } from "@nikcli-ai/util/mobile-pairing"
+import { win32EnableVirtualTerminal } from "@nikcli-ai/util/win32"
 import type { NetworkOptions, ResolvedNetworkConfig } from "@/cli/network"
 
 /** Helpers shared by the `mobile` commands. */
@@ -17,6 +18,11 @@ export { buildMobilePairingDeepLink, getLocalIPs, isLoopbackHostname, normalizeP
 
 export async function printPairing(info: { serverUrl: string; token: string; directory?: string }) {
   const deepLink = buildMobilePairingDeepLink(info)
+
+  // `generateQR` prints ANSI color. OpenTUI turns VT on for the TUI; this
+  // command never starts a renderer, so cmd.exe would otherwise echo the
+  // escapes as `←[40m` and drop the symbol.
+  win32EnableVirtualTerminal()
 
   console.log("")
   console.log("Nikcli Mobile Pairing")

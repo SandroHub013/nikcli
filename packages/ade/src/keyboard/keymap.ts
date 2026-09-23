@@ -60,6 +60,24 @@ const KEY_ALIASES: Record<string, string> = {
   left: "arrowleft",
   right: "arrowright",
   plus: "+",
+  /*
+   * The punctuation row, as `KeyboardEvent.code` and the global-hotkey crate
+   * spell it. A chord recorded here stores what `event.key` gives — "," — and
+   * the system reports the pressed hotkey as "Comma": without these the two
+   * spellings never met, so a voice chord on a punctuation key registered with
+   * the OS and was then thrown away every time it fired.
+   */
+  comma: ",",
+  period: ".",
+  slash: "/",
+  backslash: "\\",
+  backquote: "`",
+  minus: "-",
+  equal: "=",
+  semicolon: ";",
+  quote: "'",
+  bracketleft: "[",
+  bracketright: "]",
   controlleft: "control",
   controlright: "control",
   shiftleft: "shift",

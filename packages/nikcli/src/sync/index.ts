@@ -31,17 +31,25 @@ export interface SyncSequence {
 export namespace SyncStorage {
   const log = Log.create({ service: "sync.storage" })
 
-  function db() {
-    return Database.syncDb()
+  /** Run one synchronous query; this module's public surface is async. */
+  function query<A>(operation: string, run: (db: Database.TxOrDb) => A): A {
+    return Effect.runSync(Database.query(`Sync.${operation}`, run))
+  }
+
+  /** Run a synchronous transaction body, matching the previous driver call. */
+  function transact<A>(
+    operation: string,
+    run: (tx: Database.TxOrDb) => A,
+    options?: { behavior?: Database.TransactionBehavior },
+  ): A {
+    void operation
+    return Effect.runSync(Database.transaction((tx) => Effect.sync(() => run(tx)), options))
   }
 
   export async function loadEvents(projectID: string): Promise<SyncEventRecord[]> {
-    const rows = db()
-      .select()
-      .from(syncEvent)
-      .where(eq(syncEvent.projectId, projectID))
-      .orderBy(asc(syncEvent.seq))
-      .all()
+    const rows = query("loadEvents", (db) =>
+      db.select().from(syncEvent).where(eq(syncEvent.projectId, projectID)).orderBy(asc(syncEvent.seq)).all(),
+    )
     return rows.map((row) => ({
       id: row.id,
       projectId: row.projectId,
@@ -58,7 +66,8 @@ export namespace SyncStorage {
 
   export async function saveEvents(projectID: string, events: SyncEventRecord[]): Promise<void> {
     // Delete existing events for this project and re-insert atomically
-    db().transaction(
+    transact(
+      "saveEvents",
       (tx) => {
         tx.delete(syncEvent).where(eq(syncEvent.projectId, projectID)).run()
         for (const event of events) {
@@ -80,7 +89,9 @@ export namespace SyncStorage {
   }
 
   export async function loadSequence(projectID: string): Promise<SyncSequence> {
-    const rows = db().select().from(syncSequence).where(eq(syncSequence.projectId, projectID)).all()
+    const rows = query("loadSequence", (db) =>
+      db.select().from(syncSequence).where(eq(syncSequence.projectId, projectID)).all(),
+    )
     const seq: SyncSequence = {}
     for (const row of rows) {
       seq[row.aggregate] = row.seq
@@ -90,14 +101,16 @@ export namespace SyncStorage {
 
   export async function saveSequence(projectID: string, sequence: SyncSequence): Promise<void> {
     for (const [aggregate, seq] of Object.entries(sequence)) {
-      db()
-        .insert(syncSequence)
-        .values({ projectId: projectID, aggregate, seq })
-        .onConflictDoUpdate({
-          target: [syncSequence.projectId, syncSequence.aggregate],
-          set: { seq },
-        })
-        .run()
+      query("saveSequence", (db) =>
+        db
+          .insert(syncSequence)
+          .values({ projectId: projectID, aggregate, seq })
+          .onConflictDoUpdate({
+            target: [syncSequence.projectId, syncSequence.aggregate],
+            set: { seq },
+          })
+          .run(),
+      )
     }
   }
 
@@ -176,7 +189,7 @@ export namespace SyncStorage {
   }
 
   export async function appendEvent(projectID: string, event: SyncEventRecord): Promise<void> {
-    db().transaction((tx) => appendEventWith(tx, projectID, event), {
+    transact("appendEvent", (tx) => appendEventWith(tx, projectID, event), {
       behavior: "immediate",
     })
   }
@@ -188,7 +201,8 @@ export namespace SyncStorage {
   ): Promise<SyncEventRecord> {
     // BEGIN IMMEDIATE so sequence read + append are atomic even across
     // multiple processes sharing nikcli.db.
-    return db().transaction(
+    return transact(
+      "reserveSeqAndAppend",
       (tx) => {
         const seqRow = tx
           .select({ seq: syncSequence.seq })
@@ -209,12 +223,14 @@ export namespace SyncStorage {
     if (fromSeq !== undefined) {
       conditions.push(sql`${syncEvent.seq} > ${fromSeq}`)
     }
-    const rows = db()
-      .select()
-      .from(syncEvent)
-      .where(and(...conditions))
-      .orderBy(asc(syncEvent.seq))
-      .all()
+    const rows = query("loadEvents", (db) =>
+      db
+        .select()
+        .from(syncEvent)
+        .where(and(...conditions))
+        .orderBy(asc(syncEvent.seq))
+        .all(),
+    )
     return rows.map((row) => ({
       id: row.id,
       projectId: row.projectId,
@@ -230,11 +246,13 @@ export namespace SyncStorage {
   }
 
   export async function getLatestSeq(projectID: string, aggregate: string): Promise<number> {
-    const row = db()
-      .select({ seq: syncSequence.seq })
-      .from(syncSequence)
-      .where(and(eq(syncSequence.projectId, projectID), eq(syncSequence.aggregate, aggregate)))
-      .get()
+    const row = query("getLatestSeq", (db) =>
+      db
+        .select({ seq: syncSequence.seq })
+        .from(syncSequence)
+        .where(and(eq(syncSequence.projectId, projectID), eq(syncSequence.aggregate, aggregate)))
+        .get(),
+    )
     return row?.seq ?? 0
   }
 
@@ -245,19 +263,23 @@ export namespace SyncStorage {
    * against to know whether it is about to skip a hole rather than resume.
    */
   export async function oldestSeq(projectID: string, aggregate: string): Promise<number | undefined> {
-    const row = db()
-      .select({ seq: syncEvent.seq })
-      .from(syncEvent)
-      .where(and(eq(syncEvent.projectId, projectID), eq(syncEvent.aggregate, aggregate)))
-      .orderBy(asc(syncEvent.seq))
-      .limit(1)
-      .get()
+    const row = query("oldestSeq", (db) =>
+      db
+        .select({ seq: syncEvent.seq })
+        .from(syncEvent)
+        .where(and(eq(syncEvent.projectId, projectID), eq(syncEvent.aggregate, aggregate)))
+        .orderBy(asc(syncEvent.seq))
+        .limit(1)
+        .get(),
+    )
     return row?.seq
   }
 
   export async function clear(projectID: string): Promise<void> {
-    db().delete(syncEvent).where(eq(syncEvent.projectId, projectID)).run()
-    db().delete(syncSequence).where(eq(syncSequence.projectId, projectID)).run()
+    query("clear", (db) => {
+      db.delete(syncEvent).where(eq(syncEvent.projectId, projectID)).run()
+      db.delete(syncSequence).where(eq(syncSequence.projectId, projectID)).run()
+    })
   }
 
   /**
@@ -275,7 +297,7 @@ export namespace SyncStorage {
     if (metadata.origin !== undefined) updates.origin = metadata.origin
     if (metadata.originSeq !== undefined) updates.originSeq = metadata.originSeq
     if (Object.keys(updates).length === 0) return
-    db().update(syncEvent).set(updates).where(eq(syncEvent.id, eventID)).run()
+    query("stampMetadata", (db) => db.update(syncEvent).set(updates).where(eq(syncEvent.id, eventID)).run())
   }
 
   /**
@@ -286,12 +308,14 @@ export namespace SyncStorage {
    * suitable for cold-start projection.
    */
   export async function readAggregate(aggregate: string): Promise<unknown[]> {
-    const rows = db()
-      .select({ data: syncEvent.data, seq: syncEvent.seq })
-      .from(syncEvent)
-      .where(eq(syncEvent.aggregate, aggregate))
-      .orderBy(asc(syncEvent.seq))
-      .all()
+    const rows = query("readAggregate", (db) =>
+      db
+        .select({ data: syncEvent.data, seq: syncEvent.seq })
+        .from(syncEvent)
+        .where(eq(syncEvent.aggregate, aggregate))
+        .orderBy(asc(syncEvent.seq))
+        .all(),
+    )
     return rows.map((row) => {
       try {
         return JSON.parse(row.data)
@@ -491,8 +515,8 @@ export namespace Sync {
   /**
    * Default layer for `Sync.Service`. All methods are async wrappers over
    * the existing free functions, so the layer carries no dependencies of
-   * its own. The `Database.syncDb()` handle inside the free functions
-   * resolves its own globals.
+   * its own. The free functions run their own queries through the shared
+   * connection.
    */
   export const layer: Layer.Layer<Service> = Layer.succeed(
     Service,
@@ -541,25 +565,28 @@ export namespace Sync {
           const { eq, sql } = await import("drizzle-orm")
           const { syncOutbox, syncEvent } = await import("./sync.sql")
           const resolved = await SyncConfig.resolve()
-          const db = Database.syncDb()
-          const pending =
-            db
-              .select({ count: sql<number>`cast(count(*) as integer)` })
-              .from(syncOutbox)
-              .where(eq(syncOutbox.status, "pending"))
-              .get()?.count ?? 0
-          const failed =
-            db
-              .select({ count: sql<number>`cast(count(*) as integer)` })
-              .from(syncOutbox)
-              .where(eq(syncOutbox.status, "failed"))
-              .get()?.count ?? 0
-          const latest = db
-            .select({ seq: syncEvent.seq })
-            .from(syncEvent)
-            .orderBy(sql`${syncEvent.seq} DESC`)
-            .limit(1)
-            .get()
+          const { pending, failed, latest } = Effect.runSync(
+            Database.query("Sync.status", (db) => ({
+              pending:
+                db
+                  .select({ count: sql<number>`cast(count(*) as integer)` })
+                  .from(syncOutbox)
+                  .where(eq(syncOutbox.status, "pending"))
+                  .get()?.count ?? 0,
+              failed:
+                db
+                  .select({ count: sql<number>`cast(count(*) as integer)` })
+                  .from(syncOutbox)
+                  .where(eq(syncOutbox.status, "failed"))
+                  .get()?.count ?? 0,
+              latest: db
+                .select({ seq: syncEvent.seq })
+                .from(syncEvent)
+                .orderBy(sql`${syncEvent.seq} DESC`)
+                .limit(1)
+                .get(),
+            })),
+          )
           return {
             configured: resolved.configured,
             url: resolved.url,

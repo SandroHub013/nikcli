@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { Effect } from "effect"
 import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it, mock } from "bun:test"
 import fs from "fs/promises"
@@ -98,7 +99,7 @@ describe("instance-derived module state", () => {
     const parent = "ses_shared_parent"
 
     const mine = await project("bg-a", async () => {
-      BackgroundRunRepo.upsert(Instance.project.id, record("run-a", parent))
+      Effect.runSync(BackgroundRunRepo.upsert(Instance.project.id, record("run-a", parent)))
       return BackgroundRun.listForParent(parent)
     })
     expect(mine.map((r) => r.id)).toEqual(["run-a"])

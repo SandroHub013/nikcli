@@ -13,15 +13,25 @@
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
 mod agent_link;
+mod brand;
+mod append;
+mod browse;
+mod browser_shot;
 mod frontend;
 mod media;
+mod project_bytes;
 mod pty;
+mod record;
+mod secrets;
 mod serve;
 mod shots;
 mod mailbox;
 mod stats;
+mod tts;
 mod usage;
+mod vision;
 mod update;
+mod glass;
 
 use serde::Serialize;
 use std::ffi::OsStr;
@@ -449,13 +459,20 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
 
 /// The arguments `nikcli` may be run with from the bots panel.
 ///
+///   nikcli --version
 ///   nikcli models
 ///   nikcli agent create --path <dir> --description <t> --mode <m> --tools <list> [--model <id>]
 ///
 /// Each option once, each with a value, and `--path` a configuration root the
 /// agent file is then written under.
+///
+/// `--version` is here rather than behind a door of its own: it is the same
+/// program with fixed arguments, it writes nothing and reads nothing but
+/// itself, and the top bar asks it a few times a day. A second command would
+/// have been a second thing to keep in step with this list for no gain.
 fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
     match args {
+        [only] if only == "--version" => Ok(()),
         [only] if only == "models" => Ok(()),
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
@@ -506,6 +523,35 @@ async fn nikcli_bot(
         command.creation_flags(0x0800_0000);
     }
     let output = command.output().map_err(|e| format!("nikcli non eseguibile: {e}"))?;
+    Ok(ShellOutput {
+        code: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+/// Runs `claude agents --json`, the CLI's own list of its live sessions, and
+/// hands back what it printed.
+///
+/// One program, fixed arguments, nothing from the caller but a directory: the
+/// list is what native mail delivery is routed on, and `run` is git-only on
+/// purpose (see below), so this is the second door of its kind, next to
+/// `nikcli_bot`. An older CLI without the subcommand exits non-zero, and the
+/// caller reads that as "the CLI does not list".
+#[tauri::command]
+async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
+    let program = pty::which_on_path("claude").ok_or("claude non trovato nel PATH")?;
+    let mut command = std::process::Command::new(program);
+    command.args(["agents", "--json"]).stdin(std::process::Stdio::null());
+    if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
+        command.current_dir(dir);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let output = command.output().map_err(|e| format!("claude non eseguibile: {e}"))?;
     Ok(ShellOutput {
         code: output.status.code(),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
@@ -860,6 +906,41 @@ pub(crate) fn is_test_build(app: &tauri::AppHandle) -> bool {
     app.config().identifier.ends_with(".test")
 }
 
+/// Whether the Windows session is locked, so always-on listening can pause.
+///
+/// While the lock screen is up the input desktop is Winlogon's, which this
+/// process may not switch to: that refusal is the whole test. No event is
+/// needed — the page asks every few seconds — and no new crate: two calls into
+/// user32, which every Windows process already loads.
+#[tauri::command]
+fn session_locked() -> bool {
+    #[cfg(windows)]
+    {
+        use std::ffi::c_void;
+        #[link(name = "user32")]
+        extern "system" {
+            fn OpenInputDesktop(flags: u32, inherit: i32, access: u32) -> *mut c_void;
+            fn SwitchDesktop(desktop: *mut c_void) -> i32;
+            fn CloseDesktop(desktop: *mut c_void) -> i32;
+        }
+        const DESKTOP_SWITCHDESKTOP: u32 = 0x0100;
+        // SAFETY: plain Win32 calls; the handle is closed before returning.
+        unsafe {
+            let desktop = OpenInputDesktop(0, 0, DESKTOP_SWITCHDESKTOP);
+            if desktop.is_null() {
+                return true;
+            }
+            let switched = SwitchDesktop(desktop);
+            CloseDesktop(desktop);
+            switched == 0
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 #[tauri::command]
 async fn register_global_voice_shortcut(app: tauri::AppHandle, chord: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -888,7 +969,9 @@ async fn unregister_global_voice_shortcuts(app: tauri::AppHandle) -> Result<(), 
 /// nothing but its event-target window, and neither the log nor the exit code
 /// mentions it. Building it explicitly turns that into an error with a reason.
 fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let mut title = app.config().product_name.clone().unwrap_or_else(|| "ADE".into());
+    // The config always names the product (`bun run brand` writes it); the
+    // fallback reads the same brand.json, so no name is typed here.
+    let mut title = app.config().product_name.clone().unwrap_or_else(|| crate::brand::name().to_owned());
     // `bun run test:app` names the worktree and branch, so with several test
     // instances open the taskbar says which is which.
     if is_test_build(app) {
@@ -903,7 +986,11 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
         .inner_size(1440.0, 900.0)
         .min_inner_size(960.0, 600.0)
         .resizable(true)
+        .transparent(true)
         .disable_drag_drop_handler()
+        // In every frame: Tauri's IPC made inert, and the inspector bridge in
+        // a browser pane's frame. See `src/browser/frame-script.ts`.
+        .initialization_script_for_all_frames(include_str!("../scripts/browser-frame.js"))
         .center();
 
     #[cfg(target_os = "macos")]
@@ -951,9 +1038,112 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 
     let window = builder.build()?;
 
+    #[cfg(windows)]
+    {
+        #[cfg(debug_assertions)]
+        let origin = own_origin(tauri::Manager::config(&window).build.dev_url.as_ref());
+        #[cfg(not(debug_assertions))]
+        let origin = own_origin(None);
+        browse::refuse_ade_in_frames(&window, origin);
+        allow_own_microphone(&window);
+    }
+
     window.show()?;
     window.set_focus()?;
     Ok(())
+}
+
+/**
+ * The microphone for ADE's own page, without WebView2's permission prompt.
+ *
+ * WebView2 asks like a browser does — «tauri.localhost desidera usare i
+ * microfoni» — and remembers the answer in the profile. A desktop app has no
+ * browser settings to take a «Blocca» back, so one wrong click left the voice
+ * assistant refusing to start for good, with an error pointing at settings
+ * that do not exist. The page is the app itself: its request is granted, as a
+ * native app's would be, and Windows' own microphone privacy switch still
+ * applies. Anything else asking — a site in the browser pane's frame — keeps
+ * the prompt.
+ */
+/**
+ * Where ADE's page comes from. It is not loaded yet when the window is built,
+ * so its address is the one it will have: Vite's in development, Tauri's own
+ * scheme in a release (http://tauri.localhost on Windows, without
+ * useHttpsScheme).
+ */
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn own_origin(dev_url: Option<&tauri::Url>) -> String {
+    dev_url
+        .map(|url| url.origin().ascii_serialization())
+        .filter(|origin| origin != "null")
+        .unwrap_or_else(|| "http://tauri.localhost".to_string())
+}
+
+#[cfg(test)]
+mod own_origin_tests {
+    use super::own_origin;
+
+    #[test]
+    fn development_uses_the_dev_server_and_a_release_tauri_localhost() {
+        let dev = tauri::Url::parse("http://localhost:5270/").unwrap();
+        assert_eq!(own_origin(Some(&dev)), "http://localhost:5270");
+        assert_eq!(own_origin(None), "http://tauri.localhost");
+    }
+}
+
+#[cfg(windows)]
+fn allow_own_microphone(window: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Profile4, ICoreWebView2_13, COREWEBVIEW2_PERMISSION_KIND,
+        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+    };
+    use webview2_com::{take_pwstr, PermissionRequestedEventHandler, SetPermissionStateCompletedHandler};
+    use windows_core::{Interface, HSTRING};
+
+    #[cfg(debug_assertions)]
+    let origin = own_origin(tauri::Manager::config(window).build.dev_url.as_ref());
+    #[cfg(not(debug_assertions))]
+    let origin = own_origin(None);
+    let result = window.with_webview(move |webview| unsafe {
+        let Ok(core) = webview.controller().CoreWebView2() else { return };
+        // A «Blocca» already saved in the profile is never asked again, so the
+        // handler below would not hear of it: the saved answer is replaced.
+        let profile = core.cast::<ICoreWebView2_13>().and_then(|core| core.Profile()).and_then(|p| p.cast::<ICoreWebView2Profile4>());
+        if let Ok(profile) = profile {
+            let done = SetPermissionStateCompletedHandler::create(Box::new(|_| Ok(())));
+            if let Err(error) = profile.SetPermissionState(
+                COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+                &HSTRING::from(origin.as_str()),
+                COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+                &done,
+            ) {
+                eprintln!("ADE: permesso del microfono non salvato per {origin}: {error}");
+            }
+        }
+        let handler = PermissionRequestedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+            args.PermissionKind(&mut kind)?;
+            if kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                return Ok(());
+            }
+            let mut uri = windows_core::PWSTR::null();
+            args.Uri(&mut uri)?;
+            let uri = take_pwstr(uri);
+            let same_origin = tauri::Url::parse(&uri).map(|u| u.origin().ascii_serialization() == origin).unwrap_or(false);
+            if same_origin {
+                args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        if let Err(error) = core.add_PermissionRequested(&handler, &mut token) {
+            eprintln!("ADE: permesso del microfono non collegato: {error}");
+        }
+    });
+    if let Err(error) = result {
+        eprintln!("ADE: permesso del microfono non collegato: {error}");
+    }
 }
 
 pub fn run() {
@@ -989,11 +1179,14 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
+        .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
+        .manage(secrets::SecretsLock::default())
         .manage(stats::Stats::new())
+        .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
         /*
          * The video panel's files.
@@ -1005,11 +1198,20 @@ pub fn run() {
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
-            let roots = match state.0.lock() {
+            let mut roots = match state.0.lock() {
                 Ok(guard) => guard.clone(),
                 Err(_) => Vec::new(),
             };
-            media::respond(&roots, &request)
+            // The recent takes' own files, one by one: their folder is not a root.
+            roots.extend(ctx.app_handle().state::<record::Recorder>().playable());
+            // The asking page's own origin, as the webview reports it: the
+            // one origin that may read a take back into a canvas.
+            let origin = ctx
+                .app_handle()
+                .get_webview_window(ctx.webview_label())
+                .and_then(|webview| webview.url().ok())
+                .map(|url| url.origin().ascii_serialization());
+            media::respond(&roots, &request, origin.as_deref())
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -1027,11 +1229,22 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ade_open_release,
+            browse::ade_browser_framing,
+            browse::ade_open_in_browser,
+            browse::ade_forget_site,
+            browser_shot::browser_shot,
+            vision::capture_window,
+            vision::vision_allowed,
             update::ade_update_install,
+            record::record_start,
+            record::record_stop,
+            record::record_state,
+            record::record_write,
             allow_write_root,
             git_run,
             bot_delete,
             nikcli_bot,
+            claude_agents,
             read_dir,
             read_text_file,
             write_text_file,
@@ -1042,6 +1255,11 @@ pub fn run() {
             stats::system_stats,
             usage::transcript_usage,
             mailbox::mailbox_take,
+            tts::tts_piper_status,
+            tts::tts_piper_install,
+            tts::tts_piper_speak,
+            tts::tts_piper_stop,
+            tts::tts_open_voice_source,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
@@ -1068,12 +1286,22 @@ pub fn run() {
             shots::shots_watch,
             shots::shot_bytes,
             shots::shot_delete,
+            project_bytes::read_project_bytes,
+            append::append_text_file,
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,
             write_clipboard,
+            secrets::secret_list,
+            secrets::secret_save,
+            secrets::secret_delete,
+            secrets::secret_copy,
+            secrets::secret_assigned,
             register_global_voice_shortcut,
             unregister_global_voice_shortcuts,
+            session_locked,
+            glass::ade_glass_status,
+            glass::ade_window_set_glass,
         ])
         .build(tauri::generate_context!())
         .expect("error while running ADE")
@@ -1269,12 +1497,13 @@ mod tests {
     }
 
     #[test]
-    fn nikcli_runs_only_the_two_bot_commands() {
+    fn nikcli_runs_only_the_commands_on_the_list() {
         let dir = TempDir::new("bots");
         let roots = dir.roots();
         let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
         let home = dir.join(".nikcli").to_string_lossy().into_owned();
 
+        assert!(check_nikcli_args(&roots, &args(&["--version"])).is_ok());
         assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
         assert!(check_nikcli_args(
             &roots,
@@ -1284,6 +1513,8 @@ mod tests {
         for bad in [
             &["run", "rm -rf"][..],
             &["models", "--x"],
+            &["--version", "--x"],
+            &["--help"],
             &["agent", "create", "--description", "a"],
             &["agent", "create", "--path", &home, "--path", &home],
             &["agent", "create", "--path", &home, "--exec", "calc"],

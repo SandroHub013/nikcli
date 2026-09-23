@@ -239,6 +239,76 @@ describe("Account.Service", () => {
       ),
     ).rejects.toThrow()
   })
+
+  /**
+   * `auth.nikcli.store` serves no `/api/user/orgs` and has no orgs table, so
+   * the only answer this call ever got in production was a 404 — which the
+   * service raised as `AccountFetchOrgs` and `nikcli account orgs` printed as
+   * "Failed to fetch orgs: 404 404 Not Found". An issuer with no organizations
+   * endpoint has no organizations, which is an empty list.
+   */
+  it("reads an issuer without an organizations endpoint as having none", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.endsWith("oauth/device/token")) {
+        return Response.json({
+          status: "success",
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 3600,
+        })
+      }
+      if (url.endsWith("userinfo")) return Response.json({ email: "orgs@example.com" })
+      if (url.endsWith("api/user/orgs")) return new Response("Not Found", { status: 404 })
+      throw new Error(`unexpected request: ${url}`)
+    }) as typeof fetch
+
+    try {
+      const orgs = await runAccount(
+        Effect.gen(function* () {
+          const account = yield* Account.Service
+          const session = yield* account.poll("device-code" as never)
+          return yield* account.orgs(session.accountID)
+        }),
+      )
+      expect(orgs).toEqual([])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it("still reports a real organizations failure", async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.endsWith("oauth/device/token")) {
+        return Response.json({
+          status: "success",
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 3600,
+        })
+      }
+      if (url.endsWith("userinfo")) return Response.json({ email: "orgs-down@example.com" })
+      if (url.endsWith("api/user/orgs")) return new Response("boom", { status: 503 })
+      throw new Error(`unexpected request: ${url}`)
+    }) as typeof fetch
+
+    try {
+      await expect(
+        runAccount(
+          Effect.gen(function* () {
+            const account = yield* Account.Service
+            const session = yield* account.poll("device-code" as never)
+            return yield* account.orgs(session.accountID)
+          }),
+        ),
+      ).rejects.toThrow(/503/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 afterAll(async () => {

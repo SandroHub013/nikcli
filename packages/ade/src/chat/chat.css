@@ -334,7 +334,10 @@
 
 [data-slot="chat-send"] {
   flex: 0 0 auto;
-  height: 40px;
+  /* 32 is the `lg` of the button scale. It was 40 — the height of a text
+     field, because it had been lined up with the box beside it, which made the
+     most frequent action in the app also the largest button in it. */
+  height: 32px;
   padding: 0 var(--ade-space-7);
   border: 1px solid transparent;
   border-radius: var(--ade-radius-lg);
@@ -344,7 +347,11 @@
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
-  transition: background var(--ade-dur-fast) var(--ade-ease);
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="chat-send"]:active:not(:disabled) {
+  transform: var(--ade-press);
 }
 
 [data-slot="chat-send"]:hover:not(:disabled) {

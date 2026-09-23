@@ -3,6 +3,21 @@ import type { PaneSummary } from "../bridge/host"
 import { parseUtterance } from "./parse"
 
 describe("parseUtterance", () => {
+  test("the panels of the + menu each have a phrase, and the old ones keep theirs", () => {
+    const cases: [string, string][] = [
+      ["apri il video", "video.new"],
+      ["apri il modello 3D", "model.new"],
+      ["apri il simulatore", "app.new"],
+      ["apri le decisioni", "decisions.open"],
+      ["apri il browser", "browser.new"],
+      ["vai al pannello 2", "pane.focus"],
+    ]
+    for (const [sentence, intent] of cases) {
+      const parsed = parseUtterance(sentence)
+      expect([sentence, parsed.outcome, parsed.intent?.intent]).toEqual([sentence, "matched", intent])
+    }
+  })
+
   describe("synonyms and variants", () => {
     test("matches 'nuova sessione' and synonyms", () => {
       const res1 = parseUtterance("nuova sessione")
@@ -50,6 +65,27 @@ describe("parseUtterance", () => {
   })
 
   describe("slot extraction", () => {
+    test("«tema chiaro» and «tema scuro» name the theme they want", () => {
+      expect(parseUtterance("tema chiaro").slots.text).toBe("light")
+      expect(parseUtterance("modalità scura").slots.text).toBe("dark")
+      expect(parseUtterance("cambia tema").slots.text).toBeUndefined()
+    })
+
+    test("«cerca file X» searches for X instead of losing it to a file path", () => {
+      const search = parseUtterance("cerca file parser")
+      expect(search.intent?.intent).toBe("project.search")
+      expect(search.slots.text).toBe("parser")
+      expect(search.slots.path).toBeUndefined()
+
+      const withArticle = parseUtterance("cerca il file parser")
+      expect(withArticle.intent?.intent).toBe("project.search")
+      expect(withArticle.slots.text).toBe("parser")
+      expect(withArticle.slots.path).toBeUndefined()
+
+      // Opening a file still takes its path.
+      expect(parseUtterance("apri file src/bridge/host.ts").slots.path).toBe("src/bridge/host.ts")
+    })
+
     test("extracts paneIndex from written and numeric numbers", () => {
       const res1 = parseUtterance("chiudi il pannello 3")
       expect(res1.slots.paneIndex).toBe(3)

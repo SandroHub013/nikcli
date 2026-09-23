@@ -43,3 +43,16 @@ export async function pickProvider(input: PickInput): Promise<PickResult> {
     return { agent: input.agent }
   }
 }
+
+/**
+ * Whether a spawn may be routed by quota at all.
+ *
+ * Not when the caller chose something that belongs to one agent: a `--model`
+ * is a choice of provider already, a `--fork` is that CLI's conversation, and
+ * a `--profile` or `--effort` is checked against the agent it names — rerouted
+ * first, a valid `ade-msg spawn claude --effort max` was refused as an effort
+ * Codex does not take, with nothing in the error saying the agent had changed.
+ */
+export function mayReroute(options: { fork?: boolean; model?: string; profile?: string; effort?: string }): boolean {
+  return !options.fork && !options.model && !options.profile && !options.effort
+}

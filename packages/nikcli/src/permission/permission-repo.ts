@@ -5,41 +5,57 @@ import type { PermissionNext } from "./next"
 
 /**
  * SQL-backed repository for Permission data.
- * Provides synchronous CRUD operations against the central nikcli.db.
+ *
+ * Every operation is an Effect whose failure is `Database.QueryError`; the
+ * queries underneath stay synchronous. A corrupt `rules` blob reads as an
+ * empty ruleset rather than failing, matching the JSON store it replaced.
  */
 export namespace PermissionRepo {
-  function db() {
-    return Database.syncDb()
+  export function get(projectId: string, executor?: Database.TxOrDb) {
+    return Database.query(
+      "PermissionRepo.get",
+      (db) => {
+        const row = db.select().from(permissionRuleset).where(eq(permissionRuleset.projectId, projectId)).get()
+        if (!row) return [] as PermissionNext.Ruleset
+        try {
+          return JSON.parse(row.rules) as PermissionNext.Ruleset
+        } catch {
+          return [] as PermissionNext.Ruleset
+        }
+      },
+      executor,
+    )
   }
 
-  export function get(projectId: string): PermissionNext.Ruleset {
-    const row = db().select().from(permissionRuleset).where(eq(permissionRuleset.projectId, projectId)).get()
-    if (!row) return []
-    try {
-      return JSON.parse(row.rules) as PermissionNext.Ruleset
-    } catch {
-      return []
-    }
+  export function upsert(projectId: string, rules: PermissionNext.Ruleset, executor?: Database.TxOrDb) {
+    return Database.query(
+      "PermissionRepo.upsert",
+      (db) => {
+        db.insert(permissionRuleset)
+          .values({
+            projectId,
+            rules: JSON.stringify(rules),
+          })
+          .onConflictDoUpdate({
+            target: permissionRuleset.projectId,
+            set: {
+              rules: JSON.stringify(rules),
+            },
+          })
+          .run()
+      },
+      executor,
+    )
   }
 
-  export function upsert(projectId: string, rules: PermissionNext.Ruleset): void {
-    db()
-      .insert(permissionRuleset)
-      .values({
-        projectId,
-        rules: JSON.stringify(rules),
-      })
-      .onConflictDoUpdate({
-        target: permissionRuleset.projectId,
-        set: {
-          rules: JSON.stringify(rules),
-        },
-      })
-      .run()
-  }
-
-  export function remove(projectId: string): boolean {
-    const result = db().delete(permissionRuleset).where(eq(permissionRuleset.projectId, projectId)).run()
-    return (result as any).changes > 0
+  export function remove(projectId: string, executor?: Database.TxOrDb) {
+    return Database.query(
+      "PermissionRepo.remove",
+      (db) => {
+        const result = db.delete(permissionRuleset).where(eq(permissionRuleset.projectId, projectId)).run()
+        return (result as { changes: number }).changes > 0
+      },
+      executor,
+    )
   }
 }

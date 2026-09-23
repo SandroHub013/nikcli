@@ -1,4 +1,5 @@
 import { Bus } from "@/bus"
+import { Effect } from "effect"
 import { BusEvent } from "@/bus/bus-event"
 import { Instance } from "@/project/instance"
 import { Log } from "@nikcli-ai/util/log"
@@ -277,7 +278,7 @@ export namespace SessionProjector {
    */
   function isUserMessage(sessionID: string, messageID: string): boolean {
     try {
-      return MessageRepo.getMessage(sessionID, messageID)?.role === "user"
+      return Effect.runSync(MessageRepo.getMessage(sessionID, messageID))?.role === "user"
     } catch (error) {
       log.warn("failed to resolve message role", { sessionID, messageID, error })
       return false
@@ -291,7 +292,7 @@ export namespace SessionProjector {
   /** Republish an entry the persisted projection already wrote. */
   function publishStored(sessionID: string, ref: string) {
     try {
-      const entry = SessionEntryRepo.byRef(sessionID, ref)
+      const entry = Effect.runSync(SessionEntryRepo.byRef(sessionID, ref))
       if (entry) publishEntry(sessionID, entry)
     } catch (error) {
       log.warn("failed to read stored entry for publication", { sessionID, ref, error })

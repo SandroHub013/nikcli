@@ -107,6 +107,21 @@ export {
   type Speaker,
   type WebSpeechSpeakerOptions,
 } from "./tts/speaker"
+export {
+  createNaturalSpeaker,
+  splitSentences,
+  type NaturalSpeaker,
+  type NaturalSpeakerDeps,
+} from "./tts/natural-speaker"
+export {
+  createPlaybackMeter,
+  levelAt,
+  syntheticSpeechLevel,
+  wavEnvelope,
+  type Envelope,
+  type PlaybackMeter,
+} from "./tts/playback-level"
+export { orbPhase, orbCentered, type OrbPhase } from "./ui/agent-orb-state"
 
 export {
   replySpeech,
@@ -115,6 +130,7 @@ export {
   type ReplySummaryOptions,
   type SpeakableLine,
 } from "./tts/reply"
+export { cleanForSpeech } from "./tts/clean"
 
 // Planning: what the hand-written grammar cannot match
 export { announceExecution, executePlan, type PlanExecution } from "./plan/execute"
@@ -141,16 +157,19 @@ export {
 } from "./plan/schema"
 
 // Voice orchestration engine
-export { createVoiceEngine, type VoiceEngine, type VoiceEngineOptions } from "./engine"
+export { createVoiceEngine, holdsToTalk, type VoiceEngine, type VoiceEngineOptions } from "./engine"
 
 // Solid UI components
 export { VoiceButton, type VoiceButtonProps } from "./ui/voice-button"
 
 export { VoiceOrb, orbLevel, type VoiceOrbProps } from "./ui/voice-orb"
+export { ListeningIndicator } from "./ui/listening-indicator"
+export { listeningState, type ListeningState } from "./ui/listening-state"
 
 export { OrbMark, type OrbMarkProps, type OrbRim } from "./ui/orb-mark"
 
 export { VoiceHud, type VoiceHudProps } from "./ui/voice-hud"
+export { AgentOrb, type AgentOrbProps } from "./ui/agent-orb"
 
 export { NikMic, type NikMicProps } from "./ui/nik-mic"
 
@@ -293,8 +312,19 @@ export {
 export {
   CURRENT_SETTINGS_VERSION,
   AGENT_ENGINES,
+  REPLY_VOICES,
+  type ReplyVoice,
   DEFAULT_VOICE_SETTINGS,
+  WAKE_PHRASE,
+  WAKE_WORD_ENABLED,
+  wakeWordEnabled,
+  setWakeWordEnabledForTests,
+  SHORTCUT_ACTIVATION_ENABLED,
+  shortcutActivationEnabled,
+  setShortcutActivationEnabledForTests,
   type AgentEngine,
+  AGENT_SPEEDS,
+  type AgentSpeed,
   normalizeSettings,
   type NormalizedVoiceSettings,
   type ParakeetExecutionBackend,
@@ -303,6 +333,12 @@ export {
   type VoiceMode,
   type VoiceSettings,
 } from "./settings/model"
+
+export {
+  REPLY_VOICE_CHOICES,
+  activeReplyVoice,
+  replyVoiceChoicesForLocale,
+} from "./settings/reply-voices"
 
 export {
   VOICE_API_KEY_STORAGE_KEY,

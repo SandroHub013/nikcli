@@ -805,11 +805,11 @@ export default function UserScreen() {
     }, [loadUsers]),
   )
 
-  async function handleRefresh() {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     await loadUsers()
     setRefreshing(false)
-  }
+  }, [loadUsers])
 
   async function handleSave() {
     if (!config || !userToken || !currentUser) return
@@ -846,7 +846,7 @@ export default function UserScreen() {
   }
 
   const refreshControlElement = useMemo(
-    () => <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={palette.accent} />,
+    () => <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={palette.accent} />,
     [refreshing, handleRefresh, palette.accent],
   )
 

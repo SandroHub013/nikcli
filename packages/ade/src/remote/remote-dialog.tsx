@@ -12,6 +12,7 @@ import { discoverSshHosts, type SshDiscovery } from "./discover"
 import { checkRemoteDir, parseTargetInput, targetOf, type RemoteTarget, type SshHost } from "./ssh"
 import { Badge, Overlay, Row, Scroll, Stack, Surface } from "../ui/layout"
 import "./remote.css"
+import { t } from "../i18n"
 
 export function RemoteSpaceDialog(props: { open: boolean; onClose: () => void; onConnect: (target: RemoteTarget) => void }) {
   return (
@@ -72,11 +73,11 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
 
   return (
     <Overlay data-component="remote-space" onClose={props.onClose}>
-      <Surface size="md" role="dialog" aria-modal="true" aria-label="Aggiungi ambiente remoto">
+      <Surface size="md" role="dialog" aria-modal="true" aria-label={t("remote.label")}>
         <Row as="header" justify="between" gap={4} padX={6} padY={5} border="bottom">
-          <strong>Ambiente remoto (ssh)</strong>
+          <strong>{t("remote.title")}</strong>
           <Show when={found() && !found()!.client}>
-            <Badge tone="error">ssh non trovato nel PATH</Badge>
+            <Badge tone="error">{t("remote.noSsh")}</Badge>
           </Show>
         </Row>
         <Stack gap={3} padX={6} padY={5}>
@@ -84,7 +85,7 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
             ref={input}
             data-slot="input"
             value={query()}
-            placeholder="Host, utente@host o utente@host:porta"
+            placeholder={t("remote.target")}
             onInput={(event) => {
               setQuery(event.currentTarget.value)
               setProblem(undefined)
@@ -94,7 +95,7 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
           <input
             data-slot="input"
             value={folder()}
-            placeholder="Cartella remota (facoltativa): ~/progetto o /srv/app"
+            placeholder={t("remote.folder")}
             onInput={(event) => {
               setFolder(event.currentTarget.value)
               setProblem(undefined)
@@ -106,14 +107,14 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
           </Show>
         </Stack>
         <Scroll max="320px" data-slot="list" role="listbox">
-          <Show when={!found.loading} fallback={<p data-slot="empty">Cerco gli host in ~/.ssh…</p>}>
+          <Show when={!found.loading} fallback={<p data-slot="empty">{t("remote.searching")}</p>}>
             <Show
               when={hosts().length > 0}
               fallback={
                 <p data-slot="empty">
                   {query().trim()
-                    ? "Nessun host noto: Invio si collega a quello scritto."
-                    : "Nessun host in ~/.ssh/config o known_hosts."}
+                    ? t("remote.noKnownHost")
+                    : t("remote.noHosts")}
                 </p>
               }
             >
@@ -135,10 +136,10 @@ function Dialog(props: { onClose: () => void; onConnect: (target: RemoteTarget) 
         </Scroll>
         <Row as="footer" justify="end" gap={3} wrap padX={6} padY={4} border="top">
           <button type="button" data-slot="secondary" onClick={() => props.onClose()}>
-            Annulla
+            {t("new.cancel")}
           </button>
           <button type="button" data-slot="primary" disabled={!query().trim()} onClick={() => connect()}>
-            Connetti a «{query().trim() || "…"}»
+            {t("remote.connect", query().trim() || "…")}
           </button>
         </Row>
       </Surface>

@@ -35,6 +35,7 @@ import { OrbMark } from "./orb-mark"
 import { orbLevel } from "./voice-orb"
 import {
   agentHudState,
+  latestExchange,
   HUD_WAVE,
   orbRim,
   preparingHudState,
@@ -42,6 +43,7 @@ import {
   type HudState,
 } from "./voice-hud-state"
 import "./voice-hud.css"
+import { t } from "@nikcli-ai/ade/i18n"
 
 export interface VoiceHudProps {
   /** The voice control engine instance. */
@@ -144,12 +146,6 @@ export function VoiceHud(props: VoiceHudProps) {
    * earlier: the first use of the local model downloads it, and that wait is
    * far too long to spend showing nothing.
    */
-  const visible = createMemo(() =>
-    props.open !== undefined
-      ? props.open
-      : running() || preparing() !== undefined || failure() !== undefined,
-  )
-
   const readback = createMemo(() => {
     const result = parse()
     return result?.outcome === "matched" ? result.intent?.readback : undefined
@@ -161,6 +157,22 @@ export function VoiceHud(props: VoiceHudProps) {
     return (result.candidates ?? []).slice(0, 2)
   })
 
+  /*
+   * S33: the agent has its own widget now, the sphere in `agent-orb.tsx`, and
+   * the pill is dictation's. The agent pill still comes up for the two moments
+   * that need buttons — a destructive command asking first, an ambiguous one
+   * offering its candidates — because a sphere has nowhere to put "sì" and "no".
+   */
+  const agentNeedsPill = () => status() === "confirming" || candidates().length >= 2
+
+  const visible = createMemo(() =>
+    props.open !== undefined
+      ? props.open
+      : (running() && (mode() === "transcription" || agentNeedsPill())) ||
+        preparing() !== undefined ||
+        failure() !== undefined,
+  )
+
   const state = createMemo<HudState>(() => {
     const warmup = preparing()
     if (warmup) return preparingHudState({ percent: warmup.percent })
@@ -170,6 +182,7 @@ export function VoiceHud(props: VoiceHudProps) {
       spoken: spoken(),
       readback: readback(),
       wakeWord: props.engine.settings().wakeWord,
+      ...latestExchange(props.engine.history()),
     })
   })
 
@@ -223,7 +236,7 @@ export function VoiceHud(props: VoiceHudProps) {
               data-kind="failure"
               data-tone="failed"
               role="alert"
-              aria-label="Controllo vocale non avviato"
+              aria-label={t("vui.hud.failed.label")}
             >
               {/* Shut, because it is: a start that failed left the microphone
                   closed, and the orb is the one thing on screen that can say
@@ -232,7 +245,7 @@ export function VoiceHud(props: VoiceHudProps) {
                 <OrbMark awake={false} status="asleep" level={0} rim={rim()} />
               </span>
               <span data-slot="hud-body">
-                <span data-slot="hud-label">non parte</span>
+                <span data-slot="hud-label">{t("vui.hud.failed")}</span>
                 <span data-slot="hud-line">{message()}</span>
               </span>
               <Show when={props.onOpenSettings}>
@@ -243,8 +256,8 @@ export function VoiceHud(props: VoiceHudProps) {
                     dismiss()
                     props.onOpenSettings?.()
                   }}
-                  aria-label="Apri impostazioni vocali"
-                  title="Apri impostazioni vocali"
+                  aria-label={t("vui.hud.settings.label")}
+                  title={t("vui.hud.settings.label")}
                   style={{
                     background: "none",
                     border: "none",
@@ -257,14 +270,14 @@ export function VoiceHud(props: VoiceHudProps) {
                     padding: "2px 4px",
                   }}
                 >
-                  impostazioni
+                  {t("vui.hud.settings")}
                 </button>
               </Show>
               <button
                 type="button"
                 data-slot="hud-esc"
                 onClick={dismiss}
-                aria-label="Chiudi (Esc)"
+                aria-label={t("vui.hud.close")}
               >
                 esc
               </button>
@@ -283,7 +296,7 @@ export function VoiceHud(props: VoiceHudProps) {
               data-tone={state().tone}
               role="status"
               aria-live="polite"
-              aria-label="Controllo vocale, modalità agente"
+              aria-label={t("vui.hud.agent.label")}
             >
               {/*
                 The same orb the toolbar draws, at the widget's size.
@@ -324,7 +337,7 @@ export function VoiceHud(props: VoiceHudProps) {
                     data-slot="hud-btn"
                     onClick={() => void props.engine.submitText("annulla")}
                   >
-                    no
+                    {t("vui.hud.no")}
                   </button>
                   <button
                     type="button"
@@ -332,7 +345,7 @@ export function VoiceHud(props: VoiceHudProps) {
                     data-primary="true"
                     onClick={() => void props.engine.submitText("conferma")}
                   >
-                    sì
+                    {t("vui.hud.yes")}
                   </button>
                 </span>
               </Show>
@@ -349,14 +362,14 @@ export function VoiceHud(props: VoiceHudProps) {
                           void props.engine.submitText(index() === 0 ? "la prima" : "la seconda")
                         }
                       >
-                        {index() === 0 ? "la prima" : "la seconda"}
+                        {index() === 0 ? t("vui.hud.first") : t("vui.hud.second")}
                       </button>
                     )}
                   </For>
                 </span>
               </Show>
 
-              <button type="button" data-slot="hud-esc" onClick={dismiss} aria-label="Annulla (Esc)">
+              <button type="button" data-slot="hud-esc" onClick={dismiss} aria-label={t("vui.hud.cancel")}>
                 esc
               </button>
             </section>
@@ -371,7 +384,7 @@ export function VoiceHud(props: VoiceHudProps) {
             }
             role="status"
             aria-live="polite"
-            aria-label="Controllo vocale, modalità trascrizione"
+            aria-label={t("vui.hud.transcription.label")}
           >
             <span data-slot="hud-mark">
               <OrbMark
@@ -395,7 +408,7 @@ export function VoiceHud(props: VoiceHudProps) {
                 ? state().line
                 : dictated().length > 0
                   ? dictated()
-                  : "sto ascoltando…"}
+                  : t("vui.hud.listeningNow")}
             </span>
 
             <Show when={props.target && !preparing()}>
@@ -406,14 +419,14 @@ export function VoiceHud(props: VoiceHudProps) {
                   e.stopPropagation()
                   props.onCycleTarget?.()
                 }}
-                title={props.onCycleTarget ? `Destinazione: ${props.target} (clicca per cambiare sessione)` : `Il testo finisce in ${props.target}`}
+                title={props.onCycleTarget ? t("vui.hud.target.cycle", props.target ?? "") : t("vui.hud.target", props.target ?? "")}
                 style={props.onCycleTarget ? { cursor: "pointer" } : undefined}
               >
                 → {props.target}
               </button>
             </Show>
 
-            <button type="button" data-slot="hud-esc" onClick={dismiss} aria-label="Annulla (Esc)">
+            <button type="button" data-slot="hud-esc" onClick={dismiss} aria-label={t("vui.hud.cancel")}>
               esc
             </button>
           </section>

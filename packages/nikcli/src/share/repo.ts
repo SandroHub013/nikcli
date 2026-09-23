@@ -9,10 +9,6 @@ import { localShare, sessionShare } from "./share.sql"
  * Replaces `["session_share", sessionID]` and `["local_share", shareID]`.
  */
 export namespace ShareRepo {
-  function db() {
-    return Database.syncDb()
-  }
-
   type Executor = Database.TxOrDb
 
   export type LocalShare = {
@@ -42,64 +38,94 @@ export namespace ShareRepo {
     }
   }
 
-  export function get(sessionId: string): Session.ShareInfo | undefined {
-    const row = db()
-      .select({ data: sessionShare.data })
-      .from(sessionShare)
-      .where(eq(sessionShare.sessionId, sessionId))
-      .get()
-    return row ? readShare(row.data) : undefined
+  export function get(sessionId: string, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.get",
+      (db) => {
+        const row = db
+          .select({ data: sessionShare.data })
+          .from(sessionShare)
+          .where(eq(sessionShare.sessionId, sessionId))
+          .get()
+        return row ? readShare(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function put(sessionId: string, share: Session.ShareInfo, executor: Executor = db()): void {
-    executor
-      .insert(sessionShare)
-      .values({
-        sessionId,
-        mode: share.mode ?? null,
-        data: JSON.stringify(share),
-      })
-      .onConflictDoUpdate({
-        target: sessionShare.sessionId,
-        set: {
-          mode: share.mode ?? null,
-          data: JSON.stringify(share),
-        },
-      })
-      .run()
+  export function put(sessionId: string, share: Session.ShareInfo, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.put",
+      (db) =>
+        db
+          .insert(sessionShare)
+          .values({
+            sessionId,
+            mode: share.mode ?? null,
+            data: JSON.stringify(share),
+          })
+          .onConflictDoUpdate({
+            target: sessionShare.sessionId,
+            set: {
+              mode: share.mode ?? null,
+              data: JSON.stringify(share),
+            },
+          })
+          .run(),
+      executor,
+    )
   }
 
-  export function remove(sessionId: string, executor: Executor = db()): void {
-    executor.delete(sessionShare).where(eq(sessionShare.sessionId, sessionId)).run()
+  export function remove(sessionId: string, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.remove",
+      (db) => void db.delete(sessionShare).where(eq(sessionShare.sessionId, sessionId)).run(),
+      executor,
+    )
   }
 
-  export function getLocal(shareId: string): LocalShare | undefined {
-    const row = db().select({ data: localShare.data }).from(localShare).where(eq(localShare.id, shareId)).get()
-    return row ? readLocal(row.data) : undefined
+  export function getLocal(shareId: string, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.getLocal",
+      (db) => {
+        const row = db.select({ data: localShare.data }).from(localShare).where(eq(localShare.id, shareId)).get()
+        return row ? readLocal(row.data) : undefined
+      },
+      executor,
+    )
   }
 
-  export function putLocal(share: LocalShare, executor: Executor = db()): void {
-    executor
-      .insert(localShare)
-      .values({
-        id: share.id,
-        sessionId: share.sessionID,
-        data: JSON.stringify(share),
-        createdAt: share.time.created,
-        updatedAt: share.time.updated,
-      })
-      .onConflictDoUpdate({
-        target: localShare.id,
-        set: {
-          sessionId: share.sessionID,
-          data: JSON.stringify(share),
-          updatedAt: share.time.updated,
-        },
-      })
-      .run()
+  export function putLocal(share: LocalShare, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.putLocal",
+      (db) =>
+        db
+          .insert(localShare)
+          .values({
+            id: share.id,
+            sessionId: share.sessionID,
+            data: JSON.stringify(share),
+            createdAt: share.time.created,
+            updatedAt: share.time.updated,
+          })
+          .onConflictDoUpdate({
+            target: localShare.id,
+            set: {
+              sessionId: share.sessionID,
+              data: JSON.stringify(share),
+              updatedAt: share.time.updated,
+            },
+          })
+          .run(),
+      executor,
+    )
   }
 
-  export function removeLocal(shareId: string, executor: Executor = db()): void {
-    executor.delete(localShare).where(eq(localShare.id, shareId)).run()
+  export function removeLocal(shareId: string, executor?: Executor) {
+    return Database.query(
+      "ShareRepo.removeLocal",
+      (db) => void db.delete(localShare).where(eq(localShare.id, shareId)).run(),
+      executor,
+    )
   }
 }

@@ -67,7 +67,7 @@ describe("dialog state machine", () => {
       // readback, which is a statement and reads as broken Italian in a prompt.
       expect(
         effects.some(
-          (e) => e.type === "speak" && e.text.includes("terminare il processo") && e.text.includes("?")
+          (e) => e.type === "speak" && e.text.includes("Fermo il processo") && e.text.includes("?")
         )
       ).toBe(true)
     })
@@ -137,7 +137,7 @@ describe("dialog state machine", () => {
       expect(s2.status).toBe("idle")
       expect(s2.pendingAction).toBeUndefined()
       expect(e2.some((e) => e.type === "execute_intent")).toBe(false)
-      expect(e2.some((e) => e.type === "speak" && e.text.includes("scaduto"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("lascio stare"))).toBe(true)
     })
   })
 
@@ -222,6 +222,19 @@ describe("dialog state machine", () => {
         expect(ansEffect.paneId).toBe("agent-1")
         expect(ansEffect.answer).toBe("allow")
       }
+    })
+
+    test("permission request with silent: true enters confirming without speak effect", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects: e1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "bun test", silent: true },
+        5000
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.isPermission).toBe(true)
+      expect(e1.some((e) => e.type === "speak")).toBe(false)
     })
 
     test("denying permission sends deny answer", () => {

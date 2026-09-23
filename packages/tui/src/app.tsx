@@ -17,7 +17,7 @@ import {
   batch,
   on,
 } from "solid-js"
-import { InstallationEventName, VERSION, type InstallMethod } from "@nikcli-ai/util/version"
+import { VERSION, type InstallMethod } from "@nikcli-ai/util/version"
 import { Flag } from "@nikcli-ai/util/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
@@ -83,6 +83,11 @@ import { PluginRouteBoundary } from "./component/plugin-route-boundary"
 import { Reconnecting } from "./component/reconnecting"
 import { StartupLoading } from "./component/startup-loading"
 import { SessionTabs } from "./component/session-tabs"
+import { DialogOnboarding } from "@tui/component/dialog-onboarding"
+import { DialogLogin } from "@tui/component/dialog-login"
+import { DialogAccountLogin } from "@tui/component/dialog-account-login"
+import { DialogProfile } from "@tui/component/dialog-profile"
+import { DialogAuthManage } from "@tui/component/dialog-auth-manage"
 import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants"
 import { DialogWebPreview } from "@tui/component/dialog-web-preview"
 import { SupportSessionProvider } from "@tui/context/support-session"
@@ -121,6 +126,20 @@ import { Log } from "@nikcli-ai/util/log"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
 
+/**
+ * What an update check found.
+ *
+ * Mirrors the payload of `installation.update-available`, but reaches the TUI as the *return
+ * value* of `checkUpgrade` rather than over the event stream: the check runs in the CLI process
+ * (the upgrade replaces the installed binary, so it cannot run in the long-lived background
+ * service) while the event stream comes from that service, and the Bus does not cross processes.
+ */
+export type UpdateAvailable = {
+  version: string
+  method?: InstallMethod
+  current: string
+}
+
 const log = Log.create({ service: "tui.app" })
 
 export function tui(input: {
@@ -131,7 +150,7 @@ export function tui(input: {
   events?: EventSource
   onExit?: () => Promise<void>
   onRestart?: () => Promise<void>
-  checkUpgrade?: () => Promise<void>
+  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   upgradeNow?: (method: string, version: string) => Promise<void>
   startServer?: (options?: StartServerOptions) => Promise<string>
   /**
@@ -316,7 +335,7 @@ function sessionIDFromRoute(route: ReturnType<typeof useRoute>["data"]) {
   return "sessionID" in route ? route.sessionID : undefined
 }
 
-function App(props: { checkUpgrade?: () => Promise<void> }) {
+function App(props: { checkUpgrade?: () => Promise<UpdateAvailable | undefined> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -337,20 +356,94 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
   const attention = useAttention()
   const keybind = useKeybind()
 
+  /**
+   * Offer the update the check found, and install it if the user agrees.
+   *
+   * Driven by `checkUpgrade`'s return value rather than by the `installation.update-available`
+   * event: that event is published on the Bus of whichever process ran the check, and since the
+   * background service became the default that process is this CLI — not the server the event
+   * stream comes from, so the TUI never saw it. See `UpdateAvailable`.
+   */
+  async function offerUpdate(available: UpdateAvailable) {
+    const { version, method } = available
+    const currentVersion = available.current || VERSION
+
+    // Skip version already dismissed by the user
+    const skipped = kv.get("skipped_version")
+    if (skipped && version === skipped) return
+
+    const hint = method ? ` via ${method}` : ""
+    const choice = await DialogConfirm.show(
+      dialog,
+      `Update Available`,
+      `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
+      "confirm",
+    )
+
+    if (choice === false) {
+      kv.set("skipped_version", version)
+      return
+    }
+
+    if (!choice) return
+
+    // No detected installation method (e.g. running from source / unknown
+    // package manager). The TUI still shows the dialog so the user is
+    // aware, but the actual install has to be triggered manually.
+    if (!method) {
+      await DialogAlert.show(
+        dialog,
+        "Update Available",
+        `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
+      )
+      return
+    }
+
+    toast.show({
+      variant: "info",
+      message: `Updating to v${version}...`,
+      duration: 30_000,
+    })
+
+    try {
+      await upgradeCtx.upgradeNow?.(method, version)
+    } catch (error) {
+      // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
+      // is what made this toast show a blank body for every failed update.
+      //
+      // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
+      // comes back over RPC as a plain `Error`, so the class check was always false and this
+      // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
+      const stderr = (error as { stderr?: unknown }).stderr
+      const message =
+        error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
+          ? stderr
+          : error instanceof Error
+            ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
+            : "Update failed"
+      toast.show({
+        variant: "error",
+        title: "Update Failed",
+        message,
+        duration: 10_000,
+      })
+      return
+    }
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to v${version}. Please restart the application.`,
+    )
+
+    await exit()
+  }
+
   // Plugin routes — mutable map + reactive stamp for re-renders
   const routes: RouteMap = new Map()
   const [pluginRouteKey, setPluginRouteKey] = createSignal(0)
   const bump = () => setPluginRouteKey((k) => k + 1)
   const [pluginsReady, setPluginsReady] = createSignal(false)
-  /**
-   * Launched to look at a component, not to work.
-   *
-   * `NIKCLI_STORY` renders production components from fixtures with no SDK and no server, so the two
-   * gates that exist to get a working session — first-run onboarding and the empty-provider dialog —
-   * would only put a signup in front of a fixture. Same exemption `NIKCLI_DRIVE` already has, and
-   * named once so both gates state the same reason.
-   */
-  const STORYBOOK_LAUNCH = Boolean(process.env.NIKCLI_STORY)
 
   const [onboardingActive, setOnboardingActive] = createSignal(false)
 
@@ -419,19 +512,21 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
     void (async () => {
       // Drive instances use an injected local provider and must not depend on
       // interactive account/onboarding state from the host machine.
-      if (!process.env.NIKCLI_DRIVE && !STORYBOOK_LAUNCH) {
-        // Lazy: the onboarding dialog pulls the speak/provider chain, which may
-        // not be evaluated during TUI module load. Account state comes from
-        // `/user/*` — the transport is up by now, as the `sdk.client.tui.config`
-        // call a few lines below has always relied on.
-        const { DialogOnboarding } = await import("@tui/component/dialog-onboarding")
+      if (!process.env.NIKCLI_DRIVE) {
+        // Account state comes from `/user/*` — the transport is up by now, as
+        // the `sdk.client.tui.config` call a few lines below has always relied on.
 
         // `null` means the question could not be asked. Treating that as "no
         // users" would restart onboarding for someone who already has an
         // account, so only an explicit `false` counts as first run.
         const isFirstRun = (await UserApi.hasUsers(sdk)) === false
 
-        const validUser = await UserApi.me(sdk)
+        // Three answers, and only one of them is a reason to interrupt. The
+        // server is asked whether this machine holds a session; while it is
+        // still booting — or being restarted by an auto-update — it cannot
+        // answer, and reading that silence as "signed out" is what put the
+        // sign-in dialog in front of someone who had never signed out.
+        const account = await UserApi.session(sdk)
 
         if (isFirstRun && !kv.get("onboarding_complete", false)) {
           // First-time user: unified onboarding handles account creation + provider setup
@@ -440,7 +535,10 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             runOnboarding: () => DialogOnboarding.run(dialog),
             currentUser: () => UserApi.me(sdk),
             onAttemptFailed: (attempt) =>
-              log.warn("onboarding closed without an account", { attempt, service: "tui.onboarding" }),
+              log.warn("onboarding closed without an account", {
+                attempt,
+                service: "tui.onboarding",
+              }),
           })
           setOnboardingActive(false)
           if (outcome.status === "complete") {
@@ -455,16 +553,21 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
             // here — the config load and renderer wiring below never ran while
             // this loop spun, which left the user with a frozen screen and no
             // reason for it. Say what happened and let startup finish.
-            log.error("onboarding did not produce an account", { attempts: outcome.attempts })
+            log.error("onboarding did not produce an account", {
+              attempts: outcome.attempts,
+            })
             toast.show({
               message: "Account setup didn't complete — run /signin to finish signing in.",
               variant: "error",
             })
           }
-        } else if (!validUser) {
+        } else if (account.status === "signed-out") {
           // Returning user with no active session: standard login
-          const { DialogLogin } = await import("@tui/component/dialog-login")
           await DialogLogin.run(dialog, sdk)
+        } else if (account.status === "unknown") {
+          log.warn("could not read the account session at startup; not prompting", {
+            service: "tui.account",
+          })
         }
       }
 
@@ -648,8 +751,6 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return
         if (onboardingActive()) return
-        // A storybook launch has no provider by construction and does not need one.
-        if (STORYBOOK_LAUNCH) return
         dialog.replace(() => <DialogProviderList />)
       },
     ),
@@ -1094,9 +1195,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["account-login"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-account-login").then(({ DialogAccountLogin }) =>
-          dialog.replace(() => <DialogAccountLogin />),
-        )
+        dialog.replace(() => <DialogAccountLogin />)
       },
     },
     {
@@ -1108,9 +1207,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["me", "personalize"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-profile").then(({ DialogProfile }) =>
-          dialog.replace(() => <DialogProfile />),
-        )
+        dialog.replace(() => <DialogProfile />)
       },
     },
     {
@@ -1122,9 +1219,7 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
         aliases: ["account"],
       },
       onSelect: () => {
-        void import("@tui/component/dialog-auth-manage").then(({ DialogAuthManage }) =>
-          dialog.replace(() => <DialogAuthManage />),
-        )
+        dialog.replace(() => <DialogAuthManage />)
       },
     },
     {
@@ -1228,6 +1323,20 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       onSelect: () => {
         void import("@tui/component/dialog-analytics").then(({ DialogAnalytics }) =>
           dialog.replace(() => <DialogAnalytics onClose={() => dialog.clear()} />),
+        )
+      },
+      category: "Session",
+    },
+    {
+      title: "Command center",
+      value: "nikcli.dashboard",
+      slash: {
+        name: "dashboard",
+        aliases: ["ops", "command-center"],
+      },
+      onSelect: () => {
+        void import("@tui/component/dialog-command-center").then(({ DialogCommandCenter }) =>
+          dialog.replace(() => <DialogCommandCenter />),
         )
       },
       category: "Session",
@@ -1456,81 +1565,6 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
           duration: 5000,
         })
       }),
-      sdk.event.on(InstallationEventName.updateAvailable, async (evt) => {
-        const version = evt.properties.version
-        const method = (evt.properties as { method?: InstallMethod }).method
-        const currentVersion = (evt.properties as { current?: string }).current ?? VERSION
-
-        // Skip version already dismissed by the user
-        const skipped = kv.get("skipped_version")
-        if (skipped && version === skipped) return
-
-        const hint = method ? ` via ${method}` : ""
-        const choice = await DialogConfirm.show(
-          dialog,
-          `Update Available`,
-          `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now?`,
-          "confirm",
-        )
-
-        if (choice === false) {
-          kv.set("skipped_version", version)
-          return
-        }
-
-        if (!choice) return
-
-        // No detected installation method (e.g. running from source / unknown
-        // package manager). The TUI still shows the dialog so the user is
-        // aware, but the actual install has to be triggered manually.
-        if (!method) {
-          await DialogAlert.show(
-            dialog,
-            "Update Available",
-            `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
-          )
-          return
-        }
-
-        toast.show({
-          variant: "info",
-          message: `Updating to v${version}...`,
-          duration: 30_000,
-        })
-
-        try {
-          await upgradeCtx.upgradeNow?.(method, version)
-        } catch (error) {
-          // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
-          // is what made this toast show a blank body for every failed update.
-          //
-          // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
-          // comes back over RPC as a plain `Error`, so the class check was always false and this
-          // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
-          const stderr = (error as { stderr?: unknown }).stderr
-          const message =
-            error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
-              ? stderr
-              : error instanceof Error
-                ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
-                : "Update failed"
-          toast.show({
-            variant: "error",
-            title: "Update Failed",
-            message,
-            duration: 10_000,
-          })
-          return
-        }
-
-        await DialogAlert.show(
-          dialog,
-          "Update Complete",
-          `Successfully updated to v${version}. Please restart the application.`,
-        )
-
-        await exit()
-      }),
       sdk.event.on("permission.asked", () => {
         const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
         if (tuiCfg?.sound === false) return
@@ -1545,7 +1579,9 @@ function App(props: { checkUpgrade?: () => Promise<void> }) {
       }),
     ]
 
-    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade).catch(() => undefined)
+    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade)
+      .then((available) => (available ? offerUpdate(available) : undefined))
+      .catch(() => undefined)
 
     onCleanup(() => {
       renderer.off("focus", refocusPrompt)

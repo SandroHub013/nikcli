@@ -1,6 +1,7 @@
 import { Show, createSignal, createEffect, onCleanup } from "solid-js"
 import { getHost } from "../host/shell"
 import { basename } from "../host/path"
+import { t } from "../i18n"
 
 export interface FilePreviewProps {
   path: string
@@ -37,7 +38,7 @@ export function FilePreview(props: FilePreviewProps) {
     getHost().then((host) => {
       if (cancelled) return
       if (!host?.readTextFile) {
-        setError("Impossibile leggere file in questo ambiente.")
+        setError(t("preview.noHost"))
         setLoading(false)
         return
       }
@@ -48,11 +49,11 @@ export function FilePreview(props: FilePreviewProps) {
           // Is it an error or empty?
           setContent("")
         } else if (res.text === "" && res.bytes > 0) {
-          setError("File binario o codifica non supportata.")
+          setError(t("preview.binary"))
         } else {
           setContent(res.text)
           if (res.truncated) {
-            setError("File troppo grande, mostrata solo l'anteprima.")
+            setError(t("preview.truncated"))
           }
         }
         setLoading(false)
@@ -67,7 +68,7 @@ export function FilePreview(props: FilePreviewProps) {
       </header>
       <div data-slot="preview-body">
         <Show when={loading()}>
-          <div data-slot="preview-message">Caricamento in corso...</div>
+          <div data-slot="preview-message">{t("preview.loading")}</div>
         </Show>
         <Show when={error()}>
           <div data-slot="preview-message" data-error="true">

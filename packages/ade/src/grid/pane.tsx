@@ -1,21 +1,35 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
+import { For, Show, Switch, Match, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
+import { isQuotaUnavailable, quotaForAgent, type SessionQuota } from "../session/quota"
+import { useSharedQuota } from "../session/quota-store"
 
 /** The screenshot tray's own drag type. See the drop handler for why. */
 const SHOT_MIME = "application/x-ade-shot"
 import "@xterm/xterm/css/xterm.css"
 import "./pane.css"
 
-/*
- * `provisioning` comes before `working`: the worktree checkout runs for seconds
- * before the process starts, and a card stuck on `waiting` there reads as
- * "needs an answer" — which this session is not asking for.
- */
-export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
+import {
+  type PaneStatus,
+  type PaneState,
+  STATE_FULL,
+  STATE_SHORT,
+  resolvePaneState,
+} from "./pane-state"
+import { t } from "../i18n"
+import { activityLabel } from "./activity"
+import { FolderGlyph, PaneActions } from "./pane-actions"
+
+export {
+  type PaneStatus,
+  type PaneState,
+  STATE_FULL,
+  STATE_SHORT,
+  resolvePaneState,
+}
 
 /*
  * How faithfully the tree a session runs in matches what the user asked for.
@@ -41,14 +55,14 @@ export interface PaneTree {
 
 /*
  * Degradation is status, not error: the words name exactly what is missing and
- * stay Italian like the rest of the chrome. `full` has no word on purpose — the
+ * follow the interface language like the rest of the chrome. `full` has no word on purpose — the
  * good case is the quiet one, so that across six panes the absence of a mark
  * reads as the all-clear.
  */
-const FIDELITY_LABEL: Record<PaneTreeFidelity, string | undefined> = {
+const FIDELITY_LABEL: Readonly<Record<PaneTreeFidelity, string | undefined>> = {
   full: undefined,
-  stale: "solo l'ultimo commit",
-  "no-deps": "senza dipendenze",
+  get stale() { return t("pane.tree.stale.short") },
+  get "no-deps"() { return t("pane.tree.noDeps.short") },
   /*
    * Quiet too: sessions run in the project on purpose now (see `startProcess`),
    * so marking every pane as a failure was an alarm with nothing to act on.
@@ -58,11 +72,11 @@ const FIDELITY_LABEL: Record<PaneTreeFidelity, string | undefined> = {
 }
 
 /** Spoken/inspected form of each fidelity, used when no provisioning note arrives. */
-const FIDELITY_TITLE: Record<PaneTreeFidelity, string> = {
-  full: "Albero isolato che contiene il lavoro corrente",
-  stale: "Albero isolato dall'ultimo commit: le modifiche non salvate non ci sono",
-  "no-deps": "Albero isolato senza dipendenze collegate: l'agente può modificare ma non eseguire",
-  project: "Nessun albero isolato: l'agente lavora direttamente nel progetto",
+const FIDELITY_TITLE: Readonly<Record<PaneTreeFidelity, string>> = {
+  get full() { return t("pane.tree.full") },
+  get stale() { return t("pane.tree.stale") },
+  get "no-deps"() { return t("pane.tree.noDeps") },
+  get project() { return t("pane.tree.project") },
 }
 
 /* Icons are stroke-based marks on a 16px grid, never emoji: they must survive
@@ -83,27 +97,6 @@ function BranchGlyph() {
       <circle cx="12" cy="4" r="2" />
       <circle cx="4" cy="12" r="2" />
       <path d="M12 6a6 6 0 0 1-6 6" />
-    </svg>
-  )
-}
-
-/* A folder stands for the project directory: the one case where the session
-   runs without any tree of its own, so it gets a glyph of its own — colour
-   alone could not separate it from the milder degradations at a glance. */
-function FolderGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="12"
-      height="12"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    >
-      <path d="M2.5 4.5a1 1 0 0 1 1-1h2.8l1.7 2h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-9.5a1 1 0 0 1-1-1z" />
     </svg>
   )
 }
@@ -133,6 +126,12 @@ export interface PaneAction {
 export interface SessionPaneProps {
   title: string
   status: PaneStatus
+  /** Specific 6-state status for S8 dense header. When omitted, derived from status and activity. */
+  state?: PaneState
+  /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
+  stateDetail?: string
+  /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
+  quota?: SessionQuota
   /** What the agent is doing, in the present tense. Empty when it is idle. */
   activity?: string
   elapsed?: string
@@ -193,6 +192,17 @@ export interface SessionPaneProps {
   /** Keystrokes from the terminal, on their way to the process. */
   onInput?: (data: string) => void
   /**
+   * How many messages ADE is holding for this session.
+   *
+   * Held, not lost: mail is never typed onto a line the user has begun. The
+   * badge is how that shows, and it is a property of the pane rather than of
+   * the agent inside it, so a CLI added to the catalogue tomorrow gets it
+   * without anyone remembering to ask for it.
+   */
+  mail?: number
+  /** Shows what is waiting, in the transcript. Looking is not reading. */
+  onMail?: () => void
+  /**
    * Files were dropped on this session: from the project tree, from the
    * screenshot tray, or from the system's own file manager.
    *
@@ -238,13 +248,51 @@ function LineSpans(props: { text: string }) {
   )
 }
 
+/** Vector icon for each of the 6 states, stroke-based on a 16px grid. */
+export function StateIcon(props: { state: PaneState }) {
+  return (
+    <svg class={`ic ic-${props.state}`} viewBox="0 0 16 16" aria-hidden="true">
+      <Switch>
+        <Match when={props.state === "work"}>
+          <circle cx="8" cy="8" r="5.5" opacity=".28" />
+          <path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" />
+        </Match>
+        <Match when={props.state === "perm"}>
+          <path d="M8 1.8l5.2 2.1v3.7c0 3.1-2.2 5.5-5.2 6.6-3-1.1-5.2-3.5-5.2-6.6V3.9z" />
+          <path d="M6.5 6.4a1.6 1.6 0 1 1 2.3 1.4c-.5.3-.8.6-.8 1.1" />
+          <circle class="f" cx="8" cy="10.9" r=".85" />
+        </Match>
+        <Match when={props.state === "ask"}>
+          <path d="M2.5 3.2h11v7.3H8.2L5 13v-2.5H2.5z" />
+          <circle class="f d1" cx="5.5" cy="6.85" r=".9" />
+          <circle class="f d2" cx="8" cy="6.85" r=".9" />
+          <circle class="f d3" cx="10.5" cy="6.85" r=".9" />
+        </Match>
+        <Match when={props.state === "err"}>
+          <path d="M5.6 1.8h4.8l3.8 3.8v4.8l-3.8 3.8H5.6l-3.8-3.8V5.6z" />
+          <path d="M8 4.9v3.6" />
+          <circle class="f" cx="8" cy="11" r=".85" />
+        </Match>
+        <Match when={props.state === "limit"}>
+          <path d="M4 1.8h8M4 14.2h8" />
+          <path d="M5 1.8c0 3.2 3 3.9 3 6.2s-3 3-3 6.2M11 1.8c0 3.2-3 3.9-3 6.2s3 3 3 6.2" />
+          <path class="f" d="M6.3 13.3 8 11.7l1.7 1.6z" />
+        </Match>
+        <Match when={props.state === "idle"}>
+          <path d="M3.5 4.8 6.7 8l-3.2 3.2" />
+          <path d="M8.8 11.4h4" />
+        </Match>
+      </Switch>
+    </svg>
+  )
+}
+
+
 /**
  * One agent session, as it appears inside the grid.
  *
- * The pane is deliberately the same shape whatever the session is doing: header,
- * transcript, answer or prompt, footer. A grid whose cells rearrange themselves
- * per state cannot be scanned — and scanning is the entire reason several
- * sessions are on screen at once.
+ * Proposal A dense header: session title, agent mark, status chip with real tool activity,
+ * quota horizon indicator with live countdown/percentage, branch, tokens and window actions.
  */
 export function SessionPane(props: SessionPaneProps) {
   let scroller: HTMLDivElement | undefined
@@ -372,6 +420,67 @@ export function SessionPane(props: SessionPaneProps) {
     if (refocus) focusPane(root)
   }
 
+  /*
+   * The quota comes from the shared store, which re-reads quota-axi's report
+   * and the status line files on a timer. Reading its signals here is what makes a pane mounted before
+   * the first report update when it arrives, and the countdown move.
+   */
+  const shared = useSharedQuota()
+  onCleanup(shared.release)
+
+  const quota = createMemo<SessionQuota | undefined>(
+    () => props.quota ?? quotaForAgent(props.agent ?? props.model, shared.store.snapshot(), shared.store.now()),
+  )
+
+  /** The quota when it is a real reading; undefined when it is "n/d" or absent. */
+  const reading = () => {
+    const q = quota()
+    return q && !isQuotaUnavailable(q) ? q : undefined
+  }
+
+  const missing = () => {
+    const q = quota()
+    return isQuotaUnavailable(q) ? q : undefined
+  }
+
+  const state = createMemo<PaneState>(() =>
+    resolvePaneState({
+      status: props.status,
+      state: props.state,
+      activity: props.activity,
+      quota: quota(),
+      hasActions: Boolean(props.actions && props.actions.length > 0),
+    }),
+  )
+
+  const stateHead = createMemo(() => {
+    if (props.stateDetail) return props.stateDetail
+    if (props.activity) return activityLabel(props.activity)
+    const st = state()
+    if (st === "limit") return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")
+    if (st === "work") return props.mode ?? t("activity.running")
+    if (st === "perm") return props.actions?.[0]?.label ?? t("paneState.short.perm")
+    if (st === "err") return t("paneState.err")
+    return STATE_FULL[st]
+  })
+
+  const stateDetail = createMemo(() => {
+    return props.stateDetail ?? activityLabel(props.activity) ?? STATE_FULL[state()]
+  })
+
+  const tipAll = createMemo(() => {
+    const q = quota()
+    const quotaLines = q ? `\n${q.tooltip}` : ""
+    const branchLine = props.tree ? `\nBranch ${props.tree.branch}` : ""
+    const tokLine = props.tokens ? `\n${props.tokens}` : ""
+    return `${props.title}\n${props.agent ?? props.model ?? t("pane.session")} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`
+  })
+
+  const tipState = createMemo(() => {
+    const elText = props.elapsed ? ` · da ${props.elapsed}` : ""
+    return `${STATE_FULL[state()]}\n${stateDetail()}${elText}`
+  })
+
   return (
     <article
       ref={(element) => {
@@ -382,6 +491,7 @@ export function SessionPane(props: SessionPaneProps) {
       data-component="session-pane"
       data-pane-id={props.id}
       data-status={props.status}
+      data-st={state()}
       data-focused={props.focused ? "true" : undefined}
       data-dropping={dropping() ? "true" : undefined}
       onPointerDown={() => props.onFocus?.()}
@@ -453,20 +563,40 @@ export function SessionPane(props: SessionPaneProps) {
         focusPane(root)
       }}
     >
-      <header data-slot="pane-header">
-        <span data-slot="pane-identity" title={props.agent}>
-          <span data-slot="pane-glyph" aria-hidden="true">
-            {props.glyph ?? "•"}
-          </span>
+      <header class="pill hA" data-slot="pane-header">
+        <span class="logo" data-slot="pane-identity" title={props.agent}>
+          {props.glyph ?? (
+            <span data-slot="pane-glyph" aria-hidden="true">
+              •
+            </span>
+          )}
         </span>
+        <Show when={(props.mail ?? 0) > 0 && props.onMail}>
+          <button
+            type="button"
+            class="mail"
+            data-slot="pane-mail"
+            title={t("pane.mail", props.mail ?? 0)}
+            aria-label={t("pane.mail", props.mail ?? 0)}
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onMail?.()
+            }}
+          >
+            {props.mail}
+          </button>
+        </Show>
         <Show
           when={editing()}
           fallback={
             <h2
+              class="nm"
               data-slot="pane-title"
               data-renamable={props.onRename ? "true" : undefined}
-              title={props.onRename ? `${props.title}\nDoppio clic per rinominare` : props.title}
+              title={props.onRename ? `${tipAll()}\n${t("pane.renameTip")}` : tipAll()}
+              data-tip={props.onRename ? `${tipAll()}\n${t("pane.renameTip")}` : tipAll()}
               onDblClick={beginRename}
+              tabIndex={0}
             >
               {props.title}
             </h2>
@@ -476,7 +606,7 @@ export function SessionPane(props: SessionPaneProps) {
             ref={titleField}
             type="text"
             data-slot="pane-title-input"
-            aria-label="Nome della sessione"
+            aria-label={t("pane.name")}
             value={props.title}
             spellcheck={false}
             onKeyDown={(event) => {
@@ -494,78 +624,145 @@ export function SessionPane(props: SessionPaneProps) {
             onBlur={() => endRename(true)}
           />
         </Show>
+
         {/*
-          Agent, mode, tree and state used to be a footer of their own, under
-          the composer. Both rows are gone: everything below the terminal is a
-          tax paid once per pane and this window is built to hold six, so the
-          few short words they carry ride here instead, on the row that had to
-          exist anyway for the title and the window buttons.
+          A span, not a button. It was a `<button>` with no `onClick`: pressing
+          it did nothing, it offered a pointer cursor and a focus ring for an
+          action that did not exist, and — because every button is excluded
+          from the grid's drag handles — it took the middle of the header,
+          where the chip sits, out of the area the pane can be dragged by.
+          Focusable still, so the state and its detail can be read out — but
+          not a live region: the state changes with every tool call, and a
+          screen reader would read a chip nobody asked about over and over.
         */}
-        <span data-slot="pane-who">
-          <Show when={props.agent}>{(agent) => <span data-slot="pane-agent">{agent()}</span>}</Show>
-          <Show when={props.mode}>
-            <span data-slot="pane-mode">{props.mode}</span>
-          </Show>
-          {/* While provisioning decides, the same slot holds a placeholder so
-              the handover to a real branch never reshapes the row. */}
-          <Show
-            when={props.tree}
-            fallback={
-              <Show when={props.status === "provisioning"}>
-                <span data-slot="pane-tree" data-fidelity="pending">
-                  <BranchGlyph />
-                  <span data-slot="pane-tree-branch">preparazione albero…</span>
-                </span>
-              </Show>
-            }
-          >
-            {(tree) => (
-              <span
-                data-slot="pane-tree"
-                data-fidelity={tree().fidelity}
-                title={tree().note ?? FIDELITY_TITLE[tree().fidelity]}
-              >
-                {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
-                <span data-slot="pane-tree-branch">{tree().branch}</span>
-                <Show when={FIDELITY_LABEL[tree().fidelity]}>
-                  {(label) => <span data-slot="pane-tree-note">{label()}</span>}
-                </Show>
-              </span>
-            )}
-          </Show>
-        </span>
-        <span data-slot="pane-state">
-          <Show when={props.activity}>
-            {(activity) => <span data-slot="pane-activity-word">{activity()}</span>}
-          </Show>
+        <span
+          class="chip a-state"
+          tabIndex={0}
+          title={tipState()}
+          data-tip={tipState()}
+          aria-label={`${STATE_FULL[state()]}: ${stateDetail()}`}
+        >
+          <StateIcon state={state()} />
+          <span class="lbl">{STATE_SHORT[state()]}</span>
+          <span class="a-det trunc">{stateHead()}</span>
           <Show when={props.elapsed}>
-            <span data-slot="pane-meta">{props.elapsed}</span>
+            <span class="a-el mono">{props.elapsed}</span>
           </Show>
         </span>
+
+        <span class="sp"></span>
+
+        <Show when={missing()}>
+          {(none) => (
+            <span class="a-q" data-lv="na" tabIndex={0} title={none().tooltip} data-tip={none().tooltip}>
+              <span class="qk">{t("pane.quota")}</span>
+              <b class="qv">{t("pane.quota.na")}</b>
+            </span>
+          )}
+        </Show>
+
+        <Show when={reading()}>
+          {(q) => (
+            <span
+              class="a-q"
+              data-lv={q().level}
+              data-urg={state() === "limit" || (!q().stale && q().isLimit) ? "" : undefined}
+              data-stale={q().stale ? "" : undefined}
+              tabIndex={0}
+              title={q().tooltip}
+              data-tip={q().tooltip}
+            >
+              <span class="qbar" style={{ "--r": q().remainingRatio }}>
+                <i></i>
+              </span>
+              <span class="qk">{q().bindingKey}</span>
+              <b class="qv">{q().displayValue}</b>
+              {/* An old figure shows when it was read; a current one when it resets. */}
+              <Show
+                when={q().stale && q().readAt}
+                fallback={
+                  <Show when={q().countdown}>
+                    {(cd) => <span class="qr">↻ {cd()}</span>}
+                  </Show>
+                }
+              >
+                {(at) => <span class="qr qat">{at()}</span>}
+              </Show>
+            </span>
+          )}
+        </Show>
+
+        <Show when={props.mode}>
+          <span class="a-mode" data-slot="pane-mode">{props.mode}</span>
+        </Show>
+
+        {/* While provisioning decides, the same slot holds a placeholder so the
+            handover to a real branch never reshapes the row. The fidelity note
+            stays on the row, not only in the title: a tree that is behind, or
+            has no dependencies, changes what the agent can do in it. */}
+        <Show
+          when={props.tree}
+          fallback={
+            <Show when={props.status === "provisioning"}>
+              <span
+                class="a-br"
+                data-slot="pane-tree"
+                data-fidelity="pending"
+                title={t("pane.tree.preparing")}
+              >
+                <BranchGlyph />
+                <span class="a-brt trunc">{t("pane.tree.preparing.short")}</span>
+              </span>
+            </Show>
+          }
+        >
+          {(tree) => (
+            <span
+              class="a-br"
+              data-slot="pane-tree"
+              data-fidelity={tree().fidelity}
+              tabIndex={0}
+              title={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+              data-tip={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+            >
+              {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
+              <span class="a-brt trunc">{tree().branch}</span>
+              <Show when={FIDELITY_LABEL[tree().fidelity]}>
+                {(label) => (
+                  <span class="a-brn" data-slot="pane-tree-note">
+                    {label()}
+                  </span>
+                )}
+              </Show>
+            </span>
+          )}
+        </Show>
+
         <Show when={props.tokens}>
-          <span data-slot="pane-tokens">{props.tokens}</span>
+          <span class="tok">{props.tokens}</span>
         </Show>
+
         <Show when={props.cost}>
-          <span data-slot="pane-cost">{props.cost}</span>
+          <span class="tok" data-slot="pane-cost">
+            {props.cost}
+          </span>
         </Show>
-        <div data-slot="pane-actions">
-          <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label="Espandi">
-            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path
-                d="M1 4.5V1h3.5M11 7.5V11H7.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.2"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-          <button type="button" data-slot="pane-action" onClick={() => props.onClose?.()} aria-label="Chiudi">
-            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-              <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-          </button>
-        </div>
+
+        <PaneActions onExpand={() => props.onExpand?.()} onClose={() => props.onClose?.()} />
+        <button
+          type="button"
+          class="act more"
+          aria-label={t("pane.expand")}
+          title={t("pane.expand")}
+          data-tip={t("pane.expand")}
+          onClick={() => props.onExpand?.()}
+        >
+          <svg class="gi" viewBox="0 0 16 16" aria-hidden="true">
+            <circle class="f" cx="3.5" cy="8" r="1.2" />
+            <circle class="f" cx="8" cy="8" r="1.2" />
+            <circle class="f" cx="12.5" cy="8" r="1.2" />
+          </svg>
+        </button>
       </header>
 
       {/* The liveness sweep used to be a 2px lane of its own here. It is now
@@ -632,7 +829,7 @@ export function SessionPane(props: SessionPaneProps) {
 
         <Show when={!following()}>
           <button type="button" data-slot="pane-tail" onClick={toBottom}>
-            torna in fondo
+            {t("pane.toBottom")}
           </button>
         </Show>
       </div>
@@ -662,7 +859,7 @@ export function SessionPane(props: SessionPaneProps) {
                   ref={(element) => (field = element)}
                   rows={1}
                   data-slot="pane-input"
-                  placeholder={props.onSubmit ? "Scrivi all'agente…" : "nessun processo in ascolto"}
+                  placeholder={props.onSubmit ? t("pane.input") : t("pane.input.none")}
                   disabled={!props.onSubmit}
                   spellcheck={false}
                   onInput={grow}

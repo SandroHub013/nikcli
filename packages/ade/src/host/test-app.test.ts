@@ -151,6 +151,22 @@ describe("host/test-app", () => {
     expect(appStarted("   Compiling ade-desktop v0.0.0")).toBe(false)
   })
 
+  test("a Rust change does not restart the window unless the start asked to watch", () => {
+    const cargo = '[[bin]]\nname = "ade-test"\nrequired-features = ["test-exe"]\n\n[features]\ntest-exe = []\n'
+    const quiet = tauriDevArgs("C:/w/.ade-test/tauri.dev.json", cargo)
+    expect(quiet).toContain("--no-watch")
+    // Past `--` the arguments are cargo's, so the flag has to come before it.
+    expect(quiet.indexOf("--no-watch")).toBeLessThan(quiet.indexOf("--"))
+    expect(quiet.slice(-5)).toEqual(["--features", "test-exe", "--", "--bin", "ade-test"])
+
+    const watching = tauriDevArgs("C:/w/.ade-test/tauri.dev.json", cargo, { watch: true })
+    expect(watching).not.toContain("--no-watch")
+    expect(watching.slice(-5)).toEqual(["--features", "test-exe", "--", "--bin", "ade-test"])
+
+    // The same, on a branch without the test binary: still no watching.
+    expect(tauriDevArgs("x", '[[bin]]\nname = "ade-desktop"\n')).toContain("--no-watch")
+  })
+
   test("hashPath is stable", () => {
     expect(hashPath("abc")).toBe(hashPath("ABC"))
   })
