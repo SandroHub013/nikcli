@@ -571,17 +571,64 @@ async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
 async fn claude_version() -> Option<String> {
     let program = pty::which_on_path("claude")?;
     let mut command = std::process::Command::new(program);
-    command.arg("--version").stdin(std::process::Stdio::null());
+    command
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
-    let output = command.output().ok()?;
-    if !output.status.success() {
+    /*
+     * Off the async runtime and on a clock. A `claude` that never answers — a
+     * broken node, a slow start under load, some day an update prompt — used to
+     * hold a Tauri worker forever and leave the child hanging; now it is killed
+     * after five seconds and the answer is None, which the page reads as "write
+     * the shell form", the safe direction.
+     */
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut child = command.spawn().ok()?;
+        first_line_within(&mut child, std::time::Duration::from_secs(5))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Waits up to `timeout` for `child` to exit and returns the first line of its
+/// stdout, at most 200 characters. A child that fails, or is still running at
+/// the deadline, gives None; the late one is killed and reaped first.
+fn first_line_within(child: &mut std::process::Child, timeout: std::time::Duration) -> Option<String> {
+    use std::io::Read;
+    use std::time::Instant;
+
+    let mut stdout = child.stdout.take()?;
+    // Read on a thread so the pipe cannot fill and stall the child while the
+    // loop below waits on it.
+    let reader = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        let _ = stdout.read_to_end(&mut out);
+        out
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(25)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    };
+    if !status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&output.stdout);
+    let out = reader.join().ok()?;
+    let text = String::from_utf8_lossy(&out);
     let line = text.lines().next()?.trim();
     (!line.is_empty()).then(|| line.chars().take(200).collect())
 }
@@ -1470,6 +1517,37 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    fn sleeper() -> std::process::Command {
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-Command", "Start-Sleep 30"]);
+        command
+    }
+
+    #[cfg(unix)]
+    fn sleeper() -> std::process::Command {
+        let mut command = std::process::Command::new("sleep");
+        command.arg("30");
+        command
+    }
+
+    #[test]
+    fn a_version_that_never_answers_is_none_and_leaves_no_child() {
+        use std::process::Stdio;
+        use std::time::{Duration, Instant};
+
+        let mut child = sleeper()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("sleeper starts");
+        let started = Instant::now();
+        assert_eq!(first_line_within(&mut child, Duration::from_secs(5)), None);
+        assert!(started.elapsed() < Duration::from_secs(6), "took {:?}", started.elapsed());
+        assert!(child.try_wait().expect("handle still valid").is_some(), "child still running");
+    }
 
     #[cfg(unix)]
     #[test]
