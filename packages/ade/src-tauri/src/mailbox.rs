@@ -1065,16 +1065,34 @@ mod tests {
         assert!(PS1.contains("--note") && SH.contains("\\\"note\\\":"));
     }
 
+    /// A folder under the test TEMP, removed when dropped: on a failed assertion too.
+    #[cfg(windows)]
+    struct Scratch(PathBuf);
+
+    #[cfg(windows)]
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+            let dir = std::env::temp_dir().join(format!("ade-msg-{tag}-{}-{nanos}", std::process::id()));
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// Runs the real `ade-msg.ps1` on `args`, answers its receipt with "ok", and returns the JSON it posted.
     #[cfg(windows)]
     fn posted_by_ps1(tag: &str, args: &[&str], stdin: Option<&[u8]>) -> serde_json::Value {
         use std::io::Write;
         use std::process::{Command, Stdio};
-        let base = std::env::temp_dir().join(format!(
-            "ade-msg-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
-        ));
+        let scratch = Scratch::new(tag);
+        let base = scratch.0.clone();
         for dir in ["outbox", "receipts", "results", "bin"] {
             fs::create_dir_all(base.join(dir)).unwrap();
         }
@@ -1109,7 +1127,6 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         };
         let _ = child.wait();
-        let _ = fs::remove_dir_all(&base);
         serde_json::from_str(posted.trim_start_matches('\u{feff}')).unwrap()
     }
 
@@ -1118,16 +1135,14 @@ mod tests {
     fn registro_takes_its_json_from_a_file_or_stdin_with_the_quotes_intact() {
         // Audit 0.7.7, MEDIO 8: as an argument, PowerShell 5.1 drops these quotes on the way to the script.
         let json = r#"{"k":"D1","words":"ha detto \"sì, ma dopo\""}"#;
-        let dir = std::env::temp_dir().join(format!("ade-msg-json-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("evento.json");
+        let dir = Scratch::new("json");
+        let file = dir.0.join("evento.json");
         fs::write(&file, json).unwrap();
         let from_file = posted_by_ps1("file", &["registro", "decisioni", "risposta", "--file", file.to_str().unwrap()], None);
         assert_eq!(from_file["kind"], "registro");
         assert_eq!(from_file["text"], json);
         let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
         assert_eq!(from_stdin["text"], json);
-        let _ = fs::remove_dir_all(&dir);
         assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
     }
 
