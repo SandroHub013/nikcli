@@ -65,6 +65,7 @@ export function isHtmlPreview(preview: string): boolean {
 
 export function isImagePreview(preview: string): boolean {
   const trimmed = preview.trim()
+  if (/^(?:https?:|\/\/)/i.test(trimmed)) return false
   if (/\.(png|jpe?g|gif|webp|svg|bmp|ico)([?#].*)?$/i.test(trimmed)) return true
   if (trimmed.startsWith("data:image/") || trimmed.startsWith("ade-media://")) return true
   return false
@@ -126,12 +127,13 @@ export function previewPlan(preview: string, projectRoot: string | undefined, k:
   if (!raw) return { kind: "none" }
   // HTML written into the register would be a `srcdoc`: its scripts do not run in the release build.
   if (raw.startsWith("<")) return { kind: "error", text: t("design.preview.inline", k) }
+  if (/^(?:https?:|\/\/)/i.test(raw)) return { kind: "none" }
   if (/\.html?([?#].*)?$/i.test(raw)) {
     const path = resolvePreviewPath(raw, projectRoot)
     if (!projectRoot || !isInsideRoot(path, projectRoot)) return { kind: "error", text: t("design.preview.outside", path, k) }
     return { kind: "html", path, src: mediaUrl(path, windows) }
   }
-  if (/^(https?:|data:|ade-media:)/.test(raw)) return { kind: "image", path: raw, src: raw }
+  if (/^(data:|ade-media:)/.test(raw)) return { kind: "image", path: raw, src: raw }
   const path = resolvePreviewPath(raw, projectRoot)
   return { kind: "image", path, src: mediaUrl(path, windows) }
 }
