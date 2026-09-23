@@ -333,6 +333,7 @@ import {
 } from "../design/delivery"
 import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
+import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import { registerWrite } from "../session/register-write"
 import {
@@ -1343,8 +1344,13 @@ export function Workbench() {
   )
 
   onMount(() => {
-    onCleanup(decisionsRegister.watch())
-    onCleanup(designRegister.watch())
+    // One pass and one listing of `.ade/` for both registers (P1-C2c).
+    onCleanup(
+      watchRegisters([decisionsRegister, designRegister], async () => {
+        const host = await getHost()
+        return host?.readDir ? (path: string) => host.readDir!(path) : undefined
+      }),
+    )
     // Only does work while an answer is waiting to go out.
     onCleanup(every(3000, () => {
       void deliverDecisions()

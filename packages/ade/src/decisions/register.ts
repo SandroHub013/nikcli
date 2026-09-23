@@ -14,6 +14,7 @@
 import { createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
+import type { ReadDir } from "../host/register-watch"
 import type { DecisionEvent } from "./log"
 import { foldDecisions, type DecisionsState } from "./state"
 import { appendDecisionEvent, loadDecisions, type DecisionsIo, type LoadedRegister } from "./store"
@@ -44,6 +45,8 @@ export interface DecisionsRegister {
   /** Appends one event; rejects with the reason it was refused. */
   append: (event: DecisionEvent) => Promise<void>
   /** Starts watching; returns the stop. */
+  /** One look at the file, with a listing shared with the other register (P1-C2c). */
+  tick: (listing?: ReadDir) => Promise<void>
   watch: () => () => void
 }
 
@@ -58,13 +61,13 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   let loadedPath: string | undefined
   let stamp: string | undefined
 
-  const stampOf = async (path: string): Promise<string | undefined> => {
-    const io = await deps.io()
-    if (!io?.readDir) return undefined
+  const stampOf = async (path: string, listing?: ReadDir): Promise<string | undefined> => {
+    const readDir = listing ?? (await deps.io())?.readDir
+    if (!readDir) return undefined
     const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
     const dir = path.slice(0, slash)
     const name = path.slice(slash + 1)
-    const entries = await io.readDir(dir).catch(() => [] as DirEntry[])
+    const entries = await readDir(dir).catch(() => [] as DirEntry[])
     const entry = entries.find((item) => item.name === name)
     return entry ? `${entry.size}:${entry.modified_ms}` : "assente"
   }
@@ -103,13 +106,13 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
     await refresh()
   }
 
-  const tick = async () => {
+  const tick = async (listing?: ReadDir) => {
     // Set only when the minute turns: nothing re-renders between two ticks.
     if (Math.floor(Date.now() / 60_000) !== Math.floor(now().getTime() / 60_000)) setNow(new Date())
     const path = deps.path()
     if (path !== loadedPath) return refresh()
     if (!path) return
-    const next = await stampOf(path)
+    const next = await stampOf(path, listing)
     // Without a directory listing there is nothing cheap to compare: read.
     if (next === undefined || next !== stamp) await refresh()
   }
@@ -122,6 +125,7 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
     error,
     refresh,
     append,
+    tick,
     watch: () => every(REGISTER_WATCH_MS, tick, { immediate: true }),
   }
 }
