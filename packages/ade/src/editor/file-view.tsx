@@ -9,7 +9,7 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
-import { folderOf, handlePreviewClick, joinPath, renderMarkdown } from "./markdown"
+import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
 import { t } from "../i18n"
@@ -71,9 +71,7 @@ export function FileView(props: FileViewProps) {
   return (
     <Switch fallback={editor()}>
       <Match when={props.kind === "svg" && !props.asText}>
-        <div data-slot="file-view" data-kind="svg">
-          <img data-slot="file-image" src={src()} alt={props.path} />
-        </div>
+        <SvgView src={src()} path={props.path} />
       </Match>
       <Match when={props.kind === "image"}>
         <ImageView src={src()} path={props.path} />
@@ -88,6 +86,17 @@ export function FileView(props: FileViewProps) {
         <AudioView src={src()} />
       </Match>
     </Switch>
+  )
+}
+
+export function SvgView(props: { src: string; path: string }) {
+  const [failed, setFailed] = createSignal(false)
+  return (
+    <div data-slot="file-view" data-kind="svg">
+      <Show when={!failed()} fallback={<div data-slot="file-message">{t("file.imageFailed")}</div>}>
+        <img data-slot="file-image" src={props.src} alt={props.path} onError={() => setFailed(true)} />
+      </Show>
+    </div>
   )
 }
 
@@ -115,7 +124,7 @@ function ImageView(props: { src: string; path: string }) {
 function MarkdownView(props: FileViewProps) {
   const base = () => folderOf(props.path)
   const html = createMemo(() =>
-    renderMarkdown(props.buffer?.draft ?? "", (relative) => mediaUrl(joinPath(base(), decodeURI(relative)))),
+    renderMarkdown(props.buffer?.draft ?? "", (relative) => mediaUrl(joinPath(base(), safeDecodeURI(relative)))),
   )
   return (
     <Show when={props.buffer} fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}>

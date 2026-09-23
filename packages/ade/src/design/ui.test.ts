@@ -551,4 +551,20 @@ describe("a variant's preview", () => {
   test("HTML written into the register is an error, not a srcdoc", () => {
     expect(previewPlan("<!doctype html><p>x</p>", root, "DS1", true).kind).toBe("error")
   })
+
+  test("remote images are not loaded in preview: only ade-media and data (Punto 13)", () => {
+    expect(previewPlan("https://example.com/p.png", root, "DS1", true)).toEqual({ kind: "none" })
+    expect(previewPlan("http://example.com/p.png", root, "DS1", true)).toEqual({ kind: "none" })
+    expect(isImagePreview("https://example.com/p.png")).toBe(false)
+    expect(previewPlan("data:image/png;base64,abc", root, "DS1", true)).toEqual({
+      kind: "image",
+      path: "data:image/png;base64,abc",
+      src: "data:image/png;base64,abc",
+    })
+    expect(previewPlan("ade-media://localhost/p.png", root, "DS1", true)).toEqual({
+      kind: "image",
+      path: "ade-media://localhost/p.png",
+      src: "ade-media://localhost/p.png",
+    })
+  })
 })
