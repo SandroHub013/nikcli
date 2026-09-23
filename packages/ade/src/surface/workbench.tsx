@@ -282,7 +282,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { paneShowing, routeForFile } from "./open-route"
+import { openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { discardedBadge, queuedBadge } from "../decisions/card"
@@ -599,7 +599,7 @@ export function Workbench() {
    * See `pane-records.ts` for why that matters.
    */
   const records = createPaneRecords()
-  const { reports, buffers, bufferLoading, permissions } = records
+  const { reports, buffers, bufferLoading, bufferError, permissions } = records
 
   /*
    * One line for things the user has to be told but must not be stopped for.
@@ -4962,12 +4962,16 @@ export function Workbench() {
       }),
     )
 
+    // An image, a font or a sound is drawn from its bytes, never read as text.
+    if (!readsText(viewKind(path))) return
+
     bufferLoading.set(id, true)
     try {
       const read = await host.readTextFile(path)
       buffers.set(id, openBuffer({ path, text: read.text, truncated: read.truncated }))
     } catch (error) {
-      appendLine(id, error instanceof Error ? error.message : String(error))
+      // Into the pane's own state: `appendLine` wrote it to lines a file pane never shows.
+      bufferError.set(id, error instanceof Error ? error.message : String(error))
     } finally {
       bufferLoading.set(id, false)
     }
@@ -4997,16 +5001,12 @@ export function Workbench() {
       }
       return
     }
-    const absolute = /^(?:[A-Za-z]:)?[\\/]/.test(request.target)
-    const base = activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root
-    const path =
-      absolute || !base
-        ? request.target
-        : `${base.replace(/[\\/]+$/, "")}/${request.target.replace(/^\.[\\/]/, "")}`
     const host = await getHost()
-    const found = host?.readTextFile ? await host.readTextFile(path, 1).then(() => true, () => false) : false
-    if (!found) return say(t("pane.link.missing", path))
-    await openFile(path, request.line)
+    await openPathLink(request.target, activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root, request.line, {
+      readTextFile: host?.readTextFile,
+      open: openFile,
+      say: (path) => say(t("pane.link.missing", path)),
+    })
   }
 
   const saveFile = async (paneId: string) => {
@@ -6075,6 +6075,11 @@ export function Workbench() {
     mailWaiting,
     showMail,
     openLink: (id, request) => void openLink(id, request),
+    openFileLink: (id, link) => {
+      if (link.kind === "file") return void openFile(link.path)
+      const pane = wb().panes.find((candidate) => candidate.id === id)
+      openOwnedBrowser(link.url, { id, title: pane?.title ?? "" }, true)
+    },
     typeAsUser,
     announceToAll,
     pluginRuntime,

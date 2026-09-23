@@ -91,6 +91,8 @@ export interface PaneRendererDeps {
   mailWaiting: () => Record<string, number>
   /** Shows a pane what is waiting for it, without typing anything. */
   showMail: (id: string) => void
+  /** A link clicked in a file pane's markdown preview: a web page in ADE's browser, or a file. */
+  openFileLink: (id: string, link: { kind: "url"; url: string } | { kind: "file"; path: string }) => void
   /** Opens what was clicked in a session's terminal: a URL, or a file at a line. */
   openLink: (id: string, request: LinkRequest) => void
   /** Writes into a session's input line on the user's behalf, and counts it as typed. */
@@ -110,7 +112,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, reports, permissions } = records
+  const { buffers, bufferLoading, bufferError, reports, permissions } = records
   /* Panes of one kind share a panel name; see `panels/stack.ts`. */
   const stacks = {
     video: createPanelStack(panels, "video"),
@@ -186,6 +188,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         goTo={current().fileGoTo}
         buffer={buffers()[current().id]}
         loading={bufferLoading()[current().id]}
+        error={bufferError()[current().id]}
+        readBytes={deps.readBytes}
+        openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
+        openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}
         onFocus={focus}
         onChange={(draft) =>

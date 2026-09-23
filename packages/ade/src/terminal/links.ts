@@ -79,7 +79,8 @@ export function findLinks(text: string): FoundLink[] {
     // A sentence's full stop is not part of a path it ends on.
     if (!suffix) path = path.replace(/\.+$/, "")
     const separated = /[\\/]/.test(path)
-    const extension = /[^\\/.]\.[A-Za-z]{1,8}$/.test(path)
+    // A letter first, then letters or digits: `.mp4`, `.woff2`, `.m4a`, never `1.0`.
+    const extension = /[^\\/.]\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(path)
     if (!separated && !extension) continue
     if (!extension && !lineText) continue
     links.push({

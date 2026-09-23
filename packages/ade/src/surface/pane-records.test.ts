@@ -99,7 +99,7 @@ describe("createPaneRecords", () => {
        * would make the pane that reuses the id refuse mail for ever.
        */
       const every = Object.entries(records).filter(([name]) => name !== "forget")
-      expect(every.length).toBe(8)
+      expect(every.length).toBe(9)
 
       for (const [, record] of every) {
         ;(record as ReturnType<typeof createPaneRecord>).set("p1", true as never)

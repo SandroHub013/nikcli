@@ -40,6 +40,14 @@ describe("findLinks (S76)", () => {
     expect(findLinks("data:text/html,x")).toEqual([])
   })
 
+  test("an extension may hold digits after its first letter", () => {
+    for (const name of ["a.mp4", "song.mp3", "f.woff2", "clip.m4a"]) {
+      expect(findLinks(name)).toEqual([{ start: 0, end: name.length, kind: "file", target: name, line: undefined, column: undefined }])
+    }
+    expect(findLinks("v1.2.3")).toEqual([])
+    expect(findLinks("1.0")).toEqual([])
+  })
+
   test("a bare word with no extension and no line is not a path", () => {
     expect(findLinks("README")).toEqual([])
     expect(findLinks("vedi README.")).toEqual([])

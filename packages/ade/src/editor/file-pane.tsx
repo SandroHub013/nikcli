@@ -1,6 +1,7 @@
-import { Show } from "solid-js"
-import { Editor } from "./editor"
+import { Show, createSignal } from "solid-js"
 import type { Buffer } from "./buffer"
+import { FileView } from "./file-view"
+import { viewKind } from "../surface/open-route"
 import "./file-pane.css"
 import { t } from "../i18n"
 
@@ -8,6 +9,8 @@ export interface FilePaneProps {
   path: string
   buffer: Buffer | undefined
   loading?: boolean
+  /** Why the file could not be read as text, shown instead of an empty editor. */
+  error?: string
   /** A line to put the cursor on, from a link clicked in a session. */
   goTo?: { line: number; at: number }
   focused?: boolean
@@ -17,6 +20,12 @@ export interface FilePaneProps {
   onFocus?: () => void
   onClose?: () => void
   onExpand?: () => void
+  /** A font's bytes, for the font viewer. */
+  readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** A web link clicked in a markdown preview: ADE's browser. */
+  openUrl?: (url: string) => void
+  /** A file linked from a markdown preview. */
+  openFile?: (path: string) => void
 }
 
 /**
@@ -32,6 +41,14 @@ export interface FilePaneProps {
  */
 export function FilePane(props: FilePaneProps) {
   const name = () => props.path.split(/[\\/]/).pop() ?? props.path
+  const kind = () => viewKind(props.path)
+  /*
+   * «Anteprima / Testo», for the two formats that are both. An SVG starts on
+   * the picture; a markdown file starts on its text, because it is opened to
+   * be edited far more often than to be read. A line to go to means the text.
+   */
+  const [asText, setAsText] = createSignal(kind() === "markdown" || Boolean(props.goTo))
+  const switchable = () => kind() === "svg" || kind() === "markdown"
 
   return (
     <article
@@ -55,6 +72,17 @@ export function FilePane(props: FilePaneProps) {
           </Show>
         </h2>
         <div data-slot="pane-actions">
+          <Show when={switchable()}>
+            <button
+              type="button"
+              data-slot="pane-view-toggle"
+              aria-pressed={!asText()}
+              title={asText() ? t("file.showPreview") : t("file.showText")}
+              onClick={() => setAsText((now) => !now)}
+            >
+              {asText() ? t("file.preview") : t("file.text")}
+            </button>
+          </Show>
           <button type="button" data-slot="pane-action" onClick={() => props.onExpand?.()} aria-label={t("pane.expand")}>
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
               <path d="M1 4.5V1h3.5M11 7.5V11H7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -69,13 +97,20 @@ export function FilePane(props: FilePaneProps) {
       </header>
 
       <div data-slot="pane-editor">
-        <Editor
+        <FileView
+          path={props.path}
+          kind={kind()}
+          asText={asText()}
           buffer={props.buffer}
           loading={props.loading}
+          error={props.error}
           goTo={props.goTo}
           onChange={props.onChange}
           onSave={props.onSave}
           onRevert={props.onRevert}
+          readBytes={props.readBytes}
+          openUrl={props.openUrl}
+          openFile={props.openFile}
         />
       </div>
     </article>

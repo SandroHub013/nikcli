@@ -94,6 +94,21 @@ fn mime_of(path: &Path) -> &'static str {
         "mov" => "video/quicktime",
         // A design variant's page, loaded as a frame's `src` (design-preview.tsx).
         "html" | "htm" => "text/html; charset=utf-8",
+        // The file panes' viewers (editor/file-view.tsx). An SVG served as
+        // octet-stream with nosniff is not drawn at all.
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
+        "aac" => "audio/aac",
+        "mp3" => "audio/mpeg",
+        "m4a" => "audio/mp4",
+        "wav" => "audio/wav",
+        "oga" | "opus" => "audio/ogg",
         _ => "application/octet-stream",
     }
 }
@@ -386,6 +401,21 @@ mod tests {
         assert_eq!(mime_of(Path::new("a.WEBM")), "video/webm");
         assert_eq!(mime_of(Path::new("a.mov")), "video/quicktime");
         assert_eq!(mime_of(Path::new("a.html")), "text/html; charset=utf-8");
+        assert_eq!(mime_of(Path::new("a.svg")), "image/svg+xml");
+        assert_eq!(mime_of(Path::new("a.png")), "image/png");
+        assert_eq!(mime_of(Path::new("a.jpg")), "image/jpeg");
+        assert_eq!(mime_of(Path::new("a.JPEG")), "image/jpeg");
+        assert_eq!(mime_of(Path::new("a.gif")), "image/gif");
+        assert_eq!(mime_of(Path::new("a.webp")), "image/webp");
+        assert_eq!(mime_of(Path::new("a.ico")), "image/x-icon");
+        assert_eq!(mime_of(Path::new("a.bmp")), "image/bmp");
+        assert_eq!(mime_of(Path::new("a.avif")), "image/avif");
+        assert_eq!(mime_of(Path::new("a.aac")), "audio/aac");
+        assert_eq!(mime_of(Path::new("a.mp3")), "audio/mpeg");
+        assert_eq!(mime_of(Path::new("a.m4a")), "audio/mp4");
+        assert_eq!(mime_of(Path::new("a.wav")), "audio/wav");
+        assert_eq!(mime_of(Path::new("a.oga")), "audio/ogg");
+        assert_eq!(mime_of(Path::new("a.opus")), "audio/ogg");
         assert_eq!(mime_of(Path::new("a.txt")), "application/octet-stream");
     }
 
