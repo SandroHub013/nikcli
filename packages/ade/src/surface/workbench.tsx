@@ -282,7 +282,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { paneShowing, readsText, routeForFile, viewKind } from "./open-route"
+import { openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { discardedBadge, queuedBadge } from "../decisions/card"
@@ -5001,16 +5001,12 @@ export function Workbench() {
       }
       return
     }
-    const absolute = /^(?:[A-Za-z]:)?[\\/]/.test(request.target)
-    const base = activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root
-    const path =
-      absolute || !base
-        ? request.target
-        : `${base.replace(/[\\/]+$/, "")}/${request.target.replace(/^\.[\\/]/, "")}`
     const host = await getHost()
-    const found = host?.readTextFile ? await host.readTextFile(path, 1).then(() => true, () => false) : false
-    if (!found) return say(t("pane.link.missing", path))
-    await openFile(path, request.line)
+    await openPathLink(request.target, activityOf.get(paneId)?.cwd ?? pane?.cwd ?? project()?.root, request.line, {
+      readTextFile: host?.readTextFile,
+      open: openFile,
+      say: (path) => say(t("pane.link.missing", path)),
+    })
   }
 
   const saveFile = async (paneId: string) => {

@@ -83,3 +83,30 @@ export function paneShowing<P extends { id: string; mode?: string; videoPath?: s
     return pane.mode === route && !!shown && pathEquals(shown, path)
   })
 }
+
+/** What `openPathLink` needs from the workbench. */
+export interface PathLinkDeps {
+  readTextFile?: (path: string, maxBytes?: number) => Promise<unknown>
+  open: (path: string, line?: number) => unknown
+  /** The file is not there: `path` as resolved. */
+  say: (path: string) => void
+}
+
+/**
+ * A `file:line` clicked in a session: resolved against the session's folder,
+ * then opened in the pane its kind goes to.
+ *
+ * Existence is checked by reading one byte as text, which only works for a
+ * file that is text. A picture, a font, a sound, a video or a model fails that
+ * read as binary, and every link to one used to say «File non trovato»; those
+ * go straight to their pane, which says for itself if it cannot draw them.
+ */
+export async function openPathLink(target: string, base: string | undefined, line: number | undefined, deps: PathLinkDeps): Promise<void> {
+  const absolute = /^(?:[A-Za-z]:)?[\\/]/.test(target)
+  const path = absolute || !base ? target : `${base.replace(/[\\/]+$/, "")}/${target.replace(/^\.[\\/]/, "")}`
+  if (routeForFile(path) === "editor" && readsText(viewKind(path))) {
+    const found = deps.readTextFile ? await deps.readTextFile(path, 1).then(() => true, () => false) : false
+    if (!found) return deps.say(path)
+  }
+  await deps.open(path, line)
+}
