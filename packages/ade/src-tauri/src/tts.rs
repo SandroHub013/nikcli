@@ -534,4 +534,3 @@ mod tests {
         assert!(guard2.unwrap().is_none());
     }
 }
-
