@@ -245,7 +245,7 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { createLineQueue } from "../session/line-queue"
-import { lineGiven, pressEnter, typeThenEnter, type LineOutcome } from "../session/enter"
+import { deliveryResult, lineGiven, pressEnter, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -1183,7 +1183,7 @@ export function Workbench() {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         if (!decision || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
-        if (!(await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" }))) continue
+        if ((await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("decisions.delivered", decision.k), "note")
@@ -1290,7 +1290,7 @@ export function Workbench() {
       for (const item of pending) {
         const proposal = state.proposals.find((entry) => entry.k === item.k)
         if (!proposal || !running.has(target.id) || !(await freeNow(host, target.id))) continue
-        if (!(await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" }))) continue
+        if ((await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = designOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("design.delivery.done", target.title, "adesso"), "note")
@@ -1928,15 +1928,17 @@ export function Workbench() {
     meta: InboxMeta,
     /** What the inbox file holds when it differs from the typed line: the same text with its line breaks. */
     full: string = line,
-  ): Promise<boolean> => {
+  ): Promise<DeliveryResult> => {
     const session = running.get(paneId)
-    if (!session) return false
+    if (!session) return "closed"
+    // A prompt open now takes no text at all: the message waits for it to go (`deliveryResult`).
+    if (permissions()[paneId]) return "held"
     // Given even when a prompt held its Enter back; the sender is told it is waiting.
-    const given = (outcome: LineOutcome) => {
+    const given = (outcome: LineOutcome, stored = false) => {
       if (outcome === "typed-no-enter" && meta.from) {
         appendLine(meta.from, t("note.enterHeldFor", mailPanes().find((pane) => pane.id === paneId)?.title ?? paneId), "note")
       }
-      return lineGiven(outcome)
+      return deliveryResult(outcome, running.get(paneId) === session, stored)
     }
     if (!goesToInbox(line) || !host.mailboxInboxPut || !host.mailboxInboxRead) return given(await typeLineOutcome(session, line))
     const at = Date.now()
@@ -1948,7 +1950,7 @@ export function Workbench() {
     if (!stored) return given(await typeLineOutcome(session, line))
     inboxPending.push(entry)
     saveInbox()
-    return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)))
+    return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)), true)
   }
 
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
@@ -2391,7 +2393,13 @@ export function Workbench() {
       if (!session) heldLines.splice(heldLines.indexOf(item), 1)
       else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
-        void (item.inbox ? deliverText(host, item.paneId, item.text, item.inbox, item.full) : typeLine(session, item.text))
+        // Not typed while the session is still there (a prompt opened): back among the held lines.
+        void (item.inbox
+          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => result === "held")
+          : typeLineOutcome(session, item.text).then((outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held")
+        ).then((again) => {
+          if (again) heldLines.push(item)
+        })
       } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
         // Replies and updates too, not only what went to the inbox: the
         // sender is told at once, and once, why this is not arriving.
@@ -3194,7 +3202,10 @@ export function Workbench() {
     const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
     // The inbox copy, read and never typed, keeps the sender's line breaks.
     const stored = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
-    if (!(await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored))) {
+    const delivered = await deliverText(host, target.pane.id, line, { id, kind: message.kind === "ask" ? "ask" : "send", from: message.from }, stored)
+    // A prompt opened before the text: the message stays queued, as for a prompt seen above.
+    if (delivered === "held") return false
+    if (delivered === "closed") {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -5812,9 +5823,12 @@ export function Workbench() {
             // A task from `ade-msg spawn` is a request like any other: too long to type, it goes to the inbox.
             const spawned = [...openRequests.values()].find((request) => request.kind === "spawn" && request.to === paneId)
             if (session && spawned) {
-              void getHost().then((host) =>
-                host ? deliverText(host, paneId, opening, { id: spawned.id, kind: "spawn", from: spawned.from }) : typeLine(session, opening),
-              )
+              const meta = { id: spawned.id, kind: "spawn" as const, from: spawned.from }
+              void getHost().then(async (host) => {
+                if (!host) return void typeLine(session, opening)
+                // A prompt at start-up: the task waits among the held lines instead of going missing.
+                if ((await deliverText(host, paneId, opening, meta)) === "held") heldLines.push({ paneId, text: opening, inbox: meta })
+              })
             } else if (session) void typeLine(session, opening)
             return
           }

@@ -34,7 +34,11 @@ export function pressEnter(write: (data: string) => void, permissionOpen: () => 
 /**
  * A line as `typeLineNow` types it: the text, the wait, then the Enter.
  *
- * `alive` is asked after the wait: a session gone meanwhile gets no Enter.
+ * The prompt is asked about before the text too: a line waits in the pane's
+ * queue, sometimes seconds behind another, and a prompt that opened meanwhile
+ * would get the text in its answer box. Then nothing is written and the line
+ * is `not-typed` (audit 0.7.7, B1 bis, MEDIO 1). `alive` is asked after the
+ * wait: a session gone meanwhile gets no Enter.
  */
 export async function typeThenEnter(input: {
   text: string
@@ -43,8 +47,26 @@ export async function typeThenEnter(input: {
   alive: () => boolean
   permissionOpen: () => boolean
 }): Promise<LineOutcome> {
+  if (input.permissionOpen()) return "not-typed"
   input.write(input.text)
   await input.wait()
   if (!input.alive()) return "not-typed"
   return pressEnter(input.write, input.permissionOpen) ? "sent" : "typed-no-enter"
+}
+
+/**
+ * What a delivery made of its line.
+ *
+ * `held`: not typed while the session is still there — a prompt was open —
+ * so the message goes back among the held ones and comes on a later round.
+ * It used to be answered as "the session closed during delivery" (MEDIO 1).
+ * A line whose text is already in the inbox counts as given: the inbox rings
+ * for it again, and typing the message again would deliver it twice.
+ */
+export type DeliveryResult = "given" | "held" | "closed"
+
+export function deliveryResult(outcome: LineOutcome, alive: boolean, stored = false): DeliveryResult {
+  if (lineGiven(outcome)) return "given"
+  if (!alive) return "closed"
+  return stored ? "given" : "held"
 }
