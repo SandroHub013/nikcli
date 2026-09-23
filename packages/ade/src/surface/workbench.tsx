@@ -245,7 +245,7 @@ import {
   type InboxEntry,
 } from "../session/mailbox"
 import { createLineQueue } from "../session/line-queue"
-import { deliveryResult, lineGiven, pressEnter, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
+import { deliveryResult, enterAgain, lineGiven, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -1657,14 +1657,25 @@ export function Workbench() {
           continue
         }
         if (check === "resend") {
-          // A prompt may have opened during the read above: its Enter is not ours to press (B1 bis).
-          if (!pressEnter((data) => session.write(data), () => Boolean(permissions()[paneId]))) return
+          // Not over a prompt (B1 bis), not into the user's draft, and in the pane's queue (`enterAgain`).
+          if (!(await pressAgain(paneId, session))) return
           appendLine(paneId, t("note.resent"), "note")
           break
         }
       }
     }
   }
+
+  /** An Enter on its own, for a line ADE typed and no turn took: see `enterAgain`. */
+  const pressAgain = (paneId: string, session: SpawnedSession): Promise<boolean> =>
+    enterAgain({
+      queue: lineQueue,
+      key: paneId,
+      write: (data) => session.write(data),
+      alive: () => running.get(paneId) === session,
+      typing: () => isTyping(records.typed.get(paneId)),
+      permissionOpen: () => Boolean(permissions()[paneId]),
+    })
 
   /** Messages held for a busy recipient, whose sender has already been told. */
   const held = new Set<string>()
@@ -2472,8 +2483,9 @@ export function Workbench() {
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         request.rings = (request.rings ?? 0) + 1
         saveRequests()
-        session.write("\r")
-        appendLine(request.to, t("note.resentRequest", request.id), "note")
+        void pressAgain(request.to, session).then((pressed) => {
+          if (pressed) appendLine(request.to, t("note.resentRequest", request.id), "note")
+        })
         continue
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.

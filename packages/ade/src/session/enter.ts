@@ -70,3 +70,26 @@ export function deliveryResult(outcome: LineOutcome, alive: boolean, stored = fa
   if (!alive) return "closed"
   return stored ? "given" : "held"
 }
+
+/**
+ * The Enter ADE presses again, on its own: the resend of `confirmSubmitted`
+ * and the re-ring of a request whose line sits in the box.
+ *
+ * Not while the user is writing: the Enter would send their line half done
+ * (MEDIO 2). Not over a prompt, as for every Enter (B1 bis). And in the pane's
+ * line queue, like every line, so it cannot fall between another line's text
+ * and its Enter (MEDIO 3). True when it was pressed.
+ */
+export function enterAgain(input: {
+  queue: <T>(key: string, job: () => Promise<T>) => Promise<T>
+  key: string
+  write: (data: string) => void
+  alive: () => boolean
+  typing: () => boolean
+  permissionOpen: () => boolean
+}): Promise<boolean> {
+  return input.queue(input.key, async () => {
+    if (!input.alive() || input.typing()) return false
+    return pressEnter(input.write, input.permissionOpen)
+  })
+}
