@@ -136,6 +136,7 @@ import {
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
+  exitedToReopen,
   sessionsToResume,
   nextView,
   ADE_VIEW_LABELS,
@@ -4407,12 +4408,7 @@ export function Workbench() {
          * agent fresh when there is not.
          */
         const planned = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of wb().panes) {
-          if (planned.has(pane.id)) continue
-          if (isPanelPane(pane)) continue
-          if (!(pane.agent ?? pane.model)) continue
-          void reopen(pane)
-        }
+        for (const pane of exitedToReopen(wb().panes, planned)) void reopen(pane)
       }
     }
 
