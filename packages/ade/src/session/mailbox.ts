@@ -1180,7 +1180,10 @@ export const USAGE =
   "                                          scrive un evento nel registro Decisioni o Design: il json ha i campi\n" +
   "                                          senza type, at e by (li mette ADE); k serve, tranne per aperta.\n" +
   "                                          ADE controlla la riga, la scrive e dice se il tasto la mostra;\n" +
-  "                                          rimandata solo per decisioni. I registri si scrivono solo così\n" +
+  "                                          rimandata solo per decisioni. I registri si scrivono solo così.\n" +
+  "                                          Il json anche da file (--file <percorso>) o da stdin (--stdin, al\n" +
+  "                                          posto del json): da PowerShell 5.1 usa --file, perché le virgolette\n" +
+  "                                          dentro '<json>' si perdono e una pipe perde le lettere accentate\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
