@@ -12,6 +12,7 @@
  */
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
+import { registerLinks, type LinkRequest } from "./links"
 
 export interface SessionTerminal {
   terminal: Terminal
@@ -394,6 +395,8 @@ export interface AttachOptions {
   onCopied?: () => void
   /** Whether the program has mouse reporting on, whenever that changes. */
   onMouseMode?: (reporting: boolean) => void
+  /** A URL or a file path in the output was clicked. See `links.ts`. */
+  onLink?: (request: LinkRequest) => void
 }
 
 /**
@@ -460,6 +463,8 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
           })
         })
 
+  const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+
   // xterm has no event for a mode change, so the mode is read after parsed
   // output, at most every 500 ms.
   let reporting: boolean | undefined
@@ -498,6 +503,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     observer.disconnect()
     inputHandler?.dispose()
     stopCopy?.()
+    stopLinks?.()
     modeWatch?.dispose()
     if (modeTimer) clearTimeout(modeTimer)
     session.element = undefined

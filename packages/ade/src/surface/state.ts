@@ -166,6 +166,11 @@ export interface Pane {
   /** Set when the pane holds a file being edited rather than a session. */
   filePath?: string
   /**
+   * Where the editor puts the cursor: a link clicked in a session. `at` makes
+   * a second click on the same line move it again.
+   */
+  fileGoTo?: { line: number; at: number }
+  /**
    * Set when the tile is drawn by a plugin.
    *
    * A plugin pane is a full member of the workbench — it is focused, expanded,

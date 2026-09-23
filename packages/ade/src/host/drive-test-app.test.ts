@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
 
-import { BUILD_CHECK, buildRefusal, buildVerdict, chooseCdpPort, notListening, parseArgs, pickPage, usage } from "./drive-test-app"
+import { BUILD_CHECK, buildRefusal, buildVerdict, cellCenter, chooseCdpPort, modifierBits, notListening, parseArgs, pickPage, usage } from "./drive-test-app"
 
 describe("chooseCdpPort", () => {
   test("CDP_PORT wins, and must be a port", () => {
@@ -89,5 +89,32 @@ describe("the script without an ADE Test listening", () => {
   test("the message names what was tried", () => {
     expect(notListening({ port: 9528, source: "record" }, "ECONNREFUSED")).toContain("dal record di questa worktree")
     expect(notListening({ port: 9528, source: "CDP_PORT" }, "x")).toContain("CDP_PORT=9528")
+  })
+})
+
+describe("the mouse commands (S76)", () => {
+  test("drag takes a row, two columns and an optional alt or shift", () => {
+    expect(parseArgs(["drag", "1", "3", "0", "12"])).toEqual({ command: "drag", pane: 1, rest: "", pointer: { row: 3, col: 0, toCol: 12, modifier: undefined } })
+    expect(parseArgs(["drag", "2", "0", "4", "9", "alt"])).toMatchObject({ pointer: { modifier: "alt" } })
+    expect(parseArgs(["drag", "2", "0", "4", "9", "shift"])).toMatchObject({ pointer: { modifier: "shift" } })
+    expect(typeof parseArgs(["drag", "1", "3", "0"])).toBe("string")
+    expect(typeof parseArgs(["drag", "1", "3", "0", "5", "ctrl"])).toBe("string")
+  })
+
+  test("click takes a row, a column and an optional ctrl or alt", () => {
+    expect(parseArgs(["click", "1", "2", "7"])).toEqual({ command: "click", pane: 1, rest: "", pointer: { row: 2, col: 7, toCol: undefined, modifier: undefined } })
+    expect(parseArgs(["click", "1", "2", "7", "ctrl"])).toMatchObject({ pointer: { modifier: "ctrl" } })
+    expect(typeof parseArgs(["click", "1", "-1", "7"])).toBe("string")
+    expect(typeof parseArgs(["click", "1", "2", "7", "shift"])).toBe("string")
+  })
+
+  test("key takes Ctrl+V", () => {
+    expect(parseArgs(["key", "1", "Ctrl+V"])).toEqual({ command: "key", pane: 1, rest: "Ctrl+V" })
+  })
+
+  test("a cell's middle in pixels, and CDP's modifier bits", () => {
+    expect(cellCenter({ left: 10, top: 20, width: 800, height: 400 }, 20, 100, 0, 0)).toEqual({ x: 14, y: 30 })
+    expect(cellCenter({ left: 10, top: 20, width: 800, height: 400 }, 20, 100, 19, 99)).toEqual({ x: 806, y: 410 })
+    expect([modifierBits("alt"), modifierBits("ctrl"), modifierBits("shift"), modifierBits(undefined)]).toEqual([1, 2, 8, 0])
   })
 })

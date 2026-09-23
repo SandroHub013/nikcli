@@ -4,6 +4,7 @@ import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import { focusPane, holdsFocus } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
+import type { LinkRequest } from "../terminal/links"
 import { isQuotaUnavailable, quotaForAgent, type SessionQuota } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
 
@@ -217,6 +218,8 @@ export interface SessionPaneProps {
   onDropPath?: (paths: string[]) => void
   /** The terminal's size in cells, whenever the pane changes shape. */
   onResize?: (cols: number, rows: number) => void
+  /** A URL or a file path in the terminal was clicked. */
+  onLink?: (request: LinkRequest) => void
 }
 
 /*
@@ -812,6 +815,7 @@ export function SessionPane(props: SessionPaneProps) {
               onResize: (cols, rows) => props.onResize?.(cols, rows),
               onCopied: flashCopied,
               onMouseMode: setMouseReporting,
+              onLink: (request) => props.onLink?.(request),
             })
             onCleanup(detach)
           }}

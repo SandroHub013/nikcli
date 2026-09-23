@@ -8,6 +8,8 @@ export interface FilePaneProps {
   path: string
   buffer: Buffer | undefined
   loading?: boolean
+  /** A line to put the cursor on, from a link clicked in a session. */
+  goTo?: { line: number; at: number }
   focused?: boolean
   onChange: (draft: string) => void
   onSave: () => void
@@ -70,6 +72,7 @@ export function FilePane(props: FilePaneProps) {
         <Editor
           buffer={props.buffer}
           loading={props.loading}
+          goTo={props.goTo}
           onChange={props.onChange}
           onSave={props.onSave}
           onRevert={props.onRevert}
