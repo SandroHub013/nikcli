@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { createNaturalSpeaker, splitSentences, type NaturalSpeakerDeps } from "./natural-speaker"
+import { describe, expect, jest, test } from "bun:test"
+import { createNaturalSpeaker, splitSentences, SILENCE_STOP_LIMIT_MS, type NaturalSpeakerDeps } from "./natural-speaker"
 import { createFakeSpeaker } from "./speaker"
 
 const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer
@@ -10,6 +10,7 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
   const played: string[] = []
   const installs: string[] = []
   const events: string[] = []
+  const stops: number[] = []
   let installed = true
   const deps: NaturalSpeakerDeps = {
     voice: () => "ugo",
@@ -22,11 +23,14 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
     play: async (buffer) => {
       played.push(said(buffer))
     },
+    stop: async () => {
+      stops.push(Date.now())
+    },
     fallback,
     onInstall: (voice, state) => events.push(`${voice}:${state}`),
     ...overrides,
   }
-  return { deps, fallback, played, installs, events, setInstalled: (value: boolean) => (installed = value) }
+  return { deps, fallback, played, installs, events, stops, setInstalled: (value: boolean) => (installed = value) }
 }
 
 describe("tts/natural-speaker", () => {
@@ -168,5 +172,109 @@ describe("tts/natural-speaker", () => {
     release?.()
     await old
     expect(aborted).toEqual(["Vecchia risposta, prima frase."])
+  })
+
+  test("piper is shut down after 2 minutes of silence (P1-C4)", async () => {
+    jest.useFakeTimers()
+    try {
+      const h = harness()
+      const speaker = createNaturalSpeaker(h.deps)
+      await speaker.speak("Prima frase della risposta.")
+      expect(h.played).toEqual(["Prima frase della risposta."])
+      expect(h.stops).toHaveLength(0)
+
+      // 1 minute 59 seconds: still alive
+      jest.advanceTimersByTime(119_000)
+      expect(h.stops).toHaveLength(0)
+
+      // 2 minutes of silence reached: stop is called
+      jest.advanceTimersByTime(1_000)
+      expect(h.stops).toHaveLength(1)
+
+      // Further silence does not keep calling stop repeatedly
+      jest.advanceTimersByTime(120_000)
+      expect(h.stops).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("a new sentence within 2 minutes resets the silence timer", async () => {
+    jest.useFakeTimers()
+    try {
+      const h = harness()
+      const speaker = createNaturalSpeaker(h.deps)
+      await speaker.speak("Prima frase.")
+      expect(h.stops).toHaveLength(0)
+
+      // 90 seconds pass (silence)
+      jest.advanceTimersByTime(90_000)
+      expect(h.stops).toHaveLength(0)
+
+      // New sentence arrives before the 2-minute deadline
+      await speaker.speak("Seconda frase.")
+      expect(h.stops).toHaveLength(0)
+
+      // 90 seconds pass after second sentence (total 180s from start): still alive because timer reset
+      jest.advanceTimersByTime(90_000)
+      expect(h.stops).toHaveLength(0)
+
+      // Another 30 seconds pass (full 120s of silence since second sentence): shut down
+      jest.advanceTimersByTime(30_000)
+      expect(h.stops).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("a sentence arriving after shutdown restarts piper and is spoken", async () => {
+    jest.useFakeTimers()
+    try {
+      const h = harness()
+      const speaker = createNaturalSpeaker(h.deps)
+      await speaker.speak("Prima frase.")
+      jest.advanceTimersByTime(SILENCE_STOP_LIMIT_MS)
+      expect(h.stops).toHaveLength(1)
+
+      // Silence broken by a new sentence after shutdown:
+      await speaker.speak("Frase dopo il silenzio.")
+      expect(h.played).toEqual(["Prima frase.", "Frase dopo il silenzio."])
+
+      // 2 minutes after this new sentence, it shuts down again:
+      jest.advanceTimersByTime(SILENCE_STOP_LIMIT_MS)
+      expect(h.stops).toHaveLength(2)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test("a sentence arriving while shutdown is in flight still speaks (restart)", async () => {
+    jest.useFakeTimers()
+    try {
+      let finishStop: (() => void) | undefined
+      const h = harness({
+        stop: () =>
+          new Promise<void>((resolve) => {
+            finishStop = resolve
+          }),
+      })
+      const speaker = createNaturalSpeaker(h.deps)
+      await speaker.speak("Prima frase.")
+
+      // Advance to 2 minutes so stop() is triggered and in flight
+      jest.advanceTimersByTime(SILENCE_STOP_LIMIT_MS)
+      expect(finishStop).toBeDefined()
+
+      // New sentence arrives while stop is still in flight:
+      const pendingSpeak = speaker.speak("Frase mentre si sta chiudendo.")
+
+      // Complete the shutdown
+      finishStop!()
+      await pendingSpeak
+
+      expect(h.played).toEqual(["Prima frase.", "Frase mentre si sta chiudendo."])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

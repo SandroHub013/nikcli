@@ -190,6 +190,8 @@ export interface Host {
   ttsPiperInstall?: (voice: string) => Promise<void>
   /** One sentence as WAV bytes, from the resident Piper process. */
   ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+  /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
+  ttsPiperStop?: () => Promise<void>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
 
@@ -653,6 +655,11 @@ export async function getHost(): Promise<Host | undefined> {
     async ttsPiperSpeak(voice, text) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text })
+    },
+
+    async ttsPiperStop() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_piper_stop")
     },
 
     async mailboxTake() {
