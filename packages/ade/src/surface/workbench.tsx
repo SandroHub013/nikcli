@@ -9,6 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
+import { paneProject } from "./pane-project"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -502,6 +503,11 @@ export function Workbench() {
       "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>),
   )
   const [project, setProject] = createSignal<Project>()
+  /** Who a new pane belongs to: the open project, by name and by folder (see `pane-project.ts`). */
+  const here = () => {
+    const open = project()
+    return { workspaceId: open?.name ?? "workspace", ...(open?.root ? { projectRoot: open.root } : {}) }
+  }
   /** The installed nikcli, read from the binary; undefined until asked, and
       after an answer that says nothing. */
   const [nikcliVersion, setNikcliVersion] = createSignal<string>()
@@ -716,7 +722,12 @@ export function Workbench() {
       mode: "browser",
       browserUrl: url,
       browserOwner: owner,
-      workspaceId: wb().panes.find((p) => p.id === owner.id)?.workspaceId ?? project()?.name ?? "workspace",
+      // The owning session's project, name and folder both; the open one without an owner pane.
+      ...(() => {
+        const ownerPane = wb().panes.find((p) => p.id === owner.id)
+        if (!ownerPane) return here()
+        return { workspaceId: ownerPane.workspaceId, ...(ownerPane.projectRoot ? { projectRoot: ownerPane.projectRoot } : {}) }
+      })(),
       lines: [],
     }
     setWb((w) => (focus ? addPane(w, pane) : { ...addPane(w, pane), focusedId: w.focusedId }))
@@ -1046,7 +1057,7 @@ export function Workbench() {
       model: "—",
       mode: "model",
       modelPath: path,
-      workspaceId: project()?.name ?? "workspace",
+      ...here(),
       lines: [],
     }))
   }
@@ -1065,7 +1076,7 @@ export function Workbench() {
       model: "—",
       mode: "video",
       videoPath: path,
-      workspaceId: project()?.name ?? "workspace",
+      ...here(),
       lines: [],
     }))
   }
@@ -1366,7 +1377,7 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "design",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -1387,7 +1398,7 @@ export function Workbench() {
         status: "working",
         model: "—",
         mode: "decisions",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",
@@ -2953,7 +2964,7 @@ export function Workbench() {
         ...(message.budget ? { budget: message.budget } : {}),
       })
       const created = addAgent(
-        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
+        { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(root ? { projectRoot: root } : {}), ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
         { index, agentId: agent.id, role: "agent" },
       )
       openRequests.set(id, {
@@ -4126,7 +4137,7 @@ export function Workbench() {
             status: "done",
             model: "—",
             mode: "plugin",
-            workspaceId: project()?.name ?? "workspace",
+            ...here(),
             lines: [],
             plugin: { pluginId: pane.pluginId, name: pane.name },
           }),
@@ -4611,7 +4622,7 @@ export function Workbench() {
         model: "—",
         mode: "video",
         videoPath: "",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "update.check") {
@@ -4640,7 +4651,7 @@ export function Workbench() {
         model: "—",
         mode: "app",
         appUrl: "",
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "browser.new") {
@@ -4664,7 +4675,7 @@ export function Workbench() {
          * It worked in the browser harness only because `project()` is
          * undefined there and the filter is skipped.
          */
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: []
       }))
     } else if (id === "process.kill") {
@@ -5066,7 +5077,7 @@ export function Workbench() {
         filePath: path,
         fileGoTo: goTo,
         lines: [],
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
       }),
     )
 
@@ -5458,15 +5469,14 @@ export function Workbench() {
    * Panes of every project stay in the workbench and keep talking to each
    * other, so a session of a project that is not on screen — restarted, or
    * spawned by one of its agents — has to start in its own root. Found by
-   * name among the known projects; the open one when the pane's is unknown.
+   * the folder the pane keeps, or by name for a pane saved before it kept one;
+   * the open one when the pane's is unknown. See `pane-project.ts`.
    */
   const projectOfPane = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string): Promise<Project | undefined> => {
     const open = project()
-    const owner = wb().panes.find((pane) => pane.id === paneId)?.workspaceId
-    if (!owner || owner === open?.name) return open
-    const entry = recents().find((candidate) => candidate.name === owner)
-    if (!entry) return open
-    return discoverProject(host, entry.root).catch(() => open)
+    const found = paneProject(wb().panes.find((pane) => pane.id === paneId), open, recents())
+    if (found.kind === "open") return open
+    return discoverProject(host, found.root).catch(() => open)
   }
 
   const startProcess = async (
@@ -6011,6 +6021,8 @@ export function Workbench() {
       preset?: string
       title?: string
       workspaceId?: string
+      /** That project's folder, when known: the name alone can belong to two. */
+      projectRoot?: string
       /** A spawned session's own checkout, with the branch it is on. */
       worktree?: { path: string; branch: string }
       spawnArgs?: string[]
@@ -6027,7 +6039,9 @@ export function Workbench() {
     const title = input.title || task || defaultPaneTitle(entry.role, entry.index, agentLabel(entry.agentId))
     const open = project()
     // Another project's session (a subagent spawned from there) keeps that project's name; its root is found at start.
-    const currentProj = input.workspaceId && input.workspaceId !== open?.name ? undefined : open
+    const currentProj = input.projectRoot
+      ? paneProject({ projectRoot: input.projectRoot }, open, []).kind === "open" ? open : undefined
+      : input.workspaceId && input.workspaceId !== open?.name ? undefined : open
     setWb(w => addPane(w, {
       id,
       title,
@@ -6040,6 +6054,7 @@ export function Workbench() {
       task,
       lines: [{ kind: "note", text: task || t("task.none") }],
       workspaceId: input.workspaceId || currentProj?.name || "workspace",
+      ...(input.projectRoot ?? currentProj?.root ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
       cwd: input.worktree?.path ?? currentProj?.root,
       tree: input.worktree
         ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
@@ -6103,7 +6118,7 @@ export function Workbench() {
       mode: "bot",
       task: "",
       lines: [{ kind: "note", text: `${launch.command} ${launch.args.join(" ")}` }],
-      workspaceId: owner || "workspace",
+      ...here(),
     }))
     /* Narrowed to nothing, or the grid keeps showing whichever session was
        expanded and the one just started is off screen. */
@@ -6120,7 +6135,6 @@ export function Workbench() {
   const openLoginSession = (runner: Runner) => {
     const agentId = runner.id === "claude" ? "claude-code" : runner.id
     if (!agentById(agentId) || runner.login.length === 0) return
-    const owner = project()?.name
     const id = `n${Date.now()}-login-${++paneSequence}`
     setWb((w) => addPane(w, {
       id,
@@ -6132,7 +6146,7 @@ export function Workbench() {
       mode: "bot",
       task: "",
       lines: [{ kind: "note", text: `${runner.command} ${runner.login.join(" ")}` }],
-      workspaceId: owner || "workspace",
+      ...here(),
     }))
     setWb((w) => ({ ...w, view: "code", focusedId: id, expandedId: undefined }))
     setStarting(false)
@@ -6161,7 +6175,7 @@ export function Workbench() {
         model: "—",
         mode: "browser",
         browserUrl: url,
-        workspaceId: project()?.name ?? "workspace",
+        ...here(),
         lines: [],
       }),
       view: "code",

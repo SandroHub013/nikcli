@@ -66,6 +66,8 @@ export interface PaneState {
   resumeId?: string
   /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */
   project?: string
+  /** That project's folder: two projects can share a name. Absent in states saved before it was kept. */
+  projectRoot?: string
   /** The worktree a spawned session works in. */
   worktree?: string
   /** Arguments chosen at spawn, replayed on every start. */
@@ -100,6 +102,7 @@ export interface BrowserPaneState {
   /** The session the pane is bound to, see `browser/binding.ts`. */
   owner?: { id: string; title: string }
   project?: string
+  projectRoot?: string
   span?: { columns: number; rows: number }
 }
 
@@ -218,6 +221,7 @@ function sanitisePane(raw: unknown): PaneState {
     ...(lines !== undefined ? { lines } : {}),
     ...(typeof raw.wasRunning === "boolean" ? { wasRunning: raw.wasRunning } : {}),
     ...(asOptionalString(raw.project) ? { project: raw.project as string } : {}),
+    ...(asOptionalString(raw.projectRoot) ? { projectRoot: raw.projectRoot as string } : {}),
     ...(asOptionalString(raw.worktree) ? { worktree: raw.worktree as string } : {}),
     ...(Array.isArray(raw.spawnArgs) && raw.spawnArgs.every((arg) => typeof arg === "string")
       ? { spawnArgs: raw.spawnArgs as string[] }
@@ -253,6 +257,7 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
     const history = isObject(entry.history) ? restoreHistory(url, entry.history) : undefined
     const span = sanitiseSpan(entry.span)
     const project = asOptionalString(entry.project)
+    const projectRoot = asOptionalString(entry.projectRoot)
     const ownerId = isObject(entry.owner) ? asOptionalString(entry.owner.id) : undefined
     const owner = ownerId && isObject(entry.owner) ? { id: ownerId, title: asString(entry.owner.title, "") } : undefined
     browsers.push({
@@ -262,6 +267,7 @@ function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
       ...(history ? { history } : {}),
       ...(owner ? { owner } : {}),
       ...(project ? { project } : {}),
+      ...(projectRoot ? { projectRoot } : {}),
       ...(span ? { span } : {}),
     })
   }
