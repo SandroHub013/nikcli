@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, sheetKey, togglePick } from "./answer"
+import { enterReady, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import type { RecipientStatus } from "./delivery"
@@ -59,7 +59,8 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
     const decision = current()
     const draft = decision ? props.hub.draft(decision.k) : undefined
     const picked = Boolean(decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)))
-    const action = sheetKey(event, decision?.options.length ?? 0, event.target === note, picked)
+    const inText = event.target === note
+    const action = sheetKey(event, decision?.options.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return
     event.preventDefault()
     event.stopPropagation()

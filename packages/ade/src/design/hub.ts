@@ -1,6 +1,7 @@
 import { createSignal, type Accessor } from "solid-js"
 import { againEvent, answerEvent } from "./answer"
-import { runSubmit, submitControl, submitSteps } from "./card"
+import { t } from "../i18n"
+import { runSubmit, submitControl, submitSteps, waitsForRecipient } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
@@ -138,7 +139,11 @@ export function createDesignHub(deps: {
     problem: (k) => problems()[k],
     answer,
     inlineRecipient: inline,
-    setInlineRecipient: setInline,
+    setInlineRecipient: (id) => {
+      setInline(id)
+      // A session picked: the note asking for one is done with.
+      setProblems((all) => Object.fromEntries(Object.entries(all).filter(([, text]) => text !== t("design.sheet.needRecipient"))))
+    },
     submit: (proposal, press) => {
       const control = submitControl({
         recipient: deps.recipient(),
@@ -147,6 +152,10 @@ export function createDesignHub(deps: {
         busy: busyKeys().has(proposal.k),
         label: "",
       })
+      if (waitsForRecipient(control, deps.sessions(), inline(), press)) {
+        setProblem(proposal.k, t("design.sheet.needRecipient"))
+        return Promise.resolve(false)
+      }
       const steps = submitSteps(control, deps.sessions(), inline(), press)
       return runSubmit(steps, {
         choose: (id) => {

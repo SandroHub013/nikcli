@@ -68,6 +68,20 @@ export function submitSteps(
   return id ? [{ kind: "choose", id }, { kind: "answer" }] : []
 }
 
+/**
+ * Whether a press has to wait for a recipient: nobody receives yet and no
+ * running session is picked in the card's select. The steps are then empty,
+ * and Enter used to do nothing and say nothing (audit 0.7.7, MEDIO 7).
+ */
+export function waitsForRecipient(
+  control: SubmitControl,
+  sessions: readonly DeliveryCandidate[],
+  inline: string | undefined,
+  press: "primary" | "record",
+): boolean {
+  return press === "primary" && control.gate === "scegli" && !runningPick(sessions, inline)
+}
+
 /** Runs the steps; true once an answer is in the register. */
 export async function runSubmit(
   steps: readonly SubmitStep[],

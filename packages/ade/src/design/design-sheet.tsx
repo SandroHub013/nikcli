@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
+import { enterReady, firstPick, isFormField, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
@@ -60,7 +60,8 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     const proposal = current()
     const draft = proposal ? props.hub.draft(proposal.k) : undefined
     const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, chosenHere().has(proposal.k)))
-    const action = sheetKey(event, proposal?.variants.length ?? 0, event.target === note, picked)
+    const inText = event.target === note
+    const action = sheetKey(event, proposal?.variants.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
