@@ -28,6 +28,26 @@ export function paneProject(
   return entry ? { kind: "root", root: entry.root } : { kind: "open" }
 }
 
+/**
+ * Whether a pane is one of `project`'s sessions: by folder when the pane
+ * keeps one, by name for a pane saved before. The grid and the pane counts
+ * ask this, so two projects called `app` opened in turn do not share a grid.
+ */
+export function belongsTo(
+  pane: { readonly workspaceId?: string; readonly projectRoot?: string },
+  project: ProjectRef,
+): boolean {
+  return pane.projectRoot ? samePath(pane.projectRoot, project.root) : pane.workspaceId === project.name
+}
+
+/** Whether two panes are of the same project; by name only when either lacks a folder. */
+export function sameProject(
+  a: { readonly workspaceId?: string; readonly projectRoot?: string },
+  b: { readonly workspaceId?: string; readonly projectRoot?: string },
+): boolean {
+  return a.projectRoot && b.projectRoot ? samePath(a.projectRoot, b.projectRoot) : a.workspaceId === b.workspaceId
+}
+
 /** Windows paths: the same folder may come back with the other slash or another case. */
 function samePath(a: string, b: string): boolean {
   const norm = (path: string) => path.replace(/[\\/]+/g, "/").replace(/\/$/, "").toLowerCase()

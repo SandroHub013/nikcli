@@ -9,7 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
-import { paneProject } from "./pane-project"
+import { belongsTo, paneProject } from "./pane-project"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -2955,7 +2955,7 @@ export function Workbench() {
       if (root) await excludeAdeResults(host, root)
 
       const title = name ?? `${agentLabel(agent.id)} ← ${sender?.title ?? "ade-msg"}: ${briefOf(message.text, 48)}`
-      const index = (owner ? wb().panes.filter((pane) => pane.workspaceId === owner) : wb().panes).length + 1
+      const index = (ownerProject ? wb().panes.filter((pane) => belongsTo(pane, ownerProject)) : wb().panes).length + 1
       const task = formatRequest(id, message.text, sender, {
         ...(worktree ? { worktree } : {}),
         ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
@@ -5986,7 +5986,7 @@ export function Workbench() {
     setProject(opened)
     setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
     setRemoteOpen(false)
-    if (!wb().panes.some((pane) => pane.workspaceId === opened.name)) {
+    if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(
         { agentId: "terminal", count: 1, task: "", title: `ssh ${target.destination}` },
         { index: 1, agentId: "terminal", role: "shell" },
@@ -6082,8 +6082,8 @@ export function Workbench() {
    * "Sessione 3 — Claude Code" next to the two already there.
    */
   const openVoiceSession = (input: { agentId: string; task: string }) => {
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const created = addAgent(
       { agentId: input.agentId, count: 1, task: input.task },
       { index: mine.length + 1, agentId: input.agentId, role: "agent" },
@@ -6104,8 +6104,8 @@ export function Workbench() {
   const openBotSession = (bot: AgentFile) => {
     const launch = botLaunch(bot)
     if (!launch) return undefined
-    const owner = project()?.name
-    const mine = owner ? wb().panes.filter((p) => p.workspaceId === owner) : wb().panes
+    const open = project()
+    const mine = open ? wb().panes.filter((p) => belongsTo(p, open)) : wb().panes
     const id = `n${Date.now()}-bot-${++paneSequence}`
 
     setWb((w) => addPane(w, {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { paneProject } from "./pane-project"
+import { belongsTo, paneProject, sameProject } from "./pane-project"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { fromWorkspaceState, toWorkspaceState, type Pane, type Workbench } from "./state"
 
@@ -53,5 +53,26 @@ describe("the folder survives a restart", () => {
     const back = fromWorkspaceState(parseWorkspace(old)!, "app")
     expect(back.panes[0]?.projectRoot).toBeUndefined()
     expect(paneProject(back.panes[0], mine, recents)).toEqual({ kind: "open" })
+  })
+})
+
+describe("the grid and the pane counts with two projects called app", () => {
+  const panes = [
+    { id: "a1", workspaceId: "app", projectRoot: mine.root },
+    { id: "a2", workspaceId: "app", projectRoot: "c:\\lavoro\\app" },
+    { id: "b1", workspaceId: "app", projectRoot: other.root },
+    // Saved before panes kept a folder: only the name to go by.
+    { id: "old", workspaceId: "app" },
+  ]
+
+  test("opened in turn, each shows its own sessions and not the other's", () => {
+    expect(panes.filter((pane) => belongsTo(pane, mine)).map((pane) => pane.id)).toEqual(["a1", "a2", "old"])
+    expect(panes.filter((pane) => belongsTo(pane, other)).map((pane) => pane.id)).toEqual(["b1", "old"])
+  })
+
+  test("a session's neighbours are the panes of its own folder", () => {
+    expect(sameProject(panes[0]!, panes[2]!)).toBe(false)
+    expect(sameProject(panes[0]!, panes[1]!)).toBe(true)
+    expect(sameProject(panes[0]!, panes[3]!)).toBe(true)
   })
 })
