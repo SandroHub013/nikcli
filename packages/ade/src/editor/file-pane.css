@@ -95,10 +95,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: var(--ade-space-3);
   padding: var(--ade-space-4);
   overflow: auto;
+}
+
+[data-component="file-pane"] [data-slot="file-view"] > * {
+  margin: auto;
 }
 
 [data-component="file-pane"] [data-slot="file-image"] {
