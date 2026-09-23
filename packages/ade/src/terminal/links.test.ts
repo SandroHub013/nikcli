@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { findLinks, linksOnRow, logicalLine, type LinkBuffer, type LinkRequest } from "./links"
+import { findLinks, linksOnRow, logicalLine, watchPress, type LinkBuffer, type LinkRequest } from "./links"
 
 describe("findLinks (S76)", () => {
   test("drops the full stop after a URL", () => {
@@ -104,5 +104,39 @@ describe("links on a buffer row (S76)", () => {
     link.leave?.({} as MouseEvent, link.text)
     expect(titles[0]).toContain("7")
     expect(titles[1]).toBeUndefined()
+  })
+})
+
+describe("a drag over a link (S76, Architect's review)", () => {
+  const url = fakeBuffer([{ text: "https://example.com" }])
+
+  test("a drag that ends on the link it started on does not open it", () => {
+    const element = new EventTarget()
+    const press = watchPress(element)
+    const opened: LinkRequest[] = []
+    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !press.moved())
+    element.dispatchEvent(new MouseEvent("mousedown", { button: 0, clientX: 10, clientY: 10 }))
+    element.dispatchEvent(new MouseEvent("mousemove", { buttons: 1, clientX: 60, clientY: 10 }))
+    link.activate({} as MouseEvent, link.text)
+    expect(opened).toEqual([])
+  })
+
+  test("a click that stays put opens it", () => {
+    const element = new EventTarget()
+    const press = watchPress(element)
+    const opened: LinkRequest[] = []
+    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !press.moved())
+    element.dispatchEvent(new MouseEvent("mousedown", { button: 0, clientX: 10, clientY: 10 }))
+    element.dispatchEvent(new MouseEvent("mousemove", { buttons: 1, clientX: 12, clientY: 11 }))
+    link.activate({} as MouseEvent, link.text)
+    expect(opened).toHaveLength(1)
+  })
+
+  test("with a selection on screen a click does not open it", () => {
+    const opened: LinkRequest[] = []
+    const hasSelection = true
+    const [link] = linksOnRow(url, 1, (request) => opened.push(request), () => {}, () => !hasSelection)
+    link.activate({} as MouseEvent, link.text)
+    expect(opened).toEqual([])
   })
 })

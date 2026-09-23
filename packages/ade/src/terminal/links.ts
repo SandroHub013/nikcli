@@ -142,17 +142,53 @@ export function linkTitle(link: FoundLink): string {
   return link.line ? t("pane.link.fileAt", link.line) : t("pane.link.file")
 }
 
+/** How far the pointer may drift, in pixels, before a press is a drag and not a click. */
+const CLICK_SLOP = 3
+
+/**
+ * Whether the pointer moved while the button was down.
+ *
+ * The left button selects now, so a drag that starts or ends on a link is a
+ * selection, and xterm still calls `activate` when it ends on the link it began
+ * on. Without this, selecting across a URL opened it.
+ */
+export function watchPress(element: EventTarget): { moved: () => boolean; dispose: () => void } {
+  let origin: { x: number; y: number } | undefined
+  let moved = false
+  const down = (event: Event) => {
+    const mouse = event as MouseEvent
+    origin = { x: mouse.clientX, y: mouse.clientY }
+    moved = false
+  }
+  const move = (event: Event) => {
+    const mouse = event as MouseEvent
+    if (!origin || !mouse.buttons) return
+    if (Math.abs(mouse.clientX - origin.x) > CLICK_SLOP || Math.abs(mouse.clientY - origin.y) > CLICK_SLOP) moved = true
+  }
+  element.addEventListener("mousedown", down, true)
+  element.addEventListener("mousemove", move, true)
+  return {
+    moved: () => moved,
+    dispose: () => {
+      element.removeEventListener("mousedown", down, true)
+      element.removeEventListener("mousemove", move, true)
+    },
+  }
+}
+
 /**
  * The links on a buffer row, as xterm wants them: 1-based, ends inclusive.
  *
  * `row` is the 1-based line xterm asks about. A link that spans rows is given
- * for each row it touches.
+ * for each row it touches. `mayOpen` is asked at the click: false after a drag
+ * or while there is a selection.
  */
 export function linksOnRow(
   buffer: LinkBuffer,
   row: number,
   onLink: (request: LinkRequest) => void,
   setTitle: (title: string | undefined) => void,
+  mayOpen: () => boolean = () => true,
 ): ILink[] {
   const y0 = row - 1
   const { text, cells } = logicalLine(buffer, y0)
@@ -169,14 +205,16 @@ export function linksOnRow(
       decorations: { underline: true, pointerCursor: true },
       hover: () => setTitle(title),
       leave: () => setTitle(undefined),
-      activate: (event: MouseEvent) =>
+      activate: (event: MouseEvent) => {
+        if (!mayOpen()) return
         onLink({
           kind: found.kind,
           target: found.target,
           line: found.line,
           column: found.column,
           external: Boolean(event.ctrlKey || event.metaKey),
-        }),
+        })
+      },
     })
   }
   return links
@@ -188,13 +226,16 @@ export function registerLinks(terminal: Terminal, element: HTMLElement, onLink: 
     if (title) element.title = title
     else element.removeAttribute("title")
   }
+  const press = watchPress(element)
+  const mayOpen = () => !press.moved() && !terminal.hasSelection()
   const provider = terminal.registerLinkProvider({
     provideLinks: (row, callback) => {
-      const links = linksOnRow(terminal.buffer.active as LinkBuffer, row, onLink, setTitle)
+      const links = linksOnRow(terminal.buffer.active as LinkBuffer, row, onLink, setTitle, mayOpen)
       callback(links.length ? links : undefined)
     },
   })
   return () => {
+    press.dispose()
     provider.dispose()
     setTitle(undefined)
   }

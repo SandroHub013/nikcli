@@ -247,6 +247,11 @@ export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange">
  * Only a selection that changed during this press: a click that selects
  * nothing new must not copy an old selection again. The release is listened
  * for on `release` (the document), because a drag often ends outside the pane.
+ *
+ * The decision waits a turn after the release. xterm reports the selection's
+ * last change only after the mouseup has gone through both phases, so a
+ * decision taken in the handler saw no change and never copied. xterm itself
+ * finishes a selection in a `setTimeout` 0, and so does this.
  */
 export function copyOnRelease(
   terminal: CopySource,
@@ -256,15 +261,23 @@ export function copyOnRelease(
 ): () => void {
   let pressed = false
   let changed = false
+  let decision: ReturnType<typeof setTimeout> | undefined
   const down = (event: Event) => {
     if ((event as MouseEvent).button !== 0) return
+    if (decision) clearTimeout(decision)
+    decision = undefined
     pressed = true
     changed = false
   }
   const up = (event: Event) => {
     if (!pressed || (event as MouseEvent).button !== 0) return
-    pressed = false
-    if (changed && terminal.hasSelection()) copy()
+    // Still pressed until the decision: the change xterm reports after the
+    // release belongs to this press.
+    decision = setTimeout(() => {
+      decision = undefined
+      pressed = false
+      if (changed && terminal.hasSelection()) copy()
+    }, 0)
   }
   const selection = terminal.onSelectionChange(() => {
     if (pressed) changed = true
@@ -272,6 +285,7 @@ export function copyOnRelease(
   element.addEventListener("mousedown", down, true)
   release.addEventListener("mouseup", up, true)
   return () => {
+    if (decision) clearTimeout(decision)
     selection.dispose()
     element.removeEventListener("mousedown", down, true)
     release.removeEventListener("mouseup", up, true)

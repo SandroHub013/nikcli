@@ -244,6 +244,7 @@ describe("terminal selection & copy (S50)", () => {
   })
 
   describe("copyOnRelease (S76)", () => {
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
     const setup = (selected: boolean) => {
       const listeners: Array<() => void> = []
       const terminal = {
@@ -257,30 +258,33 @@ describe("terminal selection & copy (S50)", () => {
       const release = new EventTarget()
       let copies = 0
       const stop = copyOnRelease(terminal as any, element, release, () => copies++)
-      const drag = () => {
+      // The order the Architect measured in ADE Test: the mouseup goes through
+      // capture and bubble, and only then does xterm report the selection.
+      const drag = async () => {
         element.dispatchEvent(new MouseEvent("mousedown", { button: 0 }))
-        if (selected) for (const listener of listeners) listener()
         release.dispatchEvent(new MouseEvent("mouseup", { button: 0 }))
+        if (selected) for (const listener of [...listeners]) listener()
+        await tick()
       }
       return { drag, copies: () => copies, stop }
     }
 
-    it("copies once when a selection is released", () => {
+    it("copies once when the selection is reported after the release", async () => {
       const { drag, copies } = setup(true)
-      drag()
+      await drag()
       expect(copies()).toBe(1)
     })
 
-    it("copies nothing when there is no selection", () => {
+    it("copies nothing when there is no selection", async () => {
       const { drag, copies } = setup(false)
-      drag()
+      await drag()
       expect(copies()).toBe(0)
     })
 
-    it("stops listening when detached", () => {
+    it("stops listening when detached", async () => {
       const { drag, copies, stop } = setup(true)
       stop()
-      drag()
+      await drag()
       expect(copies()).toBe(0)
     })
   })
