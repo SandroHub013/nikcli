@@ -54,7 +54,13 @@ export function Editor(props: EditorProps) {
   createEffect(() => {
     const target = props.goTo
     if (!goToDue(target, done, props.buffer !== undefined && !props.loading)) return
-    done = target
+    /*
+     * A copy, not the object: the workbench is a store, and `reconcile` writes
+     * the next link's line and time into this same proxy. Keeping the proxy
+     * made every later goTo equal to the one already done, so a link to a
+     * file already open never moved the cursor.
+     */
+    done = { line: target!.line, at: target!.at }
     // After the textarea has its text: the effect can run before it renders it.
     requestAnimationFrame(() => {
       const text = props.buffer?.draft

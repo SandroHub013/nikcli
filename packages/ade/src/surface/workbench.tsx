@@ -9,6 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
+import { writeWorkbench } from "./workbench-write"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -471,17 +472,9 @@ export function Workbench() {
    */
   const [revision, setRevision] = createSignal(0, { equals: false })
 
-  /**
-   * Applies a whole new workbench, keeping the parts that did not change.
-   *
-   * The reducers in `state.ts` are pure and return a fresh object; `reconcile`
-   * turns that back into the smallest set of writes against the store, keyed
-   * by pane id, so replacing the object does not invalidate every pane in it.
-   */
+  /** Applies a whole new workbench, keeping the parts that did not change: see `workbench-write.ts`. */
   const setWb = (next: WorkbenchState | ((current: WorkbenchState) => WorkbenchState)) => {
-    const current = unwrap(wbStore)
-    const value = typeof next === "function" ? next(current) : next
-    if (value !== current) setWbStore(reconcile(value, { key: "id" }))
+    writeWorkbench(wbStore, setWbStore, next)
     setRevision((n) => n + 1)
   }
   /*
