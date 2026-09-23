@@ -1366,3 +1366,13 @@ html[data-ade-recording] .xterm .xterm-rows > div:not([data-ade-clean]),
 html[data-ade-recording] .xterm .composition-view {
   filter: blur(0.8em);
 }
+
+/*
+ * The same text where no reader reaches it: the transcript a session without
+ * a live terminal shows instead, and the screenshots in the tray, which can
+ * hold a terminal in the clear. Blurred whole for the length of a take.
+ */
+html[data-ade-recording] [data-slot="pane-transcript"],
+html[data-ade-recording] [data-component="shot-tray"] [data-slot="shot-image"] {
+  filter: blur(0.8em);
+}

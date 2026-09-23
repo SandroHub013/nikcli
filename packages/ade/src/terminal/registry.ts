@@ -23,6 +23,8 @@ export interface SessionTerminal {
   detach?: () => void
   /** Stops the take's row reader, while one runs. See `coverTerminals`. */
   uncover?: () => void
+  /** The pane that draws it says a copy was refused during a take. */
+  copyBlocked?: () => void
 }
 
 const terminals = new Map<string, SessionTerminal>()
@@ -301,7 +303,7 @@ export function copyOnRelease(
  * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and clears selection
  * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
  */
-export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEvent) => boolean {
+export function createTerminalKeyHandler(terminal: Terminal, onCopyBlocked?: () => void): (event: KeyboardEvent) => boolean {
   return (event: KeyboardEvent) => {
     const isMod = event.ctrlKey || event.metaKey
     if (isMod && event.shiftKey) {
@@ -314,7 +316,8 @@ export function createTerminalKeyHandler(terminal: Terminal): (event: KeyboardEv
     if (isCopyShortcut(event)) {
       if (terminal.hasSelection()) {
         if (event.type === "keydown") {
-          if (!copyIsCovered(terminal)) void copyToClipboard(selectionText(terminal))
+          if (copyIsCovered(terminal)) onCopyBlocked?.()
+          else void copyToClipboard(selectionText(terminal))
           terminal.clearSelection()
         }
         return false
@@ -359,9 +362,9 @@ export function getTerminal(id: string): SessionTerminal {
   const fit = new FitAddon()
   terminal.loadAddon(fit)
 
-  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal))
-
   const created: SessionTerminal = { terminal, fit }
+  terminal.attachCustomKeyEventHandler(createTerminalKeyHandler(terminal, () => created.copyBlocked?.()))
+
   terminals.set(id, created)
   return created
 }
@@ -410,6 +413,8 @@ export interface AttachOptions {
   onResize?: (cols: number, rows: number) => void
   /** A selection was copied on release; the pane says so for a moment. */
   onCopied?: () => void
+  /** A copy was refused because the selection reaches a line blurred in a take (D68). */
+  onCopyBlocked?: () => void
   /** Whether the program has mouse reporting on, whenever that changes. */
   onMouseMode?: (reporting: boolean) => void
   /** A URL or a file path in the output was clicked. See `links.ts`. */
@@ -475,13 +480,15 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     typeof document === "undefined"
       ? undefined
       : copyOnRelease(terminal, element, document, () => {
-          if (copyIsCovered(terminal)) return
+          if (copyIsCovered(terminal)) return options.onCopyBlocked?.()
           void copyToClipboard(selectionText(terminal)).then((copied) => {
             if (copied) options.onCopied?.()
           })
         })
 
   const stopLinks = options.onLink ? registerLinks(terminal, element, options.onLink) : undefined
+
+  session.copyBlocked = options.onCopyBlocked
 
   // A pane drawn or moved during a take is born covered, with a reader of its own.
   if (covering) cover(session)
@@ -529,6 +536,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     if (modeTimer) clearTimeout(modeTimer)
     session.uncover?.()
     session.uncover = undefined
+    session.copyBlocked = undefined
     session.element = undefined
     session.detach = undefined
   }

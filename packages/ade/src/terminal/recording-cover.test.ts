@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { CLEAN_ATTRIBUTE, judgeRows, logicalLine, rowIsClean, selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 import { RECORDING_ATTRIBUTE } from "../record/sensitive"
+import { coverTerminals, createTerminalKeyHandler, disposeTerminal, getTerminal } from "./registry"
 
 // Fake keys only: none of these is, or was ever, a real credential.
 const FAKE_KEY = "sk-ant-api03-FALSAFALSAFALSAFALSA"
@@ -164,5 +165,53 @@ describe("the CSS (D68)", () => {
     expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] .xterm .xterm-rows > div:not([${CLEAN_ATTRIBUTE}])`)
     expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] .xterm .composition-view`)
     expect(rule.slice(rule.indexOf("{"), rule.indexOf("}"))).toMatch(/filter:\s*blur\(0\.8em\)/)
+  })
+})
+
+describe("where no reader reaches, during a take (D68, Architect)", () => {
+  test("the transcript and the screenshots in the tray are blurred whole", () => {
+    const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+    const rule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="pane-transcript"]`))
+    const header = rule.slice(0, rule.indexOf("{"))
+    expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] [data-slot="pane-transcript"]`)
+    expect(header).toContain(`html[${RECORDING_ATTRIBUTE}] [data-component="shot-tray"] [data-slot="shot-image"]`)
+    expect(rule.slice(rule.indexOf("{"), rule.indexOf("}"))).toMatch(/filter:\s*blur\(0\.8em\)/)
+  })
+
+  test("the names the rule uses are the ones the components draw", () => {
+    const pane = readFileSync(join(import.meta.dir, "..", "grid", "pane.tsx"), "utf8")
+    const tray = readFileSync(join(import.meta.dir, "..", "shots", "tray.tsx"), "utf8")
+    expect(pane).toContain('data-slot="pane-transcript"')
+    expect(tray).toContain('data-component="shot-tray"')
+    expect(tray).toContain('data-slot="shot-image"')
+  })
+})
+
+describe("a copy refused during a take says so (D68, Architect)", () => {
+  test("Ctrl+C on a selection that reaches a secret copies nothing and calls the note", () => {
+    const id = "d68-copy-blocked"
+    const terminal = getTerminal(id).terminal
+    const buffer = fakeBuffer([{ text: `echo ${FAKE_KEY}` }])
+    Object.defineProperty(terminal, "buffer", { value: { active: buffer }, configurable: true })
+    terminal.hasSelection = () => true
+    terminal.getSelectionPosition = () => ({ start: { x: 0, y: 0 }, end: { x: 10, y: 0 } })
+    let cleared = false
+    terminal.clearSelection = () => {
+      cleared = true
+    }
+    const original = navigator.clipboard
+    let written = 0
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => void written++ }, configurable: true })
+    let blocked = 0
+    coverTerminals(true)
+    try {
+      const handled = createTerminalKeyHandler(terminal, () => blocked++)(new KeyboardEvent("keydown", { key: "c", ctrlKey: true }))
+      expect(handled).toBe(false)
+      expect([blocked, written, cleared]).toEqual([1, 0, true])
+    } finally {
+      coverTerminals(false)
+      Object.defineProperty(navigator, "clipboard", { value: original, configurable: true })
+      disposeTerminal(id)
+    }
   })
 })
