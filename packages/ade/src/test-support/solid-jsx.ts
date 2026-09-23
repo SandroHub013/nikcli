@@ -10,6 +10,11 @@
  *
  * The preset comes through vite-plugin-solid, which depends on it: it is not a
  * dependency of its own here.
+ *
+ * Whoever imports a `.tsx` calls `compileSolidJsx()` first, and imports it
+ * afterwards with `await import(...)`. The plugin is global to the `bun test`
+ * process, so a file that relies on another test file having called it works
+ * only in the order the files happen to run.
  */
 
 import { plugin } from "bun"
