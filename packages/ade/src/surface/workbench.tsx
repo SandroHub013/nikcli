@@ -199,7 +199,8 @@ import {
   updatesAnsweredBy,
   formatElapsed,
   formatTimeNote,
-  timeNoteDue,
+  timeNoteFor,
+  lineIsTaken,
   formatUpdate,
   parseActivity,
   keptActivity,
@@ -1520,9 +1521,10 @@ export function Workbench() {
   /*
    * One line at a time per session (`session/line-queue.ts`): the next line
    * starts once the one before has had its Enter, or two texts share one
-   * Enter. With `unlessTyping`, the draft check is made in the queue, at the
-   * moment of writing, and the line is dropped (false) if the user has begun
-   * one since it was queued: the caller then does not count it as given.
+   * Enter. With `unlessBusy`, the check is made in the queue, at the moment of
+   * writing, and the line is dropped (false) if the user has begun a draft or
+   * a permission prompt has opened since it was queued (`lineIsTaken`): the
+   * caller then does not count it as given.
    */
   const lineQueue = createLineQueue()
   /*
@@ -1535,10 +1537,15 @@ export function Workbench() {
     if (now && (now.cols !== bornAt?.cols || now.rows !== bornAt?.rows)) session.resize(now.cols, now.rows)
   }
 
-  const typeLine = (session: SpawnedSession, text: string, options: { unlessTyping?: boolean } = {}): Promise<boolean> => {
+  const typeLine = (session: SpawnedSession, text: string, options: { unlessBusy?: boolean } = {}): Promise<boolean> => {
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     const job = async () => {
-      if (options.unlessTyping && paneId !== undefined && isTyping(records.typed.get(paneId))) return false
+      if (
+        options.unlessBusy &&
+        paneId !== undefined &&
+        lineIsTaken({ typing: isTyping(records.typed.get(paneId)), permissionPending: Boolean(permissions()[paneId]) })
+      )
+        return false
       return typeLineNow(session, text)
     }
     return paneId === undefined ? job() : lineQueue(paneId, job)
@@ -2413,14 +2420,14 @@ export function Workbench() {
        * the reminders. Information for whoever works: it closes nothing and
        * leaves the reminders below as they were.
        */
-      // Not while the user has a line begun there: not given either, so it comes on a later round.
-      const timeNote = session ? timeNoteDue(request, now, isTyping(records.typed.get(request.to))) : undefined
+      // Not over a line begun there, nor over a permission prompt (B1): not given either, so it comes on a later round.
+      const timeNote = session ? timeNoteFor(request, now, targetOf(request)) : undefined
       if (session && timeNote) {
         // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
         const before = request.timeNotes
         request.timeNotes = timeNote
         saveRequests()
-        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessTyping: true }).then((typed) => {
+        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessBusy: true }).then((typed) => {
           if (typed || request.timeNotes !== timeNote) return
           request.timeNotes = before
           saveRequests()
@@ -2441,7 +2448,7 @@ export function Workbench() {
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
         saveRequests()
-        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessTyping: true }).then((typed) => {
+        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessBusy: true }).then((typed) => {
           if (typed) return appendLine(request.to, t("note.nudged", request.id), "note")
           if (request.nudgedAt !== now) return
           request.nudges = before.nudges

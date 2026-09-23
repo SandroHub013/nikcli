@@ -704,6 +704,25 @@ export function timeNoteDue(
   return undefined
 }
 
+/**
+ * Whether a line typed now would land on something: a draft the user began,
+ * or a permission prompt, whose selected choice the line's Enter would
+ * confirm (audit 0.7.7, B1). Read before the line is queued and again in the
+ * queue, just before it is written.
+ */
+export function lineIsTaken(target: { typing: boolean; permissionPending: boolean }): boolean {
+  return target.typing || target.permissionPending
+}
+
+/** `timeNoteDue` for a session as the workbench sees it: nothing is due while its line is taken. */
+export function timeNoteFor(
+  request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes">,
+  now: number,
+  target: { typing: boolean; permissionPending: boolean },
+): 1 | 2 | undefined {
+  return timeNoteDue(request, now, lineIsTaken(target))
+}
+
 /** The line typed to the session doing the work when a time note is due. */
 export function formatTimeNote(
   request: Pick<OpenRequest, "id" | "at" | "deliveredAt" | "budget" | "update">,
