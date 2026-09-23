@@ -216,6 +216,11 @@ export function resolvePath(target: string, base: string | undefined): string {
  * - UNC paths are rejected with `pane.link.unc` note («percorso di rete non aperto»).
  * - Outside paths require confirmation via `confirmOutside` (first click shows `pane.link.outsideConfirm`, second click within 5s opens).
  * - Inside paths open directly.
+ *
+ * Existence is checked by reading one byte as text, which only works for a
+ * file that is text. A picture, a font, a sound, a video or a model fails that
+ * read as binary, and every link to one used to say «File non trovato»; those
+ * go straight to their pane, which says for itself if it cannot draw them.
  */
 export async function openPathLink(target: string, base: string | undefined, line: number | undefined, deps: PathLinkDeps): Promise<boolean> {
   const path = resolvePath(target, base)
@@ -257,6 +262,27 @@ export interface MarkdownLinkDeps {
  * - Outside paths are rejected with `pane.link.outside` («fuori dal progetto»).
  * - Inside paths are opened.
  */
+/**
+ * The same, for a caller that shows the refusal itself: the note, or undefined when the link opened.
+ *
+ * The file pane is where a markdown link is clicked, and it has no transcript:
+ * a note appended to its lines was never drawn, and a refused link looked like
+ * a click that did nothing (audit 0.7.7, D1-2). It shows what this returns.
+ */
+export function markdownLinkRefusal(path: string, roots: readonly string[], open: (path: string) => unknown): string | undefined {
+  let note: string | undefined
+  openMarkdownFileLink(path, roots, { open, say: (text) => (note = text) })
+  return note
+}
+
+/** A file pane's handler for a clicked link: opens it, and flashes the note if it was refused. */
+export function flashRefusal(open: ((path: string) => string | void) | undefined, flash: (note: string) => void): (path: string) => void {
+  return (path) => {
+    const note = open?.(path)
+    if (note) flash(note)
+  }
+}
+
 export function openMarkdownFileLink(path: string, roots: readonly string[], deps: MarkdownLinkDeps): boolean {
   const placement = linkPlacement(path, roots)
   if (placement === "unc") {

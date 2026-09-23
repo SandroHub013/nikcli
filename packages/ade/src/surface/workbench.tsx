@@ -5,7 +5,7 @@ import { every } from "../host/every"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
-import { discoverProject, openProject, type Project } from "../host/project"
+import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
@@ -287,7 +287,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { createOutsideConfirmationTracker, openMarkdownFileLink, openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
+import { createOutsideConfirmationTracker, markdownLinkRefusal, openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { discardedBadge, queuedBadge } from "../decisions/card"
@@ -5048,7 +5048,8 @@ export function Workbench() {
    * the editor at its line.
    */
   const terminalOutsideConfirm = createOutsideConfirmationTracker()
-  const projectRoots = () => [project()?.root, ...recents().map((r) => r.root)].filter((r): r is string => Boolean(r))
+  // The roots granted to this window, as the host writes and ade-media serves them; not the recents (D1-2).
+  const projectRoots = () => grantedRoots()
 
   const openLink = async (paneId: string, request: LinkRequest) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
@@ -6152,14 +6153,8 @@ export function Workbench() {
     showMail,
     openLink: (id, request) => void openLink(id, request),
     openFileLink: (id, link) => {
-      if (link.kind === "file") {
-        const say = (text: string) => (hasTerminal(id) ? noteInTerminal(id, text) : appendLine(id, text, "note"))
-        openMarkdownFileLink(link.path, projectRoots(), {
-          open: openFile,
-          say,
-        })
-        return
-      }
+      // Refused: the note goes back to the file pane, which flashes it (it has no transcript to append to).
+      if (link.kind === "file") return markdownLinkRefusal(link.path, projectRoots(), openFile)
       const pane = wb().panes.find((candidate) => candidate.id === id)
       openOwnedBrowser(link.url, { id, title: pane?.title ?? "" }, true)
     },

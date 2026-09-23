@@ -92,7 +92,8 @@ export interface PaneRendererDeps {
   /** Shows a pane what is waiting for it, without typing anything. */
   showMail: (id: string) => void
   /** A link clicked in a file pane's markdown preview: a web page in ADE's browser, or a file. */
-  openFileLink: (id: string, link: { kind: "url"; url: string } | { kind: "file"; path: string }) => void
+  /** A link clicked in a file pane; a refused file link answers with the note to show there. */
+  openFileLink: (id: string, link: { kind: "url"; url: string } | { kind: "file"; path: string }) => string | void
   /** Opens what was clicked in a session's terminal: a URL, or a file at a line. */
   openLink: (id: string, request: LinkRequest) => void
   /** Writes into a session's input line on the user's behalf, and counts it as typed. */

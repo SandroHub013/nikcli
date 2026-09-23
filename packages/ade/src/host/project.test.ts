@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { discoverProject, openProject } from "./project"
+import { discoverProject, grantedRoots, openProject } from "./project"
 import type { Host } from "./shell"
 
 /** Minimal fake Host — only `run` and `pickDirectory` are needed here. */
@@ -103,5 +103,20 @@ describe("openProject", () => {
     expect(p).toBeDefined()
     expect(p!.root).toBe("C:/Users/nik/picked")
     expect(p!.branch).toBe("dev")
+  })
+})
+
+describe("grantedRoots (audit 0.7.7, D1-2)", () => {
+  it("holds every root granted this session, and only those", async () => {
+    await discoverProject(fakeHost(), "C:/granted/one")
+    await discoverProject(fakeHost({ run: async () => ({ code: 0, stdout: "C:/granted/two", stderr: "" }) }), "C:/granted/two/sub")
+    await discoverProject(fakeHost(), "ssh://niko@devbox/srv/app")
+    const roots = grantedRoots()
+    expect(roots).toContain("C:/granted/one")
+    expect(roots).toContain("C:/granted/two")
+    // A remote Space is granted nothing, so it is no root for a link either.
+    expect(roots.some((root) => root.startsWith("ssh://"))).toBe(false)
+    // A project only remembered (a recent never reopened) never passed through here.
+    expect(roots).not.toContain("C:/granted/recent-only")
   })
 })

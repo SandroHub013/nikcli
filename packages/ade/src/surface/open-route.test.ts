@@ -4,7 +4,9 @@ import { MODEL_EXTENSIONS } from "../model3d/model"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import {
   createOutsideConfirmationTracker,
+  flashRefusal,
   linkPlacement,
+  markdownLinkRefusal,
   openMarkdownFileLink,
   openPathLink,
   paneShowing,
@@ -287,3 +289,25 @@ describe("terminal links (openPathLink with roots and outside confirmation)", ()
   })
 })
 
+
+describe("a refused markdown link is shown in the file pane (D1-2)", () => {
+  const roots = ["C:/project"]
+
+  test("the refusal comes back as the note to show, and nothing opens", () => {
+    const opened: string[] = []
+    expect(markdownLinkRefusal("C:/Users/alice/.ssh/id_rsa", roots, (p) => opened.push(p))).toBe(t("pane.link.outside"))
+    expect(markdownLinkRefusal("\\\\host\\share\\doc.md", roots, (p) => opened.push(p))).toBe(t("pane.link.unc"))
+    expect(opened).toEqual([])
+    expect(markdownLinkRefusal("C:/project/docs/readme.md", roots, (p) => opened.push(p))).toBeUndefined()
+    expect(opened).toEqual(["C:/project/docs/readme.md"])
+  })
+
+  test("the file pane's handler flashes that note, and flashes nothing for a link that opened", () => {
+    const flashed: string[] = []
+    // The chain the pane is wired with: workbench's openFileLink, then FilePane's flash.
+    const click = flashRefusal((path) => markdownLinkRefusal(path, roots, () => {}), (note) => flashed.push(note))
+    click("C:/Users/alice/.ssh/id_rsa")
+    click("C:/project/docs/readme.md")
+    expect(flashed).toEqual([t("pane.link.outside")])
+  })
+})
