@@ -220,6 +220,8 @@ import {
   sameDir,
   formatLateReply,
   formatLost,
+  noticeTarget,
+  registerAuthor,
   formatRequest,
   parseMessage,
   resolveAgent,
@@ -1964,6 +1966,13 @@ export function Workbench() {
     return given(await typeLineOutcome(session, formatBell(entry, mailPanes().find((pane) => pane.id === meta.from), line.length)), true)
   }
 
+  /** A notice for whoever sent a message: its session, or the window's notices when none is behind it (`noticeTarget`). */
+  const tellSender = (from: string | undefined, text: string) => {
+    const target = noticeTarget(from, (paneId) => running.has(paneId))
+    if (target === "window") report(text, "info")
+    else if (target) heldLines.push({ paneId: target.pane, text })
+  }
+
   /** Rings again for unread inbox messages, and tells the sender of one never read. */
   const followInbox = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, now: number) => {
     if (!host.mailboxInboxRead || inboxPending.length === 0) return
@@ -1982,8 +1991,8 @@ export function Workbench() {
         appendLine(entry.paneId, t("note.inboxLost", entry.id), "note")
         if (entry.kind === "ask" || entry.kind === "spawn") {
           if (openRequests.has(entry.id)) await settle(host, entry.id, formatLost(entry, reader))
-        } else if (entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatLost(entry, reader) })
+        } else {
+          tellSender(entry.from, formatLost(entry, reader))
         }
         changed = true
         continue
@@ -1999,9 +2008,7 @@ export function Workbench() {
       const panes = mailPanes()
       if (action === "tell") {
         entry.told = true
-        if (entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatHeld(entry, panes.find((pane) => pane.id === entry.paneId)) })
-        }
+        tellSender(entry.from, formatHeld(entry, panes.find((pane) => pane.id === entry.paneId)))
         changed = true
         continue
       }
@@ -2012,8 +2019,8 @@ export function Workbench() {
         appendLine(entry.paneId, t("note.rang", entry.rings), "note")
       } else {
         inboxPending.splice(inboxPending.indexOf(entry), 1)
-        if (action === "warn" && entry.from && running.has(entry.from)) {
-          heldLines.push({ paneId: entry.from, text: formatUnread(entry, panes.find((pane) => pane.id === entry.paneId)) })
+        if (action === "warn") {
+          tellSender(entry.from, formatUnread(entry, panes.find((pane) => pane.id === entry.paneId)))
         }
       }
       changed = true
@@ -2760,7 +2767,7 @@ export function Workbench() {
                 ? host.writeTextFile(path, `${await read()}${text}`)
                 : "scrittura non disponibile",
           now: () => new Date(),
-          sender: sender?.title ?? message.from ?? "ade-msg",
+          sender: registerAuthor(sender?.title, message.from),
         },
         message,
       )

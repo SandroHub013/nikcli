@@ -1274,3 +1274,22 @@ export function quietOutcome(pane: { hooked: boolean; busy: boolean; owesAnswer:
   if (pane.hooked) return pane.busy ? "wait" : "settle"
   return pane.owesAnswer ? "recheck" : "settle"
 }
+
+/**
+ * Who hears that a message went wrong (held, unread, lost).
+ *
+ * The sending session, when it is open. Mail with no session behind it — the
+ * Decisions and Design panels' deliveries, a sender ADE could not verify —
+ * arrives with `from: ""`, and the check that skipped an empty sender left
+ * those notices with nobody (audit 0.7.7, MEDIO 6): they go to the window's
+ * notices instead. A sender that closed hears nothing, as before.
+ */
+export function noticeTarget(from: string | undefined, open: (paneId: string) => boolean): { pane: string } | "window" | undefined {
+  if (!from) return "window"
+  return open(from) ? { pane: from } : undefined
+}
+
+/** The `by` of an event `ade-msg registro` writes: never empty, whoever sent it. */
+export function registerAuthor(title: string | undefined, from: string | undefined): string {
+  return title || from || "ade-msg"
+}
