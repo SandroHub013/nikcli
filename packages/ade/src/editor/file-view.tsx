@@ -9,7 +9,7 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
-import { folderOf, handlePreviewClick, joinPath, renderMarkdown } from "./markdown"
+import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
 import { t } from "../i18n"
@@ -115,7 +115,7 @@ function ImageView(props: { src: string; path: string }) {
 function MarkdownView(props: FileViewProps) {
   const base = () => folderOf(props.path)
   const html = createMemo(() =>
-    renderMarkdown(props.buffer?.draft ?? "", (relative) => mediaUrl(joinPath(base(), decodeURI(relative)))),
+    renderMarkdown(props.buffer?.draft ?? "", (relative) => mediaUrl(joinPath(base(), safeDecodeURI(relative)))),
   )
   return (
     <Show when={props.buffer} fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}>

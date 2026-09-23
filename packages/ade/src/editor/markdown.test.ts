@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ALLOWED_ATTR, ALLOWED_TAGS, folderOf, handlePreviewClick, imageSource, joinPath, linkTarget, renderMarkdown, sanitizerWorks } from "./markdown"
+import { ALLOWED_ATTR, ALLOWED_TAGS, folderOf, handlePreviewClick, imageSource, joinPath, linkTarget, renderMarkdown, safeDecodeURI, sanitizerWorks } from "./markdown"
 
 /*
  * happy-dom and DOMPurify 3.4. The known trap is that `sanitize` drops the
@@ -145,4 +145,30 @@ describe("links in a markdown preview (S56)", () => {
     expect(joinPath("C:/p/docs", "img/a.png")).toBe("C:/p/docs/img/a.png")
     expect(joinPath("C:/p/docs", "../a.png")).toBe("C:/p/a.png")
   })
+
+  test("handles malformed percent sequences like 100%.png without throwing (Punto 9)", () => {
+    expect(linkTarget("100%.png", "C:/p/docs")).toEqual({ kind: "file", path: "C:/p/docs/100%.png" })
+    expect(linkTarget("folder/100%.png#heading", "C:/p/docs")).toEqual({ kind: "file", path: "C:/p/docs/folder/100%.png" })
+  })
 })
+
+describe("safeDecodeURI (Punto 9)", () => {
+  test("decodes valid percent sequences", () => {
+    expect(safeDecodeURI("hello%20world.png")).toBe("hello world.png")
+    expect(safeDecodeURI("guida%20due.md")).toBe("guida due.md")
+    expect(safeDecodeURI("%C3%A0%C3%A8%C3%AC.txt")).toBe("àèì.txt")
+  })
+
+  test("returns raw string without throwing on invalid percent sequences", () => {
+    expect(safeDecodeURI("100%.png")).toBe("100%.png")
+    expect(safeDecodeURI("%")).toBe("%")
+    expect(safeDecodeURI("%E0%A4%A")).toBe("%E0%A4%A")
+    expect(safeDecodeURI("file%2.png")).toBe("file%2.png")
+  })
+
+  test("renderMarkdown with 100%.png image does not throw and passes through resolver", () => {
+    const resolve = (rel: string) => `ade://${safeDecodeURI(rel)}`
+    expect(() => renderMarkdown("![graphic](100%.png)", resolve)).not.toThrow()
+  })
+})
+

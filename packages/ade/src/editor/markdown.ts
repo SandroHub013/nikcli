@@ -100,6 +100,18 @@ export function renderMarkdown(text: string, resolve: ResolveImage): string {
 export type LinkTarget = { kind: "web"; url: string } | { kind: "file"; path: string } | { kind: "none" }
 
 /**
+ * Decode a URI path without throwing on malformed percent sequences like `100%.png`.
+ * When `decodeURI` throws, returns the raw input unchanged.
+ */
+export function safeDecodeURI(uri: string): string {
+  try {
+    return decodeURI(uri)
+  } catch {
+    return uri
+  }
+}
+
+/**
  * Where a link in a markdown file points.
  *
  * `http(s)` opens in ADE's browser; a relative link is a file next to the
@@ -111,7 +123,7 @@ export function linkTarget(href: string, base: string): LinkTarget {
   if (!trimmed || trimmed.startsWith("#") || isExternal(trimmed)) return { kind: "none" }
   const path = trimmed.split("#")[0].split("?")[0]
   if (!path) return { kind: "none" }
-  return { kind: "file", path: joinPath(base, decodeURI(path)) }
+  return { kind: "file", path: joinPath(base, safeDecodeURI(path)) }
 }
 
 /**
