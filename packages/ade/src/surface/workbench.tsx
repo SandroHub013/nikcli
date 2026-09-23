@@ -287,7 +287,7 @@ import { SIMULATOR_VERBS } from "../simulator/simulator"
 import { PLAYABLE_EXTENSIONS } from "../video/video"
 import { playWav } from "../voice/wav-player"
 import { MODEL_EXTENSIONS } from "../model3d/model"
-import { openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
+import { createOutsideConfirmationTracker, openMarkdownFileLink, openPathLink, paneShowing, readsText, routeForFile, viewKind } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { countLabel } from "../decisions/answer"
 import { discardedBadge, queuedBadge } from "../decisions/card"
@@ -5047,6 +5047,9 @@ export function Workbench() {
    * panel. A path is read against the folder the session works in and opens in
    * the editor at its line.
    */
+  const terminalOutsideConfirm = createOutsideConfirmationTracker()
+  const projectRoots = () => [project()?.root, ...recents().map((r) => r.root)].filter((r): r is string => Boolean(r))
+
   const openLink = async (paneId: string, request: LinkRequest) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     const say = (text: string) => (hasTerminal(paneId) ? noteInTerminal(paneId, text) : appendLine(paneId, text, "note"))
@@ -5068,6 +5071,9 @@ export function Workbench() {
       readTextFile: host?.readTextFile,
       open: openFile,
       say: (path) => say(t("pane.link.missing", path)),
+      roots: projectRoots(),
+      sayNote: (note) => say(note),
+      confirmOutside: (path) => terminalOutsideConfirm.checkAndRecord(path),
     })
   }
 
@@ -6146,7 +6152,14 @@ export function Workbench() {
     showMail,
     openLink: (id, request) => void openLink(id, request),
     openFileLink: (id, link) => {
-      if (link.kind === "file") return void openFile(link.path)
+      if (link.kind === "file") {
+        const say = (text: string) => (hasTerminal(id) ? noteInTerminal(id, text) : appendLine(id, text, "note"))
+        openMarkdownFileLink(link.path, projectRoots(), {
+          open: openFile,
+          say,
+        })
+        return
+      }
       const pane = wb().panes.find((candidate) => candidate.id === id)
       openOwnedBrowser(link.url, { id, title: pane?.title ?? "" }, true)
     },
