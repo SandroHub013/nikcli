@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { buildCommands, keepsPaletteOpen, type CommandContext } from "./commands"
 import { resetLocaleForTests } from "../i18n"
+import { filterCommands } from "../command/registry"
 import { CHAT_AND_BOT_ENABLED, createWorkbench, VISIBLE_VIEWS, visibleViews, type Pane, type Workbench } from "./state"
 
 function context(overrides: Partial<CommandContext> & { workbench: Workbench }): CommandContext {
@@ -310,5 +311,14 @@ describe("the palette in English (S41)", () => {
     } finally {
       resetLocaleForTests("it")
     }
+  })
+})
+
+describe("the palette during a take (D78 live test)", () => {
+  test("«Ferma» finds «Ferma la registrazione»", () => {
+    const commands = buildCommands(context({ workbench: createWorkbench(), recording: true }))
+    const found = filterCommands(commands, "Ferma").map((hit) => hit.command.id)
+    expect(found).toContain("record.toggle")
+    expect(filterCommands(commands, "Ferma la registrazione")[0]?.command.id).toBe("record.toggle")
   })
 })

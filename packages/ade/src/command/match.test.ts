@@ -120,3 +120,10 @@ describe("fuzzyMatch", () => {
     })
   })
 })
+
+describe("a word-start jump that strands the rest of the query", () => {
+  test("the start of a title always matches it", () => {
+    expect(fuzzyMatch("ferma", "Ferma la registrazione")).toBeDefined()
+    expect(fuzzyMatch("Ferma la registrazione", "Ferma la registrazione")?.ranges).toEqual([[0, 22]])
+  })
+})
