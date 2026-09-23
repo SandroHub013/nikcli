@@ -699,5 +699,27 @@ export function disposeTerminal(id: string): void {
   if (!session) return
   session.detach?.()
   session.terminal.dispose()
+  releaseDisposed(session.terminal)
   terminals.delete(id)
+}
+
+/**
+ * Cuts what a disposed terminal's IntersectionObserver still holds (P1-C5).
+ *
+ * xterm disconnects the observer on dispose, and WebView2 (Chromium 153)
+ * keeps it anyway, reachable from the document's IntersectionObserverController.
+ * Its callback closes over the RenderService, and through it the whole
+ * terminal stayed alive, its textarea, canvases, rows and mouse listeners, one
+ * more at every pane closed. Emptying the service leaves the observer holding
+ * an empty object. The terminal is disposed: nothing reads these fields again.
+ *
+ * `_core._renderService` is private to xterm (6.0.0): a version that renames
+ * it makes this return false and do nothing, and the leak comes back.
+ * `release-disposed.test.ts` fails on such an update.
+ */
+export function releaseDisposed(terminal: object): boolean {
+  const service = (terminal as { _core?: { _renderService?: object } })._core?._renderService
+  if (!service || typeof service !== "object") return false
+  for (const key of Object.keys(service)) delete (service as Record<string, unknown>)[key]
+  return true
 }
