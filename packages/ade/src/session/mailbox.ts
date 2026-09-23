@@ -661,6 +661,23 @@ function elapsedSeconds(request: Pick<OpenRequest, "at" | "deliveredAt">, now: n
   return Math.max(0, Math.round((now - (request.deliveredAt ?? request.at)) / 1000))
 }
 
+/**
+ * The requests a message from the caller answers: the ones it made to that
+ * session which said, with `ade-msg update`, that they are blocked or need a
+ * decision. Only a note (`send`) is an answer; `formatUpdate` tells the caller
+ * to reply with one. A new `ask` to the same session is new work, not the
+ * answer: counting it cleared the update of the older request, and a request
+ * the session had said it was blocked on got reminders again.
+ */
+export function updatesAnsweredBy<R extends Pick<OpenRequest, "from" | "to" | "update">>(
+  requests: Iterable<R>,
+  message: { kind: string; from: string },
+  to: string,
+): R[] {
+  if (message.kind !== "send") return []
+  return [...requests].filter((request) => request.update && request.from === message.from && request.to === to)
+}
+
 /** `elapsed 340s / 1200s`, or undefined for a request with no budget. */
 export function formatElapsed(request: Pick<OpenRequest, "at" | "deliveredAt" | "budget">, now: number): string | undefined {
   if (!request.budget) return undefined

@@ -9,6 +9,7 @@ import {
   parseOpenRequests,
   requestsTable,
   shouldNudge,
+  updatesAnsweredBy,
   timeNoteDue,
   type OpenRequest,
 } from "./mailbox"
@@ -126,6 +127,16 @@ describe("the budget on a request (D73)", () => {
       expect(line).toBe("[Tempo] 171-ab: elapsed 1200s / 1200s, budget finito")
       expect(line).not.toContain("chiudi")
     }
+  })
+
+  test("only a note from the caller answers a blocked request; a new ask to the same session does not clear it", () => {
+    const blocked = { id: "old", from: "p1", to: "p2", update: { state: "bloccata" as const, text: "serve una chiave", at: 1 } }
+    const other = { id: "other", from: "p3", to: "p2", update: { state: "decisione" as const, text: "x", at: 1 } }
+    const requests = [blocked, other]
+    // What the Architect saw: a later `ask` from the same caller cleared the block, and the old request got reminders.
+    expect(updatesAnsweredBy(requests, { kind: "ask", from: "p1" }, "p2")).toEqual([])
+    expect(updatesAnsweredBy(requests, { kind: "send", from: "p1" }, "p2")).toEqual([blocked])
+    expect(updatesAnsweredBy(requests, { kind: "send", from: "p1" }, "p9")).toEqual([])
   })
 
   test("the help names --budget and warns against it on security reviews and releases", () => {

@@ -196,6 +196,7 @@ import {
   byProject,
   formatCancel,
   formatNudge,
+  updatesAnsweredBy,
   formatElapsed,
   formatTimeNote,
   timeNoteDue,
@@ -242,6 +243,7 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
+import { createLineQueue } from "../session/line-queue"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   formatFallbackLine,
@@ -1515,7 +1517,24 @@ export function Workbench() {
    * for someone to press Enter. A keystroke that arrives after the paste has
    * settled is a keystroke. False when the session went away in between.
    */
-  const typeLine = async (session: SpawnedSession, text: string): Promise<boolean> => {
+  /*
+   * One line at a time per session (`session/line-queue.ts`): the next line
+   * starts once the one before has had its Enter, or two texts share one
+   * Enter. With `unlessTyping`, the draft check is made in the queue, at the
+   * moment of writing, and the line is dropped (false) if the user has begun
+   * one since it was queued: the caller then does not count it as given.
+   */
+  const lineQueue = createLineQueue()
+  const typeLine = (session: SpawnedSession, text: string, options: { unlessTyping?: boolean } = {}): Promise<boolean> => {
+    const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
+    const job = async () => {
+      if (options.unlessTyping && paneId !== undefined && isTyping(records.typed.get(paneId))) return false
+      return typeLineNow(session, text)
+    }
+    return paneId === undefined ? job() : lineQueue(paneId, job)
+  }
+
+  const typeLineNow = async (session: SpawnedSession, text: string): Promise<boolean> => {
     const line = asOneLine(text)
     const paneId = [...running.entries()].find(([, live]) => live === session)?.[0]
     /*
@@ -2387,9 +2406,15 @@ export function Workbench() {
       // Not while the user has a line begun there: not given either, so it comes on a later round.
       const timeNote = session ? timeNoteDue(request, now, isTyping(records.typed.get(request.to))) : undefined
       if (session && timeNote) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = request.timeNotes
         request.timeNotes = timeNote
         saveRequests()
-        void typeLine(session, formatTimeNote(request, now, timeNote))
+        void typeLine(session, formatTimeNote(request, now, timeNote), { unlessTyping: true }).then((typed) => {
+          if (typed || request.timeNotes !== timeNote) return
+          request.timeNotes = before
+          saveRequests()
+        })
       }
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
@@ -2401,11 +2426,18 @@ export function Workbench() {
       }
       // Finished, gone quiet, and never replied: reminded, so the caller is not left to its timeout.
       if (session && shouldNudge(request, targetOf(request), now)) {
+        // Counted now, so the next round does not queue it twice; given back if a draft stopped it.
+        const before = { nudges: request.nudges, nudgedAt: request.nudgedAt }
         request.nudges = (request.nudges ?? 0) + 1
         request.nudgedAt = now
         saveRequests()
-        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)))
-        appendLine(request.to, t("note.nudged", request.id), "note")
+        void typeLine(session, formatNudge(request.id, panes.find((pane) => pane.id === request.from)), { unlessTyping: true }).then((typed) => {
+          if (typed) return appendLine(request.to, t("note.nudged", request.id), "note")
+          if (request.nudgedAt !== now) return
+          request.nudges = before.nudges
+          request.nudgedAt = before.nudgedAt
+          saveRequests()
+        })
       }
     }
 
@@ -3122,12 +3154,10 @@ export function Workbench() {
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
-    // The caller has spoken to a session that said it was blocked on it: that is the answer it was waiting for.
-    for (const request of openRequests.values()) {
-      if (request.update && request.from === message.from && request.to === target.pane.id) {
-        delete request.update
-        saveRequests()
-      }
+    // The caller has written to a session that said it was blocked on it: that note is the answer it was waiting for.
+    for (const request of updatesAnsweredBy(openRequests.values(), message, target.pane.id)) {
+      delete request.update
+      saveRequests()
     }
     if (message.kind === "ask") {
       const at = Date.now()
