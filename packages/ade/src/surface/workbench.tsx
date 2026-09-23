@@ -5662,7 +5662,28 @@ export function Workbench() {
     running.delete(paneId)
     touchRunning()
     // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
-    if (!(await closeSuspendedTree(session))) appendLine(paneId, t("note.suspendKillFailed"), "note")
+    const closed = await closeSuspendedTree(session)
+    forgetQuiet(paneId)
+    setWb((w) => updatePane(w, paneId, { activity: "suspended" }))
+    appendLine(paneId, t(closed ? "note.suspended" : "note.suspendKillFailed"), "note")
+  }
+
+  /**
+   * "Riprendi": the same conversation by its id (`reopen`), then the mark goes
+   * and the queued mail is typed in the order it came, as held lines are, once
+   * the session is free. A session that does not start stays suspended, its
+   * mail with it.
+   */
+  const resumeSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane?.suspended) return
+    await reopen(pane)
+    if (!running.has(paneId)) {
+      appendLine(paneId, t("note.resumeFailed"), "note")
+      return
+    }
+    setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+    saveSuspendedMail()
   }
 
   /**
@@ -6403,6 +6424,7 @@ export function Workbench() {
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
     suspend: (id) => void suspendSession(id),
+    resume: (id) => void resumeSession(id),
     pickVideo,
     pickModel,
     readBytes: (path, maxBytes) =>

@@ -176,6 +176,11 @@ export interface SessionPaneProps {
    * where it is and its tooltip says why.
    */
   suspend?: { enabled: boolean; reason?: string; onClick: () => void }
+  /**
+   * An input that stays in view, off, above the buttons, saying how to write
+   * again: a suspended session's "Riprendi per scrivere" (P1-C6).
+   */
+  inputHint?: string
   focused?: boolean
   /** Sends a line to whatever the pane is running. Absent when nothing runs. */
   onSubmit?: (line: string) => void
@@ -939,6 +944,16 @@ export function SessionPane(props: SessionPaneProps) {
               </div>
             }
           >
+            <Show when={props.inputHint}>
+              {(hint) => (
+                <div data-slot="pane-prompt" data-disabled="true">
+                  <span data-slot="pane-caret" aria-hidden="true">
+                    ›
+                  </span>
+                  <textarea rows={1} data-slot="pane-input" placeholder={hint()} disabled spellcheck={false} />
+                </div>
+              )}
+            </Show>
             <div data-slot="pane-answers">
               <For each={props.actions}>
                 {(action) => (

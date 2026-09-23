@@ -74,6 +74,8 @@ export interface PaneRendererDeps {
   /** Whether "Sospendi" can run on the pane now; undefined where it is not offered (P1-C6). */
   suspendCheck: (id: string) => SuspendCheck | undefined
   suspend: (id: string) => void
+  /** "Riprendi" on a suspended session. */
+  resume: (id: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
   /** The native file picker, narrowed to the formats the 3D panel reads. */
@@ -366,6 +368,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
     /* A session whose process is gone — exited, failed, or restored from disk. */
     const restartable = () =>
+      !current().suspended &&
       !deps.isRunning(current().id) &&
       Boolean(current().agent ?? current().model) &&
       (current().status === "done" || current().status === "error")
@@ -375,8 +378,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         status={current().status}
-        /* What the agent says it is doing beats the label ADE guessed. */
-        activity={reports()[current().id]?.activity ?? current().activity}
+        /* What the agent says it is doing beats the label ADE guessed; a suspended session is doing nothing. */
+        activity={current().suspended ? "suspended" : (reports()[current().id]?.activity ?? current().activity)}
         elapsed={current().elapsed}
         tokens={(() => {
           const count = reports()[current().id]?.tokens
@@ -483,7 +486,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))
-            : restartable()
+            : current().suspended && !deps.isRunning(current().id)
+              ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
+              : restartable()
               ? [
                   {
                     label: current().status === "error" ? "Riprova" : "Riprendi",
@@ -493,6 +498,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 ]
               : undefined
         }
+        inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}
         focused={isFocused()}
         onFocus={focus}
