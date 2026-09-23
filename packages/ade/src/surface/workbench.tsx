@@ -47,8 +47,7 @@ import {
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
-import { WATCH_MAX_GAP_MS, countingLines, followReports, newNonce } from "../session-new/agent-link"
-import { p1c2Off } from "../host/p1-c2-switch"
+import { countingLines, followReports, newNonce } from "../session-new/agent-link"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -1346,10 +1345,7 @@ export function Workbench() {
 
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
-    if (p1c2Off()) {
-      onCleanup(decisionsRegister.watch())
-      onCleanup(designRegister.watch())
-    } else onCleanup(
+    onCleanup(
       watchRegisters([decisionsRegister, designRegister], async () => {
         const host = await getHost()
         return host?.readDir ? (path: string) => host.readDir!(path) : undefined
@@ -1853,12 +1849,7 @@ export function Workbench() {
   const linesSent = new Map<string, number>()
   const readsOf = (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, readOne: (nonce: string) => Promise<string | null>) => {
     if (activityReads?.host !== host) {
-      activityReads = {
-        host,
-        reads: p1c2Off()
-          ? createActivityReads({ readOne, freshMs: 0 })
-          : createActivityReads({ readOne, ...(host.readAgentActivities ? { readMany: host.readAgentActivities } : {}) }),
-      }
+      activityReads = { host, reads: createActivityReads({ readOne, ...(host.readAgentActivities ? { readMany: host.readAgentActivities } : {}) }) }
     }
     return activityReads.reads
   }
@@ -5799,7 +5790,6 @@ export function Workbench() {
           },
           cancelled: () => running.get(paneId) !== session,
           linesSent: () => linesSent.get(paneId) ?? 0,
-          ...(p1c2Off() ? { gaps: [WATCH_MAX_GAP_MS] } : {}),
           onReport: (report) => {
             if (running.get(paneId) !== session) return
             setWb((w) => updatePane(w, paneId, { resumeId: report.sessionId }))
