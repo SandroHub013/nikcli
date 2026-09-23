@@ -1,7 +1,7 @@
-import { Show, createSignal } from "solid-js"
+import { Show, createSignal, onCleanup } from "solid-js"
 import type { Buffer } from "./buffer"
 import { FileView } from "./file-view"
-import { viewKind } from "../surface/open-route"
+import { flashRefusal, viewKind } from "../surface/open-route"
 import "./file-pane.css"
 import { t } from "../i18n"
 
@@ -24,8 +24,8 @@ export interface FilePaneProps {
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   /** A web link clicked in a markdown preview: ADE's browser. */
   openUrl?: (url: string) => void
-  /** A file linked from a markdown preview. */
-  openFile?: (path: string) => void
+  /** A file linked from a markdown preview; answers with a note when the link was refused. */
+  openFile?: (path: string) => string | void
 }
 
 /**
@@ -49,6 +49,18 @@ export function FilePane(props: FilePaneProps) {
    */
   const [asText, setAsText] = createSignal(kind() === "markdown" || Boolean(props.goTo))
   const switchable = () => kind() === "svg" || kind() === "markdown"
+
+  /* A link the preview refused says why here, for a moment, like «Copiato» on a session: this pane has no transcript. */
+  const [note, setNote] = createSignal<string>()
+  let noteTimer: ReturnType<typeof setTimeout> | undefined
+  const flash = (text: string) => {
+    setNote(text)
+    if (noteTimer) clearTimeout(noteTimer)
+    noteTimer = setTimeout(() => setNote(undefined), 2500)
+  }
+  onCleanup(() => {
+    if (noteTimer) clearTimeout(noteTimer)
+  })
 
   return (
     <article
@@ -110,9 +122,14 @@ export function FilePane(props: FilePaneProps) {
           onRevert={props.onRevert}
           readBytes={props.readBytes}
           openUrl={props.openUrl}
-          openFile={props.openFile}
+          openFile={flashRefusal(props.openFile, flash)}
         />
       </div>
+      <Show when={note()}>
+        <div data-slot="pane-toast" role="status">
+          {note()}
+        </div>
+      </Show>
     </article>
   )
 }
