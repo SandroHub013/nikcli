@@ -367,29 +367,105 @@ fn command_of(leaf: &serde_json::Value) -> Option<String> {
     Some(format!("{command} {rest} \"{last}\""))
 }
 
-/// The configuration with every ADE entry taken out, and whatever that emptied.
-fn without_ade(value: &serde_json::Value) -> Option<serde_json::Value> {
+/// A configuration with ADE's entries taken out, remembering what their going emptied.
+#[derive(Debug)]
+enum Stripped {
+    /// ADE's own entry.
+    Gone,
+    /// A container that held something and holds nothing now that ADE's entries are out: a
+    /// hook group whose `hooks` held only ADE's, whatever `matcher` it keeps, counts too.
+    Emptied,
+    Object(std::collections::BTreeMap<String, Stripped>),
+    Array(Vec<Stripped>),
+    Leaf(serde_json::Value),
+}
+
+/// The configuration with every ADE entry taken out (see `Stripped`).
+///
+/// Only what ADE's going emptied is marked as such. An empty container the
+/// user wrote stays one, so a write that adds or drops `"permissions": {}` is
+/// a change like any other (audit 0.7.7, C2 BASSO); and a hook group left as
+/// `{matcher}` once ADE's entry is out is emptied, not a group that stays
+/// (MEDIO 15): Claude Code's groups carry a `matcher`, and every install on a
+/// file without ADE's group was refused as "changes more than the hooks".
+fn without_ade(value: &serde_json::Value) -> Stripped {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
             // ADE's own entry, whichever form it is written in: the script's
             // name is in the command line, or among the arguments.
             if command_of(value).is_some_and(|c| c.contains(SCRIPT_NAME)) {
-                return None;
+                return Stripped::Gone;
             }
-            let kept: serde_json::Map<String, Value> = map
-                .iter()
-                .filter_map(|(k, v)| without_ade(v).map(|v| (k.clone(), v)))
-                .collect();
-            // Empty containers compare as absent: removing ADE's entry may
-            // leave `"hooks": {}` where there was no `hooks` key before.
-            (!kept.is_empty()).then_some(Value::Object(kept))
+            let mut touched = false;
+            let mut hooks_emptied = false;
+            let mut kept = std::collections::BTreeMap::new();
+            for (key, child) in map {
+                match without_ade(child) {
+                    Stripped::Gone => touched = true,
+                    Stripped::Emptied => {
+                        touched = true;
+                        hooks_emptied |= key == "hooks" && child.is_array();
+                        kept.insert(key.clone(), Stripped::Emptied);
+                    }
+                    other => {
+                        kept.insert(key.clone(), other);
+                    }
+                }
+            }
+            if touched && hooks_emptied {
+                Stripped::Emptied
+            } else {
+                Stripped::Object(kept)
+            }
         }
         Value::Array(items) => {
-            let kept: Vec<Value> = items.iter().filter_map(without_ade).collect();
-            (!kept.is_empty()).then_some(Value::Array(kept))
+            let mut touched = false;
+            let mut kept = Vec::new();
+            for item in items {
+                match without_ade(item) {
+                    Stripped::Gone | Stripped::Emptied => touched = true,
+                    other => kept.push(other),
+                }
+            }
+            if touched && kept.is_empty() {
+                Stripped::Emptied
+            } else {
+                Stripped::Array(kept)
+            }
         }
-        other => Some(other.clone()),
+        other => Stripped::Leaf(other.clone()),
+    }
+}
+
+/// Whether nothing but ADE's going is left: emptied, or an object of emptied things.
+fn ade_only(s: &Stripped) -> bool {
+    match s {
+        Stripped::Emptied | Stripped::Gone => true,
+        Stripped::Object(map) => !map.is_empty() && map.values().all(ade_only),
+        _ => false,
+    }
+}
+
+/// Whether two stripped configurations say the same thing. What ADE emptied
+/// matches a missing key or an empty container of either kind, and nothing else.
+fn same_without_ade(before: &Stripped, after: &Stripped) -> bool {
+    use Stripped::*;
+    let empty = |s: &Stripped| match s {
+        Object(map) => map.is_empty() || ade_only(s),
+        Array(items) => items.is_empty(),
+        other => ade_only(other),
+    };
+    match (before, after) {
+        (Emptied | Gone, other) | (other, Emptied | Gone) => empty(other),
+        (Object(b), Object(a)) => b.keys().chain(a.keys()).all(|key| match (b.get(key), a.get(key)) {
+            (Some(x), Some(y)) => same_without_ade(x, y),
+            (Some(only), None) | (None, Some(only)) => ade_only(only),
+            (None, None) => true,
+        }),
+        (Array(b), Array(a)) => b.len() == a.len() && b.iter().zip(a).all(|(x, y)| same_without_ade(x, y)),
+        (Leaf(b), Leaf(a)) => b == a,
+        _ => false,
     }
 }
 
@@ -428,7 +504,7 @@ fn check_hook_config(current: Option<&str>, next: &str, command: &str) -> Result
     };
     let before = parse(current.unwrap_or(""))?;
     let after = parse(next)?;
-    if without_ade(&before) != without_ade(&after) {
+    if !same_without_ade(&without_ade(&before), &without_ade(&after)) {
         return Err(format!("la configurazione cambia più degli hook di {}: scrittura rifiutata", crate::brand::name()));
     }
     let mut commands = Vec::new();
@@ -480,6 +556,37 @@ mod tests {
         assert!(check_hook_config(Some(current), &foreign, &command).is_err());
         let hijacked = installed.replace("powershell -NoProfile", "calc & powershell -NoProfile");
         assert!(check_hook_config(Some(current), &hijacked, &command).is_err());
+    }
+
+    #[test]
+    fn a_hook_group_with_a_matcher_goes_with_ades_entry() {
+        // Audit 0.7.7, MEDIO 15: Claude Code's groups carry a matcher, and `{matcher}` used to stay behind.
+        let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
+        let command = hook_command(&script);
+        let group = format!(
+            r#"{{"matcher":"startup|resume|clear","hooks":[{{"type":"command","command":{}}}]}}"#,
+            serde_json::to_string(&command).unwrap()
+        );
+        let user = r#"{"matcher":"startup","hooks":[{"type":"command","command":"notify"}]}"#;
+        // Installed on a file with no hooks, with an empty hooks object, beside a group of the user's.
+        assert!(check_hook_config(Some(r#"{"model":"opus"}"#), &format!(r#"{{"model":"opus","hooks":{{"SessionStart":[{group}]}}}}"#), &command).is_ok());
+        assert!(check_hook_config(Some(r#"{"hooks":{}}"#), &format!(r#"{{"hooks":{{"SessionStart":[{group}]}}}}"#), &command).is_ok());
+        let beside = format!(r#"{{"hooks":{{"SessionStart":[{user},{group}]}}}}"#);
+        assert!(check_hook_config(Some(&format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#)), &beside, &command).is_ok());
+        // And taken out again.
+        assert!(check_hook_config(Some(&beside), &format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#), &command).is_ok());
+        // The user's group loses its hooks: not ADE's doing, refused.
+        let emptied_user = r#"{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[]}]}}"#;
+        assert!(check_hook_config(Some(&format!(r#"{{"hooks":{{"SessionStart":[{user}]}}}}"#)), emptied_user, &command).is_err());
+    }
+
+    #[test]
+    fn the_users_empty_containers_are_not_absent() {
+        // C2 BASSO: an empty object or array the user wrote is part of the file like anything else.
+        let command = hook_command(&Path::new("C:\\h").join(SCRIPT_NAME));
+        assert!(check_hook_config(Some(r#"{"x":{}}"#), "{}", &command).is_err());
+        assert!(check_hook_config(Some("{}"), r#"{"permissions":{"allow":[]}}"#, &command).is_err());
+        assert!(check_hook_config(Some(r#"{"x":{}}"#), r#"{"x":{}}"#, &command).is_ok());
     }
 
     /// A settings file and a script path in a fresh folder of their own, under the test TEMP.
