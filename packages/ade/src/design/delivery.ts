@@ -73,6 +73,17 @@ export function recipientOptions(
   return options
 }
 
+/**
+ * Whether the answer button can send, or has to ask who receives first.
+ *
+ * With nobody chosen, or a chosen session that is not running, an answer
+ * recorded as it is would wait in the outbox with nobody to read it. So the
+ * card asks for a recipient right there instead of recording in silence.
+ */
+export function submitGate(recipient: RecipientStatus): "invia" | "scegli" {
+  return recipient.state === "pronta" ? "invia" : "scegli"
+}
+
 export function recipientChange(currentId: string | undefined, nextId: string | undefined, queued: number): "nessuna" | "applica" | "conferma" {
   if ((currentId ?? "") === (nextId ?? "")) return "nessuna"
   if (!nextId || queued === 0) return "applica"
@@ -132,7 +143,7 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposa
   return outbox.filter((item) => {
     if (item.path !== path) return true
     const proposal = byKey.get(item.k)
-    return proposal?.status === "risposta" && proposal.answer?.at === item.answeredAt
+    return (proposal?.status === "risposta" || proposal?.status === "giro") && proposal.answer?.at === item.answeredAt
   })
 }
 

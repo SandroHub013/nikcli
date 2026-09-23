@@ -1,12 +1,14 @@
 import { createSignal, type Accessor } from "solid-js"
-import { answerEvent } from "./answer"
+import { againEvent, answerEvent } from "./answer"
+import { runSubmit, submitControl, submitSteps } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredDesignEvent, DesignVariant } from "./log"
 import type { DesignRegister } from "./register"
 import type { DesignProposal } from "./state"
 
 export interface DesignDraft {
-  readonly picked?: number
+  /** One variant, or the boxes ticked on a `multi` proposal. */
+  readonly picked?: number | readonly number[]
   readonly note: string
 }
 
@@ -14,6 +16,8 @@ export interface FullPreviewState {
   readonly open: boolean
   readonly variant?: DesignVariant
   readonly title?: string
+  /** The proposal's key, for the folder an error points to. */
+  readonly k?: string
 }
 
 export function projectRootFromRegisterPath(registerPath: string | undefined): string | undefined {
@@ -33,8 +37,23 @@ export interface DesignHub {
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
+  /** The session picked in a card's own "who receives" select, not yet chosen. */
+  inlineRecipient: () => string | undefined
+  setInlineRecipient: (id: string | undefined) => void
+  /**
+   * The card's buttons and Enter: `primary` sends, first choosing the session
+   * picked inline when nobody receives yet; `record` writes without sending.
+   */
+  submit: (proposal: DesignProposal, press: "primary" | "record") => Promise<boolean>
+  /**
+   * «Altro giro»: records the note as a request for another round. It goes
+   * where the main button goes: with nobody to receive it and no running
+   * session picked inline it records nothing, like «Scegli e invia»; with one
+   * picked, that session is chosen first.
+   */
+  again: (proposal: DesignProposal) => Promise<boolean>
   fullPreview: Accessor<FullPreviewState>
-  openFullPreview: (variant: DesignVariant, title?: string) => void
+  openFullPreview: (variant: DesignVariant, title?: string, k?: string) => void
   closeFullPreview: () => void
 }
 
@@ -50,6 +69,7 @@ export function createDesignHub(deps: {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
+  const [inline, setInline] = createSignal<string>()
   const [fullPreview, setFullPreview] = createSignal<FullPreviewState>({ open: false })
 
   const setProblem = (k: string, text: string | undefined) =>
@@ -85,6 +105,23 @@ export function createDesignHub(deps: {
       return next
     })
 
+  const record = (proposal: DesignProposal, event: AnsweredDesignEvent | string): Promise<boolean> => {
+    if (typeof event === "string") {
+      setProblem(proposal.k, event)
+      return Promise.resolve(false)
+    }
+    return write(proposal.k, async () => {
+      await deps.register.append(event)
+      clearDraft(proposal.k)
+      deps.onAnswered(proposal, event)
+    })
+  }
+
+  const answer = (proposal: DesignProposal): Promise<boolean> => {
+    const current = draft(proposal.k)
+    return record(proposal, answerEvent(proposal, current.picked, current.note, new Date()))
+  }
+
   return {
     register: deps.register,
     projectRoot: deps.projectRoot,
@@ -99,21 +136,48 @@ export function createDesignHub(deps: {
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
-    answer: (proposal) => {
-      const current = draft(proposal.k)
-      const event = answerEvent(proposal, current.picked, current.note, new Date())
-      if (typeof event === "string") {
-        setProblem(proposal.k, event)
-        return Promise.resolve(false)
-      }
-      return write(proposal.k, async () => {
-        await deps.register.append(event)
-        clearDraft(proposal.k)
-        deps.onAnswered(proposal, event)
+    answer,
+    inlineRecipient: inline,
+    setInlineRecipient: setInline,
+    submit: (proposal, press) => {
+      const control = submitControl({
+        recipient: deps.recipient(),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(proposal.k),
+        label: "",
+      })
+      const steps = submitSteps(control, deps.sessions(), inline(), press)
+      return runSubmit(steps, {
+        choose: (id) => {
+          deps.choose(id)
+          setInline(undefined)
+        },
+        answer: () => answer(proposal),
       })
     },
+    again: (proposal) => {
+      const event = againEvent(proposal, draft(proposal.k).note, new Date())
+      if (typeof event === "string") return record(proposal, event)
+      const control = submitControl({
+        recipient: deps.recipient(),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(proposal.k),
+        label: "",
+      })
+      const steps = submitSteps(control, deps.sessions(), inline(), "primary")
+      // Nobody would read it: not a silent write to the outbox (S75 point 1).
+      if (steps.length === 0) return Promise.resolve(false)
+      const chosen = steps.find((step) => step.kind === "choose")
+      if (chosen?.kind === "choose") {
+        deps.choose(chosen.id)
+        setInline(undefined)
+      }
+      return record(proposal, event)
+    },
     fullPreview,
-    openFullPreview: (variant, title) => setFullPreview({ open: true, variant, title }),
+    openFullPreview: (variant, title, k) => setFullPreview({ open: true, variant, title, k }),
     closeFullPreview: () => setFullPreview({ open: false }),
   }
 }

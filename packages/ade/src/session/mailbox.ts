@@ -56,6 +56,8 @@ export type Message = { from: string; token?: string; text: string } & (
   | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
   /** The project's shared memory file; `type` for `add`, `text` is the entry. */
   | { kind: "memory"; op: "add" | "show"; type: string }
+  /** One event for the Decisions or Design register; `text` is its fields as JSON (`register-write.ts`). */
+  | { kind: "registro"; register: RegisterName; op: string }
   /** Who owns the file named in `text`, from the team board (`owners.ts`). */
   | { kind: "whoowns" }
   | { kind: "reply"; ref: string }
@@ -81,6 +83,14 @@ export type Message = { from: string; token?: string; text: string } & (
 
 export const KV_OPS = ["get", "set", "del", "list", "lock", "unlock"] as const
 export type KvOpName = (typeof KV_OPS)[number]
+
+/** The registers `ade-msg registro` writes, and the operations each takes: `rimandata` is only for decisions. */
+export const REGISTERS = ["decisioni", "design"] as const
+export type RegisterName = (typeof REGISTERS)[number]
+export const REGISTER_OPS: Record<RegisterName, readonly string[]> = {
+  decisioni: ["aperta", "risposta", "rimandata", "riaperta", "chiusa"],
+  design: ["aperta", "risposta", "riaperta", "chiusa"],
+}
 
 /** What `ade-msg update` may say about a request that is not finished. */
 export const UPDATE_STATES = ["bloccata", "decisione"] as const
@@ -143,6 +153,12 @@ export function parseMessage(body: string): Message | undefined {
     return { kind, from, token, op, key, ttl, force: record.force === true, text }
   }
   if (kind === "whoowns") return text.trim() ? { kind, from, token, text: text.trim() } : undefined
+  if (kind === "registro") {
+    const register = REGISTERS.find((known) => known === str("register"))
+    const op = str("op")
+    if (!register || !REGISTER_OPS[register].includes(op) || !text.trim()) return undefined
+    return { kind, from, token, register, op, text }
+  }
   if (kind === "memory") {
     const op = str("op")
     if (op === "show") return { kind, from, token, op, type: "", text: "" }
@@ -1039,6 +1055,11 @@ export const USAGE =
   "  ade-msg memory add decisione|fatto|trappola|todo \"<testo>\"\n" +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +
+  "  ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'\n" +
+  "                                          scrive un evento nel registro Decisioni o Design: il json ha i campi\n" +
+  "                                          senza type, at e by (li mette ADE); k serve, tranne per aperta.\n" +
+  "                                          ADE controlla la riga, la scrive e dice se il tasto la mostra;\n" +
+  "                                          rimandata solo per decisioni. I registri si scrivono solo così\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +

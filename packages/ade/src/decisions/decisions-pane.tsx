@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment } from "./answer"
+import { formatDay, formatMoment, togglePick } from "./answer"
+import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { recipientHint } from "./decisions-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
@@ -41,12 +42,23 @@ export function DecisionsPane(props: {
       note={props.hub.draft(decision.k).note}
       busy={props.hub.busy(decision.k)}
       problem={props.hub.problem(decision.k)}
-      submitLabel={t("decisions.submit")}
+      control={submitControl({
+        recipient: props.hub.recipient(),
+        sessions: props.hub.sessions(),
+        inline: props.hub.inlineRecipient(),
+        busy: props.hub.busy(decision.k),
+        label: t("decisions.submit"),
+      })}
+      onInline={(id) => props.hub.setInlineRecipient(id)}
+      onRecord={() => void props.hub.submit(decision, "record")}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
-      onPick={(picked) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), picked })}
+      onPick={(index) => {
+        const draft = props.hub.draft(decision.k)
+        props.hub.setDraft(decision.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(decision.multi)) })
+      }}
       onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
-      onSubmit={() => void props.hub.answer(decision)}
+      onSubmit={() => void props.hub.submit(decision, "primary")}
       onDefer={(until) => void props.hub.defer(decision, until)}
     />
   )
@@ -90,7 +102,7 @@ export function DecisionsPane(props: {
           <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
         </Show>
         <Show when={problems().length > 0}>
-          <details data-slot="decisions-problems">
+          <details data-slot="decisions-problems" open>
             <summary>{t("decisions.ignored", problems().length)}</summary>
             <ul>
               <For each={problems()}>{(line) => <li>{line}</li>}</For>
@@ -134,8 +146,8 @@ export function DecisionsPane(props: {
                       <span data-slot="decision-pill" data-tone="done">{t("decisions.pill.answered")}</span>
                     </header>
                     <div data-slot="decision-answer">
-                      <b>{decision.answer?.choice ?? decision.answer?.words}</b>
-                      <Show when={decision.answer?.choice && decision.answer?.note}> · {decision.answer?.note}</Show>
+                      <b>{decision.answer?.choices?.join(" + ") ?? decision.answer?.choice ?? decision.answer?.words}</b>
+                      <Show when={(decision.answer?.choices || decision.answer?.choice) && decision.answer?.note}> · {decision.answer?.note}</Show>
                     </div>
                     <Show when={props.hub.problem(decision.k)}>
                       <div data-slot="decision-problem" role="alert">{props.hub.problem(decision.k)}</div>

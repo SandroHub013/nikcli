@@ -36,14 +36,63 @@ export function sheetKey(
   return undefined
 }
 
+/** What is picked in a card: one index, or for a `multi` question the boxes ticked. */
+export type Picked = number | readonly number[] | undefined
+
+/** A digit or a click on option `index`: picks it, or on a `multi` question ticks or unticks its box. */
+export function togglePick(picked: Picked, index: number, multi: boolean): number | number[] {
+  if (!multi) return index
+  const boxes = Array.isArray(picked) ? picked : []
+  return boxes.includes(index) ? boxes.filter((item) => item !== index) : [...boxes, index].sort((a, b) => a - b)
+}
+
+export function isPicked(picked: Picked, index: number): boolean {
+  return Array.isArray(picked) ? picked.includes(index) : picked === index
+}
+
+export function hasPick(picked: Picked): boolean {
+  return Array.isArray(picked) ? picked.length > 0 : picked !== undefined
+}
+
+/** The first option picked, for what shows one at a time. */
+export function firstPick(picked: Picked): number | undefined {
+  return Array.isArray(picked) ? picked[0] : (picked as number | undefined)
+}
+
+/**
+ * Whether a plain Enter records. A single question: only a choice made in
+ * this window. A `multi` one: at least one box ticked, or a note.
+ */
+export function enterReady(multi: boolean, picked: Picked, note: string, chosenHere: boolean): boolean {
+  if (multi) return hasPick(picked) || note.trim().length > 0
+  return chosenHere && hasPick(picked)
+}
+
 export function answerEvent(
-  proposal: Pick<DesignProposal, "k" | "variants">,
-  picked: number | undefined,
+  proposal: Pick<DesignProposal, "k" | "variants"> & { multi?: true },
+  picked: Picked,
   note: string,
   at: Date,
 ): AnsweredDesignEvent | string {
-  const choice = picked === undefined ? undefined : proposal.variants[picked]?.name
   const trimmed = note.trim()
+  if (proposal.multi) {
+    // In the variants' order, whatever order the boxes were ticked in.
+    const boxes = Array.isArray(picked) ? picked : picked === undefined ? [] : [picked as number]
+    const choices = proposal.variants.filter((_, index) => boxes.includes(index)).map((variant) => variant.name)
+    if (choices.length === 0 && !trimmed) return t("design.needChoice")
+    const words = [choices.join(" + "), trimmed].filter(Boolean).join(" — ")
+    return {
+      type: "risposta",
+      k: proposal.k,
+      at: at.toISOString(),
+      by: USER,
+      words,
+      ...(choices.length > 0 ? { choices } : {}),
+      ...(trimmed ? { note: trimmed } : {}),
+    }
+  }
+  const index = firstPick(picked)
+  const choice = index === undefined ? undefined : proposal.variants[index]?.name
   if (!choice && !trimmed) return t("design.needChoice")
   const words = [choice, trimmed].filter(Boolean).join(" — ")
   return {
@@ -55,6 +104,16 @@ export function answerEvent(
     ...(choice ? { choice } : {}),
     ...(trimmed ? { note: trimmed } : {}),
   }
+}
+
+/**
+ * «Altro giro»: not a choice, the note says what to change. Without a note
+ * there is nothing for the author to do, so nothing is recorded.
+ */
+export function againEvent(proposal: Pick<DesignProposal, "k">, note: string, at: Date): AnsweredDesignEvent | string {
+  const words = note.trim()
+  if (!words) return t("design.again.needNote")
+  return { type: "risposta", k: proposal.k, at: at.toISOString(), by: USER, words, again: true }
 }
 
 const MONTHS_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]

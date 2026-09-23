@@ -2,14 +2,18 @@ import { asOneLine } from "../session/typing"
 import type { DesignEvent, DesignVariant, LogProblem } from "./log"
 import { t } from "../i18n"
 
-export type DesignStatus = "aperta" | "risposta" | "chiusa"
+/** `giro`: the user asked for another round; it waits for a `riaperta` with new variants. */
+export type DesignStatus = "aperta" | "risposta" | "giro" | "chiusa"
 
 export interface DesignAnswer {
   readonly choice?: string
+  readonly choices?: readonly string[]
   readonly note?: string
   readonly words: string
   readonly at: string
   readonly by: string
+  /** Another round asked for, not a choice. */
+  readonly again?: true
 }
 
 export interface DesignProposal {
@@ -18,6 +22,8 @@ export interface DesignProposal {
   readonly context?: string
   readonly spec?: string
   readonly variants: readonly DesignVariant[]
+  /** More than one variant may be picked. */
+  readonly multi?: true
   readonly order?: number
   readonly raisedBy: string
   readonly openedAt: string
@@ -26,6 +32,8 @@ export interface DesignProposal {
   readonly closedAt?: string
   readonly evidence?: string
   readonly history: readonly DesignEvent[]
+  /** Which round of variants this is: 1 when opened, one more at each `riaperta`. */
+  readonly round?: number
 }
 
 export interface RejectedEvent {
@@ -59,11 +67,13 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
         context: event.context,
         spec: event.spec,
         variants: event.variants,
+        ...(event.multi ? { multi: true as const } : {}),
         order: event.order,
         raisedBy: event.by,
         openedAt: event.at,
         status: "aperta",
         history: [event],
+        round: 1,
       })
       continue
     }
@@ -80,18 +90,39 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
 
     switch (event.type) {
       case "risposta":
-        if (current.status === "risposta") {
+        // A new answer after "altro giro" needs the new round first.
+        if (current.status === "risposta" || current.status === "giro") {
           reject(event, t("design.rule.answered", event.k))
           continue
         }
+        {
+          // The log does not know how the proposal was opened: the fold does.
+          const wrong = choiceProblem(current, event.choice, event.choices, current.variants.map((variant) => variant.name))
+          if (wrong) {
+            reject(event, t(wrong, event.k))
+            continue
+          }
+        }
         current.answer = {
           choice: event.choice,
+          ...(event.choices ? { choices: event.choices } : {}),
           note: event.note,
           words: event.words,
           at: event.at,
           by: event.by,
+          ...(event.again ? { again: true as const } : {}),
         }
-        current.status = "risposta"
+        current.status = event.again ? "giro" : "risposta"
+        break
+      case "riaperta":
+        if (current.status === "aperta") {
+          reject(event, t("design.rule.open", event.k))
+          continue
+        }
+        current.status = "aperta"
+        current.answer = undefined
+        if (event.variants) current.variants = event.variants
+        current.round = (current.round ?? 1) + 1
         break
       case "chiusa":
         current.status = "chiusa"
@@ -116,6 +147,8 @@ export function compareProposals(a: DesignProposal, b: DesignProposal): number {
 export interface DesignBuckets {
   readonly forYou: readonly DesignProposal[]
   readonly answered: readonly DesignProposal[]
+  /** Another round asked for: the author owes new variants. */
+  readonly rework: readonly DesignProposal[]
   readonly closed: readonly DesignProposal[]
 }
 
@@ -124,6 +157,7 @@ export function bucketProposals(proposals: readonly DesignProposal[]): DesignBuc
   return {
     forYou: sorted.filter((d) => d.status === "aperta"),
     answered: sorted.filter((d) => d.status === "risposta"),
+    rework: sorted.filter((d) => d.status === "giro"),
     closed: sorted.filter((d) => d.status === "chiusa"),
   }
 }
@@ -132,11 +166,36 @@ export function resolvedMessage(proposal: DesignProposal): string {
   const answer = proposal.answer
   if (!answer) throw new Error(`${proposal.k} non ha una risposta`)
   const parts = [`design [k=${proposal.k}] ${proposal.title}`]
-  if (answer.choice) parts.push(`scelta: ${answer.choice}`)
+  if (answer.again) {
+    // Work for the author, not a choice to carry out.
+    parts.push("ALTRO GIRO, non una scelta", `parole: "${answer.words}"`, "rifai le varianti e riapri con: ade-msg registro design riaperta")
+    return asOneLine(parts.join(" — "))
+  }
+  if (answer.choices) parts.push(`scelte: ${answer.choices.join(" + ")}`)
+  else if (answer.choice) parts.push(`scelta: ${answer.choice}`)
   if (answer.note) parts.push(`nota: ${answer.note}`)
   parts.push(`parole: "${answer.words}"`)
   if (proposal.spec) parts.push(`spec: ${proposal.spec}`)
   return asOneLine(parts.join(" — "))
+}
+
+/**
+ * Why an answer does not fit how the proposal was opened, as an i18n key:
+ * a multiple proposal takes `choices` from its own variants, never `choice`;
+ * a single one never takes `choices`.
+ */
+function choiceProblem(
+  proposal: { multi?: true },
+  choice: string | undefined,
+  choices: readonly string[] | undefined,
+  known: readonly string[],
+): "design.rule.multiChoice" | "design.rule.unknownChoice" | "design.rule.singleChoice" | undefined {
+  if (proposal.multi) {
+    if (choice !== undefined) return "design.rule.multiChoice"
+    if (choices?.some((item) => !known.includes(item))) return "design.rule.unknownChoice"
+    return undefined
+  }
+  return choices ? "design.rule.singleChoice" : undefined
 }
 
 export function nextDesignKey(proposals: readonly Pick<DesignProposal, "k">[], prefix = "DS"): string {

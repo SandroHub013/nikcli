@@ -8,13 +8,15 @@
 
 import { createSignal } from "solid-js"
 import { answerEvent, deferEvent, reopenEvent } from "./answer"
+import { runSubmit, submitControl, submitSteps } from "./card"
 import type { DeliveryCandidate, DeliveryState, RecipientStatus } from "./delivery"
 import type { AnsweredEvent } from "./log"
 import type { DecisionsRegister } from "./register"
 import type { Decision } from "./state"
 
 export interface DecisionDraft {
-  readonly picked?: number
+  /** One option, or the boxes ticked on a `multi` question. */
+  readonly picked?: number | readonly number[]
   readonly note: string
 }
 
@@ -33,6 +35,14 @@ export interface DecisionsHub {
   problem: (k: string) => string | undefined
   /** Writes the answer from the draft; resolves true once it is in the register. */
   answer: (decision: Decision) => Promise<boolean>
+  /** The session picked in a card's own "who receives" select, not yet chosen. */
+  inlineRecipient: () => string | undefined
+  setInlineRecipient: (id: string | undefined) => void
+  /**
+   * The card's buttons and Enter: `primary` sends, first choosing the session
+   * picked inline when nobody receives yet; `record` writes without sending.
+   */
+  submit: (decision: Decision, press: "primary" | "record") => Promise<boolean>
   defer: (decision: Decision, until: string) => Promise<boolean>
   reopen: (decision: Decision) => Promise<boolean>
 }
@@ -49,6 +59,7 @@ export function createDecisionsHub(deps: {
   const [drafts, setDrafts] = createSignal<Record<string, DecisionDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
+  const [inline, setInline] = createSignal<string>()
 
   const setProblem = (k: string, text: string | undefined) => setProblems((all) => ({ ...all, [k]: text }))
   const setBusy = (k: string, on: boolean) =>
@@ -83,6 +94,20 @@ export function createDecisionsHub(deps: {
       return next
     })
 
+  const answer = (decision: Decision): Promise<boolean> => {
+    const current = draft(decision.k)
+    const event = answerEvent(decision, current.picked, current.note, new Date())
+    if (typeof event === "string") {
+      setProblem(decision.k, event)
+      return Promise.resolve(false)
+    }
+    return write(decision.k, async () => {
+      await deps.register.append(event)
+      clearDraft(decision.k)
+      deps.onAnswered(decision, event)
+    })
+  }
+
   return {
     register: deps.register,
     recipient: deps.recipient,
@@ -96,17 +121,24 @@ export function createDecisionsHub(deps: {
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
-    answer: (decision) => {
-      const current = draft(decision.k)
-      const event = answerEvent(decision, current.picked, current.note, new Date())
-      if (typeof event === "string") {
-        setProblem(decision.k, event)
-        return Promise.resolve(false)
-      }
-      return write(decision.k, async () => {
-        await deps.register.append(event)
-        clearDraft(decision.k)
-        deps.onAnswered(decision, event)
+    answer,
+    inlineRecipient: inline,
+    setInlineRecipient: setInline,
+    submit: (decision, press) => {
+      const control = submitControl({
+        recipient: deps.recipient(),
+        sessions: deps.sessions(),
+        inline: inline(),
+        busy: busyKeys().has(decision.k),
+        label: "",
+      })
+      const steps = submitSteps(control, deps.sessions(), inline(), press)
+      return runSubmit(steps, {
+        choose: (id) => {
+          deps.choose(id)
+          setInline(undefined)
+        },
+        answer: () => answer(decision),
       })
     },
     defer: (decision, until) => write(decision.k, () => deps.register.append(deferEvent(decision.k, until, new Date()))),

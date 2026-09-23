@@ -79,7 +79,7 @@ fn urldecode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// The content type, from the extension. Only the ones the panel offers.
+/// The content type, from the extension: the video panel's, and a design preview's page.
 fn mime_of(path: &Path) -> &'static str {
     match path
         .extension()
@@ -92,6 +92,8 @@ fn mime_of(path: &Path) -> &'static str {
         "webm" => "video/webm",
         "ogv" | "ogg" => "video/ogg",
         "mov" => "video/quicktime",
+        // A design variant's page, loaded as a frame's `src` (design-preview.tsx).
+        "html" | "htm" => "text/html; charset=utf-8",
         _ => "application/octet-stream",
     }
 }
@@ -383,6 +385,7 @@ mod tests {
         assert_eq!(mime_of(Path::new("a.mp4")), "video/mp4");
         assert_eq!(mime_of(Path::new("a.WEBM")), "video/webm");
         assert_eq!(mime_of(Path::new("a.mov")), "video/quicktime");
+        assert_eq!(mime_of(Path::new("a.html")), "text/html; charset=utf-8");
         assert_eq!(mime_of(Path::new("a.txt")), "application/octet-stream");
     }
 

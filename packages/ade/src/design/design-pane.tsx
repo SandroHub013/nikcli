@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment } from "./answer"
+import { formatDay, formatMoment, togglePick } from "./answer"
+import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import { recipientHint } from "./design-sheet"
@@ -40,14 +41,26 @@ export function DesignPane(props: {
       note={props.hub.draft(proposal.k).note}
       busy={props.hub.busy(proposal.k)}
       problem={props.hub.problem(proposal.k)}
-      submitLabel={t("design.submit")}
+      control={submitControl({
+        recipient: props.hub.recipient(),
+        sessions: props.hub.sessions(),
+        inline: props.hub.inlineRecipient(),
+        busy: props.hub.busy(proposal.k),
+        label: t("design.submit"),
+      })}
+      onInline={(id) => props.hub.setInlineRecipient(id)}
+      onRecord={() => void props.hub.submit(proposal, "record")}
+      onAgain={() => void props.hub.again(proposal)}
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
-      onPick={(picked) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), picked })}
+      onPick={(index) => {
+        const draft = props.hub.draft(proposal.k)
+        props.hub.setDraft(proposal.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(proposal.multi)) })
+      }}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
-      onSubmit={() => void props.hub.answer(proposal)}
-      onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
+      onSubmit={() => void props.hub.submit(proposal, "primary")}
+      onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
     />
   )
 
@@ -93,7 +106,7 @@ export function DesignPane(props: {
         </Show>
 
         <Show when={problems().length > 0}>
-          <details data-slot="design-problems">
+          <details data-slot="design-problems" open>
             <summary>{t("design.ignored", problems().length)}</summary>
             <ul>
               <For each={problems()}>{(line) => <li>{line}</li>}</For>
@@ -104,7 +117,7 @@ export function DesignPane(props: {
         <Show when={props.hub.register.path()}>
           <DesignRecipientPicker
             hub={props.hub}
-            queued={buckets().answered.filter((proposal) => props.hub.delivery(proposal).state === "in coda").length}
+            queued={[...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length}
           />
 
           <h4 data-slot="design-section">{t("design.section.open")}</h4>
@@ -129,6 +142,27 @@ export function DesignPane(props: {
             </div>
           </Show>
 
+          <Show when={buckets().rework.length > 0}>
+            <h4 data-slot="design-section">{t("design.section.rework")}</h4>
+            <div data-slot="design-list">
+              <For each={buckets().rework}>
+                {(proposal) => (
+                  <section data-slot="design-card" data-state="giro">
+                    <header data-slot="design-head">
+                      <span data-slot="design-key">{proposal.k}</span>
+                      <h3 data-slot="design-title">{proposal.title}</h3>
+                      <span data-slot="design-pill" data-tone="later">{t("design.pill.rework")}</span>
+                    </header>
+                    <div data-slot="design-answer">{proposal.answer?.words}</div>
+                    <div data-slot="design-actions">
+                      <span data-slot="design-hint">{deliveryText(props.hub, proposal, now())}</span>
+                    </div>
+                  </section>
+                )}
+              </For>
+            </div>
+          </Show>
+
           <Show when={buckets().answered.length > 0}>
             <h4 data-slot="design-section">{t("design.section.answered")}</h4>
             <div data-slot="design-list">
@@ -141,8 +175,8 @@ export function DesignPane(props: {
                       <span data-slot="design-pill" data-tone="done">{t("design.pill.answered")}</span>
                     </header>
                     <div data-slot="design-answer">
-                      <b>{proposal.answer?.choice ?? proposal.answer?.words}</b>
-                      <Show when={proposal.answer?.choice && proposal.answer?.note}> · {proposal.answer?.note}</Show>
+                      <b>{proposal.answer?.choices?.join(" + ") ?? proposal.answer?.choice ?? proposal.answer?.words}</b>
+                      <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}> · {proposal.answer?.note}</Show>
                     </div>
                     <Show when={props.hub.problem(proposal.k)}>
                       <div data-slot="design-problem" role="alert">{props.hub.problem(proposal.k)}</div>
@@ -214,6 +248,7 @@ export function DesignPane(props: {
           <div data-slot="full-preview-container">
             <DesignPreview
               preview={props.hub.fullPreview().variant!.preview}
+              k={props.hub.fullPreview().k ?? ""}
               name={props.hub.fullPreview().variant!.name}
               projectRoot={root()}
               fullScreen

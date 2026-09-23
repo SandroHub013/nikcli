@@ -49,12 +49,16 @@ export interface OpenedEvent extends EventBase {
   readonly spec?: string
   /** Lower comes first. Absent: after every ordered one, by time. */
   readonly order?: number
+  /** More than one option may be picked; needs at least two options. */
+  readonly multi?: true
 }
 
 export interface AnsweredEvent extends EventBase {
   readonly type: "risposta"
   /** The option picked, when one was. */
   readonly choice?: string
+  /** The options picked, in a decision opened with `multi`. Never with `choice`. */
+  readonly choices?: readonly string[]
   /** A note added to the choice. */
   readonly note?: string
   /** What the user said, exactly. Required: it is what gets executed. */
@@ -157,6 +161,8 @@ export function toEvent(value: unknown): DecisionEvent | string {
       if (typeof options === "string") return options
       const order = record.order
       if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("decisions.log.order")
+      const multi = record.multi === true
+      if (multi && options.length < 2) return t("decisions.log.multi")
       return compact({
         type: "aperta",
         ...base,
@@ -166,12 +172,16 @@ export function toEvent(value: unknown): DecisionEvent | string {
         unlocks: text(record.unlocks),
         spec: text(record.spec),
         order: order as number | undefined,
+        multi: multi ? true : undefined,
       }) as OpenedEvent
     }
     case "risposta": {
       const words = text(record.words)
       if (!words) return t("decisions.log.words")
-      return compact({ type: "risposta", ...base, words, choice: text(record.choice), note: text(record.note) }) as AnsweredEvent
+      const choices = choicesOf(record.choices, t("decisions.log.choices"))
+      if (choices && "error" in choices) return choices.error
+      if (choices && record.choice !== undefined) return t("decisions.log.choiceAndChoices")
+      return compact({ type: "risposta", ...base, words, choice: text(record.choice), choices, note: text(record.note) }) as AnsweredEvent
     }
     case "rimandata": {
       const until = text(record.until)
@@ -189,6 +199,22 @@ function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * The options picked in a multiple answer: a non-empty list of distinct,
+ * non-empty texts. `undefined` when the field is absent.
+ */
+function choicesOf(value: unknown, bad: string): string[] | undefined | { error: string } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length === 0) return { error: bad }
+  const seen = new Set<string>()
+  for (const item of value) {
+    const label = text(item)
+    if (!label || seen.has(label)) return { error: bad }
+    seen.add(label)
+  }
+  return [...seen]
 }
 
 function optionsOf(value: unknown): DecisionOption[] | string {

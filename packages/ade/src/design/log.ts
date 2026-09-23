@@ -4,15 +4,28 @@ import { t } from "../i18n"
  * The design proposals register, as it is written to disk in `.ade/design.jsonl`.
  *
  * One JSON object per line, appended and never rewritten: an event says what
- * happened to a design proposal — aperta, risposta, chiusa — and the current
+ * happened to a design proposal — aperta, risposta, riaperta, chiusa — and the current
  * state is computed from all of them by `state.ts`.
  *
  * A proposal carries a key, title, author, reference spec, short text/context,
  * and one or more variants, each with a name, a two-line description, and a
  * preview (an image path/URL or a standalone HTML page).
+ *
+ * The team's format for a variant's page (S75 point 3):
+ * - one self-contained `.html` file per variant: CSS in `<style>`, JS in
+ *   `<script>`, images and fonts as `data:` or inline SVG, nothing beside it;
+ * - in the project, relative in the register: `.ade/design/<k>/<n>.html`,
+ *   `n` the variant's number from 1. `ade-media` serves only files inside the
+ *   open projects, and the frame loads it from there;
+ * - its size at the top: `<meta name="ade-size" content="360x240">`, width by
+ *   height in CSS px, 120 to 1600; without it, 360×240. The card shows it at
+ *   exactly that size;
+ * - a comparison page with every variant may exist, but it does not go in a
+ *   `preview`: every variant would show the same page. `ade-msg registro`
+ *   refuses two variants with the same preview.
  */
 
-export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "chiusa"] as const
+export const DESIGN_EVENT_TYPES = ["aperta", "risposta", "riaperta", "chiusa"] as const
 
 export type DesignEventType = (typeof DESIGN_EVENT_TYPES)[number]
 
@@ -45,16 +58,32 @@ export interface OpenedDesignEvent extends EventBase {
   readonly variants: readonly DesignVariant[]
   /** Lower comes first. Absent: after ordered ones, by time. */
   readonly order?: number
+  /** More than one variant may be picked; needs at least two variants. */
+  readonly multi?: true
 }
 
 export interface AnsweredDesignEvent extends EventBase {
   readonly type: "risposta"
   /** The variant name chosen, when one was. */
   readonly choice?: string
+  /** The variants chosen, in a proposal opened with `multi`. Never with `choice`. */
+  readonly choices?: readonly string[]
   /** A note added to the choice. */
   readonly note?: string
   /** What the user decided, verbatim. Required: it is what gets executed. */
   readonly words: string
+  /**
+   * Not a choice: the user asks for another round, and `words` says what to
+   * change. The author answers with a `riaperta` carrying the new variants.
+   */
+  readonly again?: true
+}
+
+/** A new round on the same key: back in front of the user, with new variants when it brings them. */
+export interface ReopenedDesignEvent extends EventBase {
+  readonly type: "riaperta"
+  readonly reason?: string
+  readonly variants?: readonly DesignVariant[]
 }
 
 export interface ClosedDesignEvent extends EventBase {
@@ -63,7 +92,7 @@ export interface ClosedDesignEvent extends EventBase {
   readonly evidence?: string
 }
 
-export type DesignEvent = OpenedDesignEvent | AnsweredDesignEvent | ClosedDesignEvent
+export type DesignEvent = OpenedDesignEvent | AnsweredDesignEvent | ReopenedDesignEvent | ClosedDesignEvent
 
 export interface LogProblem {
   readonly line: number
@@ -130,6 +159,8 @@ export function toEvent(value: unknown): DesignEvent | string {
       if (variants.length === 0) return t("design.log.variants")
       const order = record.order
       if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("design.log.order")
+      const multi = record.multi === true
+      if (multi && variants.length < 2) return t("design.log.multi")
       return compact({
         type: "aperta",
         ...base,
@@ -138,18 +169,41 @@ export function toEvent(value: unknown): DesignEvent | string {
         spec: text(record.spec),
         variants,
         order: order as number | undefined,
+        multi: multi ? true : undefined,
       }) as OpenedDesignEvent
     }
     case "risposta": {
+      const again = record.again === true
+      if (again && (record.choice !== undefined || record.choices !== undefined)) return t("design.log.again")
       const words = text(record.words)
-      if (!words) return t("design.log.words")
+      if (!words) return again ? t("design.log.again") : t("design.log.words")
+      const choices = choicesOf(record.choices, t("design.log.choices"))
+      if (choices && "error" in choices) return choices.error
+      if (choices && record.choice !== undefined) return t("design.log.choiceAndChoices")
       return compact({
         type: "risposta",
         ...base,
         words,
         choice: text(record.choice),
+        choices,
         note: text(record.note),
+        again: again ? true : undefined,
       }) as AnsweredDesignEvent
+    }
+    case "riaperta": {
+      let variants: DesignVariant[] | undefined
+      if (record.variants !== undefined) {
+        const checked = variantsOf(record.variants)
+        if (typeof checked === "string") return checked
+        if (checked.length === 0) return t("design.log.variants")
+        variants = checked
+      }
+      return compact({
+        type: "riaperta",
+        ...base,
+        reason: text(record.reason),
+        variants,
+      }) as ReopenedDesignEvent
     }
     case "chiusa":
       return compact({
@@ -164,6 +218,22 @@ function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * The options picked in a multiple answer: a non-empty list of distinct,
+ * non-empty texts. `undefined` when the field is absent.
+ */
+function choicesOf(value: unknown, bad: string): string[] | undefined | { error: string } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length === 0) return { error: bad }
+  const seen = new Set<string>()
+  for (const item of value) {
+    const label = text(item)
+    if (!label || seen.has(label)) return { error: bad }
+    seen.add(label)
+  }
+  return [...seen]
 }
 
 function variantsOf(value: unknown): DesignVariant[] | string {

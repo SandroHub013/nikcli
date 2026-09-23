@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { submitGate } from "./delivery"
 import { resetLocaleForTests } from "../i18n"
 import { parseDecisionLog, serializeDecisionEvent, toEvent, type DecisionEvent } from "./log"
 import { bucketDecisions, describeProblems, foldDecisions, nextDecisionKey, resolvedMessage } from "./state"
@@ -270,5 +271,47 @@ describe("the store", () => {
     await expect(appendDecisionEvent(failing, path, opened("D1"))).rejects.toThrow("fuori dal progetto")
     const huge: DecisionsIo = { ...failing, readTextFile: async () => ({ text: "x", truncated: true }) }
     await expect(loadDecisions(huge, path)).rejects.toThrow("supera 8 MB")
+  })
+})
+
+describe("the answer button's gate", () => {
+  test("sends only to a session that is ready; otherwise it asks who receives", () => {
+    expect(submitGate({ state: "pronta", id: "p1", title: "Master" })).toBe("invia")
+    expect(submitGate({ state: "non scelta" })).toBe("scegli")
+    expect(submitGate({ state: "non attiva", id: "p2", title: "fable" })).toBe("scegli")
+  })
+})
+
+describe("multiple answers (S75 point 6)", () => {
+  const T = "2026-09-23T10:00:00.000Z"
+  const open = (extra: Record<string, unknown> = {}) =>
+    ({ type: "aperta", k: "D40", at: T, by: "fable", title: "Quali", options: [{ label: "A" }, { label: "B" }, { label: "C" }], multi: true, ...extra }) as unknown as DecisionEvent
+  const answer = (extra: Record<string, unknown>) =>
+    ({ type: "risposta", k: "D40", at: "2026-09-23T10:05:00.000Z", by: "utente", words: "A + C", ...extra }) as unknown as DecisionEvent
+
+  test("multi with a single option is a line problem; choice and choices together too", () => {
+    expect(toEvent(open({ options: [{ label: "A" }] }))).toBe("una scelta multipla vuole almeno due opzioni")
+    expect(toEvent(answer({ choice: "A", choices: ["A", "C"] }))).toBe("choice e choices insieme")
+    expect(typeof toEvent(answer({ choices: [] }))).toBe("string")
+    expect(typeof toEvent(answer({ choices: ["A", "A"] }))).toBe("string")
+    expect(toEvent(open())).toMatchObject({ multi: true })
+  })
+
+  test("on a multi question valid choices answer it; an unknown one or a choice is refused", () => {
+    const good = foldDecisions([open(), answer({ choices: ["A", "C"] })])
+    expect(good.rejected).toEqual([])
+    expect(good.decisions[0]).toMatchObject({ status: "risposta", answer: { choices: ["A", "C"] } })
+    expect(foldDecisions([open(), answer({ choices: ["A", "Z"] })]).rejected.map((r) => r.reason)).toEqual(["D40: una delle scelte non è un'opzione"])
+    expect(foldDecisions([open(), answer({ choice: "A" })]).rejected.map((r) => r.reason)).toEqual(["D40 è a scelta multipla: si risponde con choices"])
+  })
+
+  test("on a single question choices is refused", () => {
+    const single = foldDecisions([open({ multi: undefined }), answer({ choices: ["A"] })])
+    expect(single.rejected.map((r) => r.reason)).toEqual(["D40 non è a scelta multipla: choices non vale"])
+  })
+
+  test("the message says scelte: A + C", () => {
+    const { decisions } = foldDecisions([open(), answer({ choices: ["A", "C"] })])
+    expect(resolvedMessage(decisions[0]!)).toBe('risolta [k=D40] Quali — scelte: A + C — parole: "A + C"')
   })
 })

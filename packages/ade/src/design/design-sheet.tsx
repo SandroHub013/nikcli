@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { sheetKey } from "./answer"
+import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
+import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
@@ -14,7 +15,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const buckets = createMemo(() => bucketProposals(props.hub.register.state()?.proposals ?? []))
   const open = () => buckets().forYou
   const queued = () =>
-    buckets().answered.filter((proposal) => props.hub.delivery(proposal).state === "in coda").length
+    [...buckets().answered, ...buckets().rework].filter((proposal) => props.hub.delivery(proposal).state === "in coda").length
   const [index, setIndex] = createSignal(0)
   const at = () => Math.min(index(), Math.max(0, open().length - 1))
   const current = () => open()[at()]
@@ -24,8 +25,9 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
   const [needChoice, setNeedChoice] = createSignal<string>()
 
-  const pick = (k: string, picked: number) => {
-    props.hub.setDraft(k, { ...props.hub.draft(k), picked })
+  const pick = (k: string, index: number, multi: boolean) => {
+    const draft = props.hub.draft(k)
+    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
     setChosenHere((keys) => new Set(keys).add(k))
     setNeedChoice(undefined)
   }
@@ -38,10 +40,10 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     surface?.focus()
   })
 
-  const submit = async () => {
+  const submit = async (press: "primary" | "record" = "primary") => {
     const proposal = current()
     if (!proposal) return
-    if (await props.hub.answer(proposal)) surface?.focus()
+    if (await props.hub.submit(proposal, press)) surface?.focus()
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -56,22 +58,23 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     }
 
     const proposal = current()
-    const picked = Boolean(proposal && chosenHere().has(proposal.k) && props.hub.draft(proposal.k).picked !== undefined)
+    const draft = proposal ? props.hub.draft(proposal.k) : undefined
+    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, chosenHere().has(proposal.k)))
     const action = sheetKey(event, proposal?.variants.length ?? 0, event.target === note, picked)
     if (!action) return
     event.preventDefault()
     event.stopPropagation()
     if (action.kind === "close") props.onClose()
     else if (!proposal) return
-    else if (action.kind === "pick") pick(proposal.k, action.index)
+    else if (action.kind === "pick") pick(proposal.k, action.index, Boolean(proposal.multi))
     else if (action.kind === "need-choice") setNeedChoice(proposal.k)
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
     else if (action.kind === "expand") {
-      const pickedIndex = props.hub.draft(proposal.k).picked ?? 0
+      const pickedIndex = firstPick(props.hub.draft(proposal.k).picked) ?? 0
       const variant = proposal.variants[pickedIndex]
-      if (variant) props.hub.openFullPreview(variant, proposal.title)
+      if (variant) props.hub.openFullPreview(variant, proposal.title, proposal.k)
     }
   }
 
@@ -125,14 +128,23 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                   props.hub.problem(proposal.k) ??
                   (needChoice() === proposal.k ? t("design.sheet.needChoice") : undefined)
                 }
-                submitLabel={open().length > 1 ? t("design.submitNext") : t("design.submit")}
+                control={submitControl({
+                  recipient: props.hub.recipient(),
+                  sessions: props.hub.sessions(),
+                  inline: props.hub.inlineRecipient(),
+                  busy: props.hub.busy(proposal.k),
+                  label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                })}
+                onInline={(id) => props.hub.setInlineRecipient(id)}
+                onRecord={() => void submit("record")}
+                onAgain={() => void props.hub.again(proposal).then((done) => done && surface?.focus())}
                 recipientHint={recipientHint(props.hub.recipient())}
                 now={new Date()}
                 projectRoot={root()}
-                onPick={(picked) => pick(proposal.k, picked)}
+                onPick={(index) => pick(proposal.k, index, Boolean(proposal.multi))}
                 onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
                 onSubmit={() => void submit()}
-                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title)}
+                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
                 noteRef={(element) => (note = element)}
               />
             )}
@@ -180,6 +192,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             <div data-slot="full-preview-container">
               <DesignPreview
                 preview={props.hub.fullPreview().variant!.preview}
+                k={props.hub.fullPreview().k ?? ""}
                 name={props.hub.fullPreview().variant!.name}
                 projectRoot={root()}
                 fullScreen
