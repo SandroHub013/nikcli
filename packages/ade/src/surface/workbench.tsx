@@ -9,6 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
 import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
+import { onePickAtATime } from "../record/folder-pick"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -846,7 +847,8 @@ export function Workbench() {
   })
 
   /** Asks for the folder once, and keeps it for the next takes. */
-  const pickRecordDir = async () => {
+  // One dialog at a time: a second command while it is open waits for its answer.
+  const pickRecordDir = onePickAtATime(async () => {
     const host = await getHost()
     const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
     if (!chosen) return undefined
@@ -857,7 +859,7 @@ export function Workbench() {
       // A take still records; only the choice is forgotten next launch.
     }
     return chosen
-  }
+  })
 
   /*
    * The folder is not made a write root: Rust writes and serves only the
@@ -4683,6 +4685,8 @@ export function Workbench() {
       }
       void voiceEngine.toggle()
     } else if (id === "record.toggle") {
+      // Closed first: the folder dialog may open, and a palette left open behind it takes another Enter.
+      setPaletteOpen(false)
       const problem =
         recordState().status === "recording"
           ? await recorder.stop()
