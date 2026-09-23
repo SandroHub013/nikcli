@@ -31,7 +31,7 @@ export interface MailPane {
 /** `token` is what proves `from`; see {@link verifySender}. */
 export type Message = { from: string; token?: string; text: string } & (
   /** `effort` on an ask is refused: a running session's effort is set at spawn or relaunch. */
-  | { kind: "send" | "ask"; to: string; effort?: string; via?: "typed" }
+  | { kind: "send" | "ask"; to: string; effort?: string; via?: "typed"; budget?: number }
   /**
    * `autoClose`: closed once it has replied, unless it has work not yet
    * integrated. `name` titles it; `worktree` gives it its own checkout;
@@ -51,6 +51,8 @@ export type Message = { from: string; token?: string; text: string } & (
       /** A class of work in `dispatch.json`, which supplies model and effort when not given. */
       profile?: string
       fork: boolean
+      /** Seconds the sender estimates the work takes (`--budget`, D73). */
+      budget?: number
     }
   /** The project's shared key-value store; `text` is the value for `set`, a note for `lock`. */
   | { kind: "kv"; op: KvOpName; key: string; ttl: number; force: boolean }
@@ -102,6 +104,19 @@ export const MAX_TEXT = 40_000
 /** A request id names a file; the same shape `mailbox.rs` accepts. */
 export function isRequestId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,80}$/.test(id)
+}
+
+/**
+ * The time budget a request may carry (D73), in seconds: a whole number from
+ * one minute to four hours. Anything else is dropped, never refused: a budget
+ * is information for whoever does the work, and a bad one must not lose the
+ * request it came with.
+ */
+export const BUDGET_MIN = 60
+export const BUDGET_MAX = 14_400
+
+export function budgetOf(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= BUDGET_MIN && value <= BUDGET_MAX ? value : undefined
 }
 
 export function parseMessage(body: string): Message | undefined {
@@ -172,7 +187,8 @@ export function parseMessage(body: string): Message | undefined {
     const effort = str("effort")
     // `--digita`: the sender wants the keyboard, whatever the route would be.
     const via = str("via") === "typed" ? ("typed" as const) : undefined
-    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}), ...(via ? { via } : {}) } : undefined
+    const budget = kind === "ask" ? budgetOf(record.budget) : undefined
+    return to ? { kind, from, token, to, text, ...(effort ? { effort } : {}), ...(via ? { via } : {}), ...(budget ? { budget } : {}) } : undefined
   }
   if (kind === "spawn") {
     const agent = str("agent")
@@ -182,6 +198,7 @@ export function parseMessage(body: string): Message | undefined {
     const base = str("base")
     const effort = str("effort")
     const profile = str("profile")
+    const budget = budgetOf(record.budget)
     return {
       kind,
       from,
@@ -195,6 +212,7 @@ export function parseMessage(body: string): Message | undefined {
       ...(effort ? { effort } : {}),
       ...(profile ? { profile } : {}),
       ...(model ? { model } : {}),
+      ...(budget ? { budget } : {}),
       text,
     }
   }
@@ -400,8 +418,9 @@ export function formatRequest(
     context.depth !== undefined && context.maxDepth !== undefined && context.depth >= context.maxDepth
       ? " Non avviare sessioni (ultimo livello)."
       : ""
+  const budget = context.budget ? ` · budget ${context.budget}s` : ""
   return (
-    `[Richiesta ${id} da ${who(sender)}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
+    `[Richiesta ${id} da ${who(sender)}${budget}]: ${context.keepLines ? cleanText(text) : oneLine(text)} —${where}${delegate} ` +
     `Rispondi solo con ade-msg reply ${id} "<sintesi>" (max 15 righe: ESITO, FILE, PROBLEMI, PROSSIMO PASSO` +
     (results ? `; dettagli in ${results}` : "") +
     `); se bloccata: ade-msg update ${id} bloccata|decisione "<motivo>".`
@@ -417,6 +436,8 @@ export interface RequestContext {
   /** The answering session's level in the spawn tree, and the most allowed. */
   depth?: number
   maxDepth?: number
+  /** Seconds the sender estimates, said in the header (D73). */
+  budget?: number
 }
 
 /** What a waiter prints when a request it waits on is not done but needs its caller. */
@@ -629,6 +650,42 @@ export interface OpenRequest {
   via?: "nativa" | "digitata"
   /** The caller confirmed its `SendMessage`, or the target's turn showed it arrived. */
   acked?: boolean
+  /** Seconds the sender estimated (`--budget`, D73). Information only: it closes nothing. */
+  budget?: number
+  /** The time notes already typed: 1 at half the budget, 2 at its end. Saved, so a restart does not repeat them. */
+  timeNotes?: number
+}
+
+/** Seconds since the request line was written, not since it was queued. */
+function elapsedSeconds(request: Pick<OpenRequest, "at" | "deliveredAt">, now: number): number {
+  return Math.max(0, Math.round((now - (request.deliveredAt ?? request.at)) / 1000))
+}
+
+/** `elapsed 340s / 1200s`, or undefined for a request with no budget. */
+export function formatElapsed(request: Pick<OpenRequest, "at" | "deliveredAt" | "budget">, now: number): string | undefined {
+  if (!request.budget) return undefined
+  return `elapsed ${elapsedSeconds(request, now)}s / ${request.budget}s`
+}
+
+/**
+ * Which time note is due now: 1 at half the budget, 2 at its end, each once.
+ * Past the end with neither given, only the end is said.
+ */
+export function timeNoteDue(request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes">, now: number): 1 | 2 | undefined {
+  if (!request.budget) return undefined
+  const given = request.timeNotes ?? 0
+  const elapsed = now - (request.deliveredAt ?? request.at)
+  if (given < 2 && elapsed >= request.budget * 1000) return 2
+  if (given < 1 && elapsed >= request.budget * 500) return 1
+  return undefined
+}
+
+/** The line typed to the session doing the work when a time note is due. */
+export function formatTimeNote(request: Pick<OpenRequest, "id" | "at" | "deliveredAt" | "budget">, now: number, which: 1 | 2): string {
+  const elapsed = formatElapsed(request, now) ?? ""
+  return which === 1
+    ? `[Tempo] ${request.id}: ${elapsed}`
+    : `[Tempo] ${request.id}: ${elapsed}, budget finito: chiudi con ade-msg reply ${request.id}, o chiedi tempo con ade-msg update ${request.id} decisione "<motivo>"`
 }
 
 export type RequestState =
@@ -959,7 +1016,7 @@ export function requestsTable(
   const rows = requests.map((request) => [
     request.id,
     request.kind + (request.autoClose ? "+close" : "") + (request.via === "nativa" ? (request.acked ? "·nativa✓" : "·nativa?") : ""),
-    age(now - request.at),
+    age(now - request.at) + (request.budget ? ` (${formatElapsed(request, now)})` : ""),
     request.update && stateOf(request) === "in corso" ? `${request.update.state}: ${briefOf(request.update.text, 40)}` : stateOf(request),
     `${title(request.from)} → ${title(request.to)}`,
     request.brief,
@@ -984,7 +1041,16 @@ export function parseOpenRequests(text: string | null | undefined): OpenRequest[
         typeof (entry as OpenRequest).from === "string" &&
         typeof (entry as OpenRequest).to === "string" &&
         typeof (entry as OpenRequest).at === "number",
-    )
+    ).map((entry) => {
+      // A saved budget that is not one is dropped, never the request with it.
+      const { budget, timeNotes, ...rest } = entry
+      const kept = budgetOf(budget)
+      return {
+        ...rest,
+        ...(kept ? { budget: kept } : {}),
+        ...(kept && (timeNotes === 1 || timeNotes === 2) ? { timeNotes } : {}),
+      }
+    })
   } catch {
     return []
   }
@@ -1078,6 +1144,10 @@ export const USAGE =
   "  --base <branch>  spawn --worktree: branch o commit da cui parte (predefinito: il branch della sessione che chiama)\n" +
   "  --fork           spawn: parte dalla tua conversazione e ne riusa la cache (claude, codex;\n" +
   "                   stesso agente e modello, non con --worktree)\n" +
+  "  --budget <sec>   ask, spawn: tempo stimato, da 60 a 14400 secondi; chi lavora vede l'intestazione\n" +
+  "                   «· budget Ns», il trascorso in ogni ricevuta di update e due avvisi, a metà e alla fine.\n" +
+  "                   Facoltativo, e solo dove si sa stimare. MAI su revisioni di sicurezza né su release:\n" +
+  "                   lì il tempo non deve spingere a chiudere. Non chiude nulla e non cambia i promemoria\n" +
   "  --close          spawn: chiude la sessione dopo la risposta, se non ha lavoro da integrare\n" +
   "                   (di norma resta aperta: serve per i seguiti)\n" +
   "  --file <perc>    ask/spawn/send/reply: il testo è il contenuto del file\n" +

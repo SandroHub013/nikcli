@@ -196,6 +196,9 @@ import {
   byProject,
   formatCancel,
   formatNudge,
+  formatElapsed,
+  formatTimeNote,
+  timeNoteDue,
   formatUpdate,
   parseActivity,
   keptActivity,
@@ -2374,6 +2377,17 @@ export function Workbench() {
         await host.mailboxState?.(request.id, state === "in corso" ? "" : state).catch(() => {})
       }
       const session = running.get(request.to)
+      /*
+       * The budget (D73): half-way and at the end, one line each, typed like
+       * the reminders. Information for whoever works: it closes nothing and
+       * leaves the reminders below as they were.
+       */
+      const timeNote = session ? timeNoteDue(request, now) : undefined
+      if (session && timeNote) {
+        request.timeNotes = timeNote
+        saveRequests()
+        void typeLine(session, formatTimeNote(request, now, timeNote))
+      }
       // Typed, and no turn began: the line is sitting in the input box. One more Enter sends it.
       if (session && !isTyping(records.typed.get(request.to)) && shouldRering(request, targetOf(request), now)) {
         request.rings = (request.rings ?? 0) + 1
@@ -2497,7 +2511,8 @@ export function Workbench() {
       const line = formatUpdate(request.id, message.state, message.text, sender)
       await host.mailboxState?.(request.id, line, "update").catch(() => {})
       if (caller) appendLine(caller.id, t("note.updateFrom", sender?.title ?? t("note.someSession"), message.state, message.text), "note")
-      await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta`)
+      const elapsed = formatElapsed(request, Date.now())
+      await answer(`ok: aggiornamento consegnato${caller ? ` a "${caller.title}"` : ""}; la richiesta resta aperta, aspetta la sua risposta${elapsed ? `; ${elapsed}` : ""}`)
       // Nobody woke on it: typed into the caller, which is not waiting any more.
       setTimeout(() => {
         void host.mailboxResultReclaim?.(request.id, "update").then((text) => {
@@ -2846,6 +2861,7 @@ export function Workbench() {
         ...(worktree || root ? { resultsDir: resultsDir(worktree?.path ?? root!) } : {}),
         depth,
         maxDepth: maxDepth(),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       const created = addAgent(
         { agentId: agent.id, count: 1, task, title, workspaceId: owner, ...(worktree ? { worktree } : {}), spawnArgs, ...(fork ? { fork } : {}) },
@@ -2859,6 +2875,7 @@ export function Workbench() {
         at: Date.now(),
         brief: briefOf(message.text),
         ...(message.autoClose ? { autoClose: true } : {}),
+        ...(message.budget ? { budget: message.budget } : {}),
       })
       saveRequests()
       if (message.from) {
@@ -3035,12 +3052,13 @@ export function Workbench() {
         ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
         depth: depthOf(target.pane.id, parentOf),
         maxDepth: maxDepth(),
+        ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
       }
       const line = message.kind === "ask" ? formatRequest(id, message.text, sender, nativeContext) : formatDelivery(message, sender)
       const full = message.kind === "ask" ? formatRequest(id, message.text, sender, { ...nativeContext, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
       if (message.kind === "ask") {
         const at = Date.now()
-        openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa" })
+        openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "nativa", ...(message.budget ? { budget: message.budget } : {}) })
         saveRequests()
       }
       const ask = message.kind === "ask"
@@ -3092,6 +3110,7 @@ export function Workbench() {
       ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
       depth: targetDepth,
       maxDepth: maxDepth(),
+      ...(message.kind === "ask" && message.budget ? { budget: message.budget } : {}),
     }
     const line = message.kind === "ask" ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
     // The inbox copy, read and never typed, keeps the sender's line breaks.
@@ -3109,7 +3128,7 @@ export function Workbench() {
     }
     if (message.kind === "ask") {
       const at = Date.now()
-      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "digitata" })
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.pane.id, at, deliveredAt: at, brief: briefOf(message.text), via: "digitata", ...(message.budget ? { budget: message.budget } : {}) })
       saveRequests()
     }
     const ask = message.kind === "ask"
