@@ -150,6 +150,32 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
+/// Variables every terminal ADE opens carries, whatever runs in it.
+///
+/// `PSExecutionPolicyPreference=Bypass`: the user's choice, D77 A (2026-09-23).
+/// `ade-msg` in a PowerShell pane runs `ade-msg.ps1`, not the `.cmd` or sh
+/// wrappers that already pass `-ExecutionPolicy Bypass`, and ADE does not
+/// launch it: the pane does. On a stock Windows the policy is `Restricted` and
+/// no pane could run it; under `RemoteSigned`, an unsigned script in a folder
+/// PowerShell treats as remote (Favorites, where ADE Test keeps its mailbox)
+/// is refused. `powershell` and `pwsh` read this variable at start as the
+/// `Process` scope, which comes before `CurrentUser` and `LocalMachine`, and
+/// every PowerShell started under the pane inherits it — agents' shells and
+/// hooks too. It is what Claude Code already sets for its own shells.
+///
+/// The cost, accepted by the user: in ADE's terminals any script runs without
+/// a signature check, the same as in Claude Code's shells, and a user in a
+/// Terminal pane already runs whatever they like. A policy set by Group Policy
+/// (`MachinePolicy`, `UserPolicy`) still wins over this; only signing the
+/// script would help there. See `briefs/S78-correzione.md`.
+const PANE_ENV: &[(&str, &str)] = &[("PSExecutionPolicyPreference", "Bypass")];
+
+fn apply_pane_env(builder: &mut CommandBuilder) {
+    for (key, value) in PANE_ENV {
+        builder.env(key, value);
+    }
+}
+
 /// Environment an agent must not inherit from whatever launched ADE.
 ///
 /// Prefixes, matched from the start of the name: a session marker set by one
@@ -768,6 +794,8 @@ pub async fn pty_spawn(
     for (key, value) in agent_env(&command) {
         builder.env(key, value);
     }
+    // After the scrub as well, so the user's own shell cannot take it back.
+    apply_pane_env(&mut builder);
 
     if let Some(link) = link.as_ref() {
         if let Some(dir) = crate::agent_link::link_dir(&app) {
@@ -1639,6 +1667,30 @@ mod tests {
         }
         for name in ["claude", "codex", "opencode", "agy", "pwsh", "nikcli-island"] {
             assert!(agent_env(name).is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_new_pane_runs_powershell_scripts_under_bypass() {
+        // The same step the spawn takes, on a builder that starts from this process's environment.
+        let mut builder = if cfg!(windows) { CommandBuilder::new("powershell") } else { CommandBuilder::new("sh") };
+        // Whatever the launching shell had, the pane gets Bypass.
+        builder.env("PSExecutionPolicyPreference", "Restricted");
+        apply_pane_env(&mut builder);
+        assert_eq!(
+            builder.get_env("PSExecutionPolicyPreference"),
+            Some(std::ffi::OsStr::new("Bypass"))
+        );
+    }
+
+    #[test]
+    fn bypass_is_documented_as_the_users_choice() {
+        // D77 A: the reason and the cost sit next to the line, and name the decision.
+        let source = include_str!("pty.rs");
+        let line = source.find("const PANE_ENV").expect("PANE_ENV is where the policy is set");
+        let comment = &source[source[..line].rfind("/// Variables every terminal").expect("the comment above PANE_ENV")..line];
+        for needed in ["D77 A", "PSExecutionPolicyPreference=Bypass", "Group Policy", "signature"] {
+            assert!(comment.contains(needed), "the comment must say {needed}");
         }
     }
 
