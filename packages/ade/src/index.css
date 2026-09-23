@@ -338,6 +338,12 @@ body[data-theme="glass"] #root,
   --ade-done-bg: light-dark(rgba(46, 138, 80, 0.10), rgba(113, 196, 145, 0.12));
   --ade-error: light-dark(#b74a5e, #e0879a);
   --ade-error-bg: light-dark(rgba(183, 74, 94, 0.10), rgba(224, 135, 154, 0.12));
+  /*
+   * Amber for what waits on someone (a recipient still missing, a check not yet
+   * run). It was only ever a fallback, #b7791f, which reads under 4.5:1 as text
+   * on every theme's sheet; these two reach it on overlay and surface alike.
+   */
+  --ade-warning: light-dark(#8f5c14, #dba047);
 
   /* ── interaction fills ──────────────────────────────────────────────────── */
   /*
