@@ -151,3 +151,46 @@ describe("the viewers under a covered pane", () => {
     expect(rule!.body).toMatch(/filter:\s*blur\(0\.8em\)/)
   })
 })
+
+describe("image and video viewers during a take (audit 0.7.7, R2)", () => {
+  const css = () => readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+  const blurRule = () => {
+    const text = css()
+    const rule = text.slice(text.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="file-view"]`))
+    return { selectors: splitSelectors(rule.slice(0, rule.indexOf("{"))), body: rule.slice(rule.indexOf("{"), rule.indexOf("}")) }
+  }
+
+  test("are blurred whole, whatever the file is called; the markdown preview and the editor are not", () => {
+    const { selectors, body } = blurRule()
+    expect(body).toMatch(/filter:\s*blur\(0\.8em\)/)
+    // Drawn again after each change to <html>: happy-dom keeps an element's match across an ancestor's attribute change.
+    const draw = () => {
+      document.body.innerHTML = [
+        '<div data-slot="file-view" data-kind="image" id="image"><img data-slot="file-image"></div>',
+        '<div data-slot="file-view" data-kind="svg" id="svg"><img data-slot="file-image"></div>',
+        '<video data-slot="video-element" id="video"></video>',
+        '<div data-slot="file-markdown" id="markdown"></div>',
+        '<div data-slot="file-view" data-kind="font" id="font"></div>',
+        '<textarea id="editor"></textarea>',
+      ].join("")
+    }
+    const blurred = (id: string) => selectors.some((selector) => document.getElementById(id)!.matches(selector))
+    document.documentElement.setAttribute(RECORDING_ATTRIBUTE, "")
+    draw()
+    for (const id of ["image", "svg", "video"]) expect([id, blurred(id)]).toEqual([id, true])
+    for (const id of ["markdown", "font", "editor"]) expect([id, blurred(id)]).toEqual([id, false])
+    // Outside a take nothing is blurred.
+    document.documentElement.removeAttribute(RECORDING_ATTRIBUTE)
+    draw()
+    expect(["image", "svg", "video"].some(blurred)).toBe(false)
+    document.body.innerHTML = ""
+  })
+
+  test("the names the rule uses are the ones the viewers draw", () => {
+    const view = readFileSync(join(import.meta.dir, "file-view.tsx"), "utf8")
+    const video = readFileSync(join(import.meta.dir, "..", "video", "video-pane.tsx"), "utf8")
+    expect(view).toContain('data-slot="file-view" data-kind="image"')
+    expect(view).toContain('data-slot="file-view" data-kind="svg"')
+    expect(video).toContain('data-slot="video-element"')
+  })
+})
