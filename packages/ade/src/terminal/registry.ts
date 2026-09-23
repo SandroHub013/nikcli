@@ -25,6 +25,8 @@ export interface SessionTerminal {
   uncover?: () => void
   /** The pane that draws it says a copy was refused during a take. */
   copyBlocked?: () => void
+  /** The last size that held still in its cell and was handed to `onResize` (S77). */
+  settled?: { cols: number; rows: number }
 }
 
 const terminals = new Map<string, SessionTerminal>()
@@ -422,6 +424,64 @@ export interface AttachOptions {
 }
 
 /**
+ * The size a process in `id` should have, or undefined if the pane cannot say.
+ *
+ * A process started before its pane was fitted was born at the host's 120×30,
+ * and the fit that came while `host.spawn` was awaited found no session to
+ * resize: the pty stayed at 120 columns in a cell of 80 (S77). With this the
+ * process is born at the pane's size, and resized to it once registered.
+ *
+ * Only a terminal drawn in a cell, and only a size that has held still there
+ * (`settled`): a size read mid-layout is the one-column screen of the next note.
+ */
+export function ptySize(id: string): { cols: number; rows: number } | undefined {
+  const session = terminals.get(id)
+  return session ? ptySizeOf(session) : undefined
+}
+
+export function ptySizeOf(session: Pick<SessionTerminal, "element" | "settled">): { cols: number; rows: number } | undefined {
+  const size = session.settled
+  if (!session.element || !size || size.cols < 2 || size.rows < 1) return undefined
+  return { cols: size.cols, rows: size.rows }
+}
+
+/**
+ * How long a fitted size must hold before the process is told (S77).
+ *
+ * A cell passes through sizes that are not its own while the grid lays out:
+ * restored panes all mount at once, and a pane can measure a few dozen pixels
+ * wide for a frame. Every fit used to go straight to the pty, and a program that
+ * prints once and never reflows, like Claude Code replaying a `--resume`, wrote
+ * its history at that width: one word per line, «sked / or / that». The
+ * terminal still fits at once; only the process waits for the size to settle.
+ */
+export const SETTLE_MS = 80
+
+/** Calls `send` with the last size pushed, once none has come for `wait` ms, and never twice with the same one. */
+export function createSizeSettler(
+  send: (cols: number, rows: number) => void,
+  wait = SETTLE_MS,
+): { push: (cols: number, rows: number) => void; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let sent: string | undefined
+  return {
+    push(cols, rows) {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        if (sent === `${cols}x${rows}`) return
+        sent = `${cols}x${rows}`
+        send(cols, rows)
+      }, wait)
+    },
+    cancel() {
+      if (timer) clearTimeout(timer)
+      timer = undefined
+    },
+  }
+}
+
+/**
  * How to get an emulator into the pane that is asking for it.
  *
  * `open()` builds xterm's DOM the first time and does nothing at all on any
@@ -511,6 +571,12 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
       })
     : undefined
 
+  // The process hears only a size that has held still: see `SETTLE_MS`.
+  const settler = createSizeSettler((cols, rows) => {
+    session.settled = { cols, rows }
+    options.onResize?.(cols, rows)
+  })
+
   const applyFit = () => {
     // A pane can be zero-sized for a frame — collapsed, or mid-layout — and
     // fitting against that throws inside xterm's renderer.
@@ -520,7 +586,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     } catch {
       return
     }
-    options.onResize?.(session.terminal.cols, session.terminal.rows)
+    settler.push(session.terminal.cols, session.terminal.rows)
   }
 
   const observer = new ResizeObserver(() => applyFit())
@@ -529,6 +595,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
 
   const detach = () => {
     observer.disconnect()
+    settler.cancel()
     inputHandler?.dispose()
     stopCopy?.()
     stopLinks?.()
