@@ -1382,6 +1382,14 @@ html[data-ade-recording] [data-secrets] * {
   visibility: hidden !important;
   color: transparent !important;
 }
+/*
+ * What a colour cannot hide: an image, a video, a canvas or an SVG draws its
+ * own pixels. Blurred as well, so a viewer stays covered even where something
+ * makes it visible again (audit 0.7.7, R2).
+ */
+html[data-ade-recording] [data-sensitive] :is(img, video, canvas, svg) {
+  filter: blur(0.8em);
+}
 
 /*
  * The terminal during a take (D68): every row blurred, unless the reader in

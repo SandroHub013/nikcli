@@ -1,8 +1,43 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { fileIsSensitive } from "./sensitive-file"
+import { createRoot, createSignal } from "solid-js"
+import { changedLinesAreSensitive, createFileCover, fileIsSensitive, whenToJudge, type CoverState } from "./sensitive-file"
 import { RECORDING_ATTRIBUTE } from "../record/sensitive"
+
+/** A selector list split on its own commas, not on those inside `:is(...)`. */
+function splitSelectors(header: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let from = 0
+  for (let i = 0; i < header.length; i++) {
+    if (header[i] === "(") depth++
+    else if (header[i] === ")") depth--
+    else if (header[i] === "," && depth === 0) {
+      parts.push(header.slice(from, i))
+      from = i + 1
+    }
+  }
+  parts.push(header.slice(from))
+  return parts.map((part) => part.trim())
+}
+
+/** The rules of index.css under a marked pane during a take, one per selector, with their declarations. */
+function sensitiveRules(): { selector: string; body: string }[] {
+  const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
+  return css.split("}").flatMap((block) => {
+    const open = block.indexOf("{")
+    if (open === -1) return []
+    const comment = block.lastIndexOf("*/", open)
+    const header = block.slice(comment === -1 ? 0 : comment + 2, open)
+    const body = block.slice(open + 1)
+    return splitSelectors(header)
+      .filter((selector) => selector.startsWith(`html[${RECORDING_ATTRIBUTE}] [data-sensitive]`))
+      .map((selector) => ({ selector, body }))
+  })
+}
+
+const at = (path: string, text: string | undefined, covering = true): CoverState => ({ path, text, covering })
 
 // Fake values only: none of these is, or was ever, a real credential.
 describe("fileIsSensitive", () => {
@@ -29,13 +64,9 @@ describe("fileIsSensitive", () => {
 
 describe("the pane's cover", () => {
   test("net 1 of index.css covers a pane marked data-sensitive, and what it draws", () => {
-    const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
-    const selectors = css
-      .split("}")
-      .map((block) => block.slice(block.includes("*/") ? block.lastIndexOf("*/") + 2 : 0, block.indexOf("{")))
-      .flatMap((header) => header.split(","))
-      .map((selector) => selector.trim())
-      .filter((selector) => selector.startsWith(`html[${RECORDING_ATTRIBUTE}] [data-sensitive]`) && !selector.includes("::"))
+    const selectors = sensitiveRules()
+      .map((rule) => rule.selector)
+      .filter((selector) => !selector.includes("::"))
     expect(selectors).toContain(`html[${RECORDING_ATTRIBUTE}] [data-sensitive]`)
 
     const view = '<textarea></textarea><div data-slot="file-markdown"><p>x</p></div>'
@@ -55,5 +86,68 @@ describe("the pane's cover", () => {
 
     document.documentElement.removeAttribute(RECORDING_ATTRIBUTE)
     document.body.innerHTML = ""
+  })
+})
+
+describe("when the pane is judged (audit 0.7.7, R2)", () => {
+  test("at once when the text arrives, the path changes or the take begins", () => {
+    expect(whenToJudge(at("config.ts", undefined), at("config.ts", 'DB_PASS="hunter2hunter2"'))).toBe("now")
+    expect(whenToJudge(at("a.ts", "x = 1"), at("b.ts", "x = 1"))).toBe("now")
+    expect(whenToJudge(at("config.ts", "x = 1", false), at("config.ts", "x = 1"))).toBe("now")
+    expect(whenToJudge(undefined, at("config.ts", "x = 1"))).toBe("now")
+  })
+
+  test("throttled only while a text already shown is typed into, and never outside a take", () => {
+    expect(whenToJudge(at("config.ts", "x = 1"), at("config.ts", "x = 12"))).toBe("throttle")
+    expect(whenToJudge(at("config.ts", "x = 1"), at("config.ts", "x = 1", false))).toBe("off")
+  })
+
+  test("a pane whose text arrives with DB_PASS= is covered in the same tick, with no timer", () => {
+    const [state, setState] = createSignal(at("src/config.ts", undefined))
+    let sensitive!: () => boolean
+    const dispose = createRoot((dispose) => {
+      sensitive = createFileCover(state)
+      return dispose
+    })
+    // Clean by its name while it loads.
+    expect(sensitive()).toBe(false)
+    setState(at("src/config.ts", 'export const port = 3000\nconst DB_PASS="hunter2hunter2"\n'))
+    expect(sensitive()).toBe(true)
+    dispose()
+  })
+
+  test("a secret pasted into a clean file is covered at once, inside the throttle", () => {
+    const [state, setState] = createSignal(at("src/app.ts", "export const port = 3000\n"))
+    let sensitive!: () => boolean
+    const dispose = createRoot((dispose) => {
+      sensitive = createFileCover(state)
+      return dispose
+    })
+    expect(sensitive()).toBe(false)
+    // Judged whole a moment ago: the whole-file read now waits for the throttle.
+    setState(at("src/app.ts", "export const port = 3000\nconst x = 1\n"))
+    expect(sensitive()).toBe(false)
+    setState(at("src/app.ts", 'export const port = 3000\nconst DB_PASS="hunter2hunter2"\nconst x = 1\n'))
+    expect(sensitive()).toBe(true)
+    dispose()
+  })
+
+  test("only the changed lines are read while typing", () => {
+    const clean = "export const port = 3000\n"
+    expect(changedLinesAreSensitive(clean, clean + 'const DB_PASS="hunter2hunter2"\n')).toBe(true)
+    expect(changedLinesAreSensitive(clean, 'const DB_PASS="hunter2hunter2"\n' + clean)).toBe(true)
+    // A secret typed one character at a time is caught on its own line.
+    expect(changedLinesAreSensitive('const DB_PASS="hunter2hunter', 'const DB_PASS="hunter2hunter2"')).toBe(true)
+    expect(changedLinesAreSensitive(clean, clean + "const x = 1\n")).toBe(false)
+    // A line left as it was is not read again: the whole-file read covers it.
+    expect(changedLinesAreSensitive('DB_PASS="hunter2hunter2"\nx = 1', 'DB_PASS="hunter2hunter2"\nx = 12')).toBe(false)
+  })
+})
+
+describe("the viewers under a covered pane", () => {
+  test("an image, a video, a canvas or an SVG is blurred: a colour does not hide its pixels", () => {
+    const rule = sensitiveRules().find((rule) => rule.selector === `html[${RECORDING_ATTRIBUTE}] [data-sensitive] :is(img, video, canvas, svg)`)
+    expect(rule).toBeDefined()
+    expect(rule!.body).toMatch(/filter:\s*blur\(0\.8em\)/)
   })
 })

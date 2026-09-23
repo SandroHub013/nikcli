@@ -1,14 +1,11 @@
-import { Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Show, createSignal } from "solid-js"
 import type { Buffer } from "./buffer"
 import { FileView } from "./file-view"
 import { viewKind } from "../surface/open-route"
 import "./file-pane.css"
 import { t } from "../i18n"
 import { coveringSecrets } from "../record/sensitive"
-import { fileIsSensitive } from "./sensitive-file"
-
-/** How often, at most, a file being typed into is read again during a take. */
-const JUDGE_EVERY_MS = 300
+import { createFileCover } from "./sensitive-file"
 
 export interface FilePaneProps {
   path: string
@@ -57,32 +54,14 @@ export function FilePane(props: FilePaneProps) {
 
   /*
    * During a take the whole view is covered when the file holds a secret: see
-   * `sensitive-file.ts`. Read again at most every `JUDGE_EVERY_MS` while it is
-   * typed into, so a large file does not slow the keyboard; outside a take it
-   * is not read at all.
+   * `sensitive-file.ts`. Judged at once when the text arrives, the path changes
+   * or the take begins; only typing into a text already shown is throttled.
    */
-  const [sensitive, setSensitive] = createSignal(false)
-  let judgedAt = 0
-  let pending: ReturnType<typeof setTimeout> | undefined
-  const judge = () => {
-    pending = undefined
-    judgedAt = Date.now()
-    setSensitive(fileIsSensitive(props.path, props.buffer?.draft))
-  }
-  createEffect(() => {
-    if (!coveringSecrets()) {
-      clearTimeout(pending)
-      pending = undefined
-      return setSensitive(false)
-    }
-    void props.path
-    void props.buffer?.draft
-    if (pending) return
-    const wait = judgedAt + JUDGE_EVERY_MS - Date.now()
-    if (wait <= 0) judge()
-    else pending = setTimeout(judge, wait)
-  })
-  onCleanup(() => clearTimeout(pending))
+  const sensitive = createFileCover(() => ({
+    path: props.path,
+    text: props.buffer?.draft,
+    covering: coveringSecrets(),
+  }))
 
   return (
     <article
