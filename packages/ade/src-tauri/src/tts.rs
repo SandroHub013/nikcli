@@ -262,11 +262,14 @@ pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> R
 }
 
 /// Ends the resident process, freeing its memory until the next sentence.
+/// Async and non-blocking: uses `try_lock` so an in-flight synthesis is never blocked,
+/// and the main window never freezes. If busy, a sentence is active and silence will stop it later.
 #[tauri::command]
-pub fn tts_piper_stop(state: tauri::State<'_, Piper>) {
-    if let Ok(mut guard) = state.resident.lock() {
+pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<(), String> {
+    if let Ok(mut guard) = state.resident.try_lock() {
         *guard = None;
     }
+    Ok(())
 }
 
 fn start(root: &Path, voice_id: &str) -> Result<Resident, String> {

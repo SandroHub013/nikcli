@@ -3824,6 +3824,7 @@ export function Workbench() {
 
   const downloadNaturalVoice = async () => {
     setVoiceDownloading(true)
+    speaker.prepare()
     const v = activePiperVoice()
     if (v === "system") {
       setVoiceInstalled(true)
@@ -3864,14 +3865,14 @@ export function Workbench() {
     void checkVoiceInstalled()
   }
 
-  // S15: the moment the microphone wakes, check if the voice is installed.
-  // C4: piper.exe is not started until there is an actual sentence to speak.
+  // S15: the moment the microphone wakes, load the reply voice so the first answer is not the slow one.
   createEffect(
     on(
       () => voiceEngine.isRunning(),
       (running) => {
         if (running) {
           preloadNaturalVoice()
+          if (voiceSettings().speakReplies !== false) speaker.prepare()
         }
       },
       { defer: true },
