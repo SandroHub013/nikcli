@@ -431,5 +431,3 @@ describe("a take on the browser pane (D78)", () => {
     document.body.innerHTML = ""
   })
 })
-
-

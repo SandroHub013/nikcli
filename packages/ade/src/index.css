@@ -1451,7 +1451,7 @@ html[data-ade-recording] [data-slot="browser-record-veil"] {
   pointer-events: all;
 }
 
-/* In glass --ade-bg is transparent, and the veil must remain opaque (in glass --ade-bg e transparent, e il velo deve restare opaco). */
+/* In glass --ade-bg is transparent, and the veil must stay opaque. */
 html[data-ade-recording][data-theme="glass"] [data-slot="browser-record-veil"],
 html[data-ade-recording] [data-theme="glass"] [data-slot="browser-record-veil"] {
   background: #131111;
