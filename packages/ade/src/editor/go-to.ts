@@ -11,6 +11,14 @@ export interface GoTo {
  * Typing changes the text, and the text must not bring the cursor back to the
  * link's line: that wrote «xyz» as «zyx» at the start of the line.
  */
+/**
+ * Whether a file that is both picture and text shows its text: a new goTo
+ * means the text, also on a pane already open on the preview.
+ */
+export function showTextFor(asText: boolean, target: GoTo | undefined, seen: GoTo | undefined): boolean {
+  return asText || goToDue(target, seen, true)
+}
+
 export function goToDue(target: GoTo | undefined, done: GoTo | undefined, ready: boolean): boolean {
   if (!target || !ready) return false
   return target.at !== done?.at || target.line !== done?.line

@@ -1,5 +1,6 @@
-import { Show, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import type { Buffer } from "./buffer"
+import { showTextFor, type GoTo } from "./go-to"
 import { FileView } from "./file-view"
 import { flashRefusal, viewKind } from "../surface/open-route"
 import "./file-pane.css"
@@ -14,7 +15,7 @@ export interface FilePaneProps {
   /** Why the file could not be read as text, shown instead of an empty editor. */
   error?: string
   /** A line to put the cursor on, from a link clicked in a session. */
-  goTo?: { line: number; at: number }
+  goTo?: GoTo
   focused?: boolean
   onChange: (draft: string) => void
   onSave: () => void
@@ -51,6 +52,13 @@ export function FilePane(props: FilePaneProps) {
    */
   const [asText, setAsText] = createSignal(kind() === "markdown" || Boolean(props.goTo))
   const switchable = () => kind() === "svg" || kind() === "markdown"
+  // A link with a line, arriving on a pane already open on the preview.
+  let seen: GoTo | undefined = props.goTo
+  createEffect(() => {
+    const target = props.goTo
+    setAsText((now) => showTextFor(now, target, seen))
+    seen = target
+  })
 
   /*
    * During a take the whole view is covered when the file holds a secret: see
