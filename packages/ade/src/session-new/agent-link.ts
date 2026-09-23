@@ -242,6 +242,8 @@ export interface LinkFollow extends LinkWatch {
    * lines, and nothing else writes a later report.
    */
   readonly linesSent?: () => number
+  /** TEMP (P1-C2 A/B): `[WATCH_MAX_GAP_MS]` checks every two seconds, as before. */
+  readonly gaps?: readonly number[]
 }
 
 /**
@@ -290,7 +292,8 @@ export async function followReports(follow: LinkFollow): Promise<void> {
   let waited = 0
   let lines = follow.linesSent?.()
   while (!follow.cancelled()) {
-    const gap = FOLLOW_GAPS_MS[step]!
+    const gaps = follow.gaps ?? FOLLOW_GAPS_MS
+    const gap = gaps[Math.min(step, gaps.length - 1)]!
     // Short sleeps, and no read until the gap is over: a line sent meanwhile is seen within two seconds.
     const nap = Math.min(WATCH_MAX_GAP_MS, gap - waited)
     await sleep(nap)
@@ -305,7 +308,7 @@ export async function followReports(follow: LinkFollow): Promise<void> {
     const text = await follow.read(follow.nonce)
     const report = text === null ? undefined : parseReport(text)
     if (report === undefined) {
-      step = Math.min(step + 1, FOLLOW_GAPS_MS.length - 1)
+      step = Math.min(step + 1, gaps.length - 1)
       continue
     }
     step = 0

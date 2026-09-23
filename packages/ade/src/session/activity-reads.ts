@@ -16,6 +16,8 @@ export type ActivityReaders = {
   /** One nonce. */
   readOne: (nonce: string) => Promise<string | null>
   now?: () => number
+  /** TEMP (P1-C2 A/B): 0 reads every time, as before. */
+  freshMs?: number
 }
 
 export type ActivityReads = {
@@ -42,7 +44,7 @@ export function createActivityReads(readers: ActivityReaders): ActivityReads {
     },
     async read(nonce) {
       const last = kept.get(nonce)
-      if (last && now() - last.at < ACTIVITY_FRESH_MS) return last.text
+      if (last && now() - last.at < (readers.freshMs ?? ACTIVITY_FRESH_MS)) return last.text
       return keep(nonce, await readers.readOne(nonce))
     },
   }
