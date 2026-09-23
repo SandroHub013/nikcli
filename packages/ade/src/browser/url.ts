@@ -9,6 +9,7 @@
  */
 
 import { MEDIA_SCHEME } from "../video/video"
+import { rowIsClean } from "../terminal/recording-cover"
 
 /**
  * Schemes that must be rejected immediately to prevent script execution,
@@ -184,3 +185,57 @@ export function isAdeOrigin(url: string, hostOrigin: string): boolean {
     return false
   }
 }
+
+/**
+ * What a take may show of an address: origin and path, never credentials, query or fragment (D78).
+ *
+ * Special schemes `about:blank`, `data:` and `blob:` have their scheme and that's it.
+ * If URL parsing fails, returns empty string so the veil shows only its title.
+ * Path is truncated with '…' if longer than ~80 characters.
+ */
+export function addressForTake(raw: string): string {
+  if (!raw) return ""
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol === "about:" || parsed.protocol === "data:" || parsed.protocol === "blob:") {
+      return parsed.protocol
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return ""
+    }
+    let path = parsed.pathname
+    if (path.length > 80) {
+      path = path.slice(0, 80) + "…"
+    }
+    let sanitized = `${parsed.origin}${path}`
+    if (sanitized.includes("@") || sanitized.includes("?") || sanitized.includes("#")) {
+      sanitized = sanitized.replace(/[@?#].*$/, "")
+    }
+    return sanitized
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * Whether the raw address bar text must be covered during a take (D78).
+ *
+ * True when the text contains credentials (`user:pass@`), a query string (`?`),
+ * or fails `rowIsClean` (e.g. pasted secrets like `DB_PASS=`).
+ */
+export function addressNeedsCover(raw: string): boolean {
+  if (!raw) return false
+  if (!rowIsClean(raw)) return true
+  if (raw.includes("?") || raw.includes("@")) return true
+  try {
+    const candidate = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw) ? raw : `http://${raw}`
+    const parsed = new URL(candidate)
+    if (parsed.username.length > 0 || parsed.password.length > 0 || parsed.search.length > 0) {
+      return true
+    }
+  } catch {
+    // If it cannot parse as URL, checks above already judged credentials/query/secrets.
+  }
+  return false
+}
+

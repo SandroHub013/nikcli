@@ -892,3 +892,21 @@
   background: transparent;
   color: var(--ade-text-weak);
 }
+
+[data-slot="browser-record-veil-title"] {
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: 600;
+  color: var(--ade-text);
+}
+
+[data-slot="browser-record-veil-url"] {
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

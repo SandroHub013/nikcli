@@ -51,7 +51,7 @@ import {
   type BrowserHistory,
 } from "./history"
 import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
-import { isAdeOrigin, normalizeUrl } from "./url"
+import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
@@ -783,6 +783,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <input
             type="text"
             data-slot="browser-url-input"
+            data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}
             value={inputUrl()}
             onInput={(e) => setInputUrl(e.currentTarget.value)}
             onKeyDown={(e) => {
@@ -950,6 +951,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
       <div data-slot="browser-body">
         <div ref={viewportContainerRef} data-slot="browser-viewport-container">
+          <div data-slot="browser-record-veil" aria-hidden="true">
+            <span data-slot="browser-record-veil-title">{t("browser.recordVeil.title")}</span>
+            <Show when={addressForTake(url())}>
+              {(addr) => <span data-slot="browser-record-veil-url">{addr()}</span>}
+            </Show>
+          </div>
           {/*
             * One iframe, always mounted.
             *

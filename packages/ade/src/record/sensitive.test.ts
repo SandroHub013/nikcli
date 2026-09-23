@@ -127,8 +127,8 @@ describe("record/sensitive", () => {
       // Drop the comment that sits between the previous rule and this one.
       .map((header) => header.slice(header.includes("*/") ? header.lastIndexOf("*/") + 2 : 0).trim())
       .filter((header) => header.startsWith(prefix))
-      // The blurs of D68 (terminal rows, transcript, screenshots) and of the viewers are not field covers: they have their own tests.
-      .filter((header) => !/\.xterm|pane-transcript|shot-image|:is\(img, video, canvas, svg\)|file-view|video-element/.test(header))
+      // The covers of D68 (terminal rows, transcript, screenshots), R2 (viewers) and D78 (browser veil and frame) are not field covers: they have their own tests.
+      .filter((header) => !/\.xterm|pane-transcript|shot-image|:is\(img, video, canvas, svg\)|file-view|video-element|browser-record-veil|browser-frame/.test(header))
       .map((header) => header.split(new RegExp(",\\r?\\n")).map((line) => line.trim().slice(prefix.length)))
     // The last block covers the children of a zone; it is not a part.
     const extra = ["[data-sensitive] *", `[${SECRET_ZONE_ATTRIBUTE}] *`]

@@ -1426,3 +1426,32 @@ html[data-ade-recording] [data-slot="file-view"]:is([data-kind="image"], [data-k
 html[data-ade-recording] [data-slot="video-element"] {
   filter: blur(0.8em);
 }
+
+/*
+ * The browser pane during a take (D78): an opaque veil covers the whole
+ * viewport so third-party guest pages, logins and dashboards do not end
+ * up in the recording. The frame is hidden as a second net.
+ */
+[data-slot="browser-record-veil"] {
+  display: none;
+}
+
+html[data-ade-recording] [data-slot="browser-record-veil"] {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: var(--ade-bg);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--ade-space-2);
+  padding: 24px;
+  pointer-events: all;
+}
+
+html[data-ade-recording] [data-slot="browser-frame"] {
+  visibility: hidden;
+}
+

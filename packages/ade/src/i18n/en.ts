@@ -457,6 +457,7 @@ export const en: Messages = {
   "browser.mode.edit.tip": "Inspect and edit mode",
   "browser.rotate": "Rotate",
   "browser.preview": "Browser preview",
+  "browser.recordVeil.title": "Page hidden during recording",
   "browser.error.title": "Couldn't load this URL",
   "browser.error.hint": "Make sure the server is running and reachable.",
   "browser.retry": "Try again",
