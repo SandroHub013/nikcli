@@ -153,10 +153,69 @@ fn parse_range(header: &str, length: u64) -> Option<(u64, u64)> {
 
 /// Whether `path` sits inside one of the roots the user has opened.
 fn within(roots: &[PathBuf], path: &Path) -> bool {
-    let Ok(resolved) = path.canonicalize() else {
+    within_with(roots, path, |path| path.canonicalize().ok())
+}
+
+/*
+ * The same, with the resolution handed in so a test can see whether it ran.
+ *
+ * Resolving is not harmless (audit 0.7.7, C2-2). `canonicalize` on
+ * `\\host\x` — which `%5C%5Chost%5Cx` decodes to — opens a connection to
+ * that host: Windows sends the user's NTLM hash to it, and this handler,
+ * which is synchronous, waits for the network. So nothing is resolved until
+ * the text alone says the path is local and inside a root:
+ *
+ * - two separators at the start, in any mix, are UNC or a device path
+ *   (`\\host`, `//host`, `\\?\`, `\\.\`) and are refused outright;
+ * - the path must then begin with one of the roots, compared as text,
+ *   separators unified and case ignored, on a component boundary.
+ *
+ * Only then the resolution, and the check that was here before: `..` and
+ * links can still lead out, and that is what it catches.
+ */
+fn within_with(roots: &[PathBuf], path: &Path, resolve: impl Fn(&Path) -> Option<PathBuf>) -> bool {
+    let text = path.to_string_lossy();
+    let mut start = text.chars();
+    let is_separator = |c: Option<char>| matches!(c, Some('/') | Some('\\'));
+    if is_separator(start.next()) && is_separator(start.next()) {
+        return false;
+    }
+    let wanted = comparable(&text);
+    if !roots.iter().any(|root| begins_with_root(&wanted, &comparable(&root_text(root)))) {
+        return false;
+    }
+    let Some(resolved) = resolve(path) else {
         return false;
     };
     roots.iter().any(|root| resolved.starts_with(root))
+}
+
+/// A root as the user would write it: without the `\\?\` a canonical Windows path carries.
+fn root_text(root: &Path) -> String {
+    let text = root.to_string_lossy();
+    match text.strip_prefix(r"\\?\") {
+        // A share, `\\?\UNC\host\x`: its paths are refused above anyway.
+        Some(rest) if rest.len() >= 4 && rest[..4].eq_ignore_ascii_case(r"UNC\") => format!(r"\\{}", &rest[4..]),
+        Some(rest) => rest.to_owned(),
+        None => text.into_owned(),
+    }
+}
+
+/// Forward slashes, lower case, no trailing separator: two spellings of one path compare equal.
+fn comparable(text: &str) -> String {
+    let unified = text.replace('\\', "/").to_lowercase();
+    match unified.trim_end_matches('/') {
+        "" => unified,
+        trimmed => trimmed.to_owned(),
+    }
+}
+
+/// Whether `path` is `root` or lies under it, a whole component at a time: `C:/p` is not under `C:/pro`.
+fn begins_with_root(path: &str, root: &str) -> bool {
+    match path.strip_prefix(root) {
+        Some(rest) => rest.is_empty() || rest.starts_with('/') || root.ends_with('/'),
+        None => false,
+    }
 }
 
 /*
@@ -503,6 +562,63 @@ mod tests {
         let response = respond(&roots, &request("ade-media://localhost/C%3A%2FWindows%2Fwin.ini", None), None);
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         assert_hardened(&response);
+    }
+
+    /// A resolver that never touches the disk or the network, and says whether it was asked.
+    fn counting() -> (std::cell::Cell<u32>, impl Fn(&std::cell::Cell<u32>, &Path) -> Option<PathBuf>) {
+        (std::cell::Cell::new(0), |calls: &std::cell::Cell<u32>, path: &Path| {
+            calls.set(calls.get() + 1);
+            Some(path.to_path_buf())
+        })
+    }
+
+    #[test]
+    fn a_unc_path_is_refused_before_anything_resolves_it() {
+        let roots = vec![PathBuf::from(r"\\?\C:\Users\me\project")];
+        for raw in [
+            r"%5C%5Chost%5Cx",
+            r"//host/x",
+            r"%2F%2Fhost%2Fshare%2Fx",
+            r"%5C/host/x",
+            r"%5C%5C%3F%5CC:%5CUsers%5Cme%5Cproject%5Ca.png",
+            r"%5C%5C.%5Cpipe%5Cx",
+        ] {
+            let (calls, resolve) = counting();
+            let path = PathBuf::from(urldecode(raw));
+            assert!(!within_with(&roots, &path, |p| resolve(&calls, p)), "{raw} was let through");
+            assert_eq!(calls.get(), 0, "{raw} was resolved");
+        }
+    }
+
+    #[test]
+    fn a_unc_path_in_a_request_is_a_403() {
+        let (dir, _) = fixture(b"x");
+        let roots = vec![dir.path().canonicalize().unwrap()];
+        for uri in ["ade-media://localhost/%5C%5Chost%5Cx", "ade-media://localhost///host/x"] {
+            let response = respond(&roots, &request(uri, None), None);
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{uri}");
+        }
+    }
+
+    // Windows spellings: on unix a backslash is part of a name, not a separator.
+    #[cfg(windows)]
+    #[test]
+    fn only_a_path_that_begins_with_a_root_is_resolved() {
+        let roots = vec![PathBuf::from(r"\\?\C:\Users\me\project")];
+        let (calls, resolve) = counting();
+        // Another folder, and one that only shares the root's first letters.
+        for raw in [r"C:/Windows/win.ini", r"C:/Users/me/projector/a.png", r"relative/a.png"] {
+            assert!(!within_with(&roots, Path::new(raw), |p| resolve(&calls, p)), "{raw}");
+        }
+        assert_eq!(calls.get(), 0);
+        // Inside, in either spelling and any case: resolved, then checked as before.
+        for raw in [r"C:/Users/me/project/a.png", r"c:\users\ME\Project\a.png", r"C:/Users/me/project"] {
+            let resolve_to_root = |_: &Path| Some(PathBuf::from(r"\\?\C:\Users\me\project\a.png"));
+            assert!(within_with(&roots, Path::new(raw), resolve_to_root), "{raw}");
+        }
+        // Inside as text, outside once `..` is resolved: the old check still refuses it.
+        let climbs = |_: &Path| Some(PathBuf::from(r"\\?\C:\Windows\win.ini"));
+        assert!(!within_with(&roots, Path::new(r"C:/Users/me/project/../../../Windows/win.ini"), climbs));
     }
 
     #[test]
