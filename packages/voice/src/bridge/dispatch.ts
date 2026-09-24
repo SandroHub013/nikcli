@@ -320,13 +320,30 @@ export async function dispatch(
       }
 
       case "prompt.send": {
+        /*
+         * Rilievo 23: without text the dispatcher pressed Enter with the
+         * word «continua», and with no named or focused panel it picked the
+         * first open one. Now: no text means nothing is sent, and an unclear
+         * target is asked for — same rule as a destructive action, because
+         * submitting to the wrong agent is not a harmless mistake.
+         */
+        const rawText = typeof slots.text === "string" ? slots.text.trim() : ""
+        if (!rawText) {
+          return {
+            success: false,
+            spoken:
+              lang === "en"
+                ? "No text to send: tell me what to write."
+                : "Nessun testo da inviare: dimmi cosa scrivere.",
+            error: "missing_text",
+          }
+        }
         const panes = host.listPanes()
-        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, isDestructive, lang)
+        const resolved = resolveTargetPane(slots, panes, ctx.focusedPaneId, true, lang)
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        const text = slots.text || (lang === "en" ? "continue" : "continua")
-        await host.sendPrompt(resolved.pane!.id, text)
+        await host.sendPrompt(resolved.pane!.id, rawText)
         return {
           success: true,
           spoken:

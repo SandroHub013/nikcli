@@ -48,6 +48,11 @@ const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "pro
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
+ *
+ * Rilievo 23: without a clear target the text went to the first open pane —
+ * with six sessions in a grid, the top-left one, almost never the one the
+ * person was looking at — and in auto mode Enter was pressed there. A clear
+ * target is the focused pane, or the only pane open. Anything else asks.
  */
 export function dispatchTranscription(
   text: string,
@@ -58,7 +63,8 @@ export function dispatchTranscription(
   return Effect.tryPromise({
     try: async () => {
       const panes = host.listPanes()
-      const targetPane = focusedPaneId ? (panes.find((p) => p.id === focusedPaneId)?.id ?? panes[0]?.id) : panes[0]?.id
+      const focused = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : undefined
+      const clearTarget = focused ?? (panes.length === 1 ? panes[0] : undefined)
 
       /*
        * Said, not skipped. With no pane open this used to return quietly: the
@@ -66,14 +72,17 @@ export function dispatchTranscription(
        * screen said so — dictation looked broken to someone who had simply
        * not opened a session yet.
        */
-      if (!targetPane) {
+      if (panes.length === 0) {
         throw new Error("Nessun pannello aperto: il testo dettato è negli appunti.")
+      }
+      if (!clearTarget) {
+        throw new Error("Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.")
       }
 
       if (sendMode === "auto") {
-        await host.sendPrompt(targetPane, text)
+        await host.sendPrompt(clearTarget.id, text)
       } else {
-        await host.insertText(targetPane, text)
+        await host.insertText(clearTarget.id, text)
       }
     },
     catch: (err) =>

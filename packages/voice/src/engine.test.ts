@@ -112,6 +112,7 @@ describe("engine/createVoiceEngine", () => {
       host,
       transcriber,
       speaker,
+      getContext: () => ({ focusedPaneId: "pane-1" }),
       now: () => currentTime, settings: { activation: "toggle" } })
 
     return {
@@ -1904,7 +1905,7 @@ describe("after 0.7.0: dictation is held on its key", () => {
       return { ok: true, text: "Fatto.", ran: true }
     }
     const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true }, getContext: () => ({ focusedPaneId: "pane-1" }) })
     const settle = () => new Promise((r) => setTimeout(r, 40))
     return { host, asked, transcriber, engine, settle, advance: (ms: number) => (clock += ms) }
   }
