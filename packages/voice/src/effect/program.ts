@@ -818,18 +818,27 @@ export function makeVoiceProgram(
          * user which is the difference between rephrasing and checking the
          * key. Handing it back as unhandled would print the wrong one.
          */
+        /*
+         * Back to idle only from this turn's own `executing`: a question that
+         * arrived meanwhile (a permission, a held message) owns the state now
+         * (V1-ter, ALTO 7).
+         */
         if (planned.failure) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
           yield* say(planned.failure)
           return true
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
           return false
         }
 
@@ -842,30 +851,19 @@ export function makeVoiceProgram(
          * through `execute_plan`; «no» and the timeout drop it. Plans
          * without `send_prompt` still execute immediately below: opening
          * sessions is not the same blast radius as pressing Enter.
+         *
+         * The question goes through the dialogue (V1-ter, ALTO 7): asked now,
+         * or in line behind one that arrived while the planner thought.
          */
         const needsConfirm = planned.steps.some((step) => step.action === "send_prompt")
         if (needsConfirm) {
           if (agentAbort === abort) agentAbort = null
-          const nowMs = yield* getNowMs
-          const timeoutAt = nowMs + DEFAULT_CONFIRMATION_TIMEOUT_MS
-          currentState = {
-            ...currentState,
-            status: "confirming",
-            pendingPlan: {
-              steps: planned.steps,
-              refusals: planned.refusals,
-              ...(planned.speech ? { speech: planned.speech } : {}),
-            },
-            pendingAction: undefined,
-            timeoutAt,
-          }
-          options.onStateChange?.(currentState)
-          yield* startTimer(DEFAULT_CONFIRMATION_TIMEOUT_MS)
-          const texts = planned.steps
-            .filter((step) => step.action === "send_prompt")
-            .map((step) => `«${step.text}» al pannello ${step.paneIndex}`)
-          const list = texts.length === 1 ? texts[0] : texts.join("; ")
-          yield* say(`Prima di premere Invio: ${list}. Va bene? Dimmi sì o no.`)
+          yield* applyDialogEvent({
+            type: "plan_ready",
+            steps: planned.steps,
+            refusals: planned.refusals,
+            ...(planned.speech ? { speech: planned.speech } : {}),
+          })
           return true
         }
 
@@ -873,8 +871,10 @@ export function makeVoiceProgram(
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
 
         yield* sayPlanResult(planned, execution, context.agents)
         return true

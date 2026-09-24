@@ -86,6 +86,8 @@ export interface DialogState {
    * immediately; only the submit step waits.
    */
   pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
+  /** A plan whose question came while another was being asked: asked after it (V1-ter, ALTO 7). */
+  queuedPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
   /**
    * A `send` the voice agent made into another session (rilievo 20), held in
    * confirming until the user says yes out loud. Without this the note reached
@@ -119,6 +121,8 @@ export type DialogEvent =
   | { type: "permission_resolved"; paneId: string }
   /** `lead`: who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent (V1-bis, ALTO 8). */
   | { type: "send_requested"; id: string; to: string; text: string; lead?: string }
+  /** The planner returned a plan that presses Enter: it is asked, or waits behind the question being asked. */
+  | { type: "plan_ready"; steps: PlanStep[]; refusals: string[]; speech?: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
   | { type: "timeout" }
@@ -328,7 +332,42 @@ function promoteQueuedSend(
   return withSpokenLocal(nextState, sendConfirmationPrompt(req.to, req.text, req.lead), effects)
 }
 
-/** Permissions first, then a waiting send: every exit path uses this. */
+/** The question a plan with `send_prompt` steps is asked with: it names each text about to be sent. */
+function planConfirmationPrompt(steps: readonly PlanStep[]): string {
+  const texts = steps.flatMap((step) =>
+    step.action === "send_prompt" ? [`«${step.text}» al pannello ${step.paneIndex}`] : [],
+  )
+  return `Prima di premere Invio: ${texts.join("; ")}. Va bene? Dimmi sì o no.`
+}
+
+/** Puts a plan in front of the user: confirming, with its own timer. */
+function askPlan(
+  state: DialogState,
+  plan: { steps: PlanStep[]; refusals: string[]; speech?: string },
+  now: number,
+  effects: DialogEffect[],
+): TransitionResult {
+  effects.push({ type: "cancel_timer" })
+  const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+  effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
+  const nextState: DialogState = {
+    ...state,
+    status: "confirming",
+    timeoutAt,
+    pendingPlan: { steps: plan.steps, refusals: plan.refusals, ...(plan.speech ? { speech: plan.speech } : {}) },
+    pendingAction: undefined,
+  }
+  return withSpokenLocal(nextState, planConfirmationPrompt(plan.steps), effects)
+}
+
+/** A plan that waited behind another question, after permissions and sends. */
+function promoteQueuedPlan(state: DialogState, now: number, effects: DialogEffect[]): TransitionResult | null {
+  const plan = state.queuedPlan
+  if (!plan) return null
+  return askPlan({ ...state, queuedPlan: undefined }, plan, now, effects)
+}
+
+/** Permissions first, then a waiting send, then a waiting plan: every exit path uses this. */
 function promoteQueued(
   state: DialogState,
   now: number,
@@ -337,7 +376,8 @@ function promoteQueued(
 ): TransitionResult | null {
   return (
     promoteQueuedPermission(state, now, ctx, effects) ??
-    promoteQueuedSend(state, now, effects)
+    promoteQueuedSend(state, now, effects) ??
+    promoteQueuedPlan(state, now, effects)
   )
 }
 
@@ -528,6 +568,25 @@ export function transition(
       pendingPlan: undefined,
     }
     return withSpokenLocal(nextState, sendConfirmationPrompt(event.to, event.text, event.lead), effects)
+  }
+
+  /*
+   * The plan's question (V1-ter, ALTO 7). It used to be written straight into
+   * the state by the program, over whatever was being asked: a message held
+   * while the planner thought was covered, the yes to the plan approved it,
+   * and the plan stayed to be run by the yes to the next question. It now
+   * waits in line behind a question, a dictation or sleep, like a send.
+   */
+  if (event.type === "plan_ready") {
+    const plan = { steps: event.steps, refusals: event.refusals, ...(event.speech ? { speech: event.speech } : {}) }
+    if (state.status === "confirming" || state.status === "dictating" || state.status === "asleep") {
+      return withSpokenLocal(
+        { ...state, queuedPlan: state.queuedPlan ?? plan },
+        "Ho messo in coda il piano. Te lo chiedo appena posso.",
+        effects,
+      )
+    }
+    return askPlan(state, plan, now, effects)
   }
 
   // 2. State: ASLEEP
