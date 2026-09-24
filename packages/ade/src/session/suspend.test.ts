@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   canSuspend,
   closeSuspendedTree,
+  keptWithoutProcess,
   offersSuspend,
   parseSuspendedMail,
   showsSuspendButton,
@@ -161,5 +162,25 @@ describe("the Sospendi button", () => {
     expect(showsSuspendButton(undefined)).toBe(false)
     expect(showsSuspendButton({ ok: true })).toBe(true)
     expect(showsSuspendButton({ ok: false, reason: "working" })).toBe(true)
+  })
+})
+
+describe("the queue after Riprendi (Fabio, BASSO 2)", () => {
+  test("still saved until typed: ADE closing right after Riprendi loses nothing", () => {
+    const held = [{ paneId: "a", text: "uno", inbox: { id: "1", kind: "send" as const, from: "m" }, suspended: true as const }]
+    // The pane is no longer suspended, but its mail is not typed yet.
+    const saved = suspendedMailToSave(held, (id) => id === "a")
+    expect(parseSuspendedMail(JSON.stringify(saved))).toEqual(held)
+    // Its pane closed: nobody left to read it.
+    expect(suspendedMailToSave(held, () => false)).toEqual([])
+  })
+
+  test("kept while the resumed session has no process yet, dropped once its pane is gone", () => {
+    const queued = { suspended: true as const }
+    expect(keptWithoutProcess(queued, { exists: true, suspended: false })).toBe(true)
+    expect(keptWithoutProcess(queued, { exists: false, suspended: false })).toBe(false)
+    expect(keptWithoutProcess({}, { exists: true, suspended: true })).toBe(true)
+    // Other held lines for a session without process go, as before.
+    expect(keptWithoutProcess({}, { exists: true, suspended: false })).toBe(false)
   })
 })

@@ -263,6 +263,7 @@ import {
   parseSuspendedMail,
   suspendedDelivery,
   suspendedMailToSave,
+  keptWithoutProcess,
   SUSPEND_REASON,
   type SuspendCheck,
   type SuspendContext,
@@ -1971,7 +1972,8 @@ export function Workbench() {
 
   /* The mail queued for suspended sessions (P1-C6), read back once the panes are restored. */
   const SUSPENDED_MAIL_KEY = "ade.mailbox.suspended"
-  const saveSuspendedMail = () => writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, isSuspendedPane)))
+  const paneExists = (paneId: string) => wb().panes.some((pane) => pane.id === paneId)
+  const saveSuspendedMail = () => writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, paneExists)))
 
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
@@ -2459,12 +2461,13 @@ export function Workbench() {
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
       if (!session) {
-        // A suspended session keeps its mail until the user resumes it.
-        if (isSuspendedPane(item.paneId)) continue
+        // A suspended session keeps its mail until the user resumes it, and until it is typed.
+        if (keptWithoutProcess(item, { exists: paneExists(item.paneId), suspended: isSuspendedPane(item.paneId) })) continue
         heldLines.splice(heldLines.indexOf(item), 1)
         if (item.suspended) saveSuspendedMail()
       } else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (item.inbox
           ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => {
@@ -2478,7 +2481,9 @@ export function Workbench() {
             })
           : typeLineOutcome(session, item.text).then((outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held")
         ).then((again) => {
-          if (again) heldLines.push(item)
+          if (!again) return
+          heldLines.push(item)
+          if (item.suspended) saveSuspendedMail()
         })
       } else if (!item.told && item.inbox?.from && item.inbox.from !== item.paneId && isTyping(records.typed.get(item.paneId))) {
         // Replies and updates too, not only what went to the inbox: the
@@ -4340,7 +4345,8 @@ export function Workbench() {
         restored = state
         setWb(fromWorkspaceState(state))
         // The suspended sessions' queues, now that their panes are back (P1-C6).
-        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => isSuspendedPane(line.paneId)))
+        // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
+        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
       }
     }
 
