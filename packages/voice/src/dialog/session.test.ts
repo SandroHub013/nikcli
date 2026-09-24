@@ -425,6 +425,195 @@ describe("dialog state machine", () => {
     })
   })
 
+  describe("permission request while the dialog is busy (rilievo 3)", () => {
+    test("during confirming: queues without replacing the pending action, then promotes after the answer", () => {
+      // User asked to close pane 2; confirmation is in flight.
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello 2" },
+        10_000
+      )
+      expect(confirming.status).toBe("confirming")
+      expect(confirming.pendingAction?.intent.intent).toBe("pane.close")
+
+      // A permission arrives mid-confirmation: must queue, not replace.
+      const { state: s1, effects: e1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "rm -rf build" },
+        11_000
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("pane.close")
+      expect(s1.queuedPermission).toEqual({
+        paneId: "agent-3",
+        what: "rm -rf build",
+        silent: undefined,
+      })
+      expect(
+        e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+      ).toBe(true)
+      expect(e1.some((e) => e.type === "answer_permission")).toBe(false)
+
+      // User confirms the close: executes, does NOT answer the permission yet.
+      const { state: s2, effects: e2 } = transition(s1, { type: "utterance", text: "sì" }, 12_000)
+      expect(s2.status).toBe("executing")
+      expect(e2.some((e) => e.type === "execute_intent" && e.intent.intent === "pane.close")).toBe(true)
+      expect(e2.some((e) => e.type === "answer_permission")).toBe(false)
+      expect(s2.queuedPermission?.paneId).toBe("agent-3")
+
+      // Execution finishes: the queued permission is promoted to confirming.
+      const { state: s3, effects: e3 } = transition(s2, { type: "command_success" }, 13_000)
+      expect(s3.status).toBe("confirming")
+      expect(s3.pendingAction?.isPermission).toBe(true)
+      expect(s3.pendingAction?.paneId).toBe("agent-3")
+      expect(s3.queuedPermission).toBeUndefined()
+      expect(
+        e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+      ).toBe(true)
+      expect(e3.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("during confirming: a denied confirmation still promotes the queued permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello 2" },
+        10_000
+      )
+      const { state: s1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "curl evil.test" },
+        11_000
+      )
+      expect(s1.queuedPermission).toBeDefined()
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "no" }, 12_000)
+      expect(s2.status).toBe("confirming")
+      expect(s2.pendingAction?.isPermission).toBe(true)
+      expect(s2.pendingAction?.paneId).toBe("agent-3")
+      expect(s2.queuedPermission).toBeUndefined()
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("curl evil.test"))).toBe(true)
+    })
+
+    test("during dictating: queues, keeps the buffer, promotes when dictation finishes", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: dictating } = transition(
+        s0,
+        { type: "utterance", text: "inizia dettatura pannello 1" },
+        1000
+      )
+      const { state: s1 } = transition(
+        dictating,
+        { type: "utterance", text: "crea un test" },
+        2000
+      )
+
+      const { state: s2, effects: e2 } = transition(
+        s1,
+        { type: "permission_requested", paneId: "agent-9", what: "npm publish" },
+        3000
+      )
+      expect(s2.status).toBe("dictating")
+      expect(s2.dictation?.chunks).toEqual(["crea un test"])
+      expect(s2.queuedPermission?.paneId).toBe("agent-9")
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(true)
+      // The dictation must not be sent or dropped by the permission.
+      expect(e2.some((e) => e.type === "send_prompt")).toBe(false)
+
+      const { state: s3, effects: e3 } = transition(
+        s2,
+        { type: "utterance", text: "fine dettatura" },
+        4000
+      )
+      expect(e3.some((e) => e.type === "send_prompt" && e.text === "crea un test")).toBe(true)
+      expect(s3.status).toBe("confirming")
+      expect(s3.dictation).toBeUndefined()
+      expect(s3.pendingAction?.isPermission).toBe(true)
+      expect(s3.pendingAction?.paneId).toBe("agent-9")
+      expect(s3.queuedPermission).toBeUndefined()
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(true)
+    })
+
+    test("during asleep: announces, stays asleep, promotes on wake", () => {
+      const s0 = createInitialDialogState("asleep")
+      const { state: s1, effects: e1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "sudo apt install" },
+        5000
+      )
+
+      // Stays asleep: room noise must not open a 30 s granting window.
+      expect(s1.status).toBe("asleep")
+      expect(s1.pendingAction).toBeUndefined()
+      expect(s1.queuedPermission?.paneId).toBe("agent-1")
+      expect(
+        e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))
+      ).toBe(true)
+
+      const { state: s2, effects: e2 } = transition(s1, { type: "wake" }, 6000)
+      expect(s2.status).toBe("confirming")
+      expect(s2.pendingAction?.isPermission).toBe(true)
+      expect(s2.pendingAction?.paneId).toBe("agent-1")
+      expect(s2.queuedPermission).toBeUndefined()
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(true)
+      expect(e2.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("silent permission during confirming queues without speaking", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello 2" },
+        10_000
+      )
+      const { state: s1, effects: e1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-3", what: "git push --force", silent: true },
+        11_000
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("pane.close")
+      expect(s1.queuedPermission?.paneId).toBe("agent-3")
+      expect(s1.queuedPermission?.silent).toBe(true)
+      expect(e1.some((e) => e.type === "speak")).toBe(false)
+    })
+
+    test("a second permission while one is already queued keeps the first", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: confirming } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello 2" },
+        10_000
+      )
+      const { state: s1 } = transition(
+        confirming,
+        { type: "permission_requested", paneId: "agent-a", what: "first tool" },
+        11_000
+      )
+      const { state: s2 } = transition(
+        s1,
+        { type: "permission_requested", paneId: "agent-b", what: "second tool" },
+        11_500
+      )
+      expect(s2.queuedPermission?.paneId).toBe("agent-a")
+      expect(s2.pendingAction?.intent.intent).toBe("pane.close")
+    })
+
+    test("idle permission still takes the floor immediately (not queued)", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        5000
+      )
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.isPermission).toBe(true)
+      expect(s1.queuedPermission).toBeUndefined()
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(true)
+    })
+  })
+
   describe("repeat last spoken", () => {
     test("repeats the last message spoken by the system", () => {
       const s0 = createInitialDialogState("idle")
