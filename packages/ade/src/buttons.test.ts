@@ -116,6 +116,28 @@ describe("every sheet", () => {
     expect(ext.text).toMatch(/\[data-slot="ext-search"\]:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
     expect(keys.text).toMatch(/\[data-slot="keys-field"\]\s*input:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
   })
+
+  test("uses --ade-radius-full instead of 999px, token radii instead of 6px, and tokens for B2 spacings (polish B2)", () => {
+    for (const { path, text } of CSS) {
+      const lines = text.split("\n")
+      const raw999 = lines.filter((l) => /border(-[a-z]+)*-radius:\s*999px\b/.test(l))
+      const raw6px = lines.filter((l) => /border(-[a-z]+)*-radius:\s*6px\b/.test(l))
+      expect({ path, raw999 }).toEqual({ path, raw999: [] })
+      expect({ path, raw6px }).toEqual({ path, raw6px: [] })
+    }
+
+    const decisions = CSS.find((sheet) => sheet.path.endsWith("decisions.css"))!
+    expect(decisions.text).not.toContain("7px 9px")
+    expect(decisions.text).not.toContain("7px 10px")
+
+    const sidebar = CSS.find((sheet) => sheet.path.endsWith("sidebar.css"))!
+    expect(sidebar.text).not.toContain("5px 10px")
+    expect(sidebar.text).not.toContain("7px 11px")
+    expect(sidebar.text).not.toMatch(/gap:\s*7px\b/)
+
+    const pane = CSS.find((sheet) => sheet.path.endsWith("pane.css"))!
+    expect(pane.text).not.toContain("padding: 0 8px 0 5px")
+  })
 })
 
 describe("the button scale", () => {

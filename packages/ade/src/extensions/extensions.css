@@ -166,8 +166,8 @@
 
 [data-slot="ext-badge"] {
   flex: 0 0 auto;
-  padding: 1px 7px;
-  border-radius: 999px;
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
   background: var(--ade-hover);
   color: var(--ade-text-weak);
   font-size: 10px;

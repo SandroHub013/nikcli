@@ -698,8 +698,8 @@ body,
 [data-slot="drop-zone"][data-zone="below"] { clip-path: polygon(0 100%, 100% 100%, 70% 70%, 30% 70%); align-items: flex-end; padding-bottom: 6%; }
 
 [data-slot="drop-zone-label"] {
-  padding: 4px 10px;
-  border-radius: 999px;
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-full);
   font-size: 12px;
   font-weight: var(--ade-weight-semibold);
   color: var(--ade-accent-fg);
@@ -1173,9 +1173,9 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: var(--ade-space-2) var(--ade-space-5);
   border: 1px solid color-mix(in oklab, red 45%, var(--ade-border));
-  border-radius: 999px;
+  border-radius: var(--ade-radius-full);
   background: color-mix(in oklab, red 12%, var(--ade-surface));
   color: var(--ade-text);
   font: inherit;

@@ -142,7 +142,7 @@
 [data-slot="provider-badge"] {
   padding: 1px var(--ade-space-3);
   border: 1px solid var(--ade-border);
-  border-radius: 999px;
+  border-radius: var(--ade-radius-full);
   color: var(--ade-text-weak);
   font-size: var(--ade-font-xs);
 }

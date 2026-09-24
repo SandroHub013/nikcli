@@ -16,7 +16,7 @@
   margin-left: var(--ade-space-2);
   padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-working);
-  border-radius: 999px;
+  border-radius: var(--ade-radius-full);
   background: var(--ade-working-bg);
   color: var(--ade-working);
   font: inherit;
@@ -204,7 +204,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 7px 9px;
+  padding: var(--ade-space-3) var(--ade-space-4);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-surface);
@@ -362,8 +362,8 @@
 [data-slot="decision-pill"] {
   flex: 0 0 auto;
   margin-left: auto;
-  padding: 1px 7px;
-  border-radius: 999px;
+  padding: 1px var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
   background: var(--ade-working-bg);
   color: var(--ade-working);
   font-size: 10px;
@@ -441,7 +441,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 7px 10px;
+  padding: var(--ade-space-3) var(--ade-space-5);
   border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-raised);
@@ -511,7 +511,7 @@ button[data-slot="decision-row"]:hover {
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
   border: 1px solid var(--ade-border, currentColor);
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
 }
 
 [data-slot="decisions-recipient-warning"],
@@ -561,7 +561,7 @@ button[data-slot="decision-row"]:hover {
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
   border: 1px solid var(--ade-warning, #b7791f);
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   padding: 2px 6px;
 }
 
