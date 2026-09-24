@@ -589,15 +589,22 @@ export async function downloadParakeetModel(
   }
 
   const modelKey = options.modelKey ?? "parakeet-tdt-0.6b-v3"
-  const TOTAL_ESTIMATED_BYTES = 670_488_135
+  const quant = options.quant ?? "int8"
+  const totalEstimatedBytes = quant === "fp16" ? 1_200_000_000 : 670_488_135
   let completedFilesBytes = 0
   let lastFile = ""
 
-  const fileSizes: Record<string, number> = {
-    "encoder-model.int8.onnx": 652_183_999,
-    "decoder_joint-model.int8.onnx": 18_202_004,
-    "vocab.txt": 102_132,
-  }
+  const fileSizes: Record<string, number> = quant === "fp16"
+    ? {
+        "encoder-model.fp16.onnx": 1_180_000_000,
+        "decoder_joint-model.int8.onnx": 18_202_004,
+        "vocab.txt": 102_132,
+      }
+    : {
+        "encoder-model.int8.onnx": 652_183_999,
+        "decoder_joint-model.int8.onnx": 18_202_004,
+        "vocab.txt": 102_132,
+      }
 
   const progressBridge = (p: { loaded: number; total: number; file: string }) => {
     if (lastFile && p.file !== lastFile) {
@@ -606,19 +613,19 @@ export async function downloadParakeetModel(
     lastFile = p.file
 
     const currentTotalLoaded = Math.min(
-      TOTAL_ESTIMATED_BYTES,
+      totalEstimatedBytes,
       completedFilesBytes + (p.loaded || 0)
     )
     const percent = Math.min(
       99,
-      Math.max(1, Math.round((currentTotalLoaded / TOTAL_ESTIMATED_BYTES) * 100))
+      Math.max(1, Math.round((currentTotalLoaded / totalEstimatedBytes) * 100))
     )
     const mbLoaded = (currentTotalLoaded / (1024 * 1024)).toFixed(0)
-    const mbTotal = (TOTAL_ESTIMATED_BYTES / (1024 * 1024)).toFixed(0)
+    const mbTotal = (totalEstimatedBytes / (1024 * 1024)).toFixed(0)
 
     options.onProgress?.({
       loaded: currentTotalLoaded,
-      total: TOTAL_ESTIMATED_BYTES,
+      total: totalEstimatedBytes,
       percent,
       file: p.file,
       message: `Scaricamento ${p.file}: ${percent}% (${mbLoaded} MB di ${mbTotal} MB)...`,
@@ -627,25 +634,31 @@ export async function downloadParakeetModel(
 
   options.onProgress?.({
     loaded: 0,
-    total: TOTAL_ESTIMATED_BYTES,
+    total: totalEstimatedBytes,
     percent: 0,
-    message: "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
+    message: quant === "fp16"
+      ? "Inizio scaricamento del modello Parakeet quantizzato FP16 (~1,2 GB)..."
+      : "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
   })
 
   await getModel(modelKey, {
     backend: "wasm",
-    encoderQuant: options.quant ?? "int8",
+    encoderQuant: quant,
     decoderQuant: "int8",
     preprocessorBackend: "js",
     progress: progressBridge,
   })
 
   options.onProgress?.({
-    loaded: TOTAL_ESTIMATED_BYTES,
-    total: TOTAL_ESTIMATED_BYTES,
+    loaded: totalEstimatedBytes,
+    total: totalEstimatedBytes,
     percent: 100,
     message: "Download completato con successo! Il modello è pronto all'uso.",
   })
 
-  return await inspectModelCache({ repo: options.repo })
+  return await inspectModelCache({
+    repo: options.repo,
+    skipFilesystem: true,
+    requiredFiles: [`encoder-model.${quant}.onnx`, "decoder_joint-model.int8.onnx", "vocab.txt"],
+  })
 }

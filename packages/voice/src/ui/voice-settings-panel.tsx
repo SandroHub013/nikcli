@@ -432,6 +432,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [downloadProgress, setDownloadProgress] = createSignal<DownloadParakeetProgress | null>(null)
   const [downloadError, setDownloadError] = createSignal<string | null>(null)
   const [downloadSuccess, setDownloadSuccess] = createSignal(false)
+  let cacheGeneration = 0
 
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
@@ -444,10 +445,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       "vocab.txt",
     ]
   }
+  const parakeetTotal = (backend: ParakeetExecutionBackend): number =>
+    parakeetFiles(backend)[0]?.includes("fp16") ? 1_200_000_000 : 670_488_135
   const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
+    const generation = ++cacheGeneration
     const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
-    setCached(found)
-    setInspected(true)
+    if (generation === cacheGeneration) {
+      setCached(found)
+      setInspected(true)
+    }
     return found
   }
 
@@ -584,7 +590,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setDownloadSuccess(false)
     setDownloadProgress({
       loaded: 0,
-      total: 670_488_135,
+      total: parakeetTotal(props.settings.parakeetBackend),
       percent: 0,
       message: t("vui.download.starting"),
     })
@@ -681,6 +687,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setApiKeyVisible(false)
     setLanguageFilter("")
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
+    void refreshCache(DEFAULT_VOICE_SETTINGS.parakeetBackend)
   }
 
   // Global keyboard listener for modal Escape and shortcut recording cancellation
