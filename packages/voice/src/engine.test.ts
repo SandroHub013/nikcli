@@ -112,6 +112,7 @@ describe("engine/createVoiceEngine", () => {
       host,
       transcriber,
       speaker,
+      getContext: () => ({ focusedPaneId: "pane-1" }),
       now: () => currentTime, settings: { activation: "toggle" } })
 
     return {
@@ -491,7 +492,7 @@ describe("engine/createVoiceEngine", () => {
   })
 
   test("handles pending permission request with priority", async () => {
-    const { engine, host, transcriber } = setupEngine()
+    const { engine, host, transcriber, advanceTime } = setupEngine()
 
     await engine.start()
 
@@ -501,7 +502,8 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.status()).toBe("confirming")
     expect(engine.dialogState().pendingAction?.isPermission).toBe(true)
 
-    // User grants permission
+    // User grants permission, once the question has been read
+    advanceTime(15_000)
     transcriber.emit("consenti", true)
     await new Promise((r) => setTimeout(r, 10))
 
@@ -1088,6 +1090,26 @@ describe("engine/agent answers what the grammar does not know", () => {
     await engine.stop()
   })
 
+  /*
+   * V1-bis, ALTO 7: the end of the voice agent's turn wrote idle over the
+   * confirmation of the note the agent sent in it. The question was gone,
+   * its timer ignored, and the note stayed pending for a yes to something else.
+   */
+  test("the note the voice agent sent in its turn is still being asked when the turn ends", async () => {
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { activation: "toggle", agentEngine: "auto" } })
+    ;(host as VoiceHost).askAgent = async () => {
+      await engine.requestSendConfirmation("m1", "Alfa", "cancella dist")
+      return { ok: true, text: "Ho chiesto conferma dell'invio.", ran: true }
+    }
+    await engine.start()
+    await engine.submitText("scrivi ad alfa di cancellare dist")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(engine.status()).toBe("confirming")
+    await engine.stop()
+  })
+
   test("with the microphone closed, typed text is still answered: a command and a question", async () => {
     const { asked, engine } = setup("auto", { ok: true, text: "3 per 3 fa 9." })
     await engine.start()
@@ -1116,13 +1138,17 @@ describe("engine/agent answers what the grammar does not know", () => {
         return { ok: true, text: "Fatto.", ran: true }
       }
       const transcriber = createFakeTranscriber()
+      let clock = 10_000
       // No `activation` here: this is the default a new installation gets.
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
       const hear = async (text: string) => {
         transcriber.emit(text, true)
         await new Promise((r) => setTimeout(r, 20))
       }
-      return { host, asked, engine, hear }
+      const advance = (ms: number) => {
+        clock += ms
+      }
+      return { host, asked, engine, hear, advance }
     }
 
     test("a sentence without the name is shown as ignored, and costs nothing", async () => {
@@ -1152,6 +1178,26 @@ describe("engine/agent answers what the grammar does not know", () => {
       await hear("hey nick, raccontami la storia di Roma")
       // What is left after the name, as the recogniser's own normalisation leaves it.
       expect(asked).toEqual(["raccontami la storia di roma"])
+      await engine.stop()
+    })
+
+    /*
+     * V1-bis, ALTO 5: from idle, a permission opened the name gate for its 30
+     * s, and the «va bene» of a television granted it. A question the user did
+     * not start is answered with the name.
+     */
+    test("an agent's permission does not open the gate: the room's «va bene» grants nothing, the name and a yes do", async () => {
+      const { host, engine, hear, advance } = calling()
+      await engine.start("agent", { waitForName: true })
+      await engine.handlePermissionRequest("pane-1", "rm -rf build")
+      expect(engine.status()).toBe("confirming")
+
+      await hear("va bene")
+      expect(host.calls.some((call) => call.method === "answerPermission")).toBe(false)
+
+      advance(15_000)
+      await hear("ehi nik sì")
+      expect(host.calls.find((call) => call.method === "answerPermission")?.args.slice(0, 2)).toEqual(["pane-1", "allow"])
       await engine.stop()
     })
 
@@ -2088,7 +2134,7 @@ describe("after 0.7.0: dictation is held on its key", () => {
       return { ok: true, text: "Fatto.", ran: true }
     }
     const transcriber = createFakeTranscriber()
-    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true } })
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", alwaysListen: true }, getContext: () => ({ focusedPaneId: "pane-1" }) })
     const settle = () => new Promise((r) => setTimeout(r, 40))
     return { host, asked, transcriber, engine, settle, advance: (ms: number) => (clock += ms) }
   }

@@ -20,6 +20,7 @@ import { dispatch, type DispatchOutcome } from "../bridge/dispatch"
 import {
   createInitialDialogState,
   transition,
+  DEFAULT_CONFIRMATION_TIMEOUT_MS,
   type DialogEffect,
   type DialogEvent,
   type DialogState,
@@ -35,7 +36,7 @@ import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
-import { takesWithoutName } from "../dialog/name-gate"
+import { answersWithoutName, takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -47,6 +48,11 @@ const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "pro
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
+ *
+ * Rilievo 23: without a clear target the text went to the first open pane —
+ * with six sessions in a grid, the top-left one, almost never the one the
+ * person was looking at — and in auto mode Enter was pressed there. A clear
+ * target is the focused pane, or the only pane open. Anything else asks.
  */
 export function dispatchTranscription(
   text: string,
@@ -57,7 +63,8 @@ export function dispatchTranscription(
   return Effect.tryPromise({
     try: async () => {
       const panes = host.listPanes()
-      const targetPane = focusedPaneId ? (panes.find((p) => p.id === focusedPaneId)?.id ?? panes[0]?.id) : panes[0]?.id
+      const focused = focusedPaneId ? panes.find((p) => p.id === focusedPaneId) : undefined
+      const clearTarget = focused ?? (panes.length === 1 ? panes[0] : undefined)
 
       /*
        * Said, not skipped. With no pane open this used to return quietly: the
@@ -65,14 +72,17 @@ export function dispatchTranscription(
        * screen said so — dictation looked broken to someone who had simply
        * not opened a session yet.
        */
-      if (!targetPane) {
+      if (panes.length === 0) {
         throw new Error("Nessun pannello aperto: il testo dettato è negli appunti.")
+      }
+      if (!clearTarget) {
+        throw new Error("Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.")
       }
 
       if (sendMode === "auto") {
-        await host.sendPrompt(targetPane, text)
+        await host.sendPrompt(clearTarget.id, text)
       } else {
-        await host.insertText(targetPane, text)
+        await host.insertText(clearTarget.id, text)
       }
     },
     catch: (err) =>
@@ -220,6 +230,14 @@ export interface VoiceProgramOptions {
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
   readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) => Effect.Effect<void>
+  /** A request closed outside the voice (by hand, by a button, with its pane): its question leaves the dialogue. */
+  readonly resolvePermission: (paneId: string) => Effect.Effect<void>
+  /**
+   * Puts a voice-agent `send` in front of the user for a spoken yes (rilievo
+   * 20). The host is already holding the note; the answer comes back as a
+   * `confirm_send` effect on the VoiceHost.
+   */
+  readonly requestSendConfirmation: (id: string, to: string, text: string, lead?: string) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -368,6 +386,7 @@ export function makeVoiceProgram(
         panes,
         pendingPermission: isPendingPerm,
         pendingPermissionPaneId: pendingPermPaneId,
+        ...(host.pendingPermissionWhat ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) } : {}),
         ...extra,
       }
     }
@@ -380,6 +399,26 @@ export function makeVoiceProgram(
     })
 
     yield* Scope.addFinalizer(programScope, cancelActiveTimer)
+
+    /*
+     * A message held for a spoken yes, asked or in line, is refused when the
+     * voice stops (V1-ter, reserve of ALTO 8). The dialogue that held it goes
+     * with this scope, and nothing would ever answer the waiting `ade-msg`.
+     */
+    yield* Scope.addFinalizer(
+      programScope,
+      Effect.sync(() => {
+        const held = [currentState.pendingSend?.id, currentState.queuedSend?.id].filter((id): id is string => !!id)
+        currentState = { ...currentState, pendingSend: undefined, queuedSend: undefined }
+        for (const id of held) {
+          try {
+            host.confirmVoiceSend?.(id, false)
+          } catch {
+            // The host is going away too; the refusal is best effort.
+          }
+        }
+      }),
+    )
 
     function startTimer(durationMs: number): Effect.Effect<void> {
       return Effect.gen(function* () {
@@ -576,7 +615,7 @@ export function makeVoiceProgram(
 
             case "answer_permission": {
               yield* Effect.try({
-                try: () => host.answerPermission(effect.paneId, effect.answer),
+                try: () => host.answerPermission(effect.paneId, effect.answer, effect.what),
                 catch: (err) =>
                   new HostActionFailed({
                     action: "answerPermission",
@@ -589,6 +628,27 @@ export function makeVoiceProgram(
                   }),
                 ),
               )
+              break
+            }
+
+            case "confirm_send": {
+              /* The host was holding the note; this is the spoken decision. */
+              if (host.confirmVoiceSend) {
+                yield* Effect.try({
+                  try: () => host.confirmVoiceSend!(effect.id, effect.approved),
+                  catch: (err) =>
+                    new HostActionFailed({
+                      action: "confirmVoiceSend",
+                      cause: err,
+                    }),
+                }).pipe(
+                  Effect.catchAll((err) =>
+                    Effect.sync(() => {
+                      options.onError?.(spokenMessage(err))
+                    }),
+                  ),
+                )
+              }
               break
             }
 
@@ -632,6 +692,30 @@ export function makeVoiceProgram(
               )
 
               if (sent) yield* watchForReply(sent)
+              break
+            }
+
+            case "execute_plan": {
+              /*
+               * Rilievo 4: the plan was held in `pendingPlan` until the user
+               * said yes. Now it runs — and the result is announced the same
+               * way an immediate plan is, then `command_success` returns the
+               * dialogue to idle (and promotes any permission queued behind
+               * this confirmation).
+               */
+              const execution = yield* Effect.promise(() => executePlan(effect.steps, host))
+              options.onPlan?.({ steps: effect.steps, execution })
+              const agents = host.listAgents?.() ?? []
+              yield* sayPlanResult(
+                {
+                  steps: effect.steps,
+                  refusals: effect.refusals,
+                  ...(effect.speech ? { speech: effect.speech } : {}),
+                },
+                execution,
+                agents,
+              )
+              yield* applyDialogEvent({ type: "command_success" })
               break
             }
           }
@@ -754,46 +838,90 @@ export function makeVoiceProgram(
          * user which is the difference between rephrasing and checking the
          * key. Handing it back as unhandled would print the wrong one.
          */
+        /*
+         * Back to idle only from this turn's own `executing`: a question that
+         * arrived meanwhile (a permission, a held message) owns the state now
+         * (V1-ter, ALTO 7).
+         */
         if (planned.failure) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
           yield* say(planned.failure)
           return true
         }
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
           if (agentAbort === abort) agentAbort = null
-          currentState = { ...currentState, status: "idle" }
-          options.onStateChange?.(currentState)
+          if (currentState.status === "executing") {
+            currentState = { ...currentState, status: "idle" }
+            options.onStateChange?.(currentState)
+          }
           return false
+        }
+
+        /*
+         * Rilievo 4: a plan whose steps include `send_prompt` does not run
+         * yet. The submit step presses Enter in an agent's tty — the one
+         * action a person never gets to see before it happens — so the
+         * dialogue goes to `confirming` with the plan held in `pendingPlan`
+         * and a prompt that names the text about to be sent. «sì» runs it
+         * through `execute_plan`; «no» and the timeout drop it. Plans
+         * without `send_prompt` still execute immediately below: opening
+         * sessions is not the same blast radius as pressing Enter.
+         *
+         * The question goes through the dialogue (V1-ter, ALTO 7): asked now,
+         * or in line behind one that arrived while the planner thought.
+         */
+        const needsConfirm = planned.steps.some((step) => step.action === "send_prompt")
+        if (needsConfirm) {
+          if (agentAbort === abort) agentAbort = null
+          yield* applyDialogEvent({
+            type: "plan_ready",
+            steps: planned.steps,
+            refusals: planned.refusals,
+            ...(planned.speech ? { speech: planned.speech } : {}),
+          })
+          return true
         }
 
         if (agentAbort === abort) agentAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
-
-        if (planned.speech) {
-          // What the plan refused is as much news as what failed: «copilot» not
-          // started was silently dropped whenever the model also said something.
-          const problems = [...planned.refusals, ...execution.failures]
-          const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
-          yield* say(`${planned.speech}${failures}`)
-        } else {
-          const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
-          yield* say(
-            announceExecution({
-              execution,
-              refusals: planned.refusals,
-              agentLabel: (id) => labels.get(id) ?? id,
-            }),
-          )
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
         }
+
+        yield* sayPlanResult(planned, execution, context.agents)
         return true
       })
+    }
+
+    /** One sentence for what a plan did, honouring a model-provided speech. */
+    function sayPlanResult(
+      planned: { steps: PlanStep[]; refusals: string[]; speech?: string },
+      execution: PlanExecution,
+      agents: readonly { id: string; label: string; available: boolean }[],
+    ): Effect.Effect<void> {
+      if (planned.speech) {
+        // What the plan refused is as much news as what failed: «copilot» not
+        // started was silently dropped whenever the model also said something.
+        const problems = [...planned.refusals, ...execution.failures]
+        const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
+        return say(`${planned.speech}${failures}`)
+      }
+      const labels = new Map(agents.map((agent) => [agent.id, agent.label]))
+      return say(
+        announceExecution({
+          execution,
+          refusals: planned.refusals,
+          agentLabel: (id) => labels.get(id) ?? id,
+        }),
+      )
     }
 
     /**
@@ -887,8 +1015,16 @@ export function makeVoiceProgram(
         // Cancelled while it worked: the user has moved on, so nothing is said.
         if (abort.signal.aborted) return "stopped"
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
+        /*
+         * Back to idle only from the turn's own state. A question the turn
+         * raised — the confirmation of a note it sent — is still being asked:
+         * writing idle over it left the note pending with its timer ignored,
+         * for a yes to some later question to deliver (V1-bis, ALTO 7).
+         */
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
 
         if (!answer.ok) {
           options.onError?.(answer.text)
@@ -1286,7 +1422,7 @@ export function makeVoiceProgram(
            * aspettando quale dei due pannelli si intendeva, la risposta è
            * parte di quello scambio, non un comando nuovo.
            */
-          const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+          const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
 
           /*
            * A turn already running is its own conversation: «annulla» said
@@ -1491,6 +1627,11 @@ export function makeVoiceProgram(
       handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) =>
         applyDialogEvent({ type: "permission_requested", paneId, what, silent: options?.silent }),
 
+      resolvePermission: (paneId: string) => applyDialogEvent({ type: "permission_resolved", paneId }),
+
+      requestSendConfirmation: (id: string, to: string, text: string, lead?: string) =>
+        applyDialogEvent({ type: "send_requested", id, to, text, ...(lead ? { lead } : {}) }),
+
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer
         clearHeld()
@@ -1552,14 +1693,14 @@ export function makeVoiceProgram(
         if (awakeAt(spokenAt ?? clockMs()) || isPushToTalkPressed) return false
         // A question is answered without the name. A turn at work is not: a
         // stop is short enough to go whole, and the rest has to call it.
-        return !(currentState.status === "confirming" || pendingDisambiguation !== null)
+        return !answersWithoutName(currentState, pendingDisambiguation !== null)
       },
 
       nameGate: () => {
         const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
         const at = clockMs()
         const awake = awakeAt(at)
-        const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+        const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
         const thinking = currentState.status === "executing" && agentAbort !== null
         const gate = { mode: settings.mode, activation: settings.activation, awake, awaitingAnswer, thinking, pressed: isPushToTalkPressed }
         const open = takesWithoutName(gate)

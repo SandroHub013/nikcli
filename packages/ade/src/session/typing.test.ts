@@ -40,9 +40,21 @@ describe("asOneLine", () => {
     expect(asOneLine("git status --porcelain")).toBe("git status --porcelain")
   })
 
-  test("tabs and ordinary spaces are left alone", () => {
-    // Only line endings are the hazard; a tab inside a prompt is just a tab.
-    expect(asOneLine("a\tb c")).toBe("a\tb c")
+  /*
+   * Oltre ai ritorni a capo, nella stringa possono restare controlli C0/C1
+   * che un tty non interpreta come fine riga ma che un terminale esegue:
+   * ESC apre sequenze, Ctrl-C può interrompere l'agente. L'utente non li ha
+   * detti: vengono tolti, lo spazio no.
+   */
+  test("control characters are stripped, ordinary spaces stay", () => {
+    expect(asOneLine("comando\u001b\u0003fine")).toBe("comandofine")
+    expect(asOneLine("a\u0000b c")).toBe("ab c")
+    expect(asOneLine("a\u007fb c")).toBe("ab c")
+  })
+
+  test("tabs are control characters and go; ordinary spaces stay", () => {
+    // Tab is C0 (0x09): same class as ESC, same rule.
+    expect(asOneLine("a\tb c")).toBe("ab c")
   })
 })
 

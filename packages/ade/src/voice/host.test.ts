@@ -655,3 +655,76 @@ describe("createAdeVoiceHost, spoken planning", () => {
     ).rejects.toThrow("Non posso avviare sessioni da qui.")
   })
 })
+
+/*
+ * V1-bis, ALTO 3: the grant is for the request whose question was read. A
+ * pane whose request changed since then (the first answered by hand, a new
+ * one asked) is not answered.
+ */
+describe("answerPermission answers only the request that was asked", () => {
+  const request = (what: string): PermissionRequest => ({
+    what,
+    kind: "shell",
+    answers: [
+      { label: "Sì", send: "y", tone: "primary" },
+      { label: "No", send: "n", tone: "secondary" },
+    ],
+  })
+
+  test("a different request on the pane is not granted", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({ permissions: () => ({ p1: request("rm -rf ~") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(false)
+    expect(answered).toEqual([])
+  })
+
+  test("the same request is", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({ permissions: () => ({ p1: request("cat README") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(true)
+    expect(answered.map((a) => a.send)).toEqual(["y"])
+  })
+})
+
+/*
+ * V1-bis, ALTO 6: dictating to a pane whose agent has a permission question
+ * open, «invia» typed the text and Enter into the menu, and Enter picks the
+ * highlighted option — the permission granted without a word about it. A
+ * pane with a question open takes no text from the voice until it is answered.
+ */
+describe("no voice text into a pane asking a permission", () => {
+  const asking: PermissionRequest = {
+    what: "rm -rf build",
+    kind: "shell",
+    answers: [
+      { label: "Sì", send: "1", tone: "primary" },
+      { label: "No", send: "3", tone: "secondary" },
+    ],
+  }
+
+  test("sendPrompt refuses, and nothing reaches the terminal", async () => {
+    const writtenLines: string[] = []
+    const { deps } = createMockDeps({
+      isRunning: (id) => id === "p1",
+      getRunningSession: (id) => (id === "p1" ? { write: (line: string) => void writtenLines.push(line) } : undefined),
+      permissions: () => ({ p1: asking }),
+    })
+    const host = createAdeVoiceHost(deps)
+    await expect(host.sendPrompt("p1", "sistema i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+  })
+
+  test("insertText into the terminal refuses too", async () => {
+    const writtenLines: string[] = []
+    const { deps } = createMockDeps({
+      isRunning: (id) => id === "p1",
+      getRunningSession: (id) => (id === "p1" ? { write: (line: string) => void writtenLines.push(line) } : undefined),
+      permissions: () => ({ p1: asking }),
+    })
+    const host = createAdeVoiceHost(deps)
+    await expect(host.insertText("p1", "sistema i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+  })
+})

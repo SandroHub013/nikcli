@@ -32,10 +32,34 @@ export const AMBIGUITY_MARGIN = 0.10
 
 /**
  * Added to intents that accept a `url` slot when the utterance carried one.
- * Sized to break a tie without letting a bare address trigger navigation on its
- * own: an intent that matched nothing still ends below the threshold.
+ * Sized to break a tie without letting a bare address trigger navigation on
+ * its own: an intent that matched nothing still ends below the threshold.
  */
 export const URL_SLOT_BONUS = 0.2
+
+/**
+ * Added to an intent that matched a real verb when the utterance also carried
+ * a pane target. "autorizza pannello 2" tied `permission.allow` (verb match,
+ * surplus noun) with `pane.focus` (noun match, surplus verb) at 0.85, and the
+ * disambiguator asked which one instead of granting. The verb wins; a bare
+ * "pannello N" still lands on `pane.focus` via the exact phrase.
+ */
+export const PANE_SLOT_BONUS = 0.15
+
+/**
+ * Words that veto a confirmation wherever they appear in the utterance.
+ *
+ * «non confermo» used to score 0.85 as `dialog.confirm`: the negation was
+ * only surplus, costing 0.15, and a closed pane or an allowed permission was
+ * the result of answering no. These are whole tokens after normalization
+ * (accents already folded, punctuation already split).
+ */
+const NEGATION_TOKENS: ReadonlySet<string> = new Set(["non", "no", "mai"])
+
+/** True when the normalized utterance carries a negation anywhere. */
+export function hasNegation(normalized: string): boolean {
+  return normalized.split(/\s+/).filter(Boolean).some((token) => NEGATION_TOKENS.has(token))
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +74,12 @@ export interface ParseContext {
   pendingPermissionPaneId?: string
   /** Currently focused pane ID in ADE. */
   focusedPaneId?: string
+  /**
+   * What the agent in a pane is asking permission for right now, if it is
+   * asking. Read when «consenti» is said with no question in course, so the
+   * question names it and the grant is for that request only (V1-ter, ALTO 3).
+   */
+  permissionWhat?: (paneId: string) => string | undefined
   /** Active view mode in ADE. */
   currentView?: AdeView
 }
@@ -142,21 +172,53 @@ function extractSlotsFromUtterance(
     }
   }
 
-  // 5. Pane title resolution using current context panes: e.g. "vai su Bastelli", "chiudi test runner"
+  /*
+   * 5. Pane title resolution using current context panes: e.g. "vai su Bastelli",
+   * "chiudi api tests".
+   *
+   * Rilievo 21: il confronto in ordine di elenco dava la vittoria alla prima
+   * sottosequenza sopra soglia — «chiudi api tests» con «api» elencato prima
+   * di «api tests» prendeva «api» e chiudeva il pannello sbagliato. Prima
+   * cerca il titolo esatto dentro la frase (normalizzato, così «API Tests»
+   * e «api tests» sono lo stesso stringa); solo se l'esatto non c'è cade
+   * sulla somiglianza, e allora non vince il primo ma il migliore.
+   */
   if (ctx.panes && ctx.panes.length > 0) {
+    let chosen: PaneSummary | undefined
+    let chosenNorm = ""
+
     for (const pane of ctx.panes) {
       const normPaneTitle = normalizeUtterance(pane.title)
-      if (normPaneTitle.length > 2) {
+      if (normPaneTitle.length <= 2) continue
+
+      // Exact: the whole normalized title sits inside the cleaned utterance.
+      // Longest wins when two titles are both substrings ("api" ⊂ "api tests").
+      if (normPaneTitle.length > chosenNorm.length && cleaned.includes(normPaneTitle)) {
+        chosen = pane
+        chosenNorm = normPaneTitle
+      }
+    }
+
+    if (!chosen) {
+      let bestScore = -Infinity
+      for (const pane of ctx.panes) {
+        const normPaneTitle = normalizeUtterance(pane.title)
+        if (normPaneTitle.length <= 2) continue
         const hit = fuzzyMatch(normPaneTitle, cleaned)
-        if (hit && hit.score > 15) {
-          slots.paneTitle = pane.title
-          if (!slots.paneIndex) {
-            slots.paneIndex = pane.index
-          }
-          cleaned = cleaned.replace(normPaneTitle, "").trim()
-          break
+        if (hit && hit.score > bestScore && hit.score > 15) {
+          bestScore = hit.score
+          chosen = pane
+          chosenNorm = normPaneTitle
         }
       }
+    }
+
+    if (chosen) {
+      slots.paneTitle = chosen.title
+      if (!slots.paneIndex) {
+        slots.paneIndex = chosen.index
+      }
+      cleaned = cleaned.replace(chosenNorm, "").trim()
     }
   }
 
@@ -347,8 +409,16 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
     }
   }
 
+  /*
+   * A negation vetoes every path that would confirm: the exact-match
+   * short-circuits below, and the scored candidates at the end. «non
+   * consentire» is not an allow, and «non confermo» is not a confirm — the
+   * speaker said no.
+   */
+  const negated = hasNegation(normalized)
+
   // 1. Context-aware short-circuits for confirmations
-  if (ctx.pendingPermission) {
+  if (ctx.pendingPermission && !negated) {
     if (
       normalized === "si" ||
       normalized === "conferma" ||
@@ -368,7 +438,9 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
         normalizedUtterance: normalized,
       }
     }
+  }
 
+  if (ctx.pendingPermission) {
     if (
       normalized === "no" ||
       normalized === "annulla" ||
@@ -421,11 +493,40 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
     }
 
     if (bestSpecConfidence >= MATCH_CONFIDENCE_THRESHOLD) {
+      /*
+       * A pane target plus a real verb outranks the bare noun match. Without
+       * this, "autorizza pannello 2" ties with `pane.focus` (scored against
+       * the leftover "pannello") and the answer is a disambiguation question
+       * rather than the permission confirmation.
+       */
+      if (
+        bestMatchedPhrase !== "pannello" &&
+        spec.slots.includes("paneIndex") &&
+        (slots.paneIndex !== undefined || slots.paneTitle !== undefined)
+      ) {
+        bestSpecConfidence = Math.min(1, bestSpecConfidence + PANE_SLOT_BONUS)
+      }
+
       candidateList.push({
         intent: spec,
         confidence: bestSpecConfidence,
         matchedPhrase: bestMatchedPhrase,
       })
+    }
+  }
+
+  /*
+   * A negated utterance never confirms, whatever the score said. Drop the
+   * allow/confirm intents so «non confermo» cannot win as dialog.confirm and
+   * «non consentire» cannot win as permission.allow. What remains — cancel,
+   * deny, or nothing — is the correct reading of a no.
+   */
+  if (negated) {
+    for (let i = candidateList.length - 1; i >= 0; i--) {
+      const intentId = candidateList[i]!.intent.intent
+      if (intentId === "dialog.confirm" || intentId === "permission.allow") {
+        candidateList.splice(i, 1)
+      }
     }
   }
 

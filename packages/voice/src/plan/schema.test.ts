@@ -139,6 +139,29 @@ describe("validatePlan", () => {
   })
 
   /*
+   * Un carattere di controllo nel testo di un messaggio non è «del testo»:
+   * è un tasto premuto. ESC può aprire sequenze di terminale, Ctrl-C può
+   * interrompere l'agente, e l'utente non li ha detti a voce.
+   */
+  test("i caratteri di controllo vengono tolti dal testo di send_prompt", () => {
+    const plan = validatePlan(
+      [{ action: "send_prompt", paneIndex: 1, text: "ciao\u001b[2J\u0003mondo" }],
+      context,
+    )
+    expect(plan.steps).toHaveLength(1)
+    expect(plan.steps[0]).toMatchObject({ text: "ciao[2Jmondo" })
+  })
+
+  test("send_prompt che dopo la pulizia è vuoto viene rifiutato", () => {
+    const plan = validatePlan(
+      [{ action: "send_prompt", paneIndex: 1, text: "\u0003\u001b" }],
+      context,
+    )
+    expect(plan.steps).toEqual([])
+    expect(plan.refusals[0]).toContain("vuoto")
+  })
+
+  /*
    * Senza questo il divieto sui passi distruttivi sarebbe una finzione: non
    * esiste un passo «chiudi pannello», ma `run_command` arriverebbe allo
    * stesso posto passando per l'id del comando.

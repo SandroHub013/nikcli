@@ -251,6 +251,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  voiceConfirmationFor,
   type MailPane,
   type Message,
   formatBell,
@@ -1954,6 +1955,14 @@ export function Workbench() {
   const mailQueue: { id: string; message: Message; at: number }[] = []
 
   /*
+   * A `send` the voice agent wrote is held here until the user says yes out
+   * loud (rilievo 20). `requested` keeps the question from being asked twice
+   * while the message waits in the queue on the next passes.
+   */
+  const voiceSendDecisions = new Map<string, "approved" | "rejected">()
+  const voiceSendRequested = new Set<string>()
+
+  /*
    * What survives a restart, in localStorage: the requests still waiting for
    * an answer, and which session started which with `spawn`. Pane ids survive
    * a restore, so both still point at the right panes afterwards.
@@ -2668,6 +2677,41 @@ export function Workbench() {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
+
+    /*
+     * A message from the voice agent, or from a sender nothing proved, never
+     * acts unattended (rilievo 20; V1-bis, ALTO 8: every kind that writes or
+     * acts, not only `send`): the first pass asks for a spoken yes and leaves
+     * it in the queue; the next pass either carries it out or tells the
+     * waiting `ade-msg` it was refused. Without a running voice there is
+     * nobody to ask, so it is refused rather than carried out in silence.
+     */
+    const spoken = voiceConfirmationFor(message)
+    if (spoken) {
+      const decision = voiceSendDecisions.get(id)
+      if (decision === "rejected") {
+        voiceSendDecisions.delete(id)
+        voiceSendRequested.delete(id)
+        await answer("errore: invio annullato dall'utente")
+        return true
+      }
+      if (decision !== "approved") {
+        if (!voiceSendRequested.has(id)) {
+          voiceSendRequested.add(id)
+          const asked = await voiceEngine
+            .requestSendConfirmation(id, spoken.to, spoken.text, spoken.lead)
+            .catch(() => false)
+          if (!asked) {
+            voiceSendRequested.delete(id)
+            await answer("errore: invio rifiutato: la conferma vocale non è disponibile")
+            return true
+          }
+        }
+        return false
+      }
+      voiceSendDecisions.delete(id)
+      voiceSendRequested.delete(id)
+    }
 
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
@@ -3838,6 +3882,10 @@ export function Workbench() {
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
+    confirmVoiceSend: (id, approved) => {
+      if (approved) voiceSendDecisions.set(id, "approved")
+      else voiceSendDecisions.set(id, "rejected")
+    },
     getHost,
     recents,
     agentAvailability: () => agentStatuses(),
@@ -5212,6 +5260,11 @@ export function Workbench() {
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
+    // A question the voice is asking about this pane has nobody left to answer it.
+    if (permissions()[id]) {
+      permissions.forget(id)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(id)
+    }
     disposeTerminal(id)
     setLiveTerminals((ids) => {
       if (!ids.has(id)) return ids
@@ -5540,6 +5593,8 @@ export function Workbench() {
     if (pending) {
       if (!isResolved(pending, recent, agent)) return
       permissions.forget(paneId)
+      // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
       setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       return

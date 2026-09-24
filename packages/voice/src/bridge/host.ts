@@ -237,7 +237,20 @@ export interface VoiceHost {
   /**
    * Respond to an agent's interactive permission confirmation.
    */
-  answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
+  answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean | void
+
+  /**
+   * What the agent in a pane is asking permission for, if it is asking.
+   * Optional: without it «consenti» said at rest cannot name the request.
+   */
+  pendingPermissionWhat?(paneId: string): string | undefined
+
+  /**
+   * Deliver or reject a `send` the voice agent wrote, after the user's
+   * spoken yes or no (rilievo 20). Optional: a host without it never asks
+   * for that confirmation.
+   */
+  confirmVoiceSend?(id: string, approved: boolean): boolean | void
 
   /**
    * Configure the number of grid columns on the workbench.

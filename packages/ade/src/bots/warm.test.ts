@@ -58,7 +58,7 @@ const request = (message: string, extra: Partial<TurnRequest> = {}): TurnRequest
   message,
   cwd: "C:/p",
   instructions: "Sei nik.",
-  disabledTools: ["edit", "write", "bash"],
+  disabledTools: ["edit", "write", "bash", "webfetch", "websearch"],
   lean: true,
   partial: true,
   ...extra,

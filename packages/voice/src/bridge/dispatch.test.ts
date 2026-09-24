@@ -123,6 +123,27 @@ describe("dispatch", () => {
       expect(resolved.pane?.title).toBe("Bastelli Worker")
     })
 
+    /*
+     * Rilievo 21: il readback dopo una chiusura diceva solo il numero
+     * («Pannello 2 chiuso»), così con due sessioni non si capiva quale.
+     * Ora nomina il titolo.
+     */
+    test("dopo una chiusura il readback nomina il titolo, non solo il numero", async () => {
+      const host = new MockVoiceHost()
+      const spec = VOCABULARY.find((v) => v.intent === "pane.close")!
+      const outcome = await dispatch(makeParseResult(spec, { paneIndex: 2 }), host)
+      expect(outcome.success).toBe(true)
+      expect(outcome.spoken).toContain("Browser Preview")
+    })
+
+    test("terminare un processo con processo attivo nomina il titolo nel readback", async () => {
+      const host = new MockVoiceHost()
+      const spec = VOCABULARY.find((v) => v.intent === "process.kill")!
+      const outcome = await dispatch(makeParseResult(spec, { paneIndex: 1 }), host)
+      expect(outcome.success).toBe(true)
+      expect(outcome.spoken).toContain("Bastelli Worker")
+    })
+
     test("returns spoken error when pane does not exist", () => {
       const host = new MockVoiceHost()
       const resolved = resolveTargetPane({ paneIndex: 99 }, host.panes)
@@ -169,7 +190,7 @@ describe("dispatch", () => {
    * domani non ricade in silenzio sul ripiego.
    */
   describe("gli intenti distruttivi rifiutano di indovinare", () => {
-    test.each(["pane.close", "process.kill", "permission.deny"])(
+    test.each(["pane.close", "process.kill", "permission.deny", "permission.allow"])(
       "%s chiede quale pannello invece di sceglierne uno",
       async (intent) => {
         const host = new MockVoiceHost()
@@ -297,6 +318,50 @@ describe("dispatch", () => {
           (c) => c.method === "sendPrompt" && c.args[0] === "pane-1" && c.args[1] === "esegui il build"
         )
       ).toBe(true)
+    })
+
+    /*
+     * Rilievo 23: «invia messaggio» senza testo premeva Invio mandando
+     * «continua», e senza bersaglio cadeva sul primo pannello. Ora senza
+     * testo non si invia niente, e senza un bersaglio chiaro si chiede.
+     */
+    describe("«invia messaggio» senza testo o senza bersaglio non indovina", () => {
+      test("without text nothing is sent", async () => {
+        const host = new MockVoiceHost()
+        const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
+        const outcome = await dispatch(makeParseResult(spec, { paneIndex: 1 }), host)
+
+        expect(outcome.success).toBe(false)
+        expect(outcome.spoken).toContain("testo")
+        expect(host.calls.some((c) => c.method === "sendPrompt")).toBe(false)
+      })
+
+      test("with text but no named or focused panel it asks instead of picking the first", async () => {
+        const host = new MockVoiceHost()
+        const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
+        const outcome = await dispatch(makeParseResult(spec, { text: "esegui il build" }), host)
+
+        expect(outcome.success).toBe(false)
+        expect(outcome.spoken).toContain("Non so su quale pannello")
+        expect(host.calls.some((c) => c.method === "sendPrompt")).toBe(false)
+      })
+
+      test("with text and a focused panel it goes there", async () => {
+        const host = new MockVoiceHost()
+        const spec = VOCABULARY.find((v) => v.intent === "prompt.send")!
+        const outcome = await dispatch(
+          makeParseResult(spec, { text: "esegui il build" }),
+          host,
+          { focusedPaneId: "pane-2" }
+        )
+
+        expect(outcome.success).toBe(true)
+        expect(
+          host.calls.some(
+            (c) => c.method === "sendPrompt" && c.args[0] === "pane-2" && c.args[1] === "esegui il build"
+          )
+        ).toBe(true)
+      })
     })
 
     test("dispatches openFile", async () => {
@@ -456,4 +521,14 @@ describe("a command that threw", () => {
     )
     expect(plainFailure("no project open", "en")).toBe("Could not complete action: no project open")
   })
+})
+
+/* V1-ter, ALTO 3: the direct road grants only the request it was asked about. */
+test("permission.allow passes on what it grants", async () => {
+  const host = new MockVoiceHost()
+  const seen: unknown[][] = []
+  host.answerPermission = (...args: unknown[]) => void seen.push(args)
+  const spec = VOCABULARY.find((v) => v.intent === "permission.allow")!
+  await dispatch(makeParseResult(spec, { paneIndex: 1, what: "cat README" }), host)
+  expect(seen).toEqual([["pane-1", "allow", "cat README"]])
 })

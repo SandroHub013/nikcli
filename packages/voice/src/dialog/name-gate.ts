@@ -27,3 +27,36 @@ export function takesWithoutName(input: NameGateInput): boolean {
   if (input.mode !== "agent" || input.activation !== "wake-word") return true
   return input.awake || input.awaitingAnswer || input.thinking || input.pressed
 }
+
+/**
+ * Whether the dialogue is waiting for an answer the room may give without the
+ * name: a question the user started (a destructive command, a plan, a note
+ * the voice agent wants to send) or a disambiguation.
+ *
+ * Not an agent's permission (V1-bis, ALTO 5). The user did not start it: in
+ * wake-word mode it arrives while nobody is talking to the assistant, and an
+ * open gate let the «va bene» of a television grant it for 30 s. Its answer
+ * starts with the name, like any sentence at rest.
+ *
+ * Nor anything out of the queue (V1-ter, reserve of ALTO 5): a held message
+ * or a plan asked after another question was not started by what the user
+ * is saying now. `answerableAt` is set only there.
+ */
+type Waiting = { readonly answerableAt?: number }
+
+export function answersWithoutName(
+  state: {
+    readonly status: string
+    readonly pendingAction?: { readonly isPermission?: boolean; readonly userAsked?: true } & Waiting
+    readonly pendingSend?: Waiting
+    readonly pendingPlan?: Waiting
+  },
+  disambiguating: boolean,
+): boolean {
+  if (disambiguating) return true
+  if (state.status !== "confirming") return false
+  const queued = [state.pendingAction, state.pendingSend, state.pendingPlan].some((p) => p?.answerableAt !== undefined)
+  if (queued) return false
+  // A permission is answered without the name only when the user asked to grant it («consenti»).
+  return state.pendingAction?.isPermission !== true || state.pendingAction.userAsked === true
+}
