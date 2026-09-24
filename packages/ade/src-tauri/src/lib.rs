@@ -522,23 +522,93 @@ fn nikcli_timeout(args: &[String]) -> Duration {
     }
 }
 
+#[cfg(windows)]
+struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+impl ChildTreeGuard {
+    fn new() -> Result<Self, String> {
+        use windows::Win32::System::JobObjects::{
+            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JobObjectExtendedLimitInformation, SetInformationJobObject,
+        };
+
+        let handle = unsafe { CreateJobObjectW(None, None) }.map_err(|error| error.message().to_string())?;
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        unsafe {
+            SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+            .map_err(|error| error.message().to_string())?;
+        }
+        Ok(Self(handle))
+    }
+
+    fn assign_pid(&self, pid: u32) -> Result<(), String> {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::JobObjects::AssignProcessToJobObject;
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+
+        let process = unsafe { OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid) }
+            .map_err(|error| error.message().to_string())?;
+        let result = unsafe { AssignProcessToJobObject(self.0, process) };
+        let _ = unsafe { CloseHandle(process) };
+        result.map_err(|error| error.message().to_string())
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ChildTreeGuard {
+    fn drop(&mut self) {
+        let _ = unsafe { windows::Win32::Foundation::CloseHandle(self.0) };
+    }
+}
+
+#[cfg(not(windows))]
+struct ChildTreeGuard;
+
+#[cfg(not(windows))]
+impl ChildTreeGuard {
+    fn new() -> Result<Self, String> {
+        Ok(Self)
+    }
+
+    fn assign_pid(&self, _pid: u32) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+fn terminate_child_tree(child: &mut std::process::Child, pid: u32, guard: &mut Option<ChildTreeGuard>) {
+    drop(guard.take());
+    let _ = pty::kill_tree(pid);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> Result<ShellOutput, String> {
     use std::process::Stdio;
 
+    let mut tree_guard = ChildTreeGuard::new().ok();
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("nikcli non eseguibile: {error}"))?;
+    let pid = child.id();
+    if let Some(guard) = tree_guard.as_ref() {
+        let _ = guard.assign_pid(pid);
+    }
     let Some(mut stdout) = child.stdout.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
+        terminate_child_tree(&mut child, pid, &mut tree_guard);
         return Err("nikcli non ha uno stdout leggibile".into());
     };
     let Some(mut stderr) = child.stderr.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
+        terminate_child_tree(&mut child, pid, &mut tree_guard);
         return Err("nikcli non ha uno stderr leggibile".into());
     };
     let out_reader = std::thread::spawn(move || {
@@ -558,17 +628,22 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_child_tree(&mut child, pid, &mut tree_guard);
                 return Err(format!("nikcli non ha risposto entro {} secondi e stato fermato.", timeout.as_secs()));
             }
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_child_tree(&mut child, pid, &mut tree_guard);
                 return Err(format!("nikcli non eseguibile: {error}"));
             }
         }
     };
+    while !out_reader.is_finished() || !err_reader.is_finished() {
+        if Instant::now() >= deadline {
+            terminate_child_tree(&mut child, pid, &mut tree_guard);
+            return Err(format!("nikcli non ha risposto entro {} secondi e stato fermato.", timeout.as_secs()));
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
     let stdout = out_reader.join().map_err(|_| "lettura dell'output di nikcli fallita")?;
     let stderr = err_reader.join().map_err(|_| "lettura degli errori di nikcli fallita")?;
     Ok(ShellOutput {
@@ -1894,6 +1969,21 @@ mod tests {
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
         let error = run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
+        assert!(error.contains("stato fermato"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bounded_nikcli_output_does_not_wait_for_a_grandchild_holding_stdout() {
+        let mut command = std::process::Command::new("powershell");
+        command.args([
+            "-NoProfile",
+            "-Command",
+            "$p = Start-Process powershell -NoNewWindow -ArgumentList '-NoProfile','-Command','Start-Sleep 30' -PassThru; exit 0",
+        ]);
+        let started = Instant::now();
+        let error = run_bounded_output(command, Duration::from_millis(100)).expect_err("must time out");
         assert!(error.contains("stato fermato"), "{error}");
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
     }
