@@ -1,5 +1,6 @@
 import { createSignal, type Accessor } from "solid-js"
-import { againEvent, answerEvent } from "./answer"
+import { againEvent, answerEvent, togglePick } from "./answer"
+import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
@@ -37,6 +38,14 @@ export interface DesignHub {
   delivery: (proposal: DesignProposal) => DeliveryState
   draft: (k: string) => DesignDraft
   setDraft: (k: string, draft: DesignDraft) => void
+  /**
+   * Picks variant `index` (from 0), or ticks its box on a `multi` proposal:
+   * the card, the sheet and «Scelgo questa» in the browser pane (D2) all go
+   * through here, so the three cannot pick differently.
+   */
+  pick: (proposal: Pick<DesignProposal, "k" | "multi">, index: number) => void
+  /** Adds `line` to the note of `k` on a line of its own, leaving what is written (D2, «Aggiungi alla nota»). */
+  addNoteLine: (k: string, line: string) => void
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
@@ -108,6 +117,10 @@ export function createDesignHub(deps: {
   }
 
   const draft = (k: string): DesignDraft => drafts()[k] ?? { note: "" }
+  const setDraft = (k: string, value: DesignDraft) => {
+    setDrafts((all) => ({ ...all, [k]: value }))
+    if (problems()[k]) setProblem(k, undefined)
+  }
   const clearDraft = (k: string) =>
     setDrafts((all) => {
       const next = { ...all }
@@ -140,9 +153,14 @@ export function createDesignHub(deps: {
     choose: deps.choose,
     delivery: deps.delivery,
     draft,
-    setDraft: (k, value) => {
-      setDrafts((all) => ({ ...all, [k]: value }))
-      if (problems()[k]) setProblem(k, undefined)
+    setDraft,
+    pick: (proposal, index) => {
+      const current = draft(proposal.k)
+      setDraft(proposal.k, { ...current, picked: togglePick(current.picked, index, Boolean(proposal.multi)) })
+    },
+    addNoteLine: (k, line) => {
+      const current = draft(k)
+      setDraft(k, { ...current, note: appendNoteLine(current.note, line) })
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],

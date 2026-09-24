@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
+import { enterReady, firstPick, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -27,8 +27,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   const [needChoice, setNeedChoice] = createSignal<string>()
 
   const pick = (k: string, index: number, multi: boolean) => {
-    const draft = props.hub.draft(k)
-    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
+    props.hub.pick({ k, ...(multi ? { multi: true as const } : {}) }, index)
     setChosenHere((keys) => new Set(keys).add(k))
     setNeedChoice(undefined)
   }
