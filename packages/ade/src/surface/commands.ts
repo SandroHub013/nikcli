@@ -305,6 +305,32 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     },
   ]
 
+  /*
+   * The folders that are gone, all at once (the Architect, on radice-sparita):
+   * after a cleanup of dozens of folders, one click each is not a way out.
+   * Offered only when there is something to do.
+   */
+  const gonePanes = workbench.panes.filter((pane) => pane.gone && !running.has(pane.id)).length
+  if (gonePanes > 0) {
+    commands.push({
+      id: "panes.closeGone",
+      title: t("palette.panes.closeGone", gonePanes),
+      group: t("palette.group.pane"),
+      keywords: ["sparite", "chiudi", "gone", "close"],
+      enabled: true,
+    })
+  }
+  const goneRecents = recents.filter((recent) => ctx.missingRecent?.(recent.root)).length
+  if (goneRecents > 0) {
+    commands.push({
+      id: "recents.forgetGone",
+      title: t("palette.recents.forgetGone", goneRecents),
+      group: t("palette.group.recent"),
+      keywords: ["sparite", "togli", "recenti", "spaces", "gone", "remove"],
+      enabled: true,
+    })
+  }
+
   for (const recent of recents) {
     commands.push({
       id: `project.recent.${recent.root}`,
