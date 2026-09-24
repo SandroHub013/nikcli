@@ -767,13 +767,16 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * dictation that took it over), so the agent kept ready stays. Released and
    * prepared again, it would start its process over for nothing.
    */
-  const stop = (options?: { keepAgent?: boolean }): Promise<void> => {
+  const stop = (options?: { keepAgent?: boolean; drain?: boolean; releaseText?: boolean }): Promise<void> => {
     sessionGeneration++
     startInFlight = null
     restartInFlight = null
     setIsRunning(false)
     if (stopping) return stopping
-    const cleanup = enqueueLifecycle(() => stopNow(options?.keepAgent === true))
+    const cleanup = enqueueLifecycle(async () => {
+      await stopNow(options?.keepAgent === true, options?.drain !== false)
+      if (options?.releaseText === true) await releaseTextProgram()
+    })
     stopping = cleanup
     void cleanup.finally(() => {
       if (stopping === cleanup) stopping = null
@@ -797,7 +800,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   }
   let startListening: (mode: VoiceMode, o: { waitForName: boolean; automatic?: boolean }) => Promise<void> = async () => {}
 
-  const stopNow = async (keepAgent = false): Promise<void> => {
+  const stopNow = async (keepAgent = false, drain = true): Promise<void> => {
     clearPttTimers()
     setListenPaused(false)
     dictationInterruptedListening = false
@@ -811,7 +814,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
-    await drainSession()
+    if (drain) await drainSession()
 
     setPartialTranscript("")
     setParakeetProgress(undefined)
@@ -1262,7 +1265,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         try {
           micMeter.setDevice(currentSettings().inputDeviceId)
           await micMeter.start()
-        } catch {}
+        } catch {
+          setMicLevel(0)
+        }
       }
       if (generation !== sessionGeneration) {
         if (micMeter) micMeter.stop()
@@ -1718,9 +1723,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const keyRemoved = keyChanged && !normalized.openRouterApiKey
       const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
       if (keyRemoved) {
-        if (sessionPending) setIsRunning(false)
-        await releaseTextProgram()
-        if (sessionPending) await stop()
+        await stop({ drain: false, releaseText: true })
       } else if (keyChanged || (sessionPending && backendChanged)) {
         const result = enqueueLifecycle(async (generation) => {
           if (generation !== sessionGeneration) return

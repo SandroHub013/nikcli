@@ -762,6 +762,36 @@ describe("planner key changes", () => {
     expect(engine.isRunning()).toBe(false)
   })
 
+  test("removing the key stops an open microphone before its old planner can run", async () => {
+    const authorizations: string[] = []
+    const transcriber = createFakeTranscriber()
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "wake-word", alwaysListen: true, agentEngine: "off", openRouterApiKey: "old" },
+      plannerFetch: fetchFn,
+    })
+
+    await engine.start("agent", { waitForName: true })
+    const removing = engine.updateSettings({ openRouterApiKey: undefined })
+    transcriber.emit("parola senza regola", true)
+    await removing
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(engine.isRunning()).toBe(false)
+    expect(transcriber.isStarted).toBe(false)
+    expect(authorizations).toEqual([])
+  })
+
   test("a replacement key is used by the next typed request", async () => {
     const { authorizations, engine } = setup("old")
     await engine.submitText("raccontami una storia mai raccontata")

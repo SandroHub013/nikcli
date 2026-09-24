@@ -136,15 +136,21 @@ export function isOpenRouterKeyRemoved(storage = voiceStorage()): boolean {
 }
 
 export function markOpenRouterKeyRemoved(storage = voiceStorage()): void {
+  if (!storage) return
   try {
-    storage?.setItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY, "1")
-  } catch {}
+    storage.setItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY, "1")
+  } catch {
+    return
+  }
 }
 
 export function clearOpenRouterKeyRemoved(storage = voiceStorage()): void {
+  if (!storage) return
   try {
-    storage?.removeItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)
-  } catch {}
+    storage.removeItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)
+  } catch {
+    return
+  }
 }
 
 /**
