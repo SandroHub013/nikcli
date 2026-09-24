@@ -991,6 +991,25 @@ describe("engine/agent answers what the grammar does not know", () => {
       await engine.stop()
     })
 
+    /*
+     * V1-bis, ALTO 5: from idle, a permission opened the name gate for its 30
+     * s, and the «va bene» of a television granted it. A question the user did
+     * not start is answered with the name.
+     */
+    test("an agent's permission does not open the gate: the room's «va bene» grants nothing, the name and a yes do", async () => {
+      const { host, engine, hear } = calling()
+      await engine.start("agent", { waitForName: true })
+      await engine.handlePermissionRequest("pane-1", "rm -rf build")
+      expect(engine.status()).toBe("confirming")
+
+      await hear("va bene")
+      expect(host.calls.some((call) => call.method === "answerPermission")).toBe(false)
+
+      await hear("ehi nik sì")
+      expect(host.calls.find((call) => call.method === "answerPermission")?.args.slice(0, 2)).toEqual(["pane-1", "allow"])
+      await engine.stop()
+    })
+
     test("typed text never needs the name", async () => {
       const { host, engine } = calling()
       await engine.start()

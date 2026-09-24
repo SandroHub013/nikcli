@@ -36,7 +36,7 @@ import type { CueKind } from "../audio/cue"
 import { announceExecution, executePlan, type PlanExecution } from "../plan/execute"
 import { planUtterance, type Completion } from "../plan/planner"
 import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thinking"
-import { takesWithoutName } from "../dialog/name-gate"
+import { answersWithoutName, takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
@@ -1393,7 +1393,7 @@ export function makeVoiceProgram(
            * aspettando quale dei due pannelli si intendeva, la risposta è
            * parte di quello scambio, non un comando nuovo.
            */
-          const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+          const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
 
           /*
            * A turn already running is its own conversation: «annulla» said
@@ -1664,14 +1664,14 @@ export function makeVoiceProgram(
         if (awakeAt(spokenAt ?? clockMs()) || isPushToTalkPressed) return false
         // A question is answered without the name. A turn at work is not: a
         // stop is short enough to go whole, and the rest has to call it.
-        return !(currentState.status === "confirming" || pendingDisambiguation !== null)
+        return !answersWithoutName(currentState, pendingDisambiguation !== null)
       },
 
       nameGate: () => {
         const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
         const at = clockMs()
         const awake = awakeAt(at)
-        const awaitingAnswer = currentState.status === "confirming" || pendingDisambiguation !== null
+        const awaitingAnswer = answersWithoutName(currentState, pendingDisambiguation !== null)
         const thinking = currentState.status === "executing" && agentAbort !== null
         const gate = { mode: settings.mode, activation: settings.activation, awake, awaitingAnswer, thinking, pressed: isPushToTalkPressed }
         const open = takesWithoutName(gate)
