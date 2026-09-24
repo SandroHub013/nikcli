@@ -301,15 +301,19 @@ body[data-theme="glass"] #root,
 
   /* ── text ───────────────────────────────────────────────────────────────── */
   /*
-   * Three-step ramp, measured against the lightest ground text sits on in each
-   * palette (--ade-raised: #211e1e dark, #ffffff light):
-   *   text  13.91:1 dark · 15.3:1 light — primary content, headings
-   *   soft   6.72:1 dark ·  5.12:1 light — secondary content, inactive labels
-   *   weak   4.86:1 dark ·  3.95:1 light — meta at 12px and above only
+   * Three-step ramp, every step at least 4.5:1 (AA) on every ground text sits
+   * on — bg, surface, raised and overlay — measured by `text-contrast.test.ts`.
+   * The worst ground is bg in light (#f4f2f0) and overlay in dark (#2a2626):
+   *   text  15.84:1 light · 12.57:1 dark — primary content, headings
+   *   soft   6.09:1 light ·  6.08:1 dark — secondary content, inactive labels
+   *   weak   4.64:1 light ·  4.64:1 dark — meta, counters, option details
+   * Weak used to be 3.30 light and 4.40 dark: the sheet's counter, meta and
+   * option details were under AA (polish-aaa, piece 0). Soft was darkened in
+   * light with it, so the two steps still read as two.
    */
   --ade-text: light-dark(#1a1817, #ecebeb);
-  --ade-text-soft: light-dark(#6b6562, #a9a4a4);
-  --ade-text-weak: light-dark(#8a8480, #8f8a8a);
+  --ade-text-soft: light-dark(#5f5a57, #a9a4a4);
+  --ade-text-weak: light-dark(#716c69, #938e8e);
 
   /* ── accent ─────────────────────────────────────────────────────────────── */
   /*
