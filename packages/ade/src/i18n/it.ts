@@ -114,6 +114,7 @@ export const it = {
   "paneState.limit": "Limite raggiunto",
   "paneState.idle": "Pronta",
   "paneState.off": "Sospesa",
+  "paneState.closed": "Chiusa",
   "paneState.short.perm": "Permesso",
   "paneState.short.ask": "Attende",
   "paneState.short.limit": "Limite",

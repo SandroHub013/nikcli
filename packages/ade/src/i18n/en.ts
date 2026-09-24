@@ -109,6 +109,7 @@ export const en: Messages = {
   "paneState.limit": "Limit reached",
   "paneState.idle": "Ready",
   "paneState.off": "Suspended",
+  "paneState.closed": "Closed",
   "paneState.short.perm": "Permission",
   "paneState.short.ask": "Waiting",
   "paneState.short.limit": "Limit",

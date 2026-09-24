@@ -10,10 +10,11 @@ import { normalizeActivity } from "./activity"
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
 /**
- * The canonical session states for Proposal A header, and `off`: a suspended
- * session (P1-C6), whose processes are closed. It asks nothing and moves not.
+ * The canonical session states for Proposal A header, `off`, a suspended
+ * session (P1-C6), and `closed`, one whose process ended well. Neither has a
+ * process, asks anything or moves.
  */
-export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle" | "off"
+export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle" | "off" | "closed"
 
 /* Getters, so each read is in the language of that moment (S41). */
 export const STATE_FULL: Readonly<Record<PaneState, string>> = {
@@ -24,6 +25,7 @@ export const STATE_FULL: Readonly<Record<PaneState, string>> = {
   get limit() { return t("paneState.limit") },
   get idle() { return t("paneState.idle") },
   get off() { return t("paneState.off") },
+  get closed() { return t("paneState.closed") },
 }
 
 export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
@@ -34,6 +36,7 @@ export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
   get limit() { return t("paneState.short.limit") },
   get idle() { return t("paneState.idle") },
   get off() { return t("paneState.off") },
+  get closed() { return t("paneState.closed") },
 }
 
 /**
@@ -46,6 +49,8 @@ export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
  * - idle: prompt ready, agent waiting for instruction
  * - off: suspended by the user; checked before the pending actions, since
  *   its one button is "Riprendi", which is not a question being asked
+ * - closed: the process is gone and ended well; before the actions for the
+ *   same reason, its button being "Riprendi"
  *
  * Limit is checked after permission and work, not before. The quota is the
  * provider's, shared by every session on it; a permission prompt or a running
@@ -59,10 +64,13 @@ export function resolvePaneState(props: {
   activity?: string
   quota?: SessionQuota
   hasActions?: boolean
+  /** No process behind the pane any more. */
+  exited?: boolean
 }): PaneState {
   if (props.state) return props.state
   if (props.activity !== undefined && normalizeActivity(props.activity) === "suspended") return "off"
   if (props.status === "error") return "err"
+  if (props.exited && props.status === "done") return "closed"
   if (props.hasActions) return "perm"
   if (props.status === "waiting") {
     if (props.activity && /ask|attende/i.test(props.activity)) return "ask"

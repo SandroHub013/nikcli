@@ -129,6 +129,8 @@ export interface SessionPaneProps {
   status: PaneStatus
   /** Specific 6-state status for S8 dense header. When omitted, derived from status and activity. */
   state?: PaneState
+  /** The process behind the pane has ended: a pane "done" is then closed, not asking. */
+  exited?: boolean
   /** Detailed reason or tool description (e.g. "Edit · pane.css", "Vuole eseguire Bash", "finestra 5h esaurita"). */
   stateDetail?: string
   /** Live quota view for the session's provider. When omitted, derived from agent / quota module. */
@@ -297,6 +299,9 @@ export function StateIcon(props: { state: PaneState }) {
         </Match>
         <Match when={props.state === "off"}>
           <path d="M6 4.5v7M10 4.5v7" />
+        </Match>
+        <Match when={props.state === "closed"}>
+          <rect x="4.5" y="4.5" width="7" height="7" rx="1" />
         </Match>
       </Switch>
     </svg>
@@ -484,6 +489,7 @@ export function SessionPane(props: SessionPaneProps) {
       activity: props.activity,
       quota: quota(),
       hasActions: Boolean(props.actions && props.actions.length > 0),
+      exited: props.exited,
     }),
   )
 

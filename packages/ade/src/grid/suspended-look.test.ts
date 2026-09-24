@@ -21,3 +21,13 @@ test("the suspended state's icon does not move", () => {
   const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(([, selector]) => /\.ic-off\b/.test(selector!))
   for (const [, , body] of rules) expect(body).not.toMatch(/animation/)
 })
+
+test("a session that ended well says «Chiusa», still, though its button is Riprendi", () => {
+  expect(resolvePaneState({ status: "done", exited: true, hasActions: true })).toBe("closed")
+  expect(STATE_SHORT.closed).toBe("Chiusa")
+  const css = readFileSync(join(import.meta.dir, "pane.css"), "utf-8")
+  expect(css).not.toMatch(/\.ic-closed[^{]*\{[^}]*animation/)
+  // A process still there keeps what it had: a prompt is a permission; one that failed is an error.
+  expect(resolvePaneState({ status: "done", hasActions: true })).toBe("perm")
+  expect(resolvePaneState({ status: "error", exited: true, hasActions: true })).toBe("err")
+})

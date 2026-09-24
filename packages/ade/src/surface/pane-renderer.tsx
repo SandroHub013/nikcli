@@ -378,6 +378,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         status={current().status}
+        exited={!deps.isRunning(current().id)}
         /* What the agent says it is doing beats the label ADE guessed; a suspended session is doing nothing. */
         activity={current().suspended ? "suspended" : (reports()[current().id]?.activity ?? current().activity)}
         elapsed={current().elapsed}
