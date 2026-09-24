@@ -91,6 +91,11 @@ export function withMissing(missing: ReadonlySet<string>, root: string, gone: bo
   return next
 }
 
+/** The list without the projects marked missing: what «Togli dai recenti le cartelle sparite» leaves. */
+export function withoutMissing(list: readonly RecentEntry[], missing: ReadonlySet<string>): RecentEntry[] {
+  return list.filter((entry) => !missing.has(recentKey(entry.root)))
+}
+
 /** Serialises the list to a JSON string. */
 export function serializeRecents(list: readonly RecentEntry[]): string {
   return JSON.stringify(list)

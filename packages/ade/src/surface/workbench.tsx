@@ -7,7 +7,7 @@ import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-vers
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
-import { addRecent, isMissingRecent, missingRecents, parseRecents, removeRecent, serializeRecents, withMissing, type RecentEntry } from "../host/recent"
+import { addRecent, isMissingRecent, missingRecents, parseRecents, removeRecent, serializeRecents, withMissing, withoutMissing, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
 import { belongsTo, goneFolder, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
@@ -425,6 +425,8 @@ const HANDLED_COMMANDS = new Set([
   "process.kill",
   "voice.toggle",
   "voice.settings",
+  "panes.closeGone",
+  "recents.forgetGone",
 ])
 
 function isHandledCommand(id: string): boolean {
@@ -4859,6 +4861,18 @@ export function Workbench() {
       await pickRecordDir()
     } else if (id === "voice.settings") {
       setVoiceSettingsOpen(true)
+    } else if (id === "panes.closeGone") {
+      for (const pane of wb().panes) if (pane.gone && !running.has(pane.id)) close(pane.id)
+    } else if (id === "recents.forgetGone") {
+      const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
+      if (count > 0 && confirm(t("confirm.forgetGone", count))) {
+        const next = withoutMissing(recents(), missingRoots())
+        setRecents(next)
+        localStorage.setItem("ade.recents", serializeRecents(next))
+        setMissingRoots(new Set<string>())
+        // The notice's «Togli dall'elenco» has nothing left to remove.
+        setNoticeAction(undefined)
+      }
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
