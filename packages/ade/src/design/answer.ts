@@ -1,4 +1,4 @@
-import type { AnsweredDesignEvent } from "./log"
+import type { AnsweredDesignEvent, ReopenedDesignEvent } from "./log"
 import type { DesignProposal } from "./state"
 import { locale, t } from "../i18n"
 
@@ -119,6 +119,10 @@ export function againEvent(proposal: Pick<DesignProposal, "k">, note: string, at
   const words = note.trim()
   if (!words) return t("design.again.needNote")
   return { type: "risposta", k: proposal.k, at: at.toISOString(), by: USER, words, again: true }
+}
+
+export function reopenEvent(k: string, at: Date, reason?: string): ReopenedDesignEvent {
+  return { type: "riaperta", k, at: at.toISOString(), by: USER, ...(reason ? { reason } : {}) }
 }
 
 const MONTHS_IT = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]

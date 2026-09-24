@@ -6,7 +6,7 @@ import type { DecisionsRegister } from "./register"
 import type { RecipientStatus } from "./delivery"
 import type { Decision } from "./state"
 import { answerEvent, countLabel, deferFromInput, deferPresets, formatDay, sheetKey } from "./answer"
-import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, recipientOptions, resolveRecipient } from "./delivery"
+import { deliveryLine, deliveryState, enqueue, markDelivered, parseOutbox, pendingFor, pruneOutbox, chooseRecipient, parseRecipients, recipientChange, recipientOptions, resolveRecipient, reopenLine } from "./delivery"
 import type { DecisionEvent } from "./log"
 import { foldDecisions } from "./state"
 
@@ -171,6 +171,45 @@ describe("the outbox", () => {
     const { decisions } = foldDecisions(events)
     expect(deliveryState([], path, decisions[0]!)).toEqual({ state: "fuori da ADE" })
     expect(parseOutbox("{rotto")).toEqual([])
+  })
+
+  test("reopening a delivered decision enqueues a riaperta notice and keeps it until delivered (ALTO 5)", () => {
+    let outbox = enqueue([], { path, k: "D1", answeredAt: "2026-09-15T10:05:00Z", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 99)
+
+    // Reopen event occurs: status becomes "aperta"
+    const reopened = foldDecisions([
+      ...events,
+      { type: "riaperta", k: "D1", at: "2026-09-15T10:10:00Z", by: "utente" },
+    ]).decisions
+
+    // The old delivered answer is pruned
+    outbox = pruneOutbox(outbox, path, reopened)
+    expect(outbox).toHaveLength(0)
+
+    // Reopening enqueues a riaperta message in the outbox
+    const notice = reopenLine("D1")
+    expect(notice).toBe("[Decisione da utente] riaperta [k=D1]: la risposta di prima non vale più, aspetta la nuova")
+
+    outbox = enqueue(outbox, {
+      path,
+      k: "D1",
+      answeredAt: "2026-09-15T10:10:00Z",
+      queuedAt: 2,
+      kind: "riaperta",
+      text: notice,
+    })
+
+    expect(pendingFor(outbox, path)).toHaveLength(1)
+    expect(outbox[0]!.kind).toBe("riaperta")
+    expect(outbox[0]!.text).toBe(notice)
+
+    // While aperta and pending delivery, pruneOutbox retains the reopen message
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(1)
+
+    // Once delivered, pruneOutbox cleans it up
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 100)
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(0)
   })
 })
 

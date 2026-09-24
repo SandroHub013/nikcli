@@ -148,6 +148,11 @@ export function deliveryLine(decision: Decision): string {
   return `[Decisione da utente] ${resolvedMessage(decision)}`
 }
 
+/** The notice typed into the recipient's terminal when a previously delivered decision is reopened. */
+export function reopenLine(k: string): string {
+  return `[Decisione da utente] riaperta [k=${k}]: la risposta di prima non vale più, aspetta la nuova`
+}
+
 export interface OutboxItem {
   /** The register the answer is in; one ADE can have several projects open. */
   readonly path: string
@@ -157,6 +162,8 @@ export interface OutboxItem {
   readonly queuedAt: number
   readonly deliveredTo?: string
   readonly deliveredAt?: number
+  readonly kind?: "risposta" | "riaperta"
+  readonly text?: string
 }
 
 export const OUTBOX_KEY = "ade.decisions.outbox"
@@ -198,7 +205,11 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, decisio
   return outbox.filter((item) => {
     if (item.path !== path) return true
     const decision = byKey.get(item.k)
-    return decision?.status === "risposta" && decision.answer?.at === item.answeredAt
+    if (!decision) return false
+    if (item.kind === "riaperta") {
+      return decision.status === "aperta" && item.deliveredAt === undefined
+    }
+    return decision.status === "risposta" && decision.answer?.at === item.answeredAt
   })
 }
 

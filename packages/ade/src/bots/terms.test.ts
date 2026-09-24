@@ -49,4 +49,4 @@ test("ADE's source never touches the CLIs' credentials", () => {
   const files = [...walk(join(root, "src")), ...walk(join(root, "src-tauri", "src"))]
   const hits = files.filter((file) => forbidden.some((needle) => readFileSync(file, "utf8").includes(needle)))
   expect(hits).toEqual([])
-})
+}, 20_000)

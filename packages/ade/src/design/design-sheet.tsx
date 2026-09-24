@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
 import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
@@ -6,7 +6,7 @@ import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
-import { bucketProposals } from "./state"
+import { bucketProposals, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
 
@@ -43,10 +43,38 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     surface?.focus()
   })
 
+  const [statusMessage, setStatusMessage] = createSignal<string>()
+  let statusTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (statusTimer) clearTimeout(statusTimer)
+  })
+
+  const showStatus = (text: string) => {
+    if (statusTimer) clearTimeout(statusTimer)
+    setStatusMessage(text)
+    statusTimer = setTimeout(() => {
+      setStatusMessage(undefined)
+      statusTimer = undefined
+    }, 4000)
+  }
+
   const submit = async (press: "primary" | "record" = "primary") => {
     const proposal = current()
     if (!proposal) return
-    if (await props.hub.submit(proposal, press)) surface?.focus()
+    const draft = props.hub.draft(proposal.k)
+    const label = designChoiceLabel(proposal, draft.picked, draft.note)
+    if (await props.hub.submit(proposal, press)) {
+      const recipient = props.hub.recipient()
+      const status =
+        recipient.state === "pronta"
+          ? t("design.sheet.status.sent", proposal.k, label, recipient.title)
+          : recipient.state === "non attiva"
+            ? t("design.sheet.status.idle", proposal.k, label, recipient.title)
+            : t("design.sheet.status.none", proposal.k, label)
+      showStatus(status)
+      surface?.focus()
+    }
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -150,6 +178,9 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
 
         <footer data-slot="sheet-foot">
           <span>{t("design.sheet.keys")}</span>
+          <Show when={statusMessage()}>
+            <span data-slot="sheet-status">{statusMessage()}</span>
+          </Show>
           <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
             <span data-tone="warn">
               {t(props.hub.recipient().state === "non scelta" ? "design.sheet.queued.none" : "design.sheet.queued.idle", queued())}
@@ -162,6 +193,21 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
       </Surface>
     </Overlay>
   )
+}
+
+export function designChoiceLabel(
+  proposal: DesignProposal,
+  picked: number | readonly number[] | undefined,
+  note: string,
+): string {
+  if (proposal.multi) {
+    const boxes = Array.isArray(picked) ? picked : picked !== undefined ? [picked as number] : []
+    const choices = proposal.variants.filter((_, index) => boxes.includes(index)).map((v) => v.name)
+    return choices.join(" + ") || note.trim()
+  }
+  const index = Array.isArray(picked) ? picked[0] : picked
+  const choice = index !== undefined ? proposal.variants[index]?.name : undefined
+  return choice ?? note.trim()
 }
 
 export function recipientHint(recipient: RecipientStatus): string {

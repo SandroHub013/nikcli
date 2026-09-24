@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { againEvent, answerEvent, togglePick } from "./answer"
+import { againEvent, answerEvent, reopenEvent, togglePick } from "./answer"
 import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
@@ -68,6 +68,7 @@ export interface DesignHub {
    * not, or nothing when it opened.
    */
   openVariant: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
+  reopen: (proposal: DesignProposal) => Promise<boolean>
 }
 
 export function createDesignHub(deps: {
@@ -78,6 +79,7 @@ export function createDesignHub(deps: {
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
+  onReopened?: (proposal: DesignProposal) => void
   openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
@@ -222,5 +224,13 @@ export function createDesignHub(deps: {
       }
       return result
     },
+    reopen: (proposal) =>
+      write(proposal.k, async () => {
+        const wasDelivered = deps.delivery(proposal).state === "consegnata"
+        await deps.register.append(reopenEvent(proposal.k, new Date()))
+        if (wasDelivered) {
+          deps.onReopened?.(proposal)
+        }
+      }),
   }
 }

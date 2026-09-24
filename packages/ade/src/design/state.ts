@@ -157,6 +157,10 @@ export function foldProposals(
         current.round = (current.round ?? 1) + 1
         break
       case "chiusa":
+        if (current.status !== "risposta" && !event.evidence) {
+          reject(event, t("design.rule.close", event.k))
+          continue
+        }
         current.status = "chiusa"
         current.closedAt = event.at
         current.evidence = event.evidence

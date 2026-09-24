@@ -262,3 +262,215 @@ describe("card stability (R0, ALTO 1)", () => {
     host.remove()
   })
 })
+
+describe("reopening an answered decision (ALTO 5)", () => {
+  const answeredFile = (k: string) =>
+    `${JSON.stringify({ type: "aperta", k, at: "2026-09-15T10:00:00.000Z", by: "Master", title: `T ${k}`, options: [{ label: "A" }, { label: "B" }] })}\n` +
+    `${JSON.stringify({ type: "risposta", k, at: "2026-09-15T10:05:00.000Z", by: "utente", choice: "B", words: "B" })}\n`
+
+  test("hub.reopen invokes onReopened when delivery is consegnata, but not when in coda", async () => {
+    const { io } = memory(answeredFile("D1"))
+    let reopenedCount = 0
+    let delivered = false
+
+    await createRoot(async (dispose) => {
+      const register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      const hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => (delivered ? { state: "consegnata", to: "Master", at: 123 } : { state: "in coda" }),
+        onAnswered: () => {},
+        onReopened: () => {
+          reopenedCount++
+        },
+      })
+      await register.refresh()
+      const decision = register.state()!.decisions[0] as Decision
+
+      // First test: not delivered yet
+      delivered = false
+      await hub.reopen(decision)
+      expect(reopenedCount).toBe(0)
+
+      // Refresh to see reopened state, answer again
+      hub.setDraft("D1", { picked: 1, note: "" })
+      await hub.answer(decision)
+
+      // Now marked delivered
+      delivered = true
+      await hub.reopen(decision)
+      expect(reopenedCount).toBe(1)
+      dispose()
+    })
+  })
+
+  test("DecisionsPane shows inline confirmation with recipient info when delivered", async () => {
+    const { io } = memory(answeredFile("D1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDecisionsRegister>
+    let hub!: ReturnType<typeof createDecisionsHub>
+    let reopened = false
+
+    const dispose = createRoot((dispose) => {
+      register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "consegnata", to: "Master", at: Date.now() }),
+        onAnswered: () => {},
+        onReopened: () => {
+          reopened = true
+        },
+      })
+      render(
+        () =>
+          createComponent(DecisionsPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Find the «Cambia risposta» button
+    const changeBtn = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    expect(changeBtn).not.toBeNull()
+    expect(changeBtn.textContent).toBe(t("decisions.change"))
+
+    // Click «Cambia risposta»
+    changeBtn.click()
+
+    // Inline confirmation must now appear
+    const alert = host.querySelector('[data-slot="decision-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire D1?")
+    expect(alert.textContent).toContain("Master ha già la risposta B")
+
+    const cancelBtn = alert.querySelector('button[data-slot="decision-ghost"]') as HTMLButtonElement
+    const confirmBtn = alert.querySelector('button[data-slot="decision-submit"]') as HTMLButtonElement
+    expect(cancelBtn.textContent).toBe(t("new.cancel"))
+    expect(confirmBtn.textContent).toBe(t("decisions.reopen"))
+
+    // Click cancel: reverts to normal actions without reopening
+    cancelBtn.click()
+    expect(host.querySelector('[data-slot="decision-actions"][role="alert"]')).toBeNull()
+    expect(reopened).toBe(false)
+
+    // Open confirmation again and confirm
+    const changeBtnAgain = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    changeBtnAgain.click()
+    const confirmBtnAgain = host.querySelector('[data-slot="decision-actions"][role="alert"] button[data-slot="decision-submit"]') as HTMLButtonElement
+    confirmBtnAgain.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(reopened).toBe(true)
+
+    dispose()
+    host.remove()
+  })
+
+  test("DecisionsPane shows simple inline confirmation when not yet delivered", async () => {
+    const { io } = memory(answeredFile("D1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDecisionsRegister>
+    let hub!: ReturnType<typeof createDecisionsHub>
+
+    const dispose = createRoot((dispose) => {
+      register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "non attiva", id: "p1", title: "Master" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DecisionsPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const changeBtn = host.querySelector('[data-slot="decision-actions"] button[data-slot="decision-ghost"]') as HTMLButtonElement
+    changeBtn.click()
+
+    const alert = host.querySelector('[data-slot="decision-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire D1?")
+    expect(alert.textContent).not.toContain("ha già la risposta")
+
+    dispose()
+    host.remove()
+  })
+})
+
+describe("sheet status line on submit (MEDIO 6)", () => {
+  test("submitting an answer displays the status line in the sheet footer", async () => {
+    const { io } = memory(opened("D1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDecisionsRegister>
+    let hub!: ReturnType<typeof createDecisionsHub>
+
+    const dispose = createRoot((dispose) => {
+      register = createDecisionsRegister({ path: () => "/p/.ade/decisions.jsonl", io: async () => io })
+      hub = createDecisionsHub({
+        register,
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DecisionsSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Pick option B (index 1)
+    hub.setDraft("D1", { picked: 1, note: "" })
+
+    // Submit
+    const submitBtn = host.querySelector('[data-slot="decision-submit"]') as HTMLButtonElement
+    expect(submitBtn).not.toBeNull()
+    submitBtn.click()
+
+    // Wait a tick for async submit and status update
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
+    expect(statusEl).not.toBeNull()
+    expect(statusEl?.textContent).toBe("D1: B, inviata a Master")
+
+    dispose()
+    host.remove()
+  })
+})

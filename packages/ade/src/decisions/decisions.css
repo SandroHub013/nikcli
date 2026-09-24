@@ -513,6 +513,11 @@ button[data-slot="decision-row"]:hover {
   color: var(--ade-warning, #b7791f);
 }
 
+[data-slot="sheet-status"] {
+  font-weight: 500;
+  color: var(--ade-text);
+}
+
 [data-slot="decisions-recipient-confirm"] {
   display: flex;
   flex-wrap: wrap;

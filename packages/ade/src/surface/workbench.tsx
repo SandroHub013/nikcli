@@ -346,6 +346,7 @@ import {
   resolveRecipient,
   type RecipientChoice,
   pruneOutbox,
+  reopenLine,
   type OutboxItem,
 } from "../decisions/delivery"
 import { createDecisionsHub } from "../decisions/hub"
@@ -366,6 +367,7 @@ import {
   parseRecipients as parseDesignRecipients,
   pendingFor as pendingForDesign,
   pruneOutbox as pruneDesignOutbox,
+  reopenLine as designReopenLine,
   resolveRecipient as resolveDesignRecipient,
 } from "../design/delivery"
 import { createDesignHub } from "../design/hub"
@@ -1237,7 +1239,7 @@ export function Workbench() {
         const decision = state.decisions.find((entry) => entry.k === item.k)
         if (!decision || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
-        if ((await deliverText(host, target.id, deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
+        if ((await deliverText(host, target.id, item.text ?? deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("decisions.delivered", decision.k), "note")
@@ -1257,6 +1259,21 @@ export function Workbench() {
       const path = decisionsRegister.path()
       if (!path) return
       saveDecisionsOutbox(enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }))
+      void deliverDecisions()
+    },
+    onReopened: (decision) => {
+      const path = decisionsRegister.path()
+      if (!path) return
+      saveDecisionsOutbox(
+        enqueue(decisionsOutbox(), {
+          path,
+          k: decision.k,
+          answeredAt: new Date().toISOString(),
+          queuedAt: Date.now(),
+          kind: "riaperta",
+          text: reopenLine(decision.k),
+        }),
+      )
       void deliverDecisions()
     },
   })
@@ -1344,7 +1361,7 @@ export function Workbench() {
       for (const item of pending) {
         const proposal = state.proposals.find((entry) => entry.k === item.k)
         if (!proposal || !running.has(target.id) || !(await freeNow(host, target.id))) continue
-        if ((await deliverText(host, target.id, designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" })) !== "given") continue
+        if ((await deliverText(host, target.id, item.text ?? designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = designOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
         if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, target.title, Date.now()))
         appendLine(target.id, t("design.delivery.done", target.title, "adesso"), "note")
@@ -1365,6 +1382,21 @@ export function Workbench() {
       const path = designRegister.path()
       if (!path) return
       saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
+      void deliverDesign()
+    },
+    onReopened: (proposal) => {
+      const path = designRegister.path()
+      if (!path) return
+      saveDesignOutbox(
+        enqueueDesign(designOutbox(), {
+          path,
+          k: proposal.k,
+          answeredAt: new Date().toISOString(),
+          queuedAt: Date.now(),
+          kind: "riaperta",
+          text: designReopenLine(proposal.k),
+        }),
+      )
       void deliverDesign()
     },
     openVariant: (proposal, variant) => openDesignVariant(proposal, variant),

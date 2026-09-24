@@ -26,6 +26,7 @@ export function DecisionsPane(props: {
   const state = () => props.hub.register.state()
   const buckets = createMemo(() => bucketDecisions(state()?.decisions ?? []))
   const [expanded, setExpanded] = createSignal<string>()
+  const [confirmingReopen, setConfirmingReopen] = createSignal<string>()
   const [showClosed, setShowClosed] = createSignal(false)
   const now = () => props.hub.register.now()
   // The first open decision is answerable in place; another one once clicked.
@@ -138,33 +139,69 @@ export function DecisionsPane(props: {
             <h4 data-slot="decisions-section">{t("decisions.section.answered")}</h4>
             <div data-slot="decisions-list">
               <For each={buckets().answered}>
-                {(decision) => (
-                  <section data-slot="decision-card" data-state="risposta">
-                    <header data-slot="decision-head">
-                      <span data-slot="decision-key">{decision.k}</span>
-                      <h3 data-slot="decision-title">{decision.title}</h3>
-                      <span data-slot="decision-pill" data-tone="done">{t("decisions.pill.answered")}</span>
-                    </header>
-                    <div data-slot="decision-answer">
-                      <b>{decision.answer?.choices?.join(" + ") ?? decision.answer?.choice ?? decision.answer?.words}</b>
-                      <Show when={(decision.answer?.choices || decision.answer?.choice) && decision.answer?.note}> · {decision.answer?.note}</Show>
-                    </div>
-                    <Show when={props.hub.problem(decision.k)}>
-                      <div data-slot="decision-problem" role="alert">{props.hub.problem(decision.k)}</div>
-                    </Show>
-                    <div data-slot="decision-actions">
-                      <span data-slot="decision-hint">{deliveryText(props.hub, decision, now())}</span>
-                      <button
-                        type="button"
-                        data-slot="decision-ghost"
-                        disabled={props.hub.busy(decision.k)}
-                        onClick={() => void props.hub.reopen(decision).then((done) => done && setExpanded(decision.k))}
+                {(decision) => {
+                  const delivery = () => props.hub.delivery(decision)
+                  const choiceLabel = () =>
+                    decision.answer?.choices?.join(" + ") ?? decision.answer?.choice ?? decision.answer?.words ?? ""
+                  return (
+                    <section data-slot="decision-card" data-state="risposta">
+                      <header data-slot="decision-head">
+                        <span data-slot="decision-key">{decision.k}</span>
+                        <h3 data-slot="decision-title">{decision.title}</h3>
+                        <span data-slot="decision-pill" data-tone="done">{t("decisions.pill.answered")}</span>
+                      </header>
+                      <div data-slot="decision-answer">
+                        <b>{choiceLabel()}</b>
+                        <Show when={(decision.answer?.choices || decision.answer?.choice) && decision.answer?.note}> · {decision.answer?.note}</Show>
+                      </div>
+                      <Show when={props.hub.problem(decision.k)}>
+                        <div data-slot="decision-problem" role="alert">{props.hub.problem(decision.k)}</div>
+                      </Show>
+                      <Show
+                        when={confirmingReopen() === decision.k}
+                        fallback={
+                          <div data-slot="decision-actions">
+                            <span data-slot="decision-hint">{deliveryText(props.hub, decision, now())}</span>
+                            <button
+                              type="button"
+                              data-slot="decision-ghost"
+                              disabled={props.hub.busy(decision.k)}
+                              onClick={() => setConfirmingReopen(decision.k)}
+                            >
+                              {t("decisions.change")}
+                            </button>
+                          </div>
+                        }
                       >
-                        {t("decisions.change")}
-                      </button>
-                    </div>
-                  </section>
-                )}
+                        <div data-slot="decision-actions" role="alert">
+                          <span data-slot="decision-hint">
+                            {delivery().state === "consegnata"
+                              ? t("decisions.change.confirm.delivered", decision.k, (delivery() as { to: string }).to, choiceLabel())
+                              : t("decisions.change.confirm", decision.k)}
+                          </span>
+                          <button
+                            type="button"
+                            data-slot="decision-submit"
+                            disabled={props.hub.busy(decision.k)}
+                            onClick={() => {
+                              setConfirmingReopen(undefined)
+                              void props.hub.reopen(decision).then((done) => done && setExpanded(decision.k))
+                            }}
+                          >
+                            {t("decisions.reopen")}
+                          </button>
+                          <button
+                            type="button"
+                            data-slot="decision-ghost"
+                            onClick={() => setConfirmingReopen(undefined)}
+                          >
+                            {t("new.cancel")}
+                          </button>
+                        </div>
+                      </Show>
+                    </section>
+                  )
+                }}
               </For>
             </div>
           </Show>

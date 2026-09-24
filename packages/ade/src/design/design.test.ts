@@ -4,6 +4,7 @@ import { previewSize } from "./design-preview"
 import { parseDesignLog, serializeDesignEvent, toEvent, type DesignEvent } from "./log"
 import { bucketProposals, describeProblems, foldProposals, nextDesignKey, resolvedMessage } from "./state"
 import { appendDesignEvent, designPath, loadDesign, type DesignIo } from "./store"
+import { t } from "../i18n"
 
 const at = (minute: number) => new Date(Date.UTC(2026, 8, 21, 16, minute)).toISOString()
 
@@ -90,6 +91,33 @@ describe("folding events into design proposals", () => {
       evidence: "commit 12345",
     })
     expect(proposals[0]!.history.map((e) => e.type)).toEqual(["aperta", "risposta", "chiusa"])
+  })
+
+  test("closing a proposal without an answer and without evidence is rejected (MEDIO 3 Part B)", () => {
+    const { rejected, proposals } = foldProposals([
+      opened("DS1"),
+      { type: "chiusa", k: "DS1", at: at(9), by: "Master" },
+    ])
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]!.reason).toBe(t("design.rule.close", "DS1"))
+    expect(proposals[0]!.status).toBe("aperta")
+
+    // With evidence, closing without prior answer is accepted
+    const withEvidence = foldProposals([
+      opened("DS1"),
+      { type: "chiusa", k: "DS1", at: at(9), by: "Master", evidence: "commit abc" },
+    ])
+    expect(withEvidence.rejected).toEqual([])
+    expect(withEvidence.proposals[0]!.status).toBe("chiusa")
+
+    // After an answer, closing without evidence is accepted
+    const withAnswer = foldProposals([
+      opened("DS1"),
+      answered("DS1", "A"),
+      { type: "chiusa", k: "DS1", at: at(9), by: "Master" },
+    ])
+    expect(withAnswer.rejected).toEqual([])
+    expect(withAnswer.proposals[0]!.status).toBe("chiusa")
   })
 
   test("duplicate open or events on unknown proposal are rejected", () => {

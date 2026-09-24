@@ -537,8 +537,14 @@
 }
 
 [data-slot="design-hint"] {
+  flex: 1;
   font-size: 11px;
   color: var(--ade-text-weak);
+}
+
+[data-slot="sheet-status"] {
+  font-weight: 500;
+  color: var(--ade-text);
 }
 
 [data-slot="design-problem"] {

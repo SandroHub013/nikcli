@@ -648,3 +648,223 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
   })
 })
 
+describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
+  const answeredFile = (k: string) =>
+    opened(k) +
+    `${JSON.stringify({
+      type: "risposta",
+      k,
+      at: "2026-09-15T10:05:00.000Z",
+      by: "utente",
+      choice: "A",
+      words: "A",
+    })}\n`
+
+  test("hub.reopen invokes onReopened when delivery is consegnata, but not when in coda", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    let reopenedCount = 0
+    let delivered = false
+
+    await createRoot(async (dispose) => {
+      const register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      const hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => (delivered ? { state: "consegnata", to: "Master", at: 123 } : { state: "in coda" }),
+        onAnswered: () => {},
+        onReopened: () => {
+          reopenedCount++
+        },
+      })
+      await register.refresh()
+      const proposal = register.state()!.proposals[0] as DesignProposal
+
+      delivered = false
+      await hub.reopen(proposal)
+      expect(reopenedCount).toBe(0)
+
+      hub.setDraft("DS1", { picked: 0, note: "" })
+      await hub.answer(proposal)
+
+      delivered = true
+      await hub.reopen(proposal)
+      expect(reopenedCount).toBe(1)
+      dispose()
+    })
+  })
+
+  test("DesignPane shows inline confirmation with recipient info when delivered", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+    let reopened = false
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "consegnata", to: "Master", at: Date.now() }),
+        onAnswered: () => {},
+        onReopened: () => {
+          reopened = true
+        },
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const changeBtn = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    expect(changeBtn).not.toBeNull()
+    expect(changeBtn.textContent).toBe(t("design.change"))
+
+    // Click «Cambia scelta»
+    changeBtn.click()
+
+    // Inline confirmation must now appear
+    const alert = host.querySelector('[data-slot="design-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire DS1?")
+    expect(alert.textContent).toContain("Master ha già la scelta A")
+
+    const cancelBtn = alert.querySelector('button[data-slot="design-ghost"]') as HTMLButtonElement
+    const confirmBtn = alert.querySelector('button[data-slot="design-submit"]') as HTMLButtonElement
+    expect(cancelBtn.textContent).toBe(t("new.cancel"))
+    expect(confirmBtn.textContent).toBe(t("design.reopen"))
+
+    // Click cancel: reverts to normal actions without reopening
+    cancelBtn.click()
+    expect(host.querySelector('[data-slot="design-actions"][role="alert"]')).toBeNull()
+    expect(reopened).toBe(false)
+
+    // Open confirmation again and confirm
+    const changeBtnAgain = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    changeBtnAgain.click()
+    const confirmBtnAgain = host.querySelector('[data-slot="design-actions"][role="alert"] button[data-slot="design-submit"]') as HTMLButtonElement
+    confirmBtnAgain.click()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(reopened).toBe(true)
+
+    dispose()
+    host.remove()
+  })
+
+  test("DesignPane shows simple inline confirmation when not yet delivered", async () => {
+    const { io } = memory(answeredFile("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "non attiva", id: "p1", title: "Master" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const changeBtn = host.querySelector('[data-slot="design-actions"] button[data-slot="design-ghost"]') as HTMLButtonElement
+    changeBtn.click()
+
+    const alert = host.querySelector('[data-slot="design-actions"][role="alert"]') as HTMLElement
+    expect(alert).not.toBeNull()
+    expect(alert.textContent).toContain("Riaprire DS1?")
+    expect(alert.textContent).not.toContain("ha già la scelta")
+
+    dispose()
+    host.remove()
+  })
+})
+
+describe("DesignSheet status line on submit (MEDIO 6)", () => {
+  test("submitting an answer displays the status line in the sheet footer", async () => {
+    const { io } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: DesignHub
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "/p",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Master" }),
+        sessions: () => [{ id: "p1", title: "Master", running: true }],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Pick variant A (index 0)
+    const proposal = register.state()!.proposals[0] as DesignProposal
+    hub.pick(proposal, 0)
+
+    // Submit
+    const submitBtn = host.querySelector('[data-slot="design-submit"]') as HTMLButtonElement
+    expect(submitBtn).not.toBeNull()
+    submitBtn.click()
+
+    // Wait a tick for async submit and status update
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
+    expect(statusEl).not.toBeNull()
+    expect(statusEl?.textContent).toBe("DS1: A, inviata a Master")
+
+    dispose()
+    host.remove()
+  })
+})
+

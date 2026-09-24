@@ -101,6 +101,11 @@ export function deliveryLine(proposal: DesignProposal): string {
   return `[Design da utente] ${resolvedMessage(proposal)}`
 }
 
+/** The notice typed into the recipient's terminal when a previously delivered design proposal is reopened. */
+export function reopenLine(k: string): string {
+  return `[Design da utente] riaperta [k=${k}]: la scelta di prima non vale più, aspetta la nuova`
+}
+
 export interface OutboxItem {
   readonly path: string
   readonly k: string
@@ -108,6 +113,8 @@ export interface OutboxItem {
   readonly queuedAt: number
   readonly deliveredTo?: string
   readonly deliveredAt?: number
+  readonly kind?: "risposta" | "riaperta"
+  readonly text?: string
 }
 
 export const OUTBOX_KEY = "ade.design.outbox"
@@ -143,7 +150,11 @@ export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposa
   return outbox.filter((item) => {
     if (item.path !== path) return true
     const proposal = byKey.get(item.k)
-    return (proposal?.status === "risposta" || proposal?.status === "giro") && proposal.answer?.at === item.answeredAt
+    if (!proposal) return false
+    if (item.kind === "riaperta") {
+      return proposal.status === "aperta" && item.deliveredAt === undefined
+    }
+    return (proposal.status === "risposta" || proposal.status === "giro") && proposal.answer?.at === item.answeredAt
   })
 }
 

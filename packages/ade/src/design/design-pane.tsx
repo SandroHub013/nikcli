@@ -20,6 +20,7 @@ export function DesignPane(props: {
   const state = () => props.hub.register.state()
   const buckets = createMemo(() => bucketProposals(state()?.proposals ?? []))
   const [expanded, setExpanded] = createSignal<string>()
+  const [confirmingReopen, setConfirmingReopen] = createSignal<string>()
   const [showClosed, setShowClosed] = createSignal(false)
   const now = () => new Date()
 
@@ -163,25 +164,69 @@ export function DesignPane(props: {
             <h4 data-slot="design-section">{t("design.section.answered")}</h4>
             <div data-slot="design-list">
               <For each={buckets().answered}>
-                {(proposal) => (
-                  <section data-slot="design-card" data-state="risposta">
-                    <header data-slot="design-head">
-                      <span data-slot="design-key">{proposal.k}</span>
-                      <h3 data-slot="design-title">{proposal.title}</h3>
-                      <span data-slot="design-pill" data-tone="done">{t("design.pill.answered")}</span>
-                    </header>
-                    <div data-slot="design-answer">
-                      <b>{proposal.answer?.choices?.join(" + ") ?? proposal.answer?.choice ?? proposal.answer?.words}</b>
-                      <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}> · {proposal.answer?.note}</Show>
-                    </div>
-                    <Show when={props.hub.problem(proposal.k)}>
-                      <div data-slot="design-problem" role="alert">{props.hub.problem(proposal.k)}</div>
-                    </Show>
-                    <div data-slot="design-actions">
-                      <span data-slot="design-hint">{deliveryText(props.hub, proposal, now())}</span>
-                    </div>
-                  </section>
-                )}
+                {(proposal) => {
+                  const delivery = () => props.hub.delivery(proposal)
+                  const choiceLabel = () =>
+                    proposal.answer?.choices?.join(" + ") ?? proposal.answer?.choice ?? proposal.answer?.words ?? ""
+                  return (
+                    <section data-slot="design-card" data-state="risposta">
+                      <header data-slot="design-head">
+                        <span data-slot="design-key">{proposal.k}</span>
+                        <h3 data-slot="design-title">{proposal.title}</h3>
+                        <span data-slot="design-pill" data-tone="done">{t("design.pill.answered")}</span>
+                      </header>
+                      <div data-slot="design-answer">
+                        <b>{choiceLabel()}</b>
+                        <Show when={(proposal.answer?.choices || proposal.answer?.choice) && proposal.answer?.note}> · {proposal.answer?.note}</Show>
+                      </div>
+                      <Show when={props.hub.problem(proposal.k)}>
+                        <div data-slot="design-problem" role="alert">{props.hub.problem(proposal.k)}</div>
+                      </Show>
+                      <Show
+                        when={confirmingReopen() === proposal.k}
+                        fallback={
+                          <div data-slot="design-actions">
+                            <span data-slot="design-hint">{deliveryText(props.hub, proposal, now())}</span>
+                            <button
+                              type="button"
+                              data-slot="design-ghost"
+                              disabled={props.hub.busy(proposal.k)}
+                              onClick={() => setConfirmingReopen(proposal.k)}
+                            >
+                              {t("design.change")}
+                            </button>
+                          </div>
+                        }
+                      >
+                        <div data-slot="design-actions" role="alert">
+                          <span data-slot="design-hint">
+                            {delivery().state === "consegnata"
+                              ? t("design.change.confirm.delivered", proposal.k, (delivery() as { to: string }).to, choiceLabel())
+                              : t("design.change.confirm", proposal.k)}
+                          </span>
+                          <button
+                            type="button"
+                            data-slot="design-submit"
+                            disabled={props.hub.busy(proposal.k)}
+                            onClick={() => {
+                              setConfirmingReopen(undefined)
+                              void props.hub.reopen(proposal).then((done) => done && setExpanded(proposal.k))
+                            }}
+                          >
+                            {t("design.reopen")}
+                          </button>
+                          <button
+                            type="button"
+                            data-slot="design-ghost"
+                            onClick={() => setConfirmingReopen(undefined)}
+                          >
+                            {t("new.cancel")}
+                          </button>
+                        </div>
+                      </Show>
+                    </section>
+                  )
+                }}
               </For>
             </div>
           </Show>
