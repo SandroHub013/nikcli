@@ -57,8 +57,8 @@ export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; reado
   nikcli: {},
 }
 
-/** What a voice turn may not do: edit, write, or run a command other than `ade-msg`. */
-export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash"]
+/** What a voice turn may not do: edit, write, run a command other than `ade-msg`, or touch the web. */
+export const VOICE_AGENT_DISABLED_TOOLS: readonly string[] = ["edit", "write", "bash", "webfetch", "websearch"]
 
 /**
  * The runner a request goes to, or why there is none.

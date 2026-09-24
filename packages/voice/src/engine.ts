@@ -245,6 +245,12 @@ export interface VoiceEngine {
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
   handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  /**
+   * Asks for a spoken yes before a voice-agent `send` is delivered (rilievo
+   * 20). Returns false when no program is running, so the host can refuse
+   * rather than deliver unattended.
+   */
+  requestSendConfirmation(id: string, to: string, text: string): Promise<boolean>
   openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
   cancel(): Promise<void>
   /**
@@ -1417,6 +1423,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (programHandle) {
         await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
+    },
+
+    async requestSendConfirmation(id: string, to: string, text: string): Promise<boolean> {
+      if (!programHandle) return false
+      await Effect.runPromise(programHandle.requestSendConfirmation(id, to, text))
+      return true
     },
 
     async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void> {

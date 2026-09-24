@@ -242,6 +242,17 @@ export function verifySender<M extends Message>(message: M, tokenOf: (paneId: st
   return proven ? message : { ...message, from: "" }
 }
 
+/**
+ * A `send` written by the voice agent must not land in its target pane
+ * unattended (rilievo 20): the host holds it and asks the user out loud
+ * before delivery. Other kinds keep their existing flows — `ask` already
+ * waits for an answer inside the turn, `spawn` is gated by openWorkbench.
+ */
+export function needsVoiceSendConfirmation(message: Message): boolean {
+  if (message.kind !== "send") return false
+  return message.from === "voce" || message.from.startsWith("voce-")
+}
+
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */
 function agentName(agent: string | undefined): string {
   return (agent ?? "").toLowerCase().replace(/-code$/, "")

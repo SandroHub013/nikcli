@@ -75,6 +75,14 @@ export interface DialogState {
    * immediately; only the submit step waits.
    */
   pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
+  /**
+   * A `send` the voice agent made into another session (rilievo 20), held in
+   * confirming until the user says yes out loud. Without this the note reached
+   * its target the moment the model wrote it — a message nobody ever saw.
+   */
+  pendingSend?: { id: string; to: string; text: string }
+  /** A send that arrived while the dialogue was busy: promoted like a queued permission. */
+  queuedSend?: { id: string; to: string; text: string }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
   timeoutAt?: number
   /** Last spoken Italian phrase emitted by the system, for dialog.repeat. */
@@ -89,6 +97,7 @@ export type DialogEffect =
   | { type: "answer_permission"; paneId: string; answer: "allow" | "deny" }
   | { type: "send_prompt"; paneId?: string; text: string }
   | { type: "execute_plan"; steps: PlanStep[]; refusals: string[]; speech?: string }
+  | { type: "confirm_send"; id: string; approved: boolean }
 
 export type DialogEvent =
   | { type: "wake" }
@@ -96,6 +105,7 @@ export type DialogEvent =
   | { type: "utterance"; text: string }
   | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
+  | { type: "send_requested"; id: string; to: string; text: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
   | { type: "timeout" }
@@ -192,6 +202,57 @@ function promoteQueuedPermission(
   /* Silent meant "do not interrupt on arrival"; once the question is on
    * screen it must be read aloud, or it waits for a phrase nobody heard. */
   return withSpokenLocal(nextState, prompt, effects)
+}
+
+/** The question spoken for a voice-agent `send` waiting on a spoken yes (rilievo 20). */
+function sendConfirmationPrompt(to: string, text: string): string {
+  return `La voce vuole inviare a «${to}»: «${text}». Confermi l'invio?`
+}
+
+/**
+ * Promotes a send that arrived while the dialogue was busy, after the
+ * permission queue has had its turn. Same contract as
+ * {@link promoteQueuedPermission}: null when nothing is queued.
+ */
+function promoteQueuedSend(
+  state: DialogState,
+  now: number,
+  effects: DialogEffect[],
+): TransitionResult | null {
+  const req = state.queuedSend
+  if (!req) return null
+
+  effects.push({ type: "cancel_timer" })
+  const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+  effects.push({
+    type: "start_timer",
+    durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS,
+    timeoutAt,
+  })
+
+  const nextState: DialogState = {
+    ...state,
+    status: "confirming",
+    timeoutAt,
+    queuedSend: undefined,
+    pendingSend: { id: req.id, to: req.to, text: req.text },
+    pendingAction: undefined,
+    pendingPlan: undefined,
+  }
+  return withSpokenLocal(nextState, sendConfirmationPrompt(req.to, req.text), effects)
+}
+
+/** Permissions first, then a waiting send: every exit path uses this. */
+function promoteQueued(
+  state: DialogState,
+  now: number,
+  ctx: ParseContext,
+  effects: DialogEffect[],
+): TransitionResult | null {
+  return (
+    promoteQueuedPermission(state, now, ctx, effects) ??
+    promoteQueuedSend(state, now, effects)
+  )
 }
 
 /** Same as the machine's `withSpoken`, usable from the module-level helper. */
@@ -309,12 +370,55 @@ export function transition(
     return withSpoken(nextState, prompt)
   }
 
+  /*
+   * A `send` the voice agent wrote into another session: preempts idle and
+   * executing the same way a permission does, and queues behind an in-flight
+   * confirmation, a dictation, or sleep (rilievo 20).
+   */
+  if (event.type === "send_requested") {
+    if (
+      state.status === "confirming" ||
+      state.status === "dictating" ||
+      state.status === "asleep"
+    ) {
+      /* First in wins: a second send while one waits does not drop the first. */
+      const queuedSend = state.queuedSend ?? {
+        id: event.id,
+        to: event.to,
+        text: event.text,
+      }
+      return withSpokenLocal(
+        { ...state, queuedSend },
+        `Ho messo in coda l'invio a «${event.to}». Lo affronto appena posso.`,
+        effects,
+      )
+    }
+
+    effects.push({ type: "cancel_timer" })
+    const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+    effects.push({
+      type: "start_timer",
+      durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS,
+      timeoutAt,
+    })
+
+    const nextState: DialogState = {
+      ...state,
+      status: "confirming",
+      timeoutAt,
+      pendingSend: { id: event.id, to: event.to, text: event.text },
+      pendingAction: undefined,
+      pendingPlan: undefined,
+    }
+    return withSpokenLocal(nextState, sendConfirmationPrompt(event.to, event.text), effects)
+  }
+
   // 2. State: ASLEEP
   if (state.status === "asleep") {
     if (event.type === "wake") {
       const woken = { ...state, status: "idle" as const }
       return (
-        promoteQueuedPermission(woken, now, ctx, effects) ??
+        promoteQueued(woken, now, ctx, effects) ??
         withSpoken(woken, "Sono sveglio e in ascolto.")
       )
     }
@@ -335,7 +439,7 @@ export function transition(
     if (event.type === "cancel") {
       const abandoned: DialogState = { ...state, status: "idle", dictation: undefined }
       return (
-        promoteQueuedPermission(abandoned, now, ctx, effects) ??
+        promoteQueued(abandoned, now, ctx, effects) ??
         withSpoken(abandoned, "Dettatura annullata.")
       )
     }
@@ -355,12 +459,12 @@ export function transition(
           /* A permission that arrived mid-dictation is asked now that the
            * text has gone out; it must not vanish with the buffer. */
           return (
-            promoteQueuedPermission(finished, now, ctx, effects) ??
+            promoteQueued(finished, now, ctx, effects) ??
             withSpoken(finished, "Dettatura completata e inviata all'agente.")
           )
         } else {
           return (
-            promoteQueuedPermission(finished, now, ctx, effects) ??
+            promoteQueued(finished, now, ctx, effects) ??
             withSpoken(finished, "Dettatura vuota, nessun messaggio inviato.")
           )
         }
@@ -387,6 +491,24 @@ export function transition(
   if (state.status === "confirming") {
     if (event.type === "timeout") {
       effects.push({ type: "cancel_timer" })
+      /* A send left unanswered is not delivered: approved stays false. */
+      if (state.pendingSend) {
+        effects.push({
+          type: "confirm_send",
+          id: state.pendingSend.id,
+          approved: false,
+        })
+        const expired: DialogState = {
+          ...state,
+          status: "idle",
+          pendingSend: undefined,
+          timeoutAt: undefined,
+        }
+        return (
+          promoteQueued(expired, now, ctx, effects) ??
+          withSpoken(expired, "Non ho sentito risposta: non invio niente.")
+        )
+      }
       const expired: DialogState = {
         ...state,
         status: "idle",
@@ -395,13 +517,30 @@ export function transition(
         timeoutAt: undefined,
       }
       return (
-        promoteQueuedPermission(expired, now, ctx, effects) ??
+        promoteQueued(expired, now, ctx, effects) ??
         withSpoken(expired, "Non ho sentito risposta: lascio stare.")
       )
     }
 
     if (event.type === "cancel") {
       effects.push({ type: "cancel_timer" })
+      if (state.pendingSend) {
+        effects.push({
+          type: "confirm_send",
+          id: state.pendingSend.id,
+          approved: false,
+        })
+        const cancelled: DialogState = {
+          ...state,
+          status: "idle",
+          pendingSend: undefined,
+          timeoutAt: undefined,
+        }
+        return (
+          promoteQueued(cancelled, now, ctx, effects) ??
+          withSpoken(cancelled, "Va bene, non invio niente.")
+        )
+      }
       const cancelled: DialogState = {
         ...state,
         status: "idle",
@@ -410,12 +549,84 @@ export function transition(
         timeoutAt: undefined,
       }
       return (
-        promoteQueuedPermission(cancelled, now, ctx, effects) ??
+        promoteQueued(cancelled, now, ctx, effects) ??
         withSpoken(cancelled, "Va bene, lascio stare.")
       )
     }
 
     if (event.type === "utterance") {
+      /*
+       * A voice-agent send sits here before `pendingPlan` and
+       * `pendingAction`: the only answer is yes or no, and negation vetoes
+       * before the parser, same as for a destructive intent. The host is
+       * holding the note until `confirm_send` says what the user decided.
+       */
+      if (state.pendingSend) {
+        if (hasNegation(normalizeUtterance(event.text))) {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "confirm_send",
+            id: state.pendingSend.id,
+            approved: false,
+          })
+          const abandoned: DialogState = {
+            ...state,
+            status: "idle",
+            pendingSend: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(abandoned, now, ctx, effects) ??
+            withSpoken(abandoned, "Va bene, non invio niente.")
+          )
+        }
+
+        const parsedSend = parseUtterance(event.text, ctx)
+        if (
+          parsedSend.intent?.intent === "dialog.confirm" ||
+          parsedSend.intent?.intent === "permission.allow"
+        ) {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "confirm_send",
+            id: state.pendingSend.id,
+            approved: true,
+          })
+          const approved: DialogState = {
+            ...state,
+            status: "idle",
+            pendingSend: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(approved, now, ctx, effects) ??
+            withSpoken(approved, "Invio confermato.")
+          )
+        }
+        if (
+          parsedSend.intent?.intent === "dialog.cancel" ||
+          parsedSend.intent?.intent === "permission.deny"
+        ) {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "confirm_send",
+            id: state.pendingSend.id,
+            approved: false,
+          })
+          const refused: DialogState = {
+            ...state,
+            status: "idle",
+            pendingSend: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(refused, now, ctx, effects) ??
+            withSpoken(refused, "Va bene, non invio niente.")
+          )
+        }
+        return withSpoken(state, "Sì o no?")
+      }
+
       /*
        * A planned plan (rilievo 4) sits here before `pendingAction`: the
        * planner asked to press Enter in an agent's tty, and the only answer
@@ -433,7 +644,7 @@ export function transition(
             timeoutAt: undefined,
           }
           return (
-            promoteQueuedPermission(abandoned, now, ctx, effects) ??
+            promoteQueued(abandoned, now, ctx, effects) ??
             withSpoken(abandoned, "Va bene, non invio niente.")
           )
         }
@@ -472,7 +683,7 @@ export function transition(
             timeoutAt: undefined,
           }
           return (
-            promoteQueuedPermission(refused, now, ctx, effects) ??
+            promoteQueued(refused, now, ctx, effects) ??
             withSpoken(refused, "Va bene, non invio niente.")
           )
         }
@@ -502,12 +713,12 @@ export function transition(
             answer: "deny",
           })
           return (
-            promoteQueuedPermission(abandoned, now, ctx, effects) ??
+            promoteQueued(abandoned, now, ctx, effects) ??
             withSpoken(abandoned, "Permesso negato.")
           )
         }
         return (
-          promoteQueuedPermission(abandoned, now, ctx, effects) ??
+          promoteQueued(abandoned, now, ctx, effects) ??
           withSpoken(abandoned, "Va bene, lascio stare.")
         )
       }
@@ -538,7 +749,7 @@ export function transition(
             timeoutAt: undefined,
           }
           return (
-            promoteQueuedPermission(answered, now, ctx, effects) ??
+            promoteQueued(answered, now, ctx, effects) ??
             withSpoken(answered, "Permesso accordato.")
           )
         } else {
@@ -585,12 +796,12 @@ export function transition(
             answer: "deny",
           })
           return (
-            promoteQueuedPermission(refused, now, ctx, effects) ??
+            promoteQueued(refused, now, ctx, effects) ??
             withSpoken(refused, "Permesso negato.")
           )
         } else {
           return (
-            promoteQueuedPermission(refused, now, ctx, effects) ??
+            promoteQueued(refused, now, ctx, effects) ??
             withSpoken(refused, "Va bene, lascio stare.")
           )
         }
@@ -615,7 +826,7 @@ export function transition(
        * permission queued behind that confirmation is asked here — the
        * only exit from executing that returns to an interactive state.
        */
-      const promoted = promoteQueuedPermission(finished, now, ctx, effects)
+      const promoted = promoteQueued(finished, now, ctx, effects)
       if (promoted) return promoted
       if (event.type === "command_failed") {
         // The dispatcher's sentence already says what went wrong, to the user:

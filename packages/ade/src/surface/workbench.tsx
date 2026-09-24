@@ -250,6 +250,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  needsVoiceSendConfirmation,
   type MailPane,
   type Message,
   formatBell,
@@ -1952,6 +1953,14 @@ export function Workbench() {
   const mailQueue: { id: string; message: Message; at: number }[] = []
 
   /*
+   * A `send` the voice agent wrote is held here until the user says yes out
+   * loud (rilievo 20). `requested` keeps the question from being asked twice
+   * while the message waits in the queue on the next passes.
+   */
+  const voiceSendDecisions = new Map<string, "approved" | "rejected">()
+  const voiceSendRequested = new Set<string>()
+
+  /*
    * What survives a restart, in localStorage: the requests still waiting for
    * an answer, and which session started which with `spawn`. Pane ids survive
    * a restore, so both still point at the right panes afterwards.
@@ -2666,6 +2675,39 @@ export function Workbench() {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
+
+    /*
+     * A voice-agent `send` never lands unattended (rilievo 20): the first
+     * pass asks for a spoken yes and leaves the note in the queue; the next
+     * pass either delivers it or tells the waiting `ade-msg send` it was
+     * refused. Without a running voice there is nobody to ask, so the note
+     * is refused rather than delivered in silence.
+     */
+    if (message.kind === "send" && needsVoiceSendConfirmation(message)) {
+      const decision = voiceSendDecisions.get(id)
+      if (decision === "rejected") {
+        voiceSendDecisions.delete(id)
+        voiceSendRequested.delete(id)
+        await answer("errore: invio annullato dall'utente")
+        return true
+      }
+      if (decision !== "approved") {
+        if (!voiceSendRequested.has(id)) {
+          voiceSendRequested.add(id)
+          const asked = await voiceEngine
+            .requestSendConfirmation(id, message.to, message.text)
+            .catch(() => false)
+          if (!asked) {
+            voiceSendRequested.delete(id)
+            await answer("errore: invio rifiutato: la conferma vocale non è disponibile")
+            return true
+          }
+        }
+        return false
+      }
+      voiceSendDecisions.delete(id)
+      voiceSendRequested.delete(id)
+    }
 
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
@@ -3836,6 +3878,10 @@ export function Workbench() {
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
+    confirmVoiceSend: (id, approved) => {
+      if (approved) voiceSendDecisions.set(id, "approved")
+      else voiceSendDecisions.set(id, "rejected")
+    },
     getHost,
     recents,
     agentAvailability: () => agentStatuses(),

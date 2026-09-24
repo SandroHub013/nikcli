@@ -221,6 +221,12 @@ export interface VoiceProgramOptions {
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
   readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) => Effect.Effect<void>
+  /**
+   * Puts a voice-agent `send` in front of the user for a spoken yes (rilievo
+   * 20). The host is already holding the note; the answer comes back as a
+   * `confirm_send` effect on the VoiceHost.
+   */
+  readonly requestSendConfirmation: (id: string, to: string, text: string) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -590,6 +596,27 @@ export function makeVoiceProgram(
                   }),
                 ),
               )
+              break
+            }
+
+            case "confirm_send": {
+              /* The host was holding the note; this is the spoken decision. */
+              if (host.confirmVoiceSend) {
+                yield* Effect.try({
+                  try: () => host.confirmVoiceSend!(effect.id, effect.approved),
+                  catch: (err) =>
+                    new HostActionFailed({
+                      action: "confirmVoiceSend",
+                      cause: err,
+                    }),
+                }).pipe(
+                  Effect.catchAll((err) =>
+                    Effect.sync(() => {
+                      options.onError?.(spokenMessage(err))
+                    }),
+                  ),
+                )
+              }
               break
             }
 
@@ -1559,6 +1586,9 @@ export function makeVoiceProgram(
 
       handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) =>
         applyDialogEvent({ type: "permission_requested", paneId, what, silent: options?.silent }),
+
+      requestSendConfirmation: (id: string, to: string, text: string) =>
+        applyDialogEvent({ type: "send_requested", id, to, text }),
 
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer

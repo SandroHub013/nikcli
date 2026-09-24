@@ -36,6 +36,11 @@ export interface AdeVoiceHostDeps {
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
   permissions: () => Record<string, PermissionRequest>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
+  /**
+   * The spoken decision on a `send` the voice agent wrote: deliver it, or
+   * refuse it with a receipt the waiting `ade-msg send` can print (rilievo 20).
+   */
+  confirmVoiceSend?: (id: string, approved: boolean) => void
   getHost?: () => Promise<Host | undefined>
   scrollTranscript?: (paneId: string, delta: number) => void
   /** The MRU project list, so a plan can name a project ADE is not in. */
@@ -397,6 +402,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         )
       }
       return false
+    },
+
+    confirmVoiceSend(id: string, approved: boolean): boolean {
+      if (!deps.confirmVoiceSend) return false
+      deps.confirmVoiceSend(id, approved)
+      return true
     },
 
     setColumns(columns?: number): void {

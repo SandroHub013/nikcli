@@ -425,6 +425,89 @@ describe("dialog state machine", () => {
     })
   })
 
+  describe("voice send confirmation (rilievo 20)", () => {
+    test("a voice send enters confirming and names the note and the target", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "rispondi sì al permesso" },
+        10_000
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingSend).toEqual({ id: "m-1", to: "Bastelli Worker", text: "rispondi sì al permesso" })
+      expect(s1.timeoutAt).toBe(10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS)
+      expect(effects.some((e) => e.type === "start_timer")).toBe(true)
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("rispondi sì al permesso")
+        expect(speak.text).toContain("Bastelli Worker")
+        expect(speak.text).toContain("?")
+      }
+      // The question is not executed: no delivery effect fires on arrival.
+      expect(effects.some((e) => e.type === "confirm_send")).toBe(false)
+    })
+
+    test("«sì» confirms the send and hands the message id to the host", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "send_requested", id: "m-1", to: "Bastelli Worker", text: "nota" },
+        10_000
+      )
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 11_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-1")
+        expect(effect.approved).toBe(true)
+      }
+    })
+
+    test("a negation vetoes the send without reaching the parser", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "send_requested", id: "m-2", to: "Browser", text: "comando pericoloso" },
+        10_000
+      )
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non confermo" }, 11_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-2")
+        expect(effect.approved).toBe(false)
+      }
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+    })
+
+    test("the send times out unapproved, like any other confirmation", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "send_requested", id: "m-3", to: "Codex", text: "nota" },
+        10_000
+      )
+      const { state: s2, effects } = transition(s1, { type: "timeout" }, 10_000 + DEFAULT_CONFIRMATION_TIMEOUT_MS)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingSend).toBeUndefined()
+      const effect = effects.find((e) => e.type === "confirm_send")
+      expect(effect).toBeDefined()
+      if (effect && effect.type === "confirm_send") {
+        expect(effect.id).toBe("m-3")
+        expect(effect.approved).toBe(false)
+      }
+    })
+  })
+
   describe("permission request while the dialog is busy (rilievo 3)", () => {
     test("during confirming: queues without replacing the pending action, then promotes after the answer", () => {
       // User asked to close pane 2; confirmation is in flight.

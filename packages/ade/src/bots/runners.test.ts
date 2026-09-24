@@ -79,7 +79,7 @@ describe("gli argomenti di un turno", () => {
   })
 
   test("un turno vocale non scrive e non esegue altro che ade-msg, su ogni motore che lo sa rifiutare", () => {
-    const voice = { ...bot, disabledTools: ["edit", "write", "bash"] }
+    const voice = { ...bot, disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
 
     const claude = turnCommand(runnerById("claude"), { bot: voice, message: "x", lean: true }).args
     const allowed = claude[claude.indexOf("--allowedTools") + 1]!.split(",")
@@ -89,8 +89,8 @@ describe("gli argomenti di un turno", () => {
     expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("")
     expect(allowed).toContain("Bash(ade-msg *)")
     expect(allowed).toContain("PowerShell(ade-msg *)")
-    for (const tool of ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit"]) expect(allowed).not.toContain(tool)
-    expect(disallowed).toEqual(expect.arrayContaining(["Edit", "Write", "NotebookEdit"]))
+    for (const tool of ["Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]) expect(allowed).not.toContain(tool)
+    expect(disallowed).toEqual(expect.arrayContaining(["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]))
     // A refusal beats an allow: refusing Bash would refuse ade-msg too.
     expect(disallowed).not.toContain("Bash")
 

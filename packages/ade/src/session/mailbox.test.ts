@@ -45,6 +45,7 @@ import {
   requestsTable,
   shouldNudge,
   type OpenRequest,
+  needsVoiceSendConfirmation,
 } from "./mailbox"
 
 const panes = [
@@ -127,6 +128,21 @@ test("verifySender keeps a sender only with that pane's token", () => {
   expect(verifySender(bare, tokenOf).from).toBe("")
   const unknown = parseMessage('{"from":"n9-9","to":"2","text":"x"}')!
   expect(verifySender(unknown, tokenOf).from).toBe("")
+})
+
+test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
+  // Rilievo 20: the voice agent may write into any session with ade-msg send;
+  // the host must ask the user out loud before the note reaches its target.
+  const voiceSend = parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!
+  expect(needsVoiceSendConfirmation(voiceSend)).toBe(true)
+
+  // A note from an ordinary pane is delivered as before: no spoken gate.
+  const paneSend = parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!
+  expect(needsVoiceSendConfirmation(paneSend)).toBe(false)
+
+  // Only `send` is gated by this rilievo: ask and spawn keep their own flows.
+  const voiceAsk = parseMessage('{"kind":"ask","from":"voce","token":"segreto","to":"n2-1","text":"quanti test falliscono?"}')!
+  expect(needsVoiceSendConfirmation(voiceAsk)).toBe(false)
 })
 
 test("resolveAgent accepts the id, the id without -code, and the label", () => {

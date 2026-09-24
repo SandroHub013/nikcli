@@ -240,6 +240,13 @@ export interface VoiceHost {
   answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
 
   /**
+   * Deliver or reject a `send` the voice agent wrote, after the user's
+   * spoken yes or no (rilievo 20). Optional: a host without it never asks
+   * for that confirmation.
+   */
+  confirmVoiceSend?(id: string, approved: boolean): boolean | void
+
+  /**
    * Configure the number of grid columns on the workbench.
    */
   setColumns(columns?: number): void
