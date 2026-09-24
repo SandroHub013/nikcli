@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { compileSolidJsx } from "../test-support/solid-jsx"
+import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import {
   type Workspace,
   countWorkspaceSessions,
@@ -9,6 +11,16 @@ import {
   selectionAfterSessionClose,
   toggleWorkspaceExpansion,
 } from "./workspace-tree"
+
+if (typeof document === "undefined") {
+  GlobalRegistrator.register()
+}
+compileSolidJsx()
+
+const { createRoot } = await import("solid-js")
+const { createComponent, render } = await import("solid-js/web")
+const { Sidebar, WorkspaceTreeRow } = await import("./sidebar")
+const { t } = await import("../i18n")
 
 const WORKSPACES_FIXTURE: Workspace[] = [
   {
@@ -190,5 +202,167 @@ describe("selectionAfterSessionClose (Defect 4)", () => {
 
   test("Defect 4: survives closing an untracked id without throwing", () => {
     expect(selectionAfterSessionClose(WORKSPACES_FIXTURE, "unknown", "s1")).toBe("s1")
+  })
+})
+
+function mountRow(props: {
+  row: ReturnType<typeof flattenWorkspaces>[number]
+  now?: number
+  isActiveSpace?: boolean
+  onToggleWorkspace?: (id: string) => void
+  onSelectProject?: (id: string) => void
+  onSelectSession?: (id: string) => void
+}) {
+  const host = document.createElement("div")
+  document.body.append(host)
+  const dispose = createRoot((dispose) => {
+    render(
+      () =>
+        createComponent(WorkspaceTreeRow, {
+          get row() {
+            return props.row
+          },
+          get now() {
+            return props.now ?? Date.now()
+          },
+          get isActiveSpace() {
+            return props.isActiveSpace
+          },
+          onToggleWorkspace: props.onToggleWorkspace ?? (() => {}),
+          onSelectProject: props.onSelectProject,
+          onSelectSession: props.onSelectSession,
+        }),
+      host,
+    )
+    return dispose
+  })
+  return {
+    host,
+    cleanup: () => {
+      dispose()
+      host.remove()
+    },
+  }
+}
+
+describe("WorkspaceTreeRow interactions", () => {
+  test("clicking project row calls onToggleWorkspace and does NOT call onSelectProject", () => {
+    const toggleCalls: string[] = []
+    const selectCalls: string[] = []
+    const wsRow = flattenWorkspaces(WORKSPACES_FIXTURE, new Set())[0]
+
+    const { host, cleanup } = mountRow({
+      row: wsRow,
+      onToggleWorkspace: (id) => toggleCalls.push(id),
+      onSelectProject: (id) => selectCalls.push(id),
+    })
+
+    const header = host.querySelector('[data-slot="workspace-header"]') as HTMLElement
+    expect(header).not.toBeNull()
+
+    header.click()
+    expect(toggleCalls).toEqual(["ws-ade"])
+    expect(selectCalls).toEqual([])
+
+    // Enter key on header
+    header.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    expect(toggleCalls).toEqual(["ws-ade", "ws-ade"])
+    expect(selectCalls).toEqual([])
+
+    // Space key on header
+    header.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }))
+    expect(toggleCalls).toEqual(["ws-ade", "ws-ade", "ws-ade"])
+    expect(selectCalls).toEqual([])
+
+    cleanup()
+  })
+
+  test("clicking workspace-open-project button calls onSelectProject without toggling", () => {
+    const toggleCalls: string[] = []
+    const selectCalls: string[] = []
+    const wsRow = flattenWorkspaces(WORKSPACES_FIXTURE, new Set())[0]
+
+    const { host, cleanup } = mountRow({
+      row: wsRow,
+      onToggleWorkspace: (id) => toggleCalls.push(id),
+      onSelectProject: (id) => selectCalls.push(id),
+    })
+
+    const button = host.querySelector('[data-slot="workspace-open-project"]') as HTMLButtonElement
+    expect(button).not.toBeNull()
+    expect(button.getAttribute("title")).toBe(t("sidebar.openProjectSessions"))
+    expect(button.getAttribute("aria-label")).toBe(t("sidebar.openProjectSessions"))
+
+    button.click()
+    expect(selectCalls).toEqual(["ws-ade"])
+    expect(toggleCalls).toEqual([])
+
+    cleanup()
+  })
+
+  test("clicking session row in expanded workspace calls onSelectSession", () => {
+    const selectSessionCalls: string[] = []
+    const expandedRows = flattenWorkspaces(WORKSPACES_FIXTURE, new Set(["ws-ade"]))
+    const sessionRow = expandedRows[1]
+    expect(sessionRow.type).toBe("session")
+
+    const { host, cleanup } = mountRow({
+      row: sessionRow,
+      onSelectSession: (id) => selectSessionCalls.push(id),
+    })
+
+    const card = host.querySelector('[data-slot="session-row"]') as HTMLElement
+    expect(card).not.toBeNull()
+
+    card.click()
+    expect(selectSessionCalls).toEqual(["s1"])
+
+    cleanup()
+  })
+
+  test("does not render workspace-open-project button when onSelectProject is not provided", () => {
+    const wsRow = flattenWorkspaces(WORKSPACES_FIXTURE, new Set())[0]
+
+    const { host, cleanup } = mountRow({
+      row: wsRow,
+    })
+
+    const button = host.querySelector('[data-slot="workspace-open-project"]')
+    expect(button).toBeNull()
+
+    cleanup()
+  })
+
+  test("in full Sidebar: clicking project row toggles workspace and does NOT call onSelectProject", () => {
+    const selectProjectCalls: string[] = []
+    const host = document.createElement("div")
+    document.body.append(host)
+    const dispose = createRoot((dispose) => {
+      render(
+        () =>
+          createComponent(Sidebar, {
+            workspaces: WORKSPACES_FIXTURE,
+            onSelectProject: (id) => selectProjectCalls.push(id),
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    const header = host.querySelector('[data-slot="workspace-header"]') as HTMLElement
+    expect(header).not.toBeNull()
+    header.click()
+
+    // Clicking header toggles workspace, does NOT call onSelectProject
+    expect(selectProjectCalls).toEqual([])
+
+    // Clicking the open-project button calls onSelectProject
+    const openBtn = host.querySelector('[data-slot="workspace-open-project"]') as HTMLElement
+    expect(openBtn).not.toBeNull()
+    openBtn.click()
+    expect(selectProjectCalls).toEqual(["ws-ade"])
+
+    dispose()
+    host.remove()
   })
 })

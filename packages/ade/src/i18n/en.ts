@@ -155,6 +155,7 @@ export const en: Messages = {
   "sidebar.project": "project",
   "sidebar.elapsed": "Time elapsed",
   "sidebar.spaces": "Spaces",
+  "sidebar.openProjectSessions": "Open project sessions",
   "sidebar.addSpace": "Add a space",
   "sidebar.addRemote": "Add a remote environment (ssh)",
   "sidebar.noSpaces": "No spaces open.",

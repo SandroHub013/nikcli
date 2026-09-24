@@ -950,6 +950,48 @@
   color: var(--ade-text);
 }
 
+[data-slot="workspace-name"] {
+  flex: 0 1 auto;
+}
+
+[data-slot="workspace-open-project"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-left: var(--ade-space-1);
+  margin-right: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--ade-dur-fast) var(--ade-ease), background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="workspace-header"]:hover [data-slot="workspace-open-project"],
+[data-slot="workspace-open-project"]:focus-visible {
+  opacity: 1;
+}
+
+[data-slot="workspace-open-project"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="workspace-open-project"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="workspace-header"]:not(:has([data-slot="workspace-open-project"])) [data-slot="workspace-name"] {
+  flex: 1;
+}
+
 /* Look and tone from `Badge` in `ui/layout`; here only where it sits in the row. */
 [data-slot="space-badge"] {
   margin-left: var(--ade-space-2);
