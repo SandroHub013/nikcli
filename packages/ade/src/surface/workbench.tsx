@@ -3937,6 +3937,7 @@ export function Workbench() {
       const host = await getHost()
       await host?.ttsPiperStop?.()
     },
+    stopOnCreate: true,
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)

@@ -131,6 +131,13 @@ describe("tts/natural-speaker", () => {
     expect(h.fallback.spoken).toEqual(["Prima frase lunga. Seconda frase lunga."])
   })
 
+  test("a new page stops a resident Piper before using it again", async () => {
+    const h = harness()
+    createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(h.stops).toHaveLength(1)
+  })
+
   test("prepare loads an installed voice once, silently, and starts the download of a missing one", async () => {
     const synthesized: string[] = []
     const h = harness({ synthesize: async (_voice, text) => (synthesized.push(text), wav(text)) })
