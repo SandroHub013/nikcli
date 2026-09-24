@@ -433,6 +433,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [downloadError, setDownloadError] = createSignal<string | null>(null)
   const [downloadSuccess, setDownloadSuccess] = createSignal(false)
   let cacheGeneration = 0
+  let cacheBackend = props.settings.parakeetBackend
+  createEffect(() => {
+    cacheBackend = props.settings.parakeetBackend
+  })
 
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
@@ -450,7 +454,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
     const generation = ++cacheGeneration
     const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
-    if (generation === cacheGeneration) {
+    if (generation === cacheGeneration && backend === cacheBackend) {
       setCached(found)
       setInspected(true)
     }
@@ -686,6 +690,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setApiKeyInput("")
     setApiKeyVisible(false)
     setLanguageFilter("")
+    cacheBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
     void refreshCache(DEFAULT_VOICE_SETTINGS.parakeetBackend)
   }
@@ -939,6 +944,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       data-slot="pill-btn"
       onClick={() => {
         if (!enabled) return
+        cacheBackend = value
         updateSettings({ parakeetBackend: value })
         void refreshCache(value)
       }}
