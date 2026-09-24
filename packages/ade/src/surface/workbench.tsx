@@ -2,7 +2,7 @@ import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createR
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every, pageHidden, watchDue } from "../host/every"
-import { mustConfirmLeaving } from "./before-unload"
+import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions } from "./before-unload"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
@@ -123,6 +123,21 @@ async function adeWindowClose() {
     }
   }
 }
+
+async function askCloseConfirmation(message: string): Promise<boolean> {
+  try {
+    const { ask } = await import("@tauri-apps/plugin-dialog")
+    return await ask(message, {
+      title: "ADE",
+      kind: "warning",
+      okLabel: "Chiudi",
+      cancelLabel: "Annulla",
+    })
+  } catch {
+    return window.confirm(message)
+  }
+}
+
 import {
   createWorkbench,
   type Pane,
@@ -4540,6 +4555,9 @@ export function Workbench() {
       }
     }
 
+    let closingConfirmed = false
+    let isHandlingClose = false
+
     /*
      * Closing the window is the one way out of ADE that `close` cannot guard.
      * A modified buffer lives only in memory, so quitting with one open loses
@@ -4547,12 +4565,67 @@ export function Workbench() {
      * running agent (`mustConfirmLeaving`).
      */
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (closingConfirmed) return
       const unsavedBuffers = Object.values(buffers()).filter((buffer) => buffer.dirty).length
       if (!mustConfirmLeaving({ unsavedBuffers, runningSessions: running.size })) return
       event.preventDefault()
       // Browsers ignore the text and show their own, but setting returnValue
       // is still what makes the prompt appear at all.
       event.returnValue = ""
+    }
+
+    let unlistenClose: (() => void) | undefined
+    if (isTauriDesktop()) {
+      void import("@tauri-apps/api/event").then(({ listen }) => {
+        listen<{ requestId?: number }>("ade-window-close-requested", async (event) => {
+          const requestId = event.payload?.requestId
+          if (isHandlingClose) return
+          isHandlingClose = true
+
+          try {
+            const working = countWorkingSessions(wb().panes, running)
+            if (!shouldConfirmWindowClose({ working })) {
+              closingConfirmed = true
+              try {
+                const { invoke } = await import("@tauri-apps/api/core")
+                await invoke("ade_confirm_close", { requestId })
+              } catch {
+                const { getCurrentWindow } = await import("@tauri-apps/api/window")
+                await getCurrentWindow().close()
+              }
+              return
+            }
+
+            // Acknowledge receipt to Rust to disarm the safety timeout while prompting the user
+            try {
+              const { invoke } = await import("@tauri-apps/api/core")
+              await invoke("ade_close_ack", { requestId })
+            } catch {}
+
+            const message = closeConfirmationMessage(working)
+            const allowed = await askCloseConfirmation(message)
+            if (allowed) {
+              closingConfirmed = true
+              try {
+                const { invoke } = await import("@tauri-apps/api/core")
+                await invoke("ade_confirm_close", { requestId })
+              } catch {
+                const { getCurrentWindow } = await import("@tauri-apps/api/window")
+                await getCurrentWindow().close()
+              }
+            } else {
+              try {
+                const { invoke } = await import("@tauri-apps/api/core")
+                await invoke("ade_cancel_close", { requestId })
+              } catch {}
+            }
+          } finally {
+            isHandlingClose = false
+          }
+        }).then((unlisten) => {
+          unlistenClose = unlisten
+        })
+      })
     }
 
     window.addEventListener("keydown", handleKeyDown, true)
@@ -4654,6 +4727,7 @@ export function Workbench() {
     }
 
     onCleanup(() => {
+      unlistenClose?.()
       window.removeEventListener("keydown", handleKeyDown, true)
       window.removeEventListener("keyup", handleKeyUp, true)
       window.removeEventListener("blur", handleBlur)

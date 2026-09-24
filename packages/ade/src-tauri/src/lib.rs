@@ -1014,6 +1014,197 @@ fn ade_window_close(window: tauri::WebviewWindow) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Window close interception (D81, d81-chiusura)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CloseAction {
+    PreventAndAsk(u64),
+    AllowClose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloseRequestStatus {
+    Pending,
+    Acked,
+    Cancelled,
+    Confirmed,
+}
+
+#[derive(Debug)]
+pub(crate) struct CloseManager {
+    confirmed: std::sync::atomic::AtomicBool,
+    active_request: Mutex<Option<(u64, CloseRequestStatus)>>,
+    request_counter: std::sync::atomic::AtomicU64,
+    default_timeout: std::time::Duration,
+}
+
+impl CloseManager {
+    pub(crate) fn new(default_timeout: std::time::Duration) -> Self {
+        Self {
+            confirmed: std::sync::atomic::AtomicBool::new(false),
+            active_request: Mutex::new(None),
+            request_counter: std::sync::atomic::AtomicU64::new(0),
+            default_timeout,
+        }
+    }
+
+    pub(crate) fn default_timeout(&self) -> std::time::Duration {
+        self.default_timeout
+    }
+
+    pub(crate) fn on_close_requested(&self) -> CloseAction {
+        use std::sync::atomic::Ordering;
+        if self.confirmed.swap(false, Ordering::SeqCst) {
+            CloseAction::AllowClose
+        } else {
+            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            if let Ok(mut guard) = self.active_request.lock() {
+                *guard = Some((req_id, CloseRequestStatus::Pending));
+            }
+            CloseAction::PreventAndAsk(req_id)
+        }
+    }
+
+    pub(crate) fn ack(&self, request_id: u64) -> bool {
+        if let Ok(mut guard) = self.active_request.lock() {
+            if let Some((id, status)) = &mut *guard {
+                if *id == request_id && *status == CloseRequestStatus::Pending {
+                    *status = CloseRequestStatus::Acked;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub(crate) fn confirm(&self, request_id: Option<u64>) -> bool {
+        use std::sync::atomic::Ordering;
+        let mut confirmed = false;
+        if let Ok(mut guard) = self.active_request.lock() {
+            if let Some((id, status)) = &mut *guard {
+                if request_id.is_none() || request_id == Some(*id) {
+                    *status = CloseRequestStatus::Confirmed;
+                    confirmed = true;
+                }
+            } else if request_id.is_none() {
+                confirmed = true;
+            }
+        }
+        if confirmed {
+            self.confirmed.store(true, Ordering::SeqCst);
+        }
+        confirmed
+    }
+
+    pub(crate) fn cancel(&self, request_id: Option<u64>) -> bool {
+        if let Ok(mut guard) = self.active_request.lock() {
+            if let Some((id, status)) = &mut *guard {
+                if request_id.is_none() || request_id == Some(*id) {
+                    *status = CloseRequestStatus::Cancelled;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub(crate) fn on_timeout(&self, request_id: u64) -> bool {
+        use std::sync::atomic::Ordering;
+        let mut force_close = false;
+        if let Ok(mut guard) = self.active_request.lock() {
+            if let Some((id, status)) = &mut *guard {
+                if *id == request_id && *status == CloseRequestStatus::Pending {
+                    *status = CloseRequestStatus::Confirmed;
+                    force_close = true;
+                }
+            }
+        }
+        if force_close {
+            self.confirmed.store(true, Ordering::SeqCst);
+        }
+        force_close
+    }
+}
+
+impl Default for CloseManager {
+    fn default() -> Self {
+        Self::new(std::time::Duration::from_secs(4))
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+struct CloseRequestPayload {
+    #[serde(rename = "requestId")]
+    request_id: u64,
+}
+
+fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<CloseManager>) {
+    use tauri::Emitter;
+    let target = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            match manager.on_close_requested() {
+                CloseAction::AllowClose => {}
+                CloseAction::PreventAndAsk(request_id) => {
+                    api.prevent_close();
+                    if let Err(err) = target.emit(
+                        "ade-window-close-requested",
+                        CloseRequestPayload { request_id },
+                    ) {
+                        eprintln!("ADE: errore emissione ade-window-close-requested: {err}");
+                    }
+                    let timeout = manager.default_timeout();
+                    let mgr = manager.clone();
+                    let win = target.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(timeout);
+                        if mgr.on_timeout(request_id) {
+                            eprintln!(
+                                "ADE: la pagina non ha risposto entro {timeout:?}, chiusura finestra forzata"
+                            );
+                            let _ = win.close();
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+#[tauri::command]
+fn ade_confirm_close(
+    window: tauri::WebviewWindow,
+    manager: tauri::State<'_, std::sync::Arc<CloseManager>>,
+    request_id: Option<u64>,
+) -> Result<(), String> {
+    if manager.confirm(request_id) {
+        window.close().map_err(|e| e.to_string())
+    } else {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn ade_cancel_close(
+    manager: tauri::State<'_, std::sync::Arc<CloseManager>>,
+    request_id: Option<u64>,
+) -> Result<(), String> {
+    manager.cancel(request_id);
+    Ok(())
+}
+
+#[tauri::command]
+fn ade_close_ack(
+    manager: tauri::State<'_, std::sync::Arc<CloseManager>>,
+    request_id: u64,
+) -> Result<(), String> {
+    manager.ack(request_id);
+    Ok(())
+}
+
+
 #[tauri::command]
 async fn write_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -1192,6 +1383,12 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     };
 
     let window = builder.build()?;
+
+    {
+        use tauri::Manager;
+        let close_manager = app.state::<std::sync::Arc<CloseManager>>().inner().clone();
+        attach_close_handler(&window, close_manager);
+    }
 
     #[cfg(windows)]
     {
@@ -1451,6 +1648,7 @@ pub fn run() {
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
+        .manage(std::sync::Arc::new(CloseManager::default()))
         /*
          * The video panel's files.
          *
@@ -1558,6 +1756,9 @@ pub fn run() {
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,
+            ade_confirm_close,
+            ade_cancel_close,
+            ade_close_ack,
             write_clipboard,
             secrets::secret_list,
             secrets::secret_save,
@@ -1927,5 +2128,58 @@ mod tests {
             !between.contains("fn ") && !between.contains("struct ") && !between.contains("enum "),
             "#[cfg(windows)] must guard the on_navigation call directly"
         );
+    }
+
+    #[test]
+    fn safety_timeout_forces_close_when_frontend_does_not_respond() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let action = manager.on_close_requested();
+        let CloseAction::PreventAndAsk(req_id) = action else {
+            panic!("expected PreventAndAsk, got {action:?}");
+        };
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(manager.on_timeout(req_id));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    #[test]
+    fn ack_disarms_safety_timeout() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let action = manager.on_close_requested();
+        let CloseAction::PreventAndAsk(req_id) = action else {
+            panic!("expected PreventAndAsk, got {action:?}");
+        };
+        assert!(manager.ack(req_id));
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(!manager.on_timeout(req_id));
+    }
+
+    #[test]
+    fn cancel_disarms_safety_timeout_and_leaves_window_open() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let action = manager.on_close_requested();
+        let CloseAction::PreventAndAsk(req_id) = action else {
+            panic!("expected PreventAndAsk, got {action:?}");
+        };
+        assert!(manager.cancel(Some(req_id)));
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(!manager.on_timeout(req_id));
+        let action2 = manager.on_close_requested();
+        assert!(matches!(action2, CloseAction::PreventAndAsk(_)));
+    }
+
+    #[test]
+    fn confirm_allows_immediate_close() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let action = manager.on_close_requested();
+        let CloseAction::PreventAndAsk(req_id) = action else {
+            panic!("expected PreventAndAsk, got {action:?}");
+        };
+        assert!(manager.confirm(Some(req_id)));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 }
