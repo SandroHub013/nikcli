@@ -702,7 +702,7 @@
 [data-component="ade-sidebar"] [data-slot="tree-row"],
 [data-component="ade-sidebar"] [data-slot="workspace-header"] {
   line-height: 16px;
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   padding-inline: var(--ade-space-4);
 }
 [data-slot="tree-row"][data-selected] {
@@ -720,7 +720,7 @@
   font-size: var(--ade-font-md);
 }
 [data-slot="file-result"] {
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
 }
 /* Il pezzo che corrisponde a quanto è stato digitato: in grassetto e in
    inchiostro pieno, non in tinta. Su una riga tenue il contrasto basta a
@@ -775,7 +775,7 @@
   height: 28px;
   padding: 0 var(--ade-space-4);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   background: var(--ade-active);
   transition:
     border-color var(--ade-dur-fast) var(--ade-ease),
@@ -972,12 +972,12 @@
   align-items: center;
   gap: var(--ade-space-3);
   width: 100%;
-  padding: 6px var(--ade-space-3);
+  padding: var(--ade-space-3);
   margin-block: 2px;
   box-sizing: border-box;
   background: var(--ade-surface);
   border: 1px solid var(--ade-border-subtle);
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   color: var(--ade-text);
   text-align: left;
   cursor: pointer;
@@ -1007,7 +1007,7 @@
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--ade-radius-sm);
   background: var(--ade-sunken);
   border: 1px solid var(--ade-border-subtle);
   padding: 2px;
@@ -1270,8 +1270,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--ade-space-2);
-  padding: 4px 10px;
-  border-radius: 5px;
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-sm);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
   background: var(--ade-active);
@@ -1376,7 +1376,7 @@ aside[data-component="ade-sidebar"] {
 /* L'etichetta del gruppo è una pillola come le righe sotto di lei: la stessa
    forma per la stessa cosa, qualcosa che si preme. */
 [data-slot="section-header"] {
-  padding: 5px 10px;
+  padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-full);
   transition:
     background var(--ade-dur-fast) var(--ade-ease),
@@ -1398,7 +1398,7 @@ aside[data-component="ade-sidebar"] {
   min-width: 24px;
   box-sizing: border-box;
   text-align: center;
-  padding: 0 7px;
+  padding: 0 var(--ade-space-3);
   border-radius: var(--ade-radius-full);
   background: var(--ade-active);
   color: var(--ade-text-soft);
@@ -1425,13 +1425,13 @@ aside[data-component="ade-sidebar"] {
 /* ── le righe: tutto è una pillola ── */
 [data-component="ade-sidebar"] [data-slot="workspace-header"],
 [data-component="ade-sidebar"] [data-slot="tree-row"] {
-  padding: 4px 10px;
+  padding: var(--ade-space-2) var(--ade-space-5);
   border-radius: var(--ade-radius-full);
 }
 
 [data-component="ade-sidebar"] [data-slot="file-result"] {
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-lg);
 }
 
 /*
@@ -1447,9 +1447,9 @@ aside[data-component="ade-sidebar"] {
  */
 [data-component="ade-sidebar"] [data-slot="session-row"],
 [data-component="ade-sidebar"] [data-slot="active-agent-card"] {
-  padding: 7px 11px;
+  padding: var(--ade-space-3) var(--ade-space-5);
   margin-block: 0 2px;
-  border-radius: 16px;
+  border-radius: var(--ade-radius-xl);
   background: transparent;
   border-color: transparent;
   box-shadow: none;
@@ -1656,7 +1656,7 @@ aside[data-component="ade-sidebar"] {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 7px;
+  gap: var(--ade-space-3);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -1671,7 +1671,7 @@ aside[data-component="ade-sidebar"] {
 [data-slot="sidebar-stat"] {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--ade-space-1);
   cursor: default;
 }
 
