@@ -45,6 +45,13 @@ export interface PendingAction {
   paneId?: string
   /** For a permission: what the agent asked to do, as the question said it. */
   what?: string
+  /**
+   * For a permission promoted from the queue: no yes before this time (epoch
+   * ms), the time its question takes to be read. V1-bis, ALTO 4: a second
+   * yes said right after the first granted the promoted request while its
+   * question was still being cut short by that very yes.
+   */
+  answerableAt?: number
 }
 
 export interface DictationBuffer {
@@ -261,12 +268,22 @@ function promoteQueuedPermission(
       isPermission: true,
       paneId: req.paneId,
       what: req.what,
+      answerableAt: now + readingMs(prompt),
     },
   }
 
   /* Silent meant "do not interrupt on arrival"; once the question is on
    * screen it must be read aloud, or it waits for a phrase nobody heard. */
   return withSpokenLocal(nextState, prompt, effects)
+}
+
+/**
+ * How long a question takes to be read aloud: about 60 ms a character, never
+ * under a second and a half. An estimate on the long side, so a yes said over
+ * the question is not taken for a yes to it; one said after it always is.
+ */
+export function readingMs(text: string): number {
+  return Math.min(12_000, Math.max(1_500, text.length * 60))
 }
 
 /** The question spoken for a voice-agent `send` waiting on a spoken yes (rilievo 20). */
@@ -767,6 +784,19 @@ export function transition(
           state,
           `Il pannello «${title(named.paneId)}» non ha richieste aperte. Sto chiedendo del pannello «${title(asked.paneId)}»: sì o no?`,
         )
+      }
+
+      /*
+       * A promoted question not yet read whole is not answered yes: the yes
+       * was said over it, most likely meant for the question before. It is
+       * read again, and the wait starts over. A no is taken at once.
+       */
+      if (answer === "yes" && asked?.answerableAt !== undefined && now < asked.answerableAt) {
+        const again: DialogState = {
+          ...state,
+          pendingAction: { ...asked, answerableAt: now + readingMs(asked.confirmPrompt) },
+        }
+        return withSpoken(again, asked.confirmPrompt)
       }
 
       if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, parseCtx))) {
