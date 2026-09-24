@@ -149,6 +149,24 @@ describe("tts/natural-speaker", () => {
     expect(missing.installs).toEqual(["ugo"])
   })
 
+  test("il primo token di due speaker non riparte da zero e non coincide", async () => {
+    const first: number[] = []
+    const collect = async (_voice: string, _text: string, token: number) => {
+      first.push(token)
+      return wav("Frase lunga abbastanza da non unirsi.")
+    }
+    const left = createNaturalSpeaker(harness({ synthesize: collect }).deps)
+    const right = createNaturalSpeaker(harness({ synthesize: collect }).deps)
+    await left.speak("Prima frase lunga del primo speaker.")
+    await right.speak("Prima frase lunga del secondo speaker.")
+    expect(first).toHaveLength(2)
+    // A page reload must not hand back a number the host may still hold as abandoned.
+    expect(first[0]).toBeGreaterThan(1_000_000)
+    expect(first[1]).toBeGreaterThan(1_000_000)
+    // Two speakers alive together never draw the same number either.
+    expect(first[0]).not.toBe(first[1])
+  })
+
   test("an abandoned reply cancels its queued sentences in the host, keeping the prefetched ones", async () => {
     const cancelled: number[][] = []
     const asked: { text: string; token: number }[] = []

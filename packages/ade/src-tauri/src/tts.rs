@@ -194,6 +194,15 @@ impl Piper {
             set.remove(&token);
         }
     }
+
+    /// Every mark, when the resident process ends: that queue is gone with
+    /// it, and a mark left for a token no phrase will ever claim would skip,
+    /// in silence, a later phrase that draws the same number.
+    fn clear_abandoned_for_stop(&self) {
+        if let Ok(mut set) = self.abandoned.lock() {
+            set.clear();
+        }
+    }
 }
 
 /// Clears the abandonment mark of a phrase once it has had its turn, whether
@@ -347,11 +356,16 @@ pub async fn tts_open_voice_source(app: tauri::AppHandle, voice_id: String) -> R
 /// Async and non-blocking: uses `try_lock` so an in-flight synthesis is never blocked,
 /// and the main window never freezes. If busy, synthesis is in progress and stop is skipped
 /// (JS will not re-arm the silence timer until another sentence finishes speaking).
+///
+/// The abandonment marks go with the process: nothing of that queue remains
+/// to claim them, and a mark left behind would skip, in silence, whatever
+/// phrase of a later reply draws the same token number.
 #[tauri::command]
 pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<(), String> {
     if let Ok(mut guard) = state.resident.try_lock() {
         *guard = None;
     }
+    state.clear_abandoned_for_stop();
     Ok(())
 }
 
@@ -661,6 +675,16 @@ mod tests {
         // When it finishes the mark must not linger: nothing will claim token 9 again.
         piper.release(9);
         assert!(piper.claim(9).is_ok());
+    }
+
+    #[test]
+    fn stopping_piper_forgets_every_abandonment_mark() {
+        let piper = Piper::default();
+        piper.abandon(&[11, 12]);
+        // The resident is free: stop takes it and the marks with it.
+        piper.clear_abandoned_for_stop();
+        assert!(piper.claim(11).is_ok(), "a stop leaves no orphan mark behind");
+        assert!(piper.claim(12).is_ok());
     }
 
     #[test]

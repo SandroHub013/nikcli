@@ -42,6 +42,15 @@ function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
   return Promise.race([pending, expired]).finally(() => clearTimeout(timer))
 }
 
+/**
+ * Names each synthesis request for the host, so an abandoned one can be
+ * cancelled there. Shared by every speaker and started from the clock: the
+ * host keeps its abandoned set across a page reload while a counter from
+ * zero would start again at 1, and the orphan mark would silently skip the
+ * phrase that happened to draw the same number.
+ */
+let tokenSeq = Date.now() * 1000
+
 export interface NaturalSpeakerDeps {
   /** The chosen voice id, read at every reply so a change in the settings applies at once. `system` means Web Speech. */
   voice: () => string
@@ -120,8 +129,6 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const installing = new Map<string, Promise<void>>()
   let warmed: string | undefined
   let fallbackNotified = false
-  /** Names each synthesis request for the host, so an abandoned one can be cancelled there. */
-  let tokenSeq = 0
   /** Tokens of the requests asked of the host and not settled yet. */
   const inflight = new Set<number>()
 
