@@ -237,7 +237,7 @@ export interface VoiceProgramHandle {
    * 20). The host is already holding the note; the answer comes back as a
    * `confirm_send` effect on the VoiceHost.
    */
-  readonly requestSendConfirmation: (id: string, to: string, text: string) => Effect.Effect<void>
+  readonly requestSendConfirmation: (id: string, to: string, text: string, lead?: string) => Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -1608,8 +1608,8 @@ export function makeVoiceProgram(
 
       resolvePermission: (paneId: string) => applyDialogEvent({ type: "permission_resolved", paneId }),
 
-      requestSendConfirmation: (id: string, to: string, text: string) =>
-        applyDialogEvent({ type: "send_requested", id, to, text }),
+      requestSendConfirmation: (id: string, to: string, text: string, lead?: string) =>
+        applyDialogEvent({ type: "send_requested", id, to, text, ...(lead ? { lead } : {}) }),
 
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer

@@ -89,9 +89,9 @@ export interface DialogState {
    * confirming until the user says yes out loud. Without this the note reached
    * its target the moment the model wrote it — a message nobody ever saw.
    */
-  pendingSend?: { id: string; to: string; text: string }
+  pendingSend?: { id: string; to: string; text: string; lead?: string }
   /** A send that arrived while the dialogue was busy: promoted like a queued permission. */
-  queuedSend?: { id: string; to: string; text: string }
+  queuedSend?: { id: string; to: string; text: string; lead?: string }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
   timeoutAt?: number
   /** Last spoken Italian phrase emitted by the system, for dialog.repeat. */
@@ -115,7 +115,8 @@ export type DialogEvent =
   | { type: "utterance"; text: string }
   | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
-  | { type: "send_requested"; id: string; to: string; text: string }
+  /** `lead`: who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent (V1-bis, ALTO 8). */
+  | { type: "send_requested"; id: string; to: string; text: string; lead?: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
   | { type: "timeout" }
@@ -287,8 +288,9 @@ export function readingMs(text: string): number {
 }
 
 /** The question spoken for a voice-agent `send` waiting on a spoken yes (rilievo 20). */
-function sendConfirmationPrompt(to: string, text: string): string {
-  return `La voce vuole inviare a «${to}»: «${text}». Confermi l'invio?`
+function sendConfirmationPrompt(to: string, text: string, lead?: string): string {
+  if (!lead) return `La voce vuole inviare a «${to}»: «${text}». Confermi l'invio?`
+  return text.trim() ? `${lead} «${to}»: «${text}». Confermi?` : `${lead} «${to}». Confermi?`
 }
 
 /**
@@ -317,11 +319,11 @@ function promoteQueuedSend(
     status: "confirming",
     timeoutAt,
     queuedSend: undefined,
-    pendingSend: { id: req.id, to: req.to, text: req.text },
+    pendingSend: { id: req.id, to: req.to, text: req.text, lead: req.lead },
     pendingAction: undefined,
     pendingPlan: undefined,
   }
-  return withSpokenLocal(nextState, sendConfirmationPrompt(req.to, req.text), effects)
+  return withSpokenLocal(nextState, sendConfirmationPrompt(req.to, req.text, req.lead), effects)
 }
 
 /** Permissions first, then a waiting send: every exit path uses this. */
@@ -498,6 +500,7 @@ export function transition(
         id: event.id,
         to: event.to,
         text: event.text,
+        lead: event.lead,
       }
       return withSpokenLocal(
         { ...state, queuedSend },
@@ -518,11 +521,11 @@ export function transition(
       ...state,
       status: "confirming",
       timeoutAt,
-      pendingSend: { id: event.id, to: event.to, text: event.text },
+      pendingSend: { id: event.id, to: event.to, text: event.text, lead: event.lead },
       pendingAction: undefined,
       pendingPlan: undefined,
     }
-    return withSpokenLocal(nextState, sendConfirmationPrompt(event.to, event.text), effects)
+    return withSpokenLocal(nextState, sendConfirmationPrompt(event.to, event.text, event.lead), effects)
   }
 
   // 2. State: ASLEEP

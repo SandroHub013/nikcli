@@ -242,15 +242,45 @@ export function verifySender<M extends Message>(message: M, tokenOf: (paneId: st
   return proven ? message : { ...message, from: "" }
 }
 
+/** The kinds that write into a session or act on one, and what the voice says each would do. */
+const ACTING: Readonly<Record<string, string>> = {
+  send: "inviare a",
+  ask: "chiedere a",
+  spawn: "avviare una sessione",
+  interrupt: "interrompere",
+  close: "chiudere",
+  relaunch: "riavviare",
+}
+
+/* An unproven sender is refused `interrupt`, `close` and `relaunch` further on anyway: nothing to ask about. */
+const ANONYMOUS_ACTING: ReadonlySet<string> = new Set(["send", "ask", "spawn"])
+
+const isVoiceSender = (from: string) => from === "voce" || from.startsWith("voce-")
+
 /**
- * A `send` written by the voice agent must not land in its target pane
- * unattended (rilievo 20): the host holds it and asks the user out loud
- * before delivery. Other kinds keep their existing flows — `ask` already
- * waits for an answer inside the turn, `spawn` is gated by openWorkbench.
+ * What the user is asked out loud before a message is carried out, or
+ * undefined when it goes as it is.
+ *
+ * Rilievo 20 held only a voice-agent `send`. V1-bis, ALTO 8: an `ask` is
+ * typed and submitted the same way, `spawn` starts a session with every
+ * permission, `interrupt`, `close` and `relaunch` act on one; and a sender
+ * whose token did not prove it (`from` emptied by {@link verifySender}) reached
+ * its target anyway. Every kind that writes or acts waits for a spoken yes
+ * when it comes from the voice or from nobody provable.
  */
+export function voiceConfirmationFor(message: Message): { lead: string; to: string; text: string } | undefined {
+  const verb = ACTING[message.kind]
+  if (!verb) return undefined
+  const voice = isVoiceSender(message.from)
+  if (!voice && !(message.from === "" && ANONYMOUS_ACTING.has(message.kind))) return undefined
+  const who = voice ? "La voce" : "Un mittente senza firma"
+  const to = message.kind === "spawn" ? message.agent : "to" in message ? String(message.to) : ""
+  return { lead: `${who} vuole ${verb}`, to, text: message.text }
+}
+
+/** Whether a message waits for the user's spoken yes before it is carried out. */
 export function needsVoiceSendConfirmation(message: Message): boolean {
-  if (message.kind !== "send") return false
-  return message.from === "voce" || message.from.startsWith("voce-")
+  return voiceConfirmationFor(message) !== undefined
 }
 
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */

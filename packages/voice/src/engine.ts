@@ -252,7 +252,8 @@ export interface VoiceEngine {
    * 20). Returns false when no program is running, so the host can refuse
    * rather than deliver unattended.
    */
-  requestSendConfirmation(id: string, to: string, text: string): Promise<boolean>
+  /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
+  requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
   openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
   cancel(): Promise<void>
   /**
@@ -1433,9 +1434,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
     },
 
-    async requestSendConfirmation(id: string, to: string, text: string): Promise<boolean> {
+    async requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean> {
       if (!programHandle) return false
-      await Effect.runPromise(programHandle.requestSendConfirmation(id, to, text))
+      await Effect.runPromise(programHandle.requestSendConfirmation(id, to, text, lead))
       return true
     },
 

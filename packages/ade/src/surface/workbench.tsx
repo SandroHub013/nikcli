@@ -250,7 +250,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
-  needsVoiceSendConfirmation,
+  voiceConfirmationFor,
   type MailPane,
   type Message,
   formatBell,
@@ -2677,13 +2677,15 @@ export function Workbench() {
     const sender = panes.find((pane) => pane.id === message.from)
 
     /*
-     * A voice-agent `send` never lands unattended (rilievo 20): the first
-     * pass asks for a spoken yes and leaves the note in the queue; the next
-     * pass either delivers it or tells the waiting `ade-msg send` it was
-     * refused. Without a running voice there is nobody to ask, so the note
-     * is refused rather than delivered in silence.
+     * A message from the voice agent, or from a sender nothing proved, never
+     * acts unattended (rilievo 20; V1-bis, ALTO 8: every kind that writes or
+     * acts, not only `send`): the first pass asks for a spoken yes and leaves
+     * it in the queue; the next pass either carries it out or tells the
+     * waiting `ade-msg` it was refused. Without a running voice there is
+     * nobody to ask, so it is refused rather than carried out in silence.
      */
-    if (message.kind === "send" && needsVoiceSendConfirmation(message)) {
+    const spoken = voiceConfirmationFor(message)
+    if (spoken) {
       const decision = voiceSendDecisions.get(id)
       if (decision === "rejected") {
         voiceSendDecisions.delete(id)
@@ -2695,7 +2697,7 @@ export function Workbench() {
         if (!voiceSendRequested.has(id)) {
           voiceSendRequested.add(id)
           const asked = await voiceEngine
-            .requestSendConfirmation(id, message.to, message.text)
+            .requestSendConfirmation(id, spoken.to, spoken.text, spoken.lead)
             .catch(() => false)
           if (!asked) {
             voiceSendRequested.delete(id)
