@@ -437,20 +437,34 @@ describe("engine/createVoiceEngine", () => {
   })
 
   test("removing an unused OpenRouter key leaves local Parakeet listening", async () => {
+    const authorizations: string[] = []
     const transcriber = createFakeTranscriber()
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
     const engine = createVoiceEngine({
       host: new MockVoiceHost(),
       speaker: createFakeSpeaker(),
       now: () => 10_000,
       settings: { activation: "toggle", agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
       createTranscriber: () => transcriber,
+      plannerFetch: fetchFn,
     })
 
     await engine.start()
     await engine.updateSettings({ openRouterApiKey: undefined })
+    transcriber.emit("raccontami una storia mai raccontata", true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await engine.submitText("raccontami un'altra storia mai raccontata")
 
+    expect(authorizations).toEqual([])
     expect(engine.isRunning()).toBe(true)
     expect(transcriber.isStarted).toBe(true)
+    expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
     await engine.stop()
   })
 

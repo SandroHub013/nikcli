@@ -1177,7 +1177,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
      * in settings the user can change while the app is open, and a
      * planner pinned at construction would keep using the old ones.
      */
-    plan: resolvePlanner(),
+    resolvePlan: resolvePlanner,
   })
 
   /*

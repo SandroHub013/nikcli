@@ -205,6 +205,7 @@ export interface VoiceProgramOptions {
    * network, and so the key stays in the layer that owns it.
    */
   plan?: Completion
+  resolvePlan?: () => Completion | undefined
   /**
    * The sentence heard while the assistant was thinking and set aside, or
    * `null` once it is sent or dropped. The console offers it with a button
@@ -701,7 +702,7 @@ export function makeVoiceProgram(
 
     function runPlan(utterance: string): Effect.Effect<Handled> {
       return Effect.gen(function* () {
-        const complete = options.plan
+        const complete = options.resolvePlan ? options.resolvePlan() : options.plan
         if (!complete) return false
 
         /*
@@ -901,7 +902,7 @@ export function makeVoiceProgram(
            */
           // Only when no turn ran: one that started may already have opened
           // sessions before its error or timeout, and the planner would open them again.
-          if (options.plan && answer.ran === false) return false
+          if ((options.plan || options.resolvePlan) && answer.ran === false) return false
         }
         if (streamed && append) {
           const said = squash(soFar.slice(0, saidUpTo))
@@ -1160,7 +1161,7 @@ export function makeVoiceProgram(
           }
         }
 
-        if (parsed.outcome === "unknown" && openToModels && options.plan) {
+        if (parsed.outcome === "unknown" && openToModels && (options.plan || options.resolvePlan)) {
           const handled = yield* runPlan(trimmed)
           if (handled) {
             if (handled !== "stopped") yield* afterTurn()

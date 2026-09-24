@@ -337,20 +337,19 @@ export function createParakeetTranscriber(
   let model: any = null
   let streamingTranscriber: any = null
   let userStopped = true
+  let startGeneration = 0
+  let micStartTail = Promise.resolve()
 
-  async function initializeModel(): Promise<void> {
+  async function initializeModel(generation?: number): Promise<void> {
     if (model) return
 
     const preference = options.executionBackend ?? "auto"
+    const cancelled = () => generation !== undefined && (userStopped || generation !== startGeneration)
 
     // 1. Instant re-use of already initialized neural model in RAM (0ms delay)
     if (keepWarm && globalSharedParakeet?.model) {
       const cached = globalSharedParakeet
-      const matchesBackend =
-        preference === "auto" ||
-        preference === cached.activeBackend ||
-        (preference === "webgpu" && cached.activeBackend === "webgpu") ||
-        (preference === "wasm" && cached.activeBackend === "wasm")
+      const matchesBackend = preference === "auto" || preference === cached.activeBackend
 
       if (cached.modelId === modelId && matchesBackend) {
         model = cached.model
@@ -367,11 +366,8 @@ export function createParakeetTranscriber(
       const pendingEpoch = sharedEpoch
       try {
         const res = await pending.initPromise!
-        const matchesBackend =
-          preference === "auto" ||
-          preference === res.activeBackend ||
-          (preference === "webgpu" && res.activeBackend === "webgpu") ||
-          (preference === "wasm" && res.activeBackend === "wasm")
+        if (cancelled()) return
+        const matchesBackend = preference === "auto" || preference === res.activeBackend
         if (pendingEpoch === sharedEpoch && pending.modelId === modelId && matchesBackend) {
           model = res.model
           activeBackend = res.activeBackend
@@ -380,12 +376,13 @@ export function createParakeetTranscriber(
           return
         }
       } catch {
-        // Fall through to retry loading
+        if (cancelled()) return
       }
     }
 
     const doLoad = async (): Promise<{ model: any; activeBackend: ParakeetBackend }> => {
       await applyWasmPaths(options.wasmPaths)
+      if (cancelled()) throw new Error("Caricamento Parakeet annullato.")
 
       /*
        * Asked before the download, not after: marking storage persistent once it
@@ -394,9 +391,11 @@ export function createParakeetTranscriber(
        */
       if (options.persistStorage !== false) {
         await requestPersistentStorage()
+        if (cancelled()) throw new Error("Caricamento Parakeet annullato.")
       }
 
       const { fromHub, supportsLanguage } = await resolveParakeetLib(options)
+      if (cancelled()) throw new Error("Caricamento Parakeet annullato.")
 
       // Verify coverage of the language the user actually chose.
       const wanted = (options.language ?? "it").trim().toLowerCase()
@@ -409,6 +408,7 @@ export function createParakeetTranscriber(
       }
 
       const progressBridge = (p: { loaded: number; total: number; file?: string }) => {
+        if (cancelled()) return
         const percent =
           p.total > 0 ? Math.min(100, Math.round((p.loaded / p.total) * 100)) : undefined
         const msg =
@@ -459,6 +459,7 @@ export function createParakeetTranscriber(
           })
           resolvedBackend = "webgpu"
         } catch (gpuErr: any) {
+          if (cancelled()) throw gpuErr
           // WebGPU failed during runtime initialization; proceed to WASM fallback
           loadedModel = null
           resolvedBackend = null
@@ -477,6 +478,7 @@ export function createParakeetTranscriber(
 
       // 2. Fallback or primary WebAssembly execution with lightweight INT8 quantization (~640 MB)
       if (!loadedModel) {
+        if (cancelled()) throw new Error("Caricamento Parakeet annullato.")
         statusMessage =
           preference === "wasm"
             ? "Inizializzazione del modello quantizzato INT8 su WASM (~640 MB)..."
@@ -498,6 +500,7 @@ export function createParakeetTranscriber(
           })
           resolvedBackend = "wasm"
         } catch (wasmErr: any) {
+          if (cancelled()) throw wasmErr
           statusMessage = "Inizializzazione fallita"
           throw new Error(
             `Impossibile inizializzare il modello Parakeet sia con WebGPU che con WASM: ${wasmErr?.message ?? "errore sconosciuto"}`
@@ -509,7 +512,12 @@ export function createParakeetTranscriber(
     }
 
     if (keepWarm) {
+      const requestedEpoch = sharedEpoch + 1
       await clearSharedState()
+      if (sharedEpoch !== requestedEpoch) {
+        if (userStopped) return
+        throw new Error("Il modello Parakeet è stato sostituito mentre si preparava.")
+      }
       const epoch = sharedEpoch
       const p = doLoad()
       globalSharedParakeet = {
@@ -520,7 +528,10 @@ export function createParakeetTranscriber(
       }
       try {
         const res = await p
-        if (epoch !== sharedEpoch) return
+        if (epoch !== sharedEpoch) {
+          if (userStopped) return
+          throw new Error("Il modello Parakeet è stato sostituito mentre si caricava.")
+        }
         globalSharedParakeet = {
           model: res.model,
           modelId,
@@ -538,6 +549,10 @@ export function createParakeetTranscriber(
       activeBackend = res.activeBackend
     }
 
+    if (generation !== undefined && (userStopped || generation !== startGeneration)) {
+      if (userStopped) statusMessage = "Fermato"
+      return
+    }
     options.onBackendChange?.(activeBackend!)
     statusMessage = `Modello Parakeet pronto (${activeBackend}).`
   }
@@ -699,15 +714,27 @@ export function createParakeetTranscriber(
     },
 
     async start(): Promise<void> {
+      const generation = ++startGeneration
       userStopped = false
       isFinalizing = false
       isSegmentActive = false
       receivedPcmChunks = 0
       try {
-        await initializeModel()
+        await initializeModel(generation)
+        if (userStopped || generation !== startGeneration) return
         streamingTranscriber = model.createStreamingTranscriber({ sampleRate: 16000 })
-        await micCapture.start()
+        const captureStart = micStartTail.then(async () => {
+          if (userStopped || generation !== startGeneration) return
+          await micCapture.start()
+          if (userStopped || generation !== startGeneration) micCapture.stop()
+        })
+        micStartTail = captureStart.catch(() => {})
+        await captureStart
       } catch (err: any) {
+        if (userStopped || generation !== startGeneration) {
+          if (userStopped) statusMessage = "Fermato"
+          return
+        }
         userStopped = true
         statusMessage = "Avvio fallito"
         const failure = new Error(
@@ -724,6 +751,7 @@ export function createParakeetTranscriber(
     },
 
     async stop(): Promise<void> {
+      startGeneration++
       userStopped = true
       isFinalizing = false
       isSegmentActive = false
