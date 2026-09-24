@@ -71,3 +71,25 @@ describe("the arrows between variants (D2)", () => {
     expect(stepVariant(3, 1, 3)).toBeUndefined()
   })
 })
+
+/*
+ * The Architect's BASSO 1 on D1: a new document asks for the bridge before
+ * its `load`. On a slow page outside the proposal, a real click in that
+ * window was taken as a selection. A second ask is leaving too.
+ */
+describe("watchDesign counts a second handshake as leaving", () => {
+  const run = (...events: DesignWatchEvent[]) => events.reduce(watchDesign, INITIAL_DESIGN_WATCH)
+
+  test("the variant's own ask is not leaving", () => {
+    expect(run({ type: "ask" }, { type: "load" }).left).toBe(false)
+  })
+
+  test("a second ask, before any load, is", () => {
+    expect(run({ type: "ask" }, { type: "load" }, { type: "ask" }).left).toBe(true)
+    expect(run({ type: "ask" }, { type: "ask" }).left).toBe(true)
+  })
+
+  test("the pane's reload asks again without leaving", () => {
+    expect(run({ type: "ask" }, { type: "load" }, { type: "src" }, { type: "ask" }, { type: "load" }).left).toBe(false)
+  })
+})

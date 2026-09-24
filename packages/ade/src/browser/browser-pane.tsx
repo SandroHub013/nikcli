@@ -562,7 +562,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (!iframeRef?.contentWindow || event.source !== iframeRef.contentWindow) return
     const raw = event.data as { type?: unknown } | null
     // The only thing the frame's window may say: "here is my port".
-    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) frameGate.ask(event.ports[0])
+    if (!raw || typeof raw !== "object" || raw.type !== FRAME_ASK) return
+    if (props.design) {
+      // A second handshake is a second document: not the variant any more (BASSO 1).
+      watchFrame({ type: "ask" })
+      if (designWatch().left) {
+        event.ports[0]?.close()
+        return
+      }
+    }
+    frameGate.ask(event.ports[0])
   }
 
   const handleBridge = (data: BridgeMessage | undefined) => {

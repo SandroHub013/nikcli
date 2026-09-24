@@ -9,6 +9,10 @@
  * reload the page did itself — is a new document, and the pane no longer
  * knows what that is. Inspection goes off and stays off until the pane loads
  * the variant again.
+ *
+ * A new document asks for the bridge before its `load`, though (the
+ * Architect's BASSO 1): on a slow page, a click in between was a selection.
+ * So a second ask for one `src` counts as leaving too.
  */
 
 /** The frame of an ordinary page: its own origin, for WebGL, forms and popups (fec210d0b). */
@@ -63,19 +67,23 @@ export function frameSandbox(design: DesignTarget | undefined): string {
 export interface DesignWatch {
   readonly awaiting: boolean
   readonly left: boolean
+  /** A document has asked for the bridge since the pane last set `src`. */
+  readonly asked: boolean
 }
 
 /** A frame given its `src` on first render: its first load is the pane's own. */
-export const INITIAL_DESIGN_WATCH: DesignWatch = { awaiting: true, left: false }
+export const INITIAL_DESIGN_WATCH: DesignWatch = { awaiting: true, left: false, asked: false }
 
 /**
  * `src`: the pane pointed the frame at the variant (a reload included).
  * `load`: the frame finished loading a document, whichever.
+ * `ask`: a document in the frame asked for the bridge.
  */
-export type DesignWatchEvent = { readonly type: "src" } | { readonly type: "load" }
+export type DesignWatchEvent = { readonly type: "src" } | { readonly type: "load" } | { readonly type: "ask" }
 
 export function watchDesign(state: DesignWatch, event: DesignWatchEvent): DesignWatch {
-  if (event.type === "src") return { awaiting: true, left: false }
-  if (state.awaiting) return { awaiting: false, left: state.left }
-  return { awaiting: false, left: true }
+  if (event.type === "src") return { awaiting: true, left: false, asked: false }
+  if (event.type === "ask") return state.asked ? { ...state, left: true } : { ...state, asked: true }
+  if (state.awaiting) return { ...state, awaiting: false }
+  return { ...state, awaiting: false, left: true }
 }
