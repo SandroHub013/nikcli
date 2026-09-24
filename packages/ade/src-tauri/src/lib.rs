@@ -531,7 +531,13 @@ extern "system" {
 #[cfg(windows)]
 fn resume_child(child: &std::process::Child) -> Result<(), String> {
     use std::os::windows::io::AsRawHandle;
-    let status = unsafe { NtResumeProcess(windows::Win32::Foundation::HANDLE(child.as_raw_handle())) };
+    /*
+     * The child starts suspended so it cannot create descendants before entering the job.
+     * `std::process::Child` exposes the process handle, not the primary thread handle,
+     * so the process is resumed through ntdll instead of `ResumeThread`.
+     */
+    let status =
+        unsafe { NtResumeProcess(windows::Win32::Foundation::HANDLE(child.as_raw_handle())) };
     if status < 0 {
         return Err(format!("nikcli non può essere riattivato: {status:#x}"));
     }
@@ -546,12 +552,14 @@ impl ChildTreeGuard {
     fn new() -> Result<Self, String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::{
-            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JobObjectExtendedLimitInformation, SetInformationJobObject,
+            CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         };
 
-        let handle = unsafe { CreateJobObjectW(None, None) }.map_err(|error| error.message().to_string())?;
+        let handle =
+            unsafe { CreateJobObjectW(None, None) }.map_err(|error| error.message().to_string())?;
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        // Closing the guard also kills descendants left behind by a completed command.
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         let result = unsafe {
             SetInformationJobObject(
@@ -571,7 +579,9 @@ impl ChildTreeGuard {
     fn assign_pid(&self, pid: u32) -> Result<(), String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::AssignProcessToJobObject;
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+        use windows::Win32::System::Threading::{
+            OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        };
 
         let process = unsafe { OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid) }
             .map_err(|error| error.message().to_string())?;
@@ -634,10 +644,15 @@ fn terminate_child_tree(
     let _ = child.wait();
 }
 
-fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> Result<ShellOutput, String> {
+fn run_bounded_output(
+    mut command: std::process::Command,
+    timeout: Duration,
+) -> Result<ShellOutput, String> {
     use std::process::Stdio;
 
-    let mut tree_guard = ChildTreeGuard::new().ok();
+    let mut tree_guard = Some(ChildTreeGuard::new().map_err(|error| {
+        format!("Impossibile creare il job Windows che protegge nikcli: {error}. Riavvia ADE e riprova.")
+    })?);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -656,16 +671,26 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
         .map_err(|error| format!("nikcli non eseguibile: {error}"))?;
     let pid = child.id();
     let job_assigned = if cfg!(windows) {
-        tree_guard.as_ref().is_some_and(|guard| guard.assign_pid(pid).is_ok())
+        let Some(guard) = tree_guard.as_ref() else {
+            terminate_child_tree(&mut child, pid, &mut tree_guard, false);
+            return Err(
+                "Impossibile proteggere nikcli con il job Windows. Riavvia ADE e riprova.".into(),
+            );
+        };
+        match guard.assign_pid(pid) {
+            Ok(()) => true,
+            Err(error) => {
+                terminate_child_tree(&mut child, pid, &mut tree_guard, false);
+                return Err(format!(
+                    "Impossibile assegnare nikcli al job Windows: {error}. Riavvia ADE e riprova."
+                ));
+            }
+        }
     } else {
         false
     };
     #[cfg(windows)]
     {
-        if !job_assigned {
-            terminate_child_tree(&mut child, pid, &mut tree_guard, false);
-            return Err("nikcli non può essere protetto con un job Windows".into());
-        }
         if let Err(error) = resume_child(&child) {
             terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
             return Err(error);
@@ -697,7 +722,10 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
-                return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
+                return Err(format!(
+                    "nikcli non ha risposto entro {} secondi ed è stato fermato.",
+                    timeout.as_secs()
+                ));
             }
             Err(error) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
@@ -705,15 +733,20 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
             }
         }
     };
+    let drain_deadline = Instant::now() + Duration::from_secs(1);
     while !out_reader.is_finished() || !err_reader.is_finished() {
-        if Instant::now() >= deadline {
+        if Instant::now() >= drain_deadline {
             terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
-            return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
+            break;
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    let stdout = out_reader.join().map_err(|_| "lettura dell'output di nikcli fallita")?;
-    let stderr = err_reader.join().map_err(|_| "lettura degli errori di nikcli fallita")?;
+    let stdout = out_reader
+        .join()
+        .map_err(|_| "lettura dell'output di nikcli fallita")?;
+    let stderr = err_reader
+        .join()
+        .map_err(|_| "lettura degli errori di nikcli fallita")?;
     Ok(ShellOutput {
         code: status.code(),
         stdout: String::from_utf8_lossy(&stdout).into_owned(),
@@ -2036,24 +2069,42 @@ mod tests {
     #[test]
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
-        let error = run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
-        assert!(error.contains("è stato fermato"), "{error}");
-        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+        let error =
+            run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
+        assert!(error.contains("ed è stato fermato"), "{error}");
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "took {:?}",
+            started.elapsed()
+        );
     }
 
     #[cfg(windows)]
     #[test]
     fn bounded_nikcli_output_does_not_wait_for_a_grandchild_holding_stdout() {
+        let temp = TempDir::new("grandchild-output");
+        let release = temp.join("release.txt");
+        let marker = temp.join("survived.txt");
+        let grandchild = format!(
+            "for ($i = 0; $i -lt 50; $i++) {{ if (Test-Path -LiteralPath \"{}\") {{ break }}; Start-Sleep -Milliseconds 100 }}; Set-Content -LiteralPath \"{}\" -Value alive",
+            release.display(),
+            marker.display()
+        );
+        let script = format!(
+            "$p = Start-Process powershell -NoNewWindow -ArgumentList @('-NoProfile','-Command','{grandchild}') -PassThru; 'root-output'; exit 0"
+        );
         let mut command = std::process::Command::new("powershell");
-        command.args([
-            "-NoProfile",
-            "-Command",
-            "$p = Start-Process powershell -NoNewWindow -ArgumentList '-NoProfile','-Command','Start-Sleep 30' -PassThru; exit 0",
-        ]);
+        command.args(["-NoProfile", "-Command", &script]);
         let started = Instant::now();
-        let error = run_bounded_output(command, Duration::from_millis(100)).expect_err("must time out");
-        assert!(error.contains("è stato fermato"), "{error}");
-        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+        let output =
+            run_bounded_output(command, Duration::from_secs(5)).expect("root output must survive");
+        let returned = started.elapsed();
+        assert_eq!(output.code, Some(0));
+        assert!(output.stdout.contains("root-output"), "{}", output.stdout);
+        assert!(returned < Duration::from_secs(3), "took {:?}", returned);
+        std::fs::write(&release, b"release").expect("release marker");
+        std::thread::sleep(Duration::from_secs(2));
+        assert!(!marker.exists(), "grandchild survived the job");
     }
 
     #[cfg(unix)]
