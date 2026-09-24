@@ -413,3 +413,55 @@ describe("card stability (R0, ALTO 1)", () => {
   })
 })
 
+
+/*
+ * D2 review, MEDIO: opening the sheet cleared every pick, the one made in
+ * the browser pane with «Scelgo questa» included, and «I pick in the pane,
+ * send from the sheet» lost the choice without a word. A pick made through
+ * `hub.pick` is a choice made in this window: the sheet keeps it.
+ */
+describe("the sheet keeps a choice made in this window", () => {
+  async function sheetAfter(prepare: (hub: ReturnType<typeof createDesignHub>) => void) {
+    const { io } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+    const disposeHub = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      return dispose
+    })
+    await register.refresh()
+    prepare(hub)
+    const disposeSheet = createRoot((dispose) => {
+      render(() => createComponent(DesignSheet, { hub, onClose: () => {}, onOpenPanel: () => {} }), host)
+      return dispose
+    })
+    const picked = hub.draft("DS1").picked
+    disposeSheet()
+    disposeHub()
+    host.remove()
+    return { picked, chosen: hub.chosen("DS1") }
+  }
+
+  test("picked in the pane («Scelgo questa»), then the sheet opened: the choice stays", async () => {
+    const proposal = { k: "DS1" }
+    const { picked, chosen } = await sheetAfter((hub) => hub.pick(proposal, 1))
+    expect(picked).toBe(1)
+    expect(chosen).toBe(true)
+  })
+
+  test("a pick nobody made in this window is still cleared", async () => {
+    const { picked, chosen } = await sheetAfter((hub) => hub.setDraft("DS1", { note: "", picked: 1 }))
+    expect(picked).toBeUndefined()
+    expect(chosen).toBe(false)
+  })
+})

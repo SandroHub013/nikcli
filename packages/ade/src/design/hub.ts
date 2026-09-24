@@ -44,6 +44,12 @@ export interface DesignHub {
    * through here, so the three cannot pick differently.
    */
   pick: (proposal: Pick<DesignProposal, "k" | "multi">, index: number) => void
+  /**
+   * Whether the pick of `k` was made in this window, through `pick`: the
+   * sheet keeps it when it opens, and Enter may send it. A pick the sheet
+   * finds without this mark is cleared (D2 review, MEDIO).
+   */
+  chosen: (k: string) => boolean
   /** Adds `line` to the note of `k` on a line of its own, leaving what is written (D2, «Aggiungi alla nota»). */
   addNoteLine: (k: string, line: string) => void
   busy: (k: string) => boolean
@@ -86,6 +92,7 @@ export function createDesignHub(deps: {
   openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
+  const [chosenKeys, setChosenKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
   const [inline, setInline] = createSignal<string>()
@@ -121,12 +128,18 @@ export function createDesignHub(deps: {
     setDrafts((all) => ({ ...all, [k]: value }))
     if (problems()[k]) setProblem(k, undefined)
   }
-  const clearDraft = (k: string) =>
+  const clearDraft = (k: string) => {
     setDrafts((all) => {
       const next = { ...all }
       delete next[k]
       return next
     })
+    setChosenKeys((keys) => {
+      const next = new Set(keys)
+      next.delete(k)
+      return next
+    })
+  }
 
   const record = (proposal: DesignProposal, event: AnsweredDesignEvent | string): Promise<boolean> => {
     if (typeof event === "string") {
@@ -157,7 +170,9 @@ export function createDesignHub(deps: {
     pick: (proposal, index) => {
       const current = draft(proposal.k)
       setDraft(proposal.k, { ...current, picked: togglePick(current.picked, index, Boolean(proposal.multi)) })
+      setChosenKeys((keys) => new Set(keys).add(proposal.k))
     },
+    chosen: (k) => chosenKeys().has(k),
     addNoteLine: (k, line) => {
       const current = draft(k)
       setDraft(k, { ...current, note: appendNoteLine(current.note, line) })
