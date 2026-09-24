@@ -392,6 +392,24 @@ describe("engine/createVoiceEngine", () => {
     await disposeParakeetModel()
   })
 
+  test("removing an unused OpenRouter key leaves local Parakeet listening", async () => {
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
+      createTranscriber: () => transcriber,
+    })
+
+    await engine.start()
+    await engine.updateSettings({ openRouterApiKey: undefined })
+
+    expect(engine.isRunning()).toBe(true)
+    expect(transcriber.isStarted).toBe(true)
+    await engine.stop()
+  })
+
   test("destructive command requires explicit confirmation before executing", async () => {
     const { engine, host, transcriber, speaker } = setupEngine()
 

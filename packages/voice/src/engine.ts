@@ -1708,7 +1708,11 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const keyRemoved = keyChanged && !normalized.openRouterApiKey
       const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
       if (keyRemoved) {
-        await stop({ drain: false, releaseText: true })
+        if (normalized.backend !== "parakeet" || prev.backend === "openrouter") {
+          await stop({ drain: false, releaseText: true })
+        } else {
+          await releaseTextProgram()
+        }
       } else if (keyChanged || (sessionPending && backendChanged)) {
         const result = enqueueLifecycle(async (generation) => {
           if (generation !== sessionGeneration) return
