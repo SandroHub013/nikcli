@@ -437,7 +437,13 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     void listAudioDevices().then(setDevices)
   }
   const refreshCache = () => {
-    void inspectModelCache().then((found) => {
+    const usesWebGpu = props.settings.parakeetBackend === "webgpu" || (props.settings.parakeetBackend === "auto" && isWebGpuAvailable())
+    const requiredFiles = [
+      `encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`,
+      "decoder_joint-model.int8.onnx",
+      "vocab.txt",
+    ]
+    void inspectModelCache({ skipFilesystem: true, requiredFiles }).then((found) => {
       setCached(found)
       setInspected(true)
     })
