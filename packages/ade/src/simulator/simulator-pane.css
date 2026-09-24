@@ -172,7 +172,7 @@
   padding: 0 28px;
   background: #000;
   color: #fff;
-  font: 600 15px/1 -apple-system, "Segoe UI", system-ui, sans-serif;
+  font: var(--ade-weight-semibold) 15px/1 -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
 [data-slot="sim-indicators"] {
@@ -283,7 +283,7 @@
 }
 
 [data-slot="sim-guess-label"] {
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 [data-slot="sim-guess-url"] {

@@ -139,7 +139,7 @@
   background: var(--ade-surface);
   color: var(--ade-text-soft);
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   letter-spacing: 0.02em;
 }
 
@@ -152,7 +152,7 @@
 
 [data-slot="ext-card-title"] b {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   color: var(--ade-text);
 }
 
@@ -253,7 +253,7 @@
 [data-slot="ext-group"] {
   margin: var(--ade-space-4) 0 var(--ade-space-2);
   font-size: 10px;
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ade-text-weak);

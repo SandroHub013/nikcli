@@ -556,7 +556,7 @@
   color: #000;
   font-family: var(--ade-sans);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--ade-weight-bold);
   letter-spacing: 0.06em;
   line-height: 14px;
 }

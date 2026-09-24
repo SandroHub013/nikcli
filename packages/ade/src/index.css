@@ -701,7 +701,7 @@ body,
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   color: var(--ade-accent-fg);
   background: var(--ade-accent);
 }
@@ -1240,12 +1240,12 @@ body,
   margin-left: auto;
   font-family: var(--ade-mono);
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
   color: var(--ade-text-weak);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-version"] b {
   color: var(--ade-accent);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-body"] {
   display: grid;

@@ -410,7 +410,7 @@
   background: var(--cli-color, var(--ade-accent));
   color: var(--cli-contrast, #ffffff);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--ade-weight-bold);
   line-height: 1;
   opacity: 0;
   transform: scale(0.75);
@@ -447,7 +447,7 @@
 [data-slot="new-agent-label"] {
   color: var(--ade-text);
   font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -624,7 +624,7 @@
 
 [data-slot="hook-name"] {
   color: var(--ade-text);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
 }
 
 [data-slot="hook-state"] {
