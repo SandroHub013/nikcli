@@ -1299,6 +1299,15 @@ describe("always-on listening", () => {
     expect(engine.isRunning()).toBe(false)
   })
 
+  test("opened by hand without a phrase, it closes after the short idle timeout", async () => {
+    const { engine } = listening({ alwaysListen: false }, { listenIdleMs: 20 })
+    await engine.start()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.listenHalted()).toBe(true)
+    expect(engine.listenWarning()).toContain("Non ti sento da 1 secondo")
+  })
+
   test("it never pauses by itself: a long silence leaves it listening", async () => {
     const { engine } = listening()
     await engine.start("agent", { waitForName: true })

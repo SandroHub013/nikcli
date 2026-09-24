@@ -170,7 +170,7 @@ export const voiceEn: VoiceMessages = {
   "vui.listen.spend": (calls, cost) =>
     `Listening has sent ${calls} ${calls === 1 ? "sentence" : "sentences"} to the transcription service today, for ${cost}.`,
   "vui.listen.manual": "Only when you open it",
-  "vui.listen.manual.desc": "With the button at the top or the shortcut",
+  "vui.listen.manual.desc": "With the button at the top or the shortcut; without an accepted phrase it closes after 30 seconds.",
   "vui.shortcuts.title": "Keyboard shortcuts",
   "vui.shortcuts.desc": "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
   "vui.shortcuts.agent": "Agent mode shortcut",

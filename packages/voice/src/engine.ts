@@ -101,7 +101,7 @@ export interface VoiceEngineOptions {
   readonly spendTally?: SpendTally
   /** Overrides `LOW_CREDIT_USD`, for tests. */
   readonly lowCreditUsd?: number
-  /** Overrides `LISTEN_IDLE_MS`, for tests. */
+  /** Overrides the inactivity timeout, for tests. */
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
@@ -291,6 +291,7 @@ const HOUR_MS = 60 * 60_000
  * saying the name is a room that forgot it was listening.
  */
 export const LISTEN_IDLE_MS = 30 * 60_000
+export const MANUAL_LISTEN_IDLE_MS = 30_000
 
 /**
  * Below this much credit left, in dollars, the user is told before the voice
@@ -673,12 +674,27 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   function keepListeningAwake(): void {
     clearTimeout(idleTimer)
-    if (!currentSettings().alwaysListen) return
-    const after = options.listenIdleMs ?? LISTEN_IDLE_MS
+    idleTimer = undefined
+    const alwaysListen = currentSettings().alwaysListen
+    const after = options.listenIdleMs ?? (alwaysListen ? LISTEN_IDLE_MS : MANUAL_LISTEN_IDLE_MS)
     idleTimer = setTimeout(() => {
-      if (!isRunning() || !currentSettings().alwaysListen) return
+      idleTimer = undefined
+      if (!isRunning() || chordHeld) return
+      const current = currentSettings()
+      if (current.alwaysListen !== alwaysListen) return
+      const busy =
+        activeTranscriber?.hasInFlight === true ||
+        dialogState().status === "executing" ||
+        dialogState().status === "confirming" ||
+        dialogState().status === "dictating"
+      if (!current.alwaysListen && busy) {
+        keepListeningAwake()
+        return
+      }
+      const seconds = Math.max(1, Math.round(after / 1000))
+      const idle = after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
       stopListening(
-        `Non ti sento da ${Math.round(after / 60_000)} minuti, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
+        `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
       )
     }, after)
   }
@@ -1619,6 +1635,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       setCurrentSettings(normalized)
       // Mode and activation are half of the name gate.
       refreshHearing()
+      if (isRunning()) keepListeningAwake()
 
       if (backendChanged) {
         if (prev.backend === "parakeet" && normalized.backend !== "parakeet") {

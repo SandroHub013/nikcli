@@ -171,7 +171,7 @@ export const voiceIt = {
   "vui.listen.spend": (calls: number, cost: string) =>
     `Oggi l'ascolto ha mandato ${calls} ${calls === 1 ? "frase" : "frasi"} al servizio che trascrive, per ${cost}.`,
   "vui.listen.manual": "Solo quando lo apri",
-  "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia",
+  "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia; senza una frase accettata si spegne dopo 30 secondi.",
   "vui.shortcuts.title": "Scorciatoie da tastiera",
   "vui.shortcuts.desc": "Due combinazioni libere: fai clic su una scorciatoia e premi i tasti che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a scrivere",
   "vui.shortcuts.agent": "Scorciatoia modalità agente",
