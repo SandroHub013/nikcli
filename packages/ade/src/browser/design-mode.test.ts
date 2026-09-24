@@ -61,3 +61,13 @@ describe("the size a design page declares", () => {
     expect(fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900 }).isResponsive).toBe(true)
   })
 })
+
+describe("the arrows between variants (D2)", () => {
+  test("previous and next inside the proposal, nothing past either end", async () => {
+    const { stepVariant } = await import("./design-mode")
+    expect(stepVariant(2, -1, 3)).toBe(1)
+    expect(stepVariant(2, 1, 3)).toBe(3)
+    expect(stepVariant(1, -1, 3)).toBeUndefined()
+    expect(stepVariant(3, 1, 3)).toBeUndefined()
+  })
+})

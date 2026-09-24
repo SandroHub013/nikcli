@@ -21,7 +21,7 @@ describe("designForVariant", () => {
   test("a variant under .ade/design of an open project opens, by its path", () => {
     expect(designForVariant(proposal, 2, ROOT, [ROOT])).toEqual({
       ok: true,
-      design: { k: "DS-A", variant: 2, path: "C:/Users/x/app/.ade/design/DS-A/2.html", title: "Vetro" },
+      design: { k: "DS-A", variant: 2, path: "C:/Users/x/app/.ade/design/DS-A/2.html", title: "Vetro", name: "Due" },
     })
   })
 

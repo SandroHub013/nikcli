@@ -27,10 +27,32 @@ export interface DesignTarget {
   readonly path: string
   /** The proposal's title, for the address bar. */
   readonly title?: string
+  /** The variant's name, for the note line («Vetro»). */
+  readonly name?: string
   /** The size the page declares in `ade-size`, when it declares one. */
   readonly size?: { readonly width: number; readonly height: number }
   /** The projects open in the window: the only roots `designUrlFor` accepts. */
   readonly roots: readonly string[]
+}
+
+/**
+ * What a Design-mode pane does with the proposal (D2), given by its owner:
+ * the note and the choice live in the design hub, not in the pane.
+ */
+export interface DesignActions {
+  /** Whether this variant is picked in the answer being composed. */
+  readonly picked: boolean
+  /** How many variants the proposal has, for the arrows. */
+  readonly count: number
+  readonly pick: () => void
+  readonly step: (delta: -1 | 1) => void
+  readonly addToNote: (line: string) => void
+}
+
+/** The variant `delta` away from `variant` (from 1), or undefined past either end. */
+export function stepVariant(variant: number, delta: -1 | 1, count: number): number | undefined {
+  const next = variant + delta
+  return next >= 1 && next <= count ? next : undefined
 }
 
 export function frameSandbox(design: DesignTarget | undefined): string {

@@ -147,6 +147,29 @@
   font-size: var(--ade-font-sm);
 }
 
+/* D2: the arrows between variants and «Scelgo questa», before the label. */
+[data-slot="browser-design-actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  flex: none;
+}
+
+[data-slot="browser-design-pick"] {
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-size: var(--ade-font-sm);
+  padding: 0 var(--ade-space-2);
+  cursor: pointer;
+}
+
+[data-slot="browser-design-pick"][data-active="true"] {
+  border-color: var(--ade-accent);
+  color: var(--ade-accent);
+}
+
 [data-slot="browser-design-label"] {
   color: var(--ade-text);
   overflow: hidden;

@@ -55,7 +55,8 @@ import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFram
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { designUrlFor } from "./design-url"
-import { frameSandbox, INITIAL_DESIGN_WATCH, watchDesign, type DesignTarget, type DesignWatchEvent } from "./design-mode"
+import { frameSandbox, INITIAL_DESIGN_WATCH, stepVariant, watchDesign, type DesignActions, type DesignTarget, type DesignWatchEvent } from "./design-mode"
+import { noteLine } from "../design/note-line"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
@@ -104,6 +105,11 @@ export interface BrowserPaneProps {
    * loses inspection.
    */
   design?: DesignTarget
+  /**
+   * D2: in Design mode the selection goes into the proposal's note, not to a
+   * session; «Scelgo questa» picks the variant; the arrows walk the variants.
+   */
+  designActions?: DesignActions
 }
 
 /** The address a Design-mode pane loads, or `about:blank` when the path is not a design page. */
@@ -594,6 +600,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     }
 
     if (data.type === "visual-editor:edit-applied") {
+      // A proposal's page is not code: changes made in it go nowhere (D2).
+      if (props.design) return
       const edit = data as unknown as Partial<EditRecord>
       if (typeof edit.selector !== "string" || typeof edit.property !== "string") return
       setEdits((current) =>
@@ -649,6 +657,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   /** An edit typed in a chip, applied to the page; the page reports it back. */
   const applyEdit = (selector: string, property: string, value: string) => {
+    if (props.design) return
     if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
     else post({ type: "visual-editor:apply-style", selector, property, value })
   }
@@ -727,7 +736,29 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * To the bound session, or ask. Never to whichever session happens to be
    * running: see `planSend`. The text and the selection stay until it goes.
    */
+  /*
+   * Design mode (D2): nothing goes to a session and nothing is written to
+   * `.ade/browser/`. The selection becomes a line in the proposal's note.
+   */
+  const addToNote = () => {
+    const design = props.design
+    const actions = props.designActions
+    if (!design || !actions || selection().length === 0) return
+    actions.addToNote(
+      noteLine({
+        variant: design.variant,
+        ...(design.name ? { name: design.name } : {}),
+        elements: selection(),
+        instruction: promptText(),
+      }),
+    )
+    setSendNote({ ok: true, text: t("browser.design.added") })
+    setPromptText("")
+    clearSelection()
+  }
+
   const sendPromptWithContext = () => {
+    if (props.design) return addToNote()
     if (!promptText().trim() && selection().length === 0) return
     const plan = planSend(props.owner ?? { state: "none" })
     if (plan.kind === "send") void deliver(plan.to)
@@ -884,6 +915,45 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           >
             {(design) => (
               <span data-slot="browser-design-address" title={design().path}>
+                <Show when={props.designActions}>
+                  {(actions) => (
+                    <span data-slot="browser-design-actions">
+                      <button
+                        type="button"
+                        data-slot="browser-nav-btn"
+                        disabled={stepVariant(design().variant, -1, actions().count) === undefined}
+                        onClick={() => actions().step(-1)}
+                        aria-label={t("browser.design.previous")}
+                        title={t("browser.design.previous")}
+                      >
+                        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                          <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        data-slot="browser-nav-btn"
+                        disabled={stepVariant(design().variant, 1, actions().count) === undefined}
+                        onClick={() => actions().step(1)}
+                        aria-label={t("browser.design.next")}
+                        title={t("browser.design.next")}
+                      >
+                        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                          <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        data-slot="browser-design-pick"
+                        data-active={actions().picked ? "true" : undefined}
+                        aria-pressed={actions().picked}
+                        onClick={() => actions().pick()}
+                      >
+                        {actions().picked ? t("browser.design.picked") : t("browser.design.pick")}
+                      </button>
+                    </span>
+                  )}
+                </Show>
                 <span data-slot="browser-design-label">
                   {t("browser.design.label", design().k, design().title ?? "", design().variant)}
                 </span>
@@ -1247,6 +1317,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                             <button
                               type="button"
                               data-slot="browser-context-action"
+                              hidden={Boolean(props.design)}
                               aria-expanded={editing() === el.selector}
                               onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
                             >
@@ -1263,7 +1334,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                               </svg>
                             </button>
                           </div>
-                          <Show when={editing() === el.selector}>
+                          <Show when={!props.design && editing() === el.selector}>
                             <EditFields element={el} onApply={(property, value) => applyEdit(el.selector, property, value)} />
                           </Show>
                           <For each={edits().filter((edit) => edit.selector === el.selector)}>
@@ -1333,9 +1404,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                     }
                   }}
                   placeholder={
-                    selection().length > 0
-                      ? t("browser.prompt.selected")
-                      : t("browser.prompt.empty")
+                    props.design
+                      ? t("browser.design.prompt")
+                      : selection().length > 0
+                        ? t("browser.prompt.selected")
+                        : t("browser.prompt.empty")
                   }
                   spellcheck={false}
                 />
@@ -1343,9 +1416,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   type="button"
                   data-slot="browser-send-btn"
                   onClick={sendPromptWithContext}
-                  disabled={!promptText().trim() && selection().length === 0}
+                  disabled={props.design ? selection().length === 0 || !props.designActions : !promptText().trim() && selection().length === 0}
                 >
-                  {t("agent.send")}
+                  {props.design ? t("browser.design.addToNote") : t("agent.send")}
                 </button>
               </div>
             </div>
