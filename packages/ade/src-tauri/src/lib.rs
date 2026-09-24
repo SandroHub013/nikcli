@@ -2183,4 +2183,3 @@ mod tests {
         assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 }
-

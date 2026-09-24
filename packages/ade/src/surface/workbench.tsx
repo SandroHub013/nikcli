@@ -2,7 +2,7 @@ import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createR
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
 import { every, pageHidden, watchDue } from "../host/every"
-import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage } from "./before-unload"
+import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions } from "./before-unload"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
@@ -4581,8 +4581,8 @@ export function Workbench() {
           isHandlingClose = true
 
           try {
-            const count = running.size
-            if (!shouldConfirmWindowClose({ runningSessions: count })) {
+            const working = countWorkingSessions(wb().panes, running)
+            if (!shouldConfirmWindowClose({ working })) {
               closingConfirmed = true
               try {
                 const { invoke } = await import("@tauri-apps/api/core")
@@ -4600,7 +4600,7 @@ export function Workbench() {
               await invoke("ade_close_ack", { requestId })
             } catch {}
 
-            const message = closeConfirmationMessage(count)
+            const message = closeConfirmationMessage(working)
             const allowed = await askCloseConfirmation(message)
             if (allowed) {
               closingConfirmed = true
