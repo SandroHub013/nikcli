@@ -298,6 +298,60 @@ describe("engine/createVoiceEngine", () => {
       expect(engine.isRunning()).toBe(false)
       expect(slow.stops).toBeGreaterThanOrEqual(1)
     })
+
+    test("stop wins while a settings restart is opening", async () => {
+      const slow = slowTranscriber()
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "toggle", agentEngine: "off", backend: "openrouter", openRouterApiKey: "old" },
+        creditLeft: async () => undefined,
+        createTranscriber: () => slow.transcriber,
+      })
+
+      const starting = engine.start()
+      slow.finish()
+      await starting
+      const restarting = engine.updateSettings({ openRouterApiKey: "new" })
+      while (slow.starts < 2) await new Promise((resolve) => setTimeout(resolve, 0))
+      const stopping = engine.stop()
+      slow.finish()
+      await Promise.all([restarting, stopping])
+
+      expect(engine.isRunning()).toBe(false)
+      expect(slow.stops).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  test("changing an open microphone key restarts it; removing the key stops it", async () => {
+    const keys: (string | undefined)[] = []
+    const transcribers: ReturnType<typeof createFakeTranscriber>[] = []
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "openrouter", openRouterApiKey: "old" },
+      creditLeft: async () => undefined,
+      createTranscriber: (_backend, options) => {
+        keys.push(options?.apiKey)
+        const transcriber = createFakeTranscriber()
+        transcribers.push(transcriber)
+        return transcriber
+      },
+    })
+
+    await engine.start()
+    await engine.updateSettings({ openRouterApiKey: "new" })
+    expect(keys).toEqual(["old", "new"])
+    expect(transcribers[0]?.isStarted).toBe(false)
+    expect(transcribers[1]?.isStarted).toBe(true)
+    expect(engine.isRunning()).toBe(true)
+
+    await engine.updateSettings({ openRouterApiKey: undefined })
+    expect(keys).toEqual(["old", "new"])
+    expect(transcribers[1]?.isStarted).toBe(false)
+    expect(engine.isRunning()).toBe(false)
   })
 
   test("destructive command requires explicit confirmation before executing", async () => {
