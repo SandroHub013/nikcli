@@ -4,6 +4,7 @@ import {
   closeSuspendedTree,
   offersSuspend,
   parseSuspendedMail,
+  showsSuspendButton,
   suspendedDelivery,
   suspendedMailToSave,
   type SuspendContext,
@@ -131,5 +132,14 @@ describe("mail for a suspended session (P1-C6)", () => {
       null,
     ])
     expect(parseSuspendedMail(text)).toEqual([{ paneId: "a", text: "buona", suspended: true }])
+  })
+})
+
+describe("the Sospendi button", () => {
+  test("hidden on a pane already suspended, shown (maybe off) otherwise", () => {
+    expect(showsSuspendButton({ ok: false, reason: "suspended" })).toBe(false)
+    expect(showsSuspendButton(undefined)).toBe(false)
+    expect(showsSuspendButton({ ok: true })).toBe(true)
+    expect(showsSuspendButton({ ok: false, reason: "working" })).toBe(true)
   })
 })

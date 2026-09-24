@@ -85,6 +85,11 @@ export async function closeSuspendedTree(session: { kill: (options?: { tree?: bo
   }
 }
 
+/** The header's "Sospendi": not on a pane already suspended, where "Riprendi" stands. */
+export function showsSuspendButton(check: SuspendCheck | undefined): check is SuspendCheck {
+  return check !== undefined && (check.ok || check.reason !== "suspended")
+}
+
 /** The words shown for each reason, as the command's tooltip. */
 export const SUSPEND_REASON: Readonly<Record<SuspendBlock, MessageKey>> = {
   notClaude: "suspend.why.notClaude",

@@ -12,7 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
-import { SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
+import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -396,7 +396,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         tree={current().tree}
         suspend={(() => {
           const check = deps.suspendCheck(current().id)
-          if (!check) return undefined
+          if (!showsSuspendButton(check)) return undefined
           return {
             enabled: check.ok,
             ...(check.ok ? {} : { reason: t(SUSPEND_REASON[check.reason]) }),
