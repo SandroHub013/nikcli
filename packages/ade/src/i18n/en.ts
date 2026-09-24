@@ -678,6 +678,7 @@ export const en: Messages = {
   "design.pill.closed": (day) => `closed ${day}`,
   "design.change": "Change choice",
   "design.delivery.done": (to, when) => `✓ delivered to ${to} · ${when} · whoever implements it closes it`,
+  "design.delivery.by": (who, day) => `chosen by ${who} · ${day}`,
   "design.queued.ready": (title) => `queued: goes out as soon as “${title}” is free`,
   "design.queued.idle": (title) => `queued: goes out once “${title}” is running`,
   "design.queued.none": "queued: no session chosen to receive answers",

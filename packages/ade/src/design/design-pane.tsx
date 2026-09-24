@@ -277,12 +277,16 @@ function DesignRecipientPicker(props: { hub: DesignHub; queued: number }) {
   )
 }
 
-function deliveryText(hub: DesignHub, proposal: DesignProposal, now: Date): string {
+export function deliveryText(hub: DesignHub, proposal: DesignProposal, now: Date): string {
   const delivery = hub.delivery(proposal)
   if (delivery.state === "consegnata") {
     return t("design.delivery.done", delivery.to, formatMoment(delivery.at, now))
   }
-  const recipient = hub.recipient()
+  if (delivery.state === "in coda") return queuedText(hub.recipient())
+  return t("design.delivery.by", proposal.answer?.by ?? "?", formatDay(proposal.answer?.at ?? "", now))
+}
+
+export function queuedText(recipient: RecipientStatus): string {
   if (recipient.state === "pronta") return t("design.queued.ready", recipient.title)
   if (recipient.state === "non attiva") return t("design.queued.idle", recipient.title)
   return t("design.queued.none")
