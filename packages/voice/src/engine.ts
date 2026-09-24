@@ -772,7 +772,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     startInFlight = null
     restartInFlight = null
     setIsRunning(false)
-    if (stopping) return stopping
+    if (stopping) {
+      if (options?.releaseText !== true) return stopping
+      return Promise.all([stopping, releaseTextProgram()]).then(() => undefined)
+    }
     const cleanup = enqueueLifecycle(async () => {
       await stopNow(options?.keepAgent === true, options?.drain !== false)
       if (options?.releaseText === true) await releaseTextProgram()

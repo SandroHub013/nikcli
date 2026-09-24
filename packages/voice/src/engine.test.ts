@@ -792,6 +792,43 @@ describe("planner key changes", () => {
     expect(authorizations).toEqual([])
   })
 
+  test("removing the key invalidates a cached text program while a start is stopping", async () => {
+    const authorizations: string[] = []
+    let releaseStart: (() => void) | undefined
+    const transcriber = createFakeTranscriber()
+    transcriber.start = () => new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "wake-word", alwaysListen: true, agentEngine: "off", openRouterApiKey: "old" },
+      plannerFetch: fetchFn,
+    })
+
+    const starting = engine.start()
+    while (!releaseStart) await new Promise((resolve) => setTimeout(resolve, 0))
+    await engine.submitText("prima della rimozione")
+    expect(authorizations).toEqual(["Bearer old"])
+
+    const stopping = engine.stop()
+    const removing = engine.updateSettings({ openRouterApiKey: undefined })
+    releaseStart?.()
+    await Promise.all([starting, stopping, removing])
+    await engine.submitText("dopo la rimozione")
+
+    expect(authorizations).toEqual(["Bearer old"])
+  })
+
   test("a replacement key is used by the next typed request", async () => {
     const { authorizations, engine } = setup("old")
     await engine.submitText("raccontami una storia mai raccontata")
