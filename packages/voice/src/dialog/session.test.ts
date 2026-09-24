@@ -259,6 +259,105 @@ describe("dialog state machine", () => {
     })
   })
 
+  /*
+   * Rilievo 2: permission.allow era non distruttivo, quindi «autorizza» o
+   * «consenti» detti in idle eseguivano subito answerPermission. Ora la
+   * conferma deve chiedere prima, nominando pannello e strumento.
+   */
+  describe("permission.allow free-standing requires confirmation", () => {
+    test("«autorizza» in idle enters confirming and does not answer the permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "utterance", text: "autorizza" },
+        10_000
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.intent.intent).toBe("permission.allow")
+      expect(effects.some((e) => e.type === "answer_permission")).toBe(false)
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(effects.some((e) => e.type === "start_timer")).toBe(true)
+    })
+
+    test("«consenti» confirmed with «sì» then answers the permission", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "consenti pannello 1" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "sì" }, 12_000)
+      expect(s2.status).toBe("executing")
+      const exec = effects.find((e) => e.type === "execute_intent")
+      expect(exec).toBeDefined()
+      if (exec && exec.type === "execute_intent") {
+        expect(exec.intent.intent).toBe("permission.allow")
+        expect(exec.slots.paneIndex).toBe(1)
+      }
+    })
+  })
+
+  describe("permission confirmation names panel and instrument", () => {
+    test("permission request prompt names the panel title and the tool", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "agent-1",
+          title: "API Tests",
+          status: "waiting" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        5000,
+        { panes }
+      )
+
+      expect(s1.status).toBe("confirming")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("API Tests")
+        expect(speak.text).toContain("rm -rf tmp")
+      }
+      expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
+      expect(s1.pendingAction?.confirmPrompt).toContain("rm -rf tmp")
+    })
+
+    test("free-standing permission.allow confirmation names the panel when known", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-2",
+          title: "Bastelli Worker",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "utterance", text: "autorizza pannello 2" },
+        10_000,
+        { panes }
+      )
+
+      expect(s1.status).toBe("confirming")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("Bastelli Worker")
+        expect(speak.text).toContain("?")
+      }
+    })
+  })
+
   describe("pending permission precedence", () => {
     test("permission request immediately forces confirming state", () => {
       const s0 = createInitialDialogState("idle")

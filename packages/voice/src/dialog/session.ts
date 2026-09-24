@@ -158,7 +158,12 @@ export function transition(
     })
 
     const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
-    const prompt = `L'agente richiede il permesso per: ${event.what}. Vuoi consentire?`
+    /*
+     * Rilievo 2: la domanda deve dire quale pannello e quale strumento, così
+     * l'utente conferma sapendo cosa concede — non solo «il permesso».
+     */
+    const paneTitle = ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
+    const prompt = `L'agente sul pannello «${paneTitle}» richiede il permesso per: ${event.what}. Vuoi consentire?`
 
     const nextState: DialogState = {
       ...state,
@@ -492,7 +497,23 @@ export function transition(
         // The intent carries its own question. The fallback stays generic on
         // purpose: a wrong-sounding sentence at a destructive prompt is worse
         // than a plain one, and the readback is not a question.
-        const question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+        let question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+
+        /*
+         * Rilievo 2: per un permesso la domanda deve nominare il pannello.
+         * Lo slot di pannello è già stato estratto dalla frase («autorizza
+         * pannello 2»); il titolo si legge dai pannelli aperti, così
+         * l'utente conferma sapendo a chi concede.
+         */
+        if (intent.intent === "permission.allow") {
+          const paneTitle =
+            parsed.slots.paneTitle ??
+            ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
+          if (paneTitle) {
+            question = `Concedo il permesso all'agente sul pannello «${paneTitle}», va bene?`
+          }
+        }
+
         const prompt = `${question} Dimmi sì o no.`
 
         return withSpoken(

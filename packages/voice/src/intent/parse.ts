@@ -38,6 +38,15 @@ export const AMBIGUITY_MARGIN = 0.10
 export const URL_SLOT_BONUS = 0.2
 
 /**
+ * Added to an intent that matched a real verb when the utterance also carried
+ * a pane target. "autorizza pannello 2" tied `permission.allow` (verb match,
+ * surplus noun) with `pane.focus` (noun match, surplus verb) at 0.85, and the
+ * disambiguator asked which one instead of granting. The verb wins; a bare
+ * "pannello N" still lands on `pane.focus` via the exact phrase.
+ */
+export const PANE_SLOT_BONUS = 0.15
+
+/**
  * Words that veto a confirmation wherever they appear in the utterance.
  *
  * «non confermo» used to score 0.85 as `dialog.confirm`: the negation was
@@ -446,6 +455,20 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
     }
 
     if (bestSpecConfidence >= MATCH_CONFIDENCE_THRESHOLD) {
+      /*
+       * A pane target plus a real verb outranks the bare noun match. Without
+       * this, "autorizza pannello 2" ties with `pane.focus` (scored against
+       * the leftover "pannello") and the answer is a disambiguation question
+       * rather than the permission confirmation.
+       */
+      if (
+        bestMatchedPhrase !== "pannello" &&
+        spec.slots.includes("paneIndex") &&
+        (slots.paneIndex !== undefined || slots.paneTitle !== undefined)
+      ) {
+        bestSpecConfidence = Math.min(1, bestSpecConfidence + PANE_SLOT_BONUS)
+      }
+
       candidateList.push({
         intent: spec,
         confidence: bestSpecConfidence,

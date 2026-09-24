@@ -169,7 +169,7 @@ describe("dispatch", () => {
    * domani non ricade in silenzio sul ripiego.
    */
   describe("gli intenti distruttivi rifiutano di indovinare", () => {
-    test.each(["pane.close", "process.kill", "permission.deny"])(
+    test.each(["pane.close", "process.kill", "permission.deny", "permission.allow"])(
       "%s chiede quale pannello invece di sceglierne uno",
       async (intent) => {
         const host = new MockVoiceHost()

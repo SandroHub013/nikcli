@@ -152,6 +152,28 @@ describe("parseUtterance", () => {
     })
   })
 
+  /*
+   * Rilievo 2: permission.allow era destructive:false, quindi «consenti» o
+   * «autorizza» detti in idle partivano subito, senza domanda, sul pannello
+   * indovinato. Ora è distruttivo: la macchina a stati chiede conferma.
+   */
+  describe("permission.allow è distruttivo", () => {
+    test("il vocabolario marca permission.allow come destructive", () => {
+      const res = parseUtterance("consenti")
+      expect(res.outcome).toBe("matched")
+      expect(res.intent?.intent).toBe("permission.allow")
+      expect(res.intent?.destructive).toBe(true)
+    })
+
+    test("«autorizza» è destructive anche con uno slot di pannello", () => {
+      const res = parseUtterance("autorizza pannello 2")
+      expect(res.outcome).toBe("matched")
+      expect(res.intent?.intent).toBe("permission.allow")
+      expect(res.intent?.destructive).toBe(true)
+      expect(res.slots.paneIndex).toBe(2)
+    })
+  })
+
   describe("contextual permissions", () => {
     test("resolves 'conferma' to permission.allow when pendingPermission is true", () => {
       const res = parseUtterance("conferma", { pendingPermission: true, pendingPermissionPaneId: "p-42" })

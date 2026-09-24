@@ -395,8 +395,16 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
       "consenti",
     ],
     slots: ["paneIndex", "paneTitle"],
-    destructive: false,
+    /*
+     * Rilievo 2: concedere un permesso distrugge la possibilità di rifiutarlo
+     * — l'agente prosegue con un comando che l'utente poteva ancora fermare.
+     * Con `destructive: false` «consenti» detto in idle partiva subito, senza
+     * domanda, sul pannello a fuoco o sul primo. Ora la macchina a stati chiede
+     * conferma, e la conferma nomina pannello e strumento.
+     */
+    destructive: true,
     readback: "Permesso accordato",
+    confirmPrompt: "Concedo il permesso all'agente, va bene?",
   },
   {
     intent: "permission.deny",
