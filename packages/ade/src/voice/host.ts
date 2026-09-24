@@ -122,6 +122,22 @@ const PREPARE_WAIT_MS = 30_000
 
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
+   * No voice text into a terminal whose agent is asking a permission
+   * (V1-bis, ALTO 6). The question is a menu: the text lands in it, and the
+   * Enter of «invia» picks the highlighted option — a grant nobody said. The
+   * question is answered first, by voice or by hand.
+   */
+  const refuseWhileAsking = (paneId: string) => {
+    if (!deps.permissions()[paneId]) return
+    const currentLocale = deps.locale ? deps.locale() : locale()
+    throw new Error(
+      currentLocale === "en"
+        ? "That panel is asking a permission: answer it first. The text was not sent."
+        : "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
+    )
+  }
+
+  /*
    * The agent that answers what the grammar cannot, built on first use.
    *
    * Imported lazily: `bots/turn` reaches the native host, and the voice host
@@ -290,6 +306,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * `replace(/\n/g, " ")` left carriage returns alone, which a tty reads
        * as Enter — one dictated sentence could arrive as two submissions.
        */
+      refuseWhileAsking(paneId)
       const singleLine = asOneLine(text)
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
@@ -486,6 +503,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
             : (field ? "Il pannello selezionato non ha un processo in ascolto." : "Il pannello selezionato non ha dove ricevere il testo.")
         )
       }
+      refuseWhileAsking(paneId)
       // A trailing space, not a carriage return: the next dictated phrase must
       // not run into this one, and nothing is submitted until the user says so.
       session.write(`${trimmed} `)
