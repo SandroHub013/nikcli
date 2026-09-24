@@ -34,9 +34,22 @@ import type { Activity } from "./mailbox"
  */
 const LINE_BREAKS = new RegExp("[\\r\\n\\v\\f\\u0085\\u2028\\u2029]+", "g")
 
-/** `text` with every line break turned into a space, ready to be typed. */
+/**
+ * Every remaining C0/C1 control character: things a terminal *executes*
+ * rather than prints — ESC opens a sequence, Ctrl-C can interrupt the agent,
+ * NUL truncates. They never come from a person's voice, and after the line
+ * breaks above have been flattened the ones still here have no job left.
+ * Built from a string, for the same reason as LINE_BREAKS: a character class
+ * nobody can review is a character class nobody reviews.
+ */
+const CONTROL = new RegExp("[\\u0000-\\u0008\\u0009\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]", "g")
+
+/**
+ * `text` with every line break turned into a space and every remaining
+ * control character removed, ready to be typed.
+ */
 export function asOneLine(text: string): string {
-  return text.replace(LINE_BREAKS, " ")
+  return text.replace(LINE_BREAKS, " ").replace(CONTROL, "")
 }
 
 /**

@@ -18,6 +18,7 @@ import type { ParseContext } from "../intent/parse"
 import { hasNegation, parseUtterance } from "../intent/parse"
 import { normalizeUtterance } from "../intent/normalize"
 import { VOCABULARY, type VoiceIntentSpec } from "../intent/vocabulary"
+import type { PlanStep } from "../plan/schema"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,6 +67,14 @@ export interface DialogState {
    * first question, and the user's «sì» answered the wrong one.
    */
   queuedPermission?: { paneId: string; what: string; silent?: boolean }
+  /**
+   * A validated plan whose steps include `send_prompt`, held in confirming
+   * until the user says yes. Without this the planner pressed Enter the
+   * moment the model returned a plan — the one action a person never gets
+   * to see before it happens. Plans without `send_prompt` still run
+   * immediately; only the submit step waits.
+   */
+  pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
   timeoutAt?: number
   /** Last spoken Italian phrase emitted by the system, for dialog.repeat. */
@@ -79,6 +88,7 @@ export type DialogEffect =
   | { type: "execute_intent"; intent: VoiceIntentSpec; slots: Record<string, any> }
   | { type: "answer_permission"; paneId: string; answer: "allow" | "deny" }
   | { type: "send_prompt"; paneId?: string; text: string }
+  | { type: "execute_plan"; steps: PlanStep[]; refusals: string[]; speech?: string }
 
 export type DialogEvent =
   | { type: "wake" }
@@ -381,6 +391,7 @@ export function transition(
         ...state,
         status: "idle",
         pendingAction: undefined,
+        pendingPlan: undefined,
         timeoutAt: undefined,
       }
       return (
@@ -395,6 +406,7 @@ export function transition(
         ...state,
         status: "idle",
         pendingAction: undefined,
+        pendingPlan: undefined,
         timeoutAt: undefined,
       }
       return (
@@ -404,6 +416,69 @@ export function transition(
     }
 
     if (event.type === "utterance") {
+      /*
+       * A planned plan (rilievo 4) sits here before `pendingAction`: the
+       * planner asked to press Enter in an agent's tty, and the only answer
+       * is yes or no. Negation vetoes before the parser, same as for a
+       * destructive intent — and `pendingAction` may be undefined here, so
+       * this branch never touches it.
+       */
+      if (state.pendingPlan) {
+        if (hasNegation(normalizeUtterance(event.text))) {
+          effects.push({ type: "cancel_timer" })
+          const abandoned: DialogState = {
+            ...state,
+            status: "idle",
+            pendingPlan: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueuedPermission(abandoned, now, ctx, effects) ??
+            withSpoken(abandoned, "Va bene, non invio niente.")
+          )
+        }
+
+        const parsedPlan = parseUtterance(event.text, ctx)
+        if (parsedPlan.intent?.intent === "dialog.confirm" || parsedPlan.intent?.intent === "permission.allow") {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "execute_plan",
+            steps: state.pendingPlan.steps,
+            refusals: state.pendingPlan.refusals,
+            ...(state.pendingPlan.speech ? { speech: state.pendingPlan.speech } : {}),
+          })
+          /*
+           * Goes to `executing`, not idle: a permission queued behind this
+           * confirmation waits for `command_success` / `command_failed`,
+           * which are the exits from executing and the place it is promoted.
+           */
+          return withSpoken(
+            {
+              ...state,
+              status: "executing",
+              pendingPlan: undefined,
+              pendingAction: undefined,
+              timeoutAt: undefined,
+            },
+            "Eseguo il piano."
+          )
+        }
+        if (parsedPlan.intent?.intent === "dialog.cancel" || parsedPlan.intent?.intent === "permission.deny") {
+          effects.push({ type: "cancel_timer" })
+          const refused: DialogState = {
+            ...state,
+            status: "idle",
+            pendingPlan: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueuedPermission(refused, now, ctx, effects) ??
+            withSpoken(refused, "Va bene, non invio niente.")
+          )
+        }
+        return withSpoken(state, "Sì o no?")
+      }
+
       /*
        * A negation vetoes before the parser is even asked. «non confermo»
        * and «no, non va bene» used to reach the confirm branch because the

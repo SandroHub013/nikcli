@@ -97,6 +97,25 @@ function key(value: string): string {
 }
 
 /**
+ * C0/C1 control characters that a terminal executes rather than prints.
+ *
+ * Built from a string rather than written as a literal so the file itself
+ * holds no invisible control characters: a regex whose character class you
+ * cannot read is one nobody can review. Line breaks are flattened first by
+ * the caller; what remains here is ESC, Ctrl-C, NUL and friends — keys, not
+ * words.
+ */
+const CONTROL_CHARS = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]", "g")
+
+/** `text` with every line break as a space and every control character gone. */
+function cleanPromptText(text: string): string {
+  return text
+    .replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, " ")
+    .replace(CONTROL_CHARS, "")
+    .trim()
+}
+
+/**
  * Finds the agent a spoken word meant, or `undefined`.
  *
  * Tolerant because the model is repeating what a person said: "claude",
@@ -248,7 +267,14 @@ function validateStep(entry: unknown, context: PlanContext, refusals: string[]):
     case "send_prompt": {
       const index = paneIndex(raw.paneIndex, context, refusals)
       if (index === undefined) return undefined
-      const text = typeof raw.text === "string" ? raw.text.trim() : ""
+      /*
+       * The text is not only trimmed: every C0/C1 control character is
+       * removed. ESC can open a terminal sequence, Ctrl-C can interrupt the
+       * agent mid-run, and neither ever came from a person's mouth. What is
+       * left after the strip is what the user actually asked to send — and
+       * if that is nothing, the message is refused rather than sent empty.
+       */
+      const text = typeof raw.text === "string" ? cleanPromptText(raw.text) : ""
       if (!text) {
         refusals.push("Un messaggio da inviare era vuoto.")
         return undefined

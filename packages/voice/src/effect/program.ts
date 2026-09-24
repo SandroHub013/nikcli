@@ -20,6 +20,7 @@ import { dispatch, type DispatchOutcome } from "../bridge/dispatch"
 import {
   createInitialDialogState,
   transition,
+  DEFAULT_CONFIRMATION_TIMEOUT_MS,
   type DialogEffect,
   type DialogEvent,
   type DialogState,
@@ -634,6 +635,30 @@ export function makeVoiceProgram(
               if (sent) yield* watchForReply(sent)
               break
             }
+
+            case "execute_plan": {
+              /*
+               * Rilievo 4: the plan was held in `pendingPlan` until the user
+               * said yes. Now it runs — and the result is announced the same
+               * way an immediate plan is, then `command_success` returns the
+               * dialogue to idle (and promotes any permission queued behind
+               * this confirmation).
+               */
+              const execution = yield* Effect.promise(() => executePlan(effect.steps, host))
+              options.onPlan?.({ steps: effect.steps, execution })
+              const agents = host.listAgents?.() ?? []
+              yield* sayPlanResult(
+                {
+                  steps: effect.steps,
+                  refusals: effect.refusals,
+                  ...(effect.speech ? { speech: effect.speech } : {}),
+                },
+                execution,
+                agents,
+              )
+              yield* applyDialogEvent({ type: "command_success" })
+              break
+            }
           }
         }
       })
@@ -769,6 +794,42 @@ export function makeVoiceProgram(
           return false
         }
 
+        /*
+         * Rilievo 4: a plan whose steps include `send_prompt` does not run
+         * yet. The submit step presses Enter in an agent's tty — the one
+         * action a person never gets to see before it happens — so the
+         * dialogue goes to `confirming` with the plan held in `pendingPlan`
+         * and a prompt that names the text about to be sent. «sì» runs it
+         * through `execute_plan`; «no» and the timeout drop it. Plans
+         * without `send_prompt` still execute immediately below: opening
+         * sessions is not the same blast radius as pressing Enter.
+         */
+        const needsConfirm = planned.steps.some((step) => step.action === "send_prompt")
+        if (needsConfirm) {
+          if (agentAbort === abort) agentAbort = null
+          const nowMs = yield* getNowMs
+          const timeoutAt = nowMs + DEFAULT_CONFIRMATION_TIMEOUT_MS
+          currentState = {
+            ...currentState,
+            status: "confirming",
+            pendingPlan: {
+              steps: planned.steps,
+              refusals: planned.refusals,
+              ...(planned.speech ? { speech: planned.speech } : {}),
+            },
+            pendingAction: undefined,
+            timeoutAt,
+          }
+          options.onStateChange?.(currentState)
+          yield* startTimer(DEFAULT_CONFIRMATION_TIMEOUT_MS)
+          const texts = planned.steps
+            .filter((step) => step.action === "send_prompt")
+            .map((step) => `«${step.text}» al pannello ${step.paneIndex}`)
+          const list = texts.length === 1 ? texts[0] : texts.join("; ")
+          yield* say(`Prima di premere Invio: ${list}. Va bene? Dimmi sì o no.`)
+          return true
+        }
+
         if (agentAbort === abort) agentAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
@@ -776,24 +837,32 @@ export function makeVoiceProgram(
         currentState = { ...currentState, status: "idle" }
         options.onStateChange?.(currentState)
 
-        if (planned.speech) {
-          // What the plan refused is as much news as what failed: «copilot» not
-          // started was silently dropped whenever the model also said something.
-          const problems = [...planned.refusals, ...execution.failures]
-          const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
-          yield* say(`${planned.speech}${failures}`)
-        } else {
-          const labels = new Map(context.agents.map((agent) => [agent.id, agent.label]))
-          yield* say(
-            announceExecution({
-              execution,
-              refusals: planned.refusals,
-              agentLabel: (id) => labels.get(id) ?? id,
-            }),
-          )
-        }
+        yield* sayPlanResult(planned, execution, context.agents)
         return true
       })
+    }
+
+    /** One sentence for what a plan did, honouring a model-provided speech. */
+    function sayPlanResult(
+      planned: { steps: PlanStep[]; refusals: string[]; speech?: string },
+      execution: PlanExecution,
+      agents: readonly { id: string; label: string; available: boolean }[],
+    ): Effect.Effect<void> {
+      if (planned.speech) {
+        // What the plan refused is as much news as what failed: «copilot» not
+        // started was silently dropped whenever the model also said something.
+        const problems = [...planned.refusals, ...execution.failures]
+        const failures = problems.length > 0 ? ` Nota: ${problems.join(" ")}` : ""
+        return say(`${planned.speech}${failures}`)
+      }
+      const labels = new Map(agents.map((agent) => [agent.id, agent.label]))
+      return say(
+        announceExecution({
+          execution,
+          refusals: planned.refusals,
+          agentLabel: (id) => labels.get(id) ?? id,
+        }),
+      )
     }
 
     /**
