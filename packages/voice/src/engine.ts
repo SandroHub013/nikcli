@@ -26,11 +26,7 @@ import type { Speaker } from "./tts/speaker"
 import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
-import {
-  disposeParakeetModel,
-  warmupParakeetModel,
-  type ParakeetProgress,
-} from "./asr/parakeet-local"
+import { disposeParakeetModel, type ParakeetProgress } from "./asr/parakeet-local"
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { voiceStorage } from "./settings/storage"
@@ -460,15 +456,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let activeTranscriber: Transcriber | null = null
   let hasOverriddenTranscriber = Boolean(options.transcriber)
 
-  // If Parakeet is configured and already downloaded, warm it up in the background so activation is instant.
-  if (initialSettings.backend === "parakeet" && !hasOverriddenTranscriber) {
-    void warmupParakeetModel({
-      executionBackend: initialSettings.parakeetBackend,
-      language: initialSettings.language,
-      onlyIfDownloaded: true,
-    }).catch(() => {})
-  }
-
   /*
    * Whether the microphone is being held open by a key, and whether it was
    * opened by something that is not a key at all.
@@ -846,6 +833,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     cancelSpeech()
 
     await releaseSession()
+    if (!keepAgent && currentSettings().backend === "parakeet") {
+      await disposeParakeetModel()
+    }
 
     setDialogState((prev) => ({ ...prev, status: "asleep" }))
   }
@@ -1196,7 +1186,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
      * in settings the user can change while the app is open, and a
      * planner pinned at construction would keep using the old ones.
      */
-    plan: resolvePlanner(),
+    resolvePlan: resolvePlanner,
   })
 
   /*
@@ -1731,40 +1721,39 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       // Mode and activation are half of the name gate.
       refreshHearing()
 
-      if (backendChanged) {
-        if (prev.backend === "parakeet" && normalized.backend !== "parakeet") {
-          void disposeParakeetModel().catch(() => {})
-        } else if (normalized.backend === "parakeet" && !hasOverriddenTranscriber) {
-          void warmupParakeetModel({
-            executionBackend: normalized.parakeetBackend,
-            language: normalized.language,
-            onlyIfDownloaded: true,
-          }).catch(() => {})
-        }
+      if (backendChanged && prev.backend === "parakeet" && normalized.backend !== "parakeet") {
+        void disposeParakeetModel().catch(() => {})
       }
 
       const keyChanged = normalized.openRouterApiKey !== prev.openRouterApiKey
       const keyRemoved = keyChanged && !normalized.openRouterApiKey
       const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
       if (keyRemoved) {
-        await stop({ drain: false, releaseText: true })
-      } else if (keyChanged || (sessionPending && backendChanged)) {
+        if (normalized.backend !== "parakeet" || prev.backend === "openrouter") {
+          await stop({ drain: false, releaseText: true })
+          return
+        }
+        if (programHandle) await Effect.runPromise(programHandle.cancelPlanner)
+        await releaseTextProgram()
+        return
+      }
+      if (keyChanged || (sessionPending && backendChanged)) {
         const result = enqueueLifecycle(async (generation) => {
           if (generation !== sessionGeneration) return
           if (sessionPending && backendChanged) {
             await restartNow(normalized, prev, generation)
-          } else {
-            await releaseTextProgram()
+            return
           }
+          await releaseTextProgram()
         })
         restartInFlight = result
         void result.finally(() => {
           if (restartInFlight === result) restartInFlight = null
         })
         await result
-      } else if (isRunning()) {
-        keepListeningAwake()
+        return
       }
+      if (isRunning()) keepListeningAwake()
     },
   }
   startListening = (mode, o) => engine.start(mode, o)

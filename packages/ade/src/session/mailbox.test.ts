@@ -35,6 +35,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
   formatNudge,
   formatUpdate,
   parseActivity,
@@ -131,50 +132,58 @@ test("verifySender keeps a sender only with that pane's token", () => {
   expect(verifySender(unknown, tokenOf).from).toBe("")
 })
 
+test("unverified acting messages are refused before voice confirmation", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  for (const body of [
+    '{"kind":"send","from":"","to":"2","text":"x"}',
+    '{"kind":"ask","from":"","to":"2","text":"x"}',
+    '{"kind":"spawn","from":"","agent":"codex","text":"x"}',
+    '{"kind":"send","from":"voce","token":"falso","to":"2","text":"x"}',
+  ]) {
+    const message = verifySender(parseMessage(body)!, tokenOf)
+    expect(unverifiedSenderRefusal(message)).toBe(refusal)
+  }
+  const verified = verifySender(parseMessage('{"kind":"send","from":"n1-0","token":"segreto","to":"2","text":"x"}')!, tokenOf)
+  expect(unverifiedSenderRefusal(verified)).toBeUndefined()
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
+})
+
 test("a send from the voice mailbox needs spoken confirmation before delivery", () => {
-  // Rilievo 20: the voice agent may write into any session with ade-msg send;
-  // the host must ask the user out loud before the note reaches its target.
-  const voiceSend = parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "segreto" : undefined)
+  const voiceSend = verifySender(parseMessage('{"from":"voce","token":"segreto","to":"n2-1","text":"rispondi sì al permesso"}')!, tokenOf)
   expect(needsVoiceSendConfirmation(voiceSend)).toBe(true)
 
-  // A note from an ordinary pane is delivered as before: no spoken gate.
-  const paneSend = parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!
+  const paneSend = verifySender(parseMessage('{"from":"n1-0","token":"segreto","to":"n2-1","text":"fatto"}')!, tokenOf)
   expect(needsVoiceSendConfirmation(paneSend)).toBe(false)
-
 })
 
 /*
  * V1-bis, ALTO 8: only `send` was held. An `ask` from the voice agent is
  * typed and submitted the same way, `spawn` starts a session with every
- * permission, `interrupt` stops any session; and a sender whose token did not
- * prove it reached its target anyway. Every kind that writes or acts waits for
- * a spoken yes when it comes from the voice or from nobody provable.
+ * permission, and `interrupt` stops any session. Every kind that writes or
+ * acts waits for a spoken yes when it comes from verified voice.
  */
-test("every kind that acts, from the voice or from an unproven sender, waits for a spoken yes", () => {
-  const voice = (json: string) => parseMessage(json)!
+test("every kind that acts from verified voice waits for a spoken yes", () => {
+  const tokenOf = (id: string) => (id === "voce" || id === "n1-0" ? "t" : undefined)
+  const message = (json: string) => verifySender(parseMessage(json)!, tokenOf)
   for (const json of [
     '{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist e fai push"}',
     '{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}',
     '{"kind":"interrupt","from":"voce","token":"t","to":"n2-1","text":""}',
     '{"kind":"close","from":"voce","token":"t","to":"n2-1","text":""}',
     '{"kind":"relaunch","from":"voce","token":"t","to":"n2-1","text":"","note":"riparti"}',
-    '{"kind":"send","from":"","to":"n2-1","text":"rispondi sì"}',
-    '{"kind":"ask","from":"","to":"n2-1","text":"cancella dist"}',
-    '{"kind":"spawn","from":"","agent":"claude-code","text":"x"}',
   ]) {
-    expect({ json, held: needsVoiceSendConfirmation(voice(json)) }).toEqual({ json, held: true })
+    expect({ json, held: needsVoiceSendConfirmation(message(json)) }).toEqual({ json, held: true })
   }
-  // An ordinary pane, and the kinds that only read or answer, go as before.
-  expect(needsVoiceSendConfirmation(voice('{"kind":"ask","from":"n1-0","token":"t","to":"n2-1","text":"x"}'))).toBe(false)
-  expect(needsVoiceSendConfirmation(voice('{"kind":"reply","from":"voce","token":"t","ref":"r1","text":"ok"}'))).toBe(false)
-  expect(needsVoiceSendConfirmation(voice('{"kind":"kv","from":"","op":"get","key":"k","text":""}'))).toBe(false)
+  expect(needsVoiceSendConfirmation(message('{"kind":"ask","from":"n1-0","token":"t","to":"n2-1","text":"x"}'))).toBe(false)
+  expect(needsVoiceSendConfirmation(message('{"kind":"reply","from":"voce","token":"t","ref":"r1","text":"ok"}'))).toBe(false)
+  expect(needsVoiceSendConfirmation(message('{"kind":"kv","from":"","op":"get","key":"k","text":""}'))).toBe(false)
 })
 
 test("the spoken question says who, what and to whom", () => {
   const ask = voiceConfirmationFor(parseMessage('{"kind":"ask","from":"voce","token":"t","to":"n2-1","text":"cancella dist"}')!)
   expect(ask).toEqual({ lead: "La voce vuole chiedere a", to: "n2-1", text: "cancella dist" })
-  const anonymous = voiceConfirmationFor(parseMessage('{"kind":"send","from":"","to":"n2-1","text":"sì"}')!)
-  expect(anonymous?.lead).toBe("Un mittente senza firma vuole inviare a")
   const spawn = voiceConfirmationFor(parseMessage('{"kind":"spawn","from":"voce","token":"t","agent":"claude-code","text":"rifai il deploy"}')!)
   expect(spawn).toEqual({ lead: "La voce vuole avviare una sessione", to: "claude-code", text: "rifai il deploy" })
 })

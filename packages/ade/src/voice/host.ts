@@ -64,6 +64,8 @@ export interface AdeVoiceHostDeps {
    * implementation of it grow here.
    */
   openAgentSession?: (input: { agentId: string; task: string }) => { paneId: string; title: string }
+  /** Builds the voice agent; tests and embedders can provide their own. */
+  voiceAgentFactory?: () => Promise<VoiceAgent>
   /** Explicit app locale resolver, defaults to global locale() */
   locale?: () => "it" | "en"
 }
@@ -145,21 +147,24 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
    * gets that far.
    */
   let agent: Promise<VoiceAgent> | undefined
+  let prepareGeneration = 0
   /* Closed with the window: a process left waiting would outlive the app until its idle timer. */
   const warmClaude = <T extends { close: () => void }>(warm: T): T => {
     if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
     return warm
   }
   const voiceAgent = () =>
-    (agent ??= Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
-      createVoiceAgent({
-        runTurn,
-        warm: warmClaude(createWarmClaude()),
-        statuses: () => deps.agentAvailability?.(),
-        cwd: () => deps.project()?.root,
-        codexFallback: () => deps.codexFallback?.() ?? false,
-      }),
-    ))
+    (agent ??= (deps.voiceAgentFactory
+      ? deps.voiceAgentFactory()
+      : Promise.all([import("../bots/turn"), import("../bots/warm")]).then(([{ runTurn }, { createWarmClaude }]) =>
+        createVoiceAgent({
+          runTurn,
+          warm: warmClaude(createWarmClaude()),
+          statuses: () => deps.agentAvailability?.(),
+          cwd: () => deps.project()?.root,
+          codexFallback: () => deps.codexFallback?.() ?? false,
+        }),
+      )))
 
   return {
     async askAgent(request) {
@@ -172,15 +177,20 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * without it would be replaced at the first sentence. Waited for, up to
        * half a minute, then started where the turn will run.
        */
+      const generation = prepareGeneration
       void (async () => {
         for (let waited = 0; !deps.project()?.root && waited < PREPARE_WAIT_MS; waited += 500) {
           await new Promise((resolve) => setTimeout(resolve, 500))
         }
-        ;(await voiceAgent()).prepare(request)
+        if (generation !== prepareGeneration) return
+        const ready = await voiceAgent()
+        if (generation !== prepareGeneration) return
+        ready.prepare(request)
       })()
     },
 
     releaseAgent() {
+      prepareGeneration++
       void agent?.then((ready) => ready.release())
     },
 

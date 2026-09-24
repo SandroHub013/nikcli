@@ -10,6 +10,7 @@ import {
   type ParakeetProgress,
 } from "./parakeet-local"
 import { createMicCapture } from "../audio/capture"
+import { hasRequiredFiles } from "./model-cache"
 
 class MockStreamingTranscriber {
   processCalls = 0
@@ -59,6 +60,19 @@ class MockParakeetModel {
 }
 
 describe("asr/parakeet-local", () => {
+  test("cache readiness requires the exact files for the selected variant", () => {
+    const required = ["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt"]
+    const keys = [
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-encoder-model.int8.onnx",
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-decoder_joint-model.int8.onnx",
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-vocab.txt",
+    ]
+    expect(hasRequiredFiles(keys, required)).toBe(true)
+    expect(hasRequiredFiles(keys.slice(1), required)).toBe(false)
+    expect(hasRequiredFiles(["hf-repo-rev-encoder-model.fp16.onnx", "hf-repo-rev-decoder_joint-model.int8.onnx", "hf-repo-rev-vocab.txt"], required)).toBe(false)
+    expect(hasRequiredFiles([keys[0]!, keys[1]!.replace("rev-main", "rev-other"), keys[2]!], required)).toBe(false)
+  })
+
   test("readiness reports usable when WASM or WebGPU available, and explains when model is not downloaded", () => {
     // Current runtime has WebAssembly
     expect(isWasmAvailable()).toBe(true)
@@ -328,6 +342,491 @@ describe("asr/parakeet-local", () => {
       await disposeParakeetModel()
       expect(isParakeetModelWarmedUp()).toBe(false)
       expect(mockModel.disposed).toBe(true)
+    })
+
+    test("replacing the shared model releases the previous one", async () => {
+      await disposeParakeetModel()
+      const first = new MockParakeetModel("wasm")
+      const second = new MockParakeetModel("wasm")
+      const firstTranscriber = createParakeetTranscriber({
+        modelId: "first",
+        keepWarm: true,
+        fromHub: async () => first,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+      await firstTranscriber.start()
+      expect(first.disposed).toBe(false)
+
+      const secondTranscriber = createParakeetTranscriber({
+        modelId: "second",
+        keepWarm: true,
+        fromHub: async () => second,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+      await secondTranscriber.start()
+
+      expect(first.disposed).toBe(true)
+      expect(second.disposed).toBe(false)
+      await secondTranscriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("dispose waits for an in-flight model and does not reinstall it", async () => {
+      await disposeParakeetModel()
+      let resolveModel: ((model: MockParakeetModel) => void) | undefined
+      let fromHubStarted = false
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        resolveModel = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          fromHubStarted = true
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+
+      const starting = transcriber.start()
+      while (!fromHubStarted) await new Promise((resolve) => setTimeout(resolve, 0))
+      const disposing = disposeParakeetModel()
+      const model = new MockParakeetModel("wasm")
+      resolveModel?.(model)
+      await disposing
+      await expect(starting).rejects.toThrow()
+      expect(model.disposed).toBe(true)
+      expect(isParakeetModelWarmedUp()).toBe(false)
+    })
+
+    test("stop during Parakeet initialization can restart cleanly", async () => {
+      await disposeParakeetModel()
+      const errors: Error[] = []
+      let resolveFirst: ((model: MockParakeetModel) => void) | undefined
+      let fromHubCalls = 0
+      const first = new MockParakeetModel("wasm")
+      const second = new MockParakeetModel("wasm")
+      const firstModel = new Promise<MockParakeetModel>((resolve) => {
+        resolveFirst = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          fromHubCalls++
+          return fromHubCalls === 1 ? firstModel : second
+        },
+        supportsLanguage: () => true,
+        onError: (error) => errors.push(error),
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+
+      const firstStart = transcriber.start()
+      while (fromHubCalls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+      await transcriber.stop()
+      const disposing = disposeParakeetModel()
+      resolveFirst?.(first)
+      await disposing
+      await firstStart
+
+      expect(first.disposed).toBe(true)
+      expect(errors).toEqual([])
+      await transcriber.start()
+      expect(transcriber.isReady).toBe(true)
+      expect(errors).toEqual([])
+
+      await transcriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("stop while the microphone opens releases the late stream before restart", async () => {
+      await disposeParakeetModel()
+      const model = new MockParakeetModel("wasm")
+      let releaseFirst: ((stream: MediaStream) => void) | undefined
+      let getUserMediaCalls = 0
+      let firstStopped = 0
+      let secondStopped = 0
+      const firstMedia = new Promise<MediaStream>((resolve) => {
+        releaseFirst = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => model,
+        supportsLanguage: () => true,
+        captureOptions: {
+          getUserMedia: async () => {
+            getUserMediaCalls++
+            if (getUserMediaCalls === 1) return firstMedia
+            return {
+              getTracks: () => [{ stop: () => secondStopped++ }],
+            } as unknown as MediaStream
+          },
+          isTypeSupported: () => true,
+        },
+      })
+
+      const firstStart = transcriber.start()
+      while (getUserMediaCalls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+      await transcriber.stop()
+      const secondStart = transcriber.start()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      const callsBeforeFirstResolved = getUserMediaCalls
+      releaseFirst?.({
+        getTracks: () => [{ stop: () => firstStopped++ }],
+      } as unknown as MediaStream)
+      await Promise.all([firstStart, secondStart])
+
+      expect(callsBeforeFirstResolved).toBe(1)
+      expect(getUserMediaCalls).toBe(2)
+      expect(firstStopped).toBe(1)
+      expect(secondStopped).toBe(0)
+      expect(transcriber.isReady).toBe(true)
+      await transcriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("stop during model loading suppresses late readiness without disposal", async () => {
+      await disposeParakeetModel()
+      const errors: Error[] = []
+      const backends: string[] = []
+      let releaseModel: ((model: MockParakeetModel) => void) | undefined
+      let loadStarted: (() => void) | undefined
+      const entered = new Promise<void>((resolve) => {
+        loadStarted = resolve
+      })
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        releaseModel = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          loadStarted?.()
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        onBackendChange: (backend) => backends.push(backend),
+        onError: (error) => errors.push(error),
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+
+      const firstStart = transcriber.start()
+      await entered
+      await transcriber.stop()
+      releaseModel?.(new MockParakeetModel("wasm"))
+      await firstStart
+
+      expect(transcriber.isReady).toBe(false)
+      expect(transcriber.statusMessage).toBe("Fermato")
+      expect(backends).toEqual([])
+      expect(errors).toEqual([])
+
+      await transcriber.start()
+      expect(transcriber.isReady).toBe(true)
+      await transcriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("a stopped shared-init waiter does not publish late readiness", async () => {
+      await disposeParakeetModel()
+      const errors: Error[] = []
+      const waiterBackends: string[] = []
+      let releaseModel: ((model: MockParakeetModel) => void) | undefined
+      let loadStarted: (() => void) | undefined
+      const entered = new Promise<void>((resolve) => {
+        loadStarted = resolve
+      })
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        releaseModel = resolve
+      })
+      const captureOptions = {
+        getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+        isTypeSupported: () => true,
+      }
+      const owner = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          loadStarted?.()
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        onError: (error) => errors.push(error),
+        captureOptions,
+      })
+      const waiter = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          throw new Error("waiter loaded its own model")
+        },
+        supportsLanguage: () => true,
+        onBackendChange: (backend) => waiterBackends.push(backend),
+        onError: (error) => errors.push(error),
+        captureOptions,
+      })
+
+      const ownerStart = owner.start()
+      await entered
+      const waiterStart = waiter.start()
+      await waiter.stop()
+      releaseModel?.(new MockParakeetModel("wasm"))
+      await Promise.all([ownerStart, waiterStart])
+
+      expect(waiter.isReady).toBe(false)
+      expect(waiter.statusMessage).toBe("Fermato")
+      expect(waiterBackends).toEqual([])
+      expect(errors).toEqual([])
+      await owner.stop()
+      await waiter.stop()
+      await disposeParakeetModel()
+    })
+
+    test("stop before preparation resumes discards initial progress", async () => {
+      await disposeParakeetModel()
+      const progress: ParakeetProgress[] = []
+      const errors: Error[] = []
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        persistStorage: false,
+        fromHub: async () => new MockParakeetModel("wasm"),
+        supportsLanguage: () => true,
+        onProgress: (update) => progress.push(update),
+        onError: (error) => errors.push(error),
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+
+      const starting = transcriber.start()
+      await transcriber.stop()
+      await starting
+
+      expect(progress).toEqual([])
+      expect(errors).toEqual([])
+      expect(transcriber.statusMessage).toBe("Fermato")
+      await disposeParakeetModel()
+    })
+
+    test("a stopped loader discards late progress and failure", async () => {
+      await disposeParakeetModel()
+      const progress: ParakeetProgress[] = []
+      const errors: Error[] = []
+      let finishLoad: (() => void) | undefined
+      let loadStarted: (() => void) | undefined
+      const entered = new Promise<void>((resolve) => {
+        loadStarted = resolve
+      })
+      const gate = new Promise<void>((resolve) => {
+        finishLoad = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async (
+          _modelId: string,
+          options: { progress?: (progress: { loaded: number; total: number; file?: string }) => void },
+        ) => {
+          loadStarted?.()
+          await gate
+          options.progress?.({ loaded: 50, total: 100 })
+          throw new Error("late model failure")
+        },
+        supportsLanguage: () => true,
+        onProgress: (update) => progress.push(update),
+        onError: (error) => errors.push(error),
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+
+      const starting = transcriber.start()
+      await entered
+      await transcriber.stop()
+      const progressAtStop = progress.length
+      finishLoad?.()
+      await starting
+
+      expect(transcriber.statusMessage).toBe("Fermato")
+      expect(progress).toHaveLength(progressAtStop)
+      expect(errors).toEqual([])
+      await disposeParakeetModel()
+    })
+
+    test("dispose during replacement cleanup cancels the replacement load", async () => {
+      await disposeParakeetModel()
+      let releaseOld: (() => void) | undefined
+      let oldDisposeStarted: (() => void) | undefined
+      const oldReleased = new Promise<void>((resolve) => {
+        releaseOld = resolve
+      })
+      const oldDisposeEntered = new Promise<void>((resolve) => {
+        oldDisposeStarted = resolve
+      })
+      const old = new MockParakeetModel("wasm")
+      old.dispose = async () => {
+        oldDisposeStarted?.()
+        await oldReleased
+        old.disposed = true
+      }
+      const warm = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => old,
+        supportsLanguage: () => true,
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+      await warm.start()
+      await warm.stop()
+
+      const replacement = new MockParakeetModel("wasm")
+      let replacementLoads = 0
+      const next = createParakeetTranscriber({
+        modelId: "replacement",
+        keepWarm: true,
+        fromHub: async () => {
+          replacementLoads++
+          return replacement
+        },
+        supportsLanguage: () => true,
+        captureOptions: {
+          getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream,
+          isTypeSupported: () => true,
+        },
+      })
+      try {
+        const starting = Promise.resolve(next.start())
+        await oldDisposeEntered
+        await disposeParakeetModel()
+        releaseOld?.()
+        const failure = await starting.then(() => undefined, (error: unknown) => error)
+        expect(failure).toBeInstanceOf(Error)
+        expect(replacementLoads).toBe(0)
+        expect(isParakeetModelWarmedUp()).toBe(false)
+      } finally {
+        await next.stop()
+        await disposeParakeetModel()
+      }
+    })
+
+    test("a start superseded by stop and restart cannot reopen the microphone", async () => {
+      await disposeParakeetModel()
+      const errors: Error[] = []
+      let releaseModel: ((model: MockParakeetModel) => void) | undefined
+      let loadStarted: (() => void) | undefined
+      const entered = new Promise<void>((resolve) => {
+        loadStarted = resolve
+      })
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        releaseModel = resolve
+      })
+      let microphoneStarts = 0
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          loadStarted?.()
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        onError: (error) => errors.push(error),
+        captureOptions: {
+          getUserMedia: async () => {
+            microphoneStarts++
+            return { getTracks: () => [] } as unknown as MediaStream
+          },
+          isTypeSupported: () => true,
+        },
+      })
+
+      const firstStart = transcriber.start()
+      await entered
+      await transcriber.stop()
+      const secondStart = transcriber.start()
+      releaseModel?.(new MockParakeetModel("wasm"))
+      await Promise.all([firstStart, secondStart])
+
+      expect(microphoneStarts).toBe(1)
+      expect(transcriber.isReady).toBe(true)
+      expect(errors).toEqual([])
+      await transcriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("concurrent starts share one in-flight model", async () => {
+      await disposeParakeetModel()
+      let resolveModel: ((model: MockParakeetModel) => void) | undefined
+      let calls = 0
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        resolveModel = resolve
+      })
+      const options = {
+        keepWarm: true,
+        fromHub: async () => {
+          calls++
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      }
+      const first = createParakeetTranscriber(options)
+      const firstStart = first.start()
+      while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+      const second = createParakeetTranscriber(options)
+      const secondStart = second.start()
+      const model = new MockParakeetModel("wasm")
+      resolveModel?.(model)
+      await Promise.all([Promise.resolve(firstStart), Promise.resolve(secondStart)])
+
+      expect(calls).toBe(1)
+      await first.stop()
+      await second.stop()
+      await disposeParakeetModel()
+    })
+
+    test("a waiter does not adopt a model disposed while it waits", async () => {
+      await disposeParakeetModel()
+      let resolveFirst: ((model: MockParakeetModel) => void) | undefined
+      let calls = 0
+      const first = new MockParakeetModel("wasm")
+      const second = new MockParakeetModel("wasm")
+      const firstModel = new Promise<MockParakeetModel>((resolve) => {
+        resolveFirst = resolve
+      })
+      const fromHub = async () => {
+        calls++
+        return calls === 1 ? firstModel : second
+      }
+      const options = {
+        keepWarm: true,
+        fromHub,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      }
+      const firstTranscriber = createParakeetTranscriber(options)
+      const firstStart = Promise.resolve(firstTranscriber.start())
+      const firstFailure = firstStart.then(() => undefined, (error: unknown) => error)
+      while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+
+      const secondTranscriber = createParakeetTranscriber(options)
+      const secondStart = secondTranscriber.start()
+      const disposing = disposeParakeetModel()
+      resolveFirst?.(first)
+      await disposing
+      const firstError = await firstFailure
+      expect(firstError).toBeInstanceOf(Error)
+      await secondStart
+
+      expect(first.disposed).toBe(true)
+      expect(second.disposed).toBe(false)
+      await secondTranscriber.stop()
+      await disposeParakeetModel()
     })
 
     test("warmupParakeetModel preloads model without starting microphone capture", async () => {

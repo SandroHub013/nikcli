@@ -77,6 +77,8 @@ export interface NaturalSpeakerDeps {
   synthesisLimitMs?: number
   /** What speaks while Piper cannot. */
   fallback: Speaker
+  /** Stop a resident process left by a previous page before this one uses it. */
+  stopOnCreate?: boolean
   /** Told once when a download starts, ends or fails, for the settings panel. */
   onInstall?: (voice: string, state: "downloading" | "ready" | "failed", problem?: string) => void
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
@@ -134,6 +136,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let stopping: Promise<void> | undefined
+  if (deps.stopOnCreate === true) {
+    stopping = Promise.resolve()
+      .then(() => deps.stop?.())
+      .then(() => undefined)
+      .catch(() => {})
+  }
   let activeTasks = 0
   let residentStarted = false
 
@@ -223,7 +231,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     installing.set(voice, job)
   }
 
-  async function usable(voice: string): Promise<boolean> {
+  async function usable(voice: string, installIfMissing = true): Promise<boolean> {
     if (voice === "system") return false
     if (ready.has(voice)) return true
     try {
@@ -233,7 +241,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         ready.add(voice)
         return true
       }
-      ensure(voice)
+      if (installIfMissing) ensure(voice)
     } catch {
       // A host that cannot say is a host that cannot speak with Piper.
     }
@@ -355,7 +363,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       const voice = deps.voice()
       if (voice === warmed) return
       cancelIdleTimer()
-      void usable(voice).then((ok) => {
+      void usable(voice, false).then((ok) => {
         if (!ok || warmed === voice) return
         warmed = voice
         residentStarted = true

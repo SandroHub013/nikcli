@@ -79,6 +79,8 @@ export interface CacheOptions {
   readonly repo?: string
   /** Whether to bypass local filesystem probing. */
   readonly skipFilesystem?: boolean
+  /** Exact file names required for the model variant being loaded. */
+  readonly requiredFiles?: readonly string[]
 }
 
 function resolveFactory(options: CacheOptions): IDBFactory | undefined {
@@ -174,6 +176,18 @@ function valuesOf(db: IDBDatabase, wanted: readonly IDBValidKey[]): Promise<unkn
 export function keysForRepo(keys: readonly IDBValidKey[], repo: string): string[] {
   const prefix = `hf-${repo}-`
   return keys.filter((key): key is string => typeof key === "string" && key.startsWith(prefix))
+}
+
+export function hasRequiredFiles(keys: readonly IDBValidKey[], requiredFiles: readonly string[]): boolean {
+  if (requiredFiles.length === 0) return true
+  const names = keys.filter((key): key is string => typeof key === "string")
+  const matches = requiredFiles.map((file) => names.filter((key) => key.endsWith(`-${file}`)))
+  if (matches.some((entries) => entries.length === 0)) return false
+  const firstFile = requiredFiles[0]!
+  return matches[0]!.some((firstKey) => {
+    const prefix = firstKey.slice(0, -(firstFile.length + 1))
+    return matches.every((entries) => entries.some((key) => key.startsWith(`${prefix}-`)))
+  })
 }
 
 /** Adds up whatever of these values look like stored files. */
@@ -421,9 +435,15 @@ export async function inspectModelCache(options: CacheOptions = {}): Promise<Cac
       if (db) {
         const mine = keysForRepo(await keysOf(db), repo)
         if (mine.length > 0) {
-          const files = mine.length
-          const bytes = sizeOf(await valuesOf(db, mine))
-          const present = isComplete(files)
+          const requiredFiles = options.requiredFiles
+          const matching = requiredFiles
+            ? mine.filter((key) => requiredFiles.some((file) => key.endsWith(`-${file}`)))
+            : mine
+          const files = matching.length
+          const bytes = sizeOf(await valuesOf(db, matching))
+          const present = requiredFiles
+            ? hasRequiredFiles(mine, requiredFiles)
+            : isComplete(files)
           indexedDbResult = {
             files,
             bytes,
@@ -431,6 +451,7 @@ export async function inspectModelCache(options: CacheOptions = {}): Promise<Cac
             source: "indexeddb",
             modelFormat: "onnx",
           }
+
           if (present) {
             return indexedDbResult
           }
@@ -568,15 +589,22 @@ export async function downloadParakeetModel(
   }
 
   const modelKey = options.modelKey ?? "parakeet-tdt-0.6b-v3"
-  const TOTAL_ESTIMATED_BYTES = 670_488_135
+  const quant = options.quant ?? "int8"
+  const totalEstimatedBytes = quant === "fp16" ? 1_200_000_000 : 670_488_135
   let completedFilesBytes = 0
   let lastFile = ""
 
-  const fileSizes: Record<string, number> = {
-    "encoder-model.int8.onnx": 652_183_999,
-    "decoder_joint-model.int8.onnx": 18_202_004,
-    "vocab.txt": 102_132,
-  }
+  const fileSizes: Record<string, number> = quant === "fp16"
+    ? {
+        "encoder-model.fp16.onnx": 1_180_000_000,
+        "decoder_joint-model.int8.onnx": 18_202_004,
+        "vocab.txt": 102_132,
+      }
+    : {
+        "encoder-model.int8.onnx": 652_183_999,
+        "decoder_joint-model.int8.onnx": 18_202_004,
+        "vocab.txt": 102_132,
+      }
 
   const progressBridge = (p: { loaded: number; total: number; file: string }) => {
     if (lastFile && p.file !== lastFile) {
@@ -585,19 +613,19 @@ export async function downloadParakeetModel(
     lastFile = p.file
 
     const currentTotalLoaded = Math.min(
-      TOTAL_ESTIMATED_BYTES,
+      totalEstimatedBytes,
       completedFilesBytes + (p.loaded || 0)
     )
     const percent = Math.min(
       99,
-      Math.max(1, Math.round((currentTotalLoaded / TOTAL_ESTIMATED_BYTES) * 100))
+      Math.max(1, Math.round((currentTotalLoaded / totalEstimatedBytes) * 100))
     )
     const mbLoaded = (currentTotalLoaded / (1024 * 1024)).toFixed(0)
-    const mbTotal = (TOTAL_ESTIMATED_BYTES / (1024 * 1024)).toFixed(0)
+    const mbTotal = (totalEstimatedBytes / (1024 * 1024)).toFixed(0)
 
     options.onProgress?.({
       loaded: currentTotalLoaded,
-      total: TOTAL_ESTIMATED_BYTES,
+      total: totalEstimatedBytes,
       percent,
       file: p.file,
       message: `Scaricamento ${p.file}: ${percent}% (${mbLoaded} MB di ${mbTotal} MB)...`,
@@ -606,25 +634,31 @@ export async function downloadParakeetModel(
 
   options.onProgress?.({
     loaded: 0,
-    total: TOTAL_ESTIMATED_BYTES,
+    total: totalEstimatedBytes,
     percent: 0,
-    message: "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
+    message: quant === "fp16"
+      ? "Inizio scaricamento del modello Parakeet quantizzato FP16 (~1,2 GB)..."
+      : "Inizio scaricamento del modello Parakeet quantizzato INT8 (~640 MB)...",
   })
 
   await getModel(modelKey, {
     backend: "wasm",
-    encoderQuant: options.quant ?? "int8",
+    encoderQuant: quant,
     decoderQuant: "int8",
     preprocessorBackend: "js",
     progress: progressBridge,
   })
 
   options.onProgress?.({
-    loaded: TOTAL_ESTIMATED_BYTES,
-    total: TOTAL_ESTIMATED_BYTES,
+    loaded: totalEstimatedBytes,
+    total: totalEstimatedBytes,
     percent: 100,
     message: "Download completato con successo! Il modello è pronto all'uso.",
   })
 
-  return await inspectModelCache({ repo: options.repo })
+  return await inspectModelCache({
+    repo: options.repo,
+    skipFilesystem: true,
+    requiredFiles: [`encoder-model.${quant}.onnx`, "decoder_joint-model.int8.onnx", "vocab.txt"],
+  })
 }

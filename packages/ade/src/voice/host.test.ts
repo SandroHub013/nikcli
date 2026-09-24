@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
+import type { VoiceAgent } from "./agent"
 import { AGENTS } from "../session-new/agents"
 import { createWorkbench, type Pane, type Workbench } from "../surface/state"
 import type { PermissionAnswer, PermissionRequest } from "../session/permission"
@@ -470,6 +471,31 @@ describe("createAdeVoiceHost", () => {
 
     host.browserNavigate("b1", "http://localhost:5173")
     expect(currentWb().panes[0].browserUrl).toBe("http://localhost:5173")
+  })
+
+  test("releasing the voice cancels a prepare waiting for a project", async () => {
+    let project: Project | undefined
+    let prepares = 0
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: false, text: "", ran: false }),
+      prepare: () => {
+        prepares++
+      },
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({
+      project: () => project,
+      voiceAgentFactory: async () => agent,
+    })
+    const host = createAdeVoiceHost(deps)
+
+    host.prepareAgent!({ engine: "claude" })
+    host.releaseAgent!()
+    project = { root: "C:/project", name: "project", git: true }
+    await new Promise((resolve) => setTimeout(resolve, 600))
+
+    expect(prepares).toBe(0)
   })
 })
 

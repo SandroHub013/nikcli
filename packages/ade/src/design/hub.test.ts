@@ -867,4 +867,3 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
     host.remove()
   })
 })
-

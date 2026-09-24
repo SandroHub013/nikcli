@@ -1200,7 +1200,7 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// A CLI turn that runs past its time has children of its own — a shell, an
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
-fn kill_tree(pid: u32) {
+pub(crate) fn kill_tree(pid: u32) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
