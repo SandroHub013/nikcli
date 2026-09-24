@@ -436,22 +436,24 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
   }
-  const refreshCache = () => {
-    const usesWebGpu = props.settings.parakeetBackend === "webgpu" || (props.settings.parakeetBackend === "auto" && isWebGpuAvailable())
-    const requiredFiles = [
+  const parakeetFiles = (backend: ParakeetExecutionBackend): string[] => {
+    const usesWebGpu = backend === "webgpu" || (backend === "auto" && isWebGpuAvailable())
+    return [
       `encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`,
       "decoder_joint-model.int8.onnx",
       "vocab.txt",
     ]
-    void inspectModelCache({ skipFilesystem: true, requiredFiles }).then((found) => {
-      setCached(found)
-      setInspected(true)
-    })
+  }
+  const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
+    const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
+    setCached(found)
+    setInspected(true)
+    return found
   }
 
   onMount(() => {
     refreshDevices()
-    refreshCache()
+    void refreshCache()
     const stop = onDeviceChange(refreshDevices)
     onCleanup(stop)
   })
@@ -587,13 +589,15 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       message: t("vui.download.starting"),
     })
     try {
-      const result = await downloadParakeetModel({
+      const backend = props.settings.parakeetBackend
+      const files = parakeetFiles(backend)
+      await downloadParakeetModel({
+        quant: files[0]?.includes("fp16") ? "fp16" : "int8",
         onProgress: (p) => {
           setDownloadProgress(p)
         },
       })
-      setCached(result)
-      setInspected(true)
+      await refreshCache(backend)
       updateSettings({ backend: "parakeet" })
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 6000)
@@ -927,7 +931,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       title={hint}
       data-slot="pill-btn"
       onClick={() => {
-        if (enabled) updateSettings({ parakeetBackend: value })
+        if (!enabled) return
+        updateSettings({ parakeetBackend: value })
+        void refreshCache(value)
       }}
     >
       {label}
@@ -2042,10 +2048,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   setClearingCache(true)
                   void clearModelCache()
                     .then(() => disposeParakeetModel())
-                    .finally(() => {
-                      setClearingCache(false)
-                      refreshCache()
-                    })
+                     .finally(() => {
+                       setClearingCache(false)
+                       void refreshCache()
+                     })
+
                 }}
               >
                 {clearingCache() ? t("vui.model.deleting") : t("vui.model.delete")}
