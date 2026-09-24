@@ -36,6 +36,15 @@ export interface DesignVariant {
   readonly description: string
   /** Disk path or URL to an image or standalone HTML page */
   readonly preview: string
+  /** What it changes compared with today, short (polish-aaa point 3). */
+  readonly changes?: readonly string[]
+}
+
+/** The variant the writer recommends, and why. */
+export interface DesignRecommendation {
+  /** A variant's name. */
+  readonly option: string
+  readonly because?: string
 }
 
 interface EventBase {
@@ -50,8 +59,20 @@ interface EventBase {
 export interface OpenedDesignEvent extends EventBase {
   readonly type: "aperta"
   readonly title: string
+  /*
+   * The format of the polish-aaa plan (point 3), every field optional. A build
+   * that does not know them shows `context` alone, which is why a line that
+   * uses them must still carry one.
+   */
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   /** What the user needs to know, in plain words. */
   readonly context?: string
+  readonly recommend?: DesignRecommendation
+  /** What stays as it is, whichever variant is picked. */
+  readonly keeps?: readonly string[]
   /** Reference spec, e.g. "S54" or "S57". */
   readonly spec?: string
   /** One or more design variants to pick from. */
@@ -161,11 +182,26 @@ export function toEvent(value: unknown): DesignEvent | string {
       if (order !== undefined && (typeof order !== "number" || !Number.isFinite(order))) return t("design.log.order")
       const multi = record.multi === true
       if (multi && variants.length < 2) return t("design.log.multi")
+      const keeps = textsOf(record.keeps)
+      if (keeps && "error" in keeps) return t("design.log.keeps")
+      const recommend = recommendationOf(record.recommend)
+      if (recommend && "error" in recommend) return t("design.log.recommend")
+      if (recommend && !variants.some((variant) => variant.name === recommend.option)) return t("design.log.recommendOption", recommend.option)
+      const question = text(record.question)
+      const why = text(record.why)
+      const context = text(record.context)
+      const newFormat = Boolean(question || why || keeps || recommend || variants.some((variant) => variant.changes))
+      // A build that knows none of them shows the context alone: without one it would show an empty card.
+      if (newFormat && !context) return t("design.log.contextNeeded")
       return compact({
         type: "aperta",
         ...base,
         title,
-        context: text(record.context),
+        question,
+        why,
+        context,
+        recommend,
+        keeps,
         spec: text(record.spec),
         variants,
         order: order as number | undefined,
@@ -246,9 +282,34 @@ function variantsOf(value: unknown): DesignVariant[] | string {
     if (!name) return t("design.log.variantName")
     const description = text(rec.description) ?? ""
     const preview = text(rec.preview) ?? ""
-    variants.push({ name, description, preview })
+    const changes = textsOf(rec.changes)
+    if (changes && "error" in changes) return t("design.log.changes")
+    variants.push(changes ? { name, description, preview, changes } : { name, description, preview })
   }
   return variants
+}
+
+/** Short texts; `undefined` when absent or empty, an error when not a list of texts. */
+function textsOf(value: unknown): string[] | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return { error: true }
+  const texts: string[] = []
+  for (const item of value) {
+    const entry = text(item)
+    if (!entry) return { error: true }
+    texts.push(entry)
+  }
+  return texts.length > 0 ? texts : undefined
+}
+
+/** `{ option, because? }`; an error when it is something else or names no variant. */
+function recommendationOf(value: unknown): DesignRecommendation | undefined | { error: true } {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { error: true }
+  const record = value as Record<string, unknown>
+  const option = text(record.option)
+  if (!option) return { error: true }
+  return compact({ option, because: text(record.because) }) as DesignRecommendation
 }
 
 function compact<T extends Record<string, unknown>>(record: T): T {

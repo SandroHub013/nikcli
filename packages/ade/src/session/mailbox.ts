@@ -1187,6 +1187,19 @@ export const USAGE =
   "                                          Il json anche da file (--file <percorso>) o da stdin (--stdin, al\n" +
   "                                          posto del json): da PowerShell 5.1 usa --file, perché le virgolette\n" +
   "                                          dentro '<json>' si perdono e una pipe perde le lettere accentate\n" +
+  "                                          aperta, campi facoltativi: question (la domanda in una riga), why\n" +
+  "                                          (perché adesso, 1-2 frasi), recommend {option, because}; decisioni:\n" +
+  "                                          facts [\"...\"], ogni opzione title, effect, cost, risk; design: keeps\n" +
+  "                                          [\"...\"], ogni variante changes [\"...\"]. context resta obbligatorio con\n" +
+  "                                          questi campi: le versioni vecchie mostrano solo lui. recommend.option\n" +
+  "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata.\n" +
+  "                                          Come si scrive: 1) titolo = la domanda o l'oggetto, parole dell'utente,\n" +
+  "                                          niente codici (lo spec va in spec); 2) la raccomandazione solo in\n" +
+  "                                          recommend, mai «(consigliata)» nelle opzioni né in fondo al contesto;\n" +
+  "                                          3) ogni opzione dice cosa cambia per l'utente (effect), cost e risk\n" +
+  "                                          solo se aiutano a scegliere; 4) niente note che scadono («nella tua\n" +
+  "                                          ADE di oggi…», «dalla release X»); 5) context al massimo 3 frasi,\n" +
+  "                                          misure e dettagli in facts o in un file results/…\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
