@@ -109,6 +109,24 @@ describe("folding events into decisions", () => {
     expect(decisions[0]!.status).toBe("risposta")
   })
 
+  test("a deferred decision reopened before expiration stays accepted when folded later (MEDIO 1)", () => {
+    const events: DecisionEvent[] = [
+      opened("D1", { at: "2026-09-15T10:00:00.000Z" }),
+      { type: "rimandata", k: "D1", at: "2026-09-15T11:00:00.000Z", by: "utente", until: "2026-09-20T00:00:00.000Z" } as DecisionEvent,
+      { type: "riaperta", k: "D1", at: "2026-09-19T12:00:00.000Z", by: "utente" } as DecisionEvent,
+    ]
+
+    // Evaluated on Sept 19: reopen was before deferral ran out (Sept 20), so it is accepted
+    const fold19 = foldDecisions(events, new Date("2026-09-19T14:00:00.000Z"))
+    expect(fold19.rejected).toEqual([])
+    expect(fold19.decisions[0]!.status).toBe("aperta")
+
+    // Evaluated on Sept 21: deferral expiration on Sept 20 must NOT cause the Sept 19 reopen to be rejected
+    const fold21 = foldDecisions(events, new Date("2026-09-21T10:00:00.000Z"))
+    expect(fold21.rejected).toEqual([])
+    expect(fold21.decisions[0]!.status).toBe("aperta")
+  })
+
   test("changing an answer means reopening it; a second answer on top is refused", () => {
     const raced = foldDecisions([opened("D1"), answered("D1", "A"), answered("D1", "B", 6)])
     expect(raced.decisions[0]!.answer!.words).toBe("A")

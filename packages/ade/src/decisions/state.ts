@@ -131,7 +131,7 @@ export function foldDecisions(
       reject(event, t("decisions.rule.neverOpened", event.k))
       continue
     }
-    const status = effectiveStatus(current, now)
+    const status = effectiveStatus(current, new Date(event.at))
     if (status === "chiusa") {
       reject(event, t("decisions.rule.closed", event.k))
       continue
@@ -209,9 +209,12 @@ export function foldDecisions(
 }
 
 /** `rimandata` whose date has passed is `aperta` again. */
-function effectiveStatus(decision: Pick<Decision, "status" | "deferredUntil">, now: Date): DecisionStatus {
+function effectiveStatus(decision: Pick<Decision, "status" | "deferredUntil">, at: Date): DecisionStatus {
   if (decision.status !== "rimandata" || !decision.deferredUntil) return decision.status
-  return Date.parse(decision.deferredUntil) <= now.getTime() ? "aperta" : "rimandata"
+  const until = Date.parse(decision.deferredUntil)
+  const time = at.getTime()
+  if (Number.isNaN(until) || Number.isNaN(time)) return decision.status
+  return until <= time ? "aperta" : "rimandata"
 }
 
 /**

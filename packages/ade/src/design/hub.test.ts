@@ -16,7 +16,7 @@ compileSolidJsx()
 
 const { createComponent, render } = await import("solid-js/web")
 const { DesignSheet } = await import("./design-sheet")
-const { DesignPane } = await import("./design-pane")
+const { DesignPane, deliveryText } = await import("./design-pane")
 
 const opened = (k: string) =>
   `${JSON.stringify({
@@ -541,3 +541,110 @@ describe("the sheet keeps a choice made in this window", () => {
     host.remove()
   })
 })
+
+describe("delivery text in DesignPane (MEDIO 2)", () => {
+  test("a choice made outside ADE shows «scelta di X · giorno» instead of staying «in coda»", () => {
+    const proposal: DesignProposal = {
+      k: "DS10",
+      title: "Navigation",
+      spec: "S54",
+      variants: [{ name: "A", description: "Tabs", preview: "" }],
+      raisedBy: "fable",
+      openedAt: "2026-09-20T10:00:00.000Z",
+      status: "risposta",
+      history: [],
+      answer: {
+        choice: "A",
+        words: "A",
+        at: "2026-09-24T12:00:00.000Z",
+        by: "Master",
+      },
+    }
+
+    const now = new Date("2026-09-24T15:00:00.000Z")
+
+    // 1. Outside ADE: delivery state is "fuori da ADE"
+    const hubOutside = {
+      delivery: () => ({ state: "fuori da ADE" as const }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubOutside, proposal, now)).toBe("scelta di Master · oggi")
+
+    // 2. In queue: delivery state is "in coda"
+    const hubQueued = {
+      delivery: () => ({ state: "in coda" as const }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubQueued, proposal, now)).toBe("in coda: parte appena «Master» è libera")
+
+    // 3. Delivered: delivery state is "consegnata"
+    const hubDelivered = {
+      delivery: () => ({ state: "consegnata" as const, to: "Master", at: now.getTime() }),
+      recipient: () => ({ state: "pronta" as const, id: "p1", title: "Master" }),
+    } as any
+
+    expect(deliveryText(hubDelivered, proposal, now)).toContain("✓ consegnata a Master")
+  })
+
+  test("DesignPane renders «scelta di X · giorno» for an answered proposal from outside ADE", async () => {
+    const proposal: DesignProposal = {
+      k: "DS10",
+      title: "Navigation",
+      spec: "S54",
+      variants: [{ name: "A", description: "Tabs", preview: "" }],
+      raisedBy: "fable",
+      openedAt: "2026-09-20T10:00:00.000Z",
+      status: "risposta",
+      history: [],
+      answer: {
+        choice: "A",
+        words: "Variante A",
+        at: "2026-09-24T12:00:00.000Z",
+        by: "Master",
+      },
+    }
+
+    const register: DesignRegister = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => ({ proposals: [proposal], rejected: [] }),
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    }
+
+    let hub!: DesignHub
+    const disposeHub = createRoot((dispose) => {
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "C:\\project",
+        recipient: () => ({ state: "pronta", id: "p1", title: "Dario" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "fuori da ADE" }),
+        onAnswered: () => {},
+      })
+      return dispose
+    })
+
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const disposePane = createRoot((dispose) => {
+      render(() => createComponent(DesignPane, { hub, focused: true }), host)
+      return dispose
+    })
+
+    const hint = host.querySelector('[data-slot="design-hint"]')
+    expect(hint).not.toBeNull()
+    expect(hint?.textContent).toContain("scelta di Master")
+
+    disposePane()
+    disposeHub()
+    host.remove()
+  })
+})
+

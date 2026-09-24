@@ -683,6 +683,7 @@ export const it = {
   "design.pill.closed": (day: string) => `chiusa ${day}`,
   "design.change": "Cambia scelta",
   "design.delivery.done": (to: string, when: string) => `✓ consegnata a ${to} · ${when} · chi la realizza la chiude`,
+  "design.delivery.by": (who: string, day: string) => `scelta di ${who} · ${day}`,
   "design.queued.ready": (title: string) => `in coda: parte appena «${title}» è libera`,
   "design.queued.idle": (title: string) => `in coda: parte quando «${title}» è in esecuzione`,
   "design.queued.none": "in coda: nessuna sessione scelta per le risposte",
