@@ -28,6 +28,7 @@ export const ACTIVITY_CODES = [
   "sshConnecting",
   "connected",
   "connectFailed",
+  "suspended",
 ] as const
 
 export type ActivityCode = (typeof ACTIVITY_CODES)[number]
@@ -51,6 +52,7 @@ const LABELS: Record<ActivityCode, MessageKey> = {
   sshConnecting: "activity.sshConnecting",
   connected: "activity.connected",
   connectFailed: "activity.connectFailed",
+  suspended: "activity.suspended",
 }
 
 /** The sentences earlier builds stored, and what each one meant. */

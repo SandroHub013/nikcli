@@ -169,6 +169,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                             data-selected={isSelected() ? "true" : undefined}
                             aria-selected={isSelected()}
                             aria-disabled={disabled}
+                            title={disabled ? hit.command.disabledReason : undefined}
                             onPointerEnter={() => !disabled && setSelectedIndex(index)}
                             onClick={() => {
                               if (!disabled) props.onRun(hit.command.id)

@@ -304,6 +304,11 @@ describe("orchestration", () => {
     expect(requestState(request, { running: true, permissionPending: false }, 60_000)).toBe("in corso")
   })
 
+  test("a request to a suspended session waits for it, and is not closed (P1-C6)", () => {
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 5_000)).toBe("sessione sospesa")
+    expect(requestState(request, { running: false, suspended: true, permissionPending: false }, 3_600_000)).toBe("sessione sospesa")
+  })
+
   test("a quiet session with an old request is reminded, at most twice and never over a prompt", () => {
     const quiet = { running: true, permissionPending: false, lastOutputAt: 10_000 }
     expect(shouldNudge(request, quiet, 30_000)).toBe(false) // too recent

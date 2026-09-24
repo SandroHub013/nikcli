@@ -4,11 +4,10 @@ import { DEFAULT_BINDINGS } from "../keyboard/bindings"
 import { formatChord, parseChord, type Platform } from "../keyboard/keymap"
 import type { RecentEntry } from "../host/recent"
 import { t } from "../i18n"
+import { SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { ADE_VIEW_LABELS, VISIBLE_VIEWS, nextView, type AdeView, type Workbench } from "./state"
 
 export interface SurfaceCommand extends Command {
-  /** Why the command cannot run now. Shown instead of hiding the row. */
-  disabledReason?: string
   description?: string
 }
 
@@ -49,6 +48,8 @@ export interface CommandContext {
   pluginCommands?: PluginCommandEntry[]
   /** The sections that can be reached. `VISIBLE_VIEWS` unless a test injects the other branch. */
   views?: readonly AdeView[]
+  /** Whether the focused pane can be suspended now (`canSuspend`); absent when it is not a Claude session. */
+  suspendCheck?: SuspendCheck
 }
 
 /**
@@ -102,6 +103,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
     : undefined
   const focusedRuns = !!focusedPane && running.has(focusedPane.id)
   const desktopOnly = hasHost ? undefined : t("palette.desktopOnly")
+  const suspend: SuspendCheck = ctx.suspendCheck ?? { ok: false, reason: "notClaude" }
 
   const commands: SurfaceCommand[] = [
     {
@@ -134,6 +136,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: !!focusedPane,
       disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.expand", platform),
+    },
+    {
+      id: "session.suspend",
+      title: t("palette.session.suspend"),
+      group: t("palette.group.session"),
+      keywords: ["sospendi", "pausa", "memoria", "libera", "suspend", "pause", "memory", "free"],
+      enabled: !!focusedPane && suspend.ok,
+      disabledReason: !focusedPane ? t("palette.noFocusedPane") : suspend.ok ? undefined : t(SUSPEND_REASON[suspend.reason]),
     },
     {
       id: "pane.rename",

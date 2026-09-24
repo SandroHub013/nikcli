@@ -27,6 +27,8 @@ export interface Command {
   shortcut?: string
   /** False when the command is unavailable in the current context. */
   enabled?: boolean
+  /** Why it is unavailable, shown on the row when it is. */
+  disabledReason?: string
 }
 
 export interface CommandHit {

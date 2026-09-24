@@ -72,6 +72,8 @@ export interface PaneState {
   worktree?: string
   /** Arguments chosen at spawn, replayed on every start. */
   spawnArgs?: string[]
+  /** Suspended by the user (P1-C6): restored as it was, and never started by the restore. */
+  suspended?: true
   /**
    * The cells the user resized the pane to. Absent means the default size
    * of one cell.
@@ -227,6 +229,8 @@ function sanitisePane(raw: unknown): PaneState {
       ? { spawnArgs: raw.spawnArgs as string[] }
       : {}),
     ...(span ? { span } : {}),
+    // `true` or nothing: anything else would wake a session the user put to sleep, or keep one asleep by accident.
+    ...(raw.suspended === true ? { suspended: true as const } : {}),
   }
 }
 

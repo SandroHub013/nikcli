@@ -205,6 +205,11 @@ export interface Pane {
   spawnArgs?: string[]
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
   span?: Span
+  /**
+   * Suspended by the user (P1-C6): its processes closed, its conversation kept
+   * for "Riprendi". Nothing wakes it by itself: not a message, not a restart.
+   */
+  suspended?: true
 }
 
 /**
@@ -409,9 +414,11 @@ function lastSegment(path: string | undefined): string | undefined {
  * resuming a session, it is opening a new one that happens to share a name.
  */
 export function isResumable(
-  pane: Pick<Pane, "status" | "task" | "resumeId" | "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">,
+  pane: Pick<Pane, "status" | "task" | "resumeId" | "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin" | "suspended">,
 ): boolean {
   if (isPanelPane(pane)) return false
+  // Suspended: it comes back when the user resumes it, never by itself (P1-C6).
+  if (pane.suspended) return false
   const hasTask = (pane.task ?? "").trim().length > 0
   const hasConversation = (pane.resumeId ?? "").trim().length > 0
   if (!hasTask && !hasConversation) return false
@@ -444,6 +451,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.worktree ? { worktree: p.worktree } : {}),
       ...(p.spawnArgs?.length ? { spawnArgs: [...p.spawnArgs] } : {}),
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
+      ...(p.suspended ? { suspended: true as const } : {}),
       /*
        * Recorded at save time, not derived at restore time.
        *
@@ -568,8 +576,10 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
       return {
         id: p.id,
         title: p.title,
-        status: restoredStatus(p.status),
-        activity: p.wasRunning ? "toResume" : "restored",
+        // Suspended: as it was left, neither "to resume" nor finished (P1-C6).
+        status: p.suspended ? "idle" : restoredStatus(p.status),
+        activity: p.suspended ? "suspended" : p.wasRunning ? "toResume" : "restored",
+        ...(p.suspended ? { suspended: true as const } : {}),
         model: p.model ?? p.agent,
         mode: "auto",
         agent: p.agent,
@@ -584,7 +594,8 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
          * had none. That is the second half of the bug the user reported.
          */
         ...(p.resumeId ? { resumeId: p.resumeId } : {}),
-        lines: [
+        /* A suspended session's transcript already ends with the note that says so: nothing is restarted to report. */
+        lines: p.suspended ? history : [
           ...history,
           {
             kind: "note",
@@ -661,8 +672,19 @@ export function sessionsToResume(state: WorkspaceState): PaneState[] {
   return state.panes.filter(
     (pane) =>
       pane.wasRunning === true &&
+      // A suspended session is resumed by the user, not by a restart (P1-C6).
+      pane.suspended !== true &&
       // Either half is enough: the conversation id reopens the session with
       // everything in it, and the task is what is typed when there is none.
       ((pane.task ?? "").trim().length > 0 || (pane.resumeId ?? "").trim().length > 0),
   )
+}
+
+/**
+ * The second half of a restore: the sessions whose agent had already exited,
+ * reopened too — every session pane `planned` (`sessionsToResume`) did not
+ * take. Not a suspended one: it waits for "Riprendi", restart or not (P1-C6).
+ */
+export function exitedToReopen(panes: readonly Pane[], planned: ReadonlySet<string>): Pane[] {
+  return panes.filter((pane) => !planned.has(pane.id) && !isPanelPane(pane) && !pane.suspended && Boolean(pane.agent ?? pane.model))
 }
