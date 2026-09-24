@@ -582,8 +582,37 @@ impl ChildTreeGuard {
     }
 }
 
-fn terminate_child_tree(child: &mut std::process::Child, pid: u32, guard: &mut Option<ChildTreeGuard>) {
+#[cfg(windows)]
+fn kill_process_tree_fallback(pid: u32) {
+    let pid = pid.to_string();
+    let _ = std::process::Command::new("taskkill")
+        .args(["/PID", &pid, "/T", "/F"])
+        .output();
+}
+
+#[cfg(unix)]
+fn kill_process_tree_fallback(pid: u32) {
+    let pid = format!("-{pid}");
+    let _ = std::process::Command::new("kill")
+        .args(["-KILL", "--", &pid])
+        .status();
+}
+
+#[cfg(not(any(windows, unix)))]
+fn kill_process_tree_fallback(pid: u32) {
+    let _ = pty::kill_tree(pid);
+}
+
+fn terminate_child_tree(
+    child: &mut std::process::Child,
+    pid: u32,
+    guard: &mut Option<ChildTreeGuard>,
+    job_assigned: bool,
+) {
     drop(guard.take());
+    if !job_assigned {
+        kill_process_tree_fallback(pid);
+    }
     let _ = pty::kill_tree(pid);
     let _ = child.kill();
     let _ = child.wait();
@@ -593,6 +622,11 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
     use std::process::Stdio;
 
     let mut tree_guard = ChildTreeGuard::new().ok();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -600,15 +634,17 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
         .spawn()
         .map_err(|error| format!("nikcli non eseguibile: {error}"))?;
     let pid = child.id();
-    if let Some(guard) = tree_guard.as_ref() {
-        let _ = guard.assign_pid(pid);
-    }
+    let job_assigned = if cfg!(windows) {
+        tree_guard.as_ref().is_some_and(|guard| guard.assign_pid(pid).is_ok())
+    } else {
+        false
+    };
     let Some(mut stdout) = child.stdout.take() else {
-        terminate_child_tree(&mut child, pid, &mut tree_guard);
+        terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
         return Err("nikcli non ha uno stdout leggibile".into());
     };
     let Some(mut stderr) = child.stderr.take() else {
-        terminate_child_tree(&mut child, pid, &mut tree_guard);
+        terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
         return Err("nikcli non ha uno stderr leggibile".into());
     };
     let out_reader = std::thread::spawn(move || {
@@ -628,18 +664,18 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
-                terminate_child_tree(&mut child, pid, &mut tree_guard);
+                terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
                 return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
             }
             Err(error) => {
-                terminate_child_tree(&mut child, pid, &mut tree_guard);
+                terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
                 return Err(format!("nikcli non eseguibile: {error}"));
             }
         }
     };
     while !out_reader.is_finished() || !err_reader.is_finished() {
         if Instant::now() >= deadline {
-            terminate_child_tree(&mut child, pid, &mut tree_guard);
+            terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
             return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
         }
         std::thread::sleep(Duration::from_millis(25));
