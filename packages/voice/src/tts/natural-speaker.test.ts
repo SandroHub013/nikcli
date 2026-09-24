@@ -149,6 +149,65 @@ describe("tts/natural-speaker", () => {
     expect(missing.installs).toEqual(["ugo"])
   })
 
+  test("il primo token di due speaker non riparte da zero e non coincide", async () => {
+    const first: number[] = []
+    const collect = async (_voice: string, _text: string, token: number) => {
+      first.push(token)
+      return wav("Frase lunga abbastanza da non unirsi.")
+    }
+    const left = createNaturalSpeaker(harness({ synthesize: collect }).deps)
+    const right = createNaturalSpeaker(harness({ synthesize: collect }).deps)
+    await left.speak("Prima frase lunga del primo speaker.")
+    await right.speak("Prima frase lunga del secondo speaker.")
+    expect(first).toHaveLength(2)
+    // A page reload must not hand back a number the host may still hold as abandoned.
+    expect(first[0]).toBeGreaterThan(1_000_000)
+    expect(first[1]).toBeGreaterThan(1_000_000)
+    // Two speakers alive together never draw the same number either.
+    expect(first[0]).not.toBe(first[1])
+  })
+
+  test("an abandoned reply cancels its queued sentences in the host, keeping the prefetched ones", async () => {
+    const cancelled: number[][] = []
+    const asked: { text: string; token: number }[] = []
+    const held = new Map<string, (buffer: ArrayBuffer) => void>()
+    const h = harness({
+      synthesize: (_voice, text, token) => {
+        asked.push({ text, token })
+        if (text.startsWith("Vecchia")) {
+          // Still queued in the host: it never settles on its own.
+          return new Promise<ArrayBuffer>((resolve) => held.set(text, resolve))
+        }
+        return Promise.resolve(wav(text))
+      },
+      cancel: (tokens) => {
+        cancelled.push(tokens)
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    const old = speaker.speak("Vecchia frase lunga. Vecchia altra frase lunga.")
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    // Asked for ahead of the next reply, while the old one still runs.
+    speaker.prefetch?.("Nuova frase pronta.")
+    const prefetched = asked.find((entry) => entry.text === "Nuova frase pronta.")
+    expect(prefetched).toBeDefined()
+
+    await speaker.speak("Nuova risposta lunga.")
+    expect(h.played).toEqual(["Nuova risposta lunga."])
+
+    // One cancel, with exactly the two abandoned sentences — never the prefetched one.
+    expect(cancelled).toHaveLength(1)
+    const abandoned = new Set(asked.filter((entry) => entry.text.startsWith("Vecchia")).map((entry) => entry.token))
+    expect(abandoned.size).toBe(2)
+    expect(new Set(cancelled[0])).toEqual(abandoned)
+    expect(cancelled[0]).not.toContain(prefetched!.token)
+
+    // The old reply finds its sentences settled at last, and plays none of them.
+    for (const resolve of held.values()) resolve(wav("x"))
+    await old
+    expect(h.played).toEqual(["Nuova risposta lunga."])
+  })
+
   test("a new reply stops the one playing, and nothing of the old one plays after", async () => {
     let release: (() => void) | undefined
     const aborted: string[] = []

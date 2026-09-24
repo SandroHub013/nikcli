@@ -42,6 +42,15 @@ function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
   return Promise.race([pending, expired]).finally(() => clearTimeout(timer))
 }
 
+/**
+ * Names each synthesis request for the host, so an abandoned one can be
+ * cancelled there. Shared by every speaker and started from the clock: the
+ * host keeps its abandoned set across a page reload while a counter from
+ * zero would start again at 1, and the orphan mark would silently skip the
+ * phrase that happened to draw the same number.
+ */
+let tokenSeq = Date.now() * 1000
+
 export interface NaturalSpeakerDeps {
   /** The chosen voice id, read at every reply so a change in the settings applies at once. `system` means Web Speech. */
   voice: () => string
@@ -49,8 +58,19 @@ export interface NaturalSpeakerDeps {
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
   /** Downloads what the voice needs. Called once per voice, in the background. */
   install: (voice: string) => Promise<void>
-  /** One sentence as WAV bytes. */
-  synthesize: (voice: string, text: string) => Promise<ArrayBuffer>
+  /**
+   * One sentence as WAV bytes. `token` names this request on the host, so
+   * `cancel` can tell it to skip the sentence if the reply is abandoned while
+   * the sentence still waits its turn in the queue.
+   */
+  synthesize: (voice: string, text: string, token: number) => Promise<ArrayBuffer>
+  /**
+   * Abandons the named requests: the host skips their queued sentences at
+   * their turn, and the one already being synthesised finishes on its own.
+   * Called with exactly the in-flight requests no longer waited for — never
+   * with the ones asked for ahead of the next reply.
+   */
+  cancel?: (tokens: number[]) => void | Promise<void>
   /** Plays WAV bytes; resolves when done, or when `signal` aborts. */
   play: (wav: ArrayBuffer, signal: AbortSignal) => Promise<void>
   /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. */
@@ -109,6 +129,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const installing = new Map<string, Promise<void>>()
   let warmed: string | undefined
   let fallbackNotified = false
+  /** Tokens of the requests asked of the host and not settled yet. */
+  const inflight = new Set<number>()
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let stopping: Promise<void> | undefined
@@ -149,11 +171,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     }
   }
 
-  function invokeSynthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
-    if (stopping) {
-      return stopping.catch(() => {}).then(() => deps.synthesize(voice, sentence))
+  function invokeSynthesize(voice: string, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
+    const token = ++tokenSeq
+    inflight.add(token)
+    const pending = stopping
+      ? stopping.catch(() => {}).then(() => deps.synthesize(voice, sentence, token))
+      : deps.synthesize(voice, sentence, token)
+    const forget = () => {
+      inflight.delete(token)
     }
-    return deps.synthesize(voice, sentence)
+    void pending.then(forget, forget)
+    return { token, pending }
   }
 
   async function announceFallbackOnce(voice: string): Promise<void> {
@@ -166,7 +194,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   }
 
   /* Sentences asked for ahead of their turn, by voice and text. */
-  const ahead = new Map<string, Promise<ArrayBuffer>>()
+  const ahead = new Map<string, { token: number; pending: Promise<ArrayBuffer> }>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
   function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
     residentStarted = true
@@ -174,9 +202,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     const early = ahead.get(key)
     if (early) {
       ahead.delete(key)
-      return early
+      return early.pending
     }
-    return invokeSynthesize(voice, sentence)
+    return invokeSynthesize(voice, sentence).pending
   }
 
   function ensure(voice: string): void {
@@ -212,12 +240,19 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     return false
   }
 
-  function stopAll(): void {
+  /**
+   * Drops everything of the old reply. The sentences still queued in the host
+   * are abandoned there too — they would only delay the next reply — except
+   * those kept: the ones already asked for ahead of the reply to come.
+   */
+  function stopAll(keep?: ReadonlySet<number>): void {
     generation++
     playing?.abort()
     playing = undefined
     deps.fallback.cancel()
     ahead.clear()
+    const abandoned = [...inflight].filter((token) => !keep?.has(token))
+    if (abandoned.length > 0) void deps.cancel?.(abandoned)
   }
 
   return {
@@ -228,8 +263,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         await ensureNotStopping()
         // What was asked for ahead belongs to this reply: kept across the stop.
         const early = new Map(ahead)
-        stopAll()
-        for (const [key, pending] of early) ahead.set(key, pending)
+        stopAll(new Set([...early.values()].map((entry) => entry.token)))
+        for (const [key, entry] of early) ahead.set(key, entry)
         const mine = generation
         if (!text || text.trim().length === 0) return
         const clean = cleanForSpeech(text)
@@ -306,13 +341,13 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (ahead.has(key)) continue
         residentStarted = true
         activeTasks++
-        const pending = invokeSynthesize(voice, sentence)
-          .finally(() => {
-            activeTasks--
-            if (activeTasks === 0) scheduleIdleStop()
-          })
-        pending.catch(() => {})
-        ahead.set(key, pending)
+        const { token, pending } = invokeSynthesize(voice, sentence)
+        const tracked = pending.finally(() => {
+          activeTasks--
+          if (activeTasks === 0) scheduleIdleStop()
+        })
+        tracked.catch(() => {})
+        ahead.set(key, { token, pending: tracked })
       }
     },
 
@@ -325,7 +360,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         warmed = voice
         residentStarted = true
         activeTasks++
-        invokeSynthesize(voice, "Pronto.")
+        const { pending } = invokeSynthesize(voice, "Pronto.")
+        pending
           .catch(() => {
             warmed = undefined
           })
