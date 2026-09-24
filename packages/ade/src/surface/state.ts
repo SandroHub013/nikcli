@@ -1,4 +1,5 @@
 import { redactHistory, redactUrl, type BrowserHistory } from "../browser/history"
+import type { PaneDesign } from "../design/open-variant"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
@@ -137,6 +138,11 @@ export interface Pane {
    * rebuilt it on the URL the pane was opened with.
    */
   browserHistory?: BrowserHistory
+  /**
+   * A browser pane in Design mode (D1): the variant it shows. Not saved with
+   * the layout: see `toWorkspaceState`.
+   */
+  browserDesign?: PaneDesign
   /**
    * The session a browser pane belongs to (S46): what the inspector sends
    * goes there. The title is the one it had when bound, for the chip once the
@@ -473,8 +479,14 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
    * Browser panes are saved as the page they show, so a restart reopens the
    * same page rather than dropping the pane. A plugin tile is never one.
    */
+  /*
+   * A pane in Design mode is not saved (D1). It is a view of one variant of
+   * a register entry, and the card opens it again in one click; restored, it
+   * would load at startup a page the next round may have rewritten or taken
+   * away, with nobody having asked to see it.
+   */
   const browsers = workbench.panes
-    .filter((p) => p.browserUrl && !p.plugin)
+    .filter((p) => p.browserUrl && !p.plugin && !p.browserDesign)
     .map((p) => ({
       id: p.id,
       title: p.title,

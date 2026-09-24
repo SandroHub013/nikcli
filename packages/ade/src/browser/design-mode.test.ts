@@ -1,0 +1,63 @@
+import { describe, expect, test } from "bun:test"
+import { BROWSE_SANDBOX, DESIGN_SANDBOX, frameSandbox, INITIAL_DESIGN_WATCH, watchDesign, type DesignWatchEvent } from "./design-mode"
+import { fitViewport } from "./viewport"
+
+/* D1: the frame of a design page, and how the pane knows it is still there. */
+
+const target = { k: "DS-A", variant: 1, path: "C:/p/.ade/design/DS-A/1.html", roots: ["C:/p"] }
+
+describe("the frame's sandbox", () => {
+  test("in Design mode, no origin of its own and nothing that leaves the frame", () => {
+    const tokens = frameSandbox(target).split(/\s+/)
+    expect(tokens).toContain("allow-scripts")
+    expect(tokens).not.toContain("allow-same-origin")
+    expect(tokens).not.toContain("allow-popups")
+    expect(tokens).not.toContain("allow-top-navigation")
+    expect(frameSandbox(target)).toBe(DESIGN_SANDBOX)
+  })
+
+  test("an ordinary page keeps the frame it had", () => {
+    expect(frameSandbox(undefined)).toBe(BROWSE_SANDBOX)
+    expect(BROWSE_SANDBOX).toContain("allow-same-origin")
+  })
+})
+
+describe("watchDesign", () => {
+  const run = (...events: DesignWatchEvent[]) => events.reduce(watchDesign, INITIAL_DESIGN_WATCH)
+
+  test("the first load is the variant", () => {
+    expect(run({ type: "load" }).left).toBe(false)
+  })
+
+  test("a load the pane did not cause is the frame going elsewhere", () => {
+    expect(run({ type: "load" }, { type: "load" }).left).toBe(true)
+  })
+
+  test("it stays gone until the pane loads the variant again", () => {
+    expect(run({ type: "load" }, { type: "load" }, { type: "load" }).left).toBe(true)
+    expect(run({ type: "load" }, { type: "load" }, { type: "src" }, { type: "load" }).left).toBe(false)
+  })
+
+  test("a reload by the pane is not leaving", () => {
+    expect(run({ type: "load" }, { type: "src" }, { type: "load" }).left).toBe(false)
+  })
+})
+
+describe("the size a design page declares", () => {
+  test("is the viewport, scaled to fit and never up", () => {
+    const fit = fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900, size: { width: 1200, height: 800 } })
+    expect(fit.isResponsive).toBe(false)
+    expect(fit.viewportWidth).toBe(1200)
+    expect(fit.viewportHeight).toBe(800)
+    expect(fit.scale).toBe(0.5)
+  })
+
+  test("a small page is not blown up", () => {
+    const fit = fitViewport({ preset: "responsive", containerWidth: 2000, containerHeight: 2000, size: { width: 360, height: 240 } })
+    expect(fit.scale).toBe(1)
+  })
+
+  test("without one, the pane's width, as before", () => {
+    expect(fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900 }).isResponsive).toBe(true)
+  })
+})

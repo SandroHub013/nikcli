@@ -58,6 +58,12 @@ export interface DesignHub {
   fullPreview: Accessor<FullPreviewState>
   openFullPreview: (variant: DesignVariant, title?: string, k?: string) => void
   closeFullPreview: () => void
+  /**
+   * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
+   * or the pane already showing this proposal. Resolves to why it could
+   * not, or nothing when it opened.
+   */
+  openVariant: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }
 
 export function createDesignHub(deps: {
@@ -68,6 +74,7 @@ export function createDesignHub(deps: {
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
+  openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
@@ -190,5 +197,6 @@ export function createDesignHub(deps: {
     fullPreview,
     openFullPreview: (variant, title, k) => setFullPreview({ open: true, variant, title, k }),
     closeFullPreview: () => setFullPreview({ open: false }),
+    openVariant: (proposal, variant) => deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")),
   }
 }

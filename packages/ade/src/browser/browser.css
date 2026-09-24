@@ -135,6 +135,36 @@
   outline: none;
 }
 
+/* Design mode (D1): the address is the variant, not something to type. */
+[data-slot="browser-design-address"] {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="browser-design-label"] {
+  color: var(--ade-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="browser-design-note"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-design-note"][data-note="left"],
+[data-slot="browser-design-note"][data-note="refused"] {
+  color: var(--ade-warning);
+}
+
 [data-slot="browser-mode-group"],
 [data-slot="browser-device-group"] {
   display: flex;

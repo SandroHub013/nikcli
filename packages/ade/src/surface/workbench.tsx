@@ -173,7 +173,7 @@ import { mayReroute, pickProvider, setProviderPicker } from "../session/provider
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen } from "./commands"
+import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
@@ -372,6 +372,9 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
+import { declaredSize, designForVariant, designPaneFor, type PaneDesign } from "../design/open-variant"
+import type { DesignProposal } from "../design/state"
+import { mediaUrl } from "../video/video"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -448,7 +451,7 @@ const HANDLED_COMMANDS = new Set([
 ])
 
 function isHandledCommand(id: string): boolean {
-  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.")
+  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.") || parseDesignVariantCommand(id) !== undefined
 }
 
 /**
@@ -1364,6 +1367,7 @@ export function Workbench() {
       saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDesign()
     },
+    openVariant: (proposal, variant) => openDesignVariant(proposal, variant),
   })
 
   /*
@@ -1426,6 +1430,47 @@ export function Workbench() {
       }),
       view: "code",
     }))
+  }
+
+  /**
+   * Opens variant `variant` (from 1) of `proposal` in a browser pane in
+   * Design mode (D1), or shows it in the pane already open for the same
+   * proposal. The pane is given the page's path; it makes the URL itself,
+   * through `designUrlFor`. The page's `ade-size` is read first, to be the
+   * pane's viewport. Resolves to why it could not, or nothing.
+   */
+  const openDesignVariant = async (proposal: DesignProposal, variant: number): Promise<string | undefined> => {
+    const found = designForVariant(proposal, variant, project()?.root, grantedRoots())
+    if (!found.ok) {
+      return found.reason === "no-variant" ? t("design.variant.missing", proposal.k, variant) : t("design.variant.notDesign", proposal.k)
+    }
+    const host = await getHost()
+    const html = host?.readTextFile ? await host.readTextFile(found.design.path).then((file) => file.text).catch(() => "") : ""
+    const size = declaredSize(html)
+    const design: PaneDesign = { ...found.design, ...(size ? { size } : {}) }
+    const title = t("browser.design.label", design.k, "", design.variant)
+    // The URL the layout and the record veil read; the pane loads only what `designUrlFor` gives it.
+    const browserUrl = mediaUrl(design.path)
+    const existing = designPaneFor(wb().panes, proposal.k)
+    if (existing) {
+      setWb((w) => ({ ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }), view: "code", focusedId: existing.id }))
+      return undefined
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: `bd${Date.now()}`,
+        title,
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl,
+        browserDesign: design,
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+    }))
+    return undefined
   }
 
   /** Opens the Decisions panel, or focuses the one already open. */
@@ -5002,6 +5047,11 @@ export function Workbench() {
         // The notice's «Togli dall'elenco» has nothing left to remove.
         setNoticeAction(undefined)
       }
+    } else if (parseDesignVariantCommand(id)) {
+      const wanted = parseDesignVariantCommand(id)!
+      const proposal = designRegister.state()?.proposals.find((candidate) => candidate.k === wanted.k)
+      const problem = proposal ? await openDesignVariant(proposal, wanted.variant) : t("design.variant.missing", wanted.k, wanted.variant)
+      if (problem) report(problem)
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
@@ -5028,6 +5078,9 @@ export function Workbench() {
       workbench: wb(),
       recents: recents(),
       missingRecent: (root) => isMissingRecent(missingRoots(), root),
+      designVariants: (designRegister.state()?.proposals ?? [])
+        .filter((proposal) => proposal.status !== "chiusa")
+        .map((proposal) => ({ k: proposal.k, title: proposal.title, variants: proposal.variants.map((variant) => variant.name) })),
       hasHost: hasHost(),
       running: new Set(running.keys()),
       platform,

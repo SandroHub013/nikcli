@@ -59,6 +59,8 @@ export const it = {
   "palette.pane.close": "Chiudi pannello",
   "palette.panes.closeGone": (n: number) => `Chiudi i pannelli delle cartelle sparite (${n})`,
   "palette.recents.forgetGone": (n: number) => `Togli dai recenti le cartelle sparite (${n})`,
+  "palette.design.variant": (k: string, title: string, variant: number, name: string) =>
+    `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
   "confirm.forgetGone": (n: number) => (n === 1 ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?" : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`),
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",
@@ -506,6 +508,13 @@ export const it = {
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
+  "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
+  "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
+  "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",
+  "browser.design.refused": "Non è una pagina di .ade/design di un progetto aperto: non la apro.",
+  "design.variant.cannotOpen": "Qui non si può aprire la variante in un pannello.",
+  "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
+  "design.variant.notDesign": (k: string) => `La pagina di questa variante non è in .ade/design/${k}/ di un progetto aperto.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
   "browser.forget.done.all": (cookies: number) =>

@@ -31,6 +31,7 @@ import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
   bridgelessChoice,
+  designHandshakeReducer,
   framingBlocked,
   noticeWithoutCopy,
   type PaneNotice,
@@ -53,6 +54,8 @@ import {
 import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
+import { designUrlFor } from "./design-url"
+import { frameSandbox, INITIAL_DESIGN_WATCH, watchDesign, type DesignTarget, type DesignWatchEvent } from "./design-mode"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
@@ -93,7 +96,18 @@ export interface BrowserPaneProps {
    * drawn again, and without them it came back on the URL it was opened with.
    */
   onNavigate?: (url: string, history: BrowserHistory) => void
+  /**
+   * Design mode (D1): the pane shows this variant of a design proposal, and
+   * nothing else. The page is loaded on the media scheme through
+   * `designUrlFor`, in a frame with no origin of its own; never copied, never
+   * probed; the address cannot be edited; and a frame that goes elsewhere
+   * loses inspection.
+   */
+  design?: DesignTarget
 }
+
+/** The address a Design-mode pane loads, or `about:blank` when the path is not a design page. */
+const designAddress = (design: DesignTarget) => designUrlFor(design.path, design.roots) ?? "about:blank"
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
 
@@ -182,7 +196,9 @@ function EditFields(props: { element: InspectedElement; onApply: (property: stri
 }
 
 export function BrowserPane(props: BrowserPaneProps): JSX.Element {
-  const defaultUrl = normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
+  const defaultUrl = props.design
+    ? designAddress(props.design)
+    : normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
 
   const [url, setUrl] = createSignal(defaultUrl)
   const [inputUrl, setInputUrl] = createSignal(url())
@@ -204,7 +220,26 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * coverage, it is a second opinion nobody asked for.
    */
   const [fidelity, setFidelityRaw] = createSignal<Fidelity>(INITIAL_HANDSHAKE_STATE.fidelity)
-  const handshake = (event: HandshakeEvent) => setFidelityRaw((current) => reduceFidelity(current, event))
+  const handshake = (event: HandshakeEvent) =>
+    setFidelityRaw((current) =>
+      props.design ? designHandshakeReducer({ fidelity: current }, event).fidelity : reduceFidelity(current, event),
+    )
+
+  /* Design mode: where the frame is (`design-mode.ts`), and what the bar says about it. */
+  const [designWatch, setDesignWatch] = createSignal(INITIAL_DESIGN_WATCH)
+  const [designNote, setDesignNote] = createSignal<"left" | "noBridge" | "refused">()
+  const watchFrame = (event: DesignWatchEvent) => {
+    const before = designWatch()
+    const next = watchDesign(before, event)
+    setDesignWatch(next)
+    if (next.left && !before.left) {
+      // Not the page it was given any more: nothing it says is a selection.
+      if (handshakeTimer) clearTimeout(handshakeTimer)
+      setMode("browse")
+      setSelection([])
+      setDesignNote("left")
+    }
+  }
 
   const [mode, setMode] = createSignal<"browse" | "edit">("browse")
   const [device, setDevice] = createSignal<DevicePreset>("responsive")
@@ -357,14 +392,35 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (handshakeTimer) clearTimeout(handshakeTimer)
     handshakeTimer = setTimeout(() => {
       if (generation !== loadGeneration) return
+      /*
+       * Design mode: no fetch, no framing probe, no copy. The page is on
+       * screen; without the bridge it is only not inspectable, and says so.
+       */
+      if (props.design) {
+        if (fidelity() !== "pending") return
+        handshake({ type: "timeout" })
+        setLoadState("ready")
+        if (!designWatch().left) setDesignNote("noBridge")
+        return
+      }
       // Still pending while the page is fetched: whether it becomes the
       // mirror, stays as it is or fails is what that fetch decides.
       if (fidelity() === "pending") void settleWithoutBridge(target, generation)
     }, HANDSHAKE_TIMEOUT_MS)
   }
 
-  const load = (target: string) => {
-    if (isAdeOrigin(target, window.location.origin)) {
+  /** `initial`: the frame already has `target` as its first `src`; no new token, no new navigation. */
+  const load = (target: string, initial = false) => {
+    if (props.design) {
+      // Only what `designUrlFor` gave: the media scheme is ADE's own origin to `isAdeOrigin`, and that is the point.
+      if (target === "about:blank") {
+        setDesignNote("refused")
+        setLoadState("ready")
+        return
+      }
+      setDesignNote(undefined)
+      if (!initial) watchFrame({ type: "src" })
+    } else if (isAdeOrigin(target, window.location.origin)) {
       setNotice("ade-origin")
       setLoadState("ready")
       return
@@ -384,7 +440,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     setSendNote(undefined)
     handshake({ type: "navigate", url: target })
     setSrcdoc(null)
-    setLoadToken((v) => v + 1)
+    if (!initial) setLoadToken((v) => v + 1)
 
     startHandshake(target, generation)
   }
@@ -413,6 +469,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const navigateTo = (raw: string) => {
+    // A Design-mode pane shows its variant: its address is not typed.
+    if (props.design) return
     const normalized = normalizeUrl(raw)
     if (!normalized) return
     if (isAdeOrigin(normalized, window.location.origin)) {
@@ -450,7 +508,26 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     ),
   )
 
+  /* The same pane given another variant (`openDesignVariant` reuses it for the same proposal). */
+  createEffect(
+    on(
+      () => (props.design ? designAddress(props.design) : undefined),
+      (next) => {
+        if (next === undefined || next === url()) return
+        setUrl(next)
+        setInputUrl(next)
+        setMode("browse")
+        load(next)
+      },
+      { defer: true },
+    ),
+  )
+
   const onFrameLoad = () => {
+    if (props.design) {
+      watchFrame({ type: "load" })
+      if (designWatch().left) return
+    }
     if (srcdoc() !== null) {
       setLoadState("ready")
     }
@@ -505,6 +582,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
        * own — and that prompt goes to an agent.
        */
       if (mode() !== "edit") return
+      if (props.design && designWatch().left) return
 
       const element = data.element
       if (element && typeof element.selector === "string") {
@@ -553,7 +631,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       onCleanup(() => observer.disconnect())
     }
 
-    load(url())
+    load(url(), Boolean(props.design))
   })
 
   const removeElement = (selector: string) => {
@@ -671,7 +749,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   onMount(() => {
     props.onController?.({
       reload: () => load(url()),
-      setInspect: (on) => setMode(on ? "edit" : "browse"),
+      setInspect: (on) => setMode(on && !(props.design && designWatch().left) ? "edit" : "browse"),
       state: () => ({
         url: url(),
         inspecting: mode() === "edit",
@@ -688,6 +766,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       containerWidth: containerBox().width,
       containerHeight: containerBox().height,
       landscape: landscape(),
+      // A design page's `ade-size` is its viewport; without one, the pane's width.
+      ...(props.design?.size ? { size: props.design.size } : {}),
     }),
   )
 
@@ -718,6 +798,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       data-focused={props.focused ? "true" : undefined}
       data-fidelity={fidelity()}
       data-mode={mode()}
+      data-design={props.design ? (designWatch().left ? "left" : "on") : undefined}
       data-status={loadState()}
       onFocusIn={() => props.onFocus?.()}
       onPointerDown={() => props.onFocus?.()}
@@ -740,6 +821,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
+            hidden={Boolean(props.design)}
             disabled={!canStep(history(), -1)}
             onClick={() => go(-1)}
             aria-label={t("browser.back")}
@@ -752,6 +834,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
+            hidden={Boolean(props.design)}
             disabled={!canStep(history(), 1)}
             onClick={() => go(1)}
             aria-label={t("browser.forward")}
@@ -780,20 +863,44 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             data-status={loadState()}
             aria-hidden="true"
           />
-          <input
-            type="text"
-            data-slot="browser-url-input"
-            data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}
-            value={inputUrl()}
-            onInput={(e) => setInputUrl(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                navigateTo(inputUrl())
-              }
-            }}
-            placeholder={t("browser.address.placeholder")}
-            spellcheck={false}
-          />
+          <Show
+            when={props.design}
+            fallback={
+              <input
+                type="text"
+                data-slot="browser-url-input"
+                data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}
+                value={inputUrl()}
+                onInput={(e) => setInputUrl(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    navigateTo(inputUrl())
+                  }
+                }}
+                placeholder={t("browser.address.placeholder")}
+                spellcheck={false}
+              />
+            }
+          >
+            {(design) => (
+              <span data-slot="browser-design-address" title={design().path}>
+                <span data-slot="browser-design-label">
+                  {t("browser.design.label", design().k, design().title ?? "", design().variant)}
+                </span>
+                <Show when={designNote()}>
+                  {(note) => (
+                    <span data-slot="browser-design-note" data-note={note()} role="status">
+                      {note() === "left"
+                        ? t("browser.design.left")
+                        : note() === "noBridge"
+                          ? t("browser.design.noBridge")
+                          : t("browser.design.refused")}
+                    </span>
+                  )}
+                </Show>
+              </span>
+            )}
+          </Show>
         </div>
 
         <div data-slot="browser-mode-group">
@@ -810,6 +917,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-mode-btn"
             data-active={mode() === "edit" ? "true" : undefined}
+            disabled={Boolean(props.design) && designWatch().left}
             onClick={() => setMode("edit")}
             title={t("browser.mode.edit.tip")}
           >
@@ -1032,10 +1140,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                * mirror of it.
                */
               data-load={loadToken()}
-              src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
-              srcdoc={srcdoc() ?? undefined}
+              src={srcdoc() && !props.design ? undefined : withLoadToken(url(), loadToken())}
+              /* Design mode: never a copy. A `srcdoc` document takes ADE's origin. */
+              srcdoc={props.design ? undefined : (srcdoc() ?? undefined)}
               onLoad={onFrameLoad}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              /* Design mode: no `allow-same-origin`, so the page's origin is opaque (D1). */
+              sandbox={frameSandbox(props.design)}
               name={FRAME_NAME}
               title={props.title || t("browser.preview")}
             />
