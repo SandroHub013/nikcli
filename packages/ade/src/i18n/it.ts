@@ -160,6 +160,7 @@ export const it = {
   "sidebar.project": "progetto",
   "sidebar.elapsed": "Tempo trascorso",
   "sidebar.spaces": "Spaces",
+  "sidebar.openProjectSessions": "Apri le sessioni del progetto",
   "sidebar.addSpace": "Aggiungi space",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
   "sidebar.noSpaces": "Nessuno space aperto.",

@@ -160,15 +160,16 @@ export interface SidebarProps {
   storage?: Storage
 }
 
-function WorkspaceHeaderRow(props: {
+export function WorkspaceHeaderRow(props: {
   row: FlatWorkspaceHeaderRow
   isActive?: boolean
   onToggle: (id: string) => void
+  onSelectProject?: (id: string) => void
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="treeitem"
+      tabindex={0}
       aria-level={1}
       data-slot="workspace-header"
       data-selectable="true"
@@ -178,6 +179,12 @@ function WorkspaceHeaderRow(props: {
       data-missing={props.row.workspace.missing ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          props.onToggle(props.row.id)
+        }
+      }}
     >
       <svg
         data-slot="workspace-chevron"
@@ -198,6 +205,39 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-name" title={props.row.workspace.name}>
         {props.row.workspace.name}
       </span>
+      <Show when={props.onSelectProject}>
+        <button
+          type="button"
+          data-slot="workspace-open-project"
+          title={t("sidebar.openProjectSessions")}
+          aria-label={t("sidebar.openProjectSessions")}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onSelectProject?.(props.row.id)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation()
+            }
+          }}
+        >
+          <svg
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+          >
+            <path
+              d="M2.5 6h7M6.5 3l3 3-3 3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </Show>
       <Show when={props.row.workspace.missing}>
         <Badge tone="error" data-slot="space-badge" title={t("project.missing.tip", props.row.workspace.path ?? props.row.workspace.name)}>
           {t("project.missing.badge")}
@@ -212,7 +252,7 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-count" data-empty={props.row.sessionCount === 0 ? "true" : undefined}>
         {props.row.sessionCount}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -393,11 +433,12 @@ function ActiveAgentRow(props: {
   )
 }
 
-function WorkspaceTreeRow(props: {
+export function WorkspaceTreeRow(props: {
   row: FlatWorkspaceRow
   now: number
   isActiveSpace?: boolean
   onToggleWorkspace: (id: string) => void
+  onSelectProject?: (id: string) => void
   onSelectSession?: (id: string) => void
 }) {
   if (props.row.type === "workspace") {
@@ -406,6 +447,7 @@ function WorkspaceTreeRow(props: {
         row={props.row}
         isActive={props.isActiveSpace}
         onToggle={props.onToggleWorkspace}
+        onSelectProject={props.onSelectProject}
       />
     )
   }
@@ -1100,14 +1142,12 @@ export function Sidebar(props: SidebarProps) {
                         row={entry.data()}
                         now={now()}
                         isActiveSpace={isActive()}
-                        /* Pressing a project both opens its row and makes it the
-                           one being worked in: the two are the same intent, and
-                           asking for a separate click to switch would be asking
-                           the user to say it twice. */
+                        /* Pressing a project opens or closes its session list.
+                           Selecting its project view is done via the open project button. */
                         onToggleWorkspace={(id) => {
-                          props.onSelectProject?.(id)
                           toggleWorkspace(id)
                         }}
+                        onSelectProject={props.onSelectProject}
                         onSelectSession={props.onSelectSession}
                       />
                     )
