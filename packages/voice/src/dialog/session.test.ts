@@ -497,7 +497,7 @@ describe("dialog state machine", () => {
       const { state: s2, effects: e2 } = transition(
         s1,
         { type: "utterance", text: "consenti" },
-        6000
+        20_000
       )
 
       expect(s2.status).toBe("idle")

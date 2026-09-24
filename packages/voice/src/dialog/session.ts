@@ -523,6 +523,8 @@ export function transition(
         isPermission: true,
         paneId: event.paneId,
         what: event.what,
+        /* Every question waits to be read, a new one and one the same pane replaced (V1-ter). */
+        answerableAt: now + readingMs(prompt),
       },
     }
 
@@ -772,6 +774,7 @@ export function transition(
             ...state,
             status: "idle",
             pendingSend: undefined,
+            pendingPlan: undefined,
             timeoutAt: undefined,
           }
           return (
@@ -798,6 +801,7 @@ export function transition(
             ...state,
             status: "idle",
             pendingSend: undefined,
+            pendingPlan: undefined,
             timeoutAt: undefined,
           }
           return (

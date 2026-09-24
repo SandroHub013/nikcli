@@ -70,3 +70,26 @@ describe("what comes out of the queue waits to be read", () => {
     expect(answersWithoutName(direct, false)).toBe(true)
   })
 })
+
+/*
+ * V1-ter, closing line: the wait held only for what came out of the queue. A
+ * pane that asked again replaced its question, and a «sì» 300 ms later — said
+ * to the question before — granted the new one.
+ */
+describe("every permission question waits to be read", () => {
+  test("the same pane asks again: a yes said over the new question reads it again", () => {
+    const first = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx).state
+    const replaced = transition(first, { type: "permission_requested", paneId: "pA", what: "rm -rf ~" }, 20_000, ctx)
+    const early = transition(replaced.state, { type: "utterance", text: "sì" }, 20_300, ctx)
+    expect(early.effects.some((e) => e.type === "answer_permission" && e.answer === "allow")).toBe(false)
+    expect(early.effects.some((e) => e.type === "speak" && e.text.includes("rm -rf ~"))).toBe(true)
+  })
+
+  test("a new question too; a yes once it is read grants it", () => {
+    const asked = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx)
+    const early = transition(asked.state, { type: "utterance", text: "sì" }, 10_300, ctx)
+    expect(early.effects.some((e) => e.type === "answer_permission")).toBe(false)
+    const read = transition(early.state, { type: "utterance", text: "sì" }, 30_000, ctx)
+    expect(read.effects).toContainEqual({ type: "answer_permission", paneId: "pA", answer: "allow", what: "cat README" })
+  })
+})

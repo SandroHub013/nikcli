@@ -438,7 +438,7 @@ describe("engine/createVoiceEngine", () => {
   })
 
   test("handles pending permission request with priority", async () => {
-    const { engine, host, transcriber } = setupEngine()
+    const { engine, host, transcriber, advanceTime } = setupEngine()
 
     await engine.start()
 
@@ -448,7 +448,8 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.status()).toBe("confirming")
     expect(engine.dialogState().pendingAction?.isPermission).toBe(true)
 
-    // User grants permission
+    // User grants permission, once the question has been read
+    advanceTime(15_000)
     transcriber.emit("consenti", true)
     await new Promise((r) => setTimeout(r, 10))
 
@@ -972,13 +973,17 @@ describe("engine/agent answers what the grammar does not know", () => {
         return { ok: true, text: "Fatto.", ran: true }
       }
       const transcriber = createFakeTranscriber()
+      let clock = 10_000
       // No `activation` here: this is the default a new installation gets.
-      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
+      const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => clock, settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true } })
       const hear = async (text: string) => {
         transcriber.emit(text, true)
         await new Promise((r) => setTimeout(r, 20))
       }
-      return { host, asked, engine, hear }
+      const advance = (ms: number) => {
+        clock += ms
+      }
+      return { host, asked, engine, hear, advance }
     }
 
     test("a sentence without the name is shown as ignored, and costs nothing", async () => {
@@ -1017,7 +1022,7 @@ describe("engine/agent answers what the grammar does not know", () => {
      * not start is answered with the name.
      */
     test("an agent's permission does not open the gate: the room's «va bene» grants nothing, the name and a yes do", async () => {
-      const { host, engine, hear } = calling()
+      const { host, engine, hear, advance } = calling()
       await engine.start("agent", { waitForName: true })
       await engine.handlePermissionRequest("pane-1", "rm -rf build")
       expect(engine.status()).toBe("confirming")
@@ -1025,6 +1030,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       await hear("va bene")
       expect(host.calls.some((call) => call.method === "answerPermission")).toBe(false)
 
+      advance(15_000)
       await hear("ehi nik sì")
       expect(host.calls.find((call) => call.method === "answerPermission")?.args.slice(0, 2)).toEqual(["pane-1", "allow"])
       await engine.stop()
