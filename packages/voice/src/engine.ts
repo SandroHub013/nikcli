@@ -1710,26 +1710,28 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (keyRemoved) {
         if (normalized.backend !== "parakeet" || prev.backend === "openrouter") {
           await stop({ drain: false, releaseText: true })
-        } else {
-          await releaseTextProgram()
+          return
         }
-      } else if (keyChanged || (sessionPending && backendChanged)) {
+        await releaseTextProgram()
+        return
+      }
+      if (keyChanged || (sessionPending && backendChanged)) {
         const result = enqueueLifecycle(async (generation) => {
           if (generation !== sessionGeneration) return
           if (sessionPending && backendChanged) {
             await restartNow(normalized, prev, generation)
-          } else {
-            await releaseTextProgram()
+            return
           }
+          await releaseTextProgram()
         })
         restartInFlight = result
         void result.finally(() => {
           if (restartInFlight === result) restartInFlight = null
         })
         await result
-      } else if (isRunning()) {
-        keepListeningAwake()
+        return
       }
+      if (isRunning()) keepListeningAwake()
     },
   }
   startListening = (mode, o) => engine.start(mode, o)
