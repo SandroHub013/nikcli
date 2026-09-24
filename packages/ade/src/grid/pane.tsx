@@ -295,6 +295,9 @@ export function StateIcon(props: { state: PaneState }) {
           <path d="M3.5 4.8 6.7 8l-3.2 3.2" />
           <path d="M8.8 11.4h4" />
         </Match>
+        <Match when={props.state === "off"}>
+          <path d="M6 4.5v7M10 4.5v7" />
+        </Match>
       </Switch>
     </svg>
   )
@@ -486,6 +489,8 @@ export function SessionPane(props: SessionPaneProps) {
 
   const stateHead = createMemo(() => {
     if (props.stateDetail) return props.stateDetail
+    // "Sospesa" is the label already: said twice it would read "Sospesa · Sospesa".
+    if (state() === "off") return ""
     if (props.activity) return activityLabel(props.activity)
     const st = state()
     if (st === "limit") return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")

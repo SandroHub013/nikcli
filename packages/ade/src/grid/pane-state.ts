@@ -1,5 +1,6 @@
 import type { SessionQuota } from "../session/quota"
 import { t } from "../i18n"
+import { normalizeActivity } from "./activity"
 
 /*
  * `provisioning` comes before `working`: the worktree checkout runs for seconds
@@ -8,8 +9,11 @@ import { t } from "../i18n"
  */
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
-/** The 6 distinct canonical session states for Proposal A header. */
-export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle"
+/**
+ * The canonical session states for Proposal A header, and `off`: a suspended
+ * session (P1-C6), whose processes are closed. It asks nothing and moves not.
+ */
+export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle" | "off"
 
 /* Getters, so each read is in the language of that moment (S41). */
 export const STATE_FULL: Readonly<Record<PaneState, string>> = {
@@ -19,6 +23,7 @@ export const STATE_FULL: Readonly<Record<PaneState, string>> = {
   get err() { return t("paneState.err") },
   get limit() { return t("paneState.limit") },
   get idle() { return t("paneState.idle") },
+  get off() { return t("paneState.off") },
 }
 
 export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
@@ -28,6 +33,7 @@ export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
   get err() { return t("paneState.err") },
   get limit() { return t("paneState.short.limit") },
   get idle() { return t("paneState.idle") },
+  get off() { return t("paneState.off") },
 }
 
 /**
@@ -38,6 +44,8 @@ export const STATE_SHORT: Readonly<Record<PaneState, string>> = {
  * - err: agent process failed or exited with error
  * - limit: provider quota rate limited or exhausted
  * - idle: prompt ready, agent waiting for instruction
+ * - off: suspended by the user; checked before the pending actions, since
+ *   its one button is "Riprendi", which is not a question being asked
  *
  * Limit is checked after permission and work, not before. The quota is the
  * provider's, shared by every session on it; a permission prompt or a running
@@ -53,6 +61,7 @@ export function resolvePaneState(props: {
   hasActions?: boolean
 }): PaneState {
   if (props.state) return props.state
+  if (props.activity !== undefined && normalizeActivity(props.activity) === "suspended") return "off"
   if (props.status === "error") return "err"
   if (props.hasActions) return "perm"
   if (props.status === "waiting") {
