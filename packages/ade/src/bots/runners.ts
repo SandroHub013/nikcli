@@ -181,6 +181,16 @@ export function withInstructions(bot: AgentFile, message: string): string {
   return `Istruzioni del bot "${bot.identifier}":\n${bot.prompt.trim()}\n\n---\n\n${message}`
 }
 
+/*
+ * What a bot file may put into Codex's options (B1, audit A1). `variant` goes
+ * inside a TOML string in `-c`, and `model` after `-m`: a quote or a line
+ * break there wrote a second setting (`sandbox_mode=…`), and on a `.cmd`
+ * shim an `&` ran a command. A value outside these shapes is left out, and
+ * the turn runs with Codex's own default.
+ */
+const SAFE_EFFORT = /^[a-z]{1,16}$/
+const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
+
 export function turnCommand(
   runner: Runner,
   spec: TurnSpec,
@@ -243,13 +253,14 @@ export function turnCommand(
       const inOutbox = !canWrite(bot) && spec.outbox !== undefined
       const sandbox = canWrite(bot) || inOutbox ? "workspace-write" : "read-only"
       const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", 'approval_policy="never"']
-      if (bot.effort) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
-      const model = bot.model ? ["-m", bot.model] : []
+      if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
+      const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []
       const where = inOutbox ? { cwd: spec.outbox } : {}
       if (sessionId) {
         return {
           command: runner.command,
-          args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, sessionId, message],
+          // `--` first: a message that starts with `-` is a message, not an option.
+          args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, "--", sessionId, message],
           ...where,
         }
       }

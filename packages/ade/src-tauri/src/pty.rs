@@ -692,7 +692,14 @@ pub async fn pty_spawn(
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
     let resolved = which_on_path(&command).unwrap_or_else(|| command.clone());
-    let mut builder = CommandBuilder::new(&resolved);
+    /*
+     * A `.cmd` or `.bat` is run by cmd.exe, which reads its command line again
+     * with its own rules (B1, audit A1): `&` ran a second command, `%VAR%`
+     * expanded, and everything after a line break was lost — a bot's first
+     * Codex turn never reached the question. See `launch_plan`.
+     */
+    let (program, args) = launch_plan(&resolved, &args)?;
+    let mut builder = CommandBuilder::new(&program);
     for arg in &args {
         builder.arg(arg);
     }
@@ -806,7 +813,7 @@ pub async fn pty_spawn(
     }
 
     let spawned = if pipe {
-        spawn_piped(&resolved, &builder).map_err(|e| format!("{command} non parte: {e}"))?
+        spawn_piped(&program, &builder).map_err(|e| format!("{command} non parte: {e}"))?
     } else {
         spawn_in_pty(builder, rows, cols).map_err(|e| format!("{command} non parte: {e}"))?
     };
@@ -1346,6 +1353,204 @@ pub(crate) fn which_on_path(command: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Whether `path` is a script cmd.exe runs: `.cmd` or `.bat`, any case.
+fn is_cmd_script(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".cmd") || lower.ends_with(".bat")
+}
+
+/// The characters cmd.exe gives a meaning to on a command line, plus the
+/// control characters (a line break ends the command there).
+fn unsafe_for_cmd(arg: &str) -> Option<char> {
+    arg.chars().find(|c| "\"%!^&|<>()".contains(*c) || c.is_control())
+}
+
+/**
+ * The JavaScript file an npm shim runs, when `shim` is one.
+ *
+ * npm writes every CLI it installs on Windows as a `.cmd` whose last line is
+ * `… "%_prog%"  "%dp0%\<path>.js" %*`, `%_prog%` being `node.exe` next to the
+ * shim or `node` on the PATH. That is the only shape recognised: the script
+ * must sit under the shim's own folder, and anything else is not a shim.
+ */
+fn npm_shim_script(shim: &std::path::Path) -> Option<std::path::PathBuf> {
+    let meta = std::fs::metadata(shim).ok()?;
+    if !meta.is_file() || meta.len() > 64 * 1024 {
+        return None;
+    }
+    let text = std::fs::read_to_string(shim).ok()?;
+    let line = text.lines().rev().find(|line| line.trim_end().ends_with("%*"))?;
+    let node_first = line.contains("\"%_prog%\"") || line.to_ascii_lowercase().contains("\"%dp0%\\node.exe\"");
+    if !node_first {
+        return None;
+    }
+    const OPEN: &str = "\"%dp0%\\";
+    let start = line.rfind(OPEN)? + OPEN.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    let relative = &rest[..end];
+    if rest[end + 1..].trim() != "%*" {
+        return None;
+    }
+    let lower = relative.to_ascii_lowercase();
+    let script_like = lower.ends_with(".js") || lower.ends_with(".cjs") || lower.ends_with(".mjs");
+    let clean = !relative.is_empty()
+        && !relative.contains('%')
+        && !relative.chars().any(|c| c.is_control())
+        && relative.split(['\\', '/']).all(|part| !part.is_empty() && part != "." && part != "..");
+    if !script_like || !clean {
+        return None;
+    }
+    let script = shim.parent()?.join(relative.replace('\\', std::path::MAIN_SEPARATOR_STR));
+    script.is_file().then_some(script)
+}
+
+/// The `node.exe` an npm shim would use: the one beside it, or the one on the PATH.
+fn shim_node(shim: &std::path::Path) -> Option<String> {
+    let beside = shim.parent()?.join("node.exe");
+    if beside.is_file() {
+        return Some(beside.to_string_lossy().into_owned());
+    }
+    which_on_path("node").filter(|node| !is_cmd_script(node))
+}
+
+/**
+ * The program to start and its arguments, for a resolved command (B1).
+ *
+ * A program that is not a `.cmd` or `.bat` gets its arguments as they are.
+ * One that is would be run by cmd.exe, which parses the command line a second
+ * time: an argument with `&` ran what followed it, `%VAR%` expanded — a
+ * secret's value included — and a line break cut the rest. So:
+ *
+ * - an npm shim (Codex, and Claude Code or nikcli where installed that way)
+ *   is started as what it would start, `node <script>.js`, and every argument
+ *   arrives whole, line breaks included, with nothing for cmd.exe to read;
+ * - any other script refuses an argument cmd.exe would read, rather than
+ *   quoting it: quoting for cmd.exe cannot carry a line break, and a quote
+ *   that is almost right is how the injection happened.
+ */
+pub(crate) fn launch_plan(resolved: &str, args: &[String]) -> Result<(String, Vec<String>), String> {
+    if !is_cmd_script(resolved) {
+        return Ok((resolved.to_string(), args.to_vec()));
+    }
+    let shim = std::path::Path::new(resolved);
+    if let (Some(script), Some(node)) = (npm_shim_script(shim), shim_node(shim)) {
+        let mut all = Vec::with_capacity(args.len() + 1);
+        all.push(script.to_string_lossy().into_owned());
+        all.extend(args.iter().cloned());
+        return Ok((node, all));
+    }
+    for arg in args {
+        if let Some(c) = unsafe_for_cmd(arg) {
+            let shown = if c.is_control() { format!("U+{:04X}", c as u32) } else { c.to_string() };
+            let name = shim.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            return Err(format!("argomento non sicuro per {name}: contiene {shown}, che cmd.exe interpreta"));
+        }
+    }
+    Ok((resolved.to_string(), args.to_vec()))
+}
+
+#[cfg(test)]
+mod cmd_script_tests {
+    //! B1: what reaches a `.cmd` agent is what was sent, and nothing runs.
+    //! Only a harmless `probe.cmd`/`probe.js` in a fresh folder; no agent is started.
+    use super::launch_plan;
+    use std::path::PathBuf;
+
+    fn fresh_dir(tag: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("ade-b1-{tag}-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    const NPM_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\lib\\probe.js\" %*\r\n";
+
+    /// The arguments the audit ran commands with, and the line break that cut the message.
+    fn hostile() -> Vec<String> {
+        vec![
+            "ciao&type nul > INIETTATO1".into(),
+            "-c".into(),
+            "model_reasoning_effort=\"high & type nul > INIETTATO3 & rem \"".into(),
+            "dimmi \"ciao & type nul > INIETTATO4".into(),
+            "valore %USERNAME% e %PATH%".into(),
+            "Istruzioni del bot \"x\":\nriga due\n\n---\n\nla domanda (vera) ^ | < > !".into(),
+        ]
+    }
+
+    #[test]
+    fn an_npm_shim_runs_its_script_with_every_argument_whole_and_nothing_else() {
+        let dir = fresh_dir("npm");
+        std::fs::create_dir_all(dir.join("lib")).unwrap();
+        std::fs::write(
+            dir.join("lib").join("probe.js"),
+            "require('fs').writeFileSync(process.env.PROBE_OUT, JSON.stringify(process.argv.slice(2)))\n",
+        )
+        .unwrap();
+        let shim = dir.join("probe.cmd");
+        std::fs::write(&shim, NPM_SHIM).unwrap();
+
+        let args = hostile();
+        let (program, plan) = launch_plan(&shim.to_string_lossy(), &args).expect("an npm shim is planned");
+        assert!(!super::is_cmd_script(&program), "cmd.exe must not be the program: {program}");
+        assert_eq!(plan[0], dir.join("lib").join("probe.js").to_string_lossy());
+        assert_eq!(&plan[1..], &args[..]);
+
+        if !std::path::Path::new(&program).is_file() {
+            eprintln!("node non trovato: il piano è verificato, l'esecuzione no");
+            return;
+        }
+        let out = dir.join("argv.json");
+        let status = std::process::Command::new(&program)
+            .args(&plan)
+            .current_dir(&dir)
+            .env("PROBE_OUT", &out)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let received: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        assert_eq!(received, args, "every argument arrives whole: &, %VAR%, quotes, line breaks");
+        for n in ["INIETTATO1", "INIETTATO3", "INIETTATO4"] {
+            assert!(!dir.join(n).exists(), "{n} was created: a command ran");
+        }
+    }
+
+    #[test]
+    fn another_cmd_script_refuses_what_cmd_would_read() {
+        let dir = fresh_dir("plain");
+        let script = dir.join("probe.cmd");
+        std::fs::write(&script, "@echo %*\r\n").unwrap();
+        let path = script.to_string_lossy().into_owned();
+        for arg in hostile() {
+            if arg == "-c" {
+                continue;
+            }
+            let refused = launch_plan(&path, &[arg.clone()]);
+            assert!(refused.is_err(), "not refused: {arg:?}");
+        }
+        assert!(launch_plan(&path, &["exec".into(), "--json".into()]).is_ok());
+    }
+
+    #[test]
+    fn a_shim_whose_script_leaves_its_folder_is_not_a_shim() {
+        let dir = fresh_dir("escape");
+        std::fs::create_dir_all(dir.join("inner")).unwrap();
+        std::fs::write(dir.join("x.js"), "").unwrap();
+        let shim = dir.join("inner").join("probe.cmd");
+        std::fs::write(&shim, NPM_SHIM.replace("lib\\probe.js", "..\\x.js")).unwrap();
+        let refused = launch_plan(&shim.to_string_lossy(), &["a&b".into()]);
+        assert!(refused.is_err(), "a script outside the shim's folder must fall back to refusing");
+    }
+
+    #[test]
+    fn a_program_that_is_not_a_script_keeps_its_arguments() {
+        let args = hostile();
+        let (program, plan) = launch_plan("C:/x/codex.exe", &args).unwrap();
+        assert_eq!(program, "C:/x/codex.exe");
+        assert_eq!(plan, args);
+    }
 }
 
 #[cfg(test)]

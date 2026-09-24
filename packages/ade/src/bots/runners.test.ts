@@ -287,3 +287,44 @@ describe("Claude Code reading its messages from stdin", () => {
     expect(args).not.toContain("ignorato")
   })
 })
+
+/*
+ * B1 (audit A1): what a bot file or a message puts on Codex's command line.
+ * The shim problem itself is closed in `pty.rs` (`launch_plan`); these are
+ * the arguments ADE builds, which must not carry a second option or config.
+ */
+describe("gli argomenti di Codex non portano altro", () => {
+  test("il primo turno contiene la domanda, dopo la persona su più righe, intera", () => {
+    const persona = { ...bot, prompt: "Sei un tester.\nRispondi in breve." }
+    const { args } = turnCommand(runnerById("codex"), { bot: persona, message: "quanto fa 2+2?\nE 3+3?" })
+    expect(args.at(-2)).toBe("--")
+    const last = args.at(-1)!
+    expect(last).toContain("Rispondi in breve.")
+    expect(last.endsWith("quanto fa 2+2?\nE 3+3?")).toBe(true)
+  })
+
+  test("un variant o un modello con virgolette, a capo o & dal file del bot non arrivano a -c e -m", () => {
+    const hostile = {
+      ...bot,
+      effort: 'high" & echo INIETTATO & rem "',
+      model: "gpt-5 & echo INIETTATO",
+    }
+    const { args } = turnCommand(runnerById("codex"), { bot: hostile, message: "ciao" })
+    expect(args.join(" ")).not.toContain("INIETTATO")
+    expect(args).not.toContain("-m")
+    expect(args.some((arg) => arg.startsWith("model_reasoning_effort"))).toBe(false)
+    const newline = turnCommand(runnerById("codex"), { bot: { ...bot, effort: 'low"\nsandbox_mode="danger-full-access' }, message: "x" })
+    expect(newline.args.join(" ")).not.toContain("danger-full-access")
+  })
+
+  test("valori normali passano come prima", () => {
+    const { args } = turnCommand(runnerById("codex"), { bot: { ...bot, effort: "xhigh", model: "gpt-5.1-codex" }, message: "x" })
+    expect(args).toContain('model_reasoning_effort="xhigh"')
+    expect(args[args.indexOf("-m") + 1]).toBe("gpt-5.1-codex")
+  })
+
+  test("nel seguito, un messaggio che comincia con - resta un messaggio", () => {
+    const { args } = turnCommand(runnerById("codex"), { bot, message: "--dangerously-bypass-approvals-and-sandbox", sessionId: "t-1" })
+    expect(args.slice(-3)).toEqual(["--", "t-1", "--dangerously-bypass-approvals-and-sandbox"])
+  })
+})
