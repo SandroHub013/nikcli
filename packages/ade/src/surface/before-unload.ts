@@ -1,4 +1,5 @@
 import { isPanelPane, type Pane } from "./state"
+import { t } from "../i18n"
 
 /**
  * Whether leaving the page has to be confirmed.
@@ -59,17 +60,13 @@ export function countWorkingSessions(
  *
  * Distinct from `mustConfirmLeaving`: asks only if there are agent sessions at work.
  */
-export function shouldConfirmWindowClose(state: { working?: number; workingSessions?: number }): boolean {
-  const count = state.working ?? state.workingSessions ?? 0
-  return count > 0
+export function shouldConfirmWindowClose(state: { working: number }): boolean {
+  return state.working > 0
 }
 
 /**
  * Message shown when window close is requested with active sessions.
  */
 export function closeConfirmationMessage(workingSessions: number): string {
-  if (workingSessions === 1) {
-    return "1 sessione sta lavorando. Chiudere lo stesso?"
-  }
-  return `${workingSessions} sessioni stanno lavorando. Chiudere lo stesso?`
+  return t("window.closeConfirm.message", workingSessions)
 }

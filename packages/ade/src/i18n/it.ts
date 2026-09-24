@@ -421,6 +421,10 @@ export const it = {
   "window.minimize": "Riduci a icona",
   "window.maximize": "Ingrandisci o ripristina",
   "window.close": "Chiudi",
+  "window.closeConfirm.message": (count: number) =>
+    `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
+  "window.closeConfirm.ok": "Chiudi",
+  "window.closeConfirm.cancel": "Annulla",
   "bell.title": "Notifiche",
   "bell.dismiss": "Scarta",
 
