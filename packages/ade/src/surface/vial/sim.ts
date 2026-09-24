@@ -3,20 +3,19 @@
  *
  * The Design and Decisions buttons each carry a glass tube whose level says
  * how many items wait. A new one falls in from the top, splashes, and the
- * level rises; an answer lowers it and it sloshes. At rest, with something
- * waiting, the liquid is never quite still: a slow random force on the low
- * modes, like a glass on a desk. With nothing waiting, or with reduced motion,
- * it is still.
+ * level rises; an answer lowers it and it sloshes. Between changes it is a
+ * still picture.
  *
  * Ported from the prototype `.ade/design/DS-S62-5/1.html` without changing
- * its constants: the physics is what the user chose by looking at it. Pure,
- * no DOM: the loop (`loop.ts`) steps it and the painter (`paint.ts`) draws it.
+ * the gesture's constants: the physics is what the user chose by looking at
+ * it. The prototype's rest motion — a slow random force on the low modes
+ * whenever something waited — is gone: measured in ADE it cost 5 points of a
+ * core, GPU included, for as long as anything waited, which is almost always
+ * (Verifiche, 2026-09-24). Pure, no DOM: the loop (`loop.ts`) steps it and the
+ * painter (`paint.ts`) draws it.
  */
 
 export type VialFamily = "design" | "dec"
-
-/** Rest force on the vial's surface; measured to stay well under the gesture. */
-export const IDLE_FORCE = 0.11
 
 /** How much liquid for `n` items. Past five it grows no more: the number says the rest. */
 export function fill(n: number): number {
@@ -84,29 +83,6 @@ export class Surface {
   }
 }
 
-/*
- * The rest: slow noise with memory (Ornstein-Uhlenbeck). Not a timed
- * animation: a small random force, and the liquid answers with its own
- * physics, at its own frequencies.
- */
-class Wander {
-  x = 0
-  constructor(
-    private readonly tau: number,
-    private readonly random: () => number,
-  ) {}
-
-  step(dt: number): void {
-    const g = (this.random() + this.random() + this.random() - 1.5) * 2
-    this.x += (-this.x / this.tau) * dt + Math.sqrt((2 * dt) / this.tau) * g
-  }
-}
-
-export interface VialOptions {
-  /** For tests: the rest force's noise. */
-  random?: () => number
-}
-
 /** One tube. `N` is what waits; `shownN` what the tube shows, which catches up as the drops land. */
 export class Vial {
   readonly fam: VialFamily
@@ -123,26 +99,18 @@ export class Vial {
   tL = 0
   drops: { y: number; vy: number }[] = []
   readonly s = new Surface(20, 2.6, 7)
-  private readonly w: Wander[]
 
-  constructor(fam: VialFamily, options: VialOptions = {}) {
+  constructor(fam: VialFamily) {
     this.fam = fam
-    const random = options.random ?? Math.random
-    this.w = [new Wander(1.6, random), new Wander(2.3, random), new Wander(3.1, random), new Wander(2.7, random)]
   }
 
   toneTarget(): number {
     return this.N > 0 ? 1 : 0
   }
 
-  /** Alive at rest only with something waiting, and never with reduced motion: "nothing to choose" stays still. */
-  idleOn(reduced: boolean): boolean {
-    return !reduced && this.N > 0
-  }
-
-  /** Where the light gathers inside the liquid, and how it drifts. */
+  /** Where the light gathers inside the liquid: where the prototype's drift was centred. */
   current(): { x: number; y: number } {
-    return { x: clamp(0.5 + 0.26 * this.w[2]!.x, 0.15, 0.85), y: clamp(0.55 + 0.1 * this.w[3]!.x, 0.35, 0.75) }
+    return { x: 0.5, y: 0.55 }
   }
 
   /** A new item: a drop falls in from the lip. */
@@ -181,7 +149,7 @@ export class Vial {
     this.dirty = true
   }
 
-  step(dt: number, reduced: boolean): void {
+  step(dt: number): void {
     for (const d of this.drops) {
       d.vy += 9 * dt
       d.y += d.vy * dt
@@ -198,14 +166,6 @@ export class Vial {
     const a = 80 * (this.tL - this.L) - 8 * this.vL
     this.vL += a * dt
     this.L += this.vL * dt
-    if (this.idleOn(reduced)) {
-      // At rest the liquid rocks just barely from wall to wall.
-      for (const w of this.w) w.step(dt)
-      for (let i = 0; i < this.s.M; i++) {
-        const x = i / (this.s.M - 1)
-        this.s.v[i]! += dt * IDLE_FORCE * (this.w[0]!.x * Math.cos(Math.PI * x) + 0.6 * this.w[1]!.x * Math.cos(2 * Math.PI * x))
-      }
-    }
     this.s.step(dt)
     this.tone += (this.toneTarget() - this.tone) * Math.min(1, dt * 6)
     this.dirty = true
@@ -223,16 +183,16 @@ export class Vial {
       this.s.flatten()
       this.L = this.tL
       this.tone = this.toneTarget()
+      // The last frame paints this exact level.
+      this.dirty = true
     }
     return m
   }
 }
 
-/** 2 while a gesture runs (60 fps), 1 at rest with something waiting (about 20), 0 still. */
-export function gearOf(vial: Vial, reduced: boolean): 0 | 1 | 2 {
-  if (vial.gesture > 0) return 2
-  if (vial.idleOn(reduced)) return 1
-  return vial.moving() ? 2 : 0
+/** Whether it needs frames: during a gesture and until it has settled. At rest, with anything waiting or not, it does not. */
+export function animating(vial: Vial): boolean {
+  return vial.gesture > 0 || vial.moving()
 }
 
 /*
@@ -247,10 +207,10 @@ const vials = new Map<VialFamily, { vial: Vial; seen: boolean }>()
  * is (ADE opening with three proposals waiting is not three arrivals); every
  * later change is a gesture, one per item.
  */
-export function vialFor(fam: VialFamily, count: number, reduced: boolean, options?: VialOptions): Vial {
+export function vialFor(fam: VialFamily, count: number, reduced: boolean): Vial {
   let entry = vials.get(fam)
   if (!entry) {
-    entry = { vial: new Vial(fam, options), seen: false }
+    entry = { vial: new Vial(fam), seen: false }
     vials.set(fam, entry)
   }
   const { vial } = entry

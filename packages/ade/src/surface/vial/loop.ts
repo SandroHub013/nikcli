@@ -1,17 +1,17 @@
 /**
- * One loop for every vial, in three gears (S62).
+ * One loop for every vial (S62).
  *
- * 60 fps while a gesture runs; about 20 at rest with something waiting, since
- * the rest motion is slow; still — no frame, no timer — when nothing waits,
- * when the window is hidden, and with reduced motion. At rest the next frame
- * is asked for by a timer rather than by skipping animation frames, so the
- * page is not woken sixty times a second to do nothing.
+ * Frames only while a tube is moving: the few seconds of a gesture after a
+ * count changes, and its settling. At rest — with items waiting or not — the
+ * tube is a still picture and nothing is pending: no frame, no timer.
+ *
+ * Nor while ADE is not being looked at. WebView2 does not set
+ * `document.hidden` when the window is covered (measured, Verifiche
+ * 2026-09-24), so the signal is the window's focus, from the host: without it
+ * a change is shown at once, as with reduced motion, in one frame.
  */
 
-import { gearOf, type Vial } from "./sim"
-
-/** The rest rate asked for; frames land on the display's, so about 20 in practice. */
-export const IDLE_FPS = 24
+import { animating, type Vial } from "./sim"
 
 export interface VialView {
   vial: Vial
@@ -23,29 +23,24 @@ export interface VialView {
 export interface LoopEnv {
   raf: (callback: (now: number) => void) => number
   cancelRaf: (id: number) => void
-  timeout: (callback: () => void, ms: number) => number
-  cancelTimeout: (id: number) => void
-  hidden: () => boolean
-  reduced: () => boolean
+  /** True when nothing should move: the page hidden, the window without focus, or reduced motion. */
+  still: () => boolean
 }
 
 export interface VialLoop {
   /** Adds a view and draws it; the returned function removes it. */
   add: (view: VialView) => () => void
-  /** Something changed (a count, the theme, the window shown again): look again. */
+  /** Something changed (a count, the theme, the window back in front): look again. */
   wake: () => void
-  /** Reduced motion was switched on or off: every tube goes to its level at once. */
+  /** Stop moving: every tube goes to where it is heading, drawn once, and nothing stays pending. */
   settle: () => void
-  /** The window was hidden: nothing pending until `wake`. */
-  sleep: () => void
-  /** Whether a frame or a timer is pending: false means the loop costs nothing. */
+  /** Whether a frame is pending: false means the loop costs nothing. */
   running: () => boolean
 }
 
 export function createVialLoop(env: LoopEnv): VialLoop {
   const views = new Set<VialView>()
   let raf = 0
-  let timer = 0
   let last = 0
 
   const vials = () => new Set([...views].map((view) => view.vial))
@@ -60,56 +55,40 @@ export function createVialLoop(env: LoopEnv): VialLoop {
     for (const vial of vials()) vial.dirty = false
   }
 
-  const halt = () => {
-    if (raf) env.cancelRaf(raf)
-    if (timer) env.cancelTimeout(timer)
-    raf = timer = last = 0
+  /** Every moving tube straight to its level, and the picture drawn. */
+  const snapAll = () => {
+    for (const vial of vials()) if (vial.gesture > 0 || vial.drops.length > 0 || animating(vial)) vial.snap()
+    draw()
   }
 
   const frame = (now: number) => {
     raf = 0
-    if (env.hidden() || views.size === 0) {
+    if (views.size === 0) return
+    if (env.still()) {
+      snapAll()
       last = 0
       return
     }
-    const reduced = env.reduced()
-    let gear = 0
-    for (const vial of vials()) gear = Math.max(gear, gearOf(vial, reduced))
-    if (gear === 0) {
+    const moving = [...vials()].filter(animating)
+    if (moving.length === 0) {
       draw()
       last = 0
       return
     }
     const dt = Math.min(0.1, last ? (now - last) / 1000 : 1 / 60)
     last = now
-    for (const vial of vials()) {
-      if (!gearOf(vial, reduced)) continue
+    for (const vial of moving) {
       const steps = Math.ceil(dt * 240)
-      for (let i = 0; i < steps; i++) vial.step(dt / steps, reduced)
+      for (let i = 0; i < steps; i++) vial.step(dt / steps)
       vial.gesture = Math.max(0, vial.gesture - dt)
     }
     draw()
-    let next = 0
-    for (const vial of vials()) next = Math.max(next, gearOf(vial, reduced))
-    if (next === 2) raf = env.raf(frame)
-    else if (next === 1) {
-      timer = env.timeout(() => {
-        timer = 0
-        raf = env.raf(frame)
-      }, 1000 / IDLE_FPS)
-    } else {
-      // Settled: one more frame paints the exact level `moving` left, then nothing.
-      raf = env.raf(frame)
-    }
+    // Once settled, one more frame paints the exact level `moving` left, then nothing.
+    raf = env.raf(frame)
   }
 
   const wake = () => {
-    if (views.size === 0 || env.hidden()) return
-    // A pending rest timer would make a new gesture wait for it.
-    if (timer) {
-      env.cancelTimeout(timer)
-      timer = 0
-    }
+    if (views.size === 0) return
     if (!raf) raf = env.raf(frame)
   }
 
@@ -120,15 +99,18 @@ export function createVialLoop(env: LoopEnv): VialLoop {
       wake()
       return () => {
         views.delete(view)
-        if (views.size === 0) halt()
+        if (views.size === 0 && raf) {
+          env.cancelRaf(raf)
+          raf = last = 0
+        }
       }
     },
     wake,
     settle() {
-      for (const vial of vials()) vial.snap()
-      wake()
+      if (raf) env.cancelRaf(raf)
+      raf = last = 0
+      if (views.size > 0) snapAll()
     },
-    sleep: halt,
-    running: () => raf !== 0 || timer !== 0,
+    running: () => raf !== 0,
   }
 }

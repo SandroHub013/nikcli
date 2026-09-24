@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { createVialLoop, IDLE_FPS, type LoopEnv } from "./loop"
+import { createVialLoop, type LoopEnv } from "./loop"
 import { shadeLiquid, vialGeometry } from "./paint"
-import { fill, gearOf, resetVialsForTests, Surface, Vial, vialFor } from "./sim"
+import { animating, fill, resetVialsForTests, Surface, Vial, vialFor } from "./sim"
 
 /* The vial of DS-S62-5 variant 1 in the Design and Decisions buttons (S62). */
 
 /** Steps a vial `seconds` as the loop does at 240 steps a second. */
-function run(vial: Vial, seconds: number, reduced = false) {
+function run(vial: Vial, seconds: number) {
   const h = 1 / 240
-  for (let t = 0; t < seconds; t += h) vial.step(h, reduced)
+  for (let t = 0; t < seconds; t += h) vial.step(h)
 }
 
 describe("the liquid", () => {
@@ -66,21 +66,25 @@ describe("the liquid", () => {
   })
 })
 
-describe("the three gears", () => {
-  test("a gesture runs at full rate; at rest with something waiting, the slow rate; nothing waiting, still", () => {
+describe("when it needs frames", () => {
+  test("during a gesture and its settling only: at rest with items waiting it is a still picture", () => {
     const vial = new Vial("design")
     vial.setN(2)
-    expect(gearOf(vial, false)).toBe(1)
+    expect(animating(vial)).toBe(false)
     vial.arrive(false)
-    expect(gearOf(vial, false)).toBe(2)
-    vial.setN(0)
-    expect(gearOf(vial, false)).toBe(0)
+    expect(animating(vial)).toBe(true)
+    run(vial, 6)
+    vial.gesture = 0
+    expect(animating(vial)).toBe(false)
+    expect(vial.N).toBe(3)
   })
 
-  test("with reduced motion nothing moves at rest, even with items waiting", () => {
+  test("resting, the surface does not move on its own", () => {
     const vial = new Vial("dec")
-    vial.setN(3)
-    expect(gearOf(vial, true)).toBe(0)
+    vial.setN(4)
+    run(vial, 5)
+    expect(vial.s.energy()).toBe(0)
+    expect(vial.L).toBeCloseTo(fill(4), 6)
   })
 })
 
@@ -104,13 +108,12 @@ describe("the tubes kept per family", () => {
   })
 })
 
-/** A fake clock: frames and timers run when `advance` passes their time. */
+/** A fake display: frames run when `advance` passes them, 60 a second. */
 function fakeEnv() {
   let now = 0
   let nextId = 1
   const rafs = new Map<number, (now: number) => void>()
-  const timers = new Map<number, { at: number; callback: () => void }>()
-  const state = { hidden: false, reduced: false, frames: 0 }
+  const state = { still: false, frames: 0 }
   const env: LoopEnv = {
     raf: (callback) => {
       const id = nextId++
@@ -118,26 +121,12 @@ function fakeEnv() {
       return id
     },
     cancelRaf: (id) => void rafs.delete(id),
-    timeout: (callback, ms) => {
-      const id = nextId++
-      timers.set(id, { at: now + ms, callback })
-      return id
-    },
-    cancelTimeout: (id) => void timers.delete(id),
-    hidden: () => state.hidden,
-    reduced: () => state.reduced,
+    still: () => state.still,
   }
-  /** Moves the clock in display frames of 1/60 s; each frame runs what is due. */
   const advance = (seconds: number) => {
     const end = now + seconds * 1000
     while (now < end - 1e-6) {
       now += 1000 / 60
-      for (const [id, timer] of [...timers]) {
-        if (timer.at <= now) {
-          timers.delete(id)
-          timer.callback()
-        }
-      }
       const due = [...rafs]
       rafs.clear()
       for (const [, callback] of due) {
@@ -146,12 +135,12 @@ function fakeEnv() {
       }
     }
   }
-  return { env, state, advance, pending: () => rafs.size + timers.size }
+  return { env, state, advance, pending: () => rafs.size }
 }
 
 describe("the loop", () => {
-  test("a gesture draws at the display's rate, then rest goes to about 20 fps on a timer", () => {
-    const { env, state, advance } = fakeEnv()
+  test("a gesture draws at the display's rate for a few seconds, then nothing is pending", () => {
+    const { env, state, advance, pending } = fakeEnv()
     const loop = createVialLoop(env)
     const vial = new Vial("design")
     vial.setN(1)
@@ -161,17 +150,31 @@ describe("the loop", () => {
     loop.wake()
     advance(1)
     expect(state.frames).toBeGreaterThanOrEqual(55)
-    // Past the gesture (2.6 s): the rest rate.
-    advance(3)
+    advance(5)
+    expect(pending()).toBe(0)
+    expect(loop.running()).toBe(false)
+    // At rest, with two waiting: no frame at all.
     state.frames = 0
     paints = 0
-    advance(2)
-    expect(state.frames / 2).toBeGreaterThan(12)
-    expect(state.frames / 2).toBeLessThanOrEqual(IDLE_FPS)
-    expect(paints).toBe(state.frames)
+    advance(10)
+    expect(state.frames).toBe(0)
+    expect(paints).toBe(0)
   })
 
-  test("nothing waiting: once settled, no frame and no timer is pending", () => {
+  test("with items waiting and no change, adding the button draws one frame and stops", () => {
+    const { env, state, advance, pending } = fakeEnv()
+    const loop = createVialLoop(env)
+    const vial = new Vial("dec")
+    vial.setN(3)
+    let paints = 0
+    loop.add({ vial, paint: () => paints++ })
+    advance(2)
+    expect(state.frames).toBe(1)
+    expect(paints).toBe(1)
+    expect(pending()).toBe(0)
+  })
+
+  test("nothing waiting: once the answer settles, no frame is pending", () => {
     const { env, advance, pending } = fakeEnv()
     const loop = createVialLoop(env)
     const vial = new Vial("dec")
@@ -185,46 +188,72 @@ describe("the loop", () => {
     expect(loop.running()).toBe(false)
   })
 
-  test("hidden window: still, and back at once when shown", () => {
-    const { env, state, advance } = fakeEnv()
+  test("still (covered, unfocused, hidden or reduced motion): a change is one frame at its level, no animation", () => {
+    const { env, state, advance, pending } = fakeEnv()
     const loop = createVialLoop(env)
     const vial = new Vial("design")
-    vial.setN(2)
-    loop.add({ vial, paint: () => {} })
-    state.hidden = true
-    loop.sleep()
+    vial.setN(1)
+    let paints = 0
+    loop.add({ vial, paint: () => paints++ })
+    advance(0.1)
+    state.still = true
     state.frames = 0
-    advance(2)
-    expect(state.frames).toBe(0)
-    expect(loop.running()).toBe(false)
-    state.hidden = false
+    paints = 0
+    vial.arrive(false)
     loop.wake()
-    advance(1)
-    expect(state.frames).toBeGreaterThan(0)
+    advance(3)
+    expect(state.frames).toBe(1)
+    expect(paints).toBe(1)
+    expect(vial.drops).toHaveLength(0)
+    expect(vial.L).toBeCloseTo(fill(2))
+    expect(pending()).toBe(0)
   })
 
-  test("reduced motion: every tube goes to its level and the loop stops, items waiting or not", () => {
+  test("settle in the middle of a gesture: the tube goes to its level, drawn once, and nothing stays pending", () => {
+    const { env, state, advance, pending } = fakeEnv()
+    const loop = createVialLoop(env)
+    const vial = new Vial("design")
+    vial.setN(1)
+    loop.add({ vial, paint: () => {} })
+    vial.arrive(false)
+    loop.wake()
+    advance(0.3)
+    expect(loop.running()).toBe(true)
+    state.still = true
+    loop.settle()
+    expect(pending()).toBe(0)
+    expect(vial.L).toBeCloseTo(fill(2))
+    expect(vial.shownN).toBe(2)
+    state.frames = 0
+    advance(3)
+    expect(state.frames).toBe(0)
+  })
+
+  test("back in front after a change made while still: no replay, the picture is already right", () => {
     const { env, state, advance } = fakeEnv()
     const loop = createVialLoop(env)
     const vial = new Vial("design")
-    vial.setN(2)
+    vial.setN(1)
     loop.add({ vial, paint: () => {} })
-    advance(0.5)
-    state.reduced = true
-    loop.settle()
+    state.still = true
+    vial.arrive(false)
+    loop.wake()
     advance(1)
-    expect(loop.running()).toBe(false)
+    state.still = false
     state.frames = 0
-    advance(2)
-    expect(state.frames).toBe(0)
+    loop.wake()
+    advance(3)
+    expect(state.frames).toBe(1)
   })
 
   test("the last button removed stops the loop", () => {
     const { env, advance } = fakeEnv()
     const loop = createVialLoop(env)
     const vial = new Vial("design")
-    vial.setN(2)
+    vial.setN(1)
     const remove = loop.add({ vial, paint: () => {} })
+    vial.arrive(false)
+    loop.wake()
     advance(0.5)
     remove()
     expect(loop.running()).toBe(false)

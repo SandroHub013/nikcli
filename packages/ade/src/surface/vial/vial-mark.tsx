@@ -8,27 +8,49 @@ import { vialFor, type VialFamily } from "./sim"
 /*
  * The vial in the Design and Decisions buttons (S62): a glass tube whose
  * level says how many items wait. One loop for both, made when the first is
- * drawn; it sleeps while the window is hidden and settles every tube at once
- * when reduced motion is switched on.
+ * drawn. It moves only for a gesture, and only while ADE is in front: hidden,
+ * without focus or with reduced motion, a change is drawn at once.
  */
 
 let shared: VialLoop | undefined
 let reducedQuery: MediaQueryList | undefined
+/*
+ * The window's focus, from Tauri: a covered window keeps `document.hidden`
+ * false in WebView2, so that cannot say whether anyone is looking. The DOM's
+ * own focus stands in for it where there is no Tauri (the browser harness).
+ */
+let focused = true
 
 const reducedMotion = () => reducedQuery?.matches ?? false
 
 function sharedLoop(): VialLoop {
   if (shared) return shared
   reducedQuery = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : undefined
+  focused = typeof document.hasFocus === "function" ? document.hasFocus() : true
   const loop = createVialLoop({
     raf: (callback) => requestAnimationFrame(callback),
     cancelRaf: (id) => cancelAnimationFrame(id),
-    timeout: (callback, ms) => window.setTimeout(callback, ms),
-    cancelTimeout: (id) => window.clearTimeout(id),
-    hidden: () => document.hidden,
-    reduced: reducedMotion,
+    still: () => document.hidden || !focused || reducedMotion(),
   })
-  document.addEventListener("visibilitychange", () => (document.hidden ? loop.sleep() : loop.wake()))
+  const setFocused = (next: boolean) => {
+    if (next === focused) return
+    focused = next
+    if (next) loop.wake()
+    else loop.settle()
+  }
+  if ("__TAURI_INTERNALS__" in window) {
+    void import("@tauri-apps/api/window")
+      .then(async ({ getCurrentWindow }) => {
+        const current = getCurrentWindow()
+        setFocused(await current.isFocused().catch(() => focused))
+        await current.onFocusChanged(({ payload }) => setFocused(payload))
+      })
+      .catch(() => {})
+  } else {
+    window.addEventListener("focus", () => setFocused(true))
+    window.addEventListener("blur", () => setFocused(false))
+  }
+  document.addEventListener("visibilitychange", () => (document.hidden ? loop.settle() : loop.wake()))
   reducedQuery?.addEventListener?.("change", () => loop.settle())
   shared = loop
   return loop
