@@ -1,0 +1,19 @@
+/*
+ * The vial in the Design and Decisions buttons (S62): the size of the
+ * prototype's tube at 26 px, 0.48 × 0.8 of the button's height. The canvas
+ * takes its backing size from this, in device pixels.
+ */
+[data-slot="vial"] {
+  display: block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 21px;
+}
+
+/* The compact Design button under 640px: the prototype's tube at 20 px. */
+@media (max-width: 640px) {
+  [data-slot="design-badge"] [data-slot="vial"] {
+    width: 10px;
+    height: 16px;
+  }
+}
