@@ -173,7 +173,7 @@ import { mayReroute, pickProvider, setProviderPicker } from "../session/provider
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen } from "./commands"
+import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
@@ -451,7 +451,7 @@ const HANDLED_COMMANDS = new Set([
 ])
 
 function isHandledCommand(id: string): boolean {
-  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.")
+  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.") || parseDesignVariantCommand(id) !== undefined
 }
 
 /**
@@ -5047,6 +5047,11 @@ export function Workbench() {
         // The notice's «Togli dall'elenco» has nothing left to remove.
         setNoticeAction(undefined)
       }
+    } else if (parseDesignVariantCommand(id)) {
+      const wanted = parseDesignVariantCommand(id)!
+      const proposal = designRegister.state()?.proposals.find((candidate) => candidate.k === wanted.k)
+      const problem = proposal ? await openDesignVariant(proposal, wanted.variant) : t("design.variant.missing", wanted.k, wanted.variant)
+      if (problem) report(problem)
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
@@ -5073,6 +5078,9 @@ export function Workbench() {
       workbench: wb(),
       recents: recents(),
       missingRecent: (root) => isMissingRecent(missingRoots(), root),
+      designVariants: (designRegister.state()?.proposals ?? [])
+        .filter((proposal) => proposal.status !== "chiusa")
+        .map((proposal) => ({ k: proposal.k, title: proposal.title, variants: proposal.variants.map((variant) => variant.name) })),
       hasHost: hasHost(),
       running: new Set(running.keys()),
       platform,

@@ -59,6 +59,8 @@ export const it = {
   "palette.pane.close": "Chiudi pannello",
   "palette.panes.closeGone": (n: number) => `Chiudi i pannelli delle cartelle sparite (${n})`,
   "palette.recents.forgetGone": (n: number) => `Togli dai recenti le cartelle sparite (${n})`,
+  "palette.design.variant": (k: string, title: string, variant: number, name: string) =>
+    `Design: apri la variante — ${title ? `${k} · ${title}` : k} · Variante ${variant}${name ? ` «${name}»` : ""}`,
   "confirm.forgetGone": (n: number) => (n === 1 ? "Togliere dai recenti e dagli Spaces 1 cartella sparita?" : `Togliere dai recenti e dagli Spaces ${n} cartelle sparite?`),
   "palette.pane.shrink": "Riduci pannello",
   "palette.pane.expand": "Espandi pannello",

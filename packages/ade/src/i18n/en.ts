@@ -54,6 +54,8 @@ export const en: Messages = {
   "palette.pane.close": "Close panel",
   "palette.panes.closeGone": (n) => `Close the panes of folders that are gone (${n})`,
   "palette.recents.forgetGone": (n) => `Remove gone folders from the recents (${n})`,
+  "palette.design.variant": (k, title, variant, name) =>
+    `Design: open the variant — ${title ? `${k} · ${title}` : k} · Variant ${variant}${name ? ` «${name}»` : ""}`,
   "confirm.forgetGone": (n) => (n === 1 ? "Remove 1 gone folder from the recent projects and the Spaces?" : `Remove ${n} gone folders from the recent projects and the Spaces?`),
   "palette.pane.shrink": "Restore panel size",
   "palette.pane.expand": "Maximize panel",

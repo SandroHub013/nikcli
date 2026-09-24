@@ -52,6 +52,19 @@ export interface CommandContext {
   views?: readonly AdeView[]
   /** Whether the focused pane can be suspended now (`canSuspend`); absent when it is not a Claude session. */
   suspendCheck?: SuspendCheck
+  /** The design proposals still open, with their variants' names: «Design: apri la variante…» (D1). */
+  designVariants?: readonly { k: string; title: string; variants: readonly string[] }[]
+}
+
+/** The palette id of «Design: apri la variante…» for variant `variant` (from 1) of proposal `k`. */
+export function designVariantCommandId(k: string, variant: number): string {
+  // The number first: a key may hold dots.
+  return `design.variant.${variant}.${k}`
+}
+
+export function parseDesignVariantCommand(id: string): { k: string; variant: number } | undefined {
+  const match = /^design\.variant\.(\d+)\.(.+)$/.exec(id)
+  return match ? { k: match[2]!, variant: Number(match[1]) } : undefined
 }
 
 /**
@@ -320,6 +333,23 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: true,
     })
   }
+  /*
+   * A variant of a proposal still open, in a browser pane in Design mode
+   * (D1). Until the cards have «Apri grande» (D3), this is the way in.
+   */
+  for (const proposal of ctx.designVariants ?? []) {
+    proposal.variants.forEach((name, index) => {
+      commands.push({
+        id: designVariantCommandId(proposal.k, index + 1),
+        title: t("palette.design.variant", proposal.k, proposal.title, index + 1, name),
+        group: t("palette.group.pane"),
+        keywords: ["design", "variante", "proposta", "apri", "ispeziona", "variant", "proposal", "open", "inspect"],
+        enabled: hasHost,
+        disabledReason: desktopOnly,
+      })
+    })
+  }
+
   const goneRecents = recents.filter((recent) => ctx.missingRecent?.(recent.root)).length
   if (goneRecents > 0) {
     commands.push({
