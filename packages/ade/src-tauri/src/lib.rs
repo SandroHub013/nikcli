@@ -523,11 +523,28 @@ fn nikcli_timeout(args: &[String]) -> Duration {
 }
 
 #[cfg(windows)]
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtResumeProcess(process_handle: windows::Win32::Foundation::HANDLE) -> i32;
+}
+
+#[cfg(windows)]
+fn resume_child(child: &std::process::Child) -> Result<(), String> {
+    use std::os::windows::io::AsRawHandle;
+    let status = unsafe { NtResumeProcess(windows::Win32::Foundation::HANDLE(child.as_raw_handle())) };
+    if status < 0 {
+        return Err(format!("nikcli non può essere riattivato: {status:#x}"));
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
 struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl ChildTreeGuard {
     fn new() -> Result<Self, String> {
+        use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::{
             CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
             JobObjectExtendedLimitInformation, SetInformationJobObject,
@@ -536,14 +553,17 @@ impl ChildTreeGuard {
         let handle = unsafe { CreateJobObjectW(None, None) }.map_err(|error| error.message().to_string())?;
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        unsafe {
+        let result = unsafe {
             SetInformationJobObject(
                 handle,
                 JobObjectExtendedLimitInformation,
                 &info as *const _ as *const std::ffi::c_void,
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             )
-            .map_err(|error| error.message().to_string())?;
+        };
+        if let Err(error) = result {
+            let _ = unsafe { CloseHandle(handle) };
+            return Err(error.message().to_string());
         }
         Ok(Self(handle))
     }
@@ -627,6 +647,11 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0004);
+    }
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -639,6 +664,17 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
     } else {
         false
     };
+    #[cfg(windows)]
+    {
+        if !job_assigned {
+            terminate_child_tree(&mut child, pid, &mut tree_guard, false);
+            return Err("nikcli non può essere protetto con un job Windows".into());
+        }
+        if let Err(error) = resume_child(&child) {
+            terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
+            return Err(error);
+        }
+    }
     let Some(mut stdout) = child.stdout.take() else {
         terminate_child_tree(&mut child, pid, &mut tree_guard, job_assigned);
         return Err("nikcli non ha uno stdout leggibile".into());
