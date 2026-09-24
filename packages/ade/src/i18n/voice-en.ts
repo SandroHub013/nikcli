@@ -168,9 +168,9 @@ export const voiceEn: VoiceMessages = {
   "vui.listen.always.desc": (wakeWord) =>
     `The microphone opens with ADE and waits for “${wakeWord}”. It spends credits: every voice in the room is sent to the transcription service, about $0.02 an hour with a television on, nothing while the room is quiet. It stops by itself after 30 minutes without being called, or past 120 sentences in an hour.`,
   "vui.listen.spend": (calls, cost) =>
-    `Listening has sent ${calls} ${calls === 1 ? "sentence" : "sentences"} to the transcription service today, for ${cost}.`,
+    `The voice sent ${calls} ${calls === 1 ? "request" : "requests"} to OpenRouter today, for ${cost}.`,
   "vui.listen.manual": "Only when you open it",
-  "vui.listen.manual.desc": "With the button at the top or the shortcut",
+  "vui.listen.manual.desc": "With the button at the top or the shortcut; without an accepted phrase it closes after 30 seconds.",
   "vui.shortcuts.title": "Keyboard shortcuts",
   "vui.shortcuts.desc": "Two free combinations: click a shortcut and press the keys you want. Ctrl, Alt or Cmd is required, because a single key is for typing",
   "vui.shortcuts.agent": "Agent mode shortcut",

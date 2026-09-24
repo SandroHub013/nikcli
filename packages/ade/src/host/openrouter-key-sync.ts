@@ -16,9 +16,10 @@ export interface KeySyncDeps {
   homeDir: () => Promise<string | undefined>
   readTextFile: (path: string, maxBytes: number) => Promise<{ text: string } | undefined>
   save: (key: string) => Promise<void>
+  removed: () => boolean
 }
 
-export type KeySyncOutcome = "copied" | "test-identity" | "not-found"
+export type KeySyncOutcome = "copied" | "removed" | "test-identity" | "not-found"
 
 /** Where nikcli keeps `auth.json`, on each system, in the spellings the host may need. */
 export function authCandidates(home: string): string[] {
@@ -38,6 +39,7 @@ export function authCandidates(home: string): string[] {
 export async function syncOpenRouterKey(deps: KeySyncDeps): Promise<KeySyncOutcome> {
   const identifier = await deps.identifier().catch(() => undefined)
   if (identifier === undefined || isTestIdentifier(identifier)) return "test-identity"
+  if (deps.removed()) return "removed"
   const home = await deps.homeDir().catch(() => undefined)
   if (!home) return "not-found"
   for (const authPath of authCandidates(home)) {

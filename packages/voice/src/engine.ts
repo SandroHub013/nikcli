@@ -89,6 +89,8 @@ export interface VoiceEngineOptions {
   plan?: Completion
   /** Overrides the planner model. */
   plannerModel?: string
+  /** Overrides the planner's fetch, for tests. */
+  plannerFetch?: typeof fetch
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
   /** Where a stop for spending is written down; the browser's storage by default. */
@@ -101,7 +103,7 @@ export interface VoiceEngineOptions {
   readonly spendTally?: SpendTally
   /** Overrides `LOW_CREDIT_USD`, for tests. */
   readonly lowCreditUsd?: number
-  /** Overrides `LISTEN_IDLE_MS`, for tests. */
+  /** Overrides the inactivity timeout, for tests. */
   readonly listenIdleMs?: number
   /** Overrides `LISTEN_REQUESTS_PER_HOUR`, for tests. */
   listenRequestsPerHour?: number
@@ -291,6 +293,7 @@ const HOUR_MS = 60 * 60_000
  * saying the name is a room that forgot it was listening.
  */
 export const LISTEN_IDLE_MS = 30 * 60_000
+export const MANUAL_LISTEN_IDLE_MS = 30_000
 
 /**
  * Below this much credit left, in dollars, the user is told before the voice
@@ -494,27 +497,30 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
   }
 
-  /**
-   * Which session is the current one, and whether one is being opened.
-   *
-   * `isRunning()` was the only guard, and it is written *after* `startSession()`
-   * resolves — which for the local model is a multi-minute download. Two presses
-   * inside that window both passed the guard, both built a session, and the
-   * second overwrote the first's scopes: a microphone, an audio graph and a
-   * recognition fibre with nothing left pointing at them, for the rest of the
-   * run. The mirror case was worse — `stop()` during that window set the flag
-   * to false and closed scopes that were still null, and the session that
-   * landed afterwards kept the microphone open with the whole interface saying
-   * it was off.
-   *
-   * So the truth is a counter, taken before the await and checked after it.
-   * Anything that ends a session bumps it, and a start that comes back to find
-   * its number stale tears down what it built instead of installing it. The
-   * promise beside it makes a second press wait for the first rather than
-   * racing it.
-   */
   let sessionGeneration = 0
+  let lifecycleTail: Promise<void> | null = null
   let startInFlight: Promise<void> | null = null
+  let restartInFlight: Promise<void> | null = null
+
+  const trackLifecycle = (result: Promise<unknown>): Promise<void> => {
+    const tracked = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    lifecycleTail = tracked
+    void tracked.finally(() => {
+      if (lifecycleTail === tracked) lifecycleTail = null
+    })
+    return tracked
+  }
+
+  const enqueueLifecycle = <T>(operation: (generation: number) => Promise<T>): Promise<T> => {
+    const generation = ++sessionGeneration
+    const previous = lifecycleTail
+    const result = previous ? previous.then(() => operation(generation)) : operation(generation)
+    trackLifecycle(result)
+    return result
+  }
 
   /**
    * Closes one scope, and says so when it will not close.
@@ -560,6 +566,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       engineScope = null
       await closeScope(scope, "motore")
     }
+  }
+
+  const discardSession = async (): Promise<void> => {
+    await releaseSession()
+    if (micMeter) micMeter.stop()
+    setIsRunning(false)
   }
 
   /**
@@ -673,12 +685,29 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    */
   function keepListeningAwake(): void {
     clearTimeout(idleTimer)
-    if (!currentSettings().alwaysListen) return
-    const after = options.listenIdleMs ?? LISTEN_IDLE_MS
+    idleTimer = undefined
+    const alwaysListen = currentSettings().alwaysListen
+    const after = options.listenIdleMs ?? (alwaysListen ? LISTEN_IDLE_MS : MANUAL_LISTEN_IDLE_MS)
     idleTimer = setTimeout(() => {
-      if (!isRunning() || !currentSettings().alwaysListen) return
+      idleTimer = undefined
+      if (!isRunning() || chordHeld) return
+      const current = currentSettings()
+      if (current.alwaysListen !== alwaysListen) return
+      const busy =
+        activeTranscriber?.hasInFlight === true ||
+        dialogState().status === "executing" ||
+        dialogState().status === "confirming" ||
+        dialogState().status === "dictating"
+      if (!current.alwaysListen && busy) {
+        keepListeningAwake()
+        return
+      }
+      const seconds = Math.max(1, Math.round(after / 1000))
+      const idle = after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
       stopListening(
-        `Non ti sento da ${Math.round(after / 60_000)} minuti, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
+        current.alwaysListen
+          ? `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`
+          : `Non ho sentito una frase per ${idle}, quindi ho spento il microfono. Aprilo per riprovare.`,
       )
     }, after)
   }
@@ -738,16 +767,21 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
    * dictation that took it over), so the agent kept ready stays. Released and
    * prepared again, it would start its process over for nothing.
    */
-  const stop = (options?: { keepAgent?: boolean }): Promise<void> => {
+  const stop = (options?: { keepAgent?: boolean; drain?: boolean; releaseText?: boolean }): Promise<void> => {
+    sessionGeneration++
+    startInFlight = null
+    restartInFlight = null
+    setIsRunning(false)
     if (stopping) return stopping
-    stopping = (async () => {
-      try {
-        await stopNow(options?.keepAgent === true)
-      } finally {
-        stopping = null
-      }
-    })()
-    return stopping
+    const cleanup = enqueueLifecycle(async () => {
+      await stopNow(options?.keepAgent === true, options?.drain !== false)
+      if (options?.releaseText === true) await releaseTextProgram()
+    })
+    stopping = cleanup
+    void cleanup.finally(() => {
+      if (stopping === cleanup) stopping = null
+    })
+    return cleanup
   }
 
   /*
@@ -766,10 +800,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   }
   let startListening: (mode: VoiceMode, o: { waitForName: boolean; automatic?: boolean }) => Promise<void> = async () => {}
 
-  const stopNow = async (keepAgent = false): Promise<void> => {
-    /* Before anything else: a start still in flight must find its number
-       stale and free what it has built rather than install it. */
-    sessionGeneration++
+  const stopNow = async (keepAgent = false, drain = true): Promise<void> => {
     clearPttTimers()
     setListenPaused(false)
     dictationInterruptedListening = false
@@ -783,7 +814,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
 
     /* Drained before the mode is forgotten: a dictated sentence read after
        `setSessionMode(undefined)` would be parsed as a command. */
-    await drainSession()
+    if (drain) await drainSession()
 
     setPartialTranscript("")
     setParakeetProgress(undefined)
@@ -826,10 +857,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     if (options.plan) return options.plan
     const key = currentSettings().openRouterApiKey
     if (!key) return undefined
-    return createOpenRouterCompletion({
+    const completion = createOpenRouterCompletion({
       apiKey: key,
+      ...(options.plannerFetch ? { fetchFn: options.plannerFetch } : {}),
       ...(options.plannerModel ? { model: options.plannerModel } : {}),
+      onUsage: (usage) => {
+        if (typeof usage.cost === "number") setListenSpend(spendTally.addCost(now(), usage.cost))
+      },
     })
+    return async (request) => {
+      setListenSpend(spendTally.add(now(), undefined))
+      return completion(request)
+    }
   }
 
   function resolveTranscriber(s: VoiceSettings): Transcriber {
@@ -1202,6 +1241,163 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     return textHandle
   }
 
+  const startNow = async (
+    mode: VoiceMode | undefined,
+    startOptions: { waitForName?: boolean; automatic?: boolean } | undefined,
+    generation: number,
+  ): Promise<void> => {
+    if (generation !== sessionGeneration) return
+    if (mode !== undefined) setSessionMode(mode)
+    if (activeMode() === "transcription") cancelSpeech()
+    if (isRunning()) return
+    if (startOptions?.automatic === true) {
+      if (listenHalted()) return
+    } else {
+      setListenHalted(false)
+      halts.clear()
+      setListenWarning(undefined)
+    }
+
+    openedWithoutChord = !chordHeld
+
+    try {
+      if (micMeter && hasOverriddenTranscriber) {
+        try {
+          micMeter.setDevice(currentSettings().inputDeviceId)
+          await micMeter.start()
+        } catch {
+          setMicLevel(0)
+        }
+      }
+      if (generation !== sessionGeneration) {
+        if (micMeter) micMeter.stop()
+        return
+      }
+
+      engineScope = Effect.runSync(Scope.make())
+      await startSession()
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      setIsRunning(true)
+      clearError()
+      setParakeetProgress(undefined)
+      setListenPaused(false)
+      keepListeningAwake()
+      void warnAboutCredit(currentSettings())
+      const agentSettings = currentSettings()
+      if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
+        host.prepareAgent?.({ engine: agentSettings.agentEngine, speed: agentSettings.agentSpeed })
+      }
+
+      const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
+      if (waitForName && programHandle) {
+        await Effect.runPromise(programHandle.listenForName)
+      } else if (dialogState().status === "asleep") {
+        if (programHandle) await Effect.runPromise(programHandle.wake)
+      } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
+        await Effect.runPromise(programHandle.wake)
+      } else {
+        setDialogState((prev) => ({ ...prev, status: "idle" }))
+      }
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+      refreshHearing()
+    } catch (err: unknown) {
+      await discardSession()
+      if (generation !== sessionGeneration) return
+      const message =
+        typeof err === "string"
+          ? err
+          : spokenMessage(err) ||
+            (err && typeof err === "object" && err instanceof Error
+              ? err.message
+              : "Non sono riuscito ad aprire il microfono: riprova.")
+      noteError(err, message)
+      await stopNow()
+      if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
+        void Promise.resolve(speaker.speak(message)).catch(() => {})
+      }
+    }
+  }
+
+  const restartNow = async (
+    normalized: VoiceSettings,
+    previous: VoiceSettings,
+    generation: number,
+  ): Promise<void> => {
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
+    setIsRunning(false)
+    refreshHearing()
+    await releaseTextProgram()
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
+    hasOverriddenTranscriber = false
+
+    try {
+      if (programScope) {
+        const scope = programScope
+        programScope = null
+        programHandle = null
+        await closeScope(scope, "programma")
+      }
+      if (transcriberScope) {
+        const scope = transcriberScope
+        transcriberScope = null
+        await closeScope(scope, "trascrittore")
+      }
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      if (micMeter && normalized.inputDeviceId !== previous.inputDeviceId) {
+        micMeter.stop()
+        micMeter.setDevice(normalized.inputDeviceId)
+        await micMeter.start()
+        if (generation !== sessionGeneration) {
+          await discardSession()
+          return
+        }
+      }
+
+      await startSession()
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
+
+      setIsRunning(true)
+      clearError()
+      setParakeetProgress(undefined)
+      setListenPaused(false)
+      keepListeningAwake()
+      void warnAboutCredit(currentSettings())
+      refreshHearing()
+    } catch (err: unknown) {
+      await discardSession()
+      if (generation !== sessionGeneration) return
+      const message =
+        typeof err === "string"
+          ? err
+          : spokenMessage(err) ||
+            (err && typeof err === "object" && err instanceof Error
+              ? err.message
+              : "Le nuove impostazioni vocali non sono state applicate.")
+      noteError(err, message)
+      await stopNow()
+    }
+  }
+
   const engine: VoiceEngine = {
     status: () => dialogState().status,
     partialTranscript,
@@ -1227,123 +1423,13 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     followUp,
 
     async start(mode?: VoiceMode, startOptions?: { waitForName?: boolean; automatic?: boolean }): Promise<void> {
-      /* A session still delivering its last sentence owns the scopes this
-         start would overwrite; and the stop resets the mode, so wait first. */
-      if (stopping) await stopping
-      if (mode !== undefined) setSessionMode(mode)
-      if (activeMode() === "transcription") {
-        cancelSpeech()
-      }
-      if (isRunning()) return
-      /*
-       * Someone is already opening it. Waiting for them is the whole fix: the
-       * second press gets the session the first one is building instead of
-       * building a second one on top of it.
-       */
-      if (startInFlight) {
-        await startInFlight
-        return
-      }
-
-      // A start that did not come through pressToTalk came from a button, a
-      // command or the palette, and those mean "listen", not "listen while I
-      // keep holding something I am not holding".
-      openedWithoutChord = !chordHeld
-
-      const generation = ++sessionGeneration
-
-      const attempt = async (): Promise<void> => {
-        try {
-          if (micMeter && hasOverriddenTranscriber) {
-            // Built-in transcribers already stream onLevel from their single hardware capture.
-            // Only start external micMeter when transcriber is overridden (e.g. test doubles).
-            try {
-              micMeter.setDevice(currentSettings().inputDeviceId)
-              await micMeter.start()
-            } catch {
-              // Level meter is visual only; do not abort voice session on meter failure
-            }
-          }
-
-          engineScope = Effect.runSync(Scope.make())
-          await startSession()
-
-          /*
-           * Stopped while we were loading. Everything just built is already
-           * orphaned — nothing else holds a reference to these scopes — so it
-           * is freed here rather than installed; the alternative is a live
-           * microphone behind an interface that says the session is closed.
-           */
-          if (generation !== sessionGeneration) {
-            await releaseSession()
-            if (micMeter) micMeter.stop()
-            return
-          }
-
-          setIsRunning(true)
-          clearError()
-          /* The model is loaded by the time the session is up. Cleared here,
-             rather than when a file reports 100%, because a download is three
-             or four files and the first one finishing is not the end of it. */
-          setParakeetProgress(undefined)
-
-          setListenPaused(false)
-          keepListeningAwake()
-          void warnAboutCredit(currentSettings())
-          // The agent starts now, so the first sentence does not wait for it.
-          const agentSettings = currentSettings()
-          if (activeMode() === "agent" && agentSettings.agentEngine !== "off") {
-            host.prepareAgent?.({ engine: agentSettings.agentEngine, speed: agentSettings.agentSpeed })
-          }
-          const waitForName = startOptions?.waitForName === true && activeMode() === "agent"
-          if (waitForName && programHandle) {
-            await Effect.runPromise(programHandle.listenForName)
-          } else if (dialogState().status === "asleep") {
-            if (programHandle) {
-              await Effect.runPromise(programHandle.wake)
-            }
-          } else if (programHandle && activeMode() === "agent" && currentSettings().activation === "wake-word") {
-            /* Opened by hand is called: the first sentence needs no name,
-               the first time as much as after a stop. */
-            await Effect.runPromise(programHandle.wake)
-          } else {
-            setDialogState((prev) => ({ ...prev, status: "idle" }))
-          }
-          // The session is up, with its program: what it hears starts now.
-          refreshHearing()
-        } catch (err: unknown) {
-          const message =
-            typeof err === "string"
-              ? err
-              : spokenMessage(err) ||
-                (err && typeof err === "object" && err instanceof Error
-                  ? err.message
-                  : "Non sono riuscito ad aprire il microfono: riprova.")
-          noteError(err, message)
-          await stop()
-          /* Said as well as written, when someone asked for the microphone:
-             whoever is not looking would otherwise hear nothing at all. */
-          if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
-            void Promise.resolve(speaker.speak(message)).catch(() => {})
-          }
-        }
-      }
-
-      /* Asked for by hand: whatever stopped it by itself is spent. An
-         automatic start is refused instead, so the stop holds across a
-         restart of ADE as it does across a lock. */
-      if (startOptions?.automatic === true) {
-        if (listenHalted()) return
-      } else {
-        setListenHalted(false)
-        halts.clear()
-        setListenWarning(undefined)
-      }
-      startInFlight = attempt()
+      if (startInFlight) return startInFlight
+      const result = enqueueLifecycle((generation) => startNow(mode, startOptions, generation))
+      startInFlight = result
       try {
-        await startInFlight
+        await result
       } finally {
-        startInFlight = null
+        if (startInFlight === result) startInFlight = null
       }
     },
 
@@ -1523,6 +1609,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (programHandle) {
         await Effect.runPromise(programHandle.releaseToTalk)
       }
+      if (isRunning()) keepListeningAwake()
 
       if (pressHolds() && !openedWithoutChord) {
         clearPttTimers()
@@ -1632,52 +1719,27 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         }
       }
 
-      if (isRunning() && backendChanged) {
-        hasOverriddenTranscriber = false
-
-        try {
-          // Release old program and transcriber strictly through Scope before acquiring new one
-          if (programScope) {
-            const scope = programScope
-            programScope = null
-            programHandle = null
-            await closeScope(scope, "programma")
+      const keyChanged = normalized.openRouterApiKey !== prev.openRouterApiKey
+      const keyRemoved = keyChanged && !normalized.openRouterApiKey
+      const sessionPending = isRunning() || startInFlight !== null || restartInFlight !== null
+      if (keyRemoved) {
+        await stop({ drain: false, releaseText: true })
+      } else if (keyChanged || (sessionPending && backendChanged)) {
+        const result = enqueueLifecycle(async (generation) => {
+          if (generation !== sessionGeneration) return
+          if (sessionPending && backendChanged) {
+            await restartNow(normalized, prev, generation)
+          } else {
+            await releaseTextProgram()
           }
-
-          if (transcriberScope) {
-            const scope = transcriberScope
-            transcriberScope = null
-            await closeScope(scope, "trascrittore")
-          }
-
-          /*
-           * The meter opens its own stream, so it has its own device to
-           * change. Left alone, the ring animated off the old microphone
-           * while recognition ran on the new one — two devices, one interface
-           * claiming to show one.
-           */
-          if (micMeter && normalized.inputDeviceId !== prev.inputDeviceId) {
-            micMeter.stop()
-            micMeter.setDevice(normalized.inputDeviceId)
-            await micMeter.start()
-          }
-
-          await startSession()
-        } catch (err: unknown) {
-          /*
-           * A rejection here used to travel out into the settings panel's
-           * change handler, which has nowhere to put it: the engine was left
-           * with `isRunning()` true and no program at all — the orb lit, the
-           * microphone shut, and no way back except reloading the window.
-           */
-          const message =
-            typeof err === "string"
-              ? err
-              : spokenMessage(err) ||
-                (err instanceof Error ? err.message : "Le nuove impostazioni vocali non sono state applicate.")
-          noteError(err, message)
-          await this.stop()
-        }
+        })
+        restartInFlight = result
+        void result.finally(() => {
+          if (restartInFlight === result) restartInFlight = null
+        })
+        await result
+      } else if (isRunning()) {
+        keepListeningAwake()
       }
     },
   }

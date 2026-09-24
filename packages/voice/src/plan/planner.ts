@@ -214,6 +214,7 @@ export function createOpenRouterCompletion(input: {
   model?: string
   fetchFn?: typeof fetch
   timeoutMs?: number
+  onUsage?: (usage: { cost?: number }) => void
 }): Completion {
   const fetchFn = input.fetchFn ?? fetch
   const model = input.model ?? PLANNER_MODEL
@@ -240,6 +241,7 @@ export function createOpenRouterCompletion(input: {
       },
       body: JSON.stringify({
         model,
+        usage: { include: true },
         // Zero, because two identical sentences must produce the same plan.
         // Sampling here buys nothing and costs reproducibility.
         temperature: 0,
@@ -257,7 +259,9 @@ export function createOpenRouterCompletion(input: {
 
     const body = (await response.json()) as {
       choices?: { message?: { content?: unknown } }[]
+      usage?: { cost?: number }
     }
+    if (body.usage) input.onUsage?.(body.usage)
     const content = body.choices?.[0]?.message?.content
     if (typeof content !== "string") {
       throw new Error("Risposta del servizio in un formato inatteso.")

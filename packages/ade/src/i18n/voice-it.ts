@@ -169,9 +169,9 @@ export const voiceIt = {
   "vui.listen.always.desc": (wakeWord: string) =>
     `Il microfono si apre con ADE e aspetta «${wakeWord}». Consuma crediti: ogni voce in stanza viene mandata al servizio che trascrive, circa 0,02 $ l'ora con la televisione accesa, niente quando c'è silenzio. Si ferma da solo dopo 30 minuti senza che tu lo chiami o se supera 120 frasi in un'ora.`,
   "vui.listen.spend": (calls: number, cost: string) =>
-    `Oggi l'ascolto ha mandato ${calls} ${calls === 1 ? "frase" : "frasi"} al servizio che trascrive, per ${cost}.`,
+    `Oggi la voce ha mandato ${calls} ${calls === 1 ? "richiesta" : "richieste"} a OpenRouter, per ${cost}.`,
   "vui.listen.manual": "Solo quando lo apri",
-  "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia",
+  "vui.listen.manual.desc": "Con il pulsante in alto o la scorciatoia; senza una frase accettata si spegne dopo 30 secondi.",
   "vui.shortcuts.title": "Scorciatoie da tastiera",
   "vui.shortcuts.desc": "Due combinazioni libere: fai clic su una scorciatoia e premi i tasti che vuoi. Servono Ctrl, Alt o Cmd, perché un tasto da solo serve a scrivere",
   "vui.shortcuts.agent": "Scorciatoia modalità agente",

@@ -84,6 +84,7 @@ import {
   suggestClosestLanguage,
 } from "./shortcut-capture"
 import { NikMic } from "./nik-mic"
+import { submitVoiceTrial } from "./voice-trial"
 import "./voice-settings.css"
 import { locale, t } from "@nikcli-ai/ade/i18n"
 import { formatSpendCost } from "../settings/spend"
@@ -401,7 +402,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [commandFilter, setCommandFilter] = createSignal("")
   const [trialText, setTrialText] = createSignal("")
   const [trialBusy, setTrialBusy] = createSignal(false)
-  const [trialNote, setTrialNote] = createSignal<string | undefined>(undefined)
   const [resetArmed, setResetArmed] = createSignal(false)
   const [activeSection, setActiveSection] = createSignal(props.initialSection ?? SECTIONS[0].id)
   createEffect(() => {
@@ -654,27 +654,12 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     void props.engine.toggle()
   }
 
-  /**
-   * Runs a typed command through the same path a spoken one takes.
-   *
-   * The engine only accepts text once its program is up, so an idle engine is
-   * started first. A start that fails leaves `lastError` set, and the live line
-   * is already showing it — no second error channel is needed here.
-   */
   const runTrial = async () => {
     const text = trialText().trim()
     if (text.length === 0 || trialBusy()) return
     setTrialBusy(true)
-    setTrialNote(undefined)
     try {
-      if (!props.engine.isRunning()) {
-        await props.engine.start()
-      }
-      if (!props.engine.isRunning()) {
-        setTrialNote(t("vui.trial.noEngine"))
-        return
-      }
-      await props.engine.submitText(text)
+      await submitVoiceTrial(props.engine, text)
       setTrialText("")
     } finally {
       setTrialBusy(false)
@@ -2467,11 +2452,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
               {trialBusy() ? t("vui.commands.sending") : t("vui.commands.run")}
             </button>
           </div>
-          <Show when={trialNote()}>
-            <div role="alert" data-slot="reason-box">
-              {trialNote()}
-            </div>
-          </Show>
 
           <input
             id="voice-command-filter"

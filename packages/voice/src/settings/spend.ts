@@ -6,7 +6,8 @@
  * nothing said so. The count and the cost of the day are kept here, written
  * where the settings are, so closing ADE does not hide what it spent.
  *
- * Only what listening spends: a turn the user asked for is not in here.
+ * Only what the voice sends to OpenRouter: a turn the user asked for on a
+ * subscription is not in here.
  */
 
 export const VOICE_SPEND_STORAGE_KEY = "voice.listenSpend"
@@ -14,9 +15,9 @@ export const VOICE_SPEND_STORAGE_KEY = "voice.listenSpend"
 export interface DaySpend {
   /** The day these belong to, as `YYYY-MM-DD` in the machine's own time. */
   readonly day: string
-  /** Requests sent while waiting for the name. */
+  /** Requests sent to OpenRouter by listening or the planner. */
   readonly calls: number
-  /** What they cost, in dollars, as the service reported it. */
+  /** What those requests cost, in dollars, as the service reported it. */
   readonly cost: number
 }
 
@@ -64,9 +65,9 @@ export function formatSpendCost(cost: number, locale?: string): string {
 export interface SpendTally {
   /** What has been spent today, whatever day it is now. */
   today(at: number): DaySpend
-  /** Counts a request sent while waiting for the name. */
+  /** Counts one OpenRouter request. */
   add(at: number, cost: number | undefined): DaySpend
-  /** What that request turned out to cost, once the service says so. */
+  /** Adds the cost reported for a request already counted. */
   addCost(at: number, cost: number): DaySpend
 }
 

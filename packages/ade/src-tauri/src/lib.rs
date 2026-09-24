@@ -38,7 +38,7 @@ use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // Where this window may write
@@ -65,16 +65,15 @@ use std::time::UNIX_EPOCH;
 pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 
 /*
- * Every command in this file is `async`, and none of them awaits anything.
+ * Most commands in this file are `async` without awaiting anything.
  *
  * That reads like a mistake and is not: a synchronous `#[tauri::command]` is
  * dispatched on the thread that owns the window, so a `read_dir` on a cold
  * network share or a `git status` on a large repository stops the window from
  * drawing until it finishes. Declaring them `async` moves them onto Tauri's
- * async runtime, which is all these need — they are bounded pieces of work,
- * unlike `nikcli_serve_start`, which waits up to forty-five seconds and goes
- * further onto a blocking worker. `pty.rs` reached the same conclusion first
- * and documents it on `pty_write`.
+ * async runtime, which is all these need. Bounded waits such as `nikcli_bot`
+ * and `nikcli_serve_start` go further onto a blocking worker. `pty.rs` reached
+ * the same conclusion first and documents it on `pty_write`.
  */
 
 /// Adds a directory to the set this window may write inside.
@@ -514,6 +513,71 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
     }
 }
 
+fn nikcli_timeout(args: &[String]) -> Duration {
+    match args {
+        [only] if only == "--version" => Duration::from_secs(15),
+        [only] if only == "models" => Duration::from_secs(30),
+        [agent, create, ..] if agent == "agent" && create == "create" => Duration::from_secs(120),
+        _ => Duration::from_secs(120),
+    }
+}
+
+fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> Result<ShellOutput, String> {
+    use std::process::Stdio;
+
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("nikcli non eseguibile: {error}"))?;
+    let Some(mut stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("nikcli non ha uno stdout leggibile".into());
+    };
+    let Some(mut stderr) = child.stderr.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("nikcli non ha uno stderr leggibile".into());
+    };
+    let out_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stdout.read_to_end(&mut bytes);
+        bytes
+    });
+    let err_reader = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = stderr.read_to_end(&mut bytes);
+        bytes
+    });
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("nikcli non ha risposto entro {} secondi e stato fermato.", timeout.as_secs()));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("nikcli non eseguibile: {error}"));
+            }
+        }
+    };
+    let stdout = out_reader.join().map_err(|_| "lettura dell'output di nikcli fallita")?;
+    let stderr = err_reader.join().map_err(|_| "lettura degli errori di nikcli fallita")?;
+    Ok(ShellOutput {
+        code: status.code(),
+        stdout: String::from_utf8_lossy(&stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr).into_owned(),
+    })
+}
+
 /// Runs `nikcli models` or `nikcli agent create`, and hands back what it printed.
 #[tauri::command]
 async fn nikcli_bot(
@@ -524,7 +588,7 @@ async fn nikcli_bot(
     check_nikcli_args(&roots, &args)?;
     let program = pty::which_on_path("nikcli").ok_or("nikcli non trovato nel PATH")?;
     let mut command = std::process::Command::new(program);
-    command.args(&args).stdin(std::process::Stdio::null());
+    command.args(&args);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
@@ -533,12 +597,10 @@ async fn nikcli_bot(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
-    let output = command.output().map_err(|e| format!("nikcli non eseguibile: {e}"))?;
-    Ok(ShellOutput {
-        code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    let timeout = nikcli_timeout(&args);
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout))
+        .await
+        .map_err(|_| "avvio di nikcli interrotto".to_string())?
 }
 
 /// Runs `claude agents --json`, the CLI's own list of its live sessions, and
@@ -1828,6 +1890,14 @@ mod tests {
         assert!(child.try_wait().expect("handle still valid").is_some(), "child still running");
     }
 
+    #[test]
+    fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
+        let started = Instant::now();
+        let error = run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
+        assert!(error.contains("stato fermato"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+    }
+
     #[cfg(unix)]
     #[test]
     fn the_login_path_comes_first_and_nothing_repeats() {
@@ -2024,6 +2094,14 @@ mod tests {
         ] {
             assert!(check_nikcli_args(&roots, &args(bad)).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn nikcli_commands_have_command_specific_timeouts() {
+        let args = |list: &[&str]| list.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
+        assert_eq!(nikcli_timeout(&args(&["--version"])), Duration::from_secs(15));
+        assert_eq!(nikcli_timeout(&args(&["models"])), Duration::from_secs(30));
+        assert_eq!(nikcli_timeout(&args(&["agent", "create"])), Duration::from_secs(120));
     }
 
     #[test]

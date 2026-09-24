@@ -18,6 +18,7 @@ function world(identifier: string | Error) {
       return path === "C:/Users/finto/AppData/Local/nikcli/auth.json" ? { text: JSON.stringify({ openrouter: { key: FAKE_KEY } }) } : undefined
     },
     save: async (key) => void saved.push(key),
+    removed: () => false,
   }
   return { deps, reads, saved }
 }
@@ -34,6 +35,14 @@ describe("the voice's OpenRouter key from nikcli's auth.json", () => {
     const { deps, saved } = world("ai.nikcli.ade")
     expect(await syncOpenRouterKey(deps)).toBe("copied")
     expect(saved).toEqual([FAKE_KEY])
+  })
+
+  test("a key removed by the user is not read from auth.json again", async () => {
+    const { deps, reads, saved } = world("ai.nikcli.ade")
+    deps.removed = () => true
+    expect(await syncOpenRouterKey(deps)).toBe("removed")
+    expect(reads).toEqual([])
+    expect(saved).toEqual([])
   })
 
   test("an identity that cannot be asked is treated as the test one", async () => {

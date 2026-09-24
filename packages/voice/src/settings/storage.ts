@@ -32,6 +32,7 @@ export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
  * `exportVoiceSettings` below can hand out settings that provably exclude it.
  */
 export const VOICE_API_KEY_STORAGE_KEY = "voice.openrouter.key"
+export const VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY = "voice.openrouter.keyRemoved"
 
 /** The browser's storage, or nothing where there is none: see `resolveStorage`. */
 export function voiceStorage(customStorage?: Storage): Storage | null {
@@ -130,6 +131,28 @@ function safeRead(store: Storage, key: string): string {
   }
 }
 
+export function isOpenRouterKeyRemoved(storage = voiceStorage()): boolean {
+  return !!storage && safeRead(storage, VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY) === "1"
+}
+
+export function markOpenRouterKeyRemoved(storage = voiceStorage()): void {
+  if (!storage) return
+  try {
+    storage.setItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY, "1")
+  } catch {
+    return
+  }
+}
+
+export function clearOpenRouterKeyRemoved(storage = voiceStorage()): void {
+  if (!storage) return
+  try {
+    storage.removeItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)
+  } catch {
+    return
+  }
+}
+
 /**
  * Saves voice settings to persistent storage after normalization.
  *
@@ -155,7 +178,11 @@ export function saveVoiceSettings(
     }
   }
 
-  if (writeSettings(store, normalized.settings)) return normalized
+  if (writeSettings(store, normalized.settings)) {
+    if (normalized.settings.openRouterApiKey) clearOpenRouterKeyRemoved(store)
+    else if (current.settings.openRouterApiKey) markOpenRouterKeyRemoved(store)
+    return normalized
+  }
   return {
     ...normalized,
     corrections: [
@@ -171,11 +198,13 @@ export function saveVoiceSettings(
 export function resetVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (store) {
+    const hadKey = Boolean(loadVoiceSettings(store).openRouterApiKey)
     try {
       store.removeItem(VOICE_SETTINGS_STORAGE_KEY)
       // The credential goes too. "Reset" that leaves an API key behind is
       // the one reading of the word nobody has.
       store.removeItem(VOICE_API_KEY_STORAGE_KEY)
+      if (hadKey) markOpenRouterKeyRemoved(store)
     } catch {
       // ignore
     }
