@@ -35,6 +35,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
   formatNudge,
   formatUpdate,
   parseActivity,
@@ -127,6 +128,20 @@ test("verifySender keeps a sender only with that pane's token", () => {
   expect(verifySender(bare, tokenOf).from).toBe("")
   const unknown = parseMessage('{"from":"n9-9","to":"2","text":"x"}')!
   expect(verifySender(unknown, tokenOf).from).toBe("")
+})
+
+test("unverified acting messages are refused with a terminal instruction", () => {
+  const refusal = "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
+  for (const body of [
+    '{"kind":"send","from":"","to":"2","text":"x"}',
+    '{"kind":"ask","from":"","to":"2","text":"x"}',
+    '{"kind":"spawn","from":"","agent":"codex","text":"x"}',
+  ]) {
+    const message = verifySender(parseMessage(body)!, () => undefined)
+    expect(unverifiedSenderRefusal(message)).toBe(refusal)
+  }
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"send","from":"n1-0","to":"2","text":"x"}')!)).toBeUndefined()
+  expect(unverifiedSenderRefusal(parseMessage('{"kind":"reply","from":"","ref":"r1","text":"x"}')!)).toBeUndefined()
 })
 
 test("resolveAgent accepts the id, the id without -code, and the label", () => {

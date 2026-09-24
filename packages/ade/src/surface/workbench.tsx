@@ -251,6 +251,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
   type MailPane,
   type Message,
   formatBell,
@@ -2666,6 +2667,11 @@ export function Workbench() {
 
   const deliverOne = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, message: Message): Promise<boolean> => {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
+    const refusal = unverifiedSenderRefusal(message)
+    if (refusal) {
+      await answer(refusal)
+      return true
+    }
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
 

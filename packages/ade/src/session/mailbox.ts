@@ -233,13 +233,20 @@ export function parseMessage(body: string): Message | undefined {
  *
  * A pane id is public — `ade-msg list` prints every one — so without this
  * any session could sign as another, and answer a request made to it. An
- * unproven sender is not refused, only anonymous: a note still arrives, it
- * just cannot be answered, and a reply to a known request is refused.
+ * unproven sender is refused for `send`, `ask` and `spawn`; other message
+ * kinds stay anonymous and are handled by their own rules.
  */
 export function verifySender<M extends Message>(message: M, tokenOf: (paneId: string) => string | undefined): M {
   const expected = message.from ? tokenOf(message.from) : undefined
   const proven = expected !== undefined && message.token === expected
   return proven ? message : { ...message, from: "" }
+}
+
+const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn"])
+
+export function unverifiedSenderRefusal(message: Message): string | undefined {
+  if (message.from || !UNVERIFIED_ACTING.has(message.kind)) return undefined
+  return "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
 }
 
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */
