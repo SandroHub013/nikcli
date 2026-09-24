@@ -514,6 +514,12 @@
   color: var(--ade-text);
 }
 
+/* A project whose folder is gone: still listed, read as absent. */
+[data-slot="workspace-header"][data-missing="true"] [data-slot="workspace-name"] {
+  color: var(--ade-text-weak);
+  text-decoration: line-through;
+}
+
 [data-slot="session-activity"] {
   display: block;
   font-size: var(--ade-font-sm);

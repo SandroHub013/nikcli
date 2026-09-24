@@ -65,6 +65,8 @@ export interface Workspace {
   name: string
   path?: string
   branch?: string
+  /** Its folder no longer exists: marked, not removed (the list is the user's). */
+  missing?: true
   sessions: SidebarSession[]
 }
 

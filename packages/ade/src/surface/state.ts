@@ -346,7 +346,7 @@ function inferAgent(model: string, title: string): string {
 
 export function deriveWorkspaces(
   panes: Pane[],
-  known: ReadonlyArray<{ root: string; name: string; branch?: string }> = [],
+  known: ReadonlyArray<{ root: string; name: string; branch?: string; missing?: boolean }> = [],
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
 
@@ -356,6 +356,7 @@ export function deriveWorkspaces(
       name: project.name,
       path: project.root,
       branch: project.branch,
+      ...(project.missing ? { missing: true as const } : {}),
       sessions: [],
     }
   }
