@@ -12,6 +12,7 @@ import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
 import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
+import { SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
 import { formatDroppedPaths } from "../sidebar/file-drag"
 import { runVideoCommand } from "../video/commands"
 import { VIDEO_VERBS } from "../video/video"
@@ -70,6 +71,11 @@ export interface PaneRendererDeps {
   /** "Riprova" on a session that failed. */
   /** Starts the pane's agent again, reopening its conversation; `line` is sent once it is ready. */
   restart: (pane: Pane, line?: string) => void
+  /** Whether "Sospendi" can run on the pane now; undefined where it is not offered (P1-C6). */
+  suspendCheck: (id: string) => SuspendCheck | undefined
+  suspend: (id: string) => void
+  /** "Riprendi" on a suspended session. */
+  resume: (id: string) => void
   /** The native file picker, narrowed to what the player can open. */
   pickVideo: () => Promise<string | undefined>
   /** The native file picker, narrowed to the formats the 3D panel reads. */
@@ -362,6 +368,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
 
     /* A session whose process is gone — exited, failed, or restored from disk. */
     const restartable = () =>
+      !current().suspended &&
       !deps.isRunning(current().id) &&
       Boolean(current().agent ?? current().model) &&
       (current().status === "done" || current().status === "error")
@@ -371,8 +378,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         id={current().id}
         title={current().title}
         status={current().status}
-        /* What the agent says it is doing beats the label ADE guessed. */
-        activity={reports()[current().id]?.activity ?? current().activity}
+        /* What the agent says it is doing beats the label ADE guessed; a suspended session is doing nothing. */
+        activity={current().suspended ? "suspended" : (reports()[current().id]?.activity ?? current().activity)}
         elapsed={current().elapsed}
         tokens={(() => {
           const count = reports()[current().id]?.tokens
@@ -387,6 +394,15 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         agent={current().agent}
         glyph={<AgentMark id={current().agent ?? current().model} size={14} />}
         tree={current().tree}
+        suspend={(() => {
+          const check = deps.suspendCheck(current().id)
+          if (!check) return undefined
+          return {
+            enabled: check.ok,
+            ...(check.ok ? {} : { reason: t(SUSPEND_REASON[check.reason]) }),
+            onClick: () => deps.suspend(current().id),
+          }
+        })()}
         mail={deps.mailWaiting()[current().id]}
         onMail={() => deps.showMail(current().id)}
         onLink={(request) => deps.openLink(current().id, request)}
@@ -470,7 +486,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))
-            : restartable()
+            : current().suspended && !deps.isRunning(current().id)
+              ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
+              : restartable()
               ? [
                   {
                     label: current().status === "error" ? "Riprova" : "Riprendi",
@@ -480,6 +498,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 ]
               : undefined
         }
+        inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}
         focused={isFocused()}
         onFocus={focus}

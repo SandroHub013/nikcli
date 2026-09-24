@@ -103,6 +103,19 @@ describe("every sheet", () => {
     }
     expect(rolled).toEqual([])
   })
+
+  test("extensions.css and keys.css use :focus-visible with the shared ring instead of :focus outline:none (polish B4)", () => {
+    const ext = CSS.find((sheet) => sheet.path.endsWith("extensions.css"))!
+    const keys = CSS.find((sheet) => sheet.path.endsWith("keys.css"))!
+
+    // Neither should have :focus { outline: none }
+    expect(ext.text).not.toMatch(/\[data-slot="ext-search"\]:focus\s*\{/)
+    expect(keys.text).not.toMatch(/\[data-slot="keys-field"\]\s*input:focus\s*\{/)
+
+    // Both should use :focus-visible with the shared ring
+    expect(ext.text).toMatch(/\[data-slot="ext-search"\]:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
+    expect(keys.text).toMatch(/\[data-slot="keys-field"\]\s*input:focus-visible\s*\{[^}]*box-shadow:\s*var\(--ade-focus-ring\)/)
+  })
 })
 
 describe("the button scale", () => {

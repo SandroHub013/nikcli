@@ -10,8 +10,12 @@
  */
 
 export interface SpawnedSession {
-  /** Kills the process; with `tree`, the processes it started too. Safe to call more than once. */
-  kill: (options?: { tree?: boolean }) => void
+  /**
+   * Kills the process; with `tree`, the processes it started too. Safe to call
+   * more than once. The desktop shell resolves once the kill has run, false
+   * when it failed; nothing rejects.
+   */
+  kill: (options?: { tree?: boolean }) => void | Promise<boolean>
   /**
    * Types into the session's terminal, exactly as given.
    *
@@ -509,10 +513,13 @@ export async function getHost(): Promise<Host | undefined> {
 
       return {
         kill: (options) => {
-          if (dead) return
+          if (dead) return Promise.resolve(true)
           dead = true
           stop()
-          void invoke("pty_kill", { id, tree: options?.tree === true }).catch(() => undefined)
+          return invoke("pty_kill", { id, tree: options?.tree === true }).then(
+            () => true,
+            () => false,
+          )
         },
         write: (data) => {
           if (dead) return

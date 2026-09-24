@@ -13,6 +13,7 @@ import { pathEquals } from "../host/path"
 import { belongsTo, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
+import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
@@ -137,6 +138,7 @@ import {
   deriveWorkspaces,
   toWorkspaceState,
   fromWorkspaceState,
+  exitedToReopen,
   sessionsToResume,
   nextView,
   ADE_VIEW_LABELS,
@@ -255,6 +257,17 @@ import {
 import { createLineQueue } from "../session/line-queue"
 import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type DeliveryResult, type LineOutcome } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import {
+  canSuspend,
+  closeSuspendedTree,
+  offersSuspend,
+  parseSuspendedMail,
+  suspendedDelivery,
+  suspendedMailToSave,
+  SUSPEND_REASON,
+  type SuspendCheck,
+  type SuspendContext,
+} from "../session/suspend"
 import {
   formatFallbackLine,
   formatHandoff,
@@ -1489,6 +1502,8 @@ export function Workbench() {
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick(n => n + 1)
   const isRunning = (id: string) => { runningTick(); return running.has(id) }
+  /** Suspended by the user (P1-C6): its mail waits for "Riprendi", and nothing wakes it. */
+  const isSuspendedPane = (paneId: string) => wb().panes.some((pane) => pane.id === paneId && pane.suspended)
 
   /*
    * Messages between sessions. See `session/mailbox.ts` and `mailbox.rs`.
@@ -1506,7 +1521,7 @@ export function Workbench() {
           id: pane.id,
           title: pane.title,
           agent: pane.agent ?? pane.model,
-          status: running.has(pane.id) ? pane.status : "chiusa",
+          status: running.has(pane.id) ? pane.status : pane.suspended ? "sospesa" : "chiusa",
           project: pane.workspaceId,
         })),
     )
@@ -1803,7 +1818,7 @@ export function Workbench() {
     return sessions
   }
   /** Late replies and updates for a caller that is busy: typed when its turn ends. */
-  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string }[] = []
+  const heldLines: { paneId: string; text: string; inbox?: InboxMeta; told?: boolean; full?: string; suspended?: true }[] = []
   /**
    * Replies to natively delivered requests, kept as files until the caller is
    * free. On the typed route the caller is already blocked in `ade-msg ask`
@@ -1954,6 +1969,10 @@ export function Workbench() {
   const INBOX_KEY = "ade.mailbox.inbox"
   const inboxPending: InboxEntry[] = parseInbox(readStored(INBOX_KEY))
   const saveInbox = () => writeStored(INBOX_KEY, JSON.stringify(inboxPending))
+
+  /* The mail queued for suspended sessions (P1-C6), read back once the panes are restored. */
+  const SUSPENDED_MAIL_KEY = "ade.mailbox.suspended"
+  const saveSuspendedMail = () => writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, isSuspendedPane)))
 
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
@@ -2153,6 +2172,7 @@ export function Workbench() {
 
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
+    suspended: isSuspendedPane(request.to),
     permissionPending: Boolean(permissions()[request.to]),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
@@ -2439,12 +2459,24 @@ export function Workbench() {
 
     for (const item of [...heldLines]) {
       const session = running.get(item.paneId)
-      if (!session) heldLines.splice(heldLines.indexOf(item), 1)
-      else if (await freeNow(host, item.paneId)) {
+      if (!session) {
+        // A suspended session keeps its mail until the user resumes it.
+        if (isSuspendedPane(item.paneId)) continue
+        heldLines.splice(heldLines.indexOf(item), 1)
+        if (item.suspended) saveSuspendedMail()
+      } else if (await freeNow(host, item.paneId)) {
         heldLines.splice(heldLines.indexOf(item), 1)
         // Not typed while the session is still there (a prompt opened): back among the held lines.
         void (item.inbox
-          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => result === "held")
+          ? deliverText(host, item.paneId, item.text, item.inbox, item.full).then((result) => {
+              // Queued while suspended: the request reached the session now, and its clock starts now.
+              const request = item.suspended && item.inbox?.kind === "ask" && result === "given" ? openRequests.get(item.inbox.id) : undefined
+              if (request) {
+                request.at = request.deliveredAt = Date.now()
+                saveRequests()
+              }
+              return result === "held"
+            })
           : typeLineOutcome(session, item.text).then((outcome) => deliveryResult(outcome, running.get(item.paneId) === session) === "held")
         ).then((again) => {
           if (again) heldLines.push(item)
@@ -2560,6 +2592,49 @@ export function Workbench() {
   }
 
   /** Delivers one message; false leaves it queued for the next pass. */
+  /**
+   * A `send` or `ask` to a suspended session (P1-C6): queued among the held
+   * lines, to be typed once the user resumes it, and the sender told at once.
+   * An `ask` stays open, in the state "sessione sospesa"; a caller blocked in
+   * `ade-msg ask` is woken with the same words instead of waiting it out.
+   */
+  const queueForSuspended = async (
+    host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
+    id: string,
+    message: Extract<Message, { kind: "send" | "ask" }>,
+    target: MailPane,
+    sender: MailPane | undefined,
+    receipt: string,
+  ): Promise<true> => {
+    const ask = message.kind === "ask"
+    const targetPane = wb().panes.find((pane) => pane.id === target.id)
+    const context = {
+      ...(targetPane?.cwd ? { resultsDir: resultsDir(targetPane.cwd) } : {}),
+      depth: depthOf(target.id, parentOf),
+      maxDepth: maxDepth(),
+      ...(ask && message.budget ? { budget: message.budget } : {}),
+    }
+    const line = ask ? formatRequest(id, message.text, sender, context) : formatDelivery(message, sender)
+    const full = ask ? formatRequest(id, message.text, sender, { ...context, keepLines: true }) : formatDelivery(message, sender, { keepLines: true })
+    heldLines.push({ paneId: target.id, text: line, full, inbox: { id, kind: ask ? "ask" : "send", from: message.from }, suspended: true })
+    saveSuspendedMail()
+    if (ask) {
+      openRequests.set(id, { id, kind: "ask", from: message.from, to: target.id, at: Date.now(), brief: briefOf(message.text), via: "digitata", ...(message.budget ? { budget: message.budget } : {}) })
+      saveRequests()
+    }
+    appendLine(target.id, t(ask ? "note.askFrom" : "note.messageFrom", sender?.title ?? t("note.someSession"), message.text), "note")
+    if (sender) appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note")
+    heldStates.delete(id)
+    // Held before, for a turn that has ended since: its sender was answered then, and stopped listening.
+    if (!held.delete(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
+    if (ask) {
+      await host.mailboxState?.(id, `${receipt.replace(/^ok: /, "")}; la richiesta ${id} resta aperta: la risposta arriva con ade-msg wait ${id}`, "update").catch(() => {})
+      // Taken back if nobody woke on it (`--no-wait`): a later `ade-msg wait` waits for the answer, not for this.
+      setTimeout(() => void host.mailboxResultReclaim?.(id, "update").catch(() => null), CLAIM_WINDOW_MS)
+    }
+    return true
+  }
+
   const deliverOne = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, message: Message): Promise<boolean> => {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
     const panes = mailPanes()
@@ -3045,6 +3120,12 @@ export function Workbench() {
       await answer(`errore: ${target.error}`)
       return true
     }
+    // Nothing wakes a suspended session: a restart is refused, and mail is queued below.
+    const toSuspended = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+    if (toSuspended && !toSuspended.queue) {
+      await answer(toSuspended.refusal)
+      return true
+    }
 
     if (message.kind === "interrupt") {
       if (!message.from) {
@@ -3164,6 +3245,10 @@ export function Workbench() {
       await answer("errore: una sessione non può fare una richiesta a se stessa")
       return true
     }
+    // Before the route: a suspended Claude session has no pipe, and `SendMessage` to it fails with ENOINBOX.
+    if (toSuspended?.queue && (message.kind === "send" || message.kind === "ask")) {
+      return queueForSuspended(host, id, message, target.pane, sender, toSuspended.receipt)
+    }
     const session = running.get(target.pane.id)
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
@@ -3264,6 +3349,9 @@ export function Workbench() {
     // A prompt opened before the text: the message stays queued, as for a prompt seen above.
     if (delivered === "held") return false
     if (delivered === "closed") {
+      // Suspended while this was on its way: queued like the rest of its mail.
+      const late = isSuspendedPane(target.pane.id) ? suspendedDelivery(message.kind, target.pane.title) : undefined
+      if (late?.queue && (message.kind === "send" || message.kind === "ask")) return queueForSuspended(host, id, message, target.pane, sender, late.receipt)
       await answer(`errore: la sessione "${target.pane.title}" si è chiusa durante la consegna`)
       return true
     }
@@ -4252,6 +4340,8 @@ export function Workbench() {
       if (state) {
         restored = state
         setWb(fromWorkspaceState(state))
+        // The suspended sessions' queues, now that their panes are back (P1-C6).
+        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => isSuspendedPane(line.paneId)))
       }
     }
 
@@ -4320,12 +4410,7 @@ export function Workbench() {
          * agent fresh when there is not.
          */
         const planned = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of wb().panes) {
-          if (planned.has(pane.id)) continue
-          if (isPanelPane(pane)) continue
-          if (!(pane.agent ?? pane.model)) continue
-          void reopen(pane)
-        }
+        for (const pane of exitedToReopen(wb().panes, planned)) void reopen(pane)
       }
     }
 
@@ -4455,47 +4540,19 @@ export function Workbench() {
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", handleBlur)
     window.addEventListener("beforeunload", handleBeforeUnload)
-    // Auto-sync OpenRouter API key from nikcli auth.json if not present in localStorage
+    // The voice's OpenRouter key from nikcli's auth.json when the profile has none;
+    // never under ADE Test's identity, whose profiles would get the user's paid key.
     if (!voiceSettings().openRouterApiKey) {
       void (async () => {
-        try {
-          const host = await getHost()
-          const home = await host?.homeDir?.()
-          if (home) {
-            const normalizedHome = home.replace(/\\/g, "/")
-            const candidatePaths = [
-              `${normalizedHome}/AppData/Local/nikcli/auth.json`,
-              `${home}/AppData/Local/nikcli/auth.json`,
-              `${home}\\AppData\\Local\\nikcli\\auth.json`,
-              `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
-              `${home}/AppData/Roaming/nikcli/auth.json`,
-              `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
-              `${normalizedHome}/.config/nikcli/auth.json`,
-              `${normalizedHome}/.nikcli/auth.json`,
-            ]
-            for (const authPath of candidatePaths) {
-              try {
-                const file = await host?.readTextFile?.(authPath, 64 * 1024)
-                if (file?.text) {
-                  const parsed = JSON.parse(file.text)
-                  const orKey = parsed?.openrouter?.key
-                  if (typeof orKey === "string" && orKey.trim().length > 0) {
-                    await handleVoiceSettingsChange({
-                      ...voiceSettings(),
-                      openRouterApiKey: orKey.trim(),
-                    })
-                    break
-                  }
-                }
-              } catch {
-                // check next path
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      })()
+        const host = await getHost()
+        if (!host?.homeDir || !host.readTextFile) return
+        await syncOpenRouterKey({
+          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
+          homeDir: () => host.homeDir!(),
+          readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
+          save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key }),
+        })
+      })().catch(() => {})
     }
 
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)) {
@@ -4730,6 +4787,8 @@ export function Workbench() {
         ...here(),
         lines: []
       }))
+    } else if (id === "session.suspend") {
+      if (wb().focusedId) void suspendSession(wb().focusedId!)
     } else if (id === "process.kill") {
       if (wb().focusedId && isRunning(wb().focusedId!)) {
         running.get(wb().focusedId!)?.kill()
@@ -4814,6 +4873,7 @@ export function Workbench() {
       voiceAvailable,
       voiceActive: voiceEngine.isRunning(),
       voiceChord: voiceSettings().agentChord,
+      ...(wb().focusedId ? { suspendCheck: suspendCheckFor(wb().focusedId!) } : {}),
       recording: recordState().status === "recording",
       recordMic: recordMic(),
       recordQuality: `${qualityLevel(recordQuality()).label} (${sizePerMinute(qualityLevel(recordQuality()))})`,
@@ -5035,6 +5095,8 @@ export function Workbench() {
     // Whatever was half-written belonged to the process that has gone. Left
     // behind, it would hold mail back from the session that starts next.
     records.typed.forget(id)
+    // Suspended: the exit is the one asked for, not the session ending (P1-C6).
+    if (wb().panes.find((pane) => pane.id === id)?.suspended) return
     setWb(w => updatePane(w, id, {
       status: code === 0 ? "done" : "error",
       activity: code === 0 ? "done" : exitedActivity(code)
@@ -5515,6 +5577,83 @@ export function Workbench() {
     })
     const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
+  }
+
+  /*
+   * Suspending a Claude session at rest (P1-C6): its processes are closed, the
+   * pane keeps its place and its text, and "Riprendi" reopens the conversation.
+   */
+  const suspendContext = (pane: Pane, conversationMissing: boolean): SuspendContext => ({
+    running: running.has(pane.id),
+    conversationMissing,
+    permission: Boolean(permissions()[pane.id]),
+    openRequests: openRequests.values(),
+    heldLines,
+    typing: isTyping(records.typed.get(pane.id)),
+  })
+
+  /**
+   * The button's and the palette's answer. Whether the conversation is on disk
+   * is asked on the disk, so only at the click: here it is taken as there.
+   */
+  const suspendCheckFor = (paneId: string): SuspendCheck | undefined => {
+    // Read so the answer follows a process starting or ending, and the mail queues.
+    runningTick()
+    mailWaiting()
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return undefined
+    return canSuspend(pane, suspendContext(pane, false))
+  }
+
+  const suspendSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane || !offersSuspend(pane)) return
+    const refuse = (check: SuspendCheck) => {
+      if (!check.ok) appendLine(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])), "note")
+    }
+    const missing = await conversationMissing(pane.agent ?? pane.model, pane.resumeId, pane.cwd)
+    const first = canSuspend(pane, suspendContext(pane, missing))
+    if (!first.ok) return refuse(first)
+    /*
+     * The mark first, so a message arriving from here on is queued rather than
+     * typed; then the same check again, since one may have come in while the
+     * disk was asked; only then the kill. A check that fails now takes the
+     * mark back and closes nothing.
+     */
+    setWb((w) => updatePane(w, paneId, { suspended: true }))
+    const marked = wb().panes.find((candidate) => candidate.id === paneId)
+    const again = marked ? canSuspend({ ...marked, suspended: undefined }, suspendContext(marked, missing)) : first
+    if (!marked || !again.ok) {
+      setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+      return refuse(again)
+    }
+    const session = running.get(paneId)
+    // Out of `running` before the kill, as a relaunch does: nothing below reads the exit as the session ending.
+    running.delete(paneId)
+    touchRunning()
+    // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
+    const closed = await closeSuspendedTree(session)
+    forgetQuiet(paneId)
+    setWb((w) => updatePane(w, paneId, { activity: "suspended" }))
+    appendLine(paneId, t(closed ? "note.suspended" : "note.suspendKillFailed"), "note")
+  }
+
+  /**
+   * "Riprendi": the same conversation by its id (`reopen`), then the mark goes
+   * and the queued mail is typed in the order it came, as held lines are, once
+   * the session is free. A session that does not start stays suspended, its
+   * mail with it.
+   */
+  const resumeSession = async (paneId: string) => {
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    if (!pane?.suspended) return
+    await reopen(pane)
+    if (!running.has(paneId)) {
+      appendLine(paneId, t("note.resumeFailed"), "note")
+      return
+    }
+    setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+    saveSuspendedMail()
   }
 
   /**
@@ -6253,6 +6392,9 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     answerPermission,
     restart: (pane, line) => void reopen(pane, line),
+    suspendCheck: suspendCheckFor,
+    suspend: (id) => void suspendSession(id),
+    resume: (id) => void resumeSession(id),
     pickVideo,
     pickModel,
     readBytes: (path, maxBytes) =>

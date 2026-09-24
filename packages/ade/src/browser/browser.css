@@ -163,7 +163,7 @@
   color: var(--ade-text-weak);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
   cursor: pointer;
   transition: color var(--ade-dur-fast) var(--ade-ease), background var(--ade-dur-fast) var(--ade-ease);
 }
@@ -188,7 +188,7 @@
 [data-slot="browser-rotate-btn"][data-active] {
   background: var(--ade-raised);
   color: var(--ade-text);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 /* Inspect mode changes what every click on the page does, so while it is
@@ -279,7 +279,7 @@
 
 [data-slot="browser-owner-menu"] button[aria-checked="true"] {
   color: var(--ade-accent);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 [data-slot="browser-owner-heading"],
@@ -446,7 +446,7 @@
 [data-slot="browser-error-title"] {
   font-family: var(--ade-sans);
   font-size: var(--ade-font-lg);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   color: var(--ade-text);
 }
 
@@ -537,7 +537,7 @@
 
 [data-slot="browser-selection-label"] {
   color: var(--ade-text-weak);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
 }
 
 [data-slot="browser-context-blocks"] {
@@ -568,7 +568,7 @@
 }
 
 [data-slot="browser-context-tag"] {
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 [data-slot="browser-context-id"] {
@@ -607,7 +607,7 @@
 [data-slot="browser-section-hint"] {
   margin-left: var(--ade-space-2);
   color: var(--ade-text-weak);
-  font-weight: 400;
+  font-weight: var(--ade-weight-normal);
 }
 
 [data-slot="browser-edit-fields"] {
@@ -750,7 +750,7 @@
   color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
   cursor: pointer;
   transition: background var(--ade-dur-fast) var(--ade-ease), opacity var(--ade-dur-fast) var(--ade-ease);
   flex: 0 0 auto;
@@ -896,7 +896,7 @@
 [data-slot="browser-record-veil-title"] {
   font-family: var(--ade-sans);
   font-size: var(--ade-font-lg);
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   color: var(--ade-text);
 }
 
