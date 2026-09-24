@@ -380,6 +380,7 @@ import {
   createFakeSpeaker,
   createNaturalSpeaker,
   activeReplyVoice,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
   saveVoiceSettings,
   summarizeVoiceShortcutConflicts,
@@ -4643,6 +4644,7 @@ export function Workbench() {
           homeDir: () => host.homeDir!(),
           readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
           save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key }),
+          removed: isOpenRouterKeyRemoved,
         })
       })().catch(() => {})
     }

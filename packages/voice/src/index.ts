@@ -348,6 +348,7 @@ export {
   // out with the credential provably absent. Left off this list, it could
   // not be reached from outside the package and the safe route did not exist.
   exportVoiceSettings,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
   resetVoiceSettings,
   saveVoiceSettings,
