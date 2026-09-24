@@ -436,7 +436,8 @@ export async function dispatch(
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        if (host.answerPermission(resolved.pane!.id, "allow") === false) {
+        // What was asked, when the question named it (V1-ter, ALTO 3): the host grants that request only.
+        if (host.answerPermission(resolved.pane!.id, "allow", typeof slots.what === "string" ? slots.what : undefined) === false) {
           return {
             success: false,
             spoken: lang === "en" ? "No permission request is pending." : "Non c'è nessuna richiesta di permesso in attesa.",

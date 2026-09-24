@@ -52,6 +52,8 @@ export interface PendingAction {
    * question was still being cut short by that very yes.
    */
   answerableAt?: number
+  /** A permission the user asked to grant («consenti»), not one an agent raised: answered without the name. */
+  userAsked?: true
 }
 
 export interface DictationBuffer {
@@ -971,6 +973,50 @@ export function transition(
           },
           intent.readback
         )
+      }
+
+      /*
+       * «consenti» with no question in course (V1-ter, ALTO 3). It used to
+       * ask «Concedo il permesso all'agente, va bene?» and, on the yes, answer
+       * whatever the pane was asking by then — a request that arrived after
+       * the first was answered by hand. The question now names the request
+       * open at this moment and is a permission question like an agent's: its
+       * yes carries what it grants, and a request resolved elsewhere ends it.
+       */
+      if (intent.intent === "permission.allow" && ctx.permissionWhat) {
+        const byIndex = parsed.slots.paneIndex !== undefined ? ctx.panes?.find((p) => p.index === Number(parsed.slots.paneIndex)) : undefined
+        const byTitle =
+          parsed.slots.paneTitle !== undefined
+            ? ctx.panes?.find((p) => p.title.toLowerCase() === String(parsed.slots.paneTitle).toLowerCase())
+            : undefined
+        const paneId: string | undefined = parsed.slots.paneId ?? byIndex?.id ?? byTitle?.id ?? ctx.focusedPaneId
+        if (paneId) {
+          const title = ctx.panes?.find((p) => p.id === paneId)?.title ?? paneId
+          const what = ctx.permissionWhat(paneId)
+          if (!what) {
+            return withSpoken(state, `Il pannello «${title}» non ha richieste di permesso aperte.`)
+          }
+          const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+          effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
+          const prompt = `Concedo al pannello «${title}» il permesso per: ${what}, va bene? Dimmi sì o no.`
+          return withSpoken(
+            {
+              ...state,
+              status: "confirming",
+              timeoutAt,
+              pendingAction: {
+                intent,
+                slots: { paneId, what },
+                confirmPrompt: prompt,
+                isPermission: true,
+                paneId,
+                what,
+                userAsked: true,
+              },
+            },
+            prompt,
+          )
+        }
       }
 
       // Destructive intents require explicit confirmation

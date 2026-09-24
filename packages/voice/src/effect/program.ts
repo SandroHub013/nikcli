@@ -386,6 +386,7 @@ export function makeVoiceProgram(
         panes,
         pendingPermission: isPendingPerm,
         pendingPermissionPaneId: pendingPermPaneId,
+        ...(host.pendingPermissionWhat ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) } : {}),
         ...extra,
       }
     }

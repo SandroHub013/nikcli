@@ -74,6 +74,12 @@ export interface ParseContext {
   pendingPermissionPaneId?: string
   /** Currently focused pane ID in ADE. */
   focusedPaneId?: string
+  /**
+   * What the agent in a pane is asking permission for right now, if it is
+   * asking. Read when «consenti» is said with no question in course, so the
+   * question names it and the grant is for that request only (V1-ter, ALTO 3).
+   */
+  permissionWhat?: (paneId: string) => string | undefined
   /** Active view mode in ADE. */
   currentView?: AdeView
 }

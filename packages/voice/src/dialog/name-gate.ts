@@ -39,9 +39,11 @@ export function takesWithoutName(input: NameGateInput): boolean {
  * starts with the name, like any sentence at rest.
  */
 export function answersWithoutName(
-  state: { readonly status: string; readonly pendingAction?: { readonly isPermission?: boolean } },
+  state: { readonly status: string; readonly pendingAction?: { readonly isPermission?: boolean; readonly userAsked?: true } },
   disambiguating: boolean,
 ): boolean {
   if (disambiguating) return true
-  return state.status === "confirming" && state.pendingAction?.isPermission !== true
+  if (state.status !== "confirming") return false
+  // A permission is answered without the name only when the user asked to grant it («consenti»).
+  return state.pendingAction?.isPermission !== true || state.pendingAction.userAsked === true
 }

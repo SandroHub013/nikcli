@@ -522,3 +522,13 @@ describe("a command that threw", () => {
     expect(plainFailure("no project open", "en")).toBe("Could not complete action: no project open")
   })
 })
+
+/* V1-ter, ALTO 3: the direct road grants only the request it was asked about. */
+test("permission.allow passes on what it grants", async () => {
+  const host = new MockVoiceHost()
+  const seen: unknown[][] = []
+  host.answerPermission = (...args: unknown[]) => void seen.push(args)
+  const spec = VOCABULARY.find((v) => v.intent === "permission.allow")!
+  await dispatch(makeParseResult(spec, { paneIndex: 1, what: "cat README" }), host)
+  expect(seen).toEqual([["pane-1", "allow", "cat README"]])
+})
