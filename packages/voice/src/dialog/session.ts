@@ -547,7 +547,19 @@ export function transition(
       state.status === "dictating" ||
       state.status === "asleep"
     ) {
-      /* First in wins: a second send while one waits does not drop the first. */
+      /*
+       * One in line at a time, first in wins. A third was dropped yet told
+       * «in coda», and its sender waited for ever (V1-ter, reserve of ALTO 8):
+       * it is refused now, and the refusal reaches the sender.
+       */
+      if (state.queuedSend && state.queuedSend.id !== event.id) {
+        effects.push({ type: "confirm_send", id: event.id, approved: false })
+        return withSpokenLocal(
+          state,
+          `Ho già un messaggio in coda: non invio quello a «${event.to}».`,
+          effects,
+        )
+      }
       const queuedSend = state.queuedSend ?? {
         id: event.id,
         to: event.to,
