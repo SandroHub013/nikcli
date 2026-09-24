@@ -355,6 +355,50 @@ describe("engine/createVoiceEngine", () => {
     expect(engine.isRunning()).toBe(false)
   })
 
+  test("a settings restart opens the replacement transcriber with the new key", async () => {
+    const keys: (string | undefined)[] = []
+    const transcribers: ReturnType<typeof createFakeTranscriber>[] = []
+    let releaseStart: (() => void) | undefined
+    let created = 0
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "openrouter", openRouterApiKey: "old" },
+      creditLeft: async () => undefined,
+      createTranscriber: (_backend, options) => {
+        keys.push(options?.apiKey)
+        const transcriber = createFakeTranscriber()
+        transcribers.push(transcriber)
+        created++
+        if (created === 2) {
+          const start = transcriber.start.bind(transcriber)
+          transcriber.start = () => new Promise<void>((resolve) => {
+            releaseStart = () => {
+              start()
+              resolve()
+            }
+          })
+        }
+        return transcriber
+      },
+    })
+
+    await engine.start()
+    const restarting = engine.updateSettings({ openRouterApiKey: "new" })
+    while (!releaseStart) await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(keys).toEqual(["old", "new"])
+    expect(transcribers[0]?.isStarted).toBe(false)
+    expect(engine.isRunning()).toBe(false)
+    releaseStart?.()
+    await restarting
+
+    expect(transcribers[1]?.isStarted).toBe(true)
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
   test("stopping a local Parakeet session releases its shared model", async () => {
     await disposeParakeetModel()
     let disposed = false
