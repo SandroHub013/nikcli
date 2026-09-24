@@ -4,6 +4,7 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
+import { createParakeetTranscriber, disposeParakeetModel } from "./asr/parakeet-local"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
@@ -353,6 +354,119 @@ describe("engine/createVoiceEngine", () => {
     expect(keys).toEqual(["old", "new"])
     expect(transcribers[1]?.isStarted).toBe(false)
     expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a settings restart opens the replacement transcriber with the new key", async () => {
+    const keys: (string | undefined)[] = []
+    const transcribers: ReturnType<typeof createFakeTranscriber>[] = []
+    let releaseStart: (() => void) | undefined
+    let created = 0
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "openrouter", openRouterApiKey: "old" },
+      creditLeft: async () => undefined,
+      createTranscriber: (_backend, options) => {
+        keys.push(options?.apiKey)
+        const transcriber = createFakeTranscriber()
+        transcribers.push(transcriber)
+        created++
+        if (created === 2) {
+          const start = transcriber.start.bind(transcriber)
+          transcriber.start = () => new Promise<void>((resolve) => {
+            releaseStart = () => {
+              start()
+              resolve()
+            }
+          })
+        }
+        return transcriber
+      },
+    })
+
+    await engine.start()
+    const restarting = engine.updateSettings({ openRouterApiKey: "new" })
+    while (!releaseStart) await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(keys).toEqual(["old", "new"])
+    expect(transcribers[0]?.isStarted).toBe(false)
+    expect(engine.isRunning()).toBe(false)
+    releaseStart?.()
+    await restarting
+
+    expect(transcribers[1]?.isStarted).toBe(true)
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("stopping a local Parakeet session releases its shared model", async () => {
+    await disposeParakeetModel()
+    let disposed = false
+    const model = {
+      createStreamingTranscriber: () => ({
+        processChunk: async () => ({ text: "" }),
+        finalize: async () => ({ text: "" }),
+        reset: () => {},
+      }),
+      dispose: async () => {
+        disposed = true
+      },
+    }
+    const transcriber = createParakeetTranscriber({
+      keepWarm: true,
+      fromHub: async () => model,
+      supportsLanguage: () => true,
+      captureOptions: {
+        mediaStream: { getTracks: () => [] } as unknown as MediaStream,
+        isTypeSupported: () => true,
+      },
+    })
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet" },
+      createTranscriber: () => transcriber,
+    })
+
+    await engine.start()
+    expect(disposed).toBe(false)
+    await engine.stop()
+    expect(disposed).toBe(true)
+    await disposeParakeetModel()
+  })
+
+  test("removing an unused OpenRouter key leaves local Parakeet listening", async () => {
+    const authorizations: string[] = []
+    const transcriber = createFakeTranscriber()
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
+      createTranscriber: () => transcriber,
+      plannerFetch: fetchFn,
+    })
+
+    await engine.start()
+    await engine.updateSettings({ openRouterApiKey: undefined })
+    transcriber.emit("raccontami una storia mai raccontata", true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await engine.submitText("raccontami un'altra storia mai raccontata")
+
+    expect(authorizations).toEqual([])
+    expect(engine.isRunning()).toBe(true)
+    expect(transcriber.isStarted).toBe(true)
+    expect(engine.listenSpend()).toMatchObject({ calls: 0, cost: 0 })
+    await engine.stop()
   })
 
   test("destructive command requires explicit confirmation before executing", async () => {
@@ -792,6 +906,57 @@ describe("planner key changes", () => {
     expect(engine.isRunning()).toBe(false)
     expect(transcriber.isStarted).toBe(false)
     expect(authorizations).toEqual([])
+  })
+
+  test("removing the key aborts an in-flight Parakeet planner without stopping the microphone", async () => {
+    const host = new MockVoiceHost()
+    const authorizations: string[] = []
+    const transcriber = createFakeTranscriber()
+    let plannerSignal: AbortSignal | undefined
+    let finishPlanner: (() => void) | undefined
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      plannerSignal = init?.signal ?? undefined
+      return await new Promise<Response>((resolve) => {
+        finishPlanner = () =>
+          resolve(
+            new Response(
+              JSON.stringify({
+                choices: [{ message: { content: '[{"action":"run_command","command":"palette.open"}]' } }],
+                usage: { cost: 0.002 },
+              }),
+              { status: 200 },
+            ),
+          )
+      })
+    }) as unknown as typeof fetch
+    const engine = createVoiceEngine({
+      host,
+      transcriber,
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", alwaysListen: true, agentEngine: "off", backend: "parakeet", openRouterApiKey: "old" },
+      plannerFetch: fetchFn,
+    })
+
+    await engine.start("agent")
+    transcriber.emit("raccontami una storia mai raccontata", true)
+    for (let i = 0; i < 100 && !plannerSignal; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(plannerSignal).toBeDefined()
+
+    await engine.updateSettings({ openRouterApiKey: undefined })
+    expect(plannerSignal?.aborted).toBe(true)
+    finishPlanner?.()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(host.calls.filter((call) => call.method === "runCommand")).toHaveLength(0)
+    expect(engine.isRunning()).toBe(true)
+    expect(transcriber.isStarted).toBe(true)
+
+    transcriber.emit("raccontami un'altra storia mai raccontata", true)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(authorizations).toEqual(["Bearer old"])
+    await engine.stop()
   })
 
   test("removing the key invalidates a cached text program while a start is stopping", async () => {

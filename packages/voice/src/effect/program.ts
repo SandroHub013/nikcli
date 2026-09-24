@@ -215,6 +215,7 @@ export interface VoiceProgramOptions {
    * network, and so the key stays in the layer that owns it.
    */
   plan?: Completion
+  resolvePlan?: () => Completion | undefined
   /**
    * The sentence heard while the assistant was thinking and set aside, or
    * `null` once it is sent or dropped. The console offers it with a button
@@ -238,6 +239,7 @@ export interface VoiceProgramHandle {
    * `confirm_send` effect on the VoiceHost.
    */
   readonly requestSendConfirmation: (id: string, to: string, text: string, lead?: string) => Effect.Effect<void>
+  readonly cancelPlanner: Effect.Effect<void>
   readonly cancel: Effect.Effect<void>
   readonly wake: Effect.Effect<void>
   /** Listening, silently, for a sentence that calls it: what an open microphone nobody pressed means. */
@@ -746,6 +748,7 @@ export function makeVoiceProgram(
 
     /* The agent turn or plan in progress, so cancelling the dialogue can end it. */
     let agentAbort: AbortController | null = null
+    let plannerAbort: AbortController | null = null
 
     /* A free sentence heard while thinking, and whether the user asked for it to go out. */
     let held: string | null = null
@@ -785,7 +788,7 @@ export function makeVoiceProgram(
 
     function runPlan(utterance: string): Effect.Effect<Handled> {
       return Effect.gen(function* () {
-        const complete = options.plan
+        const complete = options.resolvePlan ? options.resolvePlan() : options.plan
         if (!complete) return false
 
         /*
@@ -794,8 +797,10 @@ export function makeVoiceProgram(
          * said while it ran was dropped by the "executing" dialogue.
          */
         agentAbort?.abort()
+        plannerAbort?.abort()
         const abort = new AbortController()
         agentAbort = abort
+        plannerAbort = abort
 
         currentState = { ...currentState, status: "executing" }
         options.onStateChange?.(currentState)
@@ -845,6 +850,7 @@ export function makeVoiceProgram(
          */
         if (planned.failure) {
           if (agentAbort === abort) agentAbort = null
+          if (plannerAbort === abort) plannerAbort = null
           if (currentState.status === "executing") {
             currentState = { ...currentState, status: "idle" }
             options.onStateChange?.(currentState)
@@ -855,6 +861,7 @@ export function makeVoiceProgram(
 
         if (planned.steps.length === 0 && planned.refusals.length === 0 && !planned.speech) {
           if (agentAbort === abort) agentAbort = null
+          if (plannerAbort === abort) plannerAbort = null
           if (currentState.status === "executing") {
             currentState = { ...currentState, status: "idle" }
             options.onStateChange?.(currentState)
@@ -878,6 +885,7 @@ export function makeVoiceProgram(
         const needsConfirm = planned.steps.some((step) => step.action === "send_prompt")
         if (needsConfirm) {
           if (agentAbort === abort) agentAbort = null
+          if (plannerAbort === abort) plannerAbort = null
           yield* applyDialogEvent({
             type: "plan_ready",
             steps: planned.steps,
@@ -888,6 +896,7 @@ export function makeVoiceProgram(
         }
 
         if (agentAbort === abort) agentAbort = null
+        if (plannerAbort === abort) plannerAbort = null
         const execution = yield* Effect.promise(() => executePlan(planned.steps, host))
         options.onPlan?.({ steps: planned.steps, execution })
 
@@ -944,6 +953,8 @@ export function makeVoiceProgram(
         if (!askAgent || engine === "off") return false
 
         agentAbort?.abort()
+        plannerAbort?.abort()
+        plannerAbort = null
         const abort = new AbortController()
         agentAbort = abort
         markVoice("agent-asked", utterance)
@@ -1010,6 +1021,7 @@ export function makeVoiceProgram(
           ),
         )
         if (agentAbort === abort) agentAbort = null
+        if (plannerAbort === abort) plannerAbort = null
         clearTimeout(cue)
 
         // Cancelled while it worked: the user has moved on, so nothing is said.
@@ -1037,7 +1049,7 @@ export function makeVoiceProgram(
            */
           // Only when no turn ran: one that started may already have opened
           // sessions before its error or timeout, and the planner would open them again.
-          if (options.plan && answer.ran === false) return false
+          if ((options.plan || options.resolvePlan) && answer.ran === false) return false
         }
         if (streamed && append) {
           const said = squash(soFar.slice(0, saidUpTo))
@@ -1059,6 +1071,7 @@ export function makeVoiceProgram(
       programScope,
       Effect.sync(() => {
         agentAbort?.abort()
+        plannerAbort?.abort()
         closeFollowUp()
       }),
     )
@@ -1249,6 +1262,7 @@ export function makeVoiceProgram(
           clearHeld()
           agentAbort.abort()
           agentAbort = null
+          plannerAbort = null
           yield* speaker.cancel
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
@@ -1296,7 +1310,7 @@ export function makeVoiceProgram(
           }
         }
 
-        if (parsed.outcome === "unknown" && openToModels && options.plan) {
+        if (parsed.outcome === "unknown" && openToModels && (options.plan || options.resolvePlan)) {
           const handled = yield* runPlan(trimmed)
           if (handled) {
             if (handled !== "stopped") yield* afterTurn()
@@ -1632,11 +1646,25 @@ export function makeVoiceProgram(
       requestSendConfirmation: (id: string, to: string, text: string, lead?: string) =>
         applyDialogEvent({ type: "send_requested", id, to, text, ...(lead ? { lead } : {}) }),
 
+      cancelPlanner: Effect.sync(() => {
+        const abort = plannerAbort
+        if (!abort) return
+        plannerAbort = null
+        if (agentAbort === abort) agentAbort = null
+        abort.abort()
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
+      }),
+
       cancel: Effect.gen(function* () {
         yield* cancelActiveTimer
         clearHeld()
         agentAbort?.abort()
+        plannerAbort?.abort()
         agentAbort = null
+        plannerAbort = null
         pendingDisambiguation = null
         isWakeWordAwake = false
         followUpDue = false

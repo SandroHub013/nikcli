@@ -251,6 +251,7 @@ import {
   resolveTarget,
   sessionsTable,
   verifySender,
+  unverifiedSenderRefusal,
   voiceConfirmationFor,
   type MailPane,
   type Message,
@@ -2721,16 +2722,21 @@ export function Workbench() {
 
   const deliverOne = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, id: string, message: Message): Promise<boolean> => {
     const answer = (text: string) => host.mailboxReceipt!(id, text).catch(() => {})
+    const refusal = unverifiedSenderRefusal(message)
+    if (refusal) {
+      await answer(refusal)
+      return true
+    }
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
 
     /*
-     * A message from the voice agent, or from a sender nothing proved, never
-     * acts unattended (rilievo 20; V1-bis, ALTO 8: every kind that writes or
-     * acts, not only `send`): the first pass asks for a spoken yes and leaves
-     * it in the queue; the next pass either carries it out or tells the
-     * waiting `ade-msg` it was refused. Without a running voice there is
-     * nobody to ask, so it is refused rather than carried out in silence.
+     * A message from verified voice never acts unattended (rilievo 20; V1-bis,
+     * ALTO 8: every kind that writes or acts, not only `send`): the first pass
+     * asks for a spoken yes and leaves it in the queue; the next pass either
+     * carries it out or tells the waiting `ade-msg` it was refused. Without a
+     * running voice there is nobody to ask, so it is refused rather than
+     * carried out in silence.
      */
     const spoken = voiceConfirmationFor(message)
     if (spoken) {
@@ -4031,6 +4037,7 @@ export function Workbench() {
       const host = await getHost()
       await host?.ttsPiperStop?.()
     },
+    stopOnCreate: true,
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)
@@ -4157,7 +4164,7 @@ export function Workbench() {
       (running) => {
         if (running) {
           preloadNaturalVoice()
-          if (voiceSettings().speakReplies !== false) speaker.prepare()
+          if (voiceSettings().speakReplies !== false && voiceEngine.activeMode() === "agent") speaker.prepare()
         }
       },
       { defer: true },

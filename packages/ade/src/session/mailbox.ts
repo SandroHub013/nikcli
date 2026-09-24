@@ -233,13 +233,20 @@ export function parseMessage(body: string): Message | undefined {
  *
  * A pane id is public — `ade-msg list` prints every one — so without this
  * any session could sign as another, and answer a request made to it. An
- * unproven sender is not refused, only anonymous: a note still arrives, it
- * just cannot be answered, and a reply to a known request is refused.
+ * unproven sender is refused for `send`, `ask` and `spawn`; other message
+ * kinds stay anonymous and are handled by their own rules.
  */
 export function verifySender<M extends Message>(message: M, tokenOf: (paneId: string) => string | undefined): M {
   const expected = message.from ? tokenOf(message.from) : undefined
   const proven = expected !== undefined && message.token === expected
   return proven ? message : { ...message, from: "" }
+}
+
+const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn"])
+
+export function unverifiedSenderRefusal(message: Message): string | undefined {
+  if (message.from || !UNVERIFIED_ACTING.has(message.kind)) return undefined
+  return "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
 }
 
 /** The kinds that write into a session or act on one, and what the voice says each would do. */
@@ -252,9 +259,6 @@ const ACTING: Readonly<Record<string, string>> = {
   relaunch: "riavviare",
 }
 
-/* An unproven sender is refused `interrupt`, `close` and `relaunch` further on anyway: nothing to ask about. */
-const ANONYMOUS_ACTING: ReadonlySet<string> = new Set(["send", "ask", "spawn"])
-
 const isVoiceSender = (from: string) => from === "voce" || from.startsWith("voce-")
 
 /**
@@ -263,19 +267,14 @@ const isVoiceSender = (from: string) => from === "voce" || from.startsWith("voce
  *
  * Rilievo 20 held only a voice-agent `send`. V1-bis, ALTO 8: an `ask` is
  * typed and submitted the same way, `spawn` starts a session with every
- * permission, `interrupt`, `close` and `relaunch` act on one; and a sender
- * whose token did not prove it (`from` emptied by {@link verifySender}) reached
- * its target anyway. Every kind that writes or acts waits for a spoken yes
- * when it comes from the voice or from nobody provable.
+ * permission, while `interrupt`, `close` and `relaunch` act on one. Every kind
+ * that writes or acts waits for a spoken yes when it comes from verified voice.
  */
 export function voiceConfirmationFor(message: Message): { lead: string; to: string; text: string } | undefined {
   const verb = ACTING[message.kind]
-  if (!verb) return undefined
-  const voice = isVoiceSender(message.from)
-  if (!voice && !(message.from === "" && ANONYMOUS_ACTING.has(message.kind))) return undefined
-  const who = voice ? "La voce" : "Un mittente senza firma"
+  if (!verb || !isVoiceSender(message.from)) return undefined
   const to = message.kind === "spawn" ? message.agent : "to" in message ? String(message.to) : ""
-  return { lead: `${who} vuole ${verb}`, to, text: message.text }
+  return { lead: `La voce vuole ${verb}`, to, text: message.text }
 }
 
 /** Whether a message waits for the user's spoken yes before it is carried out. */

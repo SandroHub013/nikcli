@@ -56,7 +56,6 @@ import {
   disposeParakeetModel,
   isWasmAvailable,
   isWebGpuAvailable,
-  warmupParakeetModel,
   type ParakeetProgress,
 } from "../asr/parakeet-local"
 import {
@@ -433,20 +432,39 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const [downloadProgress, setDownloadProgress] = createSignal<DownloadParakeetProgress | null>(null)
   const [downloadError, setDownloadError] = createSignal<string | null>(null)
   const [downloadSuccess, setDownloadSuccess] = createSignal(false)
+  let cacheGeneration = 0
+  let cacheBackend = props.settings.parakeetBackend
+  createEffect(() => {
+    cacheBackend = props.settings.parakeetBackend
+  })
 
   const refreshDevices = () => {
     void listAudioDevices().then(setDevices)
   }
-  const refreshCache = () => {
-    void inspectModelCache().then((found) => {
+  const parakeetFiles = (backend: ParakeetExecutionBackend): string[] => {
+    const usesWebGpu = backend === "webgpu" || (backend === "auto" && isWebGpuAvailable())
+    return [
+      `encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`,
+      "decoder_joint-model.int8.onnx",
+      "vocab.txt",
+    ]
+  }
+  const parakeetTotal = (backend: ParakeetExecutionBackend): number =>
+    parakeetFiles(backend)[0]?.includes("fp16") ? 1_200_000_000 : 670_488_135
+  const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
+    if (backend !== cacheBackend) return EMPTY_CACHE
+    const generation = ++cacheGeneration
+    const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
+    if (generation === cacheGeneration && backend === cacheBackend) {
       setCached(found)
       setInspected(true)
-    })
+    }
+    return found
   }
 
   onMount(() => {
     refreshDevices()
-    refreshCache()
+    void refreshCache()
     const stop = onDeviceChange(refreshDevices)
     onCleanup(stop)
   })
@@ -577,23 +595,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setDownloadSuccess(false)
     setDownloadProgress({
       loaded: 0,
-      total: 670_488_135,
+      total: parakeetTotal(props.settings.parakeetBackend),
       percent: 0,
       message: t("vui.download.starting"),
     })
     try {
-      const result = await downloadParakeetModel({
+      const backend = props.settings.parakeetBackend
+      const files = parakeetFiles(backend)
+      await downloadParakeetModel({
+        quant: files[0]?.includes("fp16") ? "fp16" : "int8",
         onProgress: (p) => {
           setDownloadProgress(p)
         },
       })
-      setCached(result)
-      setInspected(true)
+      if (backend === cacheBackend) await refreshCache(backend)
       updateSettings({ backend: "parakeet" })
-      void warmupParakeetModel({
-        executionBackend: props.settings.parakeetBackend,
-        language: props.settings.language,
-      }).catch(() => {})
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 6000)
     } catch (err: any) {
@@ -675,7 +691,9 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
     setApiKeyInput("")
     setApiKeyVisible(false)
     setLanguageFilter("")
+    cacheBackend = DEFAULT_VOICE_SETTINGS.parakeetBackend
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
+    void refreshCache(DEFAULT_VOICE_SETTINGS.parakeetBackend)
   }
 
   // Global keyboard listener for modal Escape and shortcut recording cancellation
@@ -926,7 +944,10 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       title={hint}
       data-slot="pill-btn"
       onClick={() => {
-        if (enabled) updateSettings({ parakeetBackend: value })
+        if (!enabled) return
+        cacheBackend = value
+        updateSettings({ parakeetBackend: value })
+        void refreshCache(value)
       }}
     >
       {label}
@@ -2041,10 +2062,11 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                   setClearingCache(true)
                   void clearModelCache()
                     .then(() => disposeParakeetModel())
-                    .finally(() => {
-                      setClearingCache(false)
-                      refreshCache()
-                    })
+                     .finally(() => {
+                       setClearingCache(false)
+                       void refreshCache()
+                     })
+
                 }}
               >
                 {clearingCache() ? t("vui.model.deleting") : t("vui.model.delete")}

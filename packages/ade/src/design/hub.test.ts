@@ -647,4 +647,3 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
     host.remove()
   })
 })
-
