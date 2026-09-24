@@ -133,6 +133,44 @@ export function createInitialDialogState(status: DialogStatus = "idle"): DialogS
   }
 }
 
+/*
+ * V1-bis, ALTO 1: the answer to a question is a yes only when every word of it
+ * is one. «sì però aspetta», «va bene, anzi», «confermo dopo» and even «va bene
+ * la cena» used to confirm: the parser scored the yes and charged the rest as
+ * surplus. A small closed set confirms, and nothing else does.
+ */
+const YES_WORDS: ReadonlySet<string> = new Set(["si", "conferma", "confermo", "procedi", "certo", "ok", "okay", "consenti"])
+
+/** Words that turn an answer into a no wherever they appear: a yes with a «but» is not a yes. */
+const VETO_WORDS: ReadonlySet<string> = new Set([
+  "ma", "pero", "anzi", "dopo", "aspetta", "aspetto", "attendi", "momento",
+  "stop", "fermo", "ferma", "fermati", "annulla", "wait", "nope", "cancel",
+])
+
+export type ConfirmationAnswer = "yes" | "no" | "unclear"
+
+/** What an answer to a pending question says: a yes from the closed set, a veto, or neither. */
+export function confirmationAnswer(text: string): ConfirmationAnswer {
+  const norm = normalizeUtterance(text)
+  if (!norm) return "unclear"
+  const tokens = norm.split(/\s+/).filter(Boolean)
+  if (hasNegation(norm) || tokens.some((token) => VETO_WORDS.has(token))) return "no"
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === "va" && tokens[i + 1] === "bene") {
+      i++
+      continue
+    }
+    if (!YES_WORDS.has(tokens[i]!)) return "unclear"
+  }
+  return "yes"
+}
+
+/** A refusal said in words the closed yes set does not cover: «lascia stare», «nega», «rifiuta». */
+function saysRefusal(text: string, ctx: ParseContext): boolean {
+  const intent = parseUtterance(text, ctx).intent?.intent
+  return intent === "dialog.cancel" || intent === "permission.deny"
+}
+
 function isDictationFinishPhrase(text: string): boolean {
   const norm = normalizeUtterance(text)
   return (
@@ -562,7 +600,8 @@ export function transition(
        * holding the note until `confirm_send` says what the user decided.
        */
       if (state.pendingSend) {
-        if (hasNegation(normalizeUtterance(event.text))) {
+        const answer = confirmationAnswer(event.text)
+        if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, ctx))) {
           effects.push({ type: "cancel_timer" })
           effects.push({
             type: "confirm_send",
@@ -581,11 +620,7 @@ export function transition(
           )
         }
 
-        const parsedSend = parseUtterance(event.text, ctx)
-        if (
-          parsedSend.intent?.intent === "dialog.confirm" ||
-          parsedSend.intent?.intent === "permission.allow"
-        ) {
+        if (answer === "yes") {
           effects.push({ type: "cancel_timer" })
           effects.push({
             type: "confirm_send",
@@ -603,27 +638,6 @@ export function transition(
             withSpoken(approved, "Invio confermato.")
           )
         }
-        if (
-          parsedSend.intent?.intent === "dialog.cancel" ||
-          parsedSend.intent?.intent === "permission.deny"
-        ) {
-          effects.push({ type: "cancel_timer" })
-          effects.push({
-            type: "confirm_send",
-            id: state.pendingSend.id,
-            approved: false,
-          })
-          const refused: DialogState = {
-            ...state,
-            status: "idle",
-            pendingSend: undefined,
-            timeoutAt: undefined,
-          }
-          return (
-            promoteQueued(refused, now, ctx, effects) ??
-            withSpoken(refused, "Va bene, non invio niente.")
-          )
-        }
         return withSpoken(state, "Sì o no?")
       }
 
@@ -635,7 +649,8 @@ export function transition(
        * this branch never touches it.
        */
       if (state.pendingPlan) {
-        if (hasNegation(normalizeUtterance(event.text))) {
+        const answer = confirmationAnswer(event.text)
+        if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, ctx))) {
           effects.push({ type: "cancel_timer" })
           const abandoned: DialogState = {
             ...state,
@@ -649,8 +664,7 @@ export function transition(
           )
         }
 
-        const parsedPlan = parseUtterance(event.text, ctx)
-        if (parsedPlan.intent?.intent === "dialog.confirm" || parsedPlan.intent?.intent === "permission.allow") {
+        if (answer === "yes") {
           effects.push({ type: "cancel_timer" })
           effects.push({
             type: "execute_plan",
@@ -674,19 +688,6 @@ export function transition(
             "Eseguo il piano."
           )
         }
-        if (parsedPlan.intent?.intent === "dialog.cancel" || parsedPlan.intent?.intent === "permission.deny") {
-          effects.push({ type: "cancel_timer" })
-          const refused: DialogState = {
-            ...state,
-            status: "idle",
-            pendingPlan: undefined,
-            timeoutAt: undefined,
-          }
-          return (
-            promoteQueued(refused, now, ctx, effects) ??
-            withSpoken(refused, "Va bene, non invio niente.")
-          )
-        }
         return withSpoken(state, "Sì o no?")
       }
 
@@ -696,7 +697,9 @@ export function transition(
        * score only charged 0.15 for the extra word: the pane closed, or the
        * permission was granted, on an answer of no.
        */
-      if (hasNegation(normalizeUtterance(event.text))) {
+      const answer = confirmationAnswer(event.text)
+      const parseCtx = { ...ctx, pendingPermission: state.pendingAction?.isPermission }
+      if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, parseCtx))) {
         effects.push({ type: "cancel_timer" })
         const action = state.pendingAction!
         const abandoned: DialogState = {
@@ -723,16 +726,8 @@ export function transition(
         )
       }
 
-      const parsed = parseUtterance(event.text, {
-        ...ctx,
-        pendingPermission: state.pendingAction?.isPermission,
-      })
-
-      // Confirmation positive
-      if (
-        parsed.intent?.intent === "dialog.confirm" ||
-        parsed.intent?.intent === "permission.allow"
-      ) {
+      // Confirmation positive: only a yes from the closed set.
+      if (answer === "yes") {
         effects.push({ type: "cancel_timer" })
         const action = state.pendingAction!
 
@@ -771,38 +766,6 @@ export function transition(
               timeoutAt: undefined,
             },
             action.intent.readback
-          )
-        }
-      }
-
-      // Confirmation negative / cancellation
-      if (
-        parsed.intent?.intent === "dialog.cancel" ||
-        parsed.intent?.intent === "permission.deny"
-      ) {
-        effects.push({ type: "cancel_timer" })
-        const action = state.pendingAction!
-        const refused: DialogState = {
-          ...state,
-          status: "idle",
-          pendingAction: undefined,
-          timeoutAt: undefined,
-        }
-
-        if (action.isPermission && action.paneId) {
-          effects.push({
-            type: "answer_permission",
-            paneId: action.paneId,
-            answer: "deny",
-          })
-          return (
-            promoteQueued(refused, now, ctx, effects) ??
-            withSpoken(refused, "Permesso negato.")
-          )
-        } else {
-          return (
-            promoteQueued(refused, now, ctx, effects) ??
-            withSpoken(refused, "Va bene, lascio stare.")
           )
         }
       }
