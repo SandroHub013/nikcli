@@ -629,7 +629,7 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(25)),
             Ok(None) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard);
-                return Err(format!("nikcli non ha risposto entro {} secondi e stato fermato.", timeout.as_secs()));
+                return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
             }
             Err(error) => {
                 terminate_child_tree(&mut child, pid, &mut tree_guard);
@@ -640,7 +640,7 @@ fn run_bounded_output(mut command: std::process::Command, timeout: Duration) -> 
     while !out_reader.is_finished() || !err_reader.is_finished() {
         if Instant::now() >= deadline {
             terminate_child_tree(&mut child, pid, &mut tree_guard);
-            return Err(format!("nikcli non ha risposto entro {} secondi e stato fermato.", timeout.as_secs()));
+            return Err(format!("nikcli non ha risposto entro {} secondi e è stato fermato.", timeout.as_secs()));
         }
         std::thread::sleep(Duration::from_millis(25));
     }
@@ -1969,7 +1969,7 @@ mod tests {
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
         let error = run_bounded_output(sleeper(), Duration::from_millis(100)).expect_err("must time out");
-        assert!(error.contains("stato fermato"), "{error}");
+        assert!(error.contains("è stato fermato"), "{error}");
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
     }
 
@@ -1984,7 +1984,7 @@ mod tests {
         ]);
         let started = Instant::now();
         let error = run_bounded_output(command, Duration::from_millis(100)).expect_err("must time out");
-        assert!(error.contains("stato fermato"), "{error}");
+        assert!(error.contains("è stato fermato"), "{error}");
         assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
     }
 
