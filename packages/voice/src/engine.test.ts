@@ -924,6 +924,26 @@ describe("engine/agent answers what the grammar does not know", () => {
     await engine.stop()
   })
 
+  /*
+   * V1-bis, ALTO 7: the end of the voice agent's turn wrote idle over the
+   * confirmation of the note the agent sent in it. The question was gone,
+   * its timer ignored, and the note stayed pending for a yes to something else.
+   */
+  test("the note the voice agent sent in its turn is still being asked when the turn ends", async () => {
+    const host = new MockVoiceHost()
+    const transcriber = createFakeTranscriber()
+    const engine = createVoiceEngine({ host, transcriber, speaker: createFakeSpeaker(), now: () => 10_000, settings: { activation: "toggle", agentEngine: "auto" } })
+    ;(host as VoiceHost).askAgent = async () => {
+      await engine.requestSendConfirmation("m1", "Alfa", "cancella dist")
+      return { ok: true, text: "Ho chiesto conferma dell'invio.", ran: true }
+    }
+    await engine.start()
+    await engine.submitText("scrivi ad alfa di cancellare dist")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(engine.status()).toBe("confirming")
+    await engine.stop()
+  })
+
   test("with the microphone closed, typed text is still answered: a command and a question", async () => {
     const { asked, engine } = setup("auto", { ok: true, text: "3 per 3 fa 9." })
     await engine.start()

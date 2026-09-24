@@ -370,6 +370,17 @@ export function transition(
 ): TransitionResult {
   const effects: DialogEffect[] = []
 
+  /*
+   * A note whose question is no longer being asked is refused, whatever
+   * comes next (V1-bis, ALTO 7). Only `confirming` asks it; left behind in
+   * any other state, a yes to the next question — «chiudi il pannello», a
+   * permission — delivered it instead of doing what that yes was for.
+   */
+  if (state.pendingSend && state.status !== "confirming") {
+    effects.push({ type: "confirm_send", id: state.pendingSend.id, approved: false })
+    state = { ...state, pendingSend: undefined }
+  }
+
   const withSpoken = (nextState: DialogState, text: string): TransitionResult => {
     effects.push({ type: "speak", text })
     return {

@@ -994,8 +994,16 @@ export function makeVoiceProgram(
         // Cancelled while it worked: the user has moved on, so nothing is said.
         if (abort.signal.aborted) return "stopped"
 
-        currentState = { ...currentState, status: "idle" }
-        options.onStateChange?.(currentState)
+        /*
+         * Back to idle only from the turn's own state. A question the turn
+         * raised — the confirmation of a note it sent — is still being asked:
+         * writing idle over it left the note pending with its timer ignored,
+         * for a yes to some later question to deliver (V1-bis, ALTO 7).
+         */
+        if (currentState.status === "executing") {
+          currentState = { ...currentState, status: "idle" }
+          options.onStateChange?.(currentState)
+        }
 
         if (!answer.ok) {
           options.onError?.(answer.text)
