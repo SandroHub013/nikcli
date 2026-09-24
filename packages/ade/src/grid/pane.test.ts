@@ -82,7 +82,7 @@ describe("resolvePaneState (Proposal A 6-state resolution)", () => {
 })
 
 describe("Proposal A state vocabulary", () => {
-  const allStates: PaneState[] = ["work", "perm", "ask", "err", "limit", "idle"]
+  const allStates: PaneState[] = ["work", "perm", "ask", "err", "limit", "idle", "off", "closed"]
 
   test("all 6 canonical states have full and short Italian labels", () => {
     for (const st of allStates) {
