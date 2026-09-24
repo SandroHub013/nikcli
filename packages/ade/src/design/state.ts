@@ -1,5 +1,5 @@
 import { asOneLine } from "../session/typing"
-import type { DesignEvent, DesignVariant, LogProblem } from "./log"
+import type { DesignEvent, DesignRecommendation, DesignVariant, LogProblem } from "./log"
 import { t } from "../i18n"
 
 /** `giro`: the user asked for another round; it waits for a `riaperta` with new variants. */
@@ -19,7 +19,13 @@ export interface DesignAnswer {
 export interface DesignProposal {
   readonly k: string
   readonly title: string
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   readonly context?: string
+  /** The variant the writer recommends, and why. */
+  readonly recommend?: DesignRecommendation
   readonly spec?: string
   /** What stays as it is, whichever variant is picked. */
   readonly keeps?: readonly string[]
@@ -86,7 +92,10 @@ export function foldProposals(
       byKey.set(event.k, {
         k: event.k,
         title: event.title,
+        ...(event.question ? { question: event.question } : {}),
+        ...(event.why ? { why: event.why } : {}),
         context: event.context,
+        ...(event.recommend ? { recommend: event.recommend } : {}),
         spec: event.spec,
         ...(event.keeps && event.keeps.length > 0 ? { keeps: event.keeps } : {}),
         variants: event.variants,

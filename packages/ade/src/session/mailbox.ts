@@ -1236,13 +1236,15 @@ export const USAGE =
   "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata;\n" +
   "                                          per design è il nome intero della variante, per esempio «1 · Vetro».\n" +
   "                                          Come si scrive: 1) titolo = la domanda o l'oggetto, parole dell'utente,\n" +
-  "                                          niente codici (lo spec va in spec); 2) la raccomandazione solo in\n" +
-  "                                          recommend, mai «(consigliata)» nelle opzioni né in fondo al contesto;\n" +
-  "                                          3) ogni opzione dice cosa cambia per l'utente (effect), cost e risk\n" +
-  "                                          solo se aiutano a scegliere; 4) niente note che scadono («nella tua\n" +
-  "                                          ADE di oggi…», «dalla release X»); 5) context al massimo 3 frasi,\n" +
-  "                                          misure e dettagli in facts o in un file results/…; 6) scrivi con\n" +
-  "                                          gli accenti (è, perché, più), mai e' o piu al loro posto\n" +
+  "                                          niente codici (lo spec va in spec); 2) la raccomandazione all'inizio del\n" +
+  "                                          contesto («Consigliata: B, perché…»), mai «(consigliata)» nelle opzioni;\n" +
+  "                                          si può mettere anche in recommend, ma finché la carta nuova non è in\n" +
+  "                                          release va ripetuta in una riga all'inizio di context; 3) ogni opzione\n" +
+  "                                          dice cosa cambia per l'utente (effect), cost e risk solo se aiutano a\n" +
+  "                                          scegliere; 4) niente note che scadono («nella tua ADE di oggi…», «dalla\n" +
+  "                                          release X»); 5) context al massimo 3 frasi, dettagli in facts o in un\n" +
+  "                                          file results/…; 6) scrivi con gli accenti (è, perché, più), mai e' o piu\n" +
+  "                                          al loro posto\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +

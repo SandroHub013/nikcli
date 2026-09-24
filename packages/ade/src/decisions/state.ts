@@ -18,7 +18,7 @@
  */
 
 import { asOneLine } from "../session/typing"
-import type { DecisionEvent, DecisionOption, LogProblem } from "./log"
+import type { DecisionEvent, DecisionOption, LogProblem, Recommendation } from "./log"
 import { t } from "../i18n"
 
 export type DecisionStatus = "aperta" | "risposta" | "rimandata" | "chiusa"
@@ -35,7 +35,15 @@ export interface DecisionAnswer {
 export interface Decision {
   readonly k: string
   readonly title: string
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   readonly context?: string
+  /** Measures and facts, short. */
+  readonly facts?: readonly string[]
+  /** The option the writer recommends, and why. */
+  readonly recommend?: Recommendation
   readonly options: readonly DecisionOption[]
   /** More than one option may be picked. */
   readonly multi?: true
@@ -113,7 +121,11 @@ export function foldDecisions(
       byKey.set(event.k, {
         k: event.k,
         title: event.title,
+        ...(event.question ? { question: event.question } : {}),
+        ...(event.why ? { why: event.why } : {}),
         context: event.context,
+        ...(event.facts && event.facts.length > 0 ? { facts: event.facts } : {}),
+        ...(event.recommend ? { recommend: event.recommend } : {}),
         options: event.options ?? [],
         ...(event.multi ? { multi: true as const } : {}),
         unlocks: event.unlocks,
