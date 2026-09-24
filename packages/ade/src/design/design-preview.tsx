@@ -27,7 +27,7 @@
  * does not load, with the path.
  */
 
-import { Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { getHost } from "../host/shell"
 import { mediaUrl } from "../video/video"
 import { t } from "../i18n"
@@ -199,10 +199,36 @@ export function DesignPreview(props: {
   k: string
   name?: string
   projectRoot?: string
+  /** Measured container width override (e.g. for testing). */
+  containerWidth?: number
 }) {
   const plan = () => previewPlan(props.preview, props.projectRoot, props.k)
   const [size, setSize] = createSignal<PreviewSize>()
   const [failure, setFailure] = createSignal<string>()
+  let containerRef: HTMLDivElement | undefined
+  const [measuredWidth, setMeasuredWidth] = createSignal<number>(props.containerWidth ?? 330)
+
+  createEffect(() => {
+    if (props.containerWidth !== undefined && props.containerWidth > 0) {
+      setMeasuredWidth(props.containerWidth)
+    }
+  })
+
+  onMount(() => {
+    if (props.containerWidth !== undefined) return
+    const el = containerRef
+    if (!el) return
+    const initial = el.getBoundingClientRect().width || el.clientWidth
+    if (initial > 0) setMeasuredWidth(Math.round(initial))
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return
+      const w = entry.contentRect.width || el.clientWidth
+      if (w > 0) setMeasuredWidth(Math.round(w))
+    })
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  })
 
   // Reads the page only for its size, and for the error when it does not load.
   createEffect(() => {
@@ -227,6 +253,7 @@ export function DesignPreview(props: {
 
   return (
     <div
+      ref={(el) => (containerRef = el)}
       data-component="design-preview"
       data-type={plan().kind}
     >
@@ -276,7 +303,7 @@ export function DesignPreview(props: {
               </Show>
               <Show when={!failure() && size()}>
                 {(measured) => {
-                  const thumb = () => thumbnailScale(measured())
+                  const thumb = () => thumbnailScale(measured(), measuredWidth() > 0 ? measuredWidth() : 330)
                   return (
                     <div
                       data-slot="preview-frame-wrap"
