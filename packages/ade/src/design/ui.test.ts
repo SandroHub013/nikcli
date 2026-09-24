@@ -502,7 +502,7 @@ describe("a variant's preview", () => {
     expect(html).toEqual({ kind: "html", path: "C:/p/.ade/design/DS-PROVA/2.html", src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true) })
     const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
     expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
-    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "allow-scripts allow-forms", loading: "lazy" })
+    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "", loading: "lazy" })
     expect("srcdoc" in props).toBe(false)
     expect("style" in props).toBe(false)
   })
@@ -517,28 +517,31 @@ describe("a variant's preview", () => {
     expect(code).not.toContain("allow-same-origin")
   })
 
-  test("thumbnailScale computes proportional scaling within max box", () => {
-    expect(thumbnailScale({ width: 360, height: 240 }, 240, 160)).toEqual({
-      scale: 240 / 360,
-      width: 240,
-      height: 160,
-      frameWidth: 360,
-      frameHeight: 240,
-    })
-    expect(thumbnailScale({ width: 1200, height: 800 }, 240, 160)).toEqual({
-      scale: 0.2,
-      width: 240,
-      height: 160,
-      frameWidth: 1200,
-      frameHeight: 800,
-    })
-    expect(thumbnailScale({ width: 120, height: 80 }, 240, 160)).toEqual({
-      scale: 1,
-      width: 120,
-      height: 80,
-      frameWidth: 120,
-      frameHeight: 80,
-    })
+  test("thumbnailScale scales to box width, clipping height to boxH (D3 review)", () => {
+    // 760x1600 page with default box 330x220: scale is 330 / 760 (~0.434), height clipped to 220
+    const scaled760 = thumbnailScale({ width: 760, height: 1600 })
+    expect(scaled760.scale).toBe(330 / 760)
+    expect(scaled760.width).toBe(330)
+    expect(scaled760.height).toBe(220)
+    expect(scaled760.frameWidth).toBe(760)
+    expect(scaled760.frameHeight).toBe(1600)
+
+    // With custom box dimensions: scale equals box width divided by 760
+    const customBox = thumbnailScale({ width: 760, height: 1600 }, 400, 250)
+    expect(customBox.scale).toBe(400 / 760)
+    expect(customBox.width).toBe(400)
+    expect(customBox.height).toBe(250)
+
+    // A shorter page that fits within boxH without clipping
+    const shortPage = thumbnailScale({ width: 500, height: 200 }, 300, 220)
+    expect(shortPage.scale).toBe(300 / 500)
+    expect(shortPage.width).toBe(300)
+    expect(shortPage.height).toBe(120)
+  })
+
+  test("frameProps disables scripts in miniature preview sandbox", () => {
+    const props = frameProps({ src: "http://example.com" }, { width: 360, height: 240 }, "Title")
+    expect(props.sandbox).toBe("")
   })
 
   test("a page outside the project root gets no frame: Fuori dal progetto", () => {

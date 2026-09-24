@@ -60,6 +60,41 @@ describe("the size a design page declares", () => {
   test("without one, the pane's width, as before", () => {
     expect(fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900 }).isResponsive).toBe(true)
   })
+
+  test("fitWidth scales to width, allowing tall reading pages to scroll instead of shrinking to fit height", () => {
+    const withoutFitWidth = fitViewport({
+      preset: "responsive",
+      containerWidth: 800,
+      containerHeight: 600,
+      size: { width: 760, height: 1600 },
+    })
+    // Without fitWidth: scale is 600 / 1600 = 0.375
+    expect(withoutFitWidth.scale).toBe(600 / 1600)
+
+    const withFitWidth = fitViewport({
+      preset: "responsive",
+      containerWidth: 800,
+      containerHeight: 600,
+      size: { width: 760, height: 1600 },
+      fitWidth: true,
+    })
+    // With fitWidth: scale is min(1, 800 / 760) = 1 (fits width)
+    expect(withFitWidth.scale).toBe(1)
+    expect(withFitWidth.renderedWidth).toBe(760)
+    expect(withFitWidth.renderedHeight).toBe(1600)
+
+    const narrowContainer = fitViewport({
+      preset: "responsive",
+      containerWidth: 380,
+      containerHeight: 600,
+      size: { width: 760, height: 1600 },
+      fitWidth: true,
+    })
+    // When container is narrower than 760 (e.g. 380), scale is 380 / 760 = 0.5
+    expect(narrowContainer.scale).toBe(0.5)
+    expect(narrowContainer.renderedWidth).toBe(380)
+    expect(narrowContainer.renderedHeight).toBe(800)
+  })
 })
 
 describe("the arrows between variants (D2)", () => {

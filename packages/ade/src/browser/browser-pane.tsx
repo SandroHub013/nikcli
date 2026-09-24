@@ -812,7 +812,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       containerHeight: containerBox().height,
       landscape: landscape(),
       // A design page's `ade-size` is its viewport; without one, the pane's width.
-      ...(props.design?.size ? { size: props.design.size } : {}),
+      ...(props.design?.size ? { size: props.design.size, fitWidth: true } : {}),
     }),
   )
 

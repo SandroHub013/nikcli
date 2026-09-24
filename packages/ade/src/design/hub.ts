@@ -215,6 +215,12 @@ export function createDesignHub(deps: {
       }
       return record(proposal, event)
     },
-    openVariant: (proposal, variant) => deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")),
+    openVariant: async (proposal, variant) => {
+      const result = await (deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")))
+      if (result) {
+        setProblem(proposal.k, result)
+      }
+      return result
+    },
   }
 }

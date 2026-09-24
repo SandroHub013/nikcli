@@ -147,27 +147,28 @@ export interface ScaledThumbnail {
 }
 
 /**
- * Computes scaling factors for a miniature thumbnail fitting within max dimensions (D3).
+ * Computes scaling factors for a miniature thumbnail fitting within box dimensions (D3).
+ * Scales to fit the box width, clipping height to fixed boxH so the top of tall pages is clearly visible.
  * Keeps original frame dimensions for native iframe rendering.
  */
-export function thumbnailScale(size: PreviewSize, maxW = 240, maxH = 160): ScaledThumbnail {
-  const scale = Math.min(maxW / size.width, maxH / size.height, 1)
+export function thumbnailScale(size: PreviewSize, boxW = 330, boxH = 220): ScaledThumbnail {
+  const scale = size.width > 0 ? boxW / size.width : 1
   return {
     scale,
-    width: Math.round(size.width * scale),
-    height: Math.round(size.height * scale),
+    width: boxW,
+    height: Math.min(boxH, Math.round(size.height * scale)),
     frameWidth: size.width,
     frameHeight: size.height,
   }
 }
 
-/** The frame's attributes, all of them: its `src`, its size in px, its sandbox, and loading lazy. No `srcdoc`. */
+/** The frame's attributes: static miniature without scripts (sandbox: ""), lazy loading. No `srcdoc`. */
 export function frameProps(plan: { src: string }, size: PreviewSize, title: string) {
   return {
     src: plan.src,
     width: String(size.width),
     height: String(size.height),
-    sandbox: "allow-scripts allow-forms",
+    sandbox: "",
     loading: "lazy" as const,
     title,
   }

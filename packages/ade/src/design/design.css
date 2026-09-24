@@ -151,6 +151,24 @@
   max-height: calc(85vh - 100px);
 }
 
+/* Steps progress indicator: inactive dots styled with strong border token to be visible in dark mode */
+[data-slot="sheet-steps"] {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+[data-slot="sheet-steps"] i {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ade-border-strong);
+}
+
+[data-slot="sheet-steps"] i[data-on] {
+  background: var(--ade-accent);
+}
+
 /* Card */
 [data-slot="design-card"] {
   padding: 14px 16px;
@@ -339,30 +357,31 @@
   margin-bottom: 2px;
 }
 
-/* Scaled miniature preview (D3). */
+/* Scaled miniature preview (D3): 220px fixed height, aligned to top to show page header */
 [data-slot="variant-preview-wrap"] {
   border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-sm);
   overflow: hidden;
-  height: 160px;
+  height: 220px;
   position: relative;
   background: var(--ade-sunken);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 [data-component="design-preview"] {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   width: 100%;
   height: 100%;
 }
 
 [data-slot="preview-frame-wrap"] {
   overflow: hidden;
-  display: grid;
-  place-items: center;
+  display: block;
   pointer-events: none;
 }
 
@@ -376,7 +395,7 @@
 
 [data-slot="preview-image-wrap"] {
   width: 100%;
-  height: 160px;
+  height: 220px;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -408,9 +427,14 @@
   transition: background var(--ade-dur-fast, 120ms) ease, border-color var(--ade-dur-fast, 120ms) ease;
 }
 
-[data-slot="variant-open-large"]:hover {
+[data-slot="variant-open-large"]:hover:not(:disabled) {
   background: var(--ade-hover);
   border-color: var(--ade-border-strong);
+}
+
+[data-slot="variant-open-large"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 [data-slot="preview-loading"],
@@ -481,8 +505,15 @@
   transform: var(--ade-press);
 }
 
-/* A ghost button is spent like the main one: «Altro giro» off with «Scegli e invia», as Decisions already does. */
-[data-slot="design-submit"]:disabled,
+/* In dark mode, opacity 0.5 on green still looks bright. Sunken ground and weak text clearly indicate disabled state. */
+[data-slot="design-submit"]:disabled {
+  background: var(--ade-sunken);
+  color: var(--ade-text-weak);
+  border: 1px solid var(--ade-border-subtle);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 [data-slot="design-ghost"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;

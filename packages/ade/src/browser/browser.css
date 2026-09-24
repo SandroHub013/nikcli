@@ -428,6 +428,12 @@
   position: relative;
 }
 
+/* In design mode, fit width allows tall pages to scroll vertically from the top */
+[data-component="browser-pane"][data-design] [data-slot="browser-viewport-container"] {
+  align-items: flex-start;
+  overflow-y: auto;
+}
+
 [data-slot="browser-frame"] {
   width: 100%;
   height: 100%;

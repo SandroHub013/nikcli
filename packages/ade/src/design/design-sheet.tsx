@@ -135,7 +135,12 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                   onPick={(index) => pick(k, index, Boolean(proposal().multi))}
                   onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                   onSubmit={() => void submit()}
-                  onOpenVariant={(variantNumber) => void props.hub.openVariant(proposal(), variantNumber)}
+                  onOpenVariant={async (variantNumber) => {
+                    const problem = await props.hub.openVariant(proposal(), variantNumber)
+                    if (!problem) {
+                      props.onClose()
+                    }
+                  }}
                   noteRef={(element) => (note = element)}
                 />
               )
