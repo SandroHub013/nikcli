@@ -400,6 +400,26 @@ export function makeVoiceProgram(
 
     yield* Scope.addFinalizer(programScope, cancelActiveTimer)
 
+    /*
+     * A message held for a spoken yes, asked or in line, is refused when the
+     * voice stops (V1-ter, reserve of ALTO 8). The dialogue that held it goes
+     * with this scope, and nothing would ever answer the waiting `ade-msg`.
+     */
+    yield* Scope.addFinalizer(
+      programScope,
+      Effect.sync(() => {
+        const held = [currentState.pendingSend?.id, currentState.queuedSend?.id].filter((id): id is string => !!id)
+        currentState = { ...currentState, pendingSend: undefined, queuedSend: undefined }
+        for (const id of held) {
+          try {
+            host.confirmVoiceSend?.(id, false)
+          } catch {
+            // The host is going away too; the refusal is best effort.
+          }
+        }
+      }),
+    )
+
     function startTimer(durationMs: number): Effect.Effect<void> {
       return Effect.gen(function* () {
         yield* cancelActiveTimer
