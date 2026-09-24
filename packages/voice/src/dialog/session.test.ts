@@ -356,6 +356,73 @@ describe("dialog state machine", () => {
         expect(speak.text).toContain("?")
       }
     })
+
+    /*
+     * Rilievo 21: la conferma di una chiusura diceva solo «il pannello»,
+     * senza il nome, così l'utente sì sul bersaglio sbagliato non aveva
+     * come accorgersene. Il titolo c'è già negli slot o nei pannelli aperti.
+     */
+    test("pane.close confirmation names the panel title", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "idle" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+        {
+          id: "pane-2",
+          title: "API Tests",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1, effects } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello 2" },
+        10_000,
+        { panes }
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
+      const speak = effects.find((e) => e.type === "speak")
+      expect(speak).toBeDefined()
+      if (speak && speak.type === "speak") {
+        expect(speak.text).toContain("API Tests")
+      }
+    })
+
+    test("process.kill confirmation names the panel title when the index is known", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "working" as const,
+          index: 1,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+      const { state: s1 } = transition(
+        s0,
+        { type: "utterance", text: "uccidi processo 1" },
+        10_000,
+        { panes }
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.confirmPrompt).toContain("Bastelli")
+    })
   })
 
   describe("pending permission precedence", () => {

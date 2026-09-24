@@ -123,6 +123,27 @@ describe("dispatch", () => {
       expect(resolved.pane?.title).toBe("Bastelli Worker")
     })
 
+    /*
+     * Rilievo 21: il readback dopo una chiusura diceva solo il numero
+     * («Pannello 2 chiuso»), così con due sessioni non si capiva quale.
+     * Ora nomina il titolo.
+     */
+    test("dopo una chiusura il readback nomina il titolo, non solo il numero", async () => {
+      const host = new MockVoiceHost()
+      const spec = VOCABULARY.find((v) => v.intent === "pane.close")!
+      const outcome = await dispatch(makeParseResult(spec, { paneIndex: 2 }), host)
+      expect(outcome.success).toBe(true)
+      expect(outcome.spoken).toContain("Browser Preview")
+    })
+
+    test("terminare un processo con processo attivo nomina il titolo nel readback", async () => {
+      const host = new MockVoiceHost()
+      const spec = VOCABULARY.find((v) => v.intent === "process.kill")!
+      const outcome = await dispatch(makeParseResult(spec, { paneIndex: 1 }), host)
+      expect(outcome.success).toBe(true)
+      expect(outcome.spoken).toContain("Bastelli Worker")
+    })
+
     test("returns spoken error when pane does not exist", () => {
       const host = new MockVoiceHost()
       const resolved = resolveTargetPane({ paneIndex: 99 }, host.panes)

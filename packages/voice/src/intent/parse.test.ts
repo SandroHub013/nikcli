@@ -123,6 +123,66 @@ describe("parseUtterance", () => {
       expect(res.slots.paneIndex).toBe(1)
     })
 
+    /*
+     * Rilievo 21: lo step 5 di extractSlots confrontava i titoli in ordine
+     * di elenco e vinceva la prima sottosequenza sopra soglia. «chiudi api
+     * tests» con «api» elencato prima di «api tests» chiudeva «api». Ora
+     * vince il titolo esatto, e senza esatto la migliore somiglianza.
+     */
+    describe("titoli dei pannelli: esatto prima, poi il migliore", () => {
+      const api: PaneSummary = {
+        id: "pane-api",
+        title: "API",
+        status: "idle" as any,
+        index: 1,
+        hasLiveProcess: false,
+        isBrowser: false,
+        isFile: false,
+      }
+      const apiTests: PaneSummary = {
+        id: "pane-api-tests",
+        title: "API Tests",
+        status: "idle" as any,
+        index: 2,
+        hasLiveProcess: false,
+        isBrowser: false,
+        isFile: false,
+      }
+
+      test("«chiudi api tests» prende «API Tests», non «API» elencato prima", () => {
+        const res = parseUtterance("chiudi api tests", { panes: [api, apiTests] })
+        expect(res.slots.paneTitle).toBe("API Tests")
+        expect(res.slots.paneIndex).toBe(2)
+      })
+
+      test("senza titolo esatto vince la somiglianza migliore, non la prima sopra soglia", () => {
+        // «test» è sottosequenza di entrambi, ma «test runner» copre di più
+        // di «test» e non deve perdere contro l'ordine di elenco.
+        const runnerShort: PaneSummary = {
+          id: "pane-t",
+          title: "Tes",
+          status: "idle" as any,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        }
+        const runnerFull: PaneSummary = {
+          id: "pane-tr",
+          title: "Test Runner",
+          status: "idle" as any,
+          index: 2,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        }
+        const res = parseUtterance("chiudi test runner", { panes: [runnerShort, runnerFull] })
+        // «test runner» è esatto nella frase: deve vincere su «Tes».
+        expect(res.slots.paneTitle).toBe("Test Runner")
+        expect(res.slots.paneIndex).toBe(2)
+      })
+    })
+
     test("extracts columns slot", () => {
       const res = parseUtterance("imposta 3 colonne")
       expect(res.outcome).toBe("matched")

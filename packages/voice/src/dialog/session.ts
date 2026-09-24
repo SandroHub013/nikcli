@@ -913,14 +913,23 @@ export function transition(
          * Lo slot di pannello è già stato estratto dalla frase («autorizza
          * pannello 2»); il titolo si legge dai pannelli aperti, così
          * l'utente conferma sapendo a chi concede.
+         *
+         * Rilievo 21: lo stesso vale per chiudere un pannello e fermarne il
+         * processo — «Chiudo il pannello, va bene?» senza il nome lasciava
+         * confermare al buio quando più sessioni erano aperte.
          */
+        const confirmPaneTitle =
+          parsed.slots.paneTitle ??
+          ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
+
         if (intent.intent === "permission.allow") {
-          const paneTitle =
-            parsed.slots.paneTitle ??
-            ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
-          if (paneTitle) {
-            question = `Concedo il permesso all'agente sul pannello «${paneTitle}», va bene?`
+          if (confirmPaneTitle) {
+            question = `Concedo il permesso all'agente sul pannello «${confirmPaneTitle}», va bene?`
           }
+        } else if (intent.intent === "pane.close" && confirmPaneTitle) {
+          question = `Chiudo il pannello «${confirmPaneTitle}», va bene?`
+        } else if (intent.intent === "process.kill" && confirmPaneTitle) {
+          question = `Fermo il processo sul pannello «${confirmPaneTitle}», va bene?`
         }
 
         const prompt = `${question} Dimmi sì o no.`

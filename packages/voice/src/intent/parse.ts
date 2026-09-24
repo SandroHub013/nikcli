@@ -166,21 +166,53 @@ function extractSlotsFromUtterance(
     }
   }
 
-  // 5. Pane title resolution using current context panes: e.g. "vai su Bastelli", "chiudi test runner"
+  /*
+   * 5. Pane title resolution using current context panes: e.g. "vai su Bastelli",
+   * "chiudi api tests".
+   *
+   * Rilievo 21: il confronto in ordine di elenco dava la vittoria alla prima
+   * sottosequenza sopra soglia — «chiudi api tests» con «api» elencato prima
+   * di «api tests» prendeva «api» e chiudeva il pannello sbagliato. Prima
+   * cerca il titolo esatto dentro la frase (normalizzato, così «API Tests»
+   * e «api tests» sono lo stesso stringa); solo se l'esatto non c'è cade
+   * sulla somiglianza, e allora non vince il primo ma il migliore.
+   */
   if (ctx.panes && ctx.panes.length > 0) {
+    let chosen: PaneSummary | undefined
+    let chosenNorm = ""
+
     for (const pane of ctx.panes) {
       const normPaneTitle = normalizeUtterance(pane.title)
-      if (normPaneTitle.length > 2) {
+      if (normPaneTitle.length <= 2) continue
+
+      // Exact: the whole normalized title sits inside the cleaned utterance.
+      // Longest wins when two titles are both substrings ("api" ⊂ "api tests").
+      if (normPaneTitle.length > chosenNorm.length && cleaned.includes(normPaneTitle)) {
+        chosen = pane
+        chosenNorm = normPaneTitle
+      }
+    }
+
+    if (!chosen) {
+      let bestScore = -Infinity
+      for (const pane of ctx.panes) {
+        const normPaneTitle = normalizeUtterance(pane.title)
+        if (normPaneTitle.length <= 2) continue
         const hit = fuzzyMatch(normPaneTitle, cleaned)
-        if (hit && hit.score > 15) {
-          slots.paneTitle = pane.title
-          if (!slots.paneIndex) {
-            slots.paneIndex = pane.index
-          }
-          cleaned = cleaned.replace(normPaneTitle, "").trim()
-          break
+        if (hit && hit.score > bestScore && hit.score > 15) {
+          bestScore = hit.score
+          chosen = pane
+          chosenNorm = normPaneTitle
         }
       }
+    }
+
+    if (chosen) {
+      slots.paneTitle = chosen.title
+      if (!slots.paneIndex) {
+        slots.paneIndex = chosen.index
+      }
+      cleaned = cleaned.replace(chosenNorm, "").trim()
     }
   }
 

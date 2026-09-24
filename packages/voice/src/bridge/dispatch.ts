@@ -208,7 +208,10 @@ export async function dispatch(
         await host.runCommand("pane.close")
         return {
           success: true,
-          spoken: lang === "en" ? `Panel ${resolved.pane!.index} closed.` : `Pannello ${resolved.pane!.index} chiuso.`,
+          spoken:
+            lang === "en"
+              ? `Panel «${resolved.pane!.title}» closed.`
+              : `Pannello «${resolved.pane!.title}» chiuso.`,
         }
       }
 
@@ -266,8 +269,8 @@ export async function dispatch(
             success: false,
             spoken:
               lang === "en"
-                ? `Panel ${resolved.pane!.index} has no active process to terminate.`
-                : `Il pannello ${resolved.pane!.index} non ha un processo attivo da terminare.`,
+                ? `Panel «${resolved.pane!.title}» has no active process to terminate.`
+                : `Il pannello «${resolved.pane!.title}» non ha un processo attivo da terminare.`,
             error: "no_process",
           }
         }
@@ -275,7 +278,10 @@ export async function dispatch(
         await host.runCommand("process.kill")
         return {
           success: true,
-          spoken: lang === "en" ? `Process in panel ${resolved.pane!.index} terminated.` : `Processo del pannello ${resolved.pane!.index} terminato.`,
+          spoken:
+            lang === "en"
+              ? `Process in panel «${resolved.pane!.title}» terminated.`
+              : `Processo del pannello «${resolved.pane!.title}» terminato.`,
         }
       }
 
