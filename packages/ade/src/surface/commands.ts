@@ -31,6 +31,8 @@ export interface PluginCommandEntry {
 export interface CommandContext {
   workbench: Workbench
   recents: RecentEntry[]
+  /** Whether a recent project's folder is gone: still offered, since choosing it offers to remove it. */
+  missingRecent?: (root: string) => boolean
   hasHost: boolean
   /** Ids of panes with a live process behind them. */
   running: ReadonlySet<string>
@@ -310,7 +312,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       group: t("palette.group.recent"),
       enabled: hasHost,
       disabledReason: desktopOnly,
-      description: recent.root,
+      description: ctx.missingRecent?.(recent.root) ? t("palette.recent.missing", recent.root) : recent.root,
     })
   }
 

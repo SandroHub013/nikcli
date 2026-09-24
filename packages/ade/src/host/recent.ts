@@ -8,6 +8,7 @@
  */
 
 import { normalizePath } from "./path"
+import { isRemoteRoot } from "../remote/ssh"
 
 export interface RecentEntry {
   root: string
@@ -53,6 +54,41 @@ export function removeRecent(
  */
 function recentKey(root: string): string {
   return normalizePath(root).replace(/\/+$/, "").toLowerCase()
+}
+
+/**
+ * The roots in the list whose folder is gone, as keys for `isMissingRecent`.
+ *
+ * Marked, never removed: a folder on a drive not plugged in comes back, and
+ * the list is the user's. A remote Space is not asked about (nothing local
+ * belongs to it), and a check that fails says nothing, so it marks nothing.
+ */
+export async function missingRecents(
+  list: readonly Pick<RecentEntry, "root">[],
+  exists: (path: string) => Promise<boolean>,
+): Promise<Set<string>> {
+  const gone = new Set<string>()
+  await Promise.all(
+    list.map(async ({ root }) => {
+      if (isRemoteRoot(root)) return
+      const there = await exists(root).catch(() => true)
+      if (!there) gone.add(recentKey(root))
+    }),
+  )
+  return gone
+}
+
+/** Whether `root` is among the missing ones, however it is spelled. */
+export function isMissingRecent(missing: ReadonlySet<string>, root: string): boolean {
+  return missing.has(recentKey(root))
+}
+
+/** The same set with `root` added or taken out. */
+export function withMissing(missing: ReadonlySet<string>, root: string, gone: boolean): Set<string> {
+  const next = new Set(missing)
+  if (gone) next.add(recentKey(root))
+  else next.delete(recentKey(root))
+  return next
 }
 
 /** Serialises the list to a JSON string. */

@@ -364,7 +364,8 @@
   color: var(--ade-text);
 }
 
-[data-slot="ade-notice-link"] {
+[data-slot="ade-notice-link"],
+[data-slot="ade-notice-action"] {
   flex: 0 0 auto;
   padding: 2px var(--ade-space-3);
   border: 1px solid var(--ade-border);
@@ -375,7 +376,8 @@
   cursor: pointer;
 }
 
-[data-slot="ade-notice-link"]:hover {
+[data-slot="ade-notice-link"]:hover,
+[data-slot="ade-notice-action"]:hover {
   background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
 }
 

@@ -6,10 +6,10 @@ import { mustConfirmLeaving } from "./before-unload"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
 import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
-import { discoverProject, grantedRoots, openProject, type Project } from "../host/project"
-import { addRecent, serializeRecents, parseRecents, type RecentEntry } from "../host/recent"
+import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
+import { addRecent, isMissingRecent, missingRecents, parseRecents, removeRecent, serializeRecents, withMissing, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
-import { belongsTo, paneProject } from "./pane-project"
+import { belongsTo, goneFolder, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
@@ -524,6 +524,8 @@ export function Workbench() {
       after an answer that says nothing. */
   const [nikcliVersion, setNikcliVersion] = createSignal<string>()
   const [recents, setRecents] = createSignal<RecentEntry[]>([])
+  /* The recent projects whose folder is gone, marked in the sidebar and the palette; never removed on their own. */
+  const [missingRoots, setMissingRoots] = createSignal<ReadonlySet<string>>(new Set())
 
   /**
    * What the startup screen is saying, or nothing once it is done.
@@ -552,9 +554,11 @@ export function Workbench() {
    */
   const workspaces = createMemo(() => {
     const currentProject = project()
-    const list: Array<{ root: string; name: string; branch?: string }> = recents().map((r) => ({
+    const gone = missingRoots()
+    const list: Array<{ root: string; name: string; branch?: string; missing?: boolean }> = recents().map((r) => ({
       root: r.root,
       name: r.name,
+      missing: isMissingRecent(gone, r.root),
       branch: (r.root === currentProject?.root || r.name === currentProject?.name) ? currentProject?.branch : undefined,
     }))
     if (currentProject && !list.some((p) => p.name === currentProject.name || p.root === currentProject.root)) {
@@ -655,6 +659,8 @@ export function Workbench() {
     setNotice(text)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
   }
+  /* A button on the strip, for the one notice it was made for: shown only while that text is. */
+  const [noticeAction, setNoticeAction] = createSignal<{ text: string; label: string; run: () => void }>()
 
   /*
    * What the agents actually wrote, for the detectors that search it.
@@ -4332,6 +4338,8 @@ export function Workbench() {
     if (savedRecents) {
       setRecents(parseRecents(savedRecents))
     }
+    // Which of them are gone, asked in the background: marked, not removed.
+    if (host?.exists) void missingRecents(recents(), host.exists).then(setMissingRoots)
 
     themeState.restore()
     setBooting(t("boot.restore"))
@@ -4353,7 +4361,11 @@ export function Workbench() {
     // Discover project
     if (host) {
       setBooting(t("boot.project"))
-      const path = restored?.projectPath || (host.currentDir ? await host.currentDir() : "")
+      const here = host.currentDir ? await host.currentDir() : ""
+      const saved = restored?.projectPath
+      // The last project's folder gone: ADE opens where it was started, and says why.
+      const gone = saved ? await refuseMissingRoot(host, saved) : false
+      const path = (!gone && saved) || here
       const p = await discoverProject(host, path)
       setProject(p)
 
@@ -4850,7 +4862,7 @@ export function Workbench() {
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
-      if (host) {
+      if (host && !(await refuseMissingRoot(host, root))) {
         const p = await discoverProject(host, root)
         setProject(p)
         setWb(w => ({ ...w, projectPath: p.root, expandedId: undefined }))
@@ -4872,6 +4884,7 @@ export function Workbench() {
     return buildCommands({
       workbench: wb(),
       recents: recents(),
+      missingRecent: (root) => isMissingRecent(missingRoots(), root),
       hasHost: hasHost(),
       running: new Set(running.keys()),
       platform,
@@ -4993,6 +5006,7 @@ export function Workbench() {
     if (current && pathEquals(current.root, root)) return
     const host = await getHost()
     if (!host) return
+    if (await refuseMissingRoot(host, root)) return
     const opened = await discoverProject(host, root)
     setProject(opened)
     /*
@@ -5006,6 +5020,31 @@ export function Workbench() {
      */
     setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
     setStarting(false)
+  }
+
+  /**
+   * A saved root whose folder is gone — a recent project, a Space, the one
+   * restored at start — is not opened: `git` would fail in it and the
+   * sessions would start in nothing. The notice says so and offers to take it
+   * off the list; nothing is removed unless the user asks. True when refused.
+   */
+  const refuseMissingRoot = async (host: Pick<NonNullable<Awaited<ReturnType<typeof getHost>>>, "exists">, root: string) => {
+    const gone = await rootMissing(host, root)
+    setMissingRoots((set) => withMissing(set, root, gone))
+    if (!gone) return false
+    const text = t("project.missing", root)
+    report(text, "warning")
+    setNoticeAction({ text, label: t("project.missing.remove"), run: () => forgetRecent(root) })
+    return true
+  }
+
+  /** "Togli dall'elenco": the one way a gone project leaves the list. */
+  const forgetRecent = (root: string) => {
+    const next = removeRecent(recents(), root)
+    setRecents(next)
+    localStorage.setItem("ade.recents", serializeRecents(next))
+    setMissingRoots((set) => withMissing(set, root, false))
+    setNotice(undefined)
   }
 
   /** Switches to a project already in the list, by the name its row carries. */
@@ -5635,7 +5674,7 @@ export function Workbench() {
     // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
     const closed = await stopForSuspend(paneId, running, touchRunning)
     if (!closed) {
-      // Still followed, so the mark goes: the mail held meanwhile is typed as usual, and dropped from the saved queue.
+      // Tracked again, so the mark goes; but deaf (see `stopForSuspend`), so the note asks for the pane to be closed and reopened.
       setWb((w) => updatePane(w, paneId, { suspended: undefined }))
       saveSuspendedMail()
       appendLine(paneId, t("note.suspendKillFailed"), "note")
@@ -5699,6 +5738,20 @@ export function Workbench() {
   ) => {
     const agent = agentById(agentId)
     const host = await getHost()
+    /*
+     * Its folder gone (a project removed, a worktree cleaned up): not started
+     * somewhere else, and not left to die starting. The pane says which folder
+     * and offers to be closed.
+     */
+    const gone = host
+      ? await goneFolder(wb().panes.find((pane) => pane.id === paneId), project(), recents(), (path) => rootMissing(host, path))
+      : undefined
+    if (gone) {
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
+      appendLine(paneId, t("project.missing", gone), "note")
+      return
+    }
+    if (wb().panes.some((pane) => pane.id === paneId && pane.gone)) setWb((w) => updatePane(w, paneId, { gone: undefined }))
     const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
     if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host)
@@ -7019,6 +7072,13 @@ export function Workbench() {
             {(text) => (
               <div data-slot="ade-notice" role="status">
                 <span data-slot="ade-notice-text">{text()}</span>
+                <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
+                  {(action) => (
+                    <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
+                      {action().label}
+                    </button>
+                  )}
+                </Show>
                 <button
                   type="button"
                   data-slot="ade-notice-close"

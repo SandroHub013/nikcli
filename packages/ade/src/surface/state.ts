@@ -201,6 +201,8 @@ export interface Pane {
   resumeId?: string
   /** The git worktree this session works in, when `spawn --worktree` gave it one; its cwd on every start. */
   worktree?: string
+  /** The folder this session should start in and that is gone: it is not started, and offers to close. Not saved. */
+  gone?: string
   /** Arguments chosen at spawn (`--model`, agy's `--add-dir`), kept so a restart runs the same session. */
   spawnArgs?: string[]
   /** The cells the user resized this tile to; absent means the default size. See `grid/arrange.ts`. */
@@ -346,7 +348,7 @@ function inferAgent(model: string, title: string): string {
 
 export function deriveWorkspaces(
   panes: Pane[],
-  known: ReadonlyArray<{ root: string; name: string; branch?: string }> = [],
+  known: ReadonlyArray<{ root: string; name: string; branch?: string; missing?: boolean }> = [],
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
 
@@ -356,6 +358,7 @@ export function deriveWorkspaces(
       name: project.name,
       path: project.root,
       branch: project.branch,
+      ...(project.missing ? { missing: true as const } : {}),
       sessions: [],
     }
   }

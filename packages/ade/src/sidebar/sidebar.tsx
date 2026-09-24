@@ -175,6 +175,7 @@ function WorkspaceHeaderRow(props: {
       data-expanded={props.row.isExpanded ? "true" : undefined}
       data-active={props.isActive ? "true" : undefined}
       data-selected={props.isActive ? "true" : undefined}
+      data-missing={props.row.workspace.missing ? "true" : undefined}
       aria-expanded={props.row.isExpanded}
       onClick={() => props.onToggle(props.row.id)}
     >
@@ -197,6 +198,11 @@ function WorkspaceHeaderRow(props: {
       <span data-slot="workspace-name" title={props.row.workspace.name}>
         {props.row.workspace.name}
       </span>
+      <Show when={props.row.workspace.missing}>
+        <Badge tone="error" data-slot="space-badge" title={t("project.missing.tip", props.row.workspace.path ?? props.row.workspace.name)}>
+          {t("project.missing.badge")}
+        </Badge>
+      </Show>
       <Show when={props.row.workspace.path?.startsWith("ssh://")}>
         <Badge tone="accent" data-slot="space-badge" title={props.row.workspace.path}>ssh</Badge>
       </Show>

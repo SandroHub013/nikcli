@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { discoverProject, grantedRoots, openProject } from "./project"
+import { discoverProject, grantedRoots, openProject, rootMissing } from "./project"
 import type { Host } from "./shell"
 
 /** Minimal fake Host — only `run` and `pickDirectory` are needed here. */
@@ -127,5 +127,20 @@ describe("grantedRoots (audit 0.7.7, D1-2)", () => {
     await discoverProject(fakeHost({ allowWriteRoot: async () => true }), "C:/granted/by-host")
     expect(grantedRoots()).not.toContain("C:/Users/refused-home")
     expect(grantedRoots()).toContain("C:/granted/by-host")
+  })
+})
+
+describe("rootMissing", () => {
+  it("a folder that is gone is missing; one that is there is not", async () => {
+    expect(await rootMissing(fakeHost({ exists: async () => false }), "C:/Users/x/nikcli-ade-vecchia")).toBe(true)
+    expect(await rootMissing(fakeHost({ exists: async () => true }), "C:/Users/x/nikcli")).toBe(false)
+  })
+
+  it("never for a remote Space, an empty root, a host that cannot ask, or a check that fails", async () => {
+    const gone = fakeHost({ exists: async () => false })
+    expect(await rootMissing(gone, "ssh://user@host/srv/app")).toBe(false)
+    expect(await rootMissing(gone, "")).toBe(false)
+    expect(await rootMissing({}, "C:/a")).toBe(false)
+    expect(await rootMissing(fakeHost({ exists: async () => Promise.reject(new Error("no")) }), "C:/a")).toBe(false)
   })
 })

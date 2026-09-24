@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { belongsTo, paneProject, sameProject } from "./pane-project"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { activityLabel } from "../grid/activity"
+import { t } from "../i18n"
+import { belongsTo, goneFolder, paneProject, sameProject } from "./pane-project"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import { fromWorkspaceState, toWorkspaceState, type Pane, type Workbench } from "./state"
 
@@ -82,4 +86,40 @@ describe("folders are compared as host/path.ts compares them", () => {
     expect(paneProject({ workspaceId: "C:", projectRoot: "C:/" }, { name: "C:", root: "C:" }, [])).toEqual({ kind: "root", root: "C:/" })
     expect(belongsTo({ projectRoot: "d:/" }, { name: "D:", root: "D:/" })).toBe(true)
   })
+})
+
+describe("a session whose folder is gone (ROADMAP, BASSO)", () => {
+  const gone = (paths: string[]) => async (path: string) => paths.includes(path)
+  const open = { name: "nikcli", root: "C:/x/nikcli" }
+
+  test("its project's folder gone: that folder, not the open project to start in", async () => {
+    const pane = { workspaceId: "vecchia", projectRoot: "C:/x/nikcli-ade-vecchia" }
+    expect(await goneFolder(pane, open, [], gone(["C:/x/nikcli-ade-vecchia"]))).toBe("C:/x/nikcli-ade-vecchia")
+  })
+
+  test("its worktree gone: the worktree, which is where it would start", async () => {
+    const pane = { workspaceId: "nikcli", projectRoot: open.root, worktree: "C:/x/nikcli-ade-s62" }
+    expect(await goneFolder(pane, open, [], gone(["C:/x/nikcli-ade-s62"]))).toBe("C:/x/nikcli-ade-s62")
+  })
+
+  test("a pane saved before folders were kept, found by name among the recents", async () => {
+    const recents = [{ name: "vecchia", root: "C:/x/nikcli-ade-vecchia" }]
+    expect(await goneFolder({ workspaceId: "vecchia" }, open, recents, gone(["C:/x/nikcli-ade-vecchia"]))).toBe("C:/x/nikcli-ade-vecchia")
+  })
+
+  test("nothing gone, nothing to say", async () => {
+    expect(await goneFolder({ workspaceId: "nikcli", projectRoot: open.root }, open, [], gone([]))).toBeUndefined()
+    expect(await goneFolder(undefined, undefined, [], gone(["C:/x"]))).toBeUndefined()
+  })
+})
+
+test("the pane of a gone folder offers to close, not to restart, and the flag is never saved", () => {
+  const source = readFileSync(join(import.meta.dir, "pane-renderer.tsx"), "utf-8")
+  expect(source).toContain('current().gone && !deps.isRunning(current().id)')
+  expect(source).toMatch(/restartable = \(\) =>\s+!current\(\)\.suspended &&\s+!current\(\)\.gone/)
+  expect(t("pane.closeGone")).toBe("Chiudi il pannello")
+  expect(activityLabel("folderGone")).toBe("Cartella sparita")
+  const pane = { id: "p1", title: "Claude", status: "error", agent: "claude-code", mode: "auto", lines: [], workspaceId: "app", gone: "C:/x/vecchia" } as unknown as Pane
+  const state = toWorkspaceState({ panes: [pane], view: "code", sidebarWidth: 260 } as unknown as Workbench)
+  expect(JSON.stringify(state)).not.toContain("C:/x/vecchia")
 })

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { t } from "../i18n"
 import {
   canSuspend,
   closeSuspendedTree,
@@ -183,4 +184,11 @@ describe("the queue after Riprendi (Fabio, BASSO 2)", () => {
     // Other held lines for a session without process go, as before.
     expect(keptWithoutProcess({}, { exists: true, suspended: false })).toBe(false)
   })
+})
+
+test("after a failed kill the note says what to do: the session no longer answers (Architect, BASSO)", () => {
+  const note = t("note.suspendKillFailed")
+  expect(note.startsWith("Non sospesa")).toBe(true)
+  expect(note).toContain("Chiudi il pannello e riaprilo")
+  expect(note).not.toContain("com'era")
 })

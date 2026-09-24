@@ -29,6 +29,7 @@ export const ACTIVITY_CODES = [
   "connected",
   "connectFailed",
   "suspended",
+  "folderGone",
 ] as const
 
 export type ActivityCode = (typeof ACTIVITY_CODES)[number]
@@ -53,6 +54,7 @@ const LABELS: Record<ActivityCode, MessageKey> = {
   connected: "activity.connected",
   connectFailed: "activity.connectFailed",
   suspended: "activity.suspended",
+  folderGone: "activity.folderGone",
 }
 
 /** The sentences earlier builds stored, and what each one meant. */

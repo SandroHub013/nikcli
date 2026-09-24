@@ -90,8 +90,10 @@ type Killable = { kill: (options?: { tree?: boolean }) => void | Promise<boolean
 /**
  * Takes the session out of `running` and closes its tree. Out before the kill,
  * as a relaunch does, so nothing reads the exit as the session ending. A kill
- * that fails puts it back: a process perhaps still alive stays followed, and
- * "Riprendi" never opens a second one on the same conversation.
+ * that fails puts it back: a process perhaps still alive stays tracked, so
+ * closing the pane closes it, and "Riprendi" never opens a second one on the
+ * same conversation. It is deaf, though — the kill already took its listeners
+ * off — which is why the note asks the user to close the pane and reopen it.
  */
 export async function stopForSuspend<S extends Killable>(paneId: string, running: Map<string, S>, changed: () => void): Promise<boolean> {
   const session = running.get(paneId)

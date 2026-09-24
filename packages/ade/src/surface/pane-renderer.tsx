@@ -369,6 +369,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
     /* A session whose process is gone — exited, failed, or restored from disk. */
     const restartable = () =>
       !current().suspended &&
+      !current().gone &&
       !deps.isRunning(current().id) &&
       Boolean(current().agent ?? current().model) &&
       (current().status === "done" || current().status === "error")
@@ -487,6 +488,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))
+            : current().gone && !deps.isRunning(current().id)
+              ? [{ label: t("pane.closeGone"), tone: "primary" as const, onClick: () => deps.close(current().id) }]
             : current().suspended && !deps.isRunning(current().id)
               ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
               : restartable()
