@@ -3922,10 +3922,14 @@ export function Workbench() {
       if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
       await host.ttsPiperInstall(voice)
     },
-    synthesize: async (voice, text) => {
+    synthesize: async (voice, text, token) => {
       const host = await getHost()
       if (!host?.ttsPiperSpeak) throw new Error(t("voice.noHost"))
-      return host.ttsPiperSpeak(voice, text)
+      return host.ttsPiperSpeak(voice, text, token)
+    },
+    cancel: async (tokens) => {
+      const host = await getHost()
+      await host?.ttsPiperCancel?.(tokens)
     },
     stop: async () => {
       const host = await getHost()

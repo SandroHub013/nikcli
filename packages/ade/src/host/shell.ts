@@ -192,8 +192,13 @@ export interface Host {
   ttsPiperStatus?: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
   /** Downloads the Piper runtime and the voice, checked against pinned digests. */
   ttsPiperInstall?: (voice: string) => Promise<void>
-  /** One sentence as WAV bytes, from the resident Piper process. */
-  ttsPiperSpeak?: (voice: string, text: string) => Promise<ArrayBuffer>
+  /** One sentence as WAV bytes, from the resident Piper process. `token` names the request for `ttsPiperCancel`. */
+  ttsPiperSpeak?: (voice: string, text: string, token: number) => Promise<ArrayBuffer>
+  /**
+   * Skips the queued sentences of the abandoned tokens: each is dropped when
+   * it reaches the front of the queue, and the one in corso finishes alone.
+   */
+  ttsPiperCancel?: (tokens: number[]) => Promise<void>
   /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
   ttsPiperStop?: () => Promise<void>
   /** Opens the model page of a known voice in the browser. */
@@ -661,9 +666,14 @@ export async function getHost(): Promise<Host | undefined> {
       await invoke("tts_open_voice_source", { voiceId: voice })
     },
 
-    async ttsPiperSpeak(voice, text) {
+    async ttsPiperSpeak(voice, text, token) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text })
+      return invoke<ArrayBuffer>("tts_piper_speak", { voiceId: voice, text, token })
+    },
+
+    async ttsPiperCancel(tokens) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("tts_piper_cancel", { tokens })
     },
 
     async ttsPiperStop() {

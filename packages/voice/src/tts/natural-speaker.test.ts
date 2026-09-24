@@ -149,6 +149,47 @@ describe("tts/natural-speaker", () => {
     expect(missing.installs).toEqual(["ugo"])
   })
 
+  test("an abandoned reply cancels its queued sentences in the host, keeping the prefetched ones", async () => {
+    const cancelled: number[][] = []
+    const asked: { text: string; token: number }[] = []
+    const held = new Map<string, (buffer: ArrayBuffer) => void>()
+    const h = harness({
+      synthesize: (_voice, text, token) => {
+        asked.push({ text, token })
+        if (text.startsWith("Vecchia")) {
+          // Still queued in the host: it never settles on its own.
+          return new Promise<ArrayBuffer>((resolve) => held.set(text, resolve))
+        }
+        return Promise.resolve(wav(text))
+      },
+      cancel: (tokens) => {
+        cancelled.push(tokens)
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    const old = speaker.speak("Vecchia frase lunga. Vecchia altra frase lunga.")
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    // Asked for ahead of the next reply, while the old one still runs.
+    speaker.prefetch?.("Nuova frase pronta.")
+    const prefetched = asked.find((entry) => entry.text === "Nuova frase pronta.")
+    expect(prefetched).toBeDefined()
+
+    await speaker.speak("Nuova risposta lunga.")
+    expect(h.played).toEqual(["Nuova risposta lunga."])
+
+    // One cancel, with exactly the two abandoned sentences — never the prefetched one.
+    expect(cancelled).toHaveLength(1)
+    const abandoned = new Set(asked.filter((entry) => entry.text.startsWith("Vecchia")).map((entry) => entry.token))
+    expect(abandoned.size).toBe(2)
+    expect(new Set(cancelled[0])).toEqual(abandoned)
+    expect(cancelled[0]).not.toContain(prefetched!.token)
+
+    // The old reply finds its sentences settled at last, and plays none of them.
+    for (const resolve of held.values()) resolve(wav("x"))
+    await old
+    expect(h.played).toEqual(["Nuova risposta lunga."])
+  })
+
   test("a new reply stops the one playing, and nothing of the old one plays after", async () => {
     let release: (() => void) | undefined
     const aborted: string[] = []

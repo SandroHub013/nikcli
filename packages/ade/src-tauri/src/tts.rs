@@ -23,6 +23,7 @@
 //! Web Speech voice.
 
 use serde::Serialize;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
@@ -161,6 +162,48 @@ static SENTENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::ne
 pub struct Piper {
     resident: Mutex<Option<Resident>>,
     install: Mutex<()>,
+    /// Tokens the JS abandoned while their phrases waited in the queue: each is
+    /// skipped, and removed, when its own request reaches the front.
+    abandoned: Mutex<HashSet<u64>>,
+}
+
+impl Piper {
+    /// Remembers that the JS will not wait for these phrases any more.
+    fn abandon(&self, tokens: &[u64]) {
+        if let Ok(mut set) = self.abandoned.lock() {
+            set.extend(tokens.iter().copied());
+        }
+    }
+
+    /// The phrase's turn, taken with the resident lock held and before any
+    /// synthesis: an abandoned phrase stops here and never writes to Piper,
+    /// and the mark is consumed by the skip that found it.
+    fn claim(&self, token: u64) -> Result<(), String> {
+        let mut set = self.abandoned.lock().map_err(|_| "voce bloccata")?;
+        if set.remove(&token) {
+            Err("frase annullata dal client".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Forgets a mark set while the phrase with this token was already in
+    /// corso: that phrase has had its turn, and nothing claims the token again.
+    fn release(&self, token: u64) {
+        if let Ok(mut set) = self.abandoned.lock() {
+            set.remove(&token);
+        }
+    }
+}
+
+/// Clears the abandonment mark of a phrase once it has had its turn, whether
+/// it spoke or failed, so no mark outlives the request it was set for.
+struct Release<'a>(&'a Piper, u64);
+
+impl Drop for Release<'_> {
+    fn drop(&mut self) {
+        self.0.release(self.1);
+    }
 }
 
 #[derive(Serialize)]
@@ -232,19 +275,28 @@ fn install_blocking(app: &tauri::AppHandle, wanted: &'static Voice) -> Result<()
 
 /// One sentence as WAV bytes, from the resident process (started, or restarted for another voice).
 ///
+/// `token` names this request for `tts_piper_cancel`: if the JS abandoned it
+/// while it waited its turn on the resident lock, it is skipped instead of
+/// synthesised, so an abandoned reply never delays the next one.
+///
 /// On the blocking pool: the sentences of one reply are requested together and
 /// wait for each other on the resident process's lock, and each wait would
 /// otherwise hold an async worker.
 #[tauri::command]
-pub async fn tts_piper_speak(app: tauri::AppHandle, voice_id: String, text: String) -> Result<tauri::ipc::Response, String> {
+pub async fn tts_piper_speak(
+    app: tauri::AppHandle,
+    voice_id: String,
+    text: String,
+    token: u64,
+) -> Result<tauri::ipc::Response, String> {
     voice(&voice_id)?;
-    let bytes = tauri::async_runtime::spawn_blocking(move || speak_blocking(&app, &voice_id, &text))
+    let bytes = tauri::async_runtime::spawn_blocking(move || speak_blocking(&app, &voice_id, &text, token))
         .await
         .map_err(|e| e.to_string())??;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str) -> Result<Vec<u8>, String> {
+fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str, token: u64) -> Result<Vec<u8>, String> {
     let state = app.state::<Piper>();
     let root = root(app)?;
     let scratch = root.join("scratch");
@@ -256,6 +308,10 @@ fn speak_blocking(app: &tauri::AppHandle, voice_id: &str, text: &str) -> Result<
     }
 
     let mut guard = state.resident.lock().map_err(|_| "voce bloccata")?;
+    // The JS may have abandoned this phrase while it waited behind the others:
+    // at its turn it is skipped, and the one in corso keeps going untouched.
+    state.claim(token)?;
+    let _release = Release(&state, token);
     if guard.as_ref().map(|r| r.voice != voice_id).unwrap_or(true) {
         *guard = None;
         if !runtime_ready(&root) {
@@ -297,6 +353,15 @@ pub async fn tts_piper_stop(state: tauri::State<'_, Piper>) -> Result<(), String
         *guard = None;
     }
     Ok(())
+}
+
+/// The JS will not wait for these phrases any more (a cancelled reply): the
+/// queued ones are skipped when they reach the front of the queue, the one in
+/// corso finishes on its own. Called with the tokens of the in-flight requests
+/// only — the ones asked for ahead of the next reply are never abandoned.
+#[tauri::command]
+pub fn tts_piper_cancel(state: tauri::State<'_, Piper>, tokens: Vec<u64>) {
+    state.abandon(&tokens);
 }
 
 fn start(root: &Path, voice_id: &str) -> Result<Resident, String> {
@@ -553,6 +618,49 @@ mod tests {
         // Wider than the JS client's 15 s, which decides when to stop waiting.
         assert!(SYNTHESIS_TIMEOUT >= std::time::Duration::from_secs(30));
         assert!(FIRST_SYNTHESIS_TIMEOUT > std::time::Duration::from_secs(22));
+    }
+
+    #[test]
+    fn a_phrase_the_js_abandoned_is_skipped_when_it_reaches_the_front() {
+        let piper = std::sync::Arc::new(Piper::default());
+        // The phrase in corso: it holds the lock, and it is allowed to finish.
+        let front = piper.resident.lock().unwrap();
+        let queued = piper.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let _guard = queued.resident.lock().unwrap();
+            let _ = tx.send(queued.claim(7).is_err());
+        });
+        // The JS abandons the queued phrase while it still waits for the lock.
+        piper.abandon(&[7]);
+        drop(front);
+        assert_eq!(
+            rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the queued phrase must reach its turn"),
+            true,
+            "an abandoned phrase must be skipped, not synthesised"
+        );
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn the_skip_consumes_the_mark_and_leaves_the_other_phrases_alone() {
+        let piper = Piper::default();
+        piper.abandon(&[3, 4]);
+        assert!(piper.claim(3).is_err(), "the abandoned phrase is skipped");
+        assert!(piper.claim(5).is_ok(), "a phrase never abandoned reaches synthesis");
+        assert!(piper.claim(4).is_err());
+        assert!(piper.claim(4).is_ok(), "the mark is consumed by the claim that found it");
+    }
+
+    #[test]
+    fn a_phrase_already_synthesising_clears_a_late_abandonment_of_its_own_token() {
+        let piper = Piper::default();
+        // Claimed at the front: the synthesis runs. The JS abandons it meanwhile.
+        assert!(piper.claim(9).is_ok());
+        piper.abandon(&[9]);
+        // When it finishes the mark must not linger: nothing will claim token 9 again.
+        piper.release(9);
+        assert!(piper.claim(9).is_ok());
     }
 
     #[test]
