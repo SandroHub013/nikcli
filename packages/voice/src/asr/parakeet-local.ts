@@ -372,7 +372,7 @@ export function createParakeetTranscriber(
           preference === res.activeBackend ||
           (preference === "webgpu" && res.activeBackend === "webgpu") ||
           (preference === "wasm" && res.activeBackend === "wasm")
-        if (pendingEpoch === sharedEpoch && globalSharedParakeet === pending && pending.modelId === modelId && matchesBackend) {
+        if (pendingEpoch === sharedEpoch && pending.modelId === modelId && matchesBackend) {
           model = res.model
           activeBackend = res.activeBackend
           statusMessage = `Modello Parakeet pronto (${activeBackend}).`

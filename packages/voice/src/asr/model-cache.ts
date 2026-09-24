@@ -181,7 +181,13 @@ export function keysForRepo(keys: readonly IDBValidKey[], repo: string): string[
 export function hasRequiredFiles(keys: readonly IDBValidKey[], requiredFiles: readonly string[]): boolean {
   if (requiredFiles.length === 0) return true
   const names = keys.filter((key): key is string => typeof key === "string")
-  return requiredFiles.every((file) => names.some((key) => key.endsWith(`-${file}`)))
+  const matches = requiredFiles.map((file) => names.filter((key) => key.endsWith(`-${file}`)))
+  if (matches.some((entries) => entries.length === 0)) return false
+  const firstFile = requiredFiles[0]!
+  return matches[0]!.some((firstKey) => {
+    const prefix = firstKey.slice(0, -(firstFile.length + 1))
+    return matches.every((entries) => entries.some((key) => key.startsWith(`${prefix}-`)))
+  })
 }
 
 /** Adds up whatever of these values look like stored files. */

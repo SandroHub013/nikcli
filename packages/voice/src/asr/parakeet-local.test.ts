@@ -70,6 +70,7 @@ describe("asr/parakeet-local", () => {
     expect(hasRequiredFiles(keys, required)).toBe(true)
     expect(hasRequiredFiles(keys.slice(1), required)).toBe(false)
     expect(hasRequiredFiles(["hf-repo-rev-encoder-model.fp16.onnx", "hf-repo-rev-decoder_joint-model.int8.onnx", "hf-repo-rev-vocab.txt"], required)).toBe(false)
+    expect(hasRequiredFiles([keys[0]!, keys[1]!.replace("rev-main", "rev-other"), keys[2]!], required)).toBe(false)
   })
 
   test("readiness reports usable when WASM or WebGPU available, and explains when model is not downloaded", () => {
@@ -398,6 +399,37 @@ describe("asr/parakeet-local", () => {
       await expect(starting).rejects.toThrow()
       expect(model.disposed).toBe(true)
       expect(isParakeetModelWarmedUp()).toBe(false)
+    })
+
+    test("concurrent starts share one in-flight model", async () => {
+      await disposeParakeetModel()
+      let resolveModel: ((model: MockParakeetModel) => void) | undefined
+      let calls = 0
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        resolveModel = resolve
+      })
+      const options = {
+        keepWarm: true,
+        fromHub: async () => {
+          calls++
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      }
+      const first = createParakeetTranscriber(options)
+      const firstStart = first.start()
+      while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+      const second = createParakeetTranscriber(options)
+      const secondStart = second.start()
+      const model = new MockParakeetModel("wasm")
+      resolveModel?.(model)
+      await Promise.all([Promise.resolve(firstStart), Promise.resolve(secondStart)])
+
+      expect(calls).toBe(1)
+      await first.stop()
+      await second.stop()
+      await disposeParakeetModel()
     })
 
     test("a waiter does not adopt a model disposed while it waits", async () => {
