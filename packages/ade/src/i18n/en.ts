@@ -416,6 +416,10 @@ export const en: Messages = {
   "window.minimize": "Minimize",
   "window.maximize": "Maximize or restore",
   "window.close": "Close",
+  "window.closeConfirm.message": (count) =>
+    `${count} ${count === 1 ? "session is working" : "sessions are working"}. Close anyway?`,
+  "window.closeConfirm.ok": "Close",
+  "window.closeConfirm.cancel": "Cancel",
   "bell.title": "Notifications",
   "bell.dismiss": "Dismiss",
 

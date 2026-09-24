@@ -130,8 +130,8 @@ async function askCloseConfirmation(message: string): Promise<boolean> {
     return await ask(message, {
       title: "ADE",
       kind: "warning",
-      okLabel: "Chiudi",
-      cancelLabel: "Annulla",
+      okLabel: t("window.closeConfirm.ok"),
+      cancelLabel: t("window.closeConfirm.cancel"),
     })
   } catch {
     return window.confirm(message)

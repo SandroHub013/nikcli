@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { translate } from "../i18n"
 import {
   mustConfirmLeaving,
   shouldConfirmWindowClose,
@@ -121,5 +122,12 @@ describe("counting active working sessions for window close (D81)", () => {
     expect(isWorkingAgentPane({ id: "p4", agent: "terminal", status: "working" }, running)).toBe(false)
     expect(isWorkingAgentPane({ id: "p5", mode: "browser", browserUrl: "http://test", status: "working" }, running)).toBe(false)
     expect(isWorkingAgentPane({ id: "p-missing", agent: "claude-code", status: "working" }, running)).toBe(false)
+  })
+
+  test("English localization of window close confirmation", () => {
+    expect(translate("en", "window.closeConfirm.message", 1)).toBe("1 session is working. Close anyway?")
+    expect(translate("en", "window.closeConfirm.message", 3)).toBe("3 sessions are working. Close anyway?")
+    expect(translate("en", "window.closeConfirm.ok")).toBe("Close")
+    expect(translate("en", "window.closeConfirm.cancel")).toBe("Cancel")
   })
 })
