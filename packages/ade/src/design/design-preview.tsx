@@ -138,13 +138,38 @@ export function previewPlan(preview: string, projectRoot: string | undefined, k:
   return { kind: "image", path, src: mediaUrl(path, windows) }
 }
 
-/** The frame's attributes, all of them: its `src`, its size in px, its sandbox. No `srcdoc`, no scaling. */
+export interface ScaledThumbnail {
+  readonly scale: number
+  readonly width: number
+  readonly height: number
+  readonly frameWidth: number
+  readonly frameHeight: number
+}
+
+/**
+ * Computes scaling factors for a miniature thumbnail fitting within box dimensions (D3).
+ * Scales to fit the box width, clipping height to fixed boxH so the top of tall pages is clearly visible.
+ * Keeps original frame dimensions for native iframe rendering.
+ */
+export function thumbnailScale(size: PreviewSize, boxW = 330, boxH = 220): ScaledThumbnail {
+  const scale = size.width > 0 ? boxW / size.width : 1
+  return {
+    scale,
+    width: boxW,
+    height: Math.min(boxH, Math.round(size.height * scale)),
+    frameWidth: size.width,
+    frameHeight: size.height,
+  }
+}
+
+/** The frame's attributes: static miniature without scripts (sandbox: ""), lazy loading. No `srcdoc`. */
 export function frameProps(plan: { src: string }, size: PreviewSize, title: string) {
   return {
     src: plan.src,
     width: String(size.width),
     height: String(size.height),
-    sandbox: "allow-scripts allow-forms",
+    sandbox: "",
+    loading: "lazy" as const,
     title,
   }
 }
@@ -174,8 +199,6 @@ export function DesignPreview(props: {
   k: string
   name?: string
   projectRoot?: string
-  fullScreen?: boolean
-  onToggleFullScreen?: () => void
 }) {
   const plan = () => previewPlan(props.preview, props.projectRoot, props.k)
   const [size, setSize] = createSignal<PreviewSize>()
@@ -205,35 +228,8 @@ export function DesignPreview(props: {
   return (
     <div
       data-component="design-preview"
-      data-fullscreen={props.fullScreen ? "true" : undefined}
       data-type={plan().kind}
     >
-      <Show when={props.onToggleFullScreen && !failure() && (plan().kind === "html" || plan().kind === "image")}>
-        <button
-          type="button"
-          data-slot="preview-expand-btn"
-          title={props.fullScreen ? t("design.preview.close") : t("design.preview.full")}
-          aria-label={props.fullScreen ? t("design.preview.close") : t("design.preview.full")}
-          onClick={(e) => {
-            e.stopPropagation()
-            props.onToggleFullScreen?.()
-          }}
-        >
-          <Show
-            when={props.fullScreen}
-            fallback={
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
-                <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            }
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4">
-              <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </Show>
-        </button>
-      </Show>
-
       {(() => {
         const current = plan()
         if (current.kind === "error") {
@@ -279,17 +275,40 @@ export function DesignPreview(props: {
                 </div>
               </Show>
               <Show when={!failure() && size()}>
-                {(measured) => (
-                  <div data-slot="preview-frame-wrap">
-                    {/*
-                      `src` from ade-media, never `srcdoc`: a srcdoc document inherits
-                      ADE's CSP, whose release nonce stops every inline script. No
-                      `allow-same-origin`: the page stays at an opaque origin, and ADE's
-                      IPC stub in the frame refuses `invoke`. See the note at the top.
-                    */}
-                    <iframe data-slot="preview-frame" {...frameProps(current, measured(), title())} />
-                  </div>
-                )}
+                {(measured) => {
+                  const thumb = () => thumbnailScale(measured())
+                  return (
+                    <div
+                      data-slot="preview-frame-wrap"
+                      style={{
+                        width: `${thumb().width}px`,
+                        height: `${thumb().height}px`,
+                        overflow: "hidden",
+                        position: "relative",
+                        "pointer-events": "none",
+                      }}
+                    >
+                      {/*
+                        `src` from ade-media, never `srcdoc`: a srcdoc document inherits
+                        ADE's CSP, whose release nonce stops every inline script. No
+                        `allow-same-origin`: the page stays at an opaque origin, and ADE's
+                        IPC stub in the frame refuses `invoke`. Scaled as miniature (D3).
+                      */}
+                      <iframe
+                        data-slot="preview-frame"
+                        {...frameProps(current, measured(), title())}
+                        style={{
+                          width: `${thumb().frameWidth}px`,
+                          height: `${thumb().frameHeight}px`,
+                          transform: `scale(${thumb().scale})`,
+                          "transform-origin": "top left",
+                          "pointer-events": "none",
+                          border: "0",
+                        }}
+                      />
+                    </div>
+                  )
+                }}
               </Show>
             </>
           )

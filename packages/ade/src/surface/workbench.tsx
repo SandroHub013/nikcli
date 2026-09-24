@@ -1455,9 +1455,10 @@ export function Workbench() {
       setWb((w) => ({ ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }), view: "code", focusedId: existing.id }))
       return undefined
     }
+    const newId = `bd${Date.now()}`
     setWb((w) => ({
       ...addPane(w, {
-        id: `bd${Date.now()}`,
+        id: newId,
         title,
         status: "working",
         model: "—",
@@ -1468,6 +1469,7 @@ export function Workbench() {
         lines: [],
       }),
       view: "code",
+      focusedId: newId,
     }))
     return undefined
   }

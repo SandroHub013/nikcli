@@ -27,7 +27,7 @@ export function shortSelector(selector: string): string {
  * it: the line already says «Variante 1» (D2 review, BASSO 2). Another
  * number («2 · Vetro» on variant 1, «12 colonne») is part of the name.
  */
-function withoutNumber(name: string, variant: number): string {
+export function withoutNumber(name: string, variant: number): string {
   return name.replace(new RegExp(`^${variant}(?:\\s*[·.:)\\-–—]\\s*|$)`), "")
 }
 

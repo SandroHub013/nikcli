@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
-import { createDesignHub } from "./hub"
+import { createDesignHub, type DesignHub } from "./hub"
 import { t } from "../i18n"
 import type { DesignProposal } from "./state"
 import { createDesignRegister, type DesignRegister } from "./register"
@@ -101,7 +101,7 @@ describe("the design register and the hub", () => {
     expect(hub.draft("DS1")).toEqual({ note: "" })
   })
 
-  test("full preview opens and closes via hub", () => {
+  test("variant opens via hub openVariant", async () => {
     const register: DesignRegister = {
       path: () => "C:\\project\\.ade\\design.jsonl",
       loaded: () => undefined,
@@ -113,23 +113,45 @@ describe("the design register and the hub", () => {
       watch: () => () => {},
     }
 
-    const hub = createDesignHub({
+    const openedVariants: { k: string; variant: number }[] = []
+    const hubWithOpen = createDesignHub({
       register,
       recipient: () => ({ state: "non scelta" }),
       sessions: () => [],
       choose: () => {},
       delivery: () => ({ state: "in coda" }),
       onAnswered: () => {},
+      openVariant: async (p, v) => {
+        openedVariants.push({ k: p.k, variant: v })
+        return undefined
+      },
     })
 
-    expect(hub.fullPreview().open).toBe(false)
-    hub.openFullPreview({ name: "A", description: "desc", preview: "a.html" }, "Test Title")
-    expect(hub.fullPreview().open).toBe(true)
-    expect(hub.fullPreview().variant?.name).toBe("A")
-    expect(hub.fullPreview().title).toBe("Test Title")
+    const p: DesignProposal = {
+      k: "DS1",
+      title: "Settings",
+      variants: [{ name: "A", description: "desc", preview: "a.html" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    await hubWithOpen.openVariant(p, 1)
+    expect(openedVariants).toEqual([{ k: "DS1", variant: 1 }])
+    expect(hubWithOpen.problem("DS1")).toBeUndefined()
 
-    hub.closeFullPreview()
-    expect(hub.fullPreview().open).toBe(false)
+    const hubWithError = createDesignHub({
+      register,
+      recipient: () => ({ state: "non scelta" }),
+      sessions: () => [],
+      choose: () => {},
+      delivery: () => ({ state: "in coda" }),
+      onAnswered: () => {},
+      openVariant: async () => "Non si carica",
+    })
+    const err = await hubWithError.openVariant(p, 1)
+    expect(err).toBe("Non si carica")
+    expect(hubWithError.problem("DS1")).toBe("Non si carica")
   })
 })
 
@@ -463,5 +485,59 @@ describe("the sheet keeps a choice made in this window", () => {
     const { picked, chosen } = await sheetAfter((hub) => hub.setDraft("DS1", { note: "", picked: 1 }))
     expect(picked).toBeUndefined()
     expect(chosen).toBe(false)
+  })
+
+  test("«Apri grande» from DesignSheet closes the sheet when variant opens without problem (MEDIO 2)", async () => {
+    let closed = false
+    const proposal: DesignProposal = {
+      k: "DS1",
+      title: "Settings",
+      variants: [{ name: "A", description: "desc", preview: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    const register: DesignRegister = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => ({ proposals: [proposal], outbox: [], rejected: [] }),
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    }
+    let hub!: DesignHub
+    const disposeHub = createRoot((dispose) => {
+      hub = createDesignHub({
+        register,
+        projectRoot: () => "C:\\project",
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+        openVariant: async () => undefined,
+      })
+      return dispose
+    })
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const disposeSheet = createRoot((dispose) => {
+      render(() => createComponent(DesignSheet, { hub, onClose: () => { closed = true }, onOpenPanel: () => {} }), host)
+      return dispose
+    })
+
+    const openLargeBtn = host.querySelector<HTMLButtonElement>('[data-slot="variant-open-large"]')
+    expect(openLargeBtn).not.toBeNull()
+    openLargeBtn?.click()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(closed).toBe(true)
+
+    disposeSheet()
+    disposeHub()
+    host.remove()
   })
 })

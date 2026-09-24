@@ -21,6 +21,8 @@ export interface DesignProposal {
   readonly title: string
   readonly context?: string
   readonly spec?: string
+  /** What stays as it is, whichever variant is picked. */
+  readonly keeps?: readonly string[]
   readonly variants: readonly DesignVariant[]
   /** More than one variant may be picked. */
   readonly multi?: true
@@ -86,6 +88,7 @@ export function foldProposals(
         title: event.title,
         context: event.context,
         spec: event.spec,
+        ...(event.keeps && event.keeps.length > 0 ? { keeps: event.keeps } : {}),
         variants: event.variants,
         ...(event.multi ? { multi: true as const } : {}),
         order: event.order,

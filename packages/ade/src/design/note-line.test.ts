@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { appendNoteLine, noteLine, shortSelector } from "./note-line"
+import { appendNoteLine, noteLine, shortSelector, withoutNumber } from "./note-line"
 
 /* D2: the line «Aggiungi alla nota» writes, from what the page reported. */
 
@@ -80,5 +80,13 @@ describe("a numbered variant name", () => {
     expect(noteLine({ variant: 1, name: "2 · Vetro", elements: [], instruction: "" })).toBe("Variante 1 «2 · Vetro»")
     expect(noteLine({ variant: 1, name: "12 colonne", elements: [], instruction: "" })).toBe("Variante 1 «12 colonne»")
     expect(noteLine({ variant: 1, name: "1", elements: [], instruction: "" })).toBe("Variante 1")
+  })
+
+  test("withoutNumber strips variant number prefix", () => {
+    expect(withoutNumber("1 · Vetro", 1)).toBe("Vetro")
+    expect(withoutNumber("1. Vetro", 1)).toBe("Vetro")
+    expect(withoutNumber("1 - Vetro", 1)).toBe("Vetro")
+    expect(withoutNumber("Vetro", 1)).toBe("Vetro")
+    expect(withoutNumber("2 · Vetro", 1)).toBe("2 · Vetro")
   })
 })
