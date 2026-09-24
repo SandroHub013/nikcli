@@ -342,7 +342,9 @@ export {
 
 export {
   VOICE_API_KEY_STORAGE_KEY,
+  VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
+  clearOpenRouterKeyRemoved,
   clearVoiceSettings,
   // The point of `exportVoiceSettings` is that other code can hand settings
   // out with the credential provably absent. Left off this list, it could
@@ -350,6 +352,7 @@ export {
   exportVoiceSettings,
   isOpenRouterKeyRemoved,
   loadVoiceSettings,
+  markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./settings/storage"

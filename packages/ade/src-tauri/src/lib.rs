@@ -65,16 +65,15 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 
 /*
- * Every command in this file is `async`, and none of them awaits anything.
+ * Most commands in this file are `async` without awaiting anything.
  *
  * That reads like a mistake and is not: a synchronous `#[tauri::command]` is
  * dispatched on the thread that owns the window, so a `read_dir` on a cold
  * network share or a `git status` on a large repository stops the window from
  * drawing until it finishes. Declaring them `async` moves them onto Tauri's
- * async runtime, which is all these need — they are bounded pieces of work,
- * unlike `nikcli_serve_start`, which waits up to forty-five seconds and goes
- * further onto a blocking worker. `pty.rs` reached the same conclusion first
- * and documents it on `pty_write`.
+ * async runtime, which is all these need. Bounded waits such as `nikcli_bot`
+ * and `nikcli_serve_start` go further onto a blocking worker. `pty.rs` reached
+ * the same conclusion first and documents it on `pty_write`.
  */
 
 /// Adds a directory to the set this window may write inside.

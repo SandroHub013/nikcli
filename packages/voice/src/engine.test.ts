@@ -289,9 +289,9 @@ describe("engine/createVoiceEngine", () => {
         now: () => 10_000, settings: { activation: "toggle" } })
 
       const starting = engine.start()
-      await engine.stop()
+      const stopping = engine.stop()
       slow.finish()
-      await starting
+      await Promise.all([starting, stopping])
 
       // The session that landed after the stop was freed rather than
       // installed: not running, and the transcriber was told to let go.
@@ -1403,7 +1403,17 @@ describe("always-on listening", () => {
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(engine.isRunning()).toBe(false)
     expect(engine.listenHalted()).toBe(true)
-    expect(engine.listenWarning()).toContain("Non ti sento da 1 secondo")
+    expect(engine.listenWarning()).toContain("Non ho sentito una frase per 1 secondo")
+  })
+
+  test("a latched manual microphone starts the idle timeout again when the key is released", async () => {
+    const { engine } = listening({ activation: "push-to-talk", alwaysListen: false }, { listenIdleMs: 20 })
+    await engine.pressToTalk()
+    await engine.releaseToTalk()
+    expect(engine.isRunning()).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(engine.isRunning()).toBe(false)
+    expect(engine.listenHalted()).toBe(true)
   })
 
   test("it never pauses by itself: a long silence leaves it listening", async () => {

@@ -568,6 +568,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
   }
 
+  const discardSession = async (): Promise<void> => {
+    await releaseSession()
+    if (micMeter) micMeter.stop()
+    setIsRunning(false)
+  }
+
   /**
    * Lets the words already heard reach their pane before the session goes.
    *
@@ -699,7 +705,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const seconds = Math.max(1, Math.round(after / 1000))
       const idle = after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
       stopListening(
-        `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
+        current.alwaysListen
+          ? `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`
+          : `Non ho sentito una frase per ${idle}, quindi ho spento il microfono. Aprilo per riprovare.`,
       )
     }, after)
   }
@@ -764,16 +772,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     startInFlight = null
     restartInFlight = null
     setIsRunning(false)
-    const cleanup = stopping ?? (() => {
-      const result = stopNow(options?.keepAgent === true)
-      stopping = result
-      void result.finally(() => {
-        if (stopping === result) stopping = null
-      })
-      return result
-    })()
-    const previous = lifecycleTail
-    trackLifecycle(previous ? Promise.all([previous, cleanup]).then(() => undefined) : cleanup)
+    if (stopping) return stopping
+    const cleanup = enqueueLifecycle(() => stopNow(options?.keepAgent === true))
+    stopping = cleanup
+    void cleanup.finally(() => {
+      if (stopping === cleanup) stopping = null
+    })
     return cleanup
   }
 
@@ -1252,11 +1256,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     }
 
     openedWithoutChord = !chordHeld
-    const discard = async () => {
-      await releaseSession()
-      if (micMeter) micMeter.stop()
-      setIsRunning(false)
-    }
 
     try {
       if (micMeter && hasOverriddenTranscriber) {
@@ -1273,7 +1272,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       engineScope = Effect.runSync(Scope.make())
       await startSession()
       if (generation !== sessionGeneration) {
-        await discard()
+        await discardSession()
         return
       }
 
@@ -1299,12 +1298,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         setDialogState((prev) => ({ ...prev, status: "idle" }))
       }
       if (generation !== sessionGeneration) {
-        await discard()
+        await discardSession()
         return
       }
       refreshHearing()
     } catch (err: unknown) {
-      await discard()
+      await discardSession()
       if (generation !== sessionGeneration) return
       const message =
         typeof err === "string"
@@ -1326,11 +1325,17 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     previous: VoiceSettings,
     generation: number,
   ): Promise<void> => {
-    if (generation !== sessionGeneration) return
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
     setIsRunning(false)
     refreshHearing()
     await releaseTextProgram()
-    if (generation !== sessionGeneration) return
+    if (generation !== sessionGeneration) {
+      await discardSession()
+      return
+    }
     hasOverriddenTranscriber = false
 
     try {
@@ -1345,22 +1350,24 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
         transcriberScope = null
         await closeScope(scope, "trascrittore")
       }
-      if (generation !== sessionGeneration) return
+      if (generation !== sessionGeneration) {
+        await discardSession()
+        return
+      }
 
       if (micMeter && normalized.inputDeviceId !== previous.inputDeviceId) {
         micMeter.stop()
         micMeter.setDevice(normalized.inputDeviceId)
         await micMeter.start()
         if (generation !== sessionGeneration) {
-          micMeter.stop()
+          await discardSession()
           return
         }
       }
 
       await startSession()
       if (generation !== sessionGeneration) {
-        await releaseSession()
-        if (micMeter) micMeter.stop()
+        await discardSession()
         return
       }
 
@@ -1372,9 +1379,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       void warnAboutCredit(currentSettings())
       refreshHearing()
     } catch (err: unknown) {
-      await releaseSession()
-      if (micMeter) micMeter.stop()
-      setIsRunning(false)
+      await discardSession()
       if (generation !== sessionGeneration) return
       const message =
         typeof err === "string"
@@ -1599,6 +1604,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       if (programHandle) {
         await Effect.runPromise(programHandle.releaseToTalk)
       }
+      if (isRunning()) keepListeningAwake()
 
       if (pressHolds() && !openedWithoutChord) {
         clearPttTimers()

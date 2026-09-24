@@ -328,9 +328,15 @@ export {
 } from "./settings/reply-voices"
 
 export {
+  VOICE_API_KEY_STORAGE_KEY,
+  VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY,
   VOICE_SETTINGS_STORAGE_KEY,
+  clearOpenRouterKeyRemoved,
   clearVoiceSettings,
+  exportVoiceSettings,
+  isOpenRouterKeyRemoved,
   loadVoiceSettings,
+  markOpenRouterKeyRemoved,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./settings/storage"
