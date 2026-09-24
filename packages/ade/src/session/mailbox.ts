@@ -1192,14 +1192,16 @@ export const USAGE =
   "                                          facts [\"...\"], ogni opzione title, effect, cost, risk; design: keeps\n" +
   "                                          [\"...\"], ogni variante changes [\"...\"]. context resta obbligatorio con\n" +
   "                                          questi campi: le versioni vecchie mostrano solo lui. recommend.option\n" +
-  "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata.\n" +
+  "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata;\n" +
+  "                                          per design è il nome intero della variante, per esempio «1 · Vetro».\n" +
   "                                          Come si scrive: 1) titolo = la domanda o l'oggetto, parole dell'utente,\n" +
   "                                          niente codici (lo spec va in spec); 2) la raccomandazione solo in\n" +
   "                                          recommend, mai «(consigliata)» nelle opzioni né in fondo al contesto;\n" +
   "                                          3) ogni opzione dice cosa cambia per l'utente (effect), cost e risk\n" +
   "                                          solo se aiutano a scegliere; 4) niente note che scadono («nella tua\n" +
   "                                          ADE di oggi…», «dalla release X»); 5) context al massimo 3 frasi,\n" +
-  "                                          misure e dettagli in facts o in un file results/…\n" +
+  "                                          misure e dettagli in facts o in un file results/…; 6) scrivi con\n" +
+  "                                          gli accenti (è, perché, più), mai e' o piu al loro posto\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +
