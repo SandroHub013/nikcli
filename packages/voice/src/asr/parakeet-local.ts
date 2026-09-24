@@ -296,6 +296,25 @@ interface SharedParakeetState {
 }
 
 let globalSharedParakeet: SharedParakeetState | null = null
+let sharedEpoch = 0
+
+async function releaseSharedState(state: SharedParakeetState | null): Promise<void> {
+  if (!state) return
+  if (state.model) await releaseModel(state.model)
+  if (state.initPromise) {
+    try {
+      const result = await state.initPromise
+      if (result.model !== state.model) await releaseModel(result.model)
+    } catch {}
+  }
+}
+
+async function clearSharedState(): Promise<void> {
+  const state = globalSharedParakeet
+  globalSharedParakeet = null
+  sharedEpoch++
+  await releaseSharedState(state)
+}
 
 export function createParakeetTranscriber(
   options: ParakeetTranscriberOptions = {}
@@ -344,13 +363,21 @@ export function createParakeetTranscriber(
 
     // 2. Await in-flight model initialization if already warming up
     if (keepWarm && globalSharedParakeet?.initPromise) {
+      const pending = globalSharedParakeet
       try {
-        const res = await globalSharedParakeet.initPromise
-        model = res.model
-        activeBackend = res.activeBackend
-        statusMessage = `Modello Parakeet pronto (${activeBackend}).`
-        options.onBackendChange?.(activeBackend)
-        return
+        const res = await pending.initPromise!
+        const matchesBackend =
+          preference === "auto" ||
+          preference === res.activeBackend ||
+          (preference === "webgpu" && res.activeBackend === "webgpu") ||
+          (preference === "wasm" && res.activeBackend === "wasm")
+        if (pending.modelId === modelId && matchesBackend) {
+          model = res.model
+          activeBackend = res.activeBackend
+          statusMessage = `Modello Parakeet pronto (${activeBackend}).`
+          options.onBackendChange?.(activeBackend)
+          return
+        }
       } catch {
         // Fall through to retry loading
       }
@@ -481,6 +508,8 @@ export function createParakeetTranscriber(
     }
 
     if (keepWarm) {
+      await clearSharedState()
+      const epoch = sharedEpoch
       const p = doLoad()
       globalSharedParakeet = {
         model: null,
@@ -490,6 +519,7 @@ export function createParakeetTranscriber(
       }
       try {
         const res = await p
+        if (epoch !== sharedEpoch) return
         globalSharedParakeet = {
           model: res.model,
           modelId,
@@ -498,7 +528,7 @@ export function createParakeetTranscriber(
         model = res.model
         activeBackend = res.activeBackend
       } catch (err) {
-        globalSharedParakeet = null
+        if (epoch === sharedEpoch) globalSharedParakeet = null
         throw err
       }
     } else {
@@ -736,10 +766,7 @@ export function createParakeetTranscriber(
  * Frees the in-memory shared Parakeet neural model weights and ONNX sessions.
  */
 export async function disposeParakeetModel(): Promise<void> {
-  if (globalSharedParakeet?.model) {
-    await releaseModel(globalSharedParakeet.model)
-  }
-  globalSharedParakeet = null
+  await clearSharedState()
 }
 
 /**

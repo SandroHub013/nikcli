@@ -330,6 +330,63 @@ describe("asr/parakeet-local", () => {
       expect(mockModel.disposed).toBe(true)
     })
 
+    test("replacing the shared model releases the previous one", async () => {
+      await disposeParakeetModel()
+      const first = new MockParakeetModel("wasm")
+      const second = new MockParakeetModel("wasm")
+      const firstTranscriber = createParakeetTranscriber({
+        modelId: "first",
+        keepWarm: true,
+        fromHub: async () => first,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+      await firstTranscriber.start()
+      expect(first.disposed).toBe(false)
+
+      const secondTranscriber = createParakeetTranscriber({
+        modelId: "second",
+        keepWarm: true,
+        fromHub: async () => second,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+      await secondTranscriber.start()
+
+      expect(first.disposed).toBe(true)
+      expect(second.disposed).toBe(false)
+      await secondTranscriber.stop()
+      await disposeParakeetModel()
+    })
+
+    test("dispose waits for an in-flight model and does not reinstall it", async () => {
+      await disposeParakeetModel()
+      let resolveModel: ((model: MockParakeetModel) => void) | undefined
+      let fromHubStarted = false
+      const modelPromise = new Promise<MockParakeetModel>((resolve) => {
+        resolveModel = resolve
+      })
+      const transcriber = createParakeetTranscriber({
+        keepWarm: true,
+        fromHub: async () => {
+          fromHubStarted = true
+          return modelPromise
+        },
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      })
+
+      const starting = transcriber.start()
+      while (!fromHubStarted) await new Promise((resolve) => setTimeout(resolve, 0))
+      const disposing = disposeParakeetModel()
+      const model = new MockParakeetModel("wasm")
+      resolveModel?.(model)
+      await disposing
+      await expect(starting).rejects.toThrow()
+      expect(model.disposed).toBe(true)
+      expect(isParakeetModelWarmedUp()).toBe(false)
+    })
+
     test("warmupParakeetModel preloads model without starting microphone capture", async () => {
       await disposeParakeetModel()
       expect(isParakeetModelWarmedUp()).toBe(false)
