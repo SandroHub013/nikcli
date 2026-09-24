@@ -372,6 +372,9 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
+import { declaredSize, designForVariant, designPaneFor, type PaneDesign } from "../design/open-variant"
+import type { DesignProposal } from "../design/state"
+import { mediaUrl } from "../video/video"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -1364,6 +1367,7 @@ export function Workbench() {
       saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDesign()
     },
+    openVariant: (proposal, variant) => openDesignVariant(proposal, variant),
   })
 
   /*
@@ -1426,6 +1430,47 @@ export function Workbench() {
       }),
       view: "code",
     }))
+  }
+
+  /**
+   * Opens variant `variant` (from 1) of `proposal` in a browser pane in
+   * Design mode (D1), or shows it in the pane already open for the same
+   * proposal. The pane is given the page's path; it makes the URL itself,
+   * through `designUrlFor`. The page's `ade-size` is read first, to be the
+   * pane's viewport. Resolves to why it could not, or nothing.
+   */
+  const openDesignVariant = async (proposal: DesignProposal, variant: number): Promise<string | undefined> => {
+    const found = designForVariant(proposal, variant, project()?.root, grantedRoots())
+    if (!found.ok) {
+      return found.reason === "no-variant" ? t("design.variant.missing", proposal.k, variant) : t("design.variant.notDesign", proposal.k)
+    }
+    const host = await getHost()
+    const html = host?.readTextFile ? await host.readTextFile(found.design.path).then((file) => file.text).catch(() => "") : ""
+    const size = declaredSize(html)
+    const design: PaneDesign = { ...found.design, ...(size ? { size } : {}) }
+    const title = t("browser.design.label", design.k, "", design.variant)
+    // The URL the layout and the record veil read; the pane loads only what `designUrlFor` gives it.
+    const browserUrl = mediaUrl(design.path)
+    const existing = designPaneFor(wb().panes, proposal.k)
+    if (existing) {
+      setWb((w) => ({ ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }), view: "code", focusedId: existing.id }))
+      return undefined
+    }
+    setWb((w) => ({
+      ...addPane(w, {
+        id: `bd${Date.now()}`,
+        title,
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl,
+        browserDesign: design,
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+    }))
+    return undefined
   }
 
   /** Opens the Decisions panel, or focuses the one already open. */

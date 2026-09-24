@@ -505,6 +505,9 @@ export const en: Messages = {
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
   "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",
   "browser.design.refused": "Not a .ade/design page of an open project: not opened.",
+  "design.variant.cannotOpen": "The variant can't be opened in a pane here.",
+  "design.variant.missing": (k, variant) => `${k} has no variant ${variant}.`,
+  "design.variant.notDesign": (k) => `This variant's page isn't in .ade/design/${k}/ of an open project.`,
   "browser.forget": "Forget this site",
   "browser.forget.tip": "Clear cookies and data this site left in ADE's profile.",
   "browser.forget.done.all": (cookies) =>

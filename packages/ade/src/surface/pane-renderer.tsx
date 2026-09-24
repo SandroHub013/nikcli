@@ -5,7 +5,7 @@ import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
 import type { SpawnedSession } from "../host/shell"
-import type { Project } from "../host/project"
+import { grantedRoots, type Project } from "../host/project"
 import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
@@ -220,6 +220,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         title={current().title}
         initialUrl={current().browserUrl}
         initialHistory={current().browserHistory}
+        /* D1: a Design-mode pane, checked against the roots granted to this window when it is drawn. */
+        design={current().browserDesign ? { ...current().browserDesign!, roots: grantedRoots() } : undefined}
         onNavigate={(url, history) =>
           setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
         }
