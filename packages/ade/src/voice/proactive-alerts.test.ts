@@ -301,6 +301,35 @@ describe("proactive-alerts", () => {
     expect(spoken).toHaveLength(2)
   })
 
+  test("shows a proactive alert on screen instead of speaking while voice is busy", async () => {
+    const spoken: string[] = []
+    const windows: any[] = []
+    const visible: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => 1000,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      isBusy: () => true,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async (opts) => {
+        windows.push(opts)
+      },
+      report: (text) => {
+        visible.push(text)
+      },
+    })
+
+    alerts.notifyDecision("D1", "Tema scuro")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(spoken).toHaveLength(0)
+    expect(windows).toHaveLength(0)
+    expect(visible).toHaveLength(1)
+    expect(visible[0]).toContain("Tema scuro")
+  })
+
   test("does not speak cap announcement when screen is locked", async () => {
     let clock = 100_000
     let locked = false

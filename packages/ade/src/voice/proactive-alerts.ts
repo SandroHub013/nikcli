@@ -55,6 +55,7 @@ export interface ProactiveAlertsDeps {
   now(): number
   isLocked(): Promise<boolean>
   isEnabled(): boolean
+  isBusy?(): boolean
   speak(text: string): Promise<void>
   openResponseWindow(options: {
     durationMs: number
@@ -62,6 +63,7 @@ export interface ProactiveAlertsDeps {
   }): Promise<void>
   isPermissionPending?(paneId: string): boolean
   isDecisionOpen?(k: string): boolean
+  report?(text: string): void
 }
 
 /**
@@ -158,7 +160,14 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
     if (locked) return
     capAnnounced = true
     queue.length = 0
-    await deps.speak(t("voice.alert.capReached", MAX_ALERTS_PER_HOUR)).catch(() => {})
+    const phrase = t("voice.alert.capReached", MAX_ALERTS_PER_HOUR)
+    if (deps.isBusy?.()) {
+      try {
+        deps.report?.(phrase)
+      } catch {}
+      return
+    }
+    await deps.speak(phrase).catch(() => {})
   }
 
   async function processQueue(): Promise<void> {
@@ -220,6 +229,13 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
 
         if (!phrase) continue
 
+        if (deps.isBusy?.()) {
+          try {
+            deps.report?.(phrase)
+          } catch {}
+          continue
+        }
+
         const alertTime = deps.now()
         lastAlertAt = alertTime
         alertTimestamps.push(alertTime)
@@ -235,7 +251,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         }
 
         // 2. Open single response window
-        if (deps.isEnabled()) {
+        if (deps.isEnabled() && !deps.isBusy?.()) {
           const permissionParam =
             event.type === "permission"
               ? { paneId: event.paneId, what: event.what, kind: event.kind }

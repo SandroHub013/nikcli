@@ -268,6 +268,116 @@ describe("engine/createVoiceEngine", () => {
       }
     }
 
+    test("openResponseWindow does not attach to a start in flight", async () => {
+      const slow = slowTranscriber()
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        transcriber: slow.transcriber,
+        speaker: createFakeSpeaker(),
+        now: () => 10_000, settings: { activation: "toggle" } })
+
+      const starting = engine.start("transcription")
+      while (slow.starts < 1) await new Promise((resolve) => setTimeout(resolve, 0))
+      let openingSettled = false
+      const opening = engine.openResponseWindow({ durationMs: 30 }).then(() => {
+        openingSettled = true
+      })
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      const settledBeforeStart = openingSettled
+      slow.finish()
+      await Promise.all([starting, opening])
+
+      expect(settledBeforeStart).toBe(true)
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.followUp()).toBeUndefined()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.isRunning()).toBe(true)
+      await engine.stop()
+    })
+
+    test("response-window startup yields to an in-flight dictation takeover", async () => {
+      const slow = slowTranscriber()
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        transcriber: slow.transcriber,
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "toggle", mode: "agent" },
+      })
+
+      const opening = engine.openResponseWindow({ durationMs: 30 })
+      while (slow.starts < 1) await new Promise((resolve) => setTimeout(resolve, 0))
+      const takeover = engine.pressToTalk("transcription")
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      slow.finish()
+      await Promise.all([opening, takeover])
+
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.followUp()).toBeUndefined()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.isRunning()).toBe(true)
+      await engine.stop()
+    })
+
+    test("held response startup takeover returns to agent listening on release", async () => {
+      const slow = slowTranscriber()
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        transcriber: slow.transcriber,
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "wake-word", alwaysListen: true, mode: "agent", agentEngine: "off" },
+      })
+
+      const opening = engine.openResponseWindow({ durationMs: 30 })
+      while (slow.starts < 1) await new Promise((resolve) => setTimeout(resolve, 0))
+      const held = engine.pressToTalk("transcription")
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      slow.finish()
+      await Promise.all([opening, held])
+
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.followUp()).toBeUndefined()
+      expect(engine.isRunning()).toBe(true)
+      await engine.releaseToTalk()
+      for (let i = 0; i < 50 && slow.starts < 2; i++) await new Promise((resolve) => setTimeout(resolve, 1))
+      const restarted = slow.starts >= 2
+      if (restarted) slow.finish()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+
+      expect(restarted).toBe(true)
+      expect(engine.activeMode()).toBe("agent")
+      expect(engine.isRunning()).toBe(true)
+      await engine.stop()
+    })
+
+    test("a slow response startup yields to an in-flight transcription toggle", async () => {
+      const slow = slowTranscriber()
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        transcriber: slow.transcriber,
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "toggle", mode: "agent" },
+      })
+
+      const opening = engine.openResponseWindow({ durationMs: 30 })
+      while (slow.starts < 1) await new Promise((resolve) => setTimeout(resolve, 0))
+      const takeover = engine.toggle("transcription")
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      slow.finish()
+      await Promise.all([opening, takeover])
+
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.followUp()).toBeUndefined()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+      expect(engine.activeMode()).toBe("transcription")
+      expect(engine.isRunning()).toBe(true)
+      await engine.stop()
+    })
+
     test("due pressioni ravvicinate aprono una sessione sola", async () => {
       const slow = slowTranscriber()
       const engine = createVoiceEngine({
@@ -2544,6 +2654,46 @@ describe("a conversation: after an answer the name is not needed for a few secon
     await new Promise((r) => setTimeout(r, 80))
     expect(engine.isRunning()).toBe(false)
     expect(engine.followUp()).toBeUndefined()
+  })
+
+  test("openResponseWindow leaves an already-running dictation untouched", async () => {
+    const { engine } = talking({ activation: "push-to-talk", alwaysListen: false })
+    await engine.start("transcription")
+
+    await engine.openResponseWindow({ durationMs: 30 })
+    expect(engine.activeMode()).toBe("transcription")
+    expect(engine.followUp()).toBeUndefined()
+    expect(engine.isRunning()).toBe(true)
+
+    await new Promise((r) => setTimeout(r, 60))
+    expect(engine.activeMode()).toBe("transcription")
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("an old response-window timer does not close a restarted session", async () => {
+    const { engine } = talking({ activation: "push-to-talk", alwaysListen: false })
+    await engine.openResponseWindow({ durationMs: 30 })
+
+    await engine.stop()
+    await engine.start("agent", { waitForName: true })
+    await new Promise((r) => setTimeout(r, 60))
+
+    expect(engine.activeMode()).toBe("agent")
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
+  })
+
+  test("a response-window timer is invalidated by a mode takeover", async () => {
+    const { engine } = talking({ activation: "wake-word", alwaysListen: true })
+    await engine.openResponseWindow({ durationMs: 30 })
+    await engine.toggle("transcription")
+
+    await new Promise((r) => setTimeout(r, 60))
+    expect(engine.activeMode()).toBe("transcription")
+    expect(engine.followUp()).toBeUndefined()
+    expect(engine.isRunning()).toBe(true)
+    await engine.stop()
   })
 
   test("openResponseWindow reschedules timer when executing and closes after execution finishes", async () => {

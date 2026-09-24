@@ -4292,6 +4292,7 @@ export function Workbench() {
     now: () => Date.now(),
     isLocked: isScreenLocked,
     isEnabled: () => voiceSettings().spokenAlerts === true,
+    isBusy: () => voiceEngine.isBusy(),
     speak: async (text) => {
       await speaker.speak(text)
     },
@@ -4303,6 +4304,7 @@ export function Workbench() {
       const decs = decisionsRegister.state()?.decisions
       return Boolean(decs?.some((d) => d.k === k && d.status === "aperta"))
     },
+    report: (text) => report(text, "info"),
   })
 
   onMount(() => {
