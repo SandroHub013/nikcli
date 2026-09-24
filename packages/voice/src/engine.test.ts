@@ -4,6 +4,7 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
+import { createParakeetTranscriber, disposeParakeetModel } from "./asr/parakeet-local"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
 import type { AdeView, PaneSummary, VoiceHost, VoiceStateSnapshot } from "./bridge/host"
@@ -352,6 +353,43 @@ describe("engine/createVoiceEngine", () => {
     expect(keys).toEqual(["old", "new"])
     expect(transcribers[1]?.isStarted).toBe(false)
     expect(engine.isRunning()).toBe(false)
+  })
+
+  test("stopping a local Parakeet session releases its shared model", async () => {
+    await disposeParakeetModel()
+    let disposed = false
+    const model = {
+      createStreamingTranscriber: () => ({
+        processChunk: async () => ({ text: "" }),
+        finalize: async () => ({ text: "" }),
+        reset: () => {},
+      }),
+      dispose: async () => {
+        disposed = true
+      },
+    }
+    const transcriber = createParakeetTranscriber({
+      keepWarm: true,
+      fromHub: async () => model,
+      supportsLanguage: () => true,
+      captureOptions: {
+        mediaStream: { getTracks: () => [] } as unknown as MediaStream,
+        isTypeSupported: () => true,
+      },
+    })
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { activation: "toggle", agentEngine: "off", backend: "parakeet" },
+      createTranscriber: () => transcriber,
+    })
+
+    await engine.start()
+    expect(disposed).toBe(false)
+    await engine.stop()
+    expect(disposed).toBe(true)
+    await disposeParakeetModel()
   })
 
   test("destructive command requires explicit confirmation before executing", async () => {

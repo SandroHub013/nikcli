@@ -26,11 +26,7 @@ import type { Speaker } from "./tts/speaker"
 import { playCue, type CueKind } from "./audio/cue"
 import type { MicMeter } from "./audio/meter"
 import { createTranscriberFor, type SelectTranscriberOptions, type TranscriberBackend } from "./asr/select"
-import {
-  disposeParakeetModel,
-  warmupParakeetModel,
-  type ParakeetProgress,
-} from "./asr/parakeet-local"
+import { disposeParakeetModel, type ParakeetProgress } from "./asr/parakeet-local"
 import { CURRENT_SETTINGS_VERSION, normalizeSettings, type VoiceMode, type VoiceSettings } from "./settings/model"
 import { matchesWakeWord } from "./settings/wake-word"
 import { voiceStorage } from "./settings/storage"
@@ -451,15 +447,6 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
   let activeTranscriber: Transcriber | null = null
   let hasOverriddenTranscriber = Boolean(options.transcriber)
 
-  // If Parakeet is configured and already downloaded, warm it up in the background so activation is instant.
-  if (initialSettings.backend === "parakeet" && !hasOverriddenTranscriber) {
-    void warmupParakeetModel({
-      executionBackend: initialSettings.parakeetBackend,
-      language: initialSettings.language,
-      onlyIfDownloaded: true,
-    }).catch(() => {})
-  }
-
   /*
    * Whether the microphone is being held open by a key, and whether it was
    * opened by something that is not a key at all.
@@ -837,6 +824,9 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     cancelSpeech()
 
     await releaseSession()
+    if (!keepAgent && currentSettings().backend === "parakeet") {
+      await disposeParakeetModel()
+    }
 
     setDialogState((prev) => ({ ...prev, status: "asleep" }))
   }
@@ -1710,16 +1700,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       // Mode and activation are half of the name gate.
       refreshHearing()
 
-      if (backendChanged) {
-        if (prev.backend === "parakeet" && normalized.backend !== "parakeet") {
-          void disposeParakeetModel().catch(() => {})
-        } else if (normalized.backend === "parakeet" && !hasOverriddenTranscriber) {
-          void warmupParakeetModel({
-            executionBackend: normalized.parakeetBackend,
-            language: normalized.language,
-            onlyIfDownloaded: true,
-          }).catch(() => {})
-        }
+      if (backendChanged && prev.backend === "parakeet" && normalized.backend !== "parakeet") {
+        void disposeParakeetModel().catch(() => {})
       }
 
       const keyChanged = normalized.openRouterApiKey !== prev.openRouterApiKey
