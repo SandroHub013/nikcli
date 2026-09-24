@@ -15,7 +15,7 @@
  */
 
 import type { ParseContext } from "../intent/parse"
-import { parseUtterance } from "../intent/parse"
+import { hasNegation, parseUtterance } from "../intent/parse"
 import { normalizeUtterance } from "../intent/normalize"
 import { VOCABULARY, type VoiceIntentSpec } from "../intent/vocabulary"
 
@@ -278,6 +278,43 @@ export function transition(
     }
 
     if (event.type === "utterance") {
+      /*
+       * A negation vetoes before the parser is even asked. «non confermo»
+       * and «no, non va bene» used to reach the confirm branch because the
+       * score only charged 0.15 for the extra word: the pane closed, or the
+       * permission was granted, on an answer of no.
+       */
+      if (hasNegation(normalizeUtterance(event.text))) {
+        effects.push({ type: "cancel_timer" })
+        const action = state.pendingAction!
+
+        if (action.isPermission && action.paneId) {
+          effects.push({
+            type: "answer_permission",
+            paneId: action.paneId,
+            answer: "deny",
+          })
+          return withSpoken(
+            {
+              ...state,
+              status: "idle",
+              pendingAction: undefined,
+              timeoutAt: undefined,
+            },
+            "Permesso negato."
+          )
+        }
+        return withSpoken(
+          {
+            ...state,
+            status: "idle",
+            pendingAction: undefined,
+            timeoutAt: undefined,
+          },
+          "Va bene, lascio stare."
+        )
+      }
+
       const parsed = parseUtterance(event.text, {
         ...ctx,
         pendingPermission: state.pendingAction?.isPermission,

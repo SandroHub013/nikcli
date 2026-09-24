@@ -174,6 +174,33 @@ describe("parseUtterance", () => {
     })
   })
 
+  /*
+   * Rilievo 1: con un permesso in sospeso, «non consentire» e «non
+   * autorizzare» producevano permission.allow perché il confronto esatto
+   * riconosceva solo «no» o «annulla» nudi.
+   */
+  describe("negazioni con permesso in sospeso", () => {
+    test("«non consentire» non diventa permission.allow", () => {
+      const res = parseUtterance("non consentire", { pendingPermission: true, pendingPermissionPaneId: "p-42" })
+      expect(res.intent?.intent).not.toBe("permission.allow")
+    })
+
+    test("«non autorizzare» non diventa permission.allow", () => {
+      const res = parseUtterance("non autorizzare", { pendingPermission: true, pendingPermissionPaneId: "p-42" })
+      expect(res.intent?.intent).not.toBe("permission.allow")
+    })
+
+    test("«non confermo» non diventa dialog.confirm", () => {
+      const res = parseUtterance("non confermo")
+      expect(res.intent?.intent).not.toBe("dialog.confirm")
+    })
+
+    test("«no, non va bene» non diventa dialog.confirm", () => {
+      const res = parseUtterance("no, non va bene")
+      expect(res.intent?.intent).not.toBe("dialog.confirm")
+    })
+  })
+
   describe("unknown and ambiguous utterances", () => {
     test("returns unknown on gibberish", () => {
       const res = parseUtterance("paracadute spaziale astronomico xyz")

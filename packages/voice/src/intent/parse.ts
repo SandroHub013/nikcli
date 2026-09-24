@@ -32,10 +32,25 @@ export const AMBIGUITY_MARGIN = 0.10
 
 /**
  * Added to intents that accept a `url` slot when the utterance carried one.
- * Sized to break a tie without letting a bare address trigger navigation on its
- * own: an intent that matched nothing still ends below the threshold.
+ * Sized to break a tie without letting a bare address trigger navigation on
+ * its own: an intent that matched nothing still ends below the threshold.
  */
 export const URL_SLOT_BONUS = 0.2
+
+/**
+ * Words that veto a confirmation wherever they appear in the utterance.
+ *
+ * «non confermo» used to score 0.85 as `dialog.confirm`: the negation was
+ * only surplus, costing 0.15, and a closed pane or an allowed permission was
+ * the result of answering no. These are whole tokens after normalization
+ * (accents already folded, punctuation already split).
+ */
+const NEGATION_TOKENS: ReadonlySet<string> = new Set(["non", "no", "mai"])
+
+/** True when the normalized utterance carries a negation anywhere. */
+export function hasNegation(normalized: string): boolean {
+  return normalized.split(/\s+/).filter(Boolean).some((token) => NEGATION_TOKENS.has(token))
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -347,8 +362,16 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
     }
   }
 
+  /*
+   * A negation vetoes every path that would confirm: the exact-match
+   * short-circuits below, and the scored candidates at the end. «non
+   * consentire» is not an allow, and «non confermo» is not a confirm — the
+   * speaker said no.
+   */
+  const negated = hasNegation(normalized)
+
   // 1. Context-aware short-circuits for confirmations
-  if (ctx.pendingPermission) {
+  if (ctx.pendingPermission && !negated) {
     if (
       normalized === "si" ||
       normalized === "conferma" ||
@@ -368,7 +391,9 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
         normalizedUtterance: normalized,
       }
     }
+  }
 
+  if (ctx.pendingPermission) {
     if (
       normalized === "no" ||
       normalized === "annulla" ||
@@ -426,6 +451,21 @@ export function parseUtterance(rawText: string, ctx: ParseContext = {}): ParseRe
         confidence: bestSpecConfidence,
         matchedPhrase: bestMatchedPhrase,
       })
+    }
+  }
+
+  /*
+   * A negated utterance never confirms, whatever the score said. Drop the
+   * allow/confirm intents so «non confermo» cannot win as dialog.confirm and
+   * «non consentire» cannot win as permission.allow. What remains — cancel,
+   * deny, or nothing — is the correct reading of a no.
+   */
+  if (negated) {
+    for (let i = candidateList.length - 1; i >= 0; i--) {
+      const intentId = candidateList[i]!.intent.intent
+      if (intentId === "dialog.confirm" || intentId === "permission.allow") {
+        candidateList.splice(i, 1)
+      }
     }
   }
 

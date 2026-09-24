@@ -141,6 +141,71 @@ describe("dialog state machine", () => {
     })
   })
 
+  /*
+   * Rilievo 1 della review: «non confermo» e «no, non va bene» superavano la
+   * soglia come dialog.confirm, perché «non» è solo un'eccedenza che toglie
+   * 0,15. Una negazione deve annullare la conferma, non eseguirla.
+   */
+  describe("una negazione non conferma mai", () => {
+    test("«non confermo» non esegue l'azione in conferma", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non confermo" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(s2.pendingAction).toBeUndefined()
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(effects.some((e) => e.type === "cancel_timer")).toBe(true)
+    })
+
+    test("«no, non va bene» annulla invece di confermare", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "uccidi processo" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "no, non va bene" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+      expect(
+        effects.some((e) => e.type === "speak" && e.text.includes("lascio stare"))
+      ).toBe(true)
+    })
+
+    test("«non consentire» nega il permesso invece di concederlo", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(
+        s0,
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        5000
+      )
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non consentire" }, 6000)
+
+      expect(s2.status).toBe("idle")
+      const ans = effects.find((e) => e.type === "answer_permission")
+      expect(ans).toBeDefined()
+      if (ans && ans.type === "answer_permission") {
+        expect(ans.answer).toBe("deny")
+      }
+      expect(effects.some((e) => e.type === "answer_permission" && e.answer === "allow")).toBe(false)
+    })
+
+    test("«non chiudere» non chiude il pannello in conferma", () => {
+      const s0 = createInitialDialogState("idle")
+      const { state: s1 } = transition(s0, { type: "utterance", text: "chiudi pannello 2" }, 10_000)
+      expect(s1.status).toBe("confirming")
+
+      const { state: s2, effects } = transition(s1, { type: "utterance", text: "non chiudere" }, 12_000)
+
+      expect(s2.status).toBe("idle")
+      expect(effects.some((e) => e.type === "execute_intent")).toBe(false)
+    })
+  })
+
   describe("dictation mode", () => {
     test("accumulates text without interpreting as commands until finish phrase", () => {
       const s0 = createInitialDialogState("idle")
