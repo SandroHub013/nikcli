@@ -243,6 +243,15 @@ export interface VoiceEngine {
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
   handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
+  handlePermissionResolved(paneId: string): Promise<void>
+  /**
+   * Asks for a spoken yes before a voice-agent `send` is delivered (rilievo
+   * 20). Returns false when no program is running, so the host can refuse
+   * rather than deliver unattended.
+   */
+  /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
+  requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
   openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
   cancel(): Promise<void>
   /**
@@ -1498,6 +1507,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
     },
 
+    async handlePermissionResolved(paneId: string): Promise<void> {
+      if (programHandle) {
+        await Effect.runPromise(programHandle.resolvePermission(paneId))
+      }
+    },
+
+    async requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean> {
+      if (!programHandle) return false
+      await Effect.runPromise(programHandle.requestSendConfirmation(id, to, text, lead))
+      return true
+    },
+
     async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void> {
       const durationMs = options?.durationMs ?? 8_000
       const rescheduleMs = options?.rescheduleMs ?? 1_000
@@ -1712,6 +1733,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           await stop({ drain: false, releaseText: true })
           return
         }
+        if (programHandle) await Effect.runPromise(programHandle.cancelPlanner)
         await releaseTextProgram()
         return
       }

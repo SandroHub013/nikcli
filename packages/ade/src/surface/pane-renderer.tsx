@@ -5,7 +5,7 @@ import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
 import type { SpawnedSession } from "../host/shell"
-import type { Project } from "../host/project"
+import { grantedRoots, type Project } from "../host/project"
 import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
@@ -29,6 +29,9 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import type { DesignHub } from "../design/hub"
+import { isPicked } from "../design/answer"
+import type { PaneDesign } from "../design/open-variant"
+import { stepVariant, type DesignActions } from "../browser/design-mode"
 import type { PanelRouter } from "../panels/router"
 import type { PaneRecords } from "./pane-records"
 import { belongsTo, sameProject } from "./pane-project"
@@ -214,12 +217,41 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    /*
+     * D2: what a Design-mode pane does with its proposal, through the design
+     * hub, so the card and the pane share one draft and one way to pick.
+     */
+    const designActions = (design: PaneDesign): DesignActions => {
+      const proposal = () => deps.design.register.state()?.proposals.find((candidate) => candidate.k === design.k)
+      return {
+        get picked() {
+          return isPicked(deps.design.draft(design.k).picked, design.variant - 1)
+        },
+        get count() {
+          return proposal()?.variants.length ?? design.variant
+        },
+        pick: () => {
+          const found = proposal()
+          if (found) deps.design.pick(found, design.variant - 1)
+        },
+        step: (delta) => {
+          const found = proposal()
+          const next = found ? stepVariant(design.variant, delta, found.variants.length) : undefined
+          if (found && next !== undefined) void deps.design.openVariant(found, next)
+        },
+        addToNote: (line) => deps.design.addNoteLine(design.k, line),
+      }
+    }
+
     const browserPane = () => (
       <BrowserPane
         id={current().id}
         title={current().title}
         initialUrl={current().browserUrl}
         initialHistory={current().browserHistory}
+        /* D1: a Design-mode pane, checked against the roots granted to this window when it is drawn. */
+        design={current().browserDesign ? { ...current().browserDesign!, roots: grantedRoots() } : undefined}
+        designActions={current().browserDesign ? designActions(current().browserDesign!) : undefined}
         onNavigate={(url, history) =>
           setWb((w) => updatePane(w, current().id, { browserUrl: url, browserHistory: history }))
         }

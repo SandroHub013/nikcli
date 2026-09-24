@@ -1,8 +1,7 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment, togglePick } from "./answer"
+import { formatDay, formatMoment } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
-import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import { recipientHint } from "./design-sheet"
 import { recipientChange, recipientOptions, type RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
@@ -54,13 +53,10 @@ export function DesignPane(props: {
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
-      onPick={(index) => {
-        const draft = props.hub.draft(proposal.k)
-        props.hub.setDraft(proposal.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(proposal.multi)) })
-      }}
+      onPick={(index) => props.hub.pick(proposal, index)}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
-      onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
+      onOpenVariant={(variantNumber) => void props.hub.openVariant(proposal, variantNumber)}
     />
   )
 
@@ -218,45 +214,6 @@ export function DesignPane(props: {
           </Show>
         </Show>
       </div>
-
-      {/* Fullscreen Preview overlay */}
-      <Show when={props.hub.fullPreview().open && props.hub.fullPreview().variant}>
-        <div data-slot="design-full-preview-overlay" role="dialog" aria-modal="true">
-          <header data-slot="full-preview-header">
-            <div data-slot="full-preview-title-wrap">
-              <span data-slot="full-preview-title">
-                {props.hub.fullPreview().title} · <b>{props.hub.fullPreview().variant?.name}</b>
-              </span>
-              <span
-                data-slot="full-preview-source"
-                title={resolvePreviewPath(props.hub.fullPreview().variant!.preview, root())}
-              >
-                {shortenPath(resolvePreviewPath(props.hub.fullPreview().variant!.preview, root()))}
-              </span>
-            </div>
-            <button
-              type="button"
-              data-slot="full-preview-close"
-              onClick={() => props.hub.closeFullPreview()}
-              aria-label={t("design.preview.close")}
-            >
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" />
-              </svg>
-            </button>
-          </header>
-          <div data-slot="full-preview-container">
-            <DesignPreview
-              preview={props.hub.fullPreview().variant!.preview}
-              k={props.hub.fullPreview().k ?? ""}
-              name={props.hub.fullPreview().variant!.name}
-              projectRoot={root()}
-              fullScreen
-              onToggleFullScreen={() => props.hub.closeFullPreview()}
-            />
-          </div>
-        </div>
-      </Show>
     </article>
   )
 }
@@ -320,12 +277,16 @@ function DesignRecipientPicker(props: { hub: DesignHub; queued: number }) {
   )
 }
 
-function deliveryText(hub: DesignHub, proposal: DesignProposal, now: Date): string {
+export function deliveryText(hub: DesignHub, proposal: DesignProposal, now: Date): string {
   const delivery = hub.delivery(proposal)
   if (delivery.state === "consegnata") {
     return t("design.delivery.done", delivery.to, formatMoment(delivery.at, now))
   }
-  const recipient = hub.recipient()
+  if (delivery.state === "in coda") return queuedText(hub.recipient())
+  return t("design.delivery.by", proposal.answer?.by ?? "?", formatDay(proposal.answer?.at ?? "", now))
+}
+
+export function queuedText(recipient: RecipientStatus): string {
   if (recipient.state === "pronta") return t("design.queued.ready", recipient.title)
   if (recipient.state === "non attiva") return t("design.queued.idle", recipient.title)
   return t("design.queued.none")

@@ -67,6 +67,11 @@
   transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
 }
 
+/* `hidden` would lose to `display: grid` above: the arrows Design mode hides (D2 review, BASSO 1). */
+[data-slot="browser-nav-btn"][hidden] {
+  display: none;
+}
+
 [data-slot="browser-nav-btn"]:disabled {
   opacity: 0.35;
   cursor: default;
@@ -133,6 +138,59 @@
 
 [data-slot="browser-url-input"]:focus {
   outline: none;
+}
+
+/* Design mode (D1): the address is the variant, not something to type. */
+[data-slot="browser-design-address"] {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: var(--ade-font-sm);
+}
+
+/* D2: the arrows between variants and «Scelgo questa», before the label. */
+[data-slot="browser-design-actions"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  flex: none;
+}
+
+[data-slot="browser-design-pick"] {
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-size: var(--ade-font-sm);
+  padding: 0 var(--ade-space-2);
+  cursor: pointer;
+}
+
+[data-slot="browser-design-pick"][data-active="true"] {
+  border-color: var(--ade-accent);
+  color: var(--ade-accent);
+}
+
+[data-slot="browser-design-label"] {
+  color: var(--ade-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-slot="browser-design-note"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="browser-design-note"][data-note="left"],
+[data-slot="browser-design-note"][data-note="refused"] {
+  color: var(--ade-warning);
 }
 
 [data-slot="browser-mode-group"],
@@ -368,6 +426,12 @@
   overflow: hidden;
   background: var(--ade-sunken);
   position: relative;
+}
+
+/* In design mode, fit width allows tall pages to scroll vertically from the top */
+[data-component="browser-pane"][data-design] [data-slot="browser-viewport-container"] {
+  align-items: flex-start;
+  overflow-y: auto;
 }
 
 [data-slot="browser-frame"] {

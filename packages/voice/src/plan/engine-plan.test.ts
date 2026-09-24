@@ -18,6 +18,7 @@ import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "../bridge/host"
 class PlanningHost implements VoiceHost {
   started: { agent: string; task?: string; project?: string }[] = []
   panes: PaneSummary[] = []
+  sent: { paneId: string; text: string }[] = []
 
   async runCommand(): Promise<void> {}
   listPanes(): PaneSummary[] {
@@ -47,7 +48,9 @@ class PlanningHost implements VoiceHost {
     return { paneId: id, title: id }
   }
   focusPane(): void {}
-  async sendPrompt(): Promise<void> {}
+  async sendPrompt(paneId: string, text: string) {
+    this.sent.push({ paneId, text })
+  }
   async insertText(): Promise<void> {}
   async openFile(): Promise<void> {}
   async searchProject() {
@@ -356,6 +359,81 @@ describe("il pianificatore dentro il motore", () => {
 
     expect(cancelled).toBe(true)
 
+    await engine.stop()
+  })
+
+  /*
+   * send_prompt è l'unica azione di un piano che preme Invio nella tty di un
+   * agente: finché l'utente non dice sì, il testo non esce.
+   */
+  test("un piano con send_prompt chiede conferma prima di premere Invio", async () => {
+    const { engine, host, transcriber, speaker } = setup(
+      JSON.stringify([{ action: "send_prompt", paneIndex: 1, text: "ciao" }]),
+    )
+    host.panes.push({
+      id: "p1",
+      title: "Uno",
+      status: "working",
+      index: 1,
+      hasLiveProcess: false,
+      isBrowser: false,
+      isFile: false,
+    })
+
+    await engine.start()
+    transcriber.emit("fai qualcosa di molto specifico con il terminale", true)
+    await settle()
+
+    expect(host.sent).toEqual([])
+    expect(engine.status()).toBe("confirming")
+    expect(speaker.lastSpoken).toContain("ciao")
+
+    transcriber.emit("sì", true)
+    await settle()
+
+    expect(host.sent).toHaveLength(1)
+    expect(host.sent[0]).toEqual({ paneId: "p1", text: "ciao" })
+    await engine.stop()
+  })
+
+  test("«no» a un piano con send_prompt non invia niente", async () => {
+    const { engine, host, transcriber } = setup(
+      JSON.stringify([{ action: "send_prompt", paneIndex: 1, text: "ciao" }]),
+    )
+    host.panes.push({
+      id: "p1",
+      title: "Uno",
+      status: "working",
+      index: 1,
+      hasLiveProcess: false,
+      isBrowser: false,
+      isFile: false,
+    })
+
+    await engine.start()
+    transcriber.emit("fai qualcosa di molto specifico con il terminale", true)
+    await settle()
+    expect(engine.status()).toBe("confirming")
+
+    transcriber.emit("no", true)
+    await settle()
+
+    expect(host.sent).toEqual([])
+    expect(engine.status()).toBe("idle")
+    await engine.stop()
+  })
+
+  test("un piano senza send_prompt si esegue subito, come prima", async () => {
+    const { engine, host, transcriber } = setup(
+      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
+    )
+
+    await engine.start()
+    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    await settle()
+
+    expect(host.started).toHaveLength(1)
+    expect(engine.status()).toBe("idle")
     await engine.stop()
   })
 })

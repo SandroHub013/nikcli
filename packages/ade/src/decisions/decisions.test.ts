@@ -109,6 +109,24 @@ describe("folding events into decisions", () => {
     expect(decisions[0]!.status).toBe("risposta")
   })
 
+  test("a deferred decision reopened before expiration stays accepted when folded later (MEDIO 1)", () => {
+    const events: DecisionEvent[] = [
+      opened("D1", { at: "2026-09-15T10:00:00.000Z" }),
+      { type: "rimandata", k: "D1", at: "2026-09-15T11:00:00.000Z", by: "utente", until: "2026-09-20T00:00:00.000Z" } as DecisionEvent,
+      { type: "riaperta", k: "D1", at: "2026-09-19T12:00:00.000Z", by: "utente" } as DecisionEvent,
+    ]
+
+    // Evaluated on Sept 19: reopen was before deferral ran out (Sept 20), so it is accepted
+    const fold19 = foldDecisions(events, new Date("2026-09-19T14:00:00.000Z"))
+    expect(fold19.rejected).toEqual([])
+    expect(fold19.decisions[0]!.status).toBe("aperta")
+
+    // Evaluated on Sept 21: deferral expiration on Sept 20 must NOT cause the Sept 19 reopen to be rejected
+    const fold21 = foldDecisions(events, new Date("2026-09-21T10:00:00.000Z"))
+    expect(fold21.rejected).toEqual([])
+    expect(fold21.decisions[0]!.status).toBe("aperta")
+  })
+
   test("changing an answer means reopening it; a second answer on top is refused", () => {
     const raced = foldDecisions([opened("D1"), answered("D1", "A"), answered("D1", "B", 6)])
     expect(raced.decisions[0]!.answer!.words).toBe("A")
@@ -176,6 +194,36 @@ describe("buckets and messages", () => {
     expect(resolvedMessage(decisions[0]!)).toBe(
       'risolta [k=D21] Pagina Plugin: quale variante? — scelta: B · Estensioni — nota: catalogo solo progetto — parole: "la B" — sblocca S16',
     )
+  })
+
+  test("foldDecisions preserves new A1 fields on Decision (recommend, question, why, facts, effect, cost, risk)", () => {
+    const event: DecisionEvent = {
+      type: "aperta",
+      k: "D80",
+      at: at(0),
+      by: "Master",
+      title: "Dove mettiamo la barra?",
+      question: "La barra dei comandi va in alto o in basso?",
+      why: "Serve decidere prima della release 0.8.",
+      context: "Consigliata: A, perché è più visibile. Oggi la barra è nascosta.",
+      facts: ["Larghezza schermo 1280px", "Altezza 800px"],
+      recommend: { option: "A", because: "Più visibile" },
+      options: [
+        { label: "A", title: "In alto", detail: "Sotto l'intestazione", effect: "Sempre visibile a colpo d'occhio", cost: "3 ore", risk: "Occupa 32px verticali" },
+        { label: "B", title: "In basso", detail: "Sopra la barra di stato", effect: "Più vicina al mouse", cost: "1 ora", risk: "Meno evidente" },
+      ],
+    }
+    const { decisions } = foldDecisions([event])
+    const d = decisions[0]!
+    expect(d.k).toBe("D80")
+    expect(d.question).toBe("La barra dei comandi va in alto o in basso?")
+    expect(d.why).toBe("Serve decidere prima della release 0.8.")
+    expect(d.context).toBe("Consigliata: A, perché è più visibile. Oggi la barra è nascosta.")
+    expect(d.facts).toEqual(["Larghezza schermo 1280px", "Altezza 800px"])
+    expect(d.recommend).toEqual({ option: "A", because: "Più visibile" })
+    expect(d.options[0]?.effect).toBe("Sempre visibile a colpo d'occhio")
+    expect(d.options[0]?.cost).toBe("3 ore")
+    expect(d.options[0]?.risk).toBe("Occupa 32px verticali")
   })
 
   test("keys are never reused", () => {

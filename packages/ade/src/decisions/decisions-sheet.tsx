@@ -104,7 +104,7 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
             <div data-slot="decision-problem" role="alert">{t("decisions.unreadable", String(props.hub.register.error()))}</div>
           </Show>
           <Show
-            when={current()}
+            when={current()?.k}
             keyed
             fallback={
               <div data-slot="sheet-empty">
@@ -113,38 +113,41 @@ export function DecisionsSheet(props: { hub: DecisionsHub; onClose: () => void; 
               </div>
             }
           >
-            {(decision) => (
-              <DecisionCard
-                decision={decision}
-                picked={props.hub.draft(decision.k).picked}
-                note={props.hub.draft(decision.k).note}
-                busy={props.hub.busy(decision.k)}
-                problem={
-                  props.hub.problem(decision.k) ??
-                  (needChoice() === decision.k
-                    ? decision.options.length > 0
-                      ? t("decisions.sheet.needChoice")
-                      : t("decisions.sheet.needText")
-                    : undefined)
-                }
-                control={submitControl({
-                  recipient: props.hub.recipient(),
-                  sessions: props.hub.sessions(),
-                  inline: props.hub.inlineRecipient(),
-                  busy: props.hub.busy(decision.k),
-                  label: open().length > 1 ? t("decisions.submitNext") : t("decisions.submit"),
-                })}
-                onInline={(id) => props.hub.setInlineRecipient(id)}
-                onRecord={() => void submit("record")}
-                recipientHint={recipientHint(props.hub.recipient())}
-                now={props.hub.register.now()}
-                onPick={(index) => pick(decision.k, index, Boolean(decision.multi))}
-                onNote={(text) => props.hub.setDraft(decision.k, { ...props.hub.draft(decision.k), note: text })}
-                onSubmit={() => void submit()}
-                onDefer={(until) => void props.hub.defer(decision, until).then((done) => done && surface?.focus())}
-                noteRef={(element) => (note = element)}
-              />
-            )}
+            {(k) => {
+              const decision = () => current()!
+              return (
+                <DecisionCard
+                  decision={decision()}
+                  picked={props.hub.draft(k).picked}
+                  note={props.hub.draft(k).note}
+                  busy={props.hub.busy(k)}
+                  problem={
+                    props.hub.problem(k) ??
+                    (needChoice() === k
+                      ? decision().options.length > 0
+                        ? t("decisions.sheet.needChoice")
+                        : t("decisions.sheet.needText")
+                      : undefined)
+                  }
+                  control={submitControl({
+                    recipient: props.hub.recipient(),
+                    sessions: props.hub.sessions(),
+                    inline: props.hub.inlineRecipient(),
+                    busy: props.hub.busy(k),
+                    label: open().length > 1 ? t("decisions.submitNext") : t("decisions.submit"),
+                  })}
+                  onInline={(id) => props.hub.setInlineRecipient(id)}
+                  onRecord={() => void submit("record")}
+                  recipientHint={recipientHint(props.hub.recipient())}
+                  now={props.hub.register.now()}
+                  onPick={(index) => pick(k, index, Boolean(decision().multi))}
+                  onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
+                  onSubmit={() => void submit()}
+                  onDefer={(until) => void props.hub.defer(decision(), until).then((done) => done && surface?.focus())}
+                  noteRef={(element) => (note = element)}
+                />
+              )
+            }}
           </Show>
         </div>
 

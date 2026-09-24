@@ -164,3 +164,24 @@ export function noticeWithoutCopy(input: { blocked: boolean; inspecting: boolean
   if (input.blocked) return "blocked"
   return input.inspecting ? "no-copy" : undefined
 }
+
+/**
+ * The same lifecycle in Design mode (D1): a design page is never copied.
+ *
+ * The mirror is a `srcdoc` copy of the page, and a `srcdoc` document takes
+ * the embedder's origin: a design page, written by an agent, would run as ADE.
+ * So a page that does not announce the bridge in time settles on `none`, with
+ * the message that says so, and a `ready` that claims to be the mirror is
+ * taken for what it can only be, the page itself.
+ */
+export function designHandshakeReducer(state: HandshakeState, event: HandshakeEvent): HandshakeState {
+  if (event.type === "timeout") {
+    return state.fidelity === "pending" ? { fidelity: "none", error: DESIGN_NO_BRIDGE } : state
+  }
+  if (event.type === "ready") return { fidelity: "native", error: undefined }
+  const next = handshakeReducer(state, event)
+  return next.fidelity === "mirror" ? { fidelity: "none", error: DESIGN_NO_BRIDGE } : next
+}
+
+/** Why a design page is shown without inspection: the error `designHandshakeReducer` settles on. */
+export const DESIGN_NO_BRIDGE = "design-no-bridge"

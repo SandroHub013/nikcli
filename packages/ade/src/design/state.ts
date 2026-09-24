@@ -1,5 +1,5 @@
 import { asOneLine } from "../session/typing"
-import type { DesignEvent, DesignVariant, LogProblem } from "./log"
+import type { DesignEvent, DesignRecommendation, DesignVariant, LogProblem } from "./log"
 import { t } from "../i18n"
 
 /** `giro`: the user asked for another round; it waits for a `riaperta` with new variants. */
@@ -19,8 +19,16 @@ export interface DesignAnswer {
 export interface DesignProposal {
   readonly k: string
   readonly title: string
+  /** The question, in one line; the title stays for the list. */
+  readonly question?: string
+  /** Why it is being decided now, in a sentence or two. */
+  readonly why?: string
   readonly context?: string
+  /** The variant the writer recommends, and why. */
+  readonly recommend?: DesignRecommendation
   readonly spec?: string
+  /** What stays as it is, whichever variant is picked. */
+  readonly keeps?: readonly string[]
   readonly variants: readonly DesignVariant[]
   /** More than one variant may be picked. */
   readonly multi?: true
@@ -48,7 +56,27 @@ export interface DesignState {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
-export function foldProposals(events: readonly DesignEvent[]): DesignState {
+function isProposalUnchanged(prev: DesignProposal, next: DesignProposal): boolean {
+  if (prev.status !== next.status) return false
+  if (prev.round !== next.round) return false
+  if (prev.closedAt !== next.closedAt) return false
+  if (prev.evidence !== next.evidence) return false
+  if (prev.history.length !== next.history.length) return false
+  for (let i = 0; i < prev.history.length; i++) {
+    const pe = prev.history[i]
+    const ne = next.history[i]
+    if (pe === ne) continue
+    if (pe.type !== ne.type || pe.at !== ne.at || pe.by !== ne.by) return false
+    if (JSON.stringify(pe) !== JSON.stringify(ne)) return false
+  }
+  return true
+}
+
+export function foldProposals(
+  events: readonly DesignEvent[],
+  prev?: DesignState | Map<string, DesignProposal>,
+): DesignState {
+  const prevByKey = prev instanceof Map ? prev : prev ? new Map(prev.proposals.map((p) => [p.k, p])) : undefined
   const byKey = new Map<string, Mutable<DesignProposal>>()
   const rejected: RejectedEvent[] = []
   const reject = (event: DesignEvent, reason: string) => rejected.push({ event, reason })
@@ -64,8 +92,12 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
       byKey.set(event.k, {
         k: event.k,
         title: event.title,
+        ...(event.question ? { question: event.question } : {}),
+        ...(event.why ? { why: event.why } : {}),
         context: event.context,
+        ...(event.recommend ? { recommend: event.recommend } : {}),
         spec: event.spec,
+        ...(event.keeps && event.keeps.length > 0 ? { keeps: event.keeps } : {}),
         variants: event.variants,
         ...(event.multi ? { multi: true as const } : {}),
         order: event.order,
@@ -133,7 +165,15 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
     current.history = [...current.history, event]
   }
 
-  const proposals = [...byKey.values()]
+  const proposals: DesignProposal[] = []
+  for (const proposal of byKey.values()) {
+    const prevProposal = prevByKey?.get(proposal.k)
+    if (prevProposal && isProposalUnchanged(prevProposal, proposal)) {
+      proposals.push(prevProposal)
+    } else {
+      proposals.push(proposal)
+    }
+  }
   return { proposals, rejected }
 }
 

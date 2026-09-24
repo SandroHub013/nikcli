@@ -1,10 +1,9 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
+import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
-import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals } from "./state"
@@ -23,20 +22,23 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   let surface: HTMLDivElement | undefined
   let note: HTMLTextAreaElement | undefined
 
-  const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
   const [needChoice, setNeedChoice] = createSignal<string>()
 
   const pick = (k: string, index: number, multi: boolean) => {
-    const draft = props.hub.draft(k)
-    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
-    setChosenHere((keys) => new Set(keys).add(k))
+    props.hub.pick({ k, ...(multi ? { multi: true as const } : {}) }, index)
     setNeedChoice(undefined)
   }
 
+  /*
+   * A pick found here that nobody made in this window is cleared, so a plain
+   * Enter never sends a choice the user has not seen made. One made through
+   * `hub.pick` — the card, or «Scelgo questa» in the browser pane — stays
+   * (D2 review, MEDIO: «I pick in the pane, send from the sheet» lost it).
+   */
   onMount(() => {
     for (const proposal of open()) {
       const draft = props.hub.draft(proposal.k)
-      if (draft.picked !== undefined) props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
+      if (draft.picked !== undefined && !props.hub.chosen(proposal.k)) props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
     }
     surface?.focus()
   })
@@ -48,19 +50,9 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (props.hub.fullPreview().open) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        event.stopPropagation()
-        props.hub.closeFullPreview()
-        surface?.focus()
-        return
-      }
-    }
-
     const proposal = current()
     const draft = proposal ? props.hub.draft(proposal.k) : undefined
-    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, chosenHere().has(proposal.k)))
+    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)))
     const inText = event.target === note
     const action = sheetKey(event, proposal?.variants.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return
@@ -73,11 +65,6 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
-    else if (action.kind === "expand") {
-      const pickedIndex = firstPick(props.hub.draft(proposal.k).picked) ?? 0
-      const variant = proposal.variants[pickedIndex]
-      if (variant) props.hub.openFullPreview(variant, proposal.title, proposal.k)
-    }
   }
 
   return (
@@ -111,7 +98,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             <div data-slot="design-problem" role="alert">{t("design.unreadable", String(props.hub.register.error()))}</div>
           </Show>
           <Show
-            when={current()}
+            when={current()?.k}
             keyed
             fallback={
               <div data-slot="sheet-empty">
@@ -120,36 +107,44 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
               </div>
             }
           >
-            {(proposal) => (
-              <DesignCard
-                proposal={proposal}
-                picked={props.hub.draft(proposal.k).picked}
-                note={props.hub.draft(proposal.k).note}
-                busy={props.hub.busy(proposal.k)}
-                problem={
-                  props.hub.problem(proposal.k) ??
-                  (needChoice() === proposal.k ? t("design.sheet.needChoice") : undefined)
-                }
-                control={submitControl({
-                  recipient: props.hub.recipient(),
-                  sessions: props.hub.sessions(),
-                  inline: props.hub.inlineRecipient(),
-                  busy: props.hub.busy(proposal.k),
-                  label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
-                })}
-                onInline={(id) => props.hub.setInlineRecipient(id)}
-                onRecord={() => void submit("record")}
-                onAgain={() => void props.hub.again(proposal).then((done) => done && surface?.focus())}
-                recipientHint={recipientHint(props.hub.recipient())}
-                now={new Date()}
-                projectRoot={root()}
-                onPick={(index) => pick(proposal.k, index, Boolean(proposal.multi))}
-                onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
-                onSubmit={() => void submit()}
-                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
-                noteRef={(element) => (note = element)}
-              />
-            )}
+            {(k) => {
+              const proposal = () => current()!
+              return (
+                <DesignCard
+                  proposal={proposal()}
+                  picked={props.hub.draft(k).picked}
+                  note={props.hub.draft(k).note}
+                  busy={props.hub.busy(k)}
+                  problem={
+                    props.hub.problem(k) ??
+                    (needChoice() === k ? t("design.sheet.needChoice") : undefined)
+                  }
+                  control={submitControl({
+                    recipient: props.hub.recipient(),
+                    sessions: props.hub.sessions(),
+                    inline: props.hub.inlineRecipient(),
+                    busy: props.hub.busy(k),
+                    label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                  })}
+                  onInline={(id) => props.hub.setInlineRecipient(id)}
+                  onRecord={() => void submit("record")}
+                  onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
+                  recipientHint={recipientHint(props.hub.recipient())}
+                  now={new Date()}
+                  projectRoot={root()}
+                  onPick={(index) => pick(k, index, Boolean(proposal().multi))}
+                  onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
+                  onSubmit={() => void submit()}
+                  onOpenVariant={async (variantNumber) => {
+                    const problem = await props.hub.openVariant(proposal(), variantNumber)
+                    if (!problem) {
+                      props.onClose()
+                    }
+                  }}
+                  noteRef={(element) => (note = element)}
+                />
+              )
+            }}
           </Show>
         </div>
 
@@ -164,45 +159,6 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             {t("design.sheet.full")}
           </button>
         </footer>
-
-        {/* Fullscreen Preview Ingranditore Overlay */}
-        <Show when={props.hub.fullPreview().open && props.hub.fullPreview().variant}>
-          <div data-slot="design-full-preview-overlay" role="dialog" aria-modal="true">
-            <header data-slot="full-preview-header">
-              <div data-slot="full-preview-title-wrap">
-                <span data-slot="full-preview-title">
-                  {props.hub.fullPreview().title} · <b>{props.hub.fullPreview().variant?.name}</b>
-                </span>
-                <span
-                  data-slot="full-preview-source"
-                  title={resolvePreviewPath(props.hub.fullPreview().variant!.preview, root())}
-                >
-                  {shortenPath(resolvePreviewPath(props.hub.fullPreview().variant!.preview, root()))}
-                </span>
-              </div>
-              <button
-                type="button"
-                data-slot="full-preview-close"
-                onClick={() => props.hub.closeFullPreview()}
-                aria-label={t("design.preview.close")}
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" />
-                </svg>
-              </button>
-            </header>
-            <div data-slot="full-preview-container">
-              <DesignPreview
-                preview={props.hub.fullPreview().variant!.preview}
-                k={props.hub.fullPreview().k ?? ""}
-                name={props.hub.fullPreview().variant!.name}
-                projectRoot={root()}
-                fullScreen
-                onToggleFullScreen={() => props.hub.closeFullPreview()}
-              />
-            </div>
-          </div>
-        </Show>
       </Surface>
     </Overlay>
   )

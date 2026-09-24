@@ -15,9 +15,10 @@
  */
 
 import type { ParseContext } from "../intent/parse"
-import { parseUtterance } from "../intent/parse"
+import { hasNegation, parseUtterance } from "../intent/parse"
 import { normalizeUtterance } from "../intent/normalize"
 import { VOCABULARY, type VoiceIntentSpec } from "../intent/vocabulary"
+import type { PlanStep } from "../plan/schema"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +43,17 @@ export interface PendingAction {
   isPermission?: boolean
   /** Target pane ID for permissions. */
   paneId?: string
+  /** For a permission: what the agent asked to do, as the question said it. */
+  what?: string
+  /**
+   * For a permission promoted from the queue: no yes before this time (epoch
+   * ms), the time its question takes to be read. V1-bis, ALTO 4: a second
+   * yes said right after the first granted the promoted request while its
+   * question was still being cut short by that very yes.
+   */
+  answerableAt?: number
+  /** A permission the user asked to grant («consenti»), not one an agent raised: answered without the name. */
+  userAsked?: true
 }
 
 export interface DictationBuffer {
@@ -58,6 +70,34 @@ export interface DialogState {
   pendingAction?: PendingAction
   /** Ongoing prompt dictation buffer. */
   dictation?: DictationBuffer
+  /**
+   * A permission that arrived while the dialogue was already busy: a
+   * confirmation in flight, a dictation, or sleep. Held here until the busy
+   * state ends, then promoted to `confirming`. Never overwrites
+   * `pendingAction` — that was the bug: a second permission replaced the
+   * first question, and the user's «sì» answered the wrong one.
+   */
+  queuedPermission?: { paneId: string; what: string; silent?: boolean }
+  /**
+   * A validated plan whose steps include `send_prompt`, held in confirming
+   * until the user says yes. Without this the planner pressed Enter the
+   * moment the model returned a plan — the one action a person never gets
+   * to see before it happens. Plans without `send_prompt` still run
+   * immediately; only the submit step waits.
+   */
+  /** `answerableAt`: out of the queue, a yes before it is said over the question (V1-ter, ALTO 4). */
+  pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string; answerableAt?: number }
+  /** A plan whose question came while another was being asked: asked after it (V1-ter, ALTO 7). */
+  queuedPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
+  /**
+   * A `send` the voice agent made into another session (rilievo 20), held in
+   * confirming until the user says yes out loud. Without this the note reached
+   * its target the moment the model wrote it — a message nobody ever saw.
+   */
+  /** `answerableAt`: out of the queue, a yes before it is said over the question (V1-ter, ALTO 4). */
+  pendingSend?: { id: string; to: string; text: string; lead?: string; answerableAt?: number }
+  /** A send that arrived while the dialogue was busy: promoted like a queued permission. */
+  queuedSend?: { id: string; to: string; text: string; lead?: string }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
   timeoutAt?: number
   /** Last spoken Italian phrase emitted by the system, for dialog.repeat. */
@@ -69,8 +109,11 @@ export type DialogEffect =
   | { type: "start_timer"; durationMs: number; timeoutAt: number }
   | { type: "cancel_timer" }
   | { type: "execute_intent"; intent: VoiceIntentSpec; slots: Record<string, any> }
-  | { type: "answer_permission"; paneId: string; answer: "allow" | "deny" }
+  /** `what` is the request the question read: the host answers only that one (V1-bis, ALTO 3). */
+  | { type: "answer_permission"; paneId: string; answer: "allow" | "deny"; what?: string }
   | { type: "send_prompt"; paneId?: string; text: string }
+  | { type: "execute_plan"; steps: PlanStep[]; refusals: string[]; speech?: string }
+  | { type: "confirm_send"; id: string; approved: boolean }
 
 export type DialogEvent =
   | { type: "wake" }
@@ -78,6 +121,10 @@ export type DialogEvent =
   | { type: "utterance"; text: string }
   | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
+  /** `lead`: who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent (V1-bis, ALTO 8). */
+  | { type: "send_requested"; id: string; to: string; text: string; lead?: string }
+  /** The planner returned a plan that presses Enter: it is asked, or waits behind the question being asked. */
+  | { type: "plan_ready"; steps: PlanStep[]; refusals: string[]; speech?: string }
   | { type: "command_success"; readback?: string }
   | { type: "command_failed"; error: string }
   | { type: "timeout" }
@@ -105,6 +152,67 @@ export function createInitialDialogState(status: DialogStatus = "idle"): DialogS
   }
 }
 
+/*
+ * V1-bis, ALTO 1: the answer to a question is a yes only when every word of it
+ * is one. «sì però aspetta», «va bene, anzi», «confermo dopo» and even «va bene
+ * la cena» used to confirm: the parser scored the yes and charged the rest as
+ * surplus. A small closed set confirms, and nothing else does.
+ */
+const YES_WORDS: ReadonlySet<string> = new Set(["si", "conferma", "confermo", "procedi", "certo", "ok", "okay", "consenti"])
+
+/** Words that turn an answer into a no wherever they appear: a yes with a «but» is not a yes. */
+const VETO_WORDS: ReadonlySet<string> = new Set([
+  "ma", "pero", "anzi", "dopo", "aspetta", "aspetto", "attendi", "momento",
+  "stop", "fermo", "ferma", "fermati", "annulla", "wait", "nope", "cancel",
+])
+
+export type ConfirmationAnswer = "yes" | "no" | "unclear"
+
+/** What an answer to a pending question says: a yes from the closed set, a veto, or neither. */
+export function confirmationAnswer(text: string): ConfirmationAnswer {
+  const norm = normalizeUtterance(text)
+  if (!norm) return "unclear"
+  const tokens = norm.split(/\s+/).filter(Boolean)
+  if (hasNegation(norm) || tokens.some((token) => VETO_WORDS.has(token))) return "no"
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] === "va" && tokens[i + 1] === "bene") {
+      i++
+      continue
+    }
+    if (!YES_WORDS.has(tokens[i]!)) return "unclear"
+  }
+  return "yes"
+}
+
+/**
+ * The pane an answer names, when it is a grant or a refusal with a pane in it
+ * («consenti pannello 2», «autorizza beta», «nega pannello 2»). V1-bis, ALTO 2:
+ * the pane named used to be ignored, and the pane being asked was answered.
+ */
+function namedPermissionPane(
+  text: string,
+  ctx: ParseContext,
+): { paneId: string; answer: "allow" | "deny" } | undefined {
+  const parsed = parseUtterance(text, ctx)
+  const intent = parsed.intent?.intent
+  if (intent !== "permission.allow" && intent !== "permission.deny") return undefined
+  const { paneIndex, paneTitle } = parsed.slots
+  const named =
+    paneIndex !== undefined
+      ? ctx.panes?.find((p) => p.index === Number(paneIndex))
+      : paneTitle !== undefined
+        ? ctx.panes?.find((p) => p.title.toLowerCase() === String(paneTitle).toLowerCase())
+        : undefined
+  if (!named) return undefined
+  return { paneId: named.id, answer: intent === "permission.allow" ? "allow" : "deny" }
+}
+
+/** A refusal said in words the closed yes set does not cover: «lascia stare», «nega», «rifiuta». */
+function saysRefusal(text: string, ctx: ParseContext): boolean {
+  const intent = parseUtterance(text, ctx).intent?.intent
+  return intent === "dialog.cancel" || intent === "permission.deny"
+}
+
 function isDictationFinishPhrase(text: string): boolean {
   const norm = normalizeUtterance(text)
   return (
@@ -114,6 +222,186 @@ function isDictationFinishPhrase(text: string): boolean {
     norm === "concludi dettatura" ||
     norm === "invia"
   )
+}
+
+/**
+ * The spoken form of a permission question: which panel, which tool. Built in
+ * one place so the live request and a promoted queue entry ask identically.
+ */
+function permissionPrompt(
+  paneId: string,
+  what: string,
+  ctx: ParseContext,
+): string {
+  const paneTitle = ctx.panes?.find((p) => p.id === paneId)?.title ?? paneId
+  return `L'agente sul pannello «${paneTitle}» richiede il permesso per: ${what}. Vuoi consentire?`
+}
+
+/**
+ * Promotes a queued permission into `confirming`, replacing whatever idle /
+ * dictation-finished state the caller was about to return. Returns null when
+ * nothing is queued, so every exit path can say `promote(...) ?? fallback`.
+ *
+ * The timer is restarted for the permission's own window; `cancel_timer`
+ * first so a leftover confirmation timer cannot fire against the new prompt.
+ */
+function promoteQueuedPermission(
+  state: DialogState,
+  now: number,
+  ctx: ParseContext,
+  effects: DialogEffect[],
+): TransitionResult | null {
+  const req = state.queuedPermission
+  if (!req) return null
+
+  effects.push({ type: "cancel_timer" })
+  const timeoutAt = now + DEFAULT_PERMISSION_TIMEOUT_MS
+  effects.push({
+    type: "start_timer",
+    durationMs: DEFAULT_PERMISSION_TIMEOUT_MS,
+    timeoutAt,
+  })
+
+  const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
+  const prompt = permissionPrompt(req.paneId, req.what, ctx)
+
+  const nextState: DialogState = {
+    ...state,
+    status: "confirming",
+    timeoutAt,
+    queuedPermission: undefined,
+    pendingAction: {
+      intent: permAllowSpec,
+      slots: { paneId: req.paneId },
+      confirmPrompt: prompt,
+      isPermission: true,
+      paneId: req.paneId,
+      what: req.what,
+      answerableAt: now + readingMs(prompt),
+    },
+  }
+
+  /* Silent meant "do not interrupt on arrival"; once the question is on
+   * screen it must be read aloud, or it waits for a phrase nobody heard. */
+  return withSpokenLocal(nextState, prompt, effects)
+}
+
+/**
+ * How long a question takes to be read aloud: about 60 ms a character, never
+ * under a second and a half. An estimate on the long side, so a yes said over
+ * the question is not taken for a yes to it; one said after it always is.
+ */
+export function readingMs(text: string): number {
+  return Math.min(12_000, Math.max(1_500, text.length * 60))
+}
+
+/** The question spoken for a voice-agent `send` waiting on a spoken yes (rilievo 20). */
+function sendConfirmationPrompt(to: string, text: string, lead?: string): string {
+  if (!lead) return `La voce vuole inviare a «${to}»: «${text}». Confermi l'invio?`
+  return text.trim() ? `${lead} «${to}»: «${text}». Confermi?` : `${lead} «${to}». Confermi?`
+}
+
+/**
+ * Promotes a send that arrived while the dialogue was busy, after the
+ * permission queue has had its turn. Same contract as
+ * {@link promoteQueuedPermission}: null when nothing is queued.
+ */
+function promoteQueuedSend(
+  state: DialogState,
+  now: number,
+  effects: DialogEffect[],
+): TransitionResult | null {
+  const req = state.queuedSend
+  if (!req) return null
+
+  effects.push({ type: "cancel_timer" })
+  const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+  effects.push({
+    type: "start_timer",
+    durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS,
+    timeoutAt,
+  })
+
+  const prompt = sendConfirmationPrompt(req.to, req.text, req.lead)
+  const nextState: DialogState = {
+    ...state,
+    status: "confirming",
+    timeoutAt,
+    queuedSend: undefined,
+    pendingSend: { id: req.id, to: req.to, text: req.text, lead: req.lead, answerableAt: now + readingMs(prompt) },
+    pendingAction: undefined,
+    pendingPlan: undefined,
+  }
+  return withSpokenLocal(nextState, prompt, effects)
+}
+
+/** The question a plan with `send_prompt` steps is asked with: it names each text about to be sent. */
+function planConfirmationPrompt(steps: readonly PlanStep[]): string {
+  const texts = steps.flatMap((step) =>
+    step.action === "send_prompt" ? [`«${step.text}» al pannello ${step.paneIndex}`] : [],
+  )
+  return `Prima di premere Invio: ${texts.join("; ")}. Va bene? Dimmi sì o no.`
+}
+
+/** Puts a plan in front of the user: confirming, with its own timer. */
+function askPlan(
+  state: DialogState,
+  plan: { steps: PlanStep[]; refusals: string[]; speech?: string },
+  now: number,
+  effects: DialogEffect[],
+  fromQueue = false,
+): TransitionResult {
+  effects.push({ type: "cancel_timer" })
+  const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+  effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
+  const prompt = planConfirmationPrompt(plan.steps)
+  const nextState: DialogState = {
+    ...state,
+    status: "confirming",
+    timeoutAt,
+    pendingPlan: {
+      steps: plan.steps,
+      refusals: plan.refusals,
+      ...(plan.speech ? { speech: plan.speech } : {}),
+      ...(fromQueue ? { answerableAt: now + readingMs(prompt) } : {}),
+    },
+    pendingAction: undefined,
+  }
+  return withSpokenLocal(nextState, prompt, effects)
+}
+
+/** A plan that waited behind another question, after permissions and sends. */
+function promoteQueuedPlan(state: DialogState, now: number, effects: DialogEffect[]): TransitionResult | null {
+  const plan = state.queuedPlan
+  if (!plan) return null
+  return askPlan({ ...state, queuedPlan: undefined }, plan, now, effects, true)
+}
+
+/** Permissions first, then a waiting send, then a waiting plan: every exit path uses this. */
+function promoteQueued(
+  state: DialogState,
+  now: number,
+  ctx: ParseContext,
+  effects: DialogEffect[],
+): TransitionResult | null {
+  return (
+    promoteQueuedPermission(state, now, ctx, effects) ??
+    promoteQueuedSend(state, now, effects) ??
+    promoteQueuedPlan(state, now, effects)
+  )
+}
+
+/** Same as the machine's `withSpoken`, usable from the module-level helper. */
+function withSpokenLocal(
+  nextState: DialogState,
+  text: string,
+  effects: DialogEffect[],
+): TransitionResult {
+  effects.push({ type: "speak", text })
+  return {
+    state: { ...nextState, lastSpokenText: text },
+    effects,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +424,17 @@ export function transition(
 ): TransitionResult {
   const effects: DialogEffect[] = []
 
+  /*
+   * A note whose question is no longer being asked is refused, whatever
+   * comes next (V1-bis, ALTO 7). Only `confirming` asks it; left behind in
+   * any other state, a yes to the next question — «chiudi il pannello», a
+   * permission — delivered it instead of doing what that yes was for.
+   */
+  if (state.pendingSend && state.status !== "confirming") {
+    effects.push({ type: "confirm_send", id: state.pendingSend.id, approved: false })
+    state = { ...state, pendingSend: undefined }
+  }
+
   const withSpoken = (nextState: DialogState, text: string): TransitionResult => {
     effects.push({ type: "speak", text })
     return {
@@ -147,8 +446,61 @@ export function transition(
     }
   }
 
-  // 1. Agent permission request preempts current interactive state
+  // 1. Agent permission request: preempts idle and executing, queues behind
+  //    an in-flight confirmation, a dictation, or sleep.
+  /*
+   * A request answered elsewhere — by hand in the terminal, by a button, or
+   * gone with its pane — leaves the dialogue: the question it was asked with
+   * no longer has anything to answer, and a yes to it must not reach the next
+   * request of the same pane (V1-bis, ALTO 3).
+   */
+  if (event.type === "permission_resolved") {
+    const queued = state.queuedPermission?.paneId === event.paneId ? undefined : state.queuedPermission
+    const asked = state.status === "confirming" && state.pendingAction?.isPermission && state.pendingAction.paneId === event.paneId
+    if (!asked) return { state: { ...state, queuedPermission: queued }, effects: [] }
+    effects.push({ type: "cancel_timer" })
+    const closed: DialogState = { ...state, status: "idle", pendingAction: undefined, timeoutAt: undefined, queuedPermission: queued }
+    const title = ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
+    return promoteQueued(closed, now, ctx, effects) ?? withSpoken(closed, `Il pannello «${title}» ha già avuto la sua risposta.`)
+  }
+
   if (event.type === "permission_requested") {
+    /*
+     * Rilievo 3: arriving during confirming, dictating or asleep used to
+     * overwrite `pendingAction` (or yank a sleeping dialog into confirming).
+     * The user's «sì» then answered the wrong question, and from sleep any
+     * room noise could grant for 30 s. Queue instead: the busy state keeps
+     * the floor; the permission is announced and promoted when it ends.
+     */
+    /* The pane being asked asks again: its new request replaces the question, it does not queue behind it. */
+    const sameAsked =
+      state.status === "confirming" && state.pendingAction?.isPermission === true && state.pendingAction.paneId === event.paneId
+    if (
+      !sameAsked &&
+      (state.status === "confirming" || state.status === "dictating" || state.status === "asleep")
+    ) {
+      /* First in wins: a second arrival while one is already waiting does
+       * not drop the first question on the floor. The same pane asking again
+       * is not a second arrival: its newer request is the one on screen. */
+      const queuedPermission =
+        state.queuedPermission && state.queuedPermission.paneId !== event.paneId
+          ? state.queuedPermission
+          : { paneId: event.paneId, what: event.what, silent: event.silent }
+      const nextState = { ...state, queuedPermission }
+
+      if (event.silent) {
+        return { state: nextState, effects: [] }
+      }
+
+      const paneTitle =
+        ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
+      return withSpokenLocal(
+        nextState,
+        `Ho messo in coda una richiesta di permesso dal pannello «${paneTitle}» per: ${event.what}. La affronto appena posso.`,
+        effects,
+      )
+    }
+
     effects.push({ type: "cancel_timer" })
     const timeoutAt = now + DEFAULT_PERMISSION_TIMEOUT_MS
     effects.push({
@@ -158,7 +510,7 @@ export function transition(
     })
 
     const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
-    const prompt = `L'agente richiede il permesso per: ${event.what}. Vuoi consentire?`
+    const prompt = permissionPrompt(event.paneId, event.what, ctx)
 
     const nextState: DialogState = {
       ...state,
@@ -170,6 +522,9 @@ export function transition(
         confirmPrompt: prompt,
         isPermission: true,
         paneId: event.paneId,
+        what: event.what,
+        /* Every question waits to be read, a new one and one the same pane replaced (V1-ter). */
+        answerableAt: now + readingMs(prompt),
       },
     }
 
@@ -183,10 +538,89 @@ export function transition(
     return withSpoken(nextState, prompt)
   }
 
+  /*
+   * A `send` the voice agent wrote into another session: preempts idle and
+   * executing the same way a permission does, and queues behind an in-flight
+   * confirmation, a dictation, or sleep (rilievo 20).
+   */
+  if (event.type === "send_requested") {
+    if (
+      state.status === "confirming" ||
+      state.status === "dictating" ||
+      state.status === "asleep"
+    ) {
+      /*
+       * One in line at a time, first in wins. A third was dropped yet told
+       * «in coda», and its sender waited for ever (V1-ter, reserve of ALTO 8):
+       * it is refused now, and the refusal reaches the sender.
+       */
+      if (state.queuedSend && state.queuedSend.id !== event.id) {
+        effects.push({ type: "confirm_send", id: event.id, approved: false })
+        return withSpokenLocal(
+          state,
+          `Ho già un messaggio in coda: non invio quello a «${event.to}».`,
+          effects,
+        )
+      }
+      const queuedSend = state.queuedSend ?? {
+        id: event.id,
+        to: event.to,
+        text: event.text,
+        lead: event.lead,
+      }
+      return withSpokenLocal(
+        { ...state, queuedSend },
+        `Ho messo in coda l'invio a «${event.to}». Lo affronto appena posso.`,
+        effects,
+      )
+    }
+
+    effects.push({ type: "cancel_timer" })
+    const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+    effects.push({
+      type: "start_timer",
+      durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS,
+      timeoutAt,
+    })
+
+    const nextState: DialogState = {
+      ...state,
+      status: "confirming",
+      timeoutAt,
+      pendingSend: { id: event.id, to: event.to, text: event.text, lead: event.lead },
+      pendingAction: undefined,
+      pendingPlan: undefined,
+    }
+    return withSpokenLocal(nextState, sendConfirmationPrompt(event.to, event.text, event.lead), effects)
+  }
+
+  /*
+   * The plan's question (V1-ter, ALTO 7). It used to be written straight into
+   * the state by the program, over whatever was being asked: a message held
+   * while the planner thought was covered, the yes to the plan approved it,
+   * and the plan stayed to be run by the yes to the next question. It now
+   * waits in line behind a question, a dictation or sleep, like a send.
+   */
+  if (event.type === "plan_ready") {
+    const plan = { steps: event.steps, refusals: event.refusals, ...(event.speech ? { speech: event.speech } : {}) }
+    if (state.status === "confirming" || state.status === "dictating" || state.status === "asleep") {
+      return withSpokenLocal(
+        { ...state, queuedPlan: state.queuedPlan ?? plan },
+        "Ho messo in coda il piano. Te lo chiedo appena posso.",
+        effects,
+      )
+    }
+    return askPlan(state, plan, now, effects)
+  }
+
   // 2. State: ASLEEP
   if (state.status === "asleep") {
     if (event.type === "wake") {
-      return withSpoken({ ...state, status: "idle" }, "Sono sveglio e in ascolto.")
+      const woken = { ...state, status: "idle" as const }
+      return (
+        promoteQueued(woken, now, ctx, effects) ??
+        withSpoken(woken, "Sono sveglio e in ascolto.")
+      )
     }
 
     if (event.type === "utterance") {
@@ -203,9 +637,10 @@ export function transition(
   // 3. State: DICTATING
   if (state.status === "dictating") {
     if (event.type === "cancel") {
-      return withSpoken(
-        { ...state, status: "idle", dictation: undefined },
-        "Dettatura annullata."
+      const abandoned: DialogState = { ...state, status: "idle", dictation: undefined }
+      return (
+        promoteQueued(abandoned, now, ctx, effects) ??
+        withSpoken(abandoned, "Dettatura annullata.")
       )
     }
 
@@ -213,6 +648,7 @@ export function transition(
       if (isDictationFinishPhrase(event.text)) {
         const fullPrompt = (state.dictation?.chunks ?? []).join(" ").trim()
         const targetPane = state.dictation?.paneId
+        const finished: DialogState = { ...state, status: "idle", dictation: undefined }
 
         if (fullPrompt.length > 0) {
           effects.push({
@@ -220,14 +656,16 @@ export function transition(
             paneId: targetPane,
             text: fullPrompt,
           })
-          return withSpoken(
-            { ...state, status: "idle", dictation: undefined },
-            "Dettatura completata e inviata all'agente."
+          /* A permission that arrived mid-dictation is asked now that the
+           * text has gone out; it must not vanish with the buffer. */
+          return (
+            promoteQueued(finished, now, ctx, effects) ??
+            withSpoken(finished, "Dettatura completata e inviata all'agente.")
           )
         } else {
-          return withSpoken(
-            { ...state, status: "idle", dictation: undefined },
-            "Dettatura vuota, nessun messaggio inviato."
+          return (
+            promoteQueued(finished, now, ctx, effects) ??
+            withSpoken(finished, "Dettatura vuota, nessun messaggio inviato.")
           )
         }
       }
@@ -253,41 +691,258 @@ export function transition(
   if (state.status === "confirming") {
     if (event.type === "timeout") {
       effects.push({ type: "cancel_timer" })
-      return withSpoken(
-        {
+      /* A send left unanswered is not delivered: approved stays false. */
+      if (state.pendingSend) {
+        effects.push({
+          type: "confirm_send",
+          id: state.pendingSend.id,
+          approved: false,
+        })
+        const expired: DialogState = {
           ...state,
           status: "idle",
-          pendingAction: undefined,
+          pendingSend: undefined,
           timeoutAt: undefined,
-        },
-        "Non ho sentito risposta: lascio stare."
+        }
+        return (
+          promoteQueued(expired, now, ctx, effects) ??
+          withSpoken(expired, "Non ho sentito risposta: non invio niente.")
+        )
+      }
+      const expired: DialogState = {
+        ...state,
+        status: "idle",
+        pendingAction: undefined,
+        pendingPlan: undefined,
+        timeoutAt: undefined,
+      }
+      return (
+        promoteQueued(expired, now, ctx, effects) ??
+        withSpoken(expired, "Non ho sentito risposta: lascio stare.")
       )
     }
 
     if (event.type === "cancel") {
       effects.push({ type: "cancel_timer" })
-      return withSpoken(
-        {
+      if (state.pendingSend) {
+        effects.push({
+          type: "confirm_send",
+          id: state.pendingSend.id,
+          approved: false,
+        })
+        const cancelled: DialogState = {
           ...state,
           status: "idle",
-          pendingAction: undefined,
+          pendingSend: undefined,
           timeoutAt: undefined,
-        },
-        "Va bene, lascio stare."
+        }
+        return (
+          promoteQueued(cancelled, now, ctx, effects) ??
+          withSpoken(cancelled, "Va bene, non invio niente.")
+        )
+      }
+      const cancelled: DialogState = {
+        ...state,
+        status: "idle",
+        pendingAction: undefined,
+        pendingPlan: undefined,
+        timeoutAt: undefined,
+      }
+      return (
+        promoteQueued(cancelled, now, ctx, effects) ??
+        withSpoken(cancelled, "Va bene, lascio stare.")
       )
     }
 
     if (event.type === "utterance") {
-      const parsed = parseUtterance(event.text, {
-        ...ctx,
-        pendingPermission: state.pendingAction?.isPermission,
-      })
+      /*
+       * A voice-agent send sits here before `pendingPlan` and
+       * `pendingAction`: the only answer is yes or no, and negation vetoes
+       * before the parser, same as for a destructive intent. The host is
+       * holding the note until `confirm_send` says what the user decided.
+       */
+      if (state.pendingSend) {
+        const answer = confirmationAnswer(event.text)
+        if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, ctx))) {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "confirm_send",
+            id: state.pendingSend.id,
+            approved: false,
+          })
+          const abandoned: DialogState = {
+            ...state,
+            status: "idle",
+            pendingSend: undefined,
+            pendingPlan: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(abandoned, now, ctx, effects) ??
+            withSpoken(abandoned, "Va bene, non invio niente.")
+          )
+        }
 
-      // Confirmation positive
-      if (
-        parsed.intent?.intent === "dialog.confirm" ||
-        parsed.intent?.intent === "permission.allow"
-      ) {
+        /* Out of the queue and not yet read whole: read again, as for a permission (V1-ter, ALTO 4). */
+        const send = state.pendingSend
+        if (answer === "yes" && send.answerableAt !== undefined && now < send.answerableAt) {
+          const prompt = sendConfirmationPrompt(send.to, send.text, send.lead)
+          return withSpoken({ ...state, pendingSend: { ...send, answerableAt: now + readingMs(prompt) } }, prompt)
+        }
+
+        if (answer === "yes") {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "confirm_send",
+            id: state.pendingSend.id,
+            approved: true,
+          })
+          const approved: DialogState = {
+            ...state,
+            status: "idle",
+            pendingSend: undefined,
+            pendingPlan: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(approved, now, ctx, effects) ??
+            withSpoken(approved, "Invio confermato.")
+          )
+        }
+        return withSpoken(state, "Sì o no?")
+      }
+
+      /*
+       * A planned plan (rilievo 4) sits here before `pendingAction`: the
+       * planner asked to press Enter in an agent's tty, and the only answer
+       * is yes or no. Negation vetoes before the parser, same as for a
+       * destructive intent — and `pendingAction` may be undefined here, so
+       * this branch never touches it.
+       */
+      if (state.pendingPlan) {
+        const answer = confirmationAnswer(event.text)
+        if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, ctx))) {
+          effects.push({ type: "cancel_timer" })
+          const abandoned: DialogState = {
+            ...state,
+            status: "idle",
+            pendingPlan: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(abandoned, now, ctx, effects) ??
+            withSpoken(abandoned, "Va bene, non invio niente.")
+          )
+        }
+
+        const plan = state.pendingPlan
+        if (answer === "yes" && plan.answerableAt !== undefined && now < plan.answerableAt) {
+          const prompt = planConfirmationPrompt(plan.steps)
+          return withSpoken({ ...state, pendingPlan: { ...plan, answerableAt: now + readingMs(prompt) } }, prompt)
+        }
+
+        if (answer === "yes") {
+          effects.push({ type: "cancel_timer" })
+          effects.push({
+            type: "execute_plan",
+            steps: state.pendingPlan.steps,
+            refusals: state.pendingPlan.refusals,
+            ...(state.pendingPlan.speech ? { speech: state.pendingPlan.speech } : {}),
+          })
+          /*
+           * Goes to `executing`, not idle: a permission queued behind this
+           * confirmation waits for `command_success` / `command_failed`,
+           * which are the exits from executing and the place it is promoted.
+           */
+          return withSpoken(
+            {
+              ...state,
+              status: "executing",
+              pendingPlan: undefined,
+              pendingAction: undefined,
+              timeoutAt: undefined,
+            },
+            "Eseguo il piano."
+          )
+        }
+        return withSpoken(state, "Sì o no?")
+      }
+
+      /*
+       * A negation vetoes before the parser is even asked. «non confermo»
+       * and «no, non va bene» used to reach the confirm branch because the
+       * score only charged 0.15 for the extra word: the pane closed, or the
+       * permission was granted, on an answer of no.
+       */
+      let answer = confirmationAnswer(event.text)
+      const parseCtx = { ...ctx, pendingPermission: state.pendingAction?.isPermission }
+
+      /*
+       * A pane named in the answer is the pane acted on (V1-bis, ALTO 2). The
+       * one being asked is answered as said; another one with a request
+       * waiting has its own question asked first — a grant is never given to
+       * a question that was not read; a pane with nothing asked gets nothing.
+       */
+      const asked = state.pendingAction
+      const named = answer === "unclear" && asked?.isPermission ? namedPermissionPane(event.text, ctx) : undefined
+      if (named && asked?.paneId && named.paneId === asked.paneId) {
+        answer = named.answer === "allow" ? "yes" : "no"
+      } else if (named && asked?.paneId) {
+        const title = (id: string) => ctx.panes?.find((p) => p.id === id)?.title ?? id
+        if (state.queuedPermission?.paneId === named.paneId) {
+          const aside = { paneId: asked.paneId, what: asked.what ?? "" }
+          const promoted = promoteQueuedPermission(state, now, ctx, effects)!
+          return { ...promoted, state: { ...promoted.state, queuedPermission: aside } }
+        }
+        return withSpoken(
+          state,
+          `Il pannello «${title(named.paneId)}» non ha richieste aperte. Sto chiedendo del pannello «${title(asked.paneId)}»: sì o no?`,
+        )
+      }
+
+      /*
+       * A promoted question not yet read whole is not answered yes: the yes
+       * was said over it, most likely meant for the question before. It is
+       * read again, and the wait starts over. A no is taken at once.
+       */
+      if (answer === "yes" && asked?.answerableAt !== undefined && now < asked.answerableAt) {
+        const again: DialogState = {
+          ...state,
+          pendingAction: { ...asked, answerableAt: now + readingMs(asked.confirmPrompt) },
+        }
+        return withSpoken(again, asked.confirmPrompt)
+      }
+
+      if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, parseCtx))) {
+        effects.push({ type: "cancel_timer" })
+        const action = state.pendingAction!
+        const abandoned: DialogState = {
+          ...state,
+          status: "idle",
+          pendingAction: undefined,
+          timeoutAt: undefined,
+        }
+
+        if (action.isPermission && action.paneId) {
+          effects.push({
+            type: "answer_permission",
+            paneId: action.paneId,
+            answer: "deny",
+            what: action.what,
+          })
+          return (
+            promoteQueued(abandoned, now, ctx, effects) ??
+            withSpoken(abandoned, "Permesso negato.")
+          )
+        }
+        return (
+          promoteQueued(abandoned, now, ctx, effects) ??
+          withSpoken(abandoned, "Va bene, lascio stare.")
+        )
+      }
+
+      // Confirmation positive: only a yes from the closed set.
+      if (answer === "yes") {
         effects.push({ type: "cancel_timer" })
         const action = state.pendingAction!
 
@@ -296,15 +951,17 @@ export function transition(
             type: "answer_permission",
             paneId: action.paneId,
             answer: "allow",
+            what: action.what,
           })
-          return withSpoken(
-            {
-              ...state,
-              status: "idle",
-              pendingAction: undefined,
-              timeoutAt: undefined,
-            },
-            "Permesso accordato."
+          const answered: DialogState = {
+            ...state,
+            status: "idle",
+            pendingAction: undefined,
+            timeoutAt: undefined,
+          }
+          return (
+            promoteQueued(answered, now, ctx, effects) ??
+            withSpoken(answered, "Permesso accordato.")
           )
         } else {
           effects.push({
@@ -312,6 +969,11 @@ export function transition(
             intent: action.intent,
             slots: action.slots,
           })
+          /*
+           * Goes to `executing`, not idle: a permission queued behind this
+           * confirmation waits for `command_success` / `command_failed`,
+           * which are the exits from executing and the place it is promoted.
+           */
           return withSpoken(
             {
               ...state,
@@ -320,42 +982,6 @@ export function transition(
               timeoutAt: undefined,
             },
             action.intent.readback
-          )
-        }
-      }
-
-      // Confirmation negative / cancellation
-      if (
-        parsed.intent?.intent === "dialog.cancel" ||
-        parsed.intent?.intent === "permission.deny"
-      ) {
-        effects.push({ type: "cancel_timer" })
-        const action = state.pendingAction!
-
-        if (action.isPermission && action.paneId) {
-          effects.push({
-            type: "answer_permission",
-            paneId: action.paneId,
-            answer: "deny",
-          })
-          return withSpoken(
-            {
-              ...state,
-              status: "idle",
-              pendingAction: undefined,
-              timeoutAt: undefined,
-            },
-            "Permesso negato."
-          )
-        } else {
-          return withSpoken(
-            {
-              ...state,
-              status: "idle",
-              pendingAction: undefined,
-              timeoutAt: undefined,
-            },
-            "Va bene, lascio stare."
           )
         }
       }
@@ -372,17 +998,21 @@ export function transition(
 
   // 5. State: EXECUTING
   if (state.status === "executing") {
-    if (event.type === "command_success") {
-      return {
-        state: { ...state, status: "idle" },
-        effects,
+    if (event.type === "command_success" || event.type === "command_failed") {
+      const finished: DialogState = { ...state, status: "idle" }
+      /*
+       * Executing is where a confirmation that said «sì» lands. The
+       * permission queued behind that confirmation is asked here — the
+       * only exit from executing that returns to an interactive state.
+       */
+      const promoted = promoteQueued(finished, now, ctx, effects)
+      if (promoted) return promoted
+      if (event.type === "command_failed") {
+        // The dispatcher's sentence already says what went wrong, to the user:
+        // «Errore durante l'esecuzione: Non c'è niente da annullare» said it twice.
+        return withSpoken(finished, event.error)
       }
-    }
-
-    if (event.type === "command_failed") {
-      // The dispatcher's sentence already says what went wrong, to the user:
-      // «Errore durante l'esecuzione: Non c'è niente da annullare» said it twice.
-      return withSpoken({ ...state, status: "idle" }, event.error)
+      return { state: finished, effects }
     }
 
     return { state, effects: [] }
@@ -443,6 +1073,50 @@ export function transition(
         )
       }
 
+      /*
+       * «consenti» with no question in course (V1-ter, ALTO 3). It used to
+       * ask «Concedo il permesso all'agente, va bene?» and, on the yes, answer
+       * whatever the pane was asking by then — a request that arrived after
+       * the first was answered by hand. The question now names the request
+       * open at this moment and is a permission question like an agent's: its
+       * yes carries what it grants, and a request resolved elsewhere ends it.
+       */
+      if (intent.intent === "permission.allow" && ctx.permissionWhat) {
+        const byIndex = parsed.slots.paneIndex !== undefined ? ctx.panes?.find((p) => p.index === Number(parsed.slots.paneIndex)) : undefined
+        const byTitle =
+          parsed.slots.paneTitle !== undefined
+            ? ctx.panes?.find((p) => p.title.toLowerCase() === String(parsed.slots.paneTitle).toLowerCase())
+            : undefined
+        const paneId: string | undefined = parsed.slots.paneId ?? byIndex?.id ?? byTitle?.id ?? ctx.focusedPaneId
+        if (paneId) {
+          const title = ctx.panes?.find((p) => p.id === paneId)?.title ?? paneId
+          const what = ctx.permissionWhat(paneId)
+          if (!what) {
+            return withSpoken(state, `Il pannello «${title}» non ha richieste di permesso aperte.`)
+          }
+          const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
+          effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
+          const prompt = `Concedo al pannello «${title}» il permesso per: ${what}, va bene? Dimmi sì o no.`
+          return withSpoken(
+            {
+              ...state,
+              status: "confirming",
+              timeoutAt,
+              pendingAction: {
+                intent,
+                slots: { paneId, what },
+                confirmPrompt: prompt,
+                isPermission: true,
+                paneId,
+                what,
+                userAsked: true,
+              },
+            },
+            prompt,
+          )
+        }
+      }
+
       // Destructive intents require explicit confirmation
       if (intent.destructive) {
         const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
@@ -455,8 +1129,50 @@ export function transition(
         // The intent carries its own question. The fallback stays generic on
         // purpose: a wrong-sounding sentence at a destructive prompt is worse
         // than a plain one, and the readback is not a question.
-        const question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+        let question = intent.confirmPrompt ?? "Lo faccio, va bene?"
+
+        /*
+         * Rilievo 2: per un permesso la domanda deve nominare il pannello.
+         * Lo slot di pannello è già stato estratto dalla frase («autorizza
+         * pannello 2»); il titolo si legge dai pannelli aperti, così
+         * l'utente conferma sapendo a chi concede.
+         *
+         * Rilievo 21: lo stesso vale per chiudere un pannello e fermarne il
+         * processo — «Chiudo il pannello, va bene?» senza il nome lasciava
+         * confermare al buio quando più sessioni erano aperte.
+         */
+        const confirmPaneTitle =
+          parsed.slots.paneTitle ??
+          ctx.panes?.find((p) => p.index === parsed.slots.paneIndex)?.title
+
+        if (intent.intent === "permission.allow") {
+          if (confirmPaneTitle) {
+            question = `Concedo il permesso all'agente sul pannello «${confirmPaneTitle}», va bene?`
+          }
+        } else if (intent.intent === "pane.close" && confirmPaneTitle) {
+          question = `Chiudo il pannello «${confirmPaneTitle}», va bene?`
+        } else if (intent.intent === "process.kill" && confirmPaneTitle) {
+          question = `Fermo il processo sul pannello «${confirmPaneTitle}», va bene?`
+        }
+
         const prompt = `${question} Dimmi sì o no.`
+
+        /*
+         * Rilievo 22: senza numero o titolo il bersaglio era il pannello a
+         * fuoco, ma letto al «sì» — un clic nel frattempo spostava la
+         * chiusura su un'altra sessione. Il fuoco di adesso entra negli slot
+         * come `paneId`, così il dispatch lo usa al posto del fuoco vivo.
+         * Con un bersaglio già nominato lo slot non serve: index e titolo
+         * vincono comunque nel resolver.
+         */
+        const frozenSlots: Record<string, any> = { ...parsed.slots }
+        const hasNamedTarget =
+          frozenSlots.paneId !== undefined ||
+          frozenSlots.paneIndex !== undefined ||
+          frozenSlots.paneTitle !== undefined
+        if (!hasNamedTarget && ctx.focusedPaneId) {
+          frozenSlots.paneId = ctx.focusedPaneId
+        }
 
         return withSpoken(
           {
@@ -465,7 +1181,7 @@ export function transition(
             timeoutAt,
             pendingAction: {
               intent,
-              slots: parsed.slots,
+              slots: frozenSlots,
               confirmPrompt: prompt,
               isPermission: false,
             },

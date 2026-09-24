@@ -11,7 +11,6 @@ export type SheetKey =
   | { readonly kind: "close" }
   | { readonly kind: "next" }
   | { readonly kind: "previous" }
-  | { readonly kind: "expand" }
 
 export function sheetKey(
   event: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean },
@@ -39,7 +38,6 @@ export function sheetKey(
   }
   if (event.key === "ArrowRight") return { kind: "next" }
   if (event.key === "ArrowLeft") return { kind: "previous" }
-  if (event.key === "f" || event.key === "F") return { kind: "expand" }
   return undefined
 }
 

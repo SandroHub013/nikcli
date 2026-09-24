@@ -24,11 +24,11 @@ describe("voice/agent", () => {
     expect(resolveVoiceAgentRunner("nikcli", undefined)).toHaveProperty("problem")
   })
 
-  test("a voice turn is read-only: no edits, no writes, no shell but ade-msg", async () => {
+  test("a voice turn is read-only: no edits, no writes, no shell but ade-msg, no web", async () => {
     const runner = fakeRunner([{}])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
     await agent.ask({ text: "x", engine: "claude" })
-    expect(runner.requests[0].disabledTools).toEqual(["edit", "write", "bash"])
+    expect(runner.requests[0].disabledTools).toEqual(["edit", "write", "bash", "webfetch", "websearch"])
     expect(runner.requests[0].disabledTools).toBe(VOICE_AGENT_DISABLED_TOOLS)
   })
 

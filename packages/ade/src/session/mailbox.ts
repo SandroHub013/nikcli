@@ -249,6 +249,39 @@ export function unverifiedSenderRefusal(message: Message): string | undefined {
   return "Rifiutato: il mittente non è verificato. Lancia ade-msg dal terminale di un pannello di ADE."
 }
 
+/** The kinds that write into a session or act on one, and what the voice says each would do. */
+const ACTING: Readonly<Record<string, string>> = {
+  send: "inviare a",
+  ask: "chiedere a",
+  spawn: "avviare una sessione",
+  interrupt: "interrompere",
+  close: "chiudere",
+  relaunch: "riavviare",
+}
+
+const isVoiceSender = (from: string) => from === "voce" || from.startsWith("voce-")
+
+/**
+ * What the user is asked out loud before a message is carried out, or
+ * undefined when it goes as it is.
+ *
+ * Rilievo 20 held only a voice-agent `send`. V1-bis, ALTO 8: an `ask` is
+ * typed and submitted the same way, `spawn` starts a session with every
+ * permission, while `interrupt`, `close` and `relaunch` act on one. Every kind
+ * that writes or acts waits for a spoken yes when it comes from verified voice.
+ */
+export function voiceConfirmationFor(message: Message): { lead: string; to: string; text: string } | undefined {
+  const verb = ACTING[message.kind]
+  if (!verb || !isVoiceSender(message.from)) return undefined
+  const to = message.kind === "spawn" ? message.agent : "to" in message ? String(message.to) : ""
+  return { lead: `La voce vuole ${verb}`, to, text: message.text }
+}
+
+/** Whether a message waits for the user's spoken yes before it is carried out. */
+export function needsVoiceSendConfirmation(message: Message): boolean {
+  return voiceConfirmationFor(message) !== undefined
+}
+
 /** `claude-code` answers to "claude"; ids are compared without that suffix. */
 function agentName(agent: string | undefined): string {
   return (agent ?? "").toLowerCase().replace(/-code$/, "")
@@ -1202,13 +1235,15 @@ export const USAGE =
   "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata;\n" +
   "                                          per design è il nome intero della variante, per esempio «1 · Vetro».\n" +
   "                                          Come si scrive: 1) titolo = la domanda o l'oggetto, parole dell'utente,\n" +
-  "                                          niente codici (lo spec va in spec); 2) la raccomandazione solo in\n" +
-  "                                          recommend, mai «(consigliata)» nelle opzioni né in fondo al contesto;\n" +
-  "                                          3) ogni opzione dice cosa cambia per l'utente (effect), cost e risk\n" +
-  "                                          solo se aiutano a scegliere; 4) niente note che scadono («nella tua\n" +
-  "                                          ADE di oggi…», «dalla release X»); 5) context al massimo 3 frasi,\n" +
-  "                                          misure e dettagli in facts o in un file results/…; 6) scrivi con\n" +
-  "                                          gli accenti (è, perché, più), mai e' o piu al loro posto\n" +
+  "                                          niente codici (lo spec va in spec); 2) la raccomandazione all'inizio del\n" +
+  "                                          contesto («Consigliata: B, perché…»), mai «(consigliata)» nelle opzioni;\n" +
+  "                                          si può mettere anche in recommend, ma finché la carta nuova non è in\n" +
+  "                                          release va ripetuta in una riga all'inizio di context; 3) ogni opzione\n" +
+  "                                          dice cosa cambia per l'utente (effect), cost e risk solo se aiutano a\n" +
+  "                                          scegliere; 4) niente note che scadono («nella tua ADE di oggi…», «dalla\n" +
+  "                                          release X»); 5) context al massimo 3 frasi, dettagli in facts o in un\n" +
+  "                                          file results/…; 6) scrivi con gli accenti (è, perché, più), mai e' o piu\n" +
+  "                                          al loro posto\n" +
   "  ade-msg kv set <chiave> \"<valore>\" | get <chiave> | del <chiave> | list [<prefisso>]\n" +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   "  ade-msg kv lock <chiave> [--ttl <sec>] [\"<nota>\"] | unlock <chiave> [--force]\n" +

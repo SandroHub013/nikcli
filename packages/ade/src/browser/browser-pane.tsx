@@ -31,6 +31,7 @@ import {
   HANDSHAKE_TIMEOUT_MS,
   INITIAL_HANDSHAKE_STATE,
   bridgelessChoice,
+  designHandshakeReducer,
   framingBlocked,
   noticeWithoutCopy,
   type PaneNotice,
@@ -53,6 +54,9 @@ import {
 import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFraming, readHeaders } from "./host-bridge"
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
+import { designUrlFor } from "./design-url"
+import { designLoadKey, frameSandbox, INITIAL_DESIGN_WATCH, stepVariant, watchDesign, type DesignActions, type DesignTarget, type DesignWatchEvent } from "./design-mode"
+import { noteLine } from "../design/note-line"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
 
@@ -93,7 +97,23 @@ export interface BrowserPaneProps {
    * drawn again, and without them it came back on the URL it was opened with.
    */
   onNavigate?: (url: string, history: BrowserHistory) => void
+  /**
+   * Design mode (D1): the pane shows this variant of a design proposal, and
+   * nothing else. The page is loaded on the media scheme through
+   * `designUrlFor`, in a frame with no origin of its own; never copied, never
+   * probed; the address cannot be edited; and a frame that goes elsewhere
+   * loses inspection.
+   */
+  design?: DesignTarget
+  /**
+   * D2: in Design mode the selection goes into the proposal's note, not to a
+   * session; «Scelgo questa» picks the variant; the arrows walk the variants.
+   */
+  designActions?: DesignActions
 }
+
+/** The address a Design-mode pane loads, or `about:blank` when the path is not a design page. */
+const designAddress = (design: DesignTarget) => designUrlFor(design.path, design.roots) ?? "about:blank"
 
 type LoadState = "idle" | "loading" | "ready" | "unreachable"
 
@@ -182,7 +202,9 @@ function EditFields(props: { element: InspectedElement; onApply: (property: stri
 }
 
 export function BrowserPane(props: BrowserPaneProps): JSX.Element {
-  const defaultUrl = normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
+  const defaultUrl = props.design
+    ? designAddress(props.design)
+    : normalizeUrl(props.initialUrl || "http://localhost:3000") || "http://localhost:3000"
 
   const [url, setUrl] = createSignal(defaultUrl)
   const [inputUrl, setInputUrl] = createSignal(url())
@@ -204,7 +226,26 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * coverage, it is a second opinion nobody asked for.
    */
   const [fidelity, setFidelityRaw] = createSignal<Fidelity>(INITIAL_HANDSHAKE_STATE.fidelity)
-  const handshake = (event: HandshakeEvent) => setFidelityRaw((current) => reduceFidelity(current, event))
+  const handshake = (event: HandshakeEvent) =>
+    setFidelityRaw((current) =>
+      props.design ? designHandshakeReducer({ fidelity: current }, event).fidelity : reduceFidelity(current, event),
+    )
+
+  /* Design mode: where the frame is (`design-mode.ts`), and what the bar says about it. */
+  const [designWatch, setDesignWatch] = createSignal(INITIAL_DESIGN_WATCH)
+  const [designNote, setDesignNote] = createSignal<"left" | "noBridge" | "refused">()
+  const watchFrame = (event: DesignWatchEvent) => {
+    const before = designWatch()
+    const next = watchDesign(before, event)
+    setDesignWatch(next)
+    if (next.left && !before.left) {
+      // Not the page it was given any more: nothing it says is a selection.
+      if (handshakeTimer) clearTimeout(handshakeTimer)
+      setMode("browse")
+      setSelection([])
+      setDesignNote("left")
+    }
+  }
 
   const [mode, setMode] = createSignal<"browse" | "edit">("browse")
   const [device, setDevice] = createSignal<DevicePreset>("responsive")
@@ -357,14 +398,35 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (handshakeTimer) clearTimeout(handshakeTimer)
     handshakeTimer = setTimeout(() => {
       if (generation !== loadGeneration) return
+      /*
+       * Design mode: no fetch, no framing probe, no copy. The page is on
+       * screen; without the bridge it is only not inspectable, and says so.
+       */
+      if (props.design) {
+        if (fidelity() !== "pending") return
+        handshake({ type: "timeout" })
+        setLoadState("ready")
+        if (!designWatch().left) setDesignNote("noBridge")
+        return
+      }
       // Still pending while the page is fetched: whether it becomes the
       // mirror, stays as it is or fails is what that fetch decides.
       if (fidelity() === "pending") void settleWithoutBridge(target, generation)
     }, HANDSHAKE_TIMEOUT_MS)
   }
 
-  const load = (target: string) => {
-    if (isAdeOrigin(target, window.location.origin)) {
+  /** `initial`: the frame already has `target` as its first `src`; no new token, no new navigation. */
+  const load = (target: string, initial = false) => {
+    if (props.design) {
+      // Only what `designUrlFor` gave: the media scheme is ADE's own origin to `isAdeOrigin`, and that is the point.
+      if (target === "about:blank") {
+        setDesignNote("refused")
+        setLoadState("ready")
+        return
+      }
+      setDesignNote(undefined)
+      if (!initial) watchFrame({ type: "src" })
+    } else if (isAdeOrigin(target, window.location.origin)) {
       setNotice("ade-origin")
       setLoadState("ready")
       return
@@ -384,7 +446,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     setSendNote(undefined)
     handshake({ type: "navigate", url: target })
     setSrcdoc(null)
-    setLoadToken((v) => v + 1)
+    if (!initial) setLoadToken((v) => v + 1)
 
     startHandshake(target, generation)
   }
@@ -413,6 +475,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   }
 
   const navigateTo = (raw: string) => {
+    // A Design-mode pane shows its variant: its address is not typed.
+    if (props.design) return
     const normalized = normalizeUrl(raw)
     if (!normalized) return
     if (isAdeOrigin(normalized, window.location.origin)) {
@@ -450,7 +514,31 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     ),
   )
 
+  /*
+   * The same pane given another variant (`openDesignVariant` reuses it for
+   * the same proposal), or the same one opened again: that reloads it, which
+   * is the way back after the frame has left the page (BASSO 2).
+   */
+  createEffect(
+    on(
+      () => (props.design ? designLoadKey(designAddress(props.design), props.design.opened) : undefined),
+      (key, previous) => {
+        if (key === undefined || key === previous || !props.design) return
+        const next = designAddress(props.design)
+        setUrl(next)
+        setInputUrl(next)
+        setMode("browse")
+        load(next)
+      },
+      { defer: true },
+    ),
+  )
+
   const onFrameLoad = () => {
+    if (props.design) {
+      watchFrame({ type: "load" })
+      if (designWatch().left) return
+    }
     if (srcdoc() !== null) {
       setLoadState("ready")
     }
@@ -479,7 +567,16 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     if (!iframeRef?.contentWindow || event.source !== iframeRef.contentWindow) return
     const raw = event.data as { type?: unknown } | null
     // The only thing the frame's window may say: "here is my port".
-    if (raw && typeof raw === "object" && raw.type === FRAME_ASK) frameGate.ask(event.ports[0])
+    if (!raw || typeof raw !== "object" || raw.type !== FRAME_ASK) return
+    if (props.design) {
+      // A second handshake is a second document: not the variant any more (BASSO 1).
+      watchFrame({ type: "ask" })
+      if (designWatch().left) {
+        event.ports[0]?.close()
+        return
+      }
+    }
+    frameGate.ask(event.ports[0])
   }
 
   const handleBridge = (data: BridgeMessage | undefined) => {
@@ -505,6 +602,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
        * own — and that prompt goes to an agent.
        */
       if (mode() !== "edit") return
+      if (props.design && designWatch().left) return
 
       const element = data.element
       if (element && typeof element.selector === "string") {
@@ -516,6 +614,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     }
 
     if (data.type === "visual-editor:edit-applied") {
+      // A proposal's page is not code: changes made in it go nowhere (D2).
+      if (props.design) return
       const edit = data as unknown as Partial<EditRecord>
       if (typeof edit.selector !== "string" || typeof edit.property !== "string") return
       setEdits((current) =>
@@ -553,7 +653,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       onCleanup(() => observer.disconnect())
     }
 
-    load(url())
+    load(url(), Boolean(props.design))
   })
 
   const removeElement = (selector: string) => {
@@ -571,6 +671,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
 
   /** An edit typed in a chip, applied to the page; the page reports it back. */
   const applyEdit = (selector: string, property: string, value: string) => {
+    if (props.design) return
     if (property === "text") post({ type: "visual-editor:apply-text", selector, text: value })
     else post({ type: "visual-editor:apply-style", selector, property, value })
   }
@@ -649,7 +750,29 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
    * To the bound session, or ask. Never to whichever session happens to be
    * running: see `planSend`. The text and the selection stay until it goes.
    */
+  /*
+   * Design mode (D2): nothing goes to a session and nothing is written to
+   * `.ade/browser/`. The selection becomes a line in the proposal's note.
+   */
+  const addToNote = () => {
+    const design = props.design
+    const actions = props.designActions
+    if (!design || !actions || selection().length === 0) return
+    actions.addToNote(
+      noteLine({
+        variant: design.variant,
+        ...(design.name ? { name: design.name } : {}),
+        elements: selection(),
+        instruction: promptText(),
+      }),
+    )
+    setSendNote({ ok: true, text: t("browser.design.added") })
+    setPromptText("")
+    clearSelection()
+  }
+
   const sendPromptWithContext = () => {
+    if (props.design) return addToNote()
     if (!promptText().trim() && selection().length === 0) return
     const plan = planSend(props.owner ?? { state: "none" })
     if (plan.kind === "send") void deliver(plan.to)
@@ -671,7 +794,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
   onMount(() => {
     props.onController?.({
       reload: () => load(url()),
-      setInspect: (on) => setMode(on ? "edit" : "browse"),
+      setInspect: (on) => setMode(on && !(props.design && designWatch().left) ? "edit" : "browse"),
       state: () => ({
         url: url(),
         inspecting: mode() === "edit",
@@ -688,6 +811,8 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       containerWidth: containerBox().width,
       containerHeight: containerBox().height,
       landscape: landscape(),
+      // A design page's `ade-size` is its viewport; without one, the pane's width.
+      ...(props.design?.size ? { size: props.design.size, fitWidth: true } : {}),
     }),
   )
 
@@ -718,6 +843,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       data-focused={props.focused ? "true" : undefined}
       data-fidelity={fidelity()}
       data-mode={mode()}
+      data-design={props.design ? (designWatch().left ? "left" : "on") : undefined}
       data-status={loadState()}
       onFocusIn={() => props.onFocus?.()}
       onPointerDown={() => props.onFocus?.()}
@@ -740,6 +866,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
+            hidden={Boolean(props.design)}
             disabled={!canStep(history(), -1)}
             onClick={() => go(-1)}
             aria-label={t("browser.back")}
@@ -752,6 +879,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
           <button
             type="button"
             data-slot="browser-nav-btn"
+            hidden={Boolean(props.design)}
             disabled={!canStep(history(), 1)}
             onClick={() => go(1)}
             aria-label={t("browser.forward")}
@@ -780,20 +908,83 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             data-status={loadState()}
             aria-hidden="true"
           />
-          <input
-            type="text"
-            data-slot="browser-url-input"
-            data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}
-            value={inputUrl()}
-            onInput={(e) => setInputUrl(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                navigateTo(inputUrl())
-              }
-            }}
-            placeholder={t("browser.address.placeholder")}
-            spellcheck={false}
-          />
+          <Show
+            when={props.design}
+            fallback={
+              <input
+                type="text"
+                data-slot="browser-url-input"
+                data-sensitive={addressNeedsCover(inputUrl()) ? "" : undefined}
+                value={inputUrl()}
+                onInput={(e) => setInputUrl(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    navigateTo(inputUrl())
+                  }
+                }}
+                placeholder={t("browser.address.placeholder")}
+                spellcheck={false}
+              />
+            }
+          >
+            {(design) => (
+              <span data-slot="browser-design-address" title={design().path}>
+                <Show when={props.designActions}>
+                  {(actions) => (
+                    <span data-slot="browser-design-actions">
+                      <button
+                        type="button"
+                        data-slot="browser-nav-btn"
+                        disabled={stepVariant(design().variant, -1, actions().count) === undefined}
+                        onClick={() => actions().step(-1)}
+                        aria-label={t("browser.design.previous")}
+                        title={t("browser.design.previous")}
+                      >
+                        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                          <path d="M7.5 2.5L4 6l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        data-slot="browser-nav-btn"
+                        disabled={stepVariant(design().variant, 1, actions().count) === undefined}
+                        onClick={() => actions().step(1)}
+                        aria-label={t("browser.design.next")}
+                        title={t("browser.design.next")}
+                      >
+                        <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                          <path d="M4.5 2.5L8 6l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        data-slot="browser-design-pick"
+                        data-active={actions().picked ? "true" : undefined}
+                        aria-pressed={actions().picked}
+                        onClick={() => actions().pick()}
+                      >
+                        {actions().picked ? t("browser.design.picked") : t("browser.design.pick")}
+                      </button>
+                    </span>
+                  )}
+                </Show>
+                <span data-slot="browser-design-label">
+                  {t("browser.design.label", design().k, design().title ?? "", design().variant)}
+                </span>
+                <Show when={designNote()}>
+                  {(note) => (
+                    <span data-slot="browser-design-note" data-note={note()} role="status">
+                      {note() === "left"
+                        ? t("browser.design.left")
+                        : note() === "noBridge"
+                          ? t("browser.design.noBridge")
+                          : t("browser.design.refused")}
+                    </span>
+                  )}
+                </Show>
+              </span>
+            )}
+          </Show>
         </div>
 
         <div data-slot="browser-mode-group">
@@ -810,6 +1001,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
             type="button"
             data-slot="browser-mode-btn"
             data-active={mode() === "edit" ? "true" : undefined}
+            disabled={Boolean(props.design) && designWatch().left}
             onClick={() => setMode("edit")}
             title={t("browser.mode.edit.tip")}
           >
@@ -1032,10 +1224,12 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                * mirror of it.
                */
               data-load={loadToken()}
-              src={srcdoc() ? undefined : withLoadToken(url(), loadToken())}
-              srcdoc={srcdoc() ?? undefined}
+              src={srcdoc() && !props.design ? undefined : withLoadToken(url(), loadToken())}
+              /* Design mode: never a copy. A `srcdoc` document takes ADE's origin. */
+              srcdoc={props.design ? undefined : (srcdoc() ?? undefined)}
               onLoad={onFrameLoad}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+              /* Design mode: no `allow-same-origin`, so the page's origin is opaque (D1). */
+              sandbox={frameSandbox(props.design)}
               name={FRAME_NAME}
               title={props.title || t("browser.preview")}
             />
@@ -1137,6 +1331,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                             <button
                               type="button"
                               data-slot="browser-context-action"
+                              hidden={Boolean(props.design)}
                               aria-expanded={editing() === el.selector}
                               onClick={() => setEditing((open) => (open === el.selector ? undefined : el.selector))}
                             >
@@ -1153,7 +1348,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                               </svg>
                             </button>
                           </div>
-                          <Show when={editing() === el.selector}>
+                          <Show when={!props.design && editing() === el.selector}>
                             <EditFields element={el} onApply={(property, value) => applyEdit(el.selector, property, value)} />
                           </Show>
                           <For each={edits().filter((edit) => edit.selector === el.selector)}>
@@ -1223,9 +1418,11 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                     }
                   }}
                   placeholder={
-                    selection().length > 0
-                      ? t("browser.prompt.selected")
-                      : t("browser.prompt.empty")
+                    props.design
+                      ? t("browser.design.prompt")
+                      : selection().length > 0
+                        ? t("browser.prompt.selected")
+                        : t("browser.prompt.empty")
                   }
                   spellcheck={false}
                 />
@@ -1233,9 +1430,9 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
                   type="button"
                   data-slot="browser-send-btn"
                   onClick={sendPromptWithContext}
-                  disabled={!promptText().trim() && selection().length === 0}
+                  disabled={props.design ? selection().length === 0 || !props.designActions : !promptText().trim() && selection().length === 0}
                 >
-                  {t("agent.send")}
+                  {props.design ? t("browser.design.addToNote") : t("agent.send")}
                 </button>
               </div>
             </div>
@@ -1246,16 +1443,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
-        <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
-          {t("browser.storage.note")}
-        </span>
-        <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
-          {t("browser.forget")}
-        </button>
-        <Show when={forgetNote()}>
-          <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
-            {forgetNote()?.text}
+        <Show when={!props.design}>
+          <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
+            {t("browser.storage.note")}
           </span>
+          <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
+            {t("browser.forget")}
+          </button>
+          <Show when={forgetNote()}>
+            <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
+              {forgetNote()?.text}
+            </span>
+          </Show>
         </Show>
         <Show when={sending() || sendNote()}>
           <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">

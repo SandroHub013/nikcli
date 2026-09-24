@@ -134,6 +134,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
+      getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
       now: () => Date.now(),
       settings: { activation: "toggle",
         mode: "transcription",
@@ -167,6 +168,7 @@ describe("Voice Modes & Settings Interaction", () => {
       host,
       speaker,
       transcriber,
+      getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
       now: () => Date.now(),
       settings: { activation: "toggle",
         mode: "transcription",
@@ -393,6 +395,7 @@ describe("Voice Modes & Settings Interaction", () => {
         host,
         speaker: createFakeSpeaker(),
         transcriber,
+        getContext: () => ({ focusedPaneId: host.panes[0]?.id }),
         now: () => Date.now(),
         settings: { activation: "toggle", mode, transcriptionSend: "manual" },
       })

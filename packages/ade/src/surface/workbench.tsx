@@ -173,7 +173,7 @@ import { mayReroute, pickProvider, setProviderPicker } from "../session/provider
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen } from "./commands"
+import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
@@ -252,6 +252,7 @@ import {
   sessionsTable,
   verifySender,
   unverifiedSenderRefusal,
+  voiceConfirmationFor,
   type MailPane,
   type Message,
   formatBell,
@@ -372,6 +373,9 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
+import { declaredSize, designForVariant, designPaneFor, openedDesign } from "../design/open-variant"
+import type { DesignProposal } from "../design/state"
+import { mediaUrl } from "../video/video"
 import { registerWrite, withPlace } from "../session/register-write"
 import {
   AgentOrb,
@@ -448,7 +452,7 @@ const HANDLED_COMMANDS = new Set([
 ])
 
 function isHandledCommand(id: string): boolean {
-  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.")
+  return HANDLED_COMMANDS.has(id) || id.startsWith("project.recent.") || parseDesignVariantCommand(id) !== undefined
 }
 
 /**
@@ -1364,6 +1368,7 @@ export function Workbench() {
       saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDesign()
     },
+    openVariant: (proposal, variant) => openDesignVariant(proposal, variant),
   })
 
   /*
@@ -1426,6 +1431,48 @@ export function Workbench() {
       }),
       view: "code",
     }))
+  }
+
+  /**
+   * Opens variant `variant` (from 1) of `proposal` in a browser pane in
+   * Design mode (D1), or shows it in the pane already open for the same
+   * proposal. The pane is given the page's path; it makes the URL itself,
+   * through `designUrlFor`. The page's `ade-size` is read first, to be the
+   * pane's viewport. Resolves to why it could not, or nothing.
+   */
+  const openDesignVariant = async (proposal: DesignProposal, variant: number): Promise<string | undefined> => {
+    const found = designForVariant(proposal, variant, project()?.root, grantedRoots())
+    if (!found.ok) {
+      return found.reason === "no-variant" ? t("design.variant.missing", proposal.k, variant) : t("design.variant.notDesign", proposal.k)
+    }
+    const host = await getHost()
+    const html = host?.readTextFile ? await host.readTextFile(found.design.path).then((file) => file.text).catch(() => "") : ""
+    const design = openedDesign(found.design, declaredSize(html), Date.now())
+    const title = t("browser.design.label", design.k, "", design.variant)
+    // The URL the layout and the record veil read; the pane loads only what `designUrlFor` gives it.
+    const browserUrl = mediaUrl(design.path)
+    const existing = designPaneFor(wb().panes, proposal.k)
+    if (existing) {
+      setWb((w) => ({ ...updatePane(w, existing.id, { browserDesign: design, browserUrl, title }), view: "code", focusedId: existing.id }))
+      return undefined
+    }
+    const newId = `bd${Date.now()}`
+    setWb((w) => ({
+      ...addPane(w, {
+        id: newId,
+        title,
+        status: "working",
+        model: "—",
+        mode: "browser",
+        browserUrl,
+        browserDesign: design,
+        ...here(),
+        lines: [],
+      }),
+      view: "code",
+      focusedId: newId,
+    }))
+    return undefined
   }
 
   /** Opens the Decisions panel, or focuses the one already open. */
@@ -1953,6 +2000,14 @@ export function Workbench() {
 
   /** Messages taken from the outbox and not delivered yet, oldest first. */
   const mailQueue: { id: string; message: Message; at: number }[] = []
+
+  /*
+   * A `send` the voice agent wrote is held here until the user says yes out
+   * loud (rilievo 20). `requested` keeps the question from being asked twice
+   * while the message waits in the queue on the next passes.
+   */
+  const voiceSendDecisions = new Map<string, "approved" | "rejected">()
+  const voiceSendRequested = new Set<string>()
 
   /*
    * What survives a restart, in localStorage: the requests still waiting for
@@ -2674,6 +2729,41 @@ export function Workbench() {
     }
     const panes = mailPanes()
     const sender = panes.find((pane) => pane.id === message.from)
+
+    /*
+     * A message from verified voice never acts unattended (rilievo 20; V1-bis,
+     * ALTO 8: every kind that writes or acts, not only `send`): the first pass
+     * asks for a spoken yes and leaves it in the queue; the next pass either
+     * carries it out or tells the waiting `ade-msg` it was refused. Without a
+     * running voice there is nobody to ask, so it is refused rather than
+     * carried out in silence.
+     */
+    const spoken = voiceConfirmationFor(message)
+    if (spoken) {
+      const decision = voiceSendDecisions.get(id)
+      if (decision === "rejected") {
+        voiceSendDecisions.delete(id)
+        voiceSendRequested.delete(id)
+        await answer("errore: invio annullato dall'utente")
+        return true
+      }
+      if (decision !== "approved") {
+        if (!voiceSendRequested.has(id)) {
+          voiceSendRequested.add(id)
+          const asked = await voiceEngine
+            .requestSendConfirmation(id, spoken.to, spoken.text, spoken.lead)
+            .catch(() => false)
+          if (!asked) {
+            voiceSendRequested.delete(id)
+            await answer("errore: invio rifiutato: la conferma vocale non è disponibile")
+            return true
+          }
+        }
+        return false
+      }
+      voiceSendDecisions.delete(id)
+      voiceSendRequested.delete(id)
+    }
 
     if (message.kind === "reply") {
       const request = openRequests.get(message.ref)
@@ -3844,6 +3934,10 @@ export function Workbench() {
     appendLine: (id, text, kind) => appendLine(id, text, kind),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
+    confirmVoiceSend: (id, approved) => {
+      if (approved) voiceSendDecisions.set(id, "approved")
+      else voiceSendDecisions.set(id, "rejected")
+    },
     getHost,
     recents,
     agentAvailability: () => agentStatuses(),
@@ -4961,6 +5055,11 @@ export function Workbench() {
         // The notice's «Togli dall'elenco» has nothing left to remove.
         setNoticeAction(undefined)
       }
+    } else if (parseDesignVariantCommand(id)) {
+      const wanted = parseDesignVariantCommand(id)!
+      const proposal = designRegister.state()?.proposals.find((candidate) => candidate.k === wanted.k)
+      const problem = proposal ? await openDesignVariant(proposal, wanted.variant) : t("design.variant.missing", wanted.k, wanted.variant)
+      if (problem) report(problem)
     } else if (id.startsWith("project.recent.")) {
       const root = id.slice("project.recent.".length)
       const host = await getHost()
@@ -4987,6 +5086,9 @@ export function Workbench() {
       workbench: wb(),
       recents: recents(),
       missingRecent: (root) => isMissingRecent(missingRoots(), root),
+      designVariants: (designRegister.state()?.proposals ?? [])
+        .filter((proposal) => proposal.status !== "chiusa")
+        .map((proposal) => ({ k: proposal.k, title: proposal.title, variants: proposal.variants.map((variant) => variant.name) })),
       hasHost: hasHost(),
       running: new Set(running.keys()),
       platform,
@@ -5219,6 +5321,11 @@ export function Workbench() {
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
+    // A question the voice is asking about this pane has nobody left to answer it.
+    if (permissions()[id]) {
+      permissions.forget(id)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(id)
+    }
     disposeTerminal(id)
     setLiveTerminals((ids) => {
       if (!ids.has(id)) return ids
@@ -5547,6 +5654,8 @@ export function Workbench() {
     if (pending) {
       if (!isResolved(pending, recent, agent)) return
       permissions.forget(paneId)
+      // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
       setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       return

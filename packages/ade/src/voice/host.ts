@@ -36,6 +36,11 @@ export interface AdeVoiceHostDeps {
   appendLine: (paneId: string, text: string, kind?: "step" | "shell" | "note") => void
   permissions: () => Record<string, PermissionRequest>
   answerPermission: (paneId: string, answer: PermissionAnswer) => void
+  /**
+   * The spoken decision on a `send` the voice agent wrote: deliver it, or
+   * refuse it with a receipt the waiting `ade-msg send` can print (rilievo 20).
+   */
+  confirmVoiceSend?: (id: string, approved: boolean) => void
   getHost?: () => Promise<Host | undefined>
   scrollTranscript?: (paneId: string, delta: number) => void
   /** The MRU project list, so a plan can name a project ADE is not in. */
@@ -118,6 +123,22 @@ const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model
 const PREPARE_WAIT_MS = 30_000
 
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
+  /*
+   * No voice text into a terminal whose agent is asking a permission
+   * (V1-bis, ALTO 6). The question is a menu: the text lands in it, and the
+   * Enter of «invia» picks the highlighted option — a grant nobody said. The
+   * question is answered first, by voice or by hand.
+   */
+  const refuseWhileAsking = (paneId: string) => {
+    if (!deps.permissions()[paneId]) return
+    const currentLocale = deps.locale ? deps.locale() : locale()
+    throw new Error(
+      currentLocale === "en"
+        ? "That panel is asking a permission: answer it first. The text was not sent."
+        : "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
+    )
+  }
+
   /*
    * The agent that answers what the grammar cannot, built on first use.
    *
@@ -295,6 +316,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * `replace(/\n/g, " ")` left carriage returns alone, which a tty reads
        * as Enter — one dictated sentence could arrive as two submissions.
        */
+      refuseWhileAsking(paneId)
       const singleLine = asOneLine(text)
       deps.setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       deps.appendLine(paneId, `> ${singleLine}`, "shell")
@@ -360,9 +382,21 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       return true
     },
 
-    answerPermission(paneId: string, answer: "allow" | "deny"): boolean {
+    pendingPermissionWhat(paneId: string): string | undefined {
+      return deps.permissions()[paneId]?.what
+    },
+
+    answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {
+        return false
+      }
+      /*
+       * The request whose question was read, and no other (V1-bis, ALTO 3):
+       * the first one answered by hand and a new one asked, a yes to «cat
+       * README» would otherwise grant the «rm -rf ~» on screen now.
+       */
+      if (what !== undefined && pending.what !== what) {
         return false
       }
 
@@ -407,6 +441,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         )
       }
       return false
+    },
+
+    confirmVoiceSend(id: string, approved: boolean): boolean {
+      if (!deps.confirmVoiceSend) return false
+      deps.confirmVoiceSend(id, approved)
+      return true
     },
 
     setColumns(columns?: number): void {
@@ -477,6 +517,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
             : (field ? "Il pannello selezionato non ha un processo in ascolto." : "Il pannello selezionato non ha dove ricevere il testo.")
         )
       }
+      refuseWhileAsking(paneId)
       // A trailing space, not a carriage return: the next dictated phrase must
       // not run into this one, and nothing is submitted until the user says so.
       session.write(`${trimmed} `)

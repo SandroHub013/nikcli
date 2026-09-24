@@ -1,5 +1,6 @@
-import { createSignal, type Accessor } from "solid-js"
-import { againEvent, answerEvent } from "./answer"
+import { createSignal } from "solid-js"
+import { againEvent, answerEvent, togglePick } from "./answer"
+import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
 import { runSubmit, submitControl, submitSteps } from "./card"
 // The same rule for both registers, written once (audit 0.7.7, MEDIO 7).
@@ -13,14 +14,6 @@ export interface DesignDraft {
   /** One variant, or the boxes ticked on a `multi` proposal. */
   readonly picked?: number | readonly number[]
   readonly note: string
-}
-
-export interface FullPreviewState {
-  readonly open: boolean
-  readonly variant?: DesignVariant
-  readonly title?: string
-  /** The proposal's key, for the folder an error points to. */
-  readonly k?: string
 }
 
 export function projectRootFromRegisterPath(registerPath: string | undefined): string | undefined {
@@ -37,6 +30,20 @@ export interface DesignHub {
   delivery: (proposal: DesignProposal) => DeliveryState
   draft: (k: string) => DesignDraft
   setDraft: (k: string, draft: DesignDraft) => void
+  /**
+   * Picks variant `index` (from 0), or ticks its box on a `multi` proposal:
+   * the card, the sheet and «Scelgo questa» in the browser pane (D2) all go
+   * through here, so the three cannot pick differently.
+   */
+  pick: (proposal: Pick<DesignProposal, "k" | "multi">, index: number) => void
+  /**
+   * Whether the pick of `k` was made in this window, through `pick`: the
+   * sheet keeps it when it opens, and Enter may send it. A pick the sheet
+   * finds without this mark is cleared (D2 review, MEDIO).
+   */
+  chosen: (k: string) => boolean
+  /** Adds `line` to the note of `k` on a line of its own, leaving what is written (D2, «Aggiungi alla nota»). */
+  addNoteLine: (k: string, line: string) => void
   busy: (k: string) => boolean
   problem: (k: string) => string | undefined
   answer: (proposal: DesignProposal) => Promise<boolean>
@@ -55,9 +62,12 @@ export interface DesignHub {
    * picked, that session is chosen first.
    */
   again: (proposal: DesignProposal) => Promise<boolean>
-  fullPreview: Accessor<FullPreviewState>
-  openFullPreview: (variant: DesignVariant, title?: string, k?: string) => void
-  closeFullPreview: () => void
+  /**
+   * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
+   * or the pane already showing this proposal. Resolves to why it could
+   * not, or nothing when it opened.
+   */
+  openVariant: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }
 
 export function createDesignHub(deps: {
@@ -68,12 +78,13 @@ export function createDesignHub(deps: {
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
+  openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
+  const [chosenKeys, setChosenKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
   const [inline, setInline] = createSignal<string>()
-  const [fullPreview, setFullPreview] = createSignal<FullPreviewState>({ open: false })
 
   const setProblem = (k: string, text: string | undefined) =>
     setProblems((all) => ({ ...all, [k]: text }))
@@ -101,12 +112,22 @@ export function createDesignHub(deps: {
   }
 
   const draft = (k: string): DesignDraft => drafts()[k] ?? { note: "" }
-  const clearDraft = (k: string) =>
+  const setDraft = (k: string, value: DesignDraft) => {
+    setDrafts((all) => ({ ...all, [k]: value }))
+    if (problems()[k]) setProblem(k, undefined)
+  }
+  const clearDraft = (k: string) => {
     setDrafts((all) => {
       const next = { ...all }
       delete next[k]
       return next
     })
+    setChosenKeys((keys) => {
+      const next = new Set(keys)
+      next.delete(k)
+      return next
+    })
+  }
 
   const record = (proposal: DesignProposal, event: AnsweredDesignEvent | string): Promise<boolean> => {
     if (typeof event === "string") {
@@ -133,9 +154,16 @@ export function createDesignHub(deps: {
     choose: deps.choose,
     delivery: deps.delivery,
     draft,
-    setDraft: (k, value) => {
-      setDrafts((all) => ({ ...all, [k]: value }))
-      if (problems()[k]) setProblem(k, undefined)
+    setDraft,
+    pick: (proposal, index) => {
+      const current = draft(proposal.k)
+      setDraft(proposal.k, { ...current, picked: togglePick(current.picked, index, Boolean(proposal.multi)) })
+      setChosenKeys((keys) => new Set(keys).add(proposal.k))
+    },
+    chosen: (k) => chosenKeys().has(k),
+    addNoteLine: (k, line) => {
+      const current = draft(k)
+      setDraft(k, { ...current, note: appendNoteLine(current.note, line) })
     },
     busy: (k) => busyKeys().has(k),
     problem: (k) => problems()[k],
@@ -187,8 +215,12 @@ export function createDesignHub(deps: {
       }
       return record(proposal, event)
     },
-    fullPreview,
-    openFullPreview: (variant, title, k) => setFullPreview({ open: true, variant, title, k }),
-    closeFullPreview: () => setFullPreview({ open: false }),
+    openVariant: async (proposal, variant) => {
+      const result = await (deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")))
+      if (result) {
+        setProblem(proposal.k, result)
+      }
+      return result
+    },
   }
 }

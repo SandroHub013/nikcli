@@ -130,6 +130,43 @@ describe("buckets and messages", () => {
     )
   })
 
+  test("foldProposals preserves keeps on DesignProposal (D3)", () => {
+    const { proposals } = foldProposals([
+      opened("DS1", { keeps: ["Titolo principale", "Colore di sfondo"] } as never),
+    ])
+    expect(proposals[0]?.keeps).toEqual(["Titolo principale", "Colore di sfondo"])
+  })
+
+  test("foldProposals preserves new A1 fields on DesignProposal (recommend, question, why, keeps, changes)", () => {
+    const event: DesignEvent = {
+      type: "aperta",
+      k: "DS80",
+      at: at(0),
+      by: "Master",
+      title: "Layout della vista",
+      question: "Quale layout adottiamo per il dettaglio?",
+      why: "Per allineare la vista alla nuova griglia.",
+      context: "Consigliata: 1 · Vetro, perché più leggera.",
+      recommend: { option: "1 · Vetro", because: "Più leggera" },
+      keeps: ["Sidebar invariata", "Header 48px"],
+      spec: "S54",
+      variants: [
+        { name: "1 · Vetro", description: "Sfondo semitrasparente", preview: "C:/path/1.html", changes: ["Pannello opaco rimosso", "Effetto blur"] },
+        { name: "2 · Solido", description: "Sfondo opaco classico", preview: "C:/path/2.html", changes: ["Bordo più spesso"] },
+      ],
+    }
+    const { proposals } = foldProposals([event])
+    const p = proposals[0]!
+    expect(p.k).toBe("DS80")
+    expect(p.question).toBe("Quale layout adottiamo per il dettaglio?")
+    expect(p.why).toBe("Per allineare la vista alla nuova griglia.")
+    expect(p.context).toBe("Consigliata: 1 · Vetro, perché più leggera.")
+    expect(p.recommend).toEqual({ option: "1 · Vetro", because: "Più leggera" })
+    expect(p.keeps).toEqual(["Sidebar invariata", "Header 48px"])
+    expect(p.variants[0]?.changes).toEqual(["Pannello opaco rimosso", "Effetto blur"])
+    expect(p.variants[1]?.changes).toEqual(["Bordo più spesso"])
+  })
+
   test("nextDesignKey generates sequentially", () => {
     expect(nextDesignKey([])).toBe("DS1")
     expect(nextDesignKey([{ k: "DS1" }, { k: "DS5" }])).toBe("DS6")
