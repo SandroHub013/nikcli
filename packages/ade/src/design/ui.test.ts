@@ -21,7 +21,7 @@ import {
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
-import { frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath, thumbnailScale } from "./design-preview"
+import { DesignPreview, frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath, thumbnailScale } from "./design-preview"
 import { mediaUrl } from "../video/video"
 import type { DesignProposal } from "./state"
 import type { DesignEvent } from "./log"
@@ -537,6 +537,31 @@ describe("a variant's preview", () => {
     expect(shortPage.scale).toBe(300 / 500)
     expect(shortPage.width).toBe(300)
     expect(shortPage.height).toBe(120)
+  })
+
+  test("thumbnailScale with measured box width (259px) scales to 259 / size.width without clipping (ade/design-miniatura)", () => {
+    // In live ADE Test with 3 variants per row, the actual box measures 259px (not 330px).
+    const measuredBoxW = 259
+    const scaled = thumbnailScale({ width: 760, height: 1600 }, measuredBoxW)
+    expect(scaled.scale).toBe(259 / 760)
+    expect(scaled.width).toBe(259)
+    expect(scaled.height).toBe(220)
+    expect(scaled.frameWidth).toBe(760)
+    expect(scaled.frameHeight).toBe(1600)
+    // The rendered width of the scaled iframe (760 * scale) exactly equals the measured box width (259px):
+    expect(Math.round(scaled.frameWidth * scaled.scale)).toBe(259)
+
+    // Recalculates dynamically when container width changes (e.g. window resize)
+    const resizedBox = thumbnailScale({ width: 760, height: 1600 }, 285)
+    expect(resizedBox.scale).toBe(285 / 760)
+    expect(resizedBox.width).toBe(285)
+    expect(Math.round(resizedBox.frameWidth * resizedBox.scale)).toBe(285)
+  })
+
+  test("DesignPreview calculates thumbnail scale based on measured container width and ResizeObserver", () => {
+    const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
+    expect(tsx).toContain("ResizeObserver")
+    expect(tsx).toContain("thumbnailScale(measured(), measuredWidth() > 0 ? measuredWidth() : 330)")
   })
 
   test("frameProps disables scripts in miniature preview sandbox", () => {
