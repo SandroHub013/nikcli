@@ -22,6 +22,15 @@ export function shortSelector(selector: string): string {
   return field(short, 80)
 }
 
+/**
+ * A name that starts with the variant's own number («1 · A linea») without
+ * it: the line already says «Variante 1» (D2 review, BASSO 2). Another
+ * number («2 · Vetro» on variant 1, «12 colonne») is part of the name.
+ */
+function withoutNumber(name: string, variant: number): string {
+  return name.replace(new RegExp(`^${variant}(?:\\s*[·.:)\\-–—]\\s*|$)`), "")
+}
+
 export interface NoteLineInput {
   /** The variant's number, from 1. */
   readonly variant: number
@@ -33,7 +42,7 @@ export interface NoteLineInput {
 }
 
 export function noteLine(input: NoteLineInput): string {
-  const name = field(input.name, 60)
+  const name = withoutNumber(field(input.name, 60), input.variant)
   const head = name ? `Variante ${input.variant} «${name}»` : `Variante ${input.variant}`
   const selectors = input.elements.map((element) => shortSelector(element.selector)).filter(Boolean)
   // The text says which one only when there is one: with several, the selectors do.

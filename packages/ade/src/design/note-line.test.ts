@@ -67,3 +67,18 @@ describe("appendNoteLine", () => {
     expect(note.split("\n")).toEqual(["uno", "due"])
   })
 })
+
+/* D2 review, BASSO 2: a name that already carries the number is not numbered twice. */
+describe("a numbered variant name", () => {
+  test("«1 · A linea» on variant 1 is written once", () => {
+    expect(noteLine({ variant: 1, name: "1 · A linea", elements: [{ selector: "h1" }], instruction: "" })).toBe("Variante 1 «A linea» · h1")
+    expect(noteLine({ variant: 2, name: "2. Vetro", elements: [], instruction: "" })).toBe("Variante 2 «Vetro»")
+    expect(noteLine({ variant: 3, name: "3) Rail", elements: [], instruction: "" })).toBe("Variante 3 «Rail»")
+  })
+
+  test("another number, or a number that is the name, stays", () => {
+    expect(noteLine({ variant: 1, name: "2 · Vetro", elements: [], instruction: "" })).toBe("Variante 1 «2 · Vetro»")
+    expect(noteLine({ variant: 1, name: "12 colonne", elements: [], instruction: "" })).toBe("Variante 1 «12 colonne»")
+    expect(noteLine({ variant: 1, name: "1", elements: [], instruction: "" })).toBe("Variante 1")
+  })
+})
