@@ -93,3 +93,16 @@ describe("watchDesign counts a second handshake as leaving", () => {
     expect(run({ type: "ask" }, { type: "load" }, { type: "src" }, { type: "ask" }, { type: "load" }).left).toBe(false)
   })
 })
+
+/*
+ * D2 review, BASSO 1: the browser's back and forward were still drawn in
+ * Design mode. `hidden` lost to the slot's own `display: grid`.
+ */
+describe("the hidden nav buttons", () => {
+  test("a hidden nav button is not displayed", async () => {
+    const { readFileSync } = await import("node:fs")
+    const { join } = await import("node:path")
+    const css = readFileSync(join(import.meta.dir, "browser.css"), "utf8").replace(/\s+/g, " ")
+    expect(css).toMatch(/\[data-slot="browser-nav-btn"\]\[hidden\] \{ display: none;? \}/)
+  })
+})

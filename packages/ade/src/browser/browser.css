@@ -67,6 +67,11 @@
   transition: background var(--ade-dur-fast) var(--ade-ease), color var(--ade-dur-fast) var(--ade-ease);
 }
 
+/* `hidden` would lose to `display: grid` above: the arrows Design mode hides (D2 review, BASSO 1). */
+[data-slot="browser-nav-btn"][hidden] {
+  display: none;
+}
+
 [data-slot="browser-nav-btn"]:disabled {
   opacity: 0.35;
   cursor: default;
