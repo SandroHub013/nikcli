@@ -67,9 +67,10 @@
   font-size: 12.5px;
 }
 
-[data-slot="ext-search"]:focus {
+[data-slot="ext-search"]:focus-visible {
   outline: none;
   border-color: var(--ade-accent);
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="ext-filters"] {
