@@ -43,6 +43,8 @@ export interface PendingAction {
   isPermission?: boolean
   /** Target pane ID for permissions. */
   paneId?: string
+  /** For a permission: what the agent asked to do, as the question said it. */
+  what?: string
 }
 
 export interface DictationBuffer {
@@ -165,6 +167,29 @@ export function confirmationAnswer(text: string): ConfirmationAnswer {
   return "yes"
 }
 
+/**
+ * The pane an answer names, when it is a grant or a refusal with a pane in it
+ * («consenti pannello 2», «autorizza beta», «nega pannello 2»). V1-bis, ALTO 2:
+ * the pane named used to be ignored, and the pane being asked was answered.
+ */
+function namedPermissionPane(
+  text: string,
+  ctx: ParseContext,
+): { paneId: string; answer: "allow" | "deny" } | undefined {
+  const parsed = parseUtterance(text, ctx)
+  const intent = parsed.intent?.intent
+  if (intent !== "permission.allow" && intent !== "permission.deny") return undefined
+  const { paneIndex, paneTitle } = parsed.slots
+  const named =
+    paneIndex !== undefined
+      ? ctx.panes?.find((p) => p.index === Number(paneIndex))
+      : paneTitle !== undefined
+        ? ctx.panes?.find((p) => p.title.toLowerCase() === String(paneTitle).toLowerCase())
+        : undefined
+  if (!named) return undefined
+  return { paneId: named.id, answer: intent === "permission.allow" ? "allow" : "deny" }
+}
+
 /** A refusal said in words the closed yes set does not cover: «lascia stare», «nega», «rifiuta». */
 function saysRefusal(text: string, ctx: ParseContext): boolean {
   const intent = parseUtterance(text, ctx).intent?.intent
@@ -234,6 +259,7 @@ function promoteQueuedPermission(
       confirmPrompt: prompt,
       isPermission: true,
       paneId: req.paneId,
+      what: req.what,
     },
   }
 
@@ -395,6 +421,7 @@ export function transition(
         confirmPrompt: prompt,
         isPermission: true,
         paneId: event.paneId,
+        what: event.what,
       },
     }
 
@@ -697,8 +724,32 @@ export function transition(
        * score only charged 0.15 for the extra word: the pane closed, or the
        * permission was granted, on an answer of no.
        */
-      const answer = confirmationAnswer(event.text)
+      let answer = confirmationAnswer(event.text)
       const parseCtx = { ...ctx, pendingPermission: state.pendingAction?.isPermission }
+
+      /*
+       * A pane named in the answer is the pane acted on (V1-bis, ALTO 2). The
+       * one being asked is answered as said; another one with a request
+       * waiting has its own question asked first — a grant is never given to
+       * a question that was not read; a pane with nothing asked gets nothing.
+       */
+      const asked = state.pendingAction
+      const named = answer === "unclear" && asked?.isPermission ? namedPermissionPane(event.text, ctx) : undefined
+      if (named && asked?.paneId && named.paneId === asked.paneId) {
+        answer = named.answer === "allow" ? "yes" : "no"
+      } else if (named && asked?.paneId) {
+        const title = (id: string) => ctx.panes?.find((p) => p.id === id)?.title ?? id
+        if (state.queuedPermission?.paneId === named.paneId) {
+          const aside = { paneId: asked.paneId, what: asked.what ?? "" }
+          const promoted = promoteQueuedPermission(state, now, ctx, effects)!
+          return { ...promoted, state: { ...promoted.state, queuedPermission: aside } }
+        }
+        return withSpoken(
+          state,
+          `Il pannello «${title(named.paneId)}» non ha richieste aperte. Sto chiedendo del pannello «${title(asked.paneId)}»: sì o no?`,
+        )
+      }
+
       if (answer === "no" || (answer === "unclear" && saysRefusal(event.text, parseCtx))) {
         effects.push({ type: "cancel_timer" })
         const action = state.pendingAction!
