@@ -452,6 +452,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
   const parakeetTotal = (backend: ParakeetExecutionBackend): number =>
     parakeetFiles(backend)[0]?.includes("fp16") ? 1_200_000_000 : 670_488_135
   const refreshCache = async (backend = props.settings.parakeetBackend): Promise<CachedModel> => {
+    if (backend !== cacheBackend) return EMPTY_CACHE
     const generation = ++cacheGeneration
     const found = await inspectModelCache({ skipFilesystem: true, requiredFiles: parakeetFiles(backend) })
     if (generation === cacheGeneration && backend === cacheBackend) {
@@ -607,7 +608,7 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
           setDownloadProgress(p)
         },
       })
-      await refreshCache(backend)
+      if (backend === cacheBackend) await refreshCache(backend)
       updateSettings({ backend: "parakeet" })
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 6000)
