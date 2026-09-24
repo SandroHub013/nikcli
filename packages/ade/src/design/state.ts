@@ -48,7 +48,27 @@ export interface DesignState {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
-export function foldProposals(events: readonly DesignEvent[]): DesignState {
+function isProposalUnchanged(prev: DesignProposal, next: DesignProposal): boolean {
+  if (prev.status !== next.status) return false
+  if (prev.round !== next.round) return false
+  if (prev.closedAt !== next.closedAt) return false
+  if (prev.evidence !== next.evidence) return false
+  if (prev.history.length !== next.history.length) return false
+  for (let i = 0; i < prev.history.length; i++) {
+    const pe = prev.history[i]
+    const ne = next.history[i]
+    if (pe === ne) continue
+    if (pe.type !== ne.type || pe.at !== ne.at || pe.by !== ne.by) return false
+    if (JSON.stringify(pe) !== JSON.stringify(ne)) return false
+  }
+  return true
+}
+
+export function foldProposals(
+  events: readonly DesignEvent[],
+  prev?: DesignState | Map<string, DesignProposal>,
+): DesignState {
+  const prevByKey = prev instanceof Map ? prev : prev ? new Map(prev.proposals.map((p) => [p.k, p])) : undefined
   const byKey = new Map<string, Mutable<DesignProposal>>()
   const rejected: RejectedEvent[] = []
   const reject = (event: DesignEvent, reason: string) => rejected.push({ event, reason })
@@ -133,7 +153,15 @@ export function foldProposals(events: readonly DesignEvent[]): DesignState {
     current.history = [...current.history, event]
   }
 
-  const proposals = [...byKey.values()]
+  const proposals: DesignProposal[] = []
+  for (const proposal of byKey.values()) {
+    const prevProposal = prevByKey?.get(proposal.k)
+    if (prevProposal && isProposalUnchanged(prevProposal, proposal)) {
+      proposals.push(prevProposal)
+    } else {
+      proposals.push(proposal)
+    }
+  }
   return { proposals, rejected }
 }
 

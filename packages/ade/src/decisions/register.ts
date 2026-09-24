@@ -54,9 +54,9 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
   const [error, setError] = createSignal<string>()
   const [now, setNow] = createSignal(new Date())
-  const state = createMemo(() => {
+  const state = createMemo<DecisionsState | undefined>((prev) => {
     const register = loaded()
-    return register ? foldDecisions(register.events, now()) : undefined
+    return register ? foldDecisions(register.events, now(), prev) : undefined
   })
   let loadedPath: string | undefined
   let stamp: string | undefined

@@ -29,9 +29,9 @@ export interface DesignRegister {
 export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
   const [error, setError] = createSignal<string>()
-  const state = createMemo(() => {
+  const state = createMemo<DesignState | undefined>((prev) => {
     const register = loaded()
-    return register ? foldProposals(register.events) : undefined
+    return register ? foldProposals(register.events, prev) : undefined
   })
   let loadedPath: string | undefined
   let stamp: string | undefined
