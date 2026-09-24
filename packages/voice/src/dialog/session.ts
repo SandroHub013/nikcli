@@ -85,7 +85,8 @@ export interface DialogState {
    * to see before it happens. Plans without `send_prompt` still run
    * immediately; only the submit step waits.
    */
-  pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
+  /** `answerableAt`: out of the queue, a yes before it is said over the question (V1-ter, ALTO 4). */
+  pendingPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string; answerableAt?: number }
   /** A plan whose question came while another was being asked: asked after it (V1-ter, ALTO 7). */
   queuedPlan?: { steps: PlanStep[]; refusals: string[]; speech?: string }
   /**
@@ -93,7 +94,8 @@ export interface DialogState {
    * confirming until the user says yes out loud. Without this the note reached
    * its target the moment the model wrote it — a message nobody ever saw.
    */
-  pendingSend?: { id: string; to: string; text: string; lead?: string }
+  /** `answerableAt`: out of the queue, a yes before it is said over the question (V1-ter, ALTO 4). */
+  pendingSend?: { id: string; to: string; text: string; lead?: string; answerableAt?: number }
   /** A send that arrived while the dialogue was busy: promoted like a queued permission. */
   queuedSend?: { id: string; to: string; text: string; lead?: string }
   /** Timestamp (epoch ms) when the current confirmation timer expires. */
@@ -320,16 +322,17 @@ function promoteQueuedSend(
     timeoutAt,
   })
 
+  const prompt = sendConfirmationPrompt(req.to, req.text, req.lead)
   const nextState: DialogState = {
     ...state,
     status: "confirming",
     timeoutAt,
     queuedSend: undefined,
-    pendingSend: { id: req.id, to: req.to, text: req.text, lead: req.lead },
+    pendingSend: { id: req.id, to: req.to, text: req.text, lead: req.lead, answerableAt: now + readingMs(prompt) },
     pendingAction: undefined,
     pendingPlan: undefined,
   }
-  return withSpokenLocal(nextState, sendConfirmationPrompt(req.to, req.text, req.lead), effects)
+  return withSpokenLocal(nextState, prompt, effects)
 }
 
 /** The question a plan with `send_prompt` steps is asked with: it names each text about to be sent. */
@@ -346,25 +349,32 @@ function askPlan(
   plan: { steps: PlanStep[]; refusals: string[]; speech?: string },
   now: number,
   effects: DialogEffect[],
+  fromQueue = false,
 ): TransitionResult {
   effects.push({ type: "cancel_timer" })
   const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
   effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
+  const prompt = planConfirmationPrompt(plan.steps)
   const nextState: DialogState = {
     ...state,
     status: "confirming",
     timeoutAt,
-    pendingPlan: { steps: plan.steps, refusals: plan.refusals, ...(plan.speech ? { speech: plan.speech } : {}) },
+    pendingPlan: {
+      steps: plan.steps,
+      refusals: plan.refusals,
+      ...(plan.speech ? { speech: plan.speech } : {}),
+      ...(fromQueue ? { answerableAt: now + readingMs(prompt) } : {}),
+    },
     pendingAction: undefined,
   }
-  return withSpokenLocal(nextState, planConfirmationPrompt(plan.steps), effects)
+  return withSpokenLocal(nextState, prompt, effects)
 }
 
 /** A plan that waited behind another question, after permissions and sends. */
 function promoteQueuedPlan(state: DialogState, now: number, effects: DialogEffect[]): TransitionResult | null {
   const plan = state.queuedPlan
   if (!plan) return null
-  return askPlan({ ...state, queuedPlan: undefined }, plan, now, effects)
+  return askPlan({ ...state, queuedPlan: undefined }, plan, now, effects, true)
 }
 
 /** Permissions first, then a waiting send, then a waiting plan: every exit path uses this. */
@@ -758,6 +768,13 @@ export function transition(
           )
         }
 
+        /* Out of the queue and not yet read whole: read again, as for a permission (V1-ter, ALTO 4). */
+        const send = state.pendingSend
+        if (answer === "yes" && send.answerableAt !== undefined && now < send.answerableAt) {
+          const prompt = sendConfirmationPrompt(send.to, send.text, send.lead)
+          return withSpoken({ ...state, pendingSend: { ...send, answerableAt: now + readingMs(prompt) } }, prompt)
+        }
+
         if (answer === "yes") {
           effects.push({ type: "cancel_timer" })
           effects.push({
@@ -800,6 +817,12 @@ export function transition(
             promoteQueued(abandoned, now, ctx, effects) ??
             withSpoken(abandoned, "Va bene, non invio niente.")
           )
+        }
+
+        const plan = state.pendingPlan
+        if (answer === "yes" && plan.answerableAt !== undefined && now < plan.answerableAt) {
+          const prompt = planConfirmationPrompt(plan.steps)
+          return withSpoken({ ...state, pendingPlan: { ...plan, answerableAt: now + readingMs(prompt) } }, prompt)
         }
 
         if (answer === "yes") {

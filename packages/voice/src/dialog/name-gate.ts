@@ -37,13 +37,26 @@ export function takesWithoutName(input: NameGateInput): boolean {
  * wake-word mode it arrives while nobody is talking to the assistant, and an
  * open gate let the «va bene» of a television grant it for 30 s. Its answer
  * starts with the name, like any sentence at rest.
+ *
+ * Nor anything out of the queue (V1-ter, reserve of ALTO 5): a held message
+ * or a plan asked after another question was not started by what the user
+ * is saying now. `answerableAt` is set only there.
  */
+type Waiting = { readonly answerableAt?: number }
+
 export function answersWithoutName(
-  state: { readonly status: string; readonly pendingAction?: { readonly isPermission?: boolean; readonly userAsked?: true } },
+  state: {
+    readonly status: string
+    readonly pendingAction?: { readonly isPermission?: boolean; readonly userAsked?: true } & Waiting
+    readonly pendingSend?: Waiting
+    readonly pendingPlan?: Waiting
+  },
   disambiguating: boolean,
 ): boolean {
   if (disambiguating) return true
   if (state.status !== "confirming") return false
+  const queued = [state.pendingAction, state.pendingSend, state.pendingPlan].some((p) => p?.answerableAt !== undefined)
+  if (queued) return false
   // A permission is answered without the name only when the user asked to grant it («consenti»).
   return state.pendingAction?.isPermission !== true || state.pendingAction.userAsked === true
 }

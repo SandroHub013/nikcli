@@ -84,11 +84,12 @@ describe("the plan's question does not cover a held message", () => {
     const transcriber = createFakeTranscriber()
     const speaker = createFakeSpeaker()
     let release: (() => void) | undefined
+    let clock = 10_000
     const engine = createVoiceEngine({
       host,
       transcriber,
       speaker,
-      now: () => 10_000,
+      now: () => clock,
       plan: () =>
         new Promise((resolve) => {
           release = () => resolve(JSON.stringify([{ action: "send_prompt", paneIndex: 1, text: "esegui i test" }]))
@@ -115,9 +116,10 @@ describe("the plan's question does not cover a held message", () => {
     expect(host.decisions).toEqual([["m1", true]])
     expect(host.sent).toEqual([])
 
-    // Now, and only now, the plan asks; its own yes runs it.
+    // Now, and only now, the plan asks; its own yes, said once it is read, runs it.
     expect(engine.status()).toBe("confirming")
     expect(speaker.lastSpoken).toContain("esegui i test")
+    clock += 15_000
     transcriber.emit("sì", true)
     await settle()
     expect(host.sent).toEqual([{ paneId: "p1", text: "esegui i test" }])
