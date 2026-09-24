@@ -130,6 +130,13 @@ describe("buckets and messages", () => {
     )
   })
 
+  test("foldProposals preserves keeps on DesignProposal (D3)", () => {
+    const { proposals } = foldProposals([
+      opened("DS1", { keeps: ["Titolo principale", "Colore di sfondo"] } as never),
+    ])
+    expect(proposals[0]?.keeps).toEqual(["Titolo principale", "Colore di sfondo"])
+  })
+
   test("nextDesignKey generates sequentially", () => {
     expect(nextDesignKey([])).toBe("DS1")
     expect(nextDesignKey([{ k: "DS1" }, { k: "DS5" }])).toBe("DS6")

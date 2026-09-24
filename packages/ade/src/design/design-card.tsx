@@ -1,9 +1,9 @@
 import { For, Show } from "solid-js"
 import { formatDay, isPicked, type Picked } from "./answer"
+import { withoutNumber } from "./note-line"
 import { DesignPreview, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
 import type { DesignProposal } from "./state"
 import type { SubmitControl } from "./card"
-import type { DesignVariant } from "./log"
 import { t } from "../i18n"
 
 export function DesignCard(props: {
@@ -27,7 +27,7 @@ export function DesignCard(props: {
   onRecord: () => void
   /** «Altro giro»: the note, as a request for new variants. */
   onAgain: () => void
-  onOpenFullPreview?: (variant: DesignVariant) => void
+  onOpenVariant?: (variantNumber: number) => void
   noteRef?: (element: HTMLTextAreaElement) => void
 }) {
   return (
@@ -50,6 +50,15 @@ export function DesignCard(props: {
           .join(" · ")}
       </div>
 
+      <Show when={props.proposal.keeps && props.proposal.keeps.length > 0}>
+        <div data-slot="design-keeps">
+          <span data-slot="design-keeps-label">{t("design.keeps")}:</span>
+          <ul data-slot="design-keeps-list">
+            <For each={props.proposal.keeps}>{(item) => <li>{item}</li>}</For>
+          </ul>
+        </div>
+      </Show>
+
       <Show when={props.proposal.multi}>
         <div data-slot="design-multi">{t("design.multi")}</div>
       </Show>
@@ -64,51 +73,74 @@ export function DesignCard(props: {
 
       <div data-slot="design-variants" role={props.proposal.multi ? "group" : "radiogroup"} aria-label={t("design.variants")}>
         <For each={props.proposal.variants}>
-          {(variant, index) => (
-            <div
-              data-slot="design-variant-item"
-              data-selected={isPicked(props.picked, index()) ? "true" : undefined}
-            >
-              <div data-slot="variant-head">
-                <button
-                  type="button"
-                  role={props.proposal.multi ? "checkbox" : "radio"}
-                  aria-checked={isPicked(props.picked, index())}
-                  data-slot="variant-pick-button"
-                  data-on={isPicked(props.picked, index()) ? "true" : undefined}
-                  onClick={() => props.onPick(index())}
-                >
-                  <span data-slot="variant-key" aria-hidden="true">{index() + 1}</span>
-                  <b data-slot="variant-name">{variant.name}</b>
-                </button>
+          {(variant, index) => {
+            const variantName = () => withoutNumber(variant.name, index() + 1).trim() || variant.name
+            return (
+              <div
+                data-slot="design-variant-item"
+                data-selected={isPicked(props.picked, index()) ? "true" : undefined}
+              >
+                <div data-slot="variant-head">
+                  <button
+                    type="button"
+                    role={props.proposal.multi ? "checkbox" : "radio"}
+                    aria-checked={isPicked(props.picked, index())}
+                    data-slot="variant-pick-button"
+                    data-on={isPicked(props.picked, index()) ? "true" : undefined}
+                    onClick={() => props.onPick(index())}
+                  >
+                    <span data-slot="variant-key" aria-hidden="true">{index() + 1}</span>
+                    <b data-slot="variant-name">{variantName()}</b>
+                  </button>
+                </div>
+
+                <Show when={variant.description}>
+                  <p data-slot="variant-desc">{variant.description}</p>
+                </Show>
+
+                <Show when={variant.changes && variant.changes.length > 0}>
+                  <div data-slot="variant-changes">
+                    <span data-slot="variant-changes-label">{t("design.variant.changes")}:</span>
+                    <ul data-slot="variant-changes-list">
+                      <For each={variant.changes}>{(change) => <li>{change}</li>}</For>
+                    </ul>
+                  </div>
+                </Show>
+
+                <Show when={variant.preview}>
+                  <div data-slot="variant-preview-wrap">
+                    <DesignPreview
+                      preview={variant.preview}
+                      k={props.proposal.k}
+                      name={variant.name}
+                      projectRoot={props.projectRoot}
+                    />
+                  </div>
+                  <div
+                    data-slot="variant-preview-source"
+                    title={resolvePreviewPath(variant.preview, props.projectRoot)}
+                  >
+                    <span data-slot="variant-preview-source-label">{t("design.preview.source")}:</span>
+                    <span data-slot="variant-preview-source-path">
+                      {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
+                    </span>
+                  </div>
+                  <Show when={props.onOpenVariant}>
+                    <button
+                      type="button"
+                      data-slot="variant-open-large"
+                      onClick={() => props.onOpenVariant?.(index() + 1)}
+                    >
+                      <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                        <path d="M2 10v4h4M14 6V2h-4M14 2L9 7M2 14l5-5" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                      <span>{t("design.variant.openLarge")}</span>
+                    </button>
+                  </Show>
+                </Show>
               </div>
-
-              <Show when={variant.description}>
-                <p data-slot="variant-desc">{variant.description}</p>
-              </Show>
-
-              <Show when={variant.preview}>
-                <div data-slot="variant-preview-wrap">
-                  <DesignPreview
-                    preview={variant.preview}
-                    k={props.proposal.k}
-                    name={variant.name}
-                    projectRoot={props.projectRoot}
-                    onToggleFullScreen={() => props.onOpenFullPreview?.(variant)}
-                  />
-                </div>
-                <div
-                  data-slot="variant-preview-source"
-                  title={resolvePreviewPath(variant.preview, props.projectRoot)}
-                >
-                  <span data-slot="variant-preview-source-label">{t("design.preview.source")}:</span>
-                  <span data-slot="variant-preview-source-path">
-                    {shortenPath(resolvePreviewPath(variant.preview, props.projectRoot))}
-                  </span>
-                </div>
-              </Show>
-            </div>
-          )}
+            )
+          }}
         </For>
       </div>
 

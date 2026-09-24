@@ -21,7 +21,7 @@ import {
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
-import { frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath } from "./design-preview"
+import { frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath, thumbnailScale } from "./design-preview"
 import { mediaUrl } from "../video/video"
 import type { DesignProposal } from "./state"
 import type { DesignEvent } from "./log"
@@ -29,7 +29,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 describe("the design sheet keys", () => {
-  test("digits pick variant, Enter records, Esc closes, arrows navigate, f expands", () => {
+  test("digits pick variant, Enter records, Esc closes, arrows navigate", () => {
     expect(sheetKey({ key: "Escape" }, 3, false, false)).toEqual({ kind: "close" })
     expect(sheetKey({ key: "1" }, 3, false, false)).toEqual({ kind: "pick", index: 0 })
     expect(sheetKey({ key: "3" }, 3, false, false)).toEqual({ kind: "pick", index: 2 })
@@ -38,7 +38,7 @@ describe("the design sheet keys", () => {
     expect(sheetKey({ key: "Enter" }, 3, false, false)).toEqual({ kind: "need-choice" })
     expect(sheetKey({ key: "ArrowRight" }, 3, false, false)).toEqual({ kind: "next" })
     expect(sheetKey({ key: "ArrowLeft" }, 3, false, false)).toEqual({ kind: "previous" })
-    expect(sheetKey({ key: "f" }, 3, false, false)).toEqual({ kind: "expand" })
+    expect(sheetKey({ key: "f" }, 3, false, false)).toBeUndefined()
   })
 
   test("in the note textarea, keys type normally; Ctrl+Enter submits", () => {
@@ -502,21 +502,43 @@ describe("a variant's preview", () => {
     expect(html).toEqual({ kind: "html", path: "C:/p/.ade/design/DS-PROVA/2.html", src: mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true) })
     const props = frameProps(html as { src: string }, previewSize('<meta name="ade-size" content="360x240">'), "B")
     expect(props.src.startsWith(mediaUrl("C:/p/.ade/design/DS-PROVA/2.html", true))).toBe(true)
-    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "allow-scripts allow-forms" })
+    expect(props).toMatchObject({ width: "360", height: "240", sandbox: "allow-scripts allow-forms", loading: "lazy" })
     expect("srcdoc" in props).toBe(false)
     expect("style" in props).toBe(false)
   })
 
-  test("the component loads by src and never scales: no srcdoc, transform, zoom or scale", () => {
+  test("the component loads by src as a scaled thumbnail with loading lazy and pointer-events none (D3)", () => {
     const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
     const code = tsx.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\/.*$/gm, "")
     expect(code).not.toContain("srcdoc")
     expect(code).toContain("{...frameProps(current, measured(), title())}")
-    expect(code).not.toMatch(/transform|zoom|scale\(/)
+    expect(code).toContain("transform: `scale(${thumb().scale})`")
+    expect(code).toContain("pointer-events")
     expect(code).not.toContain("allow-same-origin")
-    const css = readFileSync(join(__dirname, "design.css"), "utf-8")
-    const blocks = css.split("}").filter((block) => /preview|design-variant/.test(block))
-    expect(blocks.some((block) => /transform|zoom|scale\(/.test(block))).toBe(false)
+  })
+
+  test("thumbnailScale computes proportional scaling within max box", () => {
+    expect(thumbnailScale({ width: 360, height: 240 }, 240, 160)).toEqual({
+      scale: 240 / 360,
+      width: 240,
+      height: 160,
+      frameWidth: 360,
+      frameHeight: 240,
+    })
+    expect(thumbnailScale({ width: 1200, height: 800 }, 240, 160)).toEqual({
+      scale: 0.2,
+      width: 240,
+      height: 160,
+      frameWidth: 1200,
+      frameHeight: 800,
+    })
+    expect(thumbnailScale({ width: 120, height: 80 }, 240, 160)).toEqual({
+      scale: 1,
+      width: 120,
+      height: 80,
+      frameWidth: 120,
+      frameHeight: 80,
+    })
   })
 
   test("a page outside the project root gets no frame: Fuori dal progetto", () => {

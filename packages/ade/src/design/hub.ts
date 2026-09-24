@@ -1,4 +1,4 @@
-import { createSignal, type Accessor } from "solid-js"
+import { createSignal } from "solid-js"
 import { againEvent, answerEvent, togglePick } from "./answer"
 import { appendNoteLine } from "./note-line"
 import { t } from "../i18n"
@@ -14,14 +14,6 @@ export interface DesignDraft {
   /** One variant, or the boxes ticked on a `multi` proposal. */
   readonly picked?: number | readonly number[]
   readonly note: string
-}
-
-export interface FullPreviewState {
-  readonly open: boolean
-  readonly variant?: DesignVariant
-  readonly title?: string
-  /** The proposal's key, for the folder an error points to. */
-  readonly k?: string
 }
 
 export function projectRootFromRegisterPath(registerPath: string | undefined): string | undefined {
@@ -70,9 +62,6 @@ export interface DesignHub {
    * picked, that session is chosen first.
    */
   again: (proposal: DesignProposal) => Promise<boolean>
-  fullPreview: Accessor<FullPreviewState>
-  openFullPreview: (variant: DesignVariant, title?: string, k?: string) => void
-  closeFullPreview: () => void
   /**
    * Opens variant `variant` (from 1) in a browser pane in Design mode (D1),
    * or the pane already showing this proposal. Resolves to why it could
@@ -96,7 +85,6 @@ export function createDesignHub(deps: {
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
   const [inline, setInline] = createSignal<string>()
-  const [fullPreview, setFullPreview] = createSignal<FullPreviewState>({ open: false })
 
   const setProblem = (k: string, text: string | undefined) =>
     setProblems((all) => ({ ...all, [k]: text }))
@@ -227,9 +215,6 @@ export function createDesignHub(deps: {
       }
       return record(proposal, event)
     },
-    fullPreview,
-    openFullPreview: (variant, title, k) => setFullPreview({ open: true, variant, title, k }),
-    closeFullPreview: () => setFullPreview({ open: false }),
     openVariant: (proposal, variant) => deps.openVariant?.(proposal, variant) ?? Promise.resolve(t("design.variant.cannotOpen")),
   }
 }

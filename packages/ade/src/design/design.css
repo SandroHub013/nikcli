@@ -138,23 +138,6 @@
   white-space: nowrap;
 }
 
-[data-slot="full-preview-title-wrap"] {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-[data-slot="full-preview-source"] {
-  font-family: var(--ade-mono);
-  font-size: 11px;
-  color: var(--ade-text-weak);
-  font-weight: normal;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The window / sheet */
 [data-component="design-sheet"] [data-layout="surface"] {
   outline: none;
@@ -223,31 +206,52 @@
   line-height: 1.45;
 }
 
+[data-slot="design-keeps"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  border: 1px solid var(--ade-border-subtle);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+[data-slot="design-keeps-label"] {
+  font-weight: 600;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="design-keeps-list"] {
+  margin: 0;
+  padding-left: var(--ade-space-4);
+  color: var(--ade-text);
+}
+
+[data-slot="design-keeps-list"] li {
+  margin-bottom: var(--ade-space-1);
+}
+
 /*
- * Variants: one row that scrolls sideways, each at its page's own size.
- * A grid of equal columns squeezed every page into the same box.
+ * Variants: responsive grid without horizontal scrolling so no variant is cut off (A3).
  */
 [data-slot="design-variants"] {
-  display: flex;
-  align-items: flex-start;
-  overflow-x: auto;
-  gap: 12px;
-  margin: 4px 0;
-  padding-bottom: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--ade-space-3);
+  margin: var(--ade-space-1) 0;
 }
 
 [data-slot="design-variant-item"] {
-  flex: 0 0 auto;
-  /* As wide as the page it shows; the words wrap to it. */
-  width: min-content;
-  min-width: 200px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
   background: var(--ade-surface);
-  padding: 10px;
-  gap: 8px;
+  padding: var(--ade-space-2) var(--ade-space-3);
+  gap: var(--ade-space-2);
+  min-width: 0;
   transition: border-color var(--ade-dur-fast, 120ms) ease, box-shadow var(--ade-dur-fast, 120ms) ease;
 }
 
@@ -311,38 +315,72 @@
   min-height: 30px;
 }
 
-/* The page at its declared size, never scaled: scroll bars when it is bigger than the room. */
+[data-slot="variant-changes"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ade-text-soft);
+}
+
+[data-slot="variant-changes-label"] {
+  font-weight: 600;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="variant-changes-list"] {
+  margin: 0;
+  padding-left: var(--ade-space-3);
+  color: var(--ade-text);
+}
+
+[data-slot="variant-changes-list"] li {
+  margin-bottom: 2px;
+}
+
+/* Scaled miniature preview (D3). */
 [data-slot="variant-preview-wrap"] {
   border: 1px solid var(--ade-border-subtle);
   border-radius: var(--ade-radius-sm);
-  overflow: auto;
-  max-height: 70vh;
+  overflow: hidden;
+  height: 160px;
   position: relative;
   background: var(--ade-sunken);
+  display: grid;
+  place-items: center;
 }
 
 [data-component="design-preview"] {
   position: relative;
-  width: max-content;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
 }
 
 [data-slot="preview-frame-wrap"] {
-  overflow: auto;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
 }
 
-/* Width and height come from the page's `ade-size`, as attributes. */
+/* Width and height come from the page's `ade-size`, as attributes. Scaled by transform. */
 [data-slot="preview-frame"] {
   border: 0;
   background: #ffffff;
   display: block;
+  pointer-events: none;
 }
 
 [data-slot="preview-image-wrap"] {
-  width: 360px;
-  height: 240px;
-  overflow: auto;
+  width: 100%;
+  height: 160px;
+  overflow: hidden;
   display: grid;
   place-items: center;
+  pointer-events: none;
 }
 
 [data-slot="preview-image"] {
@@ -350,103 +388,46 @@
   max-height: 100%;
   object-fit: contain;
   display: block;
+  pointer-events: none;
 }
 
-[data-slot="preview-expand-btn"] {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 5;
-  width: 26px;
-  height: 26px;
+[data-slot="variant-open-large"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ade-space-2);
+  padding: var(--ade-space-1) var(--ade-space-2);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-sm);
   background: var(--ade-raised);
-  color: var(--ade-text-soft);
-  display: grid;
-  place-items: center;
+  color: var(--ade-text);
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: var(--ade-shadow-md, 0 2px 6px rgba(0,0,0,0.1));
+  margin-top: var(--ade-space-1);
+  transition: background var(--ade-dur-fast, 120ms) ease, border-color var(--ade-dur-fast, 120ms) ease;
 }
 
-[data-slot="preview-expand-btn"]:hover {
+[data-slot="variant-open-large"]:hover {
   background: var(--ade-hover);
-  color: var(--ade-text);
+  border-color: var(--ade-border-strong);
 }
 
 [data-slot="preview-loading"],
 [data-slot="preview-error"] {
   display: grid;
   place-items: center;
-  min-width: 200px;
-  max-width: 360px;
+  min-width: 160px;
+  max-width: 100%;
   min-height: 80px;
   font-size: 11px;
   color: var(--ade-text-weak);
 }
 
 [data-slot="preview-error"] {
-  color: #e05252;
-  padding: 8px;
+  color: var(--ade-danger, #e05252);
+  padding: var(--ade-space-2);
   text-align: center;
-}
-
-/* Fullscreen modal / ingranditore */
-[data-slot="design-full-preview-overlay"] {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  background: var(--ade-bg);
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--ade-radius-md);
-  overflow: hidden;
-}
-
-:root[data-theme="glass"] [data-slot="design-full-preview-overlay"] {
-  background: var(--ade-bg);
-  backdrop-filter: blur(24px) saturate(180%);
-}
-
-[data-slot="full-preview-header"] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--ade-border);
-  background: var(--ade-surface);
-}
-
-[data-slot="full-preview-title"] {
-  font-size: 13px;
-  color: var(--ade-text);
-}
-
-[data-slot="full-preview-close"] {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--ade-radius-sm);
-  background: transparent;
-  color: var(--ade-text-soft);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-[data-slot="full-preview-close"]:hover {
-  background: var(--ade-hover);
-  color: var(--ade-text);
-}
-
-[data-slot="full-preview-container"] {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  overflow: auto;
-  display: grid;
-  place-items: center;
-  padding: 16px;
 }
 
 /* Note textarea */

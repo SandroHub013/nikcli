@@ -1443,16 +1443,18 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       <footer data-slot="browser-footer">
         <span data-slot="browser-fidelity">{fidelityLabel()}</span>
         <span data-slot="browser-dimensions">{dimensionsLabel()}</span>
-        <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
-          {t("browser.storage.note")}
-        </span>
-        <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
-          {t("browser.forget")}
-        </button>
-        <Show when={forgetNote()}>
-          <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
-            {forgetNote()?.text}
+        <Show when={!props.design}>
+          <span data-slot="browser-storage-note" title={t("browser.forget.tip")}>
+            {t("browser.storage.note")}
           </span>
+          <button type="button" data-slot="browser-forget" title={t("browser.forget.tip")} onClick={() => void forgetThisSite()}>
+            {t("browser.forget")}
+          </button>
+          <Show when={forgetNote()}>
+            <span data-slot="browser-send-note" data-ok={forgetNote()?.ok ? "true" : "false"} role="status">
+              {forgetNote()?.text}
+            </span>
+          </Show>
         </Show>
         <Show when={sending() || sendNote()}>
           <span data-slot="browser-send-note" data-ok={sending() || sendNote()?.ok ? "true" : "false"} role="status">

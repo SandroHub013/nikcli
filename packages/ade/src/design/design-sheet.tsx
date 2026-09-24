@@ -1,10 +1,9 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, firstPick, sheetKey } from "./answer"
+import { enterReady, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
-import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
 import type { RecipientStatus } from "./delivery"
 import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals } from "./state"
@@ -51,16 +50,6 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (props.hub.fullPreview().open) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        event.stopPropagation()
-        props.hub.closeFullPreview()
-        surface?.focus()
-        return
-      }
-    }
-
     const proposal = current()
     const draft = proposal ? props.hub.draft(proposal.k) : undefined
     const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)))
@@ -76,11 +65,6 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
     else if (action.kind === "submit") void submit()
     else if (action.kind === "next") setIndex(Math.min(at() + 1, open().length - 1))
     else if (action.kind === "previous") setIndex(Math.max(at() - 1, 0))
-    else if (action.kind === "expand") {
-      const pickedIndex = firstPick(props.hub.draft(proposal.k).picked) ?? 0
-      const variant = proposal.variants[pickedIndex]
-      if (variant) props.hub.openFullPreview(variant, proposal.title, proposal.k)
-    }
   }
 
   return (
@@ -151,7 +135,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
                   onPick={(index) => pick(k, index, Boolean(proposal().multi))}
                   onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
                   onSubmit={() => void submit()}
-                  onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal().title, k)}
+                  onOpenVariant={(variantNumber) => void props.hub.openVariant(proposal(), variantNumber)}
                   noteRef={(element) => (note = element)}
                 />
               )
@@ -170,45 +154,6 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             {t("design.sheet.full")}
           </button>
         </footer>
-
-        {/* Fullscreen Preview Ingranditore Overlay */}
-        <Show when={props.hub.fullPreview().open && props.hub.fullPreview().variant}>
-          <div data-slot="design-full-preview-overlay" role="dialog" aria-modal="true">
-            <header data-slot="full-preview-header">
-              <div data-slot="full-preview-title-wrap">
-                <span data-slot="full-preview-title">
-                  {props.hub.fullPreview().title} · <b>{props.hub.fullPreview().variant?.name}</b>
-                </span>
-                <span
-                  data-slot="full-preview-source"
-                  title={resolvePreviewPath(props.hub.fullPreview().variant!.preview, root())}
-                >
-                  {shortenPath(resolvePreviewPath(props.hub.fullPreview().variant!.preview, root()))}
-                </span>
-              </div>
-              <button
-                type="button"
-                data-slot="full-preview-close"
-                onClick={() => props.hub.closeFullPreview()}
-                aria-label={t("design.preview.close")}
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round" />
-                </svg>
-              </button>
-            </header>
-            <div data-slot="full-preview-container">
-              <DesignPreview
-                preview={props.hub.fullPreview().variant!.preview}
-                k={props.hub.fullPreview().k ?? ""}
-                name={props.hub.fullPreview().variant!.name}
-                projectRoot={root()}
-                fullScreen
-                onToggleFullScreen={() => props.hub.closeFullPreview()}
-              />
-            </div>
-          </div>
-        </Show>
       </Surface>
     </Overlay>
   )

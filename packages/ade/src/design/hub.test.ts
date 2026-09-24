@@ -101,7 +101,7 @@ describe("the design register and the hub", () => {
     expect(hub.draft("DS1")).toEqual({ note: "" })
   })
 
-  test("full preview opens and closes via hub", () => {
+  test("variant opens via hub openVariant", async () => {
     const register: DesignRegister = {
       path: () => "C:\\project\\.ade\\design.jsonl",
       loaded: () => undefined,
@@ -113,23 +113,31 @@ describe("the design register and the hub", () => {
       watch: () => () => {},
     }
 
-    const hub = createDesignHub({
+    const openedVariants: { k: string; variant: number }[] = []
+    const hubWithOpen = createDesignHub({
       register,
       recipient: () => ({ state: "non scelta" }),
       sessions: () => [],
       choose: () => {},
       delivery: () => ({ state: "in coda" }),
       onAnswered: () => {},
+      openVariant: async (p, v) => {
+        openedVariants.push({ k: p.k, variant: v })
+        return undefined
+      },
     })
 
-    expect(hub.fullPreview().open).toBe(false)
-    hub.openFullPreview({ name: "A", description: "desc", preview: "a.html" }, "Test Title")
-    expect(hub.fullPreview().open).toBe(true)
-    expect(hub.fullPreview().variant?.name).toBe("A")
-    expect(hub.fullPreview().title).toBe("Test Title")
-
-    hub.closeFullPreview()
-    expect(hub.fullPreview().open).toBe(false)
+    const p: DesignProposal = {
+      k: "DS1",
+      title: "Settings",
+      variants: [{ name: "A", description: "desc", preview: "a.html" }],
+      raisedBy: "fable",
+      openedAt: new Date().toISOString(),
+      status: "aperta",
+      history: [],
+    }
+    await hubWithOpen.openVariant(p, 1)
+    expect(openedVariants).toEqual([{ k: "DS1", variant: 1 }])
   })
 })
 
