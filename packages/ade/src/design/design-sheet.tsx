@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Overlay, Surface } from "../ui/layout"
-import { enterReady, firstPick, sheetKey, togglePick } from "./answer"
+import { enterReady, firstPick, sheetKey } from "./answer"
 import { isFormField } from "../decisions/answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -23,20 +23,23 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
   let surface: HTMLDivElement | undefined
   let note: HTMLTextAreaElement | undefined
 
-  const [chosenHere, setChosenHere] = createSignal<ReadonlySet<string>>(new Set())
   const [needChoice, setNeedChoice] = createSignal<string>()
 
   const pick = (k: string, index: number, multi: boolean) => {
-    const draft = props.hub.draft(k)
-    props.hub.setDraft(k, { ...draft, picked: togglePick(draft.picked, index, multi) })
-    setChosenHere((keys) => new Set(keys).add(k))
+    props.hub.pick({ k, ...(multi ? { multi: true as const } : {}) }, index)
     setNeedChoice(undefined)
   }
 
+  /*
+   * A pick found here that nobody made in this window is cleared, so a plain
+   * Enter never sends a choice the user has not seen made. One made through
+   * `hub.pick` — the card, or «Scelgo questa» in the browser pane — stays
+   * (D2 review, MEDIO: «I pick in the pane, send from the sheet» lost it).
+   */
   onMount(() => {
     for (const proposal of open()) {
       const draft = props.hub.draft(proposal.k)
-      if (draft.picked !== undefined) props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
+      if (draft.picked !== undefined && !props.hub.chosen(proposal.k)) props.hub.setDraft(proposal.k, { ...draft, picked: undefined })
     }
     surface?.focus()
   })
@@ -60,7 +63,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
 
     const proposal = current()
     const draft = proposal ? props.hub.draft(proposal.k) : undefined
-    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, chosenHere().has(proposal.k)))
+    const picked = Boolean(proposal && draft && enterReady(Boolean(proposal.multi), draft.picked, draft.note, props.hub.chosen(proposal.k)))
     const inText = event.target === note
     const action = sheetKey(event, proposal?.variants.length ?? 0, inText, picked, !inText && isFormField(event.target))
     if (!action) return

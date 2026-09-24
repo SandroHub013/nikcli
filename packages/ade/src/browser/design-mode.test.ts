@@ -61,3 +61,48 @@ describe("the size a design page declares", () => {
     expect(fitViewport({ preset: "responsive", containerWidth: 600, containerHeight: 900 }).isResponsive).toBe(true)
   })
 })
+
+describe("the arrows between variants (D2)", () => {
+  test("previous and next inside the proposal, nothing past either end", async () => {
+    const { stepVariant } = await import("./design-mode")
+    expect(stepVariant(2, -1, 3)).toBe(1)
+    expect(stepVariant(2, 1, 3)).toBe(3)
+    expect(stepVariant(1, -1, 3)).toBeUndefined()
+    expect(stepVariant(3, 1, 3)).toBeUndefined()
+  })
+})
+
+/*
+ * The Architect's BASSO 1 on D1: a new document asks for the bridge before
+ * its `load`. On a slow page outside the proposal, a real click in that
+ * window was taken as a selection. A second ask is leaving too.
+ */
+describe("watchDesign counts a second handshake as leaving", () => {
+  const run = (...events: DesignWatchEvent[]) => events.reduce(watchDesign, INITIAL_DESIGN_WATCH)
+
+  test("the variant's own ask is not leaving", () => {
+    expect(run({ type: "ask" }, { type: "load" }).left).toBe(false)
+  })
+
+  test("a second ask, before any load, is", () => {
+    expect(run({ type: "ask" }, { type: "load" }, { type: "ask" }).left).toBe(true)
+    expect(run({ type: "ask" }, { type: "ask" }).left).toBe(true)
+  })
+
+  test("the pane's reload asks again without leaving", () => {
+    expect(run({ type: "ask" }, { type: "load" }, { type: "src" }, { type: "ask" }, { type: "load" }).left).toBe(false)
+  })
+})
+
+/*
+ * D2 review, BASSO 1: the browser's back and forward were still drawn in
+ * Design mode. `hidden` lost to the slot's own `display: grid`.
+ */
+describe("the hidden nav buttons", () => {
+  test("a hidden nav button is not displayed", async () => {
+    const { readFileSync } = await import("node:fs")
+    const { join } = await import("node:path")
+    const css = readFileSync(join(import.meta.dir, "browser.css"), "utf8").replace(/\s+/g, " ")
+    expect(css).toMatch(/\[data-slot="browser-nav-btn"\]\[hidden\] \{ display: none;? \}/)
+  })
+})

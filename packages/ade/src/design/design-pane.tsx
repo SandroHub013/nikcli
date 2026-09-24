@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { formatDay, formatMoment, togglePick } from "./answer"
+import { formatDay, formatMoment } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
 import { DesignPreview, resolvePreviewPath, shortenPath } from "./design-preview"
@@ -54,10 +54,7 @@ export function DesignPane(props: {
       recipientHint={recipientHint(props.hub.recipient())}
       now={now()}
       projectRoot={root()}
-      onPick={(index) => {
-        const draft = props.hub.draft(proposal.k)
-        props.hub.setDraft(proposal.k, { ...draft, picked: togglePick(draft.picked, index, Boolean(proposal.multi)) })
-      }}
+      onPick={(index) => props.hub.pick(proposal, index)}
       onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
       onSubmit={() => void props.hub.submit(proposal, "primary")}
       onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}

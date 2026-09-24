@@ -17,7 +17,16 @@ export interface PaneDesign {
   readonly variant: number
   readonly path: string
   readonly title?: string
+  /** The variant's name, for the note line. */
+  readonly name?: string
   readonly size?: { readonly width: number; readonly height: number }
+  /** When it was opened: every open is a load of its own, the same variant again included (BASSO 2). */
+  readonly opened?: number
+}
+
+/** The design a pane is given when a variant is opened: its size, and the moment, so that opening it again reloads it. */
+export function openedDesign(design: PaneDesign, size: PaneDesign["size"] | undefined, now: number): PaneDesign {
+  return { ...design, ...(size ? { size } : {}), opened: now }
 }
 
 const MIN_SIDE = 120
@@ -52,7 +61,16 @@ export function designForVariant(
   if (!entry) return { ok: false, reason: "no-variant" }
   const path = resolvePreviewPath(entry.preview, projectRoot)
   if (!projectRoot || designUrlFor(path, roots) === undefined) return { ok: false, reason: "not-design" }
-  return { ok: true, design: { k: proposal.k, variant, path, ...(proposal.title ? { title: proposal.title } : {}) } }
+  return {
+    ok: true,
+    design: {
+      k: proposal.k,
+      variant,
+      path,
+      ...(proposal.title ? { title: proposal.title } : {}),
+      ...(entry.name ? { name: entry.name } : {}),
+    },
+  }
 }
 
 /** The pane to reuse for proposal `k`: the one already showing one of its variants. */

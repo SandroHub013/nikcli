@@ -372,7 +372,7 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
-import { declaredSize, designForVariant, designPaneFor, type PaneDesign } from "../design/open-variant"
+import { declaredSize, designForVariant, designPaneFor, openedDesign } from "../design/open-variant"
 import type { DesignProposal } from "../design/state"
 import { mediaUrl } from "../video/video"
 import { registerWrite, withPlace } from "../session/register-write"
@@ -1446,8 +1446,7 @@ export function Workbench() {
     }
     const host = await getHost()
     const html = host?.readTextFile ? await host.readTextFile(found.design.path).then((file) => file.text).catch(() => "") : ""
-    const size = declaredSize(html)
-    const design: PaneDesign = { ...found.design, ...(size ? { size } : {}) }
+    const design = openedDesign(found.design, declaredSize(html), Date.now())
     const title = t("browser.design.label", design.k, "", design.variant)
     // The URL the layout and the record veil read; the pane loads only what `designUrlFor` gives it.
     const browserUrl = mediaUrl(design.path)
