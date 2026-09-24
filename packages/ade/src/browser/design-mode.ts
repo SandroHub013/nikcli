@@ -37,6 +37,17 @@ export interface DesignTarget {
   readonly size?: { readonly width: number; readonly height: number }
   /** The projects open in the window: the only roots `designUrlFor` accepts. */
   readonly roots: readonly string[]
+  /** When the variant was opened; a new value reloads the frame, the same address included. */
+  readonly opened?: number
+}
+
+/**
+ * What makes a Design-mode pane load its frame again: the address, or a new
+ * open of the same one. The Architect's BASSO 2: after the frame had left the
+ * variant, opening that variant again compared equal addresses and did nothing.
+ */
+export function designLoadKey(address: string, opened: number | undefined): string {
+  return `${address}#${opened ?? 0}`
 }
 
 /**

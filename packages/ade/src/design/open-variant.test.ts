@@ -81,3 +81,28 @@ describe("the pane for a proposal", () => {
     expect(fromWorkspaceState(saved!, "proj").panes.some((p) => p.browserDesign)).toBe(false)
   })
 })
+
+/*
+ * The Architect's BASSO 2 on D1: «Apri la variante» on the variant already
+ * shown, after the frame had left it, did nothing: the pane compared the
+ * address with its own and saw no change. Every open is now its own load.
+ */
+describe("opening the same variant again", () => {
+  test("gives the pane a new load, even with the same address", async () => {
+    const { openedDesign } = await import("./open-variant")
+    const { designLoadKey } = await import("../browser/design-mode")
+    const found = designForVariant(proposal, 1, ROOT, [ROOT])
+    if (!found.ok) throw new Error("variant 1 should open")
+    const first = openedDesign(found.design, undefined, 1_000)
+    const again = openedDesign(found.design, undefined, 2_000)
+    expect(first.path).toBe(again.path)
+    expect(designLoadKey("http://ade-media.localhost/x.html", first.opened)).not.toBe(designLoadKey("http://ade-media.localhost/x.html", again.opened))
+  })
+
+  test("keeps the declared size", async () => {
+    const { openedDesign } = await import("./open-variant")
+    const found = designForVariant(proposal, 1, ROOT, [ROOT])
+    if (!found.ok) throw new Error("variant 1 should open")
+    expect(openedDesign(found.design, { width: 800, height: 600 }, 1).size).toEqual({ width: 800, height: 600 })
+  })
+})

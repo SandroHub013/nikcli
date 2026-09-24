@@ -55,7 +55,7 @@ import { canOpenExternally, forgetMessage, forgetSite, openExternally, probeFram
 import { addressForTake, addressNeedsCover, isAdeOrigin, normalizeUrl } from "./url"
 import { fitViewport, type DevicePreset } from "./viewport"
 import { designUrlFor } from "./design-url"
-import { frameSandbox, INITIAL_DESIGN_WATCH, stepVariant, watchDesign, type DesignActions, type DesignTarget, type DesignWatchEvent } from "./design-mode"
+import { designLoadKey, frameSandbox, INITIAL_DESIGN_WATCH, stepVariant, watchDesign, type DesignActions, type DesignTarget, type DesignWatchEvent } from "./design-mode"
 import { noteLine } from "../design/note-line"
 import { t } from "../i18n"
 import { SENSITIVE_SELECTOR } from "../record/sensitive"
@@ -514,12 +514,17 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
     ),
   )
 
-  /* The same pane given another variant (`openDesignVariant` reuses it for the same proposal). */
+  /*
+   * The same pane given another variant (`openDesignVariant` reuses it for
+   * the same proposal), or the same one opened again: that reloads it, which
+   * is the way back after the frame has left the page (BASSO 2).
+   */
   createEffect(
     on(
-      () => (props.design ? designAddress(props.design) : undefined),
-      (next) => {
-        if (next === undefined || next === url()) return
+      () => (props.design ? designLoadKey(designAddress(props.design), props.design.opened) : undefined),
+      (key, previous) => {
+        if (key === undefined || key === previous || !props.design) return
+        const next = designAddress(props.design)
         setUrl(next)
         setInputUrl(next)
         setMode("browse")

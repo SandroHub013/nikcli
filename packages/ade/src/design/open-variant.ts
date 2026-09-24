@@ -20,6 +20,13 @@ export interface PaneDesign {
   /** The variant's name, for the note line. */
   readonly name?: string
   readonly size?: { readonly width: number; readonly height: number }
+  /** When it was opened: every open is a load of its own, the same variant again included (BASSO 2). */
+  readonly opened?: number
+}
+
+/** The design a pane is given when a variant is opened: its size, and the moment, so that opening it again reloads it. */
+export function openedDesign(design: PaneDesign, size: PaneDesign["size"] | undefined, now: number): PaneDesign {
+  return { ...design, ...(size ? { size } : {}), opened: now }
 }
 
 const MIN_SIDE = 120
