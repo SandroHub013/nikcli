@@ -56,7 +56,6 @@ import {
   disposeParakeetModel,
   isWasmAvailable,
   isWebGpuAvailable,
-  warmupParakeetModel,
   type ParakeetProgress,
 } from "../asr/parakeet-local"
 import {
@@ -590,10 +589,6 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
       setCached(result)
       setInspected(true)
       updateSettings({ backend: "parakeet" })
-      void warmupParakeetModel({
-        executionBackend: props.settings.parakeetBackend,
-        language: props.settings.language,
-      }).catch(() => {})
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 6000)
     } catch (err: any) {

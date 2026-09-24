@@ -10,6 +10,7 @@ import {
   type ParakeetProgress,
 } from "./parakeet-local"
 import { createMicCapture } from "../audio/capture"
+import { hasRequiredFiles } from "./model-cache"
 
 class MockStreamingTranscriber {
   processCalls = 0
@@ -59,6 +60,18 @@ class MockParakeetModel {
 }
 
 describe("asr/parakeet-local", () => {
+  test("cache readiness requires the exact files for the selected variant", () => {
+    const required = ["encoder-model.int8.onnx", "decoder_joint-model.int8.onnx", "vocab.txt"]
+    const keys = [
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-encoder-model.int8.onnx",
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-decoder_joint-model.int8.onnx",
+      "hf-ysdede/parakeet-tdt-0.6b-v3-onnx-rev-main-vocab.txt",
+    ]
+    expect(hasRequiredFiles(keys, required)).toBe(true)
+    expect(hasRequiredFiles(keys.slice(1), required)).toBe(false)
+    expect(hasRequiredFiles(["hf-repo-rev-encoder-model.fp16.onnx", "hf-repo-rev-decoder_joint-model.int8.onnx", "hf-repo-rev-vocab.txt"], required)).toBe(false)
+  })
+
   test("readiness reports usable when WASM or WebGPU available, and explains when model is not downloaded", () => {
     // Current runtime has WebAssembly
     expect(isWasmAvailable()).toBe(true)
@@ -385,6 +398,45 @@ describe("asr/parakeet-local", () => {
       await expect(starting).rejects.toThrow()
       expect(model.disposed).toBe(true)
       expect(isParakeetModelWarmedUp()).toBe(false)
+    })
+
+    test("a waiter does not adopt a model disposed while it waits", async () => {
+      await disposeParakeetModel()
+      let resolveFirst: ((model: MockParakeetModel) => void) | undefined
+      let calls = 0
+      const first = new MockParakeetModel("wasm")
+      const second = new MockParakeetModel("wasm")
+      const firstModel = new Promise<MockParakeetModel>((resolve) => {
+        resolveFirst = resolve
+      })
+      const fromHub = async () => {
+        calls++
+        return calls === 1 ? firstModel : second
+      }
+      const options = {
+        keepWarm: true,
+        fromHub,
+        supportsLanguage: () => true,
+        captureOptions: { mediaStream: { getTracks: () => [] } as unknown as MediaStream, isTypeSupported: () => true },
+      }
+      const firstTranscriber = createParakeetTranscriber(options)
+      const firstStart = Promise.resolve(firstTranscriber.start())
+      const firstFailure = firstStart.then(() => undefined, (error: unknown) => error)
+      while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+
+      const secondTranscriber = createParakeetTranscriber(options)
+      const secondStart = secondTranscriber.start()
+      const disposing = disposeParakeetModel()
+      resolveFirst?.(first)
+      await disposing
+      const firstError = await firstFailure
+      expect(firstError).toBeInstanceOf(Error)
+      await secondStart
+
+      expect(first.disposed).toBe(true)
+      expect(second.disposed).toBe(false)
+      await secondTranscriber.stop()
+      await disposeParakeetModel()
     })
 
     test("warmupParakeetModel preloads model without starting microphone capture", async () => {

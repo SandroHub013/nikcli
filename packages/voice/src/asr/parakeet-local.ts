@@ -364,6 +364,7 @@ export function createParakeetTranscriber(
     // 2. Await in-flight model initialization if already warming up
     if (keepWarm && globalSharedParakeet?.initPromise) {
       const pending = globalSharedParakeet
+      const pendingEpoch = sharedEpoch
       try {
         const res = await pending.initPromise!
         const matchesBackend =
@@ -371,7 +372,7 @@ export function createParakeetTranscriber(
           preference === res.activeBackend ||
           (preference === "webgpu" && res.activeBackend === "webgpu") ||
           (preference === "wasm" && res.activeBackend === "wasm")
-        if (pending.modelId === modelId && matchesBackend) {
+        if (pendingEpoch === sharedEpoch && globalSharedParakeet === pending && pending.modelId === modelId && matchesBackend) {
           model = res.model
           activeBackend = res.activeBackend
           statusMessage = `Modello Parakeet pronto (${activeBackend}).`
@@ -816,7 +817,12 @@ export async function warmupParakeetModel(
   if (options.onlyIfDownloaded !== false) {
     try {
       const { inspectModelCache } = await import("./model-cache")
-      const cache = await inspectModelCache()
+      const usesWebGpu = preference === "webgpu" || (preference === "auto" && isWebGpuAvailable())
+      const requiredFiles =
+        modelId === "parakeet-tdt-0.6b-v3"
+          ? [`encoder-model.${usesWebGpu ? "fp16" : "int8"}.onnx`, "decoder_joint-model.int8.onnx", "vocab.txt"]
+          : undefined
+      const cache = await inspectModelCache(requiredFiles ? { skipFilesystem: true, requiredFiles } : {})
       if (!cache.present) {
         return
       }

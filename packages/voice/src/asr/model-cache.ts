@@ -79,6 +79,8 @@ export interface CacheOptions {
   readonly repo?: string
   /** Whether to bypass local filesystem probing. */
   readonly skipFilesystem?: boolean
+  /** Exact file names required for the model variant being loaded. */
+  readonly requiredFiles?: readonly string[]
 }
 
 function resolveFactory(options: CacheOptions): IDBFactory | undefined {
@@ -174,6 +176,12 @@ function valuesOf(db: IDBDatabase, wanted: readonly IDBValidKey[]): Promise<unkn
 export function keysForRepo(keys: readonly IDBValidKey[], repo: string): string[] {
   const prefix = `hf-${repo}-`
   return keys.filter((key): key is string => typeof key === "string" && key.startsWith(prefix))
+}
+
+export function hasRequiredFiles(keys: readonly IDBValidKey[], requiredFiles: readonly string[]): boolean {
+  if (requiredFiles.length === 0) return true
+  const names = keys.filter((key): key is string => typeof key === "string")
+  return requiredFiles.every((file) => names.some((key) => key.endsWith(`-${file}`)))
 }
 
 /** Adds up whatever of these values look like stored files. */
@@ -421,9 +429,15 @@ export async function inspectModelCache(options: CacheOptions = {}): Promise<Cac
       if (db) {
         const mine = keysForRepo(await keysOf(db), repo)
         if (mine.length > 0) {
-          const files = mine.length
-          const bytes = sizeOf(await valuesOf(db, mine))
-          const present = isComplete(files)
+          const requiredFiles = options.requiredFiles
+          const matching = requiredFiles
+            ? mine.filter((key) => requiredFiles.some((file) => key.endsWith(`-${file}`)))
+            : mine
+          const files = matching.length
+          const bytes = sizeOf(await valuesOf(db, matching))
+          const present = requiredFiles
+            ? hasRequiredFiles(mine, requiredFiles)
+            : isComplete(files)
           indexedDbResult = {
             files,
             bytes,
@@ -431,6 +445,7 @@ export async function inspectModelCache(options: CacheOptions = {}): Promise<Cac
             source: "indexeddb",
             modelFormat: "onnx",
           }
+
           if (present) {
             return indexedDbResult
           }
