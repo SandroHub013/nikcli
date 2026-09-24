@@ -111,7 +111,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
             <div data-slot="design-problem" role="alert">{t("design.unreadable", String(props.hub.register.error()))}</div>
           </Show>
           <Show
-            when={current()}
+            when={current()?.k}
             keyed
             fallback={
               <div data-slot="sheet-empty">
@@ -120,36 +120,39 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
               </div>
             }
           >
-            {(proposal) => (
-              <DesignCard
-                proposal={proposal}
-                picked={props.hub.draft(proposal.k).picked}
-                note={props.hub.draft(proposal.k).note}
-                busy={props.hub.busy(proposal.k)}
-                problem={
-                  props.hub.problem(proposal.k) ??
-                  (needChoice() === proposal.k ? t("design.sheet.needChoice") : undefined)
-                }
-                control={submitControl({
-                  recipient: props.hub.recipient(),
-                  sessions: props.hub.sessions(),
-                  inline: props.hub.inlineRecipient(),
-                  busy: props.hub.busy(proposal.k),
-                  label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
-                })}
-                onInline={(id) => props.hub.setInlineRecipient(id)}
-                onRecord={() => void submit("record")}
-                onAgain={() => void props.hub.again(proposal).then((done) => done && surface?.focus())}
-                recipientHint={recipientHint(props.hub.recipient())}
-                now={new Date()}
-                projectRoot={root()}
-                onPick={(index) => pick(proposal.k, index, Boolean(proposal.multi))}
-                onNote={(text) => props.hub.setDraft(proposal.k, { ...props.hub.draft(proposal.k), note: text })}
-                onSubmit={() => void submit()}
-                onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal.title, proposal.k)}
-                noteRef={(element) => (note = element)}
-              />
-            )}
+            {(k) => {
+              const proposal = () => current()!
+              return (
+                <DesignCard
+                  proposal={proposal()}
+                  picked={props.hub.draft(k).picked}
+                  note={props.hub.draft(k).note}
+                  busy={props.hub.busy(k)}
+                  problem={
+                    props.hub.problem(k) ??
+                    (needChoice() === k ? t("design.sheet.needChoice") : undefined)
+                  }
+                  control={submitControl({
+                    recipient: props.hub.recipient(),
+                    sessions: props.hub.sessions(),
+                    inline: props.hub.inlineRecipient(),
+                    busy: props.hub.busy(k),
+                    label: open().length > 1 ? t("design.submitNext") : t("design.submit"),
+                  })}
+                  onInline={(id) => props.hub.setInlineRecipient(id)}
+                  onRecord={() => void submit("record")}
+                  onAgain={() => void props.hub.again(proposal()).then((done) => done && surface?.focus())}
+                  recipientHint={recipientHint(props.hub.recipient())}
+                  now={new Date()}
+                  projectRoot={root()}
+                  onPick={(index) => pick(k, index, Boolean(proposal().multi))}
+                  onNote={(text) => props.hub.setDraft(k, { ...props.hub.draft(k), note: text })}
+                  onSubmit={() => void submit()}
+                  onOpenFullPreview={(variant) => props.hub.openFullPreview(variant, proposal().title, k)}
+                  noteRef={(element) => (note = element)}
+                />
+              )
+            }}
           </Show>
         </div>
 

@@ -1,9 +1,52 @@
 import { describe, expect, test } from "bun:test"
+import { createRoot } from "solid-js"
+import { compileSolidJsx } from "../test-support/solid-jsx"
+import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { createDesignHub } from "./hub"
 import { t } from "../i18n"
 import type { DesignProposal } from "./state"
-import type { DesignRegister } from "./register"
+import { createDesignRegister, type DesignRegister } from "./register"
 import type { DesignEvent } from "./log"
+import type { DesignIo } from "./store"
+
+if (typeof document === "undefined") {
+  GlobalRegistrator.register()
+}
+compileSolidJsx()
+
+const { createComponent, render } = await import("solid-js/web")
+const { DesignSheet } = await import("./design-sheet")
+const { DesignPane } = await import("./design-pane")
+
+const opened = (k: string) =>
+  `${JSON.stringify({
+    type: "aperta",
+    k,
+    at: "2026-09-15T10:00:00.000Z",
+    by: "fable",
+    title: `T ${k}`,
+    spec: "S54",
+    variants: [
+      { name: "A", description: "Alpha" },
+      { name: "B", description: "Beta" },
+    ],
+  })}\n`
+
+function memory(initial: string) {
+  const files = new Map([["/p/.ade/design.jsonl", initial]])
+  const io: DesignIo = {
+    readTextFile: async (path) => ({ text: files.get(path) ?? "", truncated: false }),
+    writeTextFile: async (path, contents) => {
+      files.set(path, contents)
+      return null
+    },
+    appendTextFile: async (path, text) => {
+      files.set(path, (files.get(path) ?? "") + text)
+      return null
+    },
+  }
+  return { io, files }
+}
 
 describe("the design register and the hub", () => {
   test("an answer is written from the draft, the draft is cleared and message queued", async () => {
@@ -227,3 +270,146 @@ describe("Enter with nobody to receive the answer, in the Design window (audit 0
     expect(hub.problem("DS1")).toBeUndefined()
   })
 })
+
+describe("card stability (R0, ALTO 1)", () => {
+  test("a tick or a new event of another proposal reuses the same DesignProposal object reference", async () => {
+    const { io, files } = memory(opened("DS1"))
+    await createRoot(async (dispose) => {
+      const register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      await register.refresh()
+      const ds1Before = register.state()!.proposals[0]
+
+      // A tick occurs
+      await register.tick()
+      const ds1AfterTick = register.state()!.proposals[0]
+      expect(ds1AfterTick).toBe(ds1Before)
+
+      // Another proposal DS2 is opened in the file
+      files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+      await register.refresh()
+
+      const ds1AfterDS2 = register.state()!.proposals.find((p) => p.k === "DS1")
+      expect(ds1AfterDS2).toBe(ds1Before)
+      dispose()
+    })
+  })
+
+  test("with a note in progress and focus inside DesignSheet, a new event for another proposal does not unmount the card", async () => {
+    const { io, files } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignSheet, {
+            hub,
+            onClose: () => {},
+            onOpenPanel: () => {},
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    // Find the card and textarea
+    const cardBefore = host.querySelector('[data-slot="design-card"]') as HTMLElement
+    const textarea = host.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
+    expect(cardBefore).not.toBeNull()
+    expect(textarea).not.toBeNull()
+
+    // Type a note and focus the textarea
+    hub.setDraft("DS1", { note: "nota a metà" })
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    // A tick occurs
+    await register.tick()
+
+    // Card must not be unmounted and focus must stay in the note
+    const cardAfterTick = host.querySelector('[data-slot="design-card"]')
+    expect(cardAfterTick).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    // Another proposal DS2 is added to the register
+    files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+    await register.refresh()
+
+    // Card must still be the exact same element and focus must still be preserved
+    const cardAfterDS2 = host.querySelector('[data-slot="design-card"]')
+    expect(cardAfterDS2).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    dispose()
+    host.remove()
+  })
+
+  test("with a note in progress and focus inside DesignPane, a new event for another proposal does not unmount the card", async () => {
+    const { io, files } = memory(opened("DS1"))
+    const host = document.createElement("div")
+    document.body.append(host)
+
+    let register!: ReturnType<typeof createDesignRegister>
+    let hub!: ReturnType<typeof createDesignHub>
+
+    const dispose = createRoot((dispose) => {
+      register = createDesignRegister({ path: () => "/p/.ade/design.jsonl", io: async () => io })
+      hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      render(
+        () =>
+          createComponent(DesignPane, {
+            hub,
+            focused: true,
+          }),
+        host,
+      )
+      return dispose
+    })
+
+    await register.refresh()
+
+    const cardBefore = host.querySelector('[data-slot="design-card"]') as HTMLElement
+    const textarea = host.querySelector('[data-slot="design-note"]') as HTMLTextAreaElement
+    expect(cardBefore).not.toBeNull()
+    expect(textarea).not.toBeNull()
+
+    hub.setDraft("DS1", { note: "nota nel pannello" })
+    textarea.focus()
+    expect(document.activeElement).toBe(textarea)
+
+    await register.tick()
+    expect(host.querySelector('[data-slot="design-card"]')).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    files.set("/p/.ade/design.jsonl", files.get("/p/.ade/design.jsonl")! + opened("DS2"))
+    await register.refresh()
+
+    expect(host.querySelector('[data-slot="design-card"]')).toBe(cardBefore)
+    expect(document.activeElement).toBe(textarea)
+
+    dispose()
+    host.remove()
+  })
+})
+

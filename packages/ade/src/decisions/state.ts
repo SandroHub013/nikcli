@@ -70,11 +70,34 @@ export interface DecisionsState {
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
+function isDecisionUnchanged(prev: Decision, next: Decision): boolean {
+  if (prev.status !== next.status) return false
+  if (prev.deferredUntil !== next.deferredUntil) return false
+  if (prev.closedAt !== next.closedAt) return false
+  if (prev.evidence !== next.evidence) return false
+  if (prev.history.length !== next.history.length) return false
+  for (let i = 0; i < prev.history.length; i++) {
+    const pe = prev.history[i]
+    const ne = next.history[i]
+    if (pe === ne) continue
+    if (pe.type !== ne.type || pe.at !== ne.at || pe.by !== ne.by) return false
+    if (JSON.stringify(pe) !== JSON.stringify(ne)) return false
+  }
+  return true
+}
+
 /**
  * Applies `events` in order. `now` decides whether a deferral has run out:
  * a decision deferred until a date that has passed reads as `aperta`.
+ * When `prev` is given, unchanged decisions keep their object identity so
+ * keyed cards and lists do not unmount.
  */
-export function foldDecisions(events: readonly DecisionEvent[], now: Date = new Date()): DecisionsState {
+export function foldDecisions(
+  events: readonly DecisionEvent[],
+  now: Date = new Date(),
+  prev?: DecisionsState | Map<string, Decision>,
+): DecisionsState {
+  const prevByKey = prev instanceof Map ? prev : prev ? new Map(prev.decisions.map((d) => [d.k, d])) : undefined
   const byKey = new Map<string, Mutable<Decision>>()
   const rejected: RejectedEvent[] = []
   const reject = (event: DecisionEvent, reason: string) => rejected.push({ event, reason })
@@ -172,7 +195,16 @@ export function foldDecisions(events: readonly DecisionEvent[], now: Date = new 
     current.history = [...current.history, event]
   }
 
-  const decisions = [...byKey.values()].map((decision) => ({ ...decision, status: effectiveStatus(decision, now) }))
+  const decisions: Decision[] = []
+  for (const decision of byKey.values()) {
+    const folded: Decision = { ...decision, status: effectiveStatus(decision, now) }
+    const prevDecision = prevByKey?.get(decision.k)
+    if (prevDecision && isDecisionUnchanged(prevDecision, folded)) {
+      decisions.push(prevDecision)
+    } else {
+      decisions.push(folded)
+    }
+  }
   return { decisions, rejected }
 }
 
