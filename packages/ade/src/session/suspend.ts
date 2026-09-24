@@ -85,6 +85,26 @@ export async function closeSuspendedTree(session: { kill: (options?: { tree?: bo
   }
 }
 
+type Killable = { kill: (options?: { tree?: boolean }) => void | Promise<boolean> }
+
+/**
+ * Takes the session out of `running` and closes its tree. Out before the kill,
+ * as a relaunch does, so nothing reads the exit as the session ending. A kill
+ * that fails puts it back: a process perhaps still alive stays followed, and
+ * "Riprendi" never opens a second one on the same conversation.
+ */
+export async function stopForSuspend<S extends Killable>(paneId: string, running: Map<string, S>, changed: () => void): Promise<boolean> {
+  const session = running.get(paneId)
+  running.delete(paneId)
+  changed()
+  const closed = await closeSuspendedTree(session)
+  if (!closed && session) {
+    running.set(paneId, session)
+    changed()
+  }
+  return closed
+}
+
 /** The header's "Sospendi": not on a pane already suspended, where "Riprendi" stands. */
 export function showsSuspendButton(check: SuspendCheck | undefined): check is SuspendCheck {
   return check !== undefined && (check.ok || check.reason !== "suspended")

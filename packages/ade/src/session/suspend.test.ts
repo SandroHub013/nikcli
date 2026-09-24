@@ -5,6 +5,7 @@ import {
   offersSuspend,
   parseSuspendedMail,
   showsSuspendButton,
+  stopForSuspend,
   suspendedDelivery,
   suspendedMailToSave,
   type SuspendContext,
@@ -132,6 +133,25 @@ describe("mail for a suspended session (P1-C6)", () => {
       null,
     ])
     expect(parseSuspendedMail(text)).toEqual([{ paneId: "a", text: "buona", suspended: true }])
+  })
+})
+
+describe("stopForSuspend: a kill that fails is not a suspension", () => {
+  const fake = (result: boolean) => ({ kill: async () => result })
+
+  test("closed: out of running", async () => {
+    const running = new Map([["p1", fake(true)]])
+    let changes = 0
+    expect(await stopForSuspend("p1", running, () => changes++)).toBe(true)
+    expect(running.has("p1")).toBe(false)
+    expect(changes).toBe(1)
+  })
+
+  test("failed: back in running, so Riprendi cannot open a second process on the same conversation", async () => {
+    const session = fake(false)
+    const running = new Map([["p1", session]])
+    expect(await stopForSuspend("p1", running, () => {})).toBe(false)
+    expect(running.get("p1")).toBe(session)
   })
 })
 

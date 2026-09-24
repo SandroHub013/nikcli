@@ -463,7 +463,7 @@ export const it = {
   "note.resumeFailed": "La sessione non è ripartita: resta sospesa, con i suoi messaggi. Riprova con Riprendi.",
   "pane.resume": "Riprendi",
   "pane.input.suspended": "Riprendi per scrivere",
-  "note.suspendKillFailed": "La chiusura dei processi non è riuscita: alcuni potrebbero essere ancora vivi.",
+  "note.suspendKillFailed": "Non sospesa: la chiusura dei processi non è riuscita, la sessione resta aperta com'era.",
   "pane.limit": "limite raggiunto",
   "pane.limit.window": (window: string) => `finestra ${window} esaurita`,
 

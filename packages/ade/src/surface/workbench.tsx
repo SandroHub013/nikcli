@@ -258,7 +258,7 @@ import { deliveryResult, enterAgain, lineGiven, ringAgain, typeThenEnter, type D
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   canSuspend,
-  closeSuspendedTree,
+  stopForSuspend,
   offersSuspend,
   parseSuspendedMail,
   suspendedDelivery,
@@ -5626,15 +5626,18 @@ export function Workbench() {
       setWb((w) => updatePane(w, paneId, { suspended: undefined }))
       return refuse(again)
     }
-    const session = running.get(paneId)
-    // Out of `running` before the kill, as a relaunch does: nothing below reads the exit as the session ending.
-    running.delete(paneId)
-    touchRunning()
     // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
-    const closed = await closeSuspendedTree(session)
+    const closed = await stopForSuspend(paneId, running, touchRunning)
+    if (!closed) {
+      // Still followed, so the mark goes: the mail held meanwhile is typed as usual, and dropped from the saved queue.
+      setWb((w) => updatePane(w, paneId, { suspended: undefined }))
+      saveSuspendedMail()
+      appendLine(paneId, t("note.suspendKillFailed"), "note")
+      return
+    }
     forgetQuiet(paneId)
     setWb((w) => updatePane(w, paneId, { activity: "suspended" }))
-    appendLine(paneId, t(closed ? "note.suspended" : "note.suspendKillFailed"), "note")
+    appendLine(paneId, t("note.suspended"), "note")
   }
 
   /**
