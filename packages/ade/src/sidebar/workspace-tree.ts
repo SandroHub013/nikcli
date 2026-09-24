@@ -11,9 +11,11 @@ import type { PaneStatus } from "../grid/pane"
 
 export type WorkspaceSessionStatus = PaneStatus
 
-export type AgentDisplayStatus = "disponibile" | "a lavoro" | "in attesa di input" | "task completata" | "errore"
+export type AgentDisplayStatus = "disponibile" | "a lavoro" | "in attesa di input" | "task completata" | "errore" | "sospesa"
 
-export function mapAgentStatus(status: WorkspaceSessionStatus): AgentDisplayStatus {
+/** A suspended session (P1-C6) has no process: it is neither available nor at work, whatever its last status. */
+export function mapAgentStatus(status: WorkspaceSessionStatus, suspended?: boolean): AgentDisplayStatus {
+  if (suspended) return "sospesa"
   switch (status) {
     case "working":
       return "a lavoro"
@@ -54,6 +56,8 @@ export interface SidebarSession {
   status: WorkspaceSessionStatus
   workspaceId?: string
   activity?: string
+  /** Suspended by the user (P1-C6): the dot goes grey. */
+  suspended?: true
   startTime?: number
   agent?: string
   branch?: string

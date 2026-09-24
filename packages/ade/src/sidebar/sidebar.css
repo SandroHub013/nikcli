@@ -1069,6 +1069,12 @@
   box-shadow: 0 0 5px rgba(250, 204, 21, 0.55);
 }
 
+/* Sospesa (P1-C6): no process, so no colour and no glow. */
+[data-slot="agent-status-dot"][data-agent-status="sospesa"] {
+  background-color: var(--ade-text-weak);
+  box-shadow: none;
+}
+
 /* 3. In attesa di input (Orange / Blocked-Waiting con pulse) */
 [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
   background-color: #f97316;

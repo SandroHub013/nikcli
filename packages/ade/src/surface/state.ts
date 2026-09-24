@@ -383,6 +383,7 @@ export function deriveWorkspaces(
       status: pane.status,
       workspaceId: pane.workspaceId,
       activity: pane.activity,
+      ...(pane.suspended ? { suspended: true as const } : {}),
       agent: pane.agent ?? (pane.model ? inferAgent(pane.model, pane.title) : undefined),
       branch,
       cwd: pane.cwd || ws?.path,
