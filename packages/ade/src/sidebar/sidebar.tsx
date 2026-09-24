@@ -243,7 +243,7 @@ function SessionChildRow(props: {
   now: number
   onSelect?: (id: string) => void
 }) {
-  const displayStatus = () => mapAgentStatus(props.row.session.status)
+  const displayStatus = () => mapAgentStatus(props.row.session.status, props.row.session.suspended)
   const folder = () => {
     if (props.row.session.cwd) {
       const base = basename(props.row.session.cwd)
@@ -319,7 +319,7 @@ function ActiveAgentRow(props: {
   now: number
   onSelect?: (id: string) => void
 }) {
-  const displayStatus = () => mapAgentStatus(props.session.status)
+  const displayStatus = () => mapAgentStatus(props.session.status, props.session.suspended)
   const folder = () => {
     if (props.session.cwd) {
       const base = basename(props.session.cwd)
