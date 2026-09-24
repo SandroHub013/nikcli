@@ -603,12 +603,7 @@ impl ChildTreeGuard {
 }
 
 #[cfg(windows)]
-fn kill_process_tree_fallback(pid: u32) {
-    let pid = pid.to_string();
-    let _ = std::process::Command::new("taskkill")
-        .args(["/PID", &pid, "/T", "/F"])
-        .output();
-}
+fn kill_process_tree_fallback(_pid: u32) {}
 
 #[cfg(unix)]
 fn kill_process_tree_fallback(pid: u32) {
@@ -633,6 +628,7 @@ fn terminate_child_tree(
     if !job_assigned {
         kill_process_tree_fallback(pid);
     }
+    #[cfg(not(windows))]
     let _ = pty::kill_tree(pid);
     let _ = child.kill();
     let _ = child.wait();
