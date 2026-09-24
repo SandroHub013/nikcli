@@ -231,7 +231,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     installing.set(voice, job)
   }
 
-  async function usable(voice: string): Promise<boolean> {
+  async function usable(voice: string, installIfMissing = true): Promise<boolean> {
     if (voice === "system") return false
     if (ready.has(voice)) return true
     try {
@@ -241,7 +241,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         ready.add(voice)
         return true
       }
-      ensure(voice)
+      if (installIfMissing) ensure(voice)
     } catch {
       // A host that cannot say is a host that cannot speak with Piper.
     }
@@ -363,7 +363,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       const voice = deps.voice()
       if (voice === warmed) return
       cancelIdleTimer()
-      void usable(voice).then((ok) => {
+      void usable(voice, false).then((ok) => {
         if (!ok || warmed === voice) return
         warmed = voice
         residentStarted = true

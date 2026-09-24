@@ -138,7 +138,7 @@ describe("tts/natural-speaker", () => {
     expect(h.stops).toHaveLength(1)
   })
 
-  test("prepare loads an installed voice once, silently, and starts the download of a missing one", async () => {
+  test("prepare loads an installed voice without downloading a missing one", async () => {
     const synthesized: string[] = []
     const h = harness({ synthesize: async (_voice, text) => (synthesized.push(text), wav(text)) })
     const speaker = createNaturalSpeaker(h.deps)
@@ -153,7 +153,7 @@ describe("tts/natural-speaker", () => {
     missing.setInstalled(false)
     createNaturalSpeaker(missing.deps).prepare()
     await new Promise((resolve) => setTimeout(resolve, 5))
-    expect(missing.installs).toEqual(["ugo"])
+    expect(missing.installs).toEqual([])
   })
 
   test("il primo token di due speaker non riparte da zero e non coincide", async () => {

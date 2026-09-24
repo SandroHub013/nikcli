@@ -4064,7 +4064,7 @@ export function Workbench() {
       (running) => {
         if (running) {
           preloadNaturalVoice()
-          if (voiceSettings().speakReplies !== false) speaker.prepare()
+          if (voiceSettings().speakReplies !== false && voiceEngine.activeMode() === "agent") speaker.prepare()
         }
       },
       { defer: true },
