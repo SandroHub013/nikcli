@@ -934,6 +934,23 @@ export function transition(
 
         const prompt = `${question} Dimmi sì o no.`
 
+        /*
+         * Rilievo 22: senza numero o titolo il bersaglio era il pannello a
+         * fuoco, ma letto al «sì» — un clic nel frattempo spostava la
+         * chiusura su un'altra sessione. Il fuoco di adesso entra negli slot
+         * come `paneId`, così il dispatch lo usa al posto del fuoco vivo.
+         * Con un bersaglio già nominato lo slot non serve: index e titolo
+         * vincono comunque nel resolver.
+         */
+        const frozenSlots: Record<string, any> = { ...parsed.slots }
+        const hasNamedTarget =
+          frozenSlots.paneId !== undefined ||
+          frozenSlots.paneIndex !== undefined ||
+          frozenSlots.paneTitle !== undefined
+        if (!hasNamedTarget && ctx.focusedPaneId) {
+          frozenSlots.paneId = ctx.focusedPaneId
+        }
+
         return withSpoken(
           {
             ...state,
@@ -941,7 +958,7 @@ export function transition(
             timeoutAt,
             pendingAction: {
               intent,
-              slots: parsed.slots,
+              slots: frozenSlots,
               confirmPrompt: prompt,
               isPermission: false,
             },

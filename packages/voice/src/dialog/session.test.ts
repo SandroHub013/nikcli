@@ -423,6 +423,60 @@ describe("dialog state machine", () => {
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.confirmPrompt).toContain("Bastelli")
     })
+
+    /*
+     * Rilievo 22: il bersaglio senza numero o titolo veniva letto dal fuoco
+     * al «sì», non al momento della domanda. Un clic nel frattempo spostava
+     * la chiusura su un altro pannello. Ora lo slot porta l'ID del fuoco
+     * congelato quando la conferma parte.
+     */
+    test("without a named panel the target is frozen when the question is asked", () => {
+      const s0 = createInitialDialogState("idle")
+      const panes = [
+        {
+          id: "pane-1",
+          title: "Bastelli",
+          status: "idle" as const,
+          index: 1,
+          hasLiveProcess: false,
+          isBrowser: false,
+          isFile: false,
+        },
+        {
+          id: "pane-2",
+          title: "API Tests",
+          status: "working" as const,
+          index: 2,
+          hasLiveProcess: true,
+          isBrowser: false,
+          isFile: false,
+        },
+      ]
+
+      const { state: s1 } = transition(
+        s0,
+        { type: "utterance", text: "chiudi pannello" },
+        10_000,
+        { panes, focusedPaneId: "pane-1" }
+      )
+
+      expect(s1.status).toBe("confirming")
+      expect(s1.pendingAction?.slots.paneId).toBe("pane-1")
+
+      // A click moves focus before the answer: the slots must not follow.
+      const { state: s2, effects } = transition(
+        s1,
+        { type: "utterance", text: "sì" },
+        12_000,
+        { panes, focusedPaneId: "pane-2" }
+      )
+      expect(s2.status).toBe("executing")
+      const exec = effects.find((e) => e.type === "execute_intent")
+      expect(exec).toBeDefined()
+      if (exec && exec.type === "execute_intent") {
+        expect(exec.slots.paneId).toBe("pane-1")
+      }
+    })
   })
 
   describe("pending permission precedence", () => {
