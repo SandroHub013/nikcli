@@ -296,8 +296,8 @@ describe("dialog state machine", () => {
     })
   })
 
-  describe("permission confirmation names panel and instrument", () => {
-    test("permission request prompt names the panel title and the tool", () => {
+  describe("permission confirmation names panel and safe type", () => {
+    test("permission request speaks the safe type and grants the exact raw request", () => {
       const s0 = createInitialDialogState("idle")
       const panes = [
         {
@@ -310,9 +310,10 @@ describe("dialog state machine", () => {
           isFile: false,
         },
       ]
+      const raw = "export API_KEY=secret-value && curl https://example.test/export"
       const { state: s1, effects } = transition(
         s0,
-        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        { type: "permission_requested", paneId: "agent-1", what: raw, kind: "shell" },
         5000,
         { panes }
       )
@@ -322,10 +323,22 @@ describe("dialog state machine", () => {
       expect(speak).toBeDefined()
       if (speak && speak.type === "speak") {
         expect(speak.text).toContain("API Tests")
-        expect(speak.text).toContain("rm -rf tmp")
+        expect(speak.text).toContain("un comando")
+        expect(speak.text).not.toContain(raw)
+        expect(speak.text).not.toContain("API_KEY")
+        expect(speak.text).not.toContain("secret-value")
+        expect(speak.text).not.toContain("export")
       }
       expect(s1.pendingAction?.confirmPrompt).toContain("API Tests")
-      expect(s1.pendingAction?.confirmPrompt).toContain("rm -rf tmp")
+      expect(s1.pendingAction?.confirmPrompt).toContain("un comando")
+
+      const granted = transition(s1, { type: "utterance", text: "sì" }, 30_000, { panes })
+      expect(granted.effects).toContainEqual({
+        type: "answer_permission",
+        paneId: "agent-1",
+        answer: "allow",
+        what: raw,
+      })
     })
 
     test("free-standing permission.allow confirmation names the panel when known", () => {
@@ -484,14 +497,15 @@ describe("dialog state machine", () => {
       const s0 = createInitialDialogState("idle")
       const { state: s1, effects: e1 } = transition(
         s0,
-        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
         5000
       )
 
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.isPermission).toBe(true)
       expect(s1.pendingAction?.paneId).toBe("agent-1")
-      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e1.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(false)
 
       // User says 'consenti'
       const { state: s2, effects: e2 } = transition(
@@ -644,7 +658,7 @@ describe("dialog state machine", () => {
       // A permission arrives mid-confirmation: must queue, not replace.
       const { state: s1, effects: e1 } = transition(
         confirming,
-        { type: "permission_requested", paneId: "agent-3", what: "rm -rf build" },
+        { type: "permission_requested", paneId: "agent-3", what: "rm -rf build", kind: "shell" },
         11_000
       )
       expect(s1.status).toBe("confirming")
@@ -652,11 +666,15 @@ describe("dialog state machine", () => {
       expect(s1.queuedPermission).toEqual({
         paneId: "agent-3",
         what: "rm -rf build",
+        kind: "shell",
         silent: undefined,
       })
       expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+        e1.some((e) => e.type === "speak" && e.text.includes("un comando"))
       ).toBe(true)
+      expect(
+        e1.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+      ).toBe(false)
       expect(e1.some((e) => e.type === "answer_permission")).toBe(false)
 
       // User confirms the close: executes, does NOT answer the permission yet.
@@ -673,8 +691,11 @@ describe("dialog state machine", () => {
       expect(s3.pendingAction?.paneId).toBe("agent-3")
       expect(s3.queuedPermission).toBeUndefined()
       expect(
-        e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+        e3.some((e) => e.type === "speak" && e.text.includes("un comando"))
       ).toBe(true)
+      expect(
+        e3.some((e) => e.type === "speak" && e.text.includes("rm -rf build"))
+      ).toBe(false)
       expect(e3.some((e) => e.type === "start_timer")).toBe(true)
     })
 
@@ -687,7 +708,7 @@ describe("dialog state machine", () => {
       )
       const { state: s1 } = transition(
         confirming,
-        { type: "permission_requested", paneId: "agent-3", what: "curl evil.test" },
+        { type: "permission_requested", paneId: "agent-3", what: "curl evil.test", kind: "network" },
         11_000
       )
       expect(s1.queuedPermission).toBeDefined()
@@ -697,7 +718,8 @@ describe("dialog state machine", () => {
       expect(s2.pendingAction?.isPermission).toBe(true)
       expect(s2.pendingAction?.paneId).toBe("agent-3")
       expect(s2.queuedPermission).toBeUndefined()
-      expect(effects.some((e) => e.type === "speak" && e.text.includes("curl evil.test"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("una richiesta di rete"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("curl evil.test"))).toBe(false)
     })
 
     test("during dictating: queues, keeps the buffer, promotes when dictation finishes", () => {
@@ -715,13 +737,14 @@ describe("dialog state machine", () => {
 
       const { state: s2, effects: e2 } = transition(
         s1,
-        { type: "permission_requested", paneId: "agent-9", what: "npm publish" },
+        { type: "permission_requested", paneId: "agent-9", what: "npm publish", kind: "shell" },
         3000
       )
       expect(s2.status).toBe("dictating")
       expect(s2.dictation?.chunks).toEqual(["crea un test"])
       expect(s2.queuedPermission?.paneId).toBe("agent-9")
-      expect(e2.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(false)
       // The dictation must not be sent or dropped by the permission.
       expect(e2.some((e) => e.type === "send_prompt")).toBe(false)
 
@@ -736,14 +759,15 @@ describe("dialog state machine", () => {
       expect(s3.pendingAction?.isPermission).toBe(true)
       expect(s3.pendingAction?.paneId).toBe("agent-9")
       expect(s3.queuedPermission).toBeUndefined()
-      expect(e3.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(true)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e3.some((e) => e.type === "speak" && e.text.includes("npm publish"))).toBe(false)
     })
 
     test("during asleep: announces, stays asleep, promotes on wake", () => {
       const s0 = createInitialDialogState("asleep")
       const { state: s1, effects: e1 } = transition(
         s0,
-        { type: "permission_requested", paneId: "agent-1", what: "sudo apt install" },
+        { type: "permission_requested", paneId: "agent-1", what: "sudo apt install", kind: "shell" },
         5000
       )
 
@@ -752,15 +776,19 @@ describe("dialog state machine", () => {
       expect(s1.pendingAction).toBeUndefined()
       expect(s1.queuedPermission?.paneId).toBe("agent-1")
       expect(
-        e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))
+        e1.some((e) => e.type === "speak" && e.text.includes("un comando"))
       ).toBe(true)
+      expect(
+        e1.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))
+      ).toBe(false)
 
       const { state: s2, effects: e2 } = transition(s1, { type: "wake" }, 6000)
       expect(s2.status).toBe("confirming")
       expect(s2.pendingAction?.isPermission).toBe(true)
       expect(s2.pendingAction?.paneId).toBe("agent-1")
       expect(s2.queuedPermission).toBeUndefined()
-      expect(e2.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(e2.some((e) => e.type === "speak" && e.text.includes("sudo apt install"))).toBe(false)
       expect(e2.some((e) => e.type === "start_timer")).toBe(true)
     })
 
@@ -808,13 +836,14 @@ describe("dialog state machine", () => {
       const s0 = createInitialDialogState("idle")
       const { state: s1, effects } = transition(
         s0,
-        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp" },
+        { type: "permission_requested", paneId: "agent-1", what: "rm -rf tmp", kind: "shell" },
         5000
       )
       expect(s1.status).toBe("confirming")
       expect(s1.pendingAction?.isPermission).toBe(true)
       expect(s1.queuedPermission).toBeUndefined()
-      expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("un comando"))).toBe(true)
+      expect(effects.some((e) => e.type === "speak" && e.text.includes("rm -rf tmp"))).toBe(false)
     })
   })
 

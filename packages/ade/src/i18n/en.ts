@@ -390,6 +390,10 @@ export const en: Messages = {
   "voice.shortcut.busy": (chord, feature) => `The shortcut ${chord} for ${feature} is unavailable: another application might be using it. Choose another one in voice settings.`,
   "voice.shortcut.unknown": (chord) => `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
   "voice.permission.notRefusal": "None of the proposed answers is a refusal: please answer yourself, I won't choose for you.",
+  "voice.permission.type.shell": "a command",
+  "voice.permission.type.write": "a file change",
+  "voice.permission.type.network": "a network request",
+  "voice.permission.type.unknown": "a generic action",
 
   // Bar, window, bell, panel actions
   "pane.expand": "Maximize",

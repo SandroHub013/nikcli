@@ -19,6 +19,7 @@
  */
 
 import { t, translate, locale, type Locale } from "../i18n"
+import { permissionSpeechLabel, type PermissionRequest } from "../session/permission"
 
 export const ALERT_COOLDOWN_MS = 20_000
 export const RESPONSE_WINDOW_MS = 8_000
@@ -34,6 +35,7 @@ export type AlertEvent =
       paneId: string
       paneTitle: string
       what: string
+      kind?: PermissionRequest["kind"]
     }
   | {
       type: "completion"
@@ -56,7 +58,7 @@ export interface ProactiveAlertsDeps {
   speak(text: string): Promise<void>
   openResponseWindow(options: {
     durationMs: number
-    permission?: { paneId: string; what: string }
+    permission?: { paneId: string; what: string; kind?: PermissionRequest["kind"] }
   }): Promise<void>
   isPermissionPending?(paneId: string): boolean
   isDecisionOpen?(k: string): boolean
@@ -207,7 +209,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         // Formulate spoken text
         let phrase = ""
         if (event.type === "permission") {
-          phrase = t("voice.alert.permission", event.paneTitle, event.what)
+          phrase = t("voice.alert.permission", event.paneTitle, permissionSpeechLabel(event.kind))
         } else if (event.type === "completion") {
           phrase = event.summary
             ? t("voice.alert.completed", event.paneTitle, event.summary)
@@ -236,7 +238,7 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
         if (deps.isEnabled()) {
           const permissionParam =
             event.type === "permission"
-              ? { paneId: event.paneId, what: event.what }
+              ? { paneId: event.paneId, what: event.what, kind: event.kind }
               : undefined
           await deps.openResponseWindow({
             durationMs: RESPONSE_WINDOW_MS,
@@ -272,13 +274,19 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
   }
 
   return {
-    notifyPermission(paneId: string, paneTitle: string, what: string): void {
+    notifyPermission(
+      paneId: string,
+      paneTitle: string,
+      what: string,
+      kind?: PermissionRequest["kind"],
+    ): void {
       enqueue({
         type: "permission",
         key: `perm:${paneId}:${what}`,
         paneId,
         paneTitle,
         what,
+        kind,
       })
     },
 

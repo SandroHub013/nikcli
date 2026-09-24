@@ -17,7 +17,7 @@
 
 import { createSignal } from "solid-js"
 import { Effect, Exit, Scope, Stream } from "effect"
-import type { VoiceHost } from "./bridge/host"
+import type { PermissionSpeechKind, VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"
 import { createInitialDialogState, type DialogState, type DialogStatus } from "./dialog/session"
 import type { ParseContext, ParseResult } from "./intent/parse"
@@ -242,7 +242,7 @@ export interface VoiceEngine {
    */
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
-  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void>
   /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
   handlePermissionResolved(paneId: string): Promise<void>
   /**
@@ -252,7 +252,7 @@ export interface VoiceEngine {
    */
   /** `lead` says who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent. */
   requestSendConfirmation(id: string, to: string, text: string, lead?: string): Promise<boolean>
-  openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void>
+  openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void>
   cancel(): Promise<void>
   /**
    * A tap while the assistant talks or works: it stops, and the next sentence
@@ -1501,7 +1501,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       await Effect.runPromise(handle.submitText(text))
     },
 
-    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void> {
+    async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }): Promise<void> {
       if (programHandle) {
         await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
       }
@@ -1519,14 +1519,19 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       return true
     },
 
-    async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string } }): Promise<void> {
+    async openResponseWindow(options?: { durationMs?: number; rescheduleMs?: number; permission?: { paneId: string; what: string; kind?: PermissionSpeechKind } }): Promise<void> {
       const durationMs = options?.durationMs ?? 8_000
       const rescheduleMs = options?.rescheduleMs ?? 1_000
       await this.start("agent", { waitForName: false, automatic: true })
       const until = now() + durationMs
       setFollowUp(until)
       if (options?.permission && programHandle) {
-        await Effect.runPromise(programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, { silent: true }))
+        await Effect.runPromise(
+          programHandle.handlePermissionRequest(options.permission.paneId, options.permission.what, {
+            silent: true,
+            kind: options.permission.kind,
+          }),
+        )
       }
       const checkAndClose = () => {
         if (!isRunning()) return

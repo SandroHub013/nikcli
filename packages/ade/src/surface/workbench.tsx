@@ -5734,10 +5734,10 @@ export function Workbench() {
     permissions.set(paneId, request)
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
-      void voiceEngine.handlePermissionRequest(paneId, request.what)
+      void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
     } else {
       const pane = wb().panes.find((p) => p.id === paneId)
-      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what, request.kind)
     }
   }
 

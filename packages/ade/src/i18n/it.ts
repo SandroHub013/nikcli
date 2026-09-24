@@ -395,6 +395,10 @@ export const it = {
   "voice.shortcut.busy": (chord: string, feature: string) => `La scorciatoia ${chord} per ${feature} non è disponibile: forse un'altra applicazione la sta usando. Scegline un'altra nelle impostazioni vocali.`,
   "voice.shortcut.unknown": (chord: string) => `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
   "voice.permission.notRefusal": "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
+  "voice.permission.type.shell": "un comando",
+  "voice.permission.type.write": "una modifica ai file",
+  "voice.permission.type.network": "una richiesta di rete",
+  "voice.permission.type.unknown": "un'azione generica",
 
   // Bar, window, bell, panel actions
   "pane.expand": "Ingrandisci",

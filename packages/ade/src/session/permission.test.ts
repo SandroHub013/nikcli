@@ -2,8 +2,24 @@ import { describe, expect, test } from "bun:test"
 import {
   detectPermission,
   isResolved,
+  permissionSpeechLabel,
   type PermissionRequest,
 } from "./permission"
+
+describe("permissionSpeechLabel", () => {
+  test("names only the safe request type in either locale", () => {
+    expect(permissionSpeechLabel("shell", "it")).toBe("un comando")
+    expect(permissionSpeechLabel("write", "it")).toBe("una modifica ai file")
+    expect(permissionSpeechLabel("network", "it")).toBe("una richiesta di rete")
+    expect(permissionSpeechLabel("unknown", "it")).toBe("un'azione generica")
+    expect(permissionSpeechLabel("shell", "en")).toBe("a command")
+    expect(permissionSpeechLabel("write", "en")).toBe("a file change")
+    expect(permissionSpeechLabel("network", "en")).toBe("a network request")
+    expect(permissionSpeechLabel("unknown", "en")).toBe("a generic action")
+    expect(permissionSpeechLabel(undefined, "it")).toBe("un'azione generica")
+    expect(permissionSpeechLabel("rm -rf API_KEY_SECRET" as PermissionRequest["kind"], "it")).toBe("un'azione generica")
+  })
+})
 
 describe("detectPermission - Numbered Choices", () => {
   test("detects standard 3-choice permission prompt", () => {

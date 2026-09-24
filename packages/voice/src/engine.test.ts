@@ -73,8 +73,11 @@ class MockVoiceHost implements VoiceHost {
     this.calls.push({ method: "browserNavigate", args: [paneId, url] })
   }
 
-  answerPermission(paneId: string, answer: "allow" | "deny"): void {
-    this.calls.push({ method: "answerPermission", args: [paneId, answer] })
+  answerPermission(paneId: string, answer: "allow" | "deny", what?: string): void {
+    this.calls.push({
+      method: "answerPermission",
+      args: what === undefined ? [paneId, answer] : [paneId, answer, what],
+    })
   }
 
   setColumns(columns?: number): void {
@@ -606,26 +609,49 @@ describe("engine/createVoiceEngine", () => {
   })
 
   test("handles pending permission request with priority", async () => {
-    const { engine, host, transcriber, advanceTime } = setupEngine()
+    const { engine, host, transcriber, speaker, advanceTime } = setupEngine()
+    const raw = "export API_KEY=secret-value && curl https://example.test/export"
 
     await engine.start()
-
-    // Host alerts engine that pane-1 needs permission
-    await engine.handlePermissionRequest("pane-1", "esecuzione di npm install")
+    await engine.handlePermissionRequest("pane-1", raw, { kind: "shell" })
 
     expect(engine.status()).toBe("confirming")
     expect(engine.dialogState().pendingAction?.isPermission).toBe(true)
+    const spoken = speaker.spoken.join(" ")
+    expect(spoken).toContain("Worker Process")
+    expect(spoken).toContain("un comando")
+    expect(spoken).not.toContain(raw)
+    expect(spoken).not.toContain("API_KEY")
+    expect(spoken).not.toContain("secret-value")
+    expect(spoken).not.toContain("export")
 
-    // User grants permission, once the question has been read
     advanceTime(15_000)
     transcriber.emit("consenti", true)
     await new Promise((r) => setTimeout(r, 10))
 
     expect(host.calls).toContainEqual({
       method: "answerPermission",
-      args: ["pane-1", "allow"],
+      args: ["pane-1", "allow", raw],
     })
     expect(engine.status()).toBe("idle")
+  })
+
+  test("proactive response window keeps the safe type and raw request separate", async () => {
+    const { engine } = setupEngine()
+    const raw = "cat C:/Users/private/API_KEY_SECRET"
+
+    await engine.openResponseWindow({
+      durationMs: 8_000,
+      permission: { paneId: "pane-1", what: raw, kind: "write" },
+    })
+
+    const pending = engine.dialogState().pendingAction
+    expect(pending?.confirmPrompt).toContain("Worker Process")
+    expect(pending?.confirmPrompt).toContain("una modifica ai file")
+    expect(pending?.confirmPrompt).not.toContain(raw)
+    expect(pending?.confirmPrompt).not.toContain("API_KEY_SECRET")
+    expect(pending?.what).toBe(raw)
+    await engine.stop()
   })
 
   test("transcription mode never speaks: silently inserts transcribed text into pane", async () => {
@@ -2506,7 +2532,10 @@ describe("a conversation: after an answer the name is not needed for a few secon
 
   test("openResponseWindow starts in agent mode, sets followUp, and closes on timeout", async () => {
     const { engine } = talking({ activation: "push-to-talk", alwaysListen: false })
-    await engine.openResponseWindow({ durationMs: 50, permission: { paneId: "pane-1", what: "npm test" } })
+    await engine.openResponseWindow({
+      durationMs: 50,
+      permission: { paneId: "pane-1", what: "npm test", kind: "shell" },
+    })
     expect(engine.isRunning()).toBe(true)
     expect(engine.followUp()).toBeDefined()
     expect(engine.dialogState().status).toBe("confirming")

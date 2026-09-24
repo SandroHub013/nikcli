@@ -14,6 +14,7 @@
  * 4. Wake/sleep toggling isolates workbench actions from casual room speech.
  */
 
+import type { PermissionSpeechKind } from "../bridge/host"
 import type { ParseContext } from "../intent/parse"
 import { hasNegation, parseUtterance } from "../intent/parse"
 import { normalizeUtterance } from "../intent/normalize"
@@ -45,6 +46,7 @@ export interface PendingAction {
   paneId?: string
   /** For a permission: what the agent asked to do, as the question said it. */
   what?: string
+  kind?: PermissionSpeechKind
   /**
    * For a permission promoted from the queue: no yes before this time (epoch
    * ms), the time its question takes to be read. V1-bis, ALTO 4: a second
@@ -52,7 +54,7 @@ export interface PendingAction {
    * question was still being cut short by that very yes.
    */
   answerableAt?: number
-  /** A permission the user asked to grant («consenti»), not one an agent raised: answered without the name. */
+  /** A permission the user asked to grant or refuse, not one an agent raised: answered without the name. */
   userAsked?: true
 }
 
@@ -77,7 +79,7 @@ export interface DialogState {
    * `pendingAction` — that was the bug: a second permission replaced the
    * first question, and the user's «sì» answered the wrong one.
    */
-  queuedPermission?: { paneId: string; what: string; silent?: boolean }
+  queuedPermission?: { paneId: string; what: string; kind?: PermissionSpeechKind; silent?: boolean }
   /**
    * A validated plan whose steps include `send_prompt`, held in confirming
    * until the user says yes. Without this the planner pressed Enter the
@@ -119,7 +121,7 @@ export type DialogEvent =
   | { type: "wake" }
   | { type: "sleep" }
   | { type: "utterance"; text: string }
-  | { type: "permission_requested"; paneId: string; what: string; silent?: boolean }
+  | { type: "permission_requested"; paneId: string; what: string; kind?: PermissionSpeechKind; silent?: boolean }
   | { type: "permission_resolved"; paneId: string }
   /** `lead`: who wants to do what («La voce vuole chiedere a»); a note sent by the voice when absent (V1-bis, ALTO 8). */
   | { type: "send_requested"; id: string; to: string; text: string; lead?: string }
@@ -224,17 +226,26 @@ function isDictationFinishPhrase(text: string): boolean {
   )
 }
 
-/**
- * The spoken form of a permission question: which panel, which tool. Built in
- * one place so the live request and a promoted queue entry ask identically.
- */
+function permissionKindSpeech(kind?: PermissionSpeechKind): string {
+  switch (kind) {
+    case "shell":
+      return "un comando"
+    case "write":
+      return "una modifica ai file"
+    case "network":
+      return "una richiesta di rete"
+    default:
+      return "un'azione generica"
+  }
+}
+
 function permissionPrompt(
   paneId: string,
-  what: string,
+  kind: PermissionSpeechKind | undefined,
   ctx: ParseContext,
 ): string {
   const paneTitle = ctx.panes?.find((p) => p.id === paneId)?.title ?? paneId
-  return `L'agente sul pannello «${paneTitle}» richiede il permesso per: ${what}. Vuoi consentire?`
+  return `L'agente sul pannello «${paneTitle}» richiede il permesso per: ${permissionKindSpeech(kind)}. Vuoi consentire?`
 }
 
 /**
@@ -263,7 +274,7 @@ function promoteQueuedPermission(
   })
 
   const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
-  const prompt = permissionPrompt(req.paneId, req.what, ctx)
+  const prompt = permissionPrompt(req.paneId, req.kind, ctx)
 
   const nextState: DialogState = {
     ...state,
@@ -277,6 +288,7 @@ function promoteQueuedPermission(
       isPermission: true,
       paneId: req.paneId,
       what: req.what,
+      kind: req.kind,
       answerableAt: now + readingMs(prompt),
     },
   }
@@ -485,7 +497,12 @@ export function transition(
       const queuedPermission =
         state.queuedPermission && state.queuedPermission.paneId !== event.paneId
           ? state.queuedPermission
-          : { paneId: event.paneId, what: event.what, silent: event.silent }
+          : {
+              paneId: event.paneId,
+              what: event.what,
+              silent: event.silent,
+              ...(event.kind ? { kind: event.kind } : {}),
+            }
       const nextState = { ...state, queuedPermission }
 
       if (event.silent) {
@@ -496,7 +513,7 @@ export function transition(
         ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
       return withSpokenLocal(
         nextState,
-        `Ho messo in coda una richiesta di permesso dal pannello «${paneTitle}» per: ${event.what}. La affronto appena posso.`,
+        `Ho messo in coda una richiesta di permesso dal pannello «${paneTitle}» per: ${permissionKindSpeech(event.kind)}. La affronto appena posso.`,
         effects,
       )
     }
@@ -510,7 +527,7 @@ export function transition(
     })
 
     const permAllowSpec = VOCABULARY.find((v) => v.intent === "permission.allow")!
-    const prompt = permissionPrompt(event.paneId, event.what, ctx)
+    const prompt = permissionPrompt(event.paneId, event.kind, ctx)
 
     const nextState: DialogState = {
       ...state,
@@ -523,6 +540,7 @@ export function transition(
         isPermission: true,
         paneId: event.paneId,
         what: event.what,
+        kind: event.kind,
         /* Every question waits to be read, a new one and one the same pane replaced (V1-ter). */
         answerableAt: now + readingMs(prompt),
       },
@@ -890,7 +908,11 @@ export function transition(
       } else if (named && asked?.paneId) {
         const title = (id: string) => ctx.panes?.find((p) => p.id === id)?.title ?? id
         if (state.queuedPermission?.paneId === named.paneId) {
-          const aside = { paneId: asked.paneId, what: asked.what ?? "" }
+          const aside = {
+            paneId: asked.paneId,
+            what: asked.what ?? "",
+            kind: asked.kind,
+          }
           const promoted = promoteQueuedPermission(state, now, ctx, effects)!
           return { ...promoted, state: { ...promoted.state, queuedPermission: aside } }
         }
@@ -924,6 +946,12 @@ export function transition(
         }
 
         if (action.isPermission && action.paneId) {
+          if (action.userAsked && action.intent.intent === "permission.deny") {
+            return (
+              promoteQueued(abandoned, now, ctx, effects) ??
+              withSpoken(abandoned, "Non lo nego.")
+            )
+          }
           effects.push({
             type: "answer_permission",
             paneId: action.paneId,
@@ -947,10 +975,11 @@ export function transition(
         const action = state.pendingAction!
 
         if (action.isPermission && action.paneId) {
+          const answer = action.intent.intent === "permission.deny" ? "deny" : "allow"
           effects.push({
             type: "answer_permission",
             paneId: action.paneId,
-            answer: "allow",
+            answer,
             what: action.what,
           })
           const answered: DialogState = {
@@ -961,7 +990,7 @@ export function transition(
           }
           return (
             promoteQueued(answered, now, ctx, effects) ??
-            withSpoken(answered, "Permesso accordato.")
+            withSpoken(answered, answer === "deny" ? "Permesso negato." : "Permesso accordato.")
           )
         } else {
           effects.push({
@@ -1074,14 +1103,17 @@ export function transition(
       }
 
       /*
-       * «consenti» with no question in course (V1-ter, ALTO 3). It used to
+       * «consenti» or «nega» with no question in course (V1-ter, ALTO 3). It used to
        * ask «Concedo il permesso all'agente, va bene?» and, on the yes, answer
        * whatever the pane was asking by then — a request that arrived after
        * the first was answered by hand. The question now names the request
        * open at this moment and is a permission question like an agent's: its
        * yes carries what it grants, and a request resolved elsewhere ends it.
        */
-      if (intent.intent === "permission.allow" && ctx.permissionWhat) {
+      if (
+        (intent.intent === "permission.allow" || intent.intent === "permission.deny") &&
+        ctx.permissionWhat
+      ) {
         const byIndex = parsed.slots.paneIndex !== undefined ? ctx.panes?.find((p) => p.index === Number(parsed.slots.paneIndex)) : undefined
         const byTitle =
           parsed.slots.paneTitle !== undefined
@@ -1094,9 +1126,11 @@ export function transition(
           if (!what) {
             return withSpoken(state, `Il pannello «${title}» non ha richieste di permesso aperte.`)
           }
+          const kind = ctx.permissionKind?.(paneId)
           const timeoutAt = now + DEFAULT_CONFIRMATION_TIMEOUT_MS
           effects.push({ type: "start_timer", durationMs: DEFAULT_CONFIRMATION_TIMEOUT_MS, timeoutAt })
-          const prompt = `Concedo al pannello «${title}» il permesso per: ${what}, va bene? Dimmi sì o no.`
+          const action = intent.intent === "permission.deny" ? "Nego" : "Concedo"
+          const prompt = `${action} al pannello «${title}» il permesso per: ${permissionKindSpeech(kind)}, va bene? Dimmi sì o no.`
           return withSpoken(
             {
               ...state,
@@ -1109,6 +1143,7 @@ export function transition(
                 isPermission: true,
                 paneId,
                 what,
+                kind,
                 userAsked: true,
               },
             },

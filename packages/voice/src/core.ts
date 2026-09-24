@@ -19,6 +19,7 @@ export type {
   AdeView,
   PaneStatus,
   PaneSummary,
+  PermissionSpeechKind,
   VoiceHost,
   VoiceStateSnapshot,
 } from "./bridge/host"

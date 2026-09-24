@@ -7,7 +7,7 @@
  */
 
 import { fuzzyMatch } from "@nikcli-ai/ade/command/match"
-import type { AdeView, PaneSummary } from "../bridge/host"
+import type { AdeView, PaneSummary, PermissionSpeechKind } from "../bridge/host"
 import { normalizeUtterance } from "./normalize"
 import { VOCABULARY, type VoiceIntentSpec } from "./vocabulary"
 
@@ -80,6 +80,7 @@ export interface ParseContext {
    * question names it and the grant is for that request only (V1-ter, ALTO 3).
    */
   permissionWhat?: (paneId: string) => string | undefined
+  permissionKind?: (paneId: string) => PermissionSpeechKind | undefined
   /** Active view mode in ADE. */
   currentView?: AdeView
 }

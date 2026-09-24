@@ -456,7 +456,7 @@ export async function dispatch(
         if (resolved.error) {
           return { success: false, spoken: resolved.error, error: "pane_not_found" }
         }
-        if (host.answerPermission(resolved.pane!.id, "deny") === false) {
+        if (host.answerPermission(resolved.pane!.id, "deny", typeof slots.what === "string" ? slots.what : undefined) === false) {
           return {
             success: false,
             spoken:

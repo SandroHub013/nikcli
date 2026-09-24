@@ -15,7 +15,7 @@
 import { markVoice } from "../timing"
 import { Clock, Duration, Effect, Fiber, Scope, Stream } from "effect"
 
-import type { VoiceHost } from "../bridge/host"
+import type { PermissionSpeechKind, VoiceHost } from "../bridge/host"
 import { dispatch, type DispatchOutcome } from "../bridge/dispatch"
 import {
   createInitialDialogState,
@@ -230,7 +230,7 @@ export interface VoiceProgramOptions {
 
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
-  readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) => Effect.Effect<void>
+  readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }) => Effect.Effect<void>
   /** A request closed outside the voice (by hand, by a button, with its pane): its question leaves the dialogue. */
   readonly resolvePermission: (paneId: string) => Effect.Effect<void>
   /**
@@ -389,6 +389,9 @@ export function makeVoiceProgram(
         pendingPermission: isPendingPerm,
         pendingPermissionPaneId: pendingPermPaneId,
         ...(host.pendingPermissionWhat ? { permissionWhat: (paneId: string) => host.pendingPermissionWhat!(paneId) } : {}),
+        ...(host.pendingPermissionKind
+          ? { permissionKind: (paneId: string) => host.pendingPermissionKind!(paneId) }
+          : {}),
         ...extra,
       }
     }
@@ -1638,8 +1641,14 @@ export function makeVoiceProgram(
     return {
       submitText: (text: string) => processUtterance(text, false, true).pipe(Effect.ensuring(turnEnded)),
 
-      handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) =>
-        applyDialogEvent({ type: "permission_requested", paneId, what, silent: options?.silent }),
+      handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean; kind?: PermissionSpeechKind }) =>
+        applyDialogEvent({
+          type: "permission_requested",
+          paneId,
+          what,
+          kind: options?.kind,
+          silent: options?.silent,
+        }),
 
       resolvePermission: (paneId: string) => applyDialogEvent({ type: "permission_resolved", paneId }),
 
