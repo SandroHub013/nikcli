@@ -464,7 +464,7 @@ export const en: Messages = {
   "note.resumeFailed": "The session did not start again: it stays suspended, with its messages. Try Resume again.",
   "pane.resume": "Resume",
   "pane.input.suspended": "Resume to write",
-  "note.suspendKillFailed": "Not suspended: closing the processes failed, so the session stays open as it was.",
+  "note.suspendKillFailed": "Not suspended: closing the processes failed and the session no longer answers. Close the pane and open it again.",
   "pane.limit": "limit reached",
   "pane.limit.window": (window) => `${window} window used up`,
 

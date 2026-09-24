@@ -5674,7 +5674,7 @@ export function Workbench() {
     // The whole tree, MCP servers included, and waited for: a pane saying "Sospesa" has nothing left running.
     const closed = await stopForSuspend(paneId, running, touchRunning)
     if (!closed) {
-      // Still followed, so the mark goes: the mail held meanwhile is typed as usual, and dropped from the saved queue.
+      // Tracked again, so the mark goes; but deaf (see `stopForSuspend`), so the note asks for the pane to be closed and reopened.
       setWb((w) => updatePane(w, paneId, { suspended: undefined }))
       saveSuspendedMail()
       appendLine(paneId, t("note.suspendKillFailed"), "note")
