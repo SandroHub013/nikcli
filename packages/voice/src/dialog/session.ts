@@ -96,7 +96,8 @@ export type DialogEffect =
   | { type: "start_timer"; durationMs: number; timeoutAt: number }
   | { type: "cancel_timer" }
   | { type: "execute_intent"; intent: VoiceIntentSpec; slots: Record<string, any> }
-  | { type: "answer_permission"; paneId: string; answer: "allow" | "deny" }
+  /** `what` is the request the question read: the host answers only that one (V1-bis, ALTO 3). */
+  | { type: "answer_permission"; paneId: string; answer: "allow" | "deny"; what?: string }
   | { type: "send_prompt"; paneId?: string; text: string }
   | { type: "execute_plan"; steps: PlanStep[]; refusals: string[]; speech?: string }
   | { type: "confirm_send"; id: string; approved: boolean }
@@ -365,6 +366,22 @@ export function transition(
 
   // 1. Agent permission request: preempts idle and executing, queues behind
   //    an in-flight confirmation, a dictation, or sleep.
+  /*
+   * A request answered elsewhere — by hand in the terminal, by a button, or
+   * gone with its pane — leaves the dialogue: the question it was asked with
+   * no longer has anything to answer, and a yes to it must not reach the next
+   * request of the same pane (V1-bis, ALTO 3).
+   */
+  if (event.type === "permission_resolved") {
+    const queued = state.queuedPermission?.paneId === event.paneId ? undefined : state.queuedPermission
+    const asked = state.status === "confirming" && state.pendingAction?.isPermission && state.pendingAction.paneId === event.paneId
+    if (!asked) return { state: { ...state, queuedPermission: queued }, effects: [] }
+    effects.push({ type: "cancel_timer" })
+    const closed: DialogState = { ...state, status: "idle", pendingAction: undefined, timeoutAt: undefined, queuedPermission: queued }
+    const title = ctx.panes?.find((p) => p.id === event.paneId)?.title ?? event.paneId
+    return promoteQueued(closed, now, ctx, effects) ?? withSpoken(closed, `Il pannello «${title}» ha già avuto la sua risposta.`)
+  }
+
   if (event.type === "permission_requested") {
     /*
      * Rilievo 3: arriving during confirming, dictating or asleep used to
@@ -373,18 +390,20 @@ export function transition(
      * room noise could grant for 30 s. Queue instead: the busy state keeps
      * the floor; the permission is announced and promoted when it ends.
      */
+    /* The pane being asked asks again: its new request replaces the question, it does not queue behind it. */
+    const sameAsked =
+      state.status === "confirming" && state.pendingAction?.isPermission === true && state.pendingAction.paneId === event.paneId
     if (
-      state.status === "confirming" ||
-      state.status === "dictating" ||
-      state.status === "asleep"
+      !sameAsked &&
+      (state.status === "confirming" || state.status === "dictating" || state.status === "asleep")
     ) {
       /* First in wins: a second arrival while one is already waiting does
-       * not drop the first question on the floor. */
-      const queuedPermission = state.queuedPermission ?? {
-        paneId: event.paneId,
-        what: event.what,
-        silent: event.silent,
-      }
+       * not drop the first question on the floor. The same pane asking again
+       * is not a second arrival: its newer request is the one on screen. */
+      const queuedPermission =
+        state.queuedPermission && state.queuedPermission.paneId !== event.paneId
+          ? state.queuedPermission
+          : { paneId: event.paneId, what: event.what, silent: event.silent }
       const nextState = { ...state, queuedPermission }
 
       if (event.silent) {
@@ -765,6 +784,7 @@ export function transition(
             type: "answer_permission",
             paneId: action.paneId,
             answer: "deny",
+            what: action.what,
           })
           return (
             promoteQueued(abandoned, now, ctx, effects) ??
@@ -787,6 +807,7 @@ export function transition(
             type: "answer_permission",
             paneId: action.paneId,
             answer: "allow",
+            what: action.what,
           })
           const answered: DialogState = {
             ...state,

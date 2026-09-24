@@ -237,7 +237,7 @@ export interface VoiceHost {
   /**
    * Respond to an agent's interactive permission confirmation.
    */
-  answerPermission(paneId: string, answer: "allow" | "deny"): boolean | void
+  answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean | void
 
   /**
    * Deliver or reject a `send` the voice agent wrote, after the user's

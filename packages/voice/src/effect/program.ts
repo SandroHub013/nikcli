@@ -230,6 +230,8 @@ export interface VoiceProgramOptions {
 export interface VoiceProgramHandle {
   readonly submitText: (text: string) => Effect.Effect<void>
   readonly handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) => Effect.Effect<void>
+  /** A request closed outside the voice (by hand, by a button, with its pane): its question leaves the dialogue. */
+  readonly resolvePermission: (paneId: string) => Effect.Effect<void>
   /**
    * Puts a voice-agent `send` in front of the user for a spoken yes (rilievo
    * 20). The host is already holding the note; the answer comes back as a
@@ -592,7 +594,7 @@ export function makeVoiceProgram(
 
             case "answer_permission": {
               yield* Effect.try({
-                try: () => host.answerPermission(effect.paneId, effect.answer),
+                try: () => host.answerPermission(effect.paneId, effect.answer, effect.what),
                 catch: (err) =>
                   new HostActionFailed({
                     action: "answerPermission",
@@ -1595,6 +1597,8 @@ export function makeVoiceProgram(
 
       handlePermissionRequest: (paneId: string, what: string, options?: { silent?: boolean }) =>
         applyDialogEvent({ type: "permission_requested", paneId, what, silent: options?.silent }),
+
+      resolvePermission: (paneId: string) => applyDialogEvent({ type: "permission_resolved", paneId }),
 
       requestSendConfirmation: (id: string, to: string, text: string) =>
         applyDialogEvent({ type: "send_requested", id, to, text }),

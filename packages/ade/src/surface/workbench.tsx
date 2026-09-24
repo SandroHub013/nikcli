@@ -5251,6 +5251,11 @@ export function Workbench() {
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
+    // A question the voice is asking about this pane has nobody left to answer it.
+    if (permissions()[id]) {
+      permissions.forget(id)
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(id)
+    }
     disposeTerminal(id)
     setLiveTerminals((ids) => {
       if (!ids.has(id)) return ids
@@ -5579,6 +5584,8 @@ export function Workbench() {
     if (pending) {
       if (!isResolved(pending, recent, agent)) return
       permissions.forget(paneId)
+      // Answered here, by hand or by a button: the voice stops asking it (V1-bis, ALTO 3).
+      if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(paneId)
       // The agent moved on by itself, so the pane is working again.
       setWb((w) => updatePane(w, paneId, { status: "working", activity: "running" }))
       return

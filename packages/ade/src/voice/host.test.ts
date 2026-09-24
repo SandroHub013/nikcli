@@ -655,3 +655,35 @@ describe("createAdeVoiceHost, spoken planning", () => {
     ).rejects.toThrow("Non posso avviare sessioni da qui.")
   })
 })
+
+/*
+ * V1-bis, ALTO 3: the grant is for the request whose question was read. A
+ * pane whose request changed since then (the first answered by hand, a new
+ * one asked) is not answered.
+ */
+describe("answerPermission answers only the request that was asked", () => {
+  const request = (what: string): PermissionRequest => ({
+    what,
+    kind: "shell",
+    answers: [
+      { label: "Sì", send: "y", tone: "primary" },
+      { label: "No", send: "n", tone: "secondary" },
+    ],
+  })
+
+  test("a different request on the pane is not granted", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({ permissions: () => ({ p1: request("rm -rf ~") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(false)
+    expect(answered).toEqual([])
+  })
+
+  test("the same request is", () => {
+    const answered: PermissionAnswer[] = []
+    const { deps } = createMockDeps({ permissions: () => ({ p1: request("cat README") }), answerPermission: (_id, ans) => void answered.push(ans) })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow", "cat README")).toBe(true)
+    expect(answered.map((a) => a.send)).toEqual(["y"])
+  })
+})

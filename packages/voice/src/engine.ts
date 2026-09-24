@@ -245,6 +245,8 @@ export interface VoiceEngine {
   toggle(mode?: VoiceMode): Promise<void>
   submitText(text: string): Promise<void>
   handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void>
+  /** A request closed outside the voice: its question is no longer asked, and no yes can reach the next one. */
+  handlePermissionResolved(paneId: string): Promise<void>
   /**
    * Asks for a spoken yes before a voice-agent `send` is delivered (rilievo
    * 20). Returns false when no program is running, so the host can refuse
@@ -1422,6 +1424,12 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     async handlePermissionRequest(paneId: string, what: string, options?: { silent?: boolean }): Promise<void> {
       if (programHandle) {
         await Effect.runPromise(programHandle.handlePermissionRequest(paneId, what, options))
+      }
+    },
+
+    async handlePermissionResolved(paneId: string): Promise<void> {
+      if (programHandle) {
+        await Effect.runPromise(programHandle.resolvePermission(paneId))
       }
     },
 

@@ -355,9 +355,17 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       return true
     },
 
-    answerPermission(paneId: string, answer: "allow" | "deny"): boolean {
+    answerPermission(paneId: string, answer: "allow" | "deny", what?: string): boolean {
       const pending = deps.permissions()[paneId]
       if (!pending) {
+        return false
+      }
+      /*
+       * The request whose question was read, and no other (V1-bis, ALTO 3):
+       * the first one answered by hand and a new one asked, a yes to «cat
+       * README» would otherwise grant the «rm -rf ~» on screen now.
+       */
+      if (what !== undefined && pending.what !== what) {
         return false
       }
 
