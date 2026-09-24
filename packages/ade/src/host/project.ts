@@ -95,6 +95,18 @@ export function grantedRoots(): string[] {
 }
 
 /**
+ * Whether a saved root — a recent project, a Space, the one restored at start
+ * — no longer exists on disk. Asked before opening it: `git` run in a folder
+ * that is gone fails, and the project would open on nothing, with its
+ * sessions failing to start in it. A remote Space is never missing here, and
+ * without a way to ask, or when asking fails, the folder is taken as there.
+ */
+export async function rootMissing(host: Pick<Host, "exists">, root: string): Promise<boolean> {
+  if (!root || isRemoteRoot(root) || !host.exists) return false
+  return !(await host.exists(root).catch(() => true))
+}
+
+/**
  * Lets the user pick a directory, then discovers the project rooted there.
  * Returns `undefined` when the user cancels the dialog.
  */

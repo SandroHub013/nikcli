@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { addRecent, removeRecent, serializeRecents, parseRecents, type RecentEntry } from "./recent"
+import { addRecent, isMissingRecent, missingRecents, removeRecent, serializeRecents, parseRecents, withMissing, type RecentEntry } from "./recent"
 
 const entry = (root: string, name?: string): Omit<RecentEntry, "openedAt"> => ({
   root,
@@ -90,5 +90,37 @@ describe("serialize / parse round-trip", () => {
     const list = parseRecents(json)
     expect(list).toHaveLength(1)
     expect(list[0].root).toBe("C:/a")
+  })
+})
+
+describe("missing roots", () => {
+  const list = [
+    { root: "C:/Users/x/nikcli-ade-vecchia" },
+    { root: "C:/Users/x/nikcli" },
+    { root: "ssh://user@host/srv/app" },
+    { root: "D:/progetto" },
+  ]
+
+  it("marks the folders that are gone, and only those", async () => {
+    const asked: string[] = []
+    const gone = await missingRecents(list, async (path) => {
+      asked.push(path)
+      if (path === "D:/progetto") throw new Error("drive not ready")
+      return path !== "C:/Users/x/nikcli-ade-vecchia"
+    })
+    // A remote Space is never asked about; a check that fails marks nothing.
+    expect(asked).not.toContain("ssh://user@host/srv/app")
+    expect(isMissingRecent(gone, "C:/Users/x/nikcli-ade-vecchia")).toBe(true)
+    expect(isMissingRecent(gone, "C:\\Users\\x\\nikcli-ade-vecchia\\")).toBe(true)
+    expect(isMissingRecent(gone, "C:/Users/x/nikcli")).toBe(false)
+    expect(isMissingRecent(gone, "D:/progetto")).toBe(false)
+  })
+
+  it("marking changes the set, never the list", () => {
+    const recents = [{ root: "C:/a", name: "a", openedAt: 1 }]
+    const gone = withMissing(new Set(), "C:/a", true)
+    expect(isMissingRecent(gone, "c:\\a")).toBe(true)
+    expect(recents).toHaveLength(1)
+    expect(isMissingRecent(withMissing(gone, "C:/a", false), "C:/a")).toBe(false)
   })
 })
