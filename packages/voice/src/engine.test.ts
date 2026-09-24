@@ -675,6 +675,50 @@ describe("engine/push-to-talk tap latches", () => {
   })
 })
 
+describe("planner key changes", () => {
+  function setup(key: string) {
+    const authorizations: string[] = []
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    const engine = createVoiceEngine({
+      host: new MockVoiceHost(),
+      speaker: createFakeSpeaker(),
+      now: () => 10_000,
+      settings: { agentEngine: "off", openRouterApiKey: key },
+      plannerFetch: fetchFn,
+    })
+    return { authorizations, engine }
+  }
+
+  test("a removed key is not used by the next typed request", async () => {
+    const { authorizations, engine } = setup("old")
+    await engine.submitText("raccontami una storia mai raccontata")
+    expect(authorizations).toEqual(["Bearer old"])
+    expect(engine.listenSpend()).toMatchObject({ calls: 1, cost: 0.002 })
+
+    await engine.updateSettings({ openRouterApiKey: undefined })
+    await engine.submitText("raccontami un'altra storia mai raccontata")
+
+    expect(authorizations).toEqual(["Bearer old"])
+    expect(engine.isRunning()).toBe(false)
+  })
+
+  test("a replacement key is used by the next typed request", async () => {
+    const { authorizations, engine } = setup("old")
+    await engine.submitText("raccontami una storia mai raccontata")
+    await engine.updateSettings({ openRouterApiKey: "new" })
+    await engine.submitText("raccontami un'altra storia mai raccontata")
+
+    expect(authorizations).toEqual(["Bearer old", "Bearer new"])
+    expect(engine.listenSpend()).toMatchObject({ calls: 2, cost: 0.004 })
+  })
+})
+
 describe("engine/agent answers what the grammar does not know", () => {
   function setup(agentEngine: "auto" | "off", answer: { ok: boolean; text: string }) {
     const host = new MockVoiceHost()

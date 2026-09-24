@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildPlannerPrompt, extractJson, planUtterance } from "./planner"
+import { buildPlannerPrompt, createOpenRouterCompletion, extractJson, planUtterance } from "./planner"
 import type { PlanContext } from "./schema"
 
 const context: PlanContext = {
@@ -145,5 +145,31 @@ describe("planUtterance", () => {
     expect(system).toContain("Cronologia recente della conversazione")
     expect(system).toContain("avvia claude sul parser")
     expect(system).toContain("Sessione Claude avviata.")
+  })
+})
+
+describe("createOpenRouterCompletion", () => {
+  test("returns usage cost and asks OpenRouter to include it", async () => {
+    const authorizations: string[] = []
+    let sent: Record<string, unknown> | undefined
+    const fetchFn = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+      authorizations.push(new Headers(init?.headers).get("Authorization") ?? "")
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "[]" } }],
+        usage: { cost: 0.002 },
+      }), { status: 200 })
+    }) as unknown as typeof fetch
+    let usage: { cost?: number } | undefined
+    const complete = createOpenRouterCompletion({
+      apiKey: "key",
+      fetchFn,
+      onUsage: (value) => void (usage = value),
+    })
+
+    expect(await complete({ system: "system", user: "utterance" })).toBe("[]")
+    expect(authorizations).toEqual(["Bearer key"])
+    expect(sent?.usage).toEqual({ include: true })
+    expect(usage).toEqual({ cost: 0.002 })
   })
 })

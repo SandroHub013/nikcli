@@ -89,6 +89,8 @@ export interface VoiceEngineOptions {
   plan?: Completion
   /** Overrides the planner model. */
   plannerModel?: string
+  /** Overrides the planner's fetch, for tests. */
+  plannerFetch?: typeof fetch
   /** Overrides `DRAIN_TIMEOUT_MS`, for tests that exercise a stuck request. */
   drainTimeoutMs?: number
   /** Where a stop for spending is written down; the browser's storage by default. */
@@ -842,10 +844,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     if (options.plan) return options.plan
     const key = currentSettings().openRouterApiKey
     if (!key) return undefined
-    return createOpenRouterCompletion({
+    const completion = createOpenRouterCompletion({
       apiKey: key,
+      ...(options.plannerFetch ? { fetchFn: options.plannerFetch } : {}),
       ...(options.plannerModel ? { model: options.plannerModel } : {}),
+      onUsage: (usage) => {
+        if (typeof usage.cost === "number") setListenSpend(spendTally.addCost(now(), usage.cost))
+      },
     })
+    return async (request) => {
+      setListenSpend(spendTally.add(now(), undefined))
+      return completion(request)
+    }
   }
 
   function resolveTranscriber(s: VoiceSettings): Transcriber {
@@ -1635,6 +1645,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       setCurrentSettings(normalized)
       // Mode and activation are half of the name gate.
       refreshHearing()
+      if (normalized.openRouterApiKey !== prev.openRouterApiKey) await releaseTextProgram()
       if (isRunning()) keepListeningAwake()
 
       if (backendChanged) {
