@@ -223,9 +223,9 @@ pub async fn mailbox_result(app: tauri::AppHandle, id: String, text: String) -> 
 
 /// Takes back an answer nobody claimed, and returns it to be typed instead.
 ///
-/// A rename, like the waiter's claim, so exactly one of the two wins. The
-/// file is removed once read: the answer is now in the caller's terminal, and
-/// a later `ade-msg wait` printing it a second time only doubled its cost.
+/// A rename, like the waiter's claim, so exactly one of the two wins. What is
+/// kept is a `.closed` copy, not the `.txt` a waiter takes: a later `ade-msg
+/// wait` says the request is closed, at once, rather than answering it anew.
 #[tauri::command]
 ///
 /// `kind: "update"` does the same for an `ade-msg update` no waiter woke on;
@@ -244,13 +244,25 @@ pub async fn mailbox_result_reclaim(app: tauri::AppHandle, id: String, kind: Opt
         let _ = fs::remove_file(&taken);
         return Ok(text);
     }
+    Ok(reclaim_result(&dir, &id))
+}
+
+/// The answer in `dir/<id>.txt`, taken back from the waiter it was left for.
+///
+/// Kept as `<id>.closed`, as a waiter keeps what it took: a later `ade-msg
+/// wait` on the id says at once that the request is closed, with its answer,
+/// instead of waiting its whole timeout for a file already gone and then
+/// saying «in corso» (ROADMAP, BASSO). Removed with the other leftovers.
+fn reclaim_result(dir: &std::path::Path, id: &str) -> Option<String> {
     let typed = dir.join(format!("{id}.typed"));
     if fs::rename(dir.join(format!("{id}.txt")), &typed).is_err() {
-        return Ok(None);
+        return None;
     }
     let text = fs::read_to_string(&typed).ok();
-    let _ = fs::remove_file(&typed);
-    Ok(text)
+    if fs::rename(&typed, dir.join(format!("{id}.closed"))).is_err() {
+        let _ = fs::remove_file(&typed);
+    }
+    text
 }
 
 /// What request `id` is waiting on, for the `ade-msg wait` blocked on it to
@@ -495,19 +507,24 @@ function TakeResult($id) {
   $ready = Join-Path $dir "$id.txt"
   $taken = Join-Path $dir "$id.taken"
   $typed = Join-Path $dir "$id.typed"
+  $closed = Join-Path $dir "$id.closed"
   if (Has $ready) {
     $claimed = $true
     try { Move-Item -LiteralPath $ready -Destination $taken -Force } catch { $claimed = $false }
     if ($claimed) {
       $r = [IO.File]::ReadAllText($taken, $utf8)
-      Remove-Item -LiteralPath $taken -ErrorAction SilentlyContinue
+      Move-Item -LiteralPath $taken -Destination $closed -Force -ErrorAction SilentlyContinue
       return $r
     }
   }
   if (Has $typed) {
     $r = [IO.File]::ReadAllText($typed, $utf8)
-    Remove-Item -LiteralPath $typed -ErrorAction SilentlyContinue
+    Move-Item -LiteralPath $typed -Destination $closed -Force -ErrorAction SilentlyContinue
     return $r
+  }
+  # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
+  if (Has $closed) {
+    return "ade-msg: la richiesta $id e' gia' chiusa. La sua risposta, gia' consegnata:`n" + [IO.File]::ReadAllText($closed, $utf8)
   }
   return $null
 }
@@ -794,9 +811,12 @@ show() {
 take() {
   got=""
   if [ -f "$box/results/$1.txt" ] && mv "$box/results/$1.txt" "$box/results/$1.taken" 2>/dev/null; then
-    got="$(cat "$box/results/$1.taken")"; rm -f "$box/results/$1.taken"; return 0
+    got="$(cat "$box/results/$1.taken")"; mv -f "$box/results/$1.taken" "$box/results/$1.closed" 2>/dev/null; return 0
   fi
-  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; rm -f "$box/results/$1.typed"; return 0; fi
+  if [ -f "$box/results/$1.typed" ]; then got="$(cat "$box/results/$1.typed")"; mv -f "$box/results/$1.typed" "$box/results/$1.closed" 2>/dev/null; return 0; fi
+  # Answered already, to an earlier wait or into the terminal: said at once, not waited for.
+  if [ -f "$box/results/$1.closed" ]; then got="ade-msg: la richiesta $1 e' gia' chiusa. La sua risposta, gia' consegnata:
+$(cat "$box/results/$1.closed")"; return 0; fi
   return 1
 }
 await() {
@@ -1144,6 +1164,66 @@ mod tests {
         let from_stdin = posted_by_ps1("stdin", &["registro", "decisioni", "risposta", "--stdin"], Some(json.as_bytes()));
         assert_eq!(from_stdin["text"], json);
         assert!(SH.contains("--stdin) stdin=1;") && SH.contains("[ \"$cmd\" = \"registro\" ] && [ \"$stdin\" = 1 ]; then text=\"$(cat)\"; fi"));
+    }
+
+    /// Runs the real `ade-msg.ps1` in `base` on `args`; what it printed, and how long it took.
+    #[cfg(windows)]
+    fn run_ps1(base: &std::path::Path, args: &[&str]) -> (String, Duration) {
+        use std::process::{Command, Stdio};
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::create_dir_all(base.join("bin")).unwrap();
+        fs::write(&script, PS1).unwrap();
+        let started = std::time::Instant::now();
+        let out = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(base)
+            .env("ADE_MAILBOX", base)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        (String::from_utf8_lossy(&out.stdout).into_owned(), started.elapsed())
+    }
+
+    /*
+     * ROADMAP, BASSO: `ade-msg wait` on a request already answered sat out its
+     * whole timeout and then said «in corso». The answer had gone to the
+     * caller's terminal (nobody was waiting), or to an earlier wait, and with
+     * it the only file that said the request was over.
+     */
+    #[cfg(windows)]
+    #[test]
+    fn wait_on_a_request_already_answered_says_so_at_once() {
+        let scratch = Scratch::new("wait-closed");
+        let results = scratch.0.join("results");
+        fs::create_dir_all(&results).unwrap();
+
+        // Typed into the caller: nobody was waiting when the answer came.
+        fs::write(results.join("1790000000000-aaaa.txt"), "risposta A").unwrap();
+        assert_eq!(reclaim_result(&results, "1790000000000-aaaa").as_deref(), Some("risposta A"));
+        let (out, took) = run_ps1(&scratch.0, &["wait", "1790000000000-aaaa", "--timeout", "8"]);
+        assert!(took < Duration::from_secs(6), "wait sat out its timeout: {took:?}, {out}");
+        assert!(out.contains("gia' chiusa") && out.contains("risposta A"), "{out}");
+        assert!(!out.contains("in corso"), "{out}");
+
+        // Taken by a first wait: a second one says the same, at once.
+        fs::write(results.join("1790000000000-bbbb.txt"), "risposta B").unwrap();
+        let (first, _) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
+        assert!(first.contains("risposta B") && !first.contains("gia' chiusa"), "{first}");
+        let (again, took) = run_ps1(&scratch.0, &["wait", "1790000000000-bbbb", "--timeout", "8"]);
+        assert!(took < Duration::from_secs(6), "the second wait sat out its timeout: {took:?}, {again}");
+        assert!(again.contains("gia' chiusa") && again.contains("risposta B"), "{again}");
+    }
+
+    #[test]
+    fn both_scripts_keep_what_they_took_and_say_closed_from_it() {
+        // The ps1 is run above; the sh, where no shell can be assumed, is read.
+        assert!(SH.contains("mv -f \"$box/results/$1.taken\" \"$box/results/$1.closed\""));
+        assert!(SH.contains("mv -f \"$box/results/$1.typed\" \"$box/results/$1.closed\""));
+        assert!(SH.contains("if [ -f \"$box/results/$1.closed\" ]; then got=\"ade-msg: la richiesta $1 e' gia' chiusa."));
+        assert!(PS1.contains("Move-Item -LiteralPath $taken -Destination $closed"));
+        assert!(!SH.contains("rm -f \"$box/results/$1.taken\""));
     }
 
     #[test]
