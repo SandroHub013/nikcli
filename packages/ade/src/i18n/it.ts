@@ -506,6 +506,10 @@ export const it = {
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
+  "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
+  "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
+  "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",
+  "browser.design.refused": "Non è una pagina di .ade/design di un progetto aperto: non la apro.",
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
   "browser.forget.done.all": (cookies: number) =>

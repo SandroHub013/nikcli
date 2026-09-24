@@ -501,6 +501,10 @@ export const en: Messages = {
   "browser.retry": "Try again",
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
+  "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
+  "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
+  "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",
+  "browser.design.refused": "Not a .ade/design page of an open project: not opened.",
   "browser.forget": "Forget this site",
   "browser.forget.tip": "Clear cookies and data this site left in ADE's profile.",
   "browser.forget.done.all": (cookies) =>

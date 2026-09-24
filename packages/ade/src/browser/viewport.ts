@@ -32,6 +32,11 @@ export interface FitViewportInput {
   containerWidth: number
   containerHeight: number
   landscape?: boolean
+  /**
+   * A size the page itself declares (a design page's `ade-size`, D1): the
+   * viewport, whatever the preset, scaled to fit like a device.
+   */
+  size?: { width: number; height: number }
 }
 
 export interface ViewportFit {
@@ -59,7 +64,7 @@ export function fitViewport(input: FitViewportInput): ViewportFit {
   const containerH = Math.max(0, input.containerHeight)
   const isLandscape = Boolean(input.landscape)
 
-  if (input.preset === "responsive") {
+  if (input.preset === "responsive" && !input.size) {
     return {
       preset: "responsive",
       viewportWidth: containerW,
@@ -72,7 +77,7 @@ export function fitViewport(input: FitViewportInput): ViewportFit {
     }
   }
 
-  const spec = DEVICE_PRESETS[input.preset] ?? DEVICE_PRESETS.desktop
+  const spec = input.size ?? DEVICE_PRESETS[input.preset] ?? DEVICE_PRESETS.desktop
   const baseW = spec.width
   const baseH = spec.height
 
