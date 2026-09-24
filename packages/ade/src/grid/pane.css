@@ -1208,7 +1208,7 @@
 
 .hA .nm {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
   letter-spacing: -0.012em;
   color: var(--ade-text);
   white-space: nowrap;
@@ -1228,7 +1228,7 @@
   border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--st) 14%, transparent);
   color: var(--ade-text-soft);
-  font: 500 11px / 1 var(--ade-sans);
+  font: var(--ade-weight-medium) 11px / 1 var(--ade-sans);
   white-space: nowrap;
   min-width: 0;
   overflow: hidden;
@@ -1315,7 +1315,7 @@
 }
 
 .hA .qv {
-  font: 600 10px var(--ade-mono);
+  font: var(--ade-weight-semibold) 10px var(--ade-mono);
   color: var(--qc);
   font-variant-numeric: tabular-nums;
 }
@@ -1382,7 +1382,7 @@
    low one. */
 .hA [data-lv="na"] .qv {
   color: var(--ade-text-weak);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
 }
 
 .hA .acts {

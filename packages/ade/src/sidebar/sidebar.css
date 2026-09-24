@@ -1202,7 +1202,7 @@
   display: inline-flex;
   align-items: center;
   color: var(--ade-text-soft);
-  font-weight: 450;
+  font-weight: var(--ade-weight-medium);
   font-size: 11px;
   min-width: 0;
   overflow: hidden;

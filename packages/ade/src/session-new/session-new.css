@@ -233,13 +233,20 @@
  * same ink as OpenCode's and nothing else. They used to have a hue each —
  * teal, violet, indigo, amber, red — chosen here rather than by the vendor,
  * and a black mark on a violet tile still reads as violet.
+ *
+ * `--cli-contrast` is the text on a full brand fill (the tick on a picked
+ * tile), chosen per palette for at least 4.5:1 (polish-aaa B6): white where
+ * white reaches it, ADE's ink where it does not, and black for Claude's
+ * orange in light, which neither white (4.36) nor the ink (4.32) clears.
+ * The brand colours are the vendors' and do not move; `brand-contrast.test.ts`
+ * measures the pairs.
  */
 [data-agent-id="claude-code"] {
   --cli-color: light-dark(#c25a39, #d97757);
   --cli-tint: light-dark(rgba(194, 90, 57, 0.10), rgba(217, 119, 87, 0.14));
   --cli-border: light-dark(rgba(194, 90, 57, 0.28), rgba(217, 119, 87, 0.35));
   --cli-glow: light-dark(rgba(194, 90, 57, 0.18), rgba(217, 119, 87, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#000000, #131111);
 }
 
 [data-agent-id="codex"] {
@@ -247,7 +254,7 @@
   --cli-tint: light-dark(rgba(57, 65, 255, 0.10), rgba(122, 157, 255, 0.14));
   --cli-border: light-dark(rgba(57, 65, 255, 0.28), rgba(122, 157, 255, 0.35));
   --cli-glow: light-dark(rgba(57, 65, 255, 0.18), rgba(122, 157, 255, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 [data-agent-id="agy"] {
@@ -255,7 +262,7 @@
   --cli-tint: light-dark(rgba(26, 111, 232, 0.10), rgba(49, 134, 255, 0.14));
   --cli-border: light-dark(rgba(26, 111, 232, 0.28), rgba(49, 134, 255, 0.35));
   --cli-glow: light-dark(rgba(26, 111, 232, 0.18), rgba(49, 134, 255, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 /* Black-and-white brands: ink, at the same strengths OpenCode's off-white gets. */
@@ -283,7 +290,7 @@
   --cli-tint: light-dark(rgba(37, 99, 235, 0.10), rgba(59, 130, 246, 0.15));
   --cli-border: light-dark(rgba(37, 99, 235, 0.30), rgba(59, 130, 246, 0.40));
   --cli-glow: light-dark(rgba(37, 99, 235, 0.20), rgba(59, 130, 246, 0.30));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 [data-agent-id="kimi"] {
@@ -291,7 +298,7 @@
   --cli-tint: light-dark(rgba(2, 102, 214, 0.10), rgba(23, 131, 255, 0.14));
   --cli-border: light-dark(rgba(2, 102, 214, 0.28), rgba(23, 131, 255, 0.35));
   --cli-glow: light-dark(rgba(2, 102, 214, 0.18), rgba(23, 131, 255, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 [data-agent-id="ohmypi"] {
@@ -299,7 +306,7 @@
   --cli-tint: light-dark(rgba(234, 88, 12, 0.10), rgba(249, 115, 22, 0.14));
   --cli-border: light-dark(rgba(234, 88, 12, 0.28), rgba(249, 115, 22, 0.35));
   --cli-glow: light-dark(rgba(234, 88, 12, 0.18), rgba(249, 115, 22, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: #131111;
 }
 
 [data-agent-id="terminal"] {
@@ -307,7 +314,7 @@
   --cli-tint: light-dark(rgba(21, 128, 61, 0.10), rgba(34, 197, 94, 0.14));
   --cli-border: light-dark(rgba(21, 128, 61, 0.28), rgba(34, 197, 94, 0.35));
   --cli-glow: light-dark(rgba(21, 128, 61, 0.18), rgba(34, 197, 94, 0.25));
-  --cli-contrast: #ffffff;
+  --cli-contrast: light-dark(#ffffff, #131111);
 }
 
 [data-slot="new-agents"] {
@@ -410,7 +417,7 @@
   background: var(--cli-color, var(--ade-accent));
   color: var(--cli-contrast, #ffffff);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--ade-weight-bold);
   line-height: 1;
   opacity: 0;
   transform: scale(0.75);
@@ -447,7 +454,7 @@
 [data-slot="new-agent-label"] {
   color: var(--ade-text);
   font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -624,7 +631,7 @@
 
 [data-slot="hook-name"] {
   color: var(--ade-text);
-  font-weight: 500;
+  font-weight: var(--ade-weight-medium);
 }
 
 [data-slot="hook-state"] {
