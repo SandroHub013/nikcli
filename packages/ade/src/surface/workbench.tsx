@@ -9,7 +9,7 @@ import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
 import { addRecent, isMissingRecent, missingRecents, parseRecents, removeRecent, serializeRecents, withMissing, type RecentEntry } from "../host/recent"
 import { pathEquals } from "../host/path"
-import { belongsTo, paneProject } from "./pane-project"
+import { belongsTo, goneFolder, paneProject } from "./pane-project"
 import { writeWorkbench } from "./workbench-write"
 import { onePickAtATime } from "../record/folder-pick"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
@@ -5738,6 +5738,20 @@ export function Workbench() {
   ) => {
     const agent = agentById(agentId)
     const host = await getHost()
+    /*
+     * Its folder gone (a project removed, a worktree cleaned up): not started
+     * somewhere else, and not left to die starting. The pane says which folder
+     * and offers to be closed.
+     */
+    const gone = host
+      ? await goneFolder(wb().panes.find((pane) => pane.id === paneId), project(), recents(), (path) => rootMissing(host, path))
+      : undefined
+    if (gone) {
+      setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
+      appendLine(paneId, t("project.missing", gone), "note")
+      return
+    }
+    if (wb().panes.some((pane) => pane.id === paneId && pane.gone)) setWb((w) => updatePane(w, paneId, { gone: undefined }))
     const p = host ? await projectOfPane(host, paneId) : undefined
     if (!agent || !agent.command || !host || !p) return
     if (p.remote) return startRemoteProcess(paneId, agentId, agent.command, task, p.remote, host)
