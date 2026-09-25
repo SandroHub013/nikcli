@@ -4103,7 +4103,7 @@ export function Workbench() {
     },
     stop: async () => {
       const host = await getHost()
-      await host?.ttsPiperStop?.()
+      return (await host?.ttsPiperStop?.()) ?? { busy: false }
     },
     stopOnCreate: true,
     play: (wav, signal) => {

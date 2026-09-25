@@ -206,7 +206,7 @@ export interface Host {
    */
   ttsPiperCancel?: (tokens: number[]) => Promise<void>
   /** Shuts down the resident Piper process after silence, freeing memory (P1-C4). */
-  ttsPiperStop?: () => Promise<void>
+  ttsPiperStop?: () => Promise<{ busy: boolean }>
   /** Opens the model page of a known voice in the browser. */
   ttsOpenVoiceSource?: (voice: string) => Promise<void>
 
@@ -685,7 +685,7 @@ export async function getHost(): Promise<Host | undefined> {
 
     async ttsPiperStop() {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("tts_piper_stop")
+      return invoke<{ busy: boolean }>("tts_piper_stop")
     },
 
     async mailboxTake() {

@@ -25,6 +25,7 @@ function harness(overrides: Partial<NaturalSpeakerDeps> = {}) {
     },
     stop: async () => {
       stops.push(Date.now())
+      return { busy: false }
     },
     fallback,
     onInstall: (voice, state) => events.push(`${voice}:${state}`),
@@ -371,14 +372,148 @@ describe("tts/natural-speaker", () => {
     }
   })
 
+  test("a stop the host calls busy is asked again: no speech before the confirmation, and the voice is forgotten after it", async () => {
+    const events: string[] = []
+    let busy = true
+    const h = harness({
+      stopRetryMs: 1,
+      idleLimitMs: 5,
+      stop: async () => {
+        const stillBusy = busy
+        busy = false
+        events.push("stop")
+        return { busy: stillBusy }
+      },
+      synthesize: async (_voice, text) => {
+        events.push(text)
+        return wav(text)
+      },
+    })
+    const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    await speaker.speak("Prima frase della risposta.")
+    expect(h.played).toEqual(["Prima frase della risposta."])
+    expect(events).toEqual(["stop", "stop", "Prima frase della risposta."])
+
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(events).toEqual(["stop", "stop", "Prima frase della risposta.", "stop"])
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(events).toEqual(["stop", "stop", "Prima frase della risposta.", "stop", "Pronto."])
+  })
+
+  test("a stop that never confirms is given up on at its deadline, and the voice is not forgotten", async () => {
+    const asked: string[] = []
+    const stops: number[] = []
+    const h = harness({
+      stopRetryMs: 1,
+      stopDeadlineMs: 20,
+      idleLimitMs: 20,
+      stop: async () => {
+        stops.push(stops.length)
+        return { busy: true }
+      },
+      synthesize: async (_voice, text) => {
+        asked.push(text)
+        return wav(text)
+      },
+    })
+    const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(asked).toEqual(["Pronto."])
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(asked).toEqual(["Pronto."])
+    await speaker.speak("Prima frase della risposta.")
+    expect(h.played).toEqual(["Prima frase della risposta."])
+    const before = stops.length
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(stops.length).toBeGreaterThan(before)
+  })
+
+  test("a stop the host refuses does not silence the reply, and is asked again", async () => {
+    const asked: string[] = []
+    const stops: number[] = []
+    const h = harness({
+      idleLimitMs: 20,
+      stop: async () => {
+        stops.push(stops.length)
+        throw new Error("il comando è fallito")
+      },
+      synthesize: async (_voice, text) => {
+        asked.push(text)
+        return wav(text)
+      },
+    })
+    const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    const before = stops.length
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(stops.length).toBeGreaterThan(before)
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(asked).toEqual(["Pronto."])
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(asked).toEqual(["Pronto."])
+    await speaker.speak("Prima frase della risposta.")
+    expect(h.played).toEqual(["Prima frase della risposta."])
+  })
+
+  test("a stop the silence caught in flight is asked again once it lets go", async () => {
+    let release: ((answer: { busy: boolean }) => void) | undefined
+    const stops: number[] = []
+    const h = harness({
+      idleLimitMs: 20,
+      stopRetryMs: 5,
+      stopDeadlineMs: 5_000,
+      stop: () =>
+        new Promise<{ busy: boolean }>((resolve) => {
+          stops.push(stops.length)
+          release = resolve
+        }),
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak("Prima frase della risposta.")
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(stops).toHaveLength(1)
+    release!({ busy: true })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(stops.length).toBeGreaterThan(1)
+  })
+
+  test("a warm-up asked while a stop was still busy leaves the voice resident, and it is stopped again", async () => {
+    const asked: string[] = []
+    const stops: number[] = []
+    const h = harness({
+      stopRetryMs: 1,
+      idleLimitMs: 40,
+      stop: async () => {
+        stops.push(stops.length)
+        return { busy: stops.length === 1 }
+      },
+      synthesize: async (_voice, text) => {
+        asked.push(text)
+        return wav(text)
+      },
+    })
+    const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    speaker.prepare()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(asked).toEqual(["Pronto."])
+    expect(stops).toHaveLength(2)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(stops).toHaveLength(3)
+  })
+
   test("a sentence arriving while shutdown is in flight still speaks (restart)", async () => {
     jest.useFakeTimers()
     try {
       let finishStop: (() => void) | undefined
       const h = harness({
         stop: () =>
-          new Promise<void>((resolve) => {
-            finishStop = resolve
+          new Promise<{ busy: boolean }>((resolve) => {
+            finishStop = () => resolve({ busy: false })
           }),
       })
       const speaker = createNaturalSpeaker(h.deps)

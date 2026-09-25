@@ -34,6 +34,8 @@ export const SYNTHESIS_LIMIT_MS = 15_000
  */
 export const SILENCE_STOP_LIMIT_MS = 120_000
 
+const STOP_RETRY_MS = 250
+
 function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const expired = new Promise<never>((_, reject) => {
@@ -84,9 +86,11 @@ export interface NaturalSpeakerDeps {
   /** Spoken notice when natural voice is chosen but unavailable before using system voice. */
   fallbackNotice?: () => string
   /** Shuts down the resident process on the host after silence, freeing memory (P1-C4). */
-  stop?: () => Promise<void> | void
+  stop?: () => Promise<{ busy: boolean }> | { busy: boolean }
   /** How long silence lasts before Piper is shut down (default 120_000 ms = 2 min). */
   idleLimitMs?: number
+  stopRetryMs?: number
+  stopDeadlineMs?: number
 }
 
 /**
@@ -137,14 +141,43 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let stopping: Promise<void> | undefined
-  if (deps.stopOnCreate === true) {
-    stopping = Promise.resolve()
-      .then(() => deps.stop?.())
-      .then(() => undefined)
-      .catch(() => {})
-  }
   let activeTasks = 0
   let residentStarted = false
+
+  function confirmStop(): Promise<boolean> {
+    const stop = deps.stop
+    if (!stop) return Promise.resolve(true)
+    const startedAt = Date.now()
+    const deadlineMs = deps.stopDeadlineMs ?? SYNTHESIS_LIMIT_MS
+    const retryMs = deps.stopRetryMs ?? STOP_RETRY_MS
+    const ask = async (): Promise<boolean> => {
+      const { busy } = await stop()
+      if (!busy) {
+        residentStarted = false
+        warmed = undefined
+        return true
+      }
+      if (Date.now() - startedAt < deadlineMs) {
+        await new Promise<void>((resolve) => setTimeout(resolve, retryMs))
+        return ask()
+      }
+      return false
+    }
+    return ask().catch(() => false)
+  }
+
+  function beginStop(): void {
+    if (stopping) return
+    const pending: Promise<void> = confirmStop().then((confirmed) => {
+      if (stopping === pending) stopping = undefined
+      if (confirmed) return
+      residentStarted = true
+      if (activeTasks === 0) scheduleIdleStop()
+    })
+    stopping = pending
+  }
+
+  if (deps.stopOnCreate === true) beginStop()
 
   function cancelIdleTimer(): void {
     if (idleTimer !== undefined) {
@@ -159,14 +192,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     const timeoutMs = deps.idleLimitMs ?? SILENCE_STOP_LIMIT_MS
     idleTimer = setTimeout(() => {
       idleTimer = undefined
-      residentStarted = false
-      warmed = undefined
-      const pending = deps.stop?.()
-      if (pending && typeof (pending as Promise<void>).then === "function") {
-        stopping = (pending as Promise<void>).finally(() => {
-          if (stopping === pending) stopping = undefined
-        })
-      }
+      beginStop()
     }, timeoutMs)
   }
 
@@ -183,9 +209,11 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   function invokeSynthesize(voice: string, sentence: string): { token: number; pending: Promise<ArrayBuffer> } {
     const token = ++tokenSeq
     inflight.add(token)
-    const pending = stopping
-      ? stopping.catch(() => {}).then(() => deps.synthesize(voice, sentence, token))
-      : deps.synthesize(voice, sentence, token)
+    const send = (): Promise<ArrayBuffer> => {
+      residentStarted = true
+      return deps.synthesize(voice, sentence, token)
+    }
+    const pending = stopping ? stopping.catch(() => {}).then(send) : send()
     const forget = () => {
       inflight.delete(token)
     }
