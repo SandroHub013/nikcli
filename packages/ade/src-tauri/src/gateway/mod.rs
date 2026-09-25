@@ -12,6 +12,7 @@
 mod adapter;
 mod authz;
 mod hub;
+mod known;
 mod redact;
 mod store;
 
@@ -51,8 +52,11 @@ impl Env for AppEnv {
     fn log(&self, line: &str) {
         eprintln!("ADE: {line}");
     }
+    /// The keys in ADE's keychain, nikcli's provider keys and the keys in ADE's environment.
     fn secrets(&self) -> Vec<String> {
-        crate::secrets::values(&self.app)
+        let mut values = crate::secrets::values(&self.app);
+        values.extend(known::values());
+        values
     }
     fn now_ms(&self) -> u64 {
         std::time::SystemTime::now()
