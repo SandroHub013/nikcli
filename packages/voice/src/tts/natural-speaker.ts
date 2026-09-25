@@ -29,6 +29,17 @@ import type { Speaker } from "./speaker"
 export const SYNTHESIS_LIMIT_MS = 15_000
 
 /**
+ * The first sentence after the voice starts. Piper reads stdin only once it
+ * has loaded its 63 MB model, and that first «Pronto.» took 22 s live: with
+ * the short limit the client gave up before the host had answered, and the
+ * first reply of a session came out in the old voice. The host waits 90 s for
+ * the same sentence (`FIRST_SYNTHESIS_TIMEOUT` in `tts.rs`), and the client has
+ * to be the narrower of the two, as it is for the ones after: half of 90 s,
+ * against 15 s against 30 s.
+ */
+export const FIRST_SYNTHESIS_LIMIT_MS = 45_000
+
+/**
  * How long silence lasts without sentences to speak before the resident Piper
  * process is shut down to free its ~98 MB of memory (P1-C4). 2 minutes.
  */
@@ -53,8 +64,22 @@ function withinLimit<T>(pending: Promise<T>, ms: number): Promise<T> {
  */
 let tokenSeq = Date.now() * 1000
 
+/**
+ * How long the sentence due now may keep the reply silent: the long one while
+ * the host's process may still be loading its model, the short one after.
+ * `synthesisLimitMs` is a test's way of saying "every sentence", so it wins.
+ */
+export function synthesisLimitMs(state: {
+  fresh: boolean
+  synthesisLimitMs?: number
+  firstSynthesisLimitMs?: number
+}): number {
+  if (state.synthesisLimitMs !== undefined) return state.synthesisLimitMs
+  if (!state.fresh) return SYNTHESIS_LIMIT_MS
+  return state.firstSynthesisLimitMs ?? FIRST_SYNTHESIS_LIMIT_MS
+}
+
 export interface NaturalSpeakerDeps {
-  /** The chosen voice id, read at every reply so a change in the settings applies at once. `system` means Web Speech. */
   voice: () => string
   /** Whether the voice can speak now, and whether it can ever on this host. */
   status: (voice: string) => Promise<{ supported: boolean; installed: boolean }>
@@ -75,8 +100,10 @@ export interface NaturalSpeakerDeps {
   cancel?: (tokens: number[]) => void | Promise<void>
   /** Plays WAV bytes; resolves when done, or when `signal` aborts. */
   play: (wav: ArrayBuffer, signal: AbortSignal) => Promise<void>
-  /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. */
+  /** How long one sentence may take; `SYNTHESIS_LIMIT_MS` unless a test needs less. Set, it covers the first one too. */
   synthesisLimitMs?: number
+  /** How long the first sentence after a start may take; `FIRST_SYNTHESIS_LIMIT_MS` unless a test needs less. */
+  firstSynthesisLimitMs?: number
   /** What speaks while Piper cannot. */
   fallback: Speaker
   /** Stop a resident process left by a previous page before this one uses it. */
@@ -143,6 +170,22 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   let stopping: Promise<void> | undefined
   let activeTasks = 0
   let residentStarted = false
+  /**
+   * True until the host has answered one sentence: its resident process may
+   * still be loading the model, and that first answer is the slow one. A
+   * refusal counts as an answer, so a voice that is broken rather than slow
+   * does not make every reply wait out the long limit.
+   */
+  let fresh = true
+
+  /** How long the sentence due now may keep the reply silent. */
+  function limitMs(): number {
+    return synthesisLimitMs({
+      fresh,
+      synthesisLimitMs: deps.synthesisLimitMs,
+      firstSynthesisLimitMs: deps.firstSynthesisLimitMs,
+    })
+  }
 
   function confirmStop(): Promise<boolean> {
     const stop = deps.stop
@@ -154,6 +197,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       const { busy } = await stop()
       if (!busy) {
         residentStarted = false
+        fresh = true
         warmed = undefined
         return true
       }
@@ -216,6 +260,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     const pending = stopping ? stopping.catch(() => {}).then(send) : send()
     const forget = () => {
       inflight.delete(token)
+      // The host has spoken, one way or the other: from here on it is warm.
+      fresh = false
     }
     void pending.then(forget, forget)
     return { token, pending }
@@ -329,7 +375,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
           let wav: ArrayBuffer
           try {
             // Timed from when this sentence is due, not when it was queued behind the others.
-            wav = await withinLimit(audio[i]!, deps.synthesisLimitMs ?? SYNTHESIS_LIMIT_MS)
+            wav = await withinLimit(audio[i]!, limitMs())
           } catch {
             // The rest of the reply goes out in the old voice rather than not at all.
             if (mine === generation) {

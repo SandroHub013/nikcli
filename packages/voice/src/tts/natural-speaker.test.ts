@@ -1,5 +1,13 @@
 import { describe, expect, jest, test } from "bun:test"
-import { createNaturalSpeaker, splitSentences, SILENCE_STOP_LIMIT_MS, type NaturalSpeakerDeps } from "./natural-speaker"
+import {
+  createNaturalSpeaker,
+  FIRST_SYNTHESIS_LIMIT_MS,
+  splitSentences,
+  SILENCE_STOP_LIMIT_MS,
+  SYNTHESIS_LIMIT_MS,
+  synthesisLimitMs,
+  type NaturalSpeakerDeps,
+} from "./natural-speaker"
 import { createFakeSpeaker } from "./speaker"
 
 const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer
@@ -187,6 +195,56 @@ describe("tts/natural-speaker", () => {
     })
     await createNaturalSpeaker(h.deps).speak("Prima frase lunga. Seconda frase lunga.")
     expect(h.fallback.spoken).toEqual(["Prima frase lunga. Seconda frase lunga."])
+  })
+
+  test("the first sentence after a start has its own, longer limit", async () => {
+    // Piper reads stdin once, after loading its model: that first answer is
+    // the slow one, and the host waits 90 s for it.
+    expect(synthesisLimitMs({ fresh: true })).toBe(FIRST_SYNTHESIS_LIMIT_MS)
+    expect(synthesisLimitMs({ fresh: false })).toBe(SYNTHESIS_LIMIT_MS)
+    // The client has to be the narrower of the two, or it gives up first.
+    expect(FIRST_SYNTHESIS_LIMIT_MS).toBeLessThan(90_000)
+    expect(SYNTHESIS_LIMIT_MS).toBeLessThan(30_000)
+    // A test that sets the plain limit means it for every sentence, the first included.
+    expect(synthesisLimitMs({ fresh: true, synthesisLimitMs: 30 })).toBe(30)
+    expect(synthesisLimitMs({ fresh: false, firstSynthesisLimitMs: 40 })).toBe(SYNTHESIS_LIMIT_MS)
+  })
+
+  test("a first sentence slower than the later limit is still read by Piper", async () => {
+    const h = harness({
+      firstSynthesisLimitMs: 120,
+      // 60 ms: past the 30 ms a test would set for a sentence that never answers.
+      synthesize: (_voice, text) => new Promise((resolve) => setTimeout(() => resolve(wav(text)), 60)),
+    })
+    await createNaturalSpeaker(h.deps).speak("Prima frase lunga.")
+    expect(h.played).toEqual(["Prima frase lunga."])
+    expect(h.fallback.spoken).toEqual([])
+  })
+
+  test("once the host has answered, a sentence that stalls goes to the old voice again", async () => {
+    const h = harness({
+      firstSynthesisLimitMs: 5_000,
+      synthesisLimitMs: 30,
+      // The host answers the first sentence, then never answers the second.
+      synthesize: (_voice, text) =>
+        text.startsWith("Seconda") ? new Promise<ArrayBuffer>(() => {}) : Promise.resolve(wav(text)),
+    })
+    await createNaturalSpeaker(h.deps).speak("Prima frase lunga. Seconda frase lunga.")
+    expect(h.played).toEqual(["Prima frase lunga."])
+    expect(h.fallback.spoken).toEqual(["Seconda frase lunga."])
+  })
+
+  test("a voice that is broken rather than loading does not wait out the long limit", async () => {
+    // A refusal is an answer: the next reply must not sit on the cold-start window.
+    const h = harness({
+      firstSynthesisLimitMs: 5_000,
+      synthesisLimitMs: 30,
+      synthesize: () => Promise.reject(new Error("Piper si è chiuso.")),
+    })
+    const started = Date.now()
+    await createNaturalSpeaker(h.deps).speak("Prima frase lunga.")
+    expect(h.fallback.spoken).toEqual(["Prima frase lunga."])
+    expect(Date.now() - started).toBeLessThan(1_000)
   })
 
   test("a new page stops a resident Piper before using it again", async () => {
