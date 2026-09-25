@@ -107,6 +107,9 @@ export function selfApproval(text: string): string | undefined {
   return undefined
 }
 
+/** Project bots with a question on screen, so a second send does not ask again (review B3, BASSO 1). */
+const asking = new Set<string>()
+
 export interface AdmitDeps {
   readonly store: TrustStore
   /** The bot file's contents as they are now. */
@@ -122,6 +125,7 @@ export interface AdmitDeps {
  */
 export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true } | { ok: false; problem?: string }> {
   if (bot.scope !== "project") return { ok: true }
+  if (asking.has(bot.path)) return { ok: false }
   let text: string
   try {
     text = await deps.read(bot.path)
@@ -135,8 +139,15 @@ export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true
   const fingerprint = await fileFingerprint(text)
   const trusted = deps.store.get(bot.path)
   if (trusted === fingerprint) return { ok: true }
-  const question = trusted === undefined ? t("bots.trust.new", bot.identifier) : t("bots.trust.changed", bot.identifier)
-  if (!(await deps.confirm(question))) return { ok: false }
+  const can = t(runner === "codex" ? "bots.trust.can.codex" : runner === "claude" ? "bots.trust.can.claude" : "bots.trust.can.nikcli")
+  const question =
+    trusted === undefined ? t("bots.trust.new", bot.identifier, can) : t("bots.trust.changed", bot.identifier, can)
+  asking.add(bot.path)
+  try {
+    if (!(await deps.confirm(question))) return { ok: false }
+  } finally {
+    asking.delete(bot.path)
+  }
   deps.store.set(bot.path, fingerprint)
   return { ok: true }
 }

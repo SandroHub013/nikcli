@@ -508,10 +508,16 @@ export const it = {
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
-  "bots.trust.new": (name: string) =>
-    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. Non avrà comandi pre-approvati, ma potrà leggere e modificare file. Lo usi?`,
-  "bots.trust.changed": (name: string) =>
-    `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. Lo usi così com'è ora?`,
+  "bots.trust.new": (name: string, can: string) =>
+    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
+  "bots.trust.changed": (name: string, can: string) =>
+    `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
+  // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
+  "bots.trust.can.codex": "Girerà in sola lettura: potrà leggere i file del progetto, non modificarli né eseguire comandi.",
+  "bots.trust.can.claude":
+    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
+  "bots.trust.can.nikcli":
+    "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string) =>
     `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file (permission o tools), e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,

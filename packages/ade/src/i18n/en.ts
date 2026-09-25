@@ -503,10 +503,14 @@ export const en: Messages = {
   "browser.retry": "Try again",
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
-  "bots.trust.new": (name) =>
-    `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. It gets no pre-approved commands, but it can read and change files. Use it?`,
-  "bots.trust.changed": (name) =>
-    `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. Use it as it is now?`,
+  "bots.trust.new": (name, can) =>
+    `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
+  "bots.trust.changed": (name, can) =>
+    `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
+  "bots.trust.can.codex": "It runs read-only: it can read the project's files, not change them or run commands.",
+  "bots.trust.can.claude":
+    "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
+  "bots.trust.can.nikcli": "It can do what your nikcli configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what) =>
     `This project's bot «${name}» grants itself «${what}» in its file (permission or tools), and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
   "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
