@@ -56,9 +56,16 @@ export interface Talk {
   readonly sessionId?: string
   readonly messages: readonly TalkMessage[]
   readonly status: TalkStatus
-  /** Summed over every step nikcli reported, for the card. */
+  /** Summed over every step of the whole thread, for the card. */
   readonly tokens: number
   readonly costUsd: number
+  /**
+   * The turn that just finished: the model the CLI named, and only that
+   * turn's tokens and cost. The thread totals above keep growing.
+   */
+  readonly lastTurn?: LastTurn
+  /** Usage of the turn under way, until its result. Not stored. */
+  readonly pendingTurn?: LastTurn
   /** When anything last happened, for the roster's clock. */
   readonly updatedAt?: number
   /** A question nikcli is waiting on. The thread shows it; `answerKeys` answers it. */
@@ -92,8 +99,78 @@ export interface Talk {
   readonly streaming?: string
 }
 
+export interface LastTurn {
+  readonly model?: string
+  readonly tokens: number
+  readonly costUsd: number
+}
+
 export function emptyTalk(): Talk {
   return { messages: [], status: "idle", tokens: 0, costUsd: 0 }
+}
+
+/**
+ * A model id an event actually carried.
+ *
+ * A string `model`, `providerID` plus `modelID`, the same pair on `part`,
+ * or the single key of Claude Code's `modelUsage`. Nothing here is the
+ * model written in the bot's file.
+ */
+export function reportedModel(event: Record<string, unknown>): string | undefined {
+  const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined)
+  const record = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+  const pair = (source: Record<string, unknown> | undefined) => {
+    if (!source) return undefined
+    const provider = text(source["providerID"])
+    const id = text(source["modelID"])
+    if (provider && id) return `${provider}/${id}`
+    return id
+  }
+  const direct = text(event["model"]) ?? pair(event)
+  if (direct) return direct
+  const part = record(event["part"])
+  const fromPart = text(part?.["model"]) ?? pair(record(part?.["model"])) ?? pair(part)
+  if (fromPart) return fromPart
+  const message = record(event["message"])
+  const fromMessage = text(message?.["model"])
+  if (fromMessage) return fromMessage
+  const usage = record(event["modelUsage"])
+  const names = usage ? Object.keys(usage).filter((name) => name.trim().length > 0) : []
+  return names.length === 1 ? names[0] : undefined
+}
+
+function rememberModel(talk: Talk, model: string | undefined): Talk {
+  const named = model?.trim()
+  if (!named) return talk
+  const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
+  return { ...talk, pendingTurn: { ...pending, model: named } }
+}
+
+/** Keeps the model an event named, for the turn under way. */
+export function noteReportedModel(talk: Talk, event: Record<string, unknown>): Talk {
+  return rememberModel(talk, reportedModel(event))
+}
+
+/** Adds this event's usage to the turn under way, and keeps it when the turn ends. */
+export function noteTurnUsage(talk: Talk, tokens: number, costUsd: number, close: boolean): Talk {
+  const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
+  const next = { ...pending, tokens: pending.tokens + tokens, costUsd: pending.costUsd + costUsd }
+  if (!close) return { ...talk, pendingTurn: next }
+  return {
+    ...talk,
+    pendingTurn: undefined,
+    lastTurn: { ...(next.model ? { model: next.model } : {}), tokens: next.tokens, costUsd: next.costUsd },
+  }
+}
+
+/** A turn that ended without a result still keeps whatever usage it had gathered. */
+export function sealTurn(talk: Talk): Talk {
+  const pending = talk.pendingTurn
+  if (!pending || (pending.tokens === 0 && pending.costUsd === 0 && !pending.model)) {
+    return pending ? { ...talk, pendingTurn: undefined } : talk
+  }
+  return noteTurnUsage(talk, 0, 0, true)
 }
 
 /**
@@ -137,6 +214,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     problem: undefined,
     permission: undefined,
     ended: undefined,
+    pendingTurn: { tokens: 0, costUsd: 0 },
     turnSession: undefined,
   }
 }
@@ -314,10 +392,12 @@ export { sumTokens, errorText }
 
 function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
   const when = typeof event.timestamp === "number" ? event.timestamp : at
-  const withSession =
+  const withSession = rememberModel(
     event.sessionID && (!talk.sessionId || !talk.turnSession)
       ? { ...talk, sessionId: talk.sessionId ?? event.sessionID, turnSession: talk.turnSession ?? event.sessionID }
-      : talk
+      : talk,
+    reportedModel(event as unknown as Record<string, unknown>),
+  )
 
   switch (event.type) {
     case "text": {
@@ -360,12 +440,17 @@ function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
        * not end it.
        */
       const ended = event.part?.reason === "stop" && !!event.sessionID && event.sessionID === withSession.turnSession
-      return {
-        ...withSession,
-        tokens: withSession.tokens + tokens,
-        costUsd: withSession.costUsd + cost,
-        ...(ended ? { ended: true } : {}),
-      }
+      return noteTurnUsage(
+        {
+          ...withSession,
+          tokens: withSession.tokens + tokens,
+          costUsd: withSession.costUsd + cost,
+          ...(ended ? { ended: true } : {}),
+        },
+        tokens,
+        cost,
+        ended,
+      )
     }
     case "error": {
       const text = errorText(event.error)
@@ -423,6 +508,7 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * error already on the thread, is said once so the silence has a reason.
  */
 export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli", lastWords?: string): Talk {
+  talk = sealTurn(talk)
   const limited = withLimitNotice(talk, code, at, program)
   if (limited) return limited
   if (code === 0 || code === null) {
@@ -567,6 +653,7 @@ export function serializeTalk(talk: Talk): string {
       messages: list,
       tokens: talk.tokens,
       costUsd: talk.costUsd,
+      ...(talk.lastTurn ? { lastTurn: talk.lastTurn } : {}),
       updatedAt: talk.updatedAt,
     })
   let encoded = pack(messages)
@@ -575,6 +662,16 @@ export function serializeTalk(talk: Talk): string {
     encoded = pack(messages)
   }
   return encoded
+}
+
+function parseLastTurn(value: unknown): LastTurn | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as { model?: unknown; tokens?: unknown; costUsd?: unknown }
+  const tokens = typeof record.tokens === "number" ? record.tokens : 0
+  const costUsd = typeof record.costUsd === "number" ? record.costUsd : 0
+  const model = typeof record.model === "string" && record.model.trim() ? record.model : undefined
+  if (!model && tokens === 0 && costUsd === 0) return undefined
+  return { ...(model ? { model } : {}), tokens, costUsd }
 }
 
 /** The stored thread, tolerating anything: an unreadable one is an empty one. */
@@ -599,6 +696,10 @@ export function parseTalk(raw: string | null | undefined): Talk {
       messages,
       tokens: typeof parsed.tokens === "number" ? parsed.tokens : 0,
       costUsd: typeof parsed.costUsd === "number" ? parsed.costUsd : 0,
+      ...(() => {
+        const last = parseLastTurn(parsed.lastTurn)
+        return last ? { lastTurn: last } : {}
+      })(),
       ...(typeof parsed.updatedAt === "number" ? { updatedAt: parsed.updatedAt } : {}),
     }
   } catch {

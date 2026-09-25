@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, readLoginStatus, runnerById, turnCommand } from "./runners"
+import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, spendLine, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -529,5 +529,72 @@ describe("un turno da chat non ha la shell", () => {
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
     expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config"])
+  })
+})
+
+describe("il costo di un turno", () => {
+  test("Claude Code e Codex non mostrano dollari: il numero della CLI non è un addebito", () => {
+    for (const runnerId of ["claude", "codex"]) {
+      const line = spendLine({ runnerId, model: "opus", tokens: 1200, costUsd: 0.42 })
+      expect(line.kind).toBe("plan")
+      expect(line.usd).toBeUndefined()
+      expect(JSON.stringify(line)).not.toContain("$")
+    }
+  })
+
+  test("nikcli mostra il costo del turno, e un modello :free no", () => {
+    const paid = spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 800, costUsd: 0.04 })
+    expect(paid).toMatchObject({ kind: "api", model: "openai/gpt-4o", usd: "$0.04" })
+    const free = spendLine({ runnerId: "nikcli", model: "google/gemini-2.0-flash:free", tokens: 800, costUsd: 0.5 })
+    expect(free.kind).toBe("free")
+    expect(free.usd).toBeUndefined()
+    const unnamed = spendLine({ runnerId: "nikcli", tokens: 10, costUsd: 0.004 })
+    expect(unnamed.kind).toBe("metered")
+    expect(unnamed.usd).toBe("$0.004")
+    expect(spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
+  })
+
+  test("i dollari hanno tre cifre sotto il centesimo e due sopra", () => {
+    expect(formatUsd(0.009)).toBe("$0.009")
+    expect(formatUsd(0.01)).toBe("$0.01")
+    expect(formatUsd(1.2)).toBe("$1.20")
+  })
+
+  test("l'ultimo turno di Claude Code tiene il modello dell'init e solo i token di quel result", () => {
+    const talk = fold("claude", [
+      '{"type":"system","subtype":"init","session_id":"s","model":"claude-sonnet-5"}',
+      '{"type":"result","is_error":false,"session_id":"s","total_cost_usd":0.04,"usage":{"input_tokens":10,"output_tokens":2}}',
+    ])
+    expect(talk.tokens).toBe(12)
+    expect(talk.lastTurn).toEqual({ model: "claude-sonnet-5", tokens: 12, costUsd: 0.04 })
+    const again = fold("claude", [
+      '{"type":"result","is_error":false,"session_id":"s","total_cost_usd":0.01,"usage":{"input_tokens":1,"output_tokens":1}}',
+    ])
+    const second = applyRunnerLine(
+      runnerById("claude"),
+      sendMessage(talk, "ancora", 2),
+      '{"type":"result","is_error":false,"session_id":"s","model":"claude-haiku-4-5","total_cost_usd":0.01,"usage":{"input_tokens":3,"output_tokens":1}}',
+      3,
+    )
+    expect(second.tokens).toBe(16)
+    expect(second.costUsd).toBeCloseTo(0.05)
+    expect(second.lastTurn).toEqual({ model: "claude-haiku-4-5", tokens: 4, costUsd: 0.01 })
+    expect(again.lastTurn?.tokens).toBe(2)
+  })
+
+  test("Codex tiene il modello di thread.started sull'ultimo turno", () => {
+    const talk = fold("codex", [
+      '{"type":"thread.started","thread_id":"t1","model":"gpt-5.5"}',
+      '{"type":"turn.completed","usage":{"input_tokens":3,"cached_input_tokens":1,"output_tokens":1}}',
+    ])
+    expect(talk.tokens).toBe(4)
+    expect(talk.lastTurn).toEqual({ model: "gpt-5.5", tokens: 4, costUsd: 0 })
+  })
+
+  test("Genera con nikcli: senza modello è il predefinito, a pagamento; :free no", () => {
+    expect(generationSpend()).toEqual({ model: "", paid: true })
+    expect(generationSpend("  ")).toEqual({ model: "", paid: true })
+    expect(generationSpend("openai/gpt-4o")).toEqual({ model: "openai/gpt-4o", paid: true })
+    expect(generationSpend("google/gemini-2.0-flash:free")).toEqual({ model: "google/gemini-2.0-flash:free", paid: false })
   })
 })

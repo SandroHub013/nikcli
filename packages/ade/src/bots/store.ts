@@ -221,6 +221,8 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     description: input.description,
     mode,
     ...(input.tools ? { tools: input.tools } : {}),
+    // The model that writes the file, so the cost named in the form is the one that runs.
+    ...(input.model ? { model: input.model } : {}),
   }), base)
 
   const created = parseCreatedPath(result.stdout)
