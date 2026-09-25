@@ -129,6 +129,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   /** Voices known to be installed, and the downloads already started. */
   const ready = new Set<string>()
   const installing = new Map<string, Promise<void>>()
+  const failed = new Set<string>()
   let warmed: string | undefined
   let fallbackNotified = false
   /** Tokens of the requests asked of the host and not settled yet. */
@@ -216,15 +217,17 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   }
 
   function ensure(voice: string): void {
-    if (ready.has(voice) || installing.has(voice)) return
+    if (ready.has(voice) || installing.has(voice) || failed.has(voice)) return
     deps.onInstall?.(voice, "downloading")
     const job = deps
       .install(voice)
       .then(() => {
         ready.add(voice)
+        failed.delete(voice)
         deps.onInstall?.(voice, "ready")
       })
       .catch((error: unknown) => {
+        failed.add(voice)
         deps.onInstall?.(voice, "failed", error instanceof Error ? error.message : String(error))
       })
       .finally(() => installing.delete(voice))
@@ -239,6 +242,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       if (!supported) return false
       if (installed) {
         ready.add(voice)
+        failed.delete(voice)
         return true
       }
       if (installIfMissing) ensure(voice)

@@ -128,6 +128,9 @@ export interface VoiceSettingsPanelProps {
   existingBindings?: readonly Binding[]
   /** Opens the page of a Piper voice's model, where its licence is stated. Absent: no link is shown. */
   onOpenVoiceSource?: (voice: ReplyVoice) => void
+  naturalVoiceError?: string
+  naturalVoiceDownloading?: boolean
+  onDownloadNaturalVoice?: () => void
   /** Optional Parakeet neural model download progress. */
   parakeetProgress?: ParakeetProgress
   /** Optional cost of the most recent speech transcription request. */
@@ -1299,6 +1302,21 @@ export function VoiceSettingsPanel(props: VoiceSettingsPanelProps) {
                 <p data-slot="sub-choice-note">
                   {t("vui.replies.note")}
                 </p>
+                <Show when={props.naturalVoiceError}>
+                  <div data-slot="reply-voice-error" role="alert">
+                    <span>{props.naturalVoiceError}</span>
+                    <Show when={props.onDownloadNaturalVoice}>
+                      <button
+                        type="button"
+                        data-slot="link-button"
+                        disabled={props.naturalVoiceDownloading}
+                        onClick={() => props.onDownloadNaturalVoice?.()}
+                      >
+                        {props.naturalVoiceDownloading ? t("vui.replies.downloading") : t("vui.replies.retry")}
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
               </div>
             </Show>
 

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { isVoiceReady, voicePrerequisitesList, type VoicePrerequisitesState } from "./onboarding"
+import {
+  clearNaturalVoiceFailure,
+  isVoiceReady,
+  naturalVoiceFailureFor,
+  voicePrerequisitesList,
+  type VoicePrerequisitesState,
+} from "./onboarding"
 import { setLocalePreference } from "../i18n/locale"
 
 describe("voice onboarding prerequisites", () => {
@@ -55,6 +61,34 @@ describe("voice onboarding prerequisites", () => {
     expect(voiceItem.done).toBe(false)
     expect(voiceItem.actionLabel).toBe("Download in corso…")
     expect(voiceItem.actionDisabled).toBe(true)
+  })
+
+  test("a failed natural voice install is visible until the current voice succeeds", () => {
+    setLocalePreference("it")
+    const failure = { voice: "ugo", problem: "Connessione interrotta" }
+    expect(naturalVoiceFailureFor(failure, "ugo")).toBe("Connessione interrotta")
+    expect(naturalVoiceFailureFor(failure, "paola")).toBeUndefined()
+    expect(naturalVoiceFailureFor(clearNaturalVoiceFailure(failure, "paola"), "ugo")).toBe("Connessione interrotta")
+    expect(naturalVoiceFailureFor(clearNaturalVoiceFailure(failure, "ugo"), "ugo")).toBeUndefined()
+
+    const failed = voicePrerequisitesList({
+      hasKey: true,
+      hasAgent: true,
+      hasVoice: false,
+      voiceError: naturalVoiceFailureFor(failure, "ugo"),
+    })
+    const failedVoice = failed.find((item) => item.id === "voice")!
+    expect(failedVoice.error).toBe("Connessione interrotta")
+    expect(failedVoice.actionLabel).toBe("Riprova")
+    expect(failedVoice.actionDisabled).toBe(false)
+
+    const installed = voicePrerequisitesList({
+      hasKey: true,
+      hasAgent: true,
+      hasVoice: true,
+      voiceError: naturalVoiceFailureFor(clearNaturalVoiceFailure(failure, "ugo"), "ugo"),
+    })
+    expect(installed.find((item) => item.id === "voice")?.error).toBeUndefined()
   })
 
   test("voicePrerequisitesList marks completed voice as installed and disabled", () => {

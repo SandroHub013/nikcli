@@ -154,6 +154,11 @@ import {
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
+import {
+  clearNaturalVoiceFailure,
+  naturalVoiceFailureFor,
+  type NaturalVoiceFailure,
+} from "../agent/onboarding"
 import { Chat } from "../chat/chat"
 import { BotsMain, BotsRoster } from "../bots/bots"
 import type { AgentFile } from "../bots/nikcli"
@@ -4036,25 +4041,38 @@ export function Workbench() {
   }
   const [voiceInstalled, setVoiceInstalled] = createSignal(false)
   const [voiceDownloading, setVoiceDownloading] = createSignal(false)
+  const [voiceFailure, setVoiceFailure] = createSignal<NaturalVoiceFailure>()
 
   const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
+  const voiceError = createMemo(() => naturalVoiceFailureFor(voiceFailure(), activePiperVoice()))
+  const clearVoiceFailure = (voice: string) => {
+    setVoiceFailure((current) => clearNaturalVoiceFailure(current, voice))
+  }
+  const failNaturalVoice = (voice: string, problem: unknown) => {
+    const message = (problem instanceof Error ? problem.message : String(problem ?? "")).trim() || t("voice.download.failed")
+    setVoiceFailure({ voice, problem: message })
+    if (voice === activePiperVoice()) report(t("voice.download.report", message))
+  }
 
   const checkVoiceInstalled = async () => {
     const v = activePiperVoice()
     if (v === "system") {
       setVoiceInstalled(true)
+      clearVoiceFailure(v)
       return
     }
     try {
       const host = await getHost()
       if (!host?.ttsPiperStatus) {
-        setVoiceInstalled(true)
+        if (activePiperVoice() === v) setVoiceInstalled(true)
         return
       }
       const st = await host.ttsPiperStatus(v)
+      if (activePiperVoice() !== v) return
       setVoiceInstalled(Boolean(st.installed))
+      if (st.installed) clearVoiceFailure(v)
     } catch {
-      setVoiceInstalled(false)
+      if (activePiperVoice() === v) setVoiceInstalled(false)
     }
   }
 
@@ -4096,14 +4114,17 @@ export function Workbench() {
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
+      if (voice !== activePiperVoice()) return
       if (state === "ready") {
         setVoiceInstalled(true)
         setVoiceDownloading(false)
+        clearVoiceFailure(voice)
       } else if (state === "downloading") {
         setVoiceDownloading(true)
       } else if (state === "failed") {
+        setVoiceInstalled(false)
         setVoiceDownloading(false)
-        console.warn(`ADE: voce ${voice} non scaricata: ${problem ?? ""}`)
+        failNaturalVoice(voice, problem)
       }
     },
   })
@@ -4165,24 +4186,29 @@ export function Workbench() {
   })
 
   const downloadNaturalVoice = async () => {
+    if (voiceDownloading()) return
+    const v = activePiperVoice()
     setVoiceDownloading(true)
     speaker.prepare()
-    const v = activePiperVoice()
     if (v === "system") {
       setVoiceInstalled(true)
+      clearVoiceFailure(v)
       setVoiceDownloading(false)
       return
     }
     try {
       const host = await getHost()
-      if (host?.ttsPiperInstall) {
-        await host.ttsPiperInstall(v)
-        setVoiceInstalled(true)
-      }
-    } catch (e) {
-      console.warn(e)
+      if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
+      await host.ttsPiperInstall(v)
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(true)
+      clearVoiceFailure(v)
+    } catch (error) {
+      if (activePiperVoice() !== v) return
+      setVoiceInstalled(false)
+      failNaturalVoice(v, error)
     } finally {
-      setVoiceDownloading(false)
+      if (activePiperVoice() === v) setVoiceDownloading(false)
     }
   }
 
@@ -4266,8 +4292,16 @@ export function Workbench() {
     // and the profile was written back on the way in, so it does not return.
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
+    const previousVoice = activePiperVoice()
     const saved = saveVoiceSettings(next)
     setVoiceSettings(saved.settings)
+    const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
+    if (nextVoice !== previousVoice) {
+      setVoiceFailure(undefined)
+      setVoiceInstalled(nextVoice === "system")
+      setVoiceDownloading(false)
+      void checkVoiceInstalled()
+    }
     await voiceEngine.updateSettings(saved.settings)
     await registerGlobalShortcuts?.(saved.settings)
     const after = listensByItself(saved.settings)
@@ -7378,8 +7412,9 @@ export function Workbench() {
               canPlan={Boolean(voiceSettings().openRouterApiKey)}
               hasKey={Boolean(voiceSettings().openRouterApiKey?.trim())}
               hasAgent={hasVoiceAgent()}
-              hasVoice={voiceInstalled()}
+              hasVoice={voiceInstalled() && !voiceError()}
               isVoiceDownloading={voiceDownloading()}
+              voiceError={voiceError()}
               onDownloadVoice={() => void downloadNaturalVoice()}
               onOpenKeySettings={() => openVoiceSettings("voice-sec-backend")}
               onOpenAgentSettings={() => openVoiceSettings("set-sec-provider")}
@@ -7517,6 +7552,9 @@ export function Workbench() {
             setVoiceSettingsOpen(false)
           }}
           onOpenVoiceSource={(voice) => void getHost().then((host) => host?.ttsOpenVoiceSource?.(voice))}
+          naturalVoiceError={voiceError()}
+          naturalVoiceDownloading={voiceDownloading()}
+          onDownloadNaturalVoice={() => void downloadNaturalVoice()}
           existingBindings={bindings}
           settingsNotice={voiceSettingsNotice()}
           title={t("settings.title")}
@@ -7650,6 +7688,7 @@ export function Workbench() {
       */}
       <VoiceHud
         engine={voiceEngine}
+        naturalVoiceError={voiceError()}
         target={(() => {
           const focused = wb().panes.find((pane) => pane.id === wb().focusedId)
           return focused?.title
@@ -7664,7 +7703,10 @@ export function Workbench() {
             setWb((w) => ({ ...w, focusedId: nextPane.id }))
           }
         }}
-        onOpenSettings={() => setVoiceSettingsOpen(true)}
+        onOpenSettings={() => {
+          setVoiceSettingsSection("voice-sec-mode")
+          setVoiceSettingsOpen(true)
+        }}
       />
 
       {/* S33: the agent speaks through its own sphere, over the workspace. */}

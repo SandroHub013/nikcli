@@ -88,6 +88,30 @@ describe("tts/natural-speaker", () => {
     expect(h.played).toEqual(["Seconda risposta."])
   })
 
+  test("a failed natural voice download stays failed until a later successful retry", async () => {
+    let installed = false
+    let attempts = 0
+    const h = harness({
+      status: async () => ({ supported: true, installed }),
+      install: async () => {
+        attempts++
+        throw new Error("download interrupted")
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+
+    await speaker.speak("Prima risposta.")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await speaker.speak("Seconda risposta.")
+    expect(attempts).toBe(1)
+    expect(h.events).toEqual(["ugo:downloading", "ugo:failed"])
+
+    installed = true
+    await speaker.speak("Risposta dopo il retry.")
+    expect(h.played).toEqual(["Risposta dopo il retry."])
+    expect(attempts).toBe(1)
+  })
+
   test("the system voice, or a host without Piper, is the Web Speech voice", async () => {
     const system = harness({ voice: () => "system" })
     await createNaturalSpeaker(system.deps).speak("Ciao.")
