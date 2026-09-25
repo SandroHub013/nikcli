@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { emptyChatData, type ChatData } from "./events"
 import { CHAT_PERMISSION } from "./rules"
-import {
-  connectionNotice,
-  conversationOf,
-  messageError,
-  followOpen,
-  partsOf,
-  sessionEntries,
-} from "./sessions"
+import { connectionNotice, conversationOf, messageError, followOpen, partsOf, sessionEntries } from "./sessions"
 
 /* C4: the sessions the chat lists and the one it shows. */
 
@@ -124,14 +117,23 @@ describe("the open session", () => {
 
 describe("the connection, in words", () => {
   test("no project, on its way, refused with why; nothing when live", () => {
-    expect(connectionNotice({ status: "idle" })).toEqual({ kind: "noProject" })
-    expect(connectionNotice({ directory: "C:/progetto", status: "admitting" })).toEqual({ kind: "admitting" })
-    expect(connectionNotice({ directory: "C:/progetto", status: "retrying" })).toEqual({ kind: "retrying" })
-    expect(connectionNotice({ directory: "C:/progetto", status: "refused", problem: "No." })).toEqual({
+    expect(connectionNotice({ status: "idle" }, undefined)).toEqual({ kind: "noProject" })
+    // Not used yet, or open on another folder: the chat says so and waits.
+    expect(connectionNotice({ status: "idle" }, "C:/progetto")).toEqual({ kind: "notOpen" })
+    expect(connectionNotice({ directory: "C:/altro", status: "live" }, "C:/progetto")).toEqual({ kind: "notOpen" })
+    expect(connectionNotice({ directory: "C:/progetto", status: "admitting" }, "C:/progetto")).toEqual({
+      kind: "admitting",
+    })
+    expect(connectionNotice({ directory: "C:/progetto", status: "retrying" }, "C:/progetto")).toEqual({
+      kind: "retrying",
+    })
+    expect(connectionNotice({ directory: "C:/progetto", status: "refused", problem: "No." }, "C:/progetto")).toEqual({
       kind: "refused",
       problem: "No.",
     })
-    expect(connectionNotice({ directory: "C:/progetto", status: "refused" })).toEqual({ kind: "refused" })
-    expect(connectionNotice({ directory: "C:/progetto", status: "live" })).toBeUndefined()
+    expect(connectionNotice({ directory: "C:/progetto", status: "refused" }, "C:/progetto")).toEqual({
+      kind: "refused",
+    })
+    expect(connectionNotice({ directory: "C:/progetto", status: "live" }, "C:/progetto")).toBeUndefined()
   })
 })

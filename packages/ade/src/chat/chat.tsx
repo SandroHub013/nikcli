@@ -31,6 +31,7 @@ import {
   type ModelRef,
 } from "./model"
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
+import { isOpenOn, useFolder } from "./first-use"
 import { SessionList } from "./session-list"
 import {
   connectionNotice,
@@ -51,6 +52,7 @@ const AGENT_KEY = "ade.chat.agent"
 
 const STATUS = {
   noProject: "chat.status.noProject",
+  notOpen: "chat.status.notOpen",
   admitting: "chat.status.admitting",
   connecting: "chat.status.connecting",
   retrying: "chat.status.retrying",
@@ -130,31 +132,33 @@ export function Chat(props: ChatProps) {
     setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
   }
 
-  const loadCatalog = async () => {
-    try {
-      applyCatalog(await store.catalog())
-    } catch {
-      // Not open, or refused: the notice says why, and the pickers stay as they are.
-    }
-  }
+  /**
+   * A use of the chat: a picker opened, a message sent, «Collega» pressed.
+   * Only here does the chat admit and open the project and read its catalog
+   * (`first-use.ts`); showing the section calls nothing (C9).
+   */
+  const use = () => useFolder(store, props.projectRoot, applyCatalog)
 
-  onMount(() => composer?.focus())
+  onMount(() => {
+    composer?.focus()
+    // Back to a folder already in use: its catalog is the store's, kept per opening.
+    if (isOpenOn(store, props.projectRoot)) void use()
+  })
 
-  // The project's folder: opening the one already open changes nothing, so
-  // coming back to the section finds the stream and the answer where they were.
+  // Another project: its sessions are not the ones open here.
   createEffect(
     on(
       () => props.projectRoot,
-      (root, previous) => {
-        if (root && root !== previous) {
-          if (previous !== undefined) setCurrent(undefined)
-          void store.open(root).then(loadCatalog)
-        }
+      (_root, previous) => {
+        if (previous !== undefined) setCurrent(undefined)
       },
+      { defer: true },
     ),
   )
 
-  const entries = createMemo(() => sessionEntries(store.state.data, store.state.directory))
+  const entries = createMemo(() =>
+    isOpenOn(store, props.projectRoot) ? sessionEntries(store.state.data, store.state.directory) : [],
+  )
   createEffect(
     on(entries, (list) => {
       const next = followOpen(list, opened())
@@ -179,10 +183,11 @@ export function Chat(props: ChatProps) {
     const id = open()
     return id ? isBusy(store.state.data, id) : false
   }
-  const notice = () => connectionNotice(store.state)
+  const notice = () => connectionNotice(store.state, props.projectRoot)
   // A session made outside the chat is read, never written to (C5).
   const foreign = () => entry() !== undefined && !entry()!.chat
-  const canSend = () => store.state.status === "live" && !!model() && !foreign() && !sending()
+  // The first message is a use too: it opens the folder, then goes. The stream follows it.
+  const canSend = () => !!props.projectRoot && store.state.status !== "refused" && !foreign() && !sending()
 
   createEffect(
     on([() => turns().length, () => turns().at(-1)?.parts.length, permissions, questions], () => {
@@ -209,11 +214,16 @@ export function Chat(props: ChatProps) {
 
   const send = async () => {
     const text = draft().trim()
-    const ref = model()
-    if (!text || !ref || !canSend()) return
+    if (!text || !canSend()) return
     setSending(true)
     setProblem(undefined)
     try {
+      if (!(await use())) return
+      const ref = model()
+      if (!ref) {
+        setProblem(t("chat.model.choose"))
+        return
+      }
       const id = await store.send(open(), text, ref, agent() || undefined)
       setCurrent(id)
       setDraft("")
@@ -264,6 +274,7 @@ export function Chat(props: ChatProps) {
           <select
             data-slot="chat-agent"
             value={agent() || ""}
+            onFocus={() => void use()}
             onChange={(event) => chooseAgent(event.currentTarget.value)}
             aria-label={t("chat.agent.label")}
           >
@@ -281,6 +292,7 @@ export function Chat(props: ChatProps) {
           <select
             data-slot="chat-model"
             value={model() ? serializeModelRef(model()!) : ""}
+            onFocus={() => void use()}
             onChange={(event) => chooseModel(event.currentTarget.value)}
             aria-label={t("chat.model.label")}
           >
@@ -325,6 +337,12 @@ export function Chat(props: ChatProps) {
                   const now = shown()
                   return now.kind === "refused" ? (now.problem ?? t("chat.status.refused")) : t(STATUS[now.kind])
                 })()}
+                <Show when={shown().kind === "notOpen"}>
+                  {" "}
+                  <button type="button" data-slot="chat-link" onClick={() => void use()}>
+                    {t("chat.connect")}
+                  </button>
+                </Show>
               </p>
             )}
           </Show>

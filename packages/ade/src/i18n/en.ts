@@ -615,6 +615,8 @@ export const en: Messages = {
   "chat.session.waiting": "waiting for you",
   "chat.session.foreign": "outside the Chat",
   "chat.status.noProject": "Open a project to use the Chat.",
+  "chat.status.notOpen": "The Chat is not connected to this project yet: it connects when you pick a model or send a message.",
+  "chat.connect": "Connect now",
   "chat.status.admitting": "Checking your trust in the project…",
   "chat.status.connecting": "Connecting to the nikcli server…",
   "chat.status.retrying": "Connection lost: trying again…",

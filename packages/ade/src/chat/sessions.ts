@@ -110,12 +110,21 @@ export function followOpen(entries: readonly SessionEntry[], open: OpenSession):
 
 export type ChatNotice =
   | { readonly kind: "noProject" }
+  | { readonly kind: "notOpen" }
   | { readonly kind: "admitting" | "connecting" | "retrying" }
   | { readonly kind: "refused"; readonly problem?: string }
 
-/** What the chat says about its connection, when it is not simply live. */
-export function connectionNotice(state: Pick<ChatState, "directory" | "status" | "problem">): ChatNotice | undefined {
-  if (!state.directory) return { kind: "noProject" }
+/**
+ * What the chat says about its connection to the project `root`, when it is
+ * not simply live. Not open yet is a state of its own: the chat opens a folder
+ * on its first use, not when the section is shown.
+ */
+export function connectionNotice(
+  state: Pick<ChatState, "directory" | "status" | "problem">,
+  root: string | undefined,
+): ChatNotice | undefined {
+  if (!root) return { kind: "noProject" }
+  if (state.directory !== root || state.status === "idle") return { kind: "notOpen" }
   switch (state.status) {
     case "admitting":
     case "connecting":

@@ -624,6 +624,8 @@ export const it = {
   "chat.session.waiting": "aspetta te",
   "chat.session.foreign": "fuori dalla Chat",
   "chat.status.noProject": "Apri un progetto per usare la Chat.",
+  "chat.status.notOpen": "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
+  "chat.connect": "Collega adesso",
   "chat.status.admitting": "Controllo la fiducia nel progetto…",
   "chat.status.connecting": "Collegamento al server di nikcli…",
   "chat.status.retrying": "Collegamento perso: riprovo…",
