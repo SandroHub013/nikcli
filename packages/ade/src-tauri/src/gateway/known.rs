@@ -4,9 +4,10 @@
 //! Read here, in Rust, each time the gateway needs the list, and never kept,
 //! logged or sent to the page: they are only what `redact` looks for.
 //!
-//! Claude's and Codex's own credentials are not read, not even to hide them:
-//! ADE does not touch them (D7). So their files are not opened, and the
-//! variables they use are skipped.
+//! Claude's and Codex's credential files are not opened, not even to hide
+//! what is in them: ADE does not touch them (D7). A key of theirs that is
+//! already in ADE's environment is hidden like any other: that reads no file
+//! of theirs, and hiding it is only safer.
 
 use std::path::PathBuf;
 
@@ -56,14 +57,12 @@ fn auth_values(text: &str) -> Vec<String> {
     out
 }
 
-/// Variables that are credentials by their name, bar Claude's and Codex's.
+/// Variables that are credentials by their name, Claude's and Codex's included.
 fn env_values(vars: impl IntoIterator<Item = (String, String)>) -> Vec<String> {
     vars.into_iter()
         .filter(|(name, _)| {
             let name = name.to_ascii_uppercase();
-            let credential = ["_API_KEY", "_TOKEN", "_SECRET"].iter().any(|end| name.ends_with(end));
-            let theirs = name.starts_with("CLAUDE_") || name.starts_with("CODEX_");
-            credential && !theirs
+            ["_API_KEY", "_TOKEN", "_SECRET"].iter().any(|end| name.ends_with(end))
         })
         .map(|(_, value)| value.trim().to_string())
         .filter(|value| value.chars().count() >= MIN_ENV_LEN)
@@ -115,18 +114,27 @@ mod tests {
     }
 
     #[test]
-    fn the_variables_named_as_keys_but_not_claudes_or_codexs() {
+    fn the_variables_named_as_keys_claudes_and_codexs_included() {
         let vars = [
             ("OPENROUTER_API_KEY", "sk-or-v1-finta-variabile"),
             ("GITHUB_TOKEN", "ghp_finto_token_0123"),
             ("my_service_secret", "finto-segreto-minuscolo"),
-            ("CLAUDE_SESSION_TOKEN", "finto-di-claude-non-letto"),
-            ("CODEX_API_KEY", "finto-di-codex-non-letto"),
+            ("CLAUDE_SESSION_TOKEN", "finto-di-claude-nell-ambiente"),
+            ("CODEX_API_KEY", "finto-di-codex-nell-ambiente"),
             ("PATH", "C:/Windows/system32"),
             ("SHORT_TOKEN", "1234"),
         ]
         .map(|(name, value)| (name.to_string(), value.to_string()));
-        assert_eq!(env_values(vars), vec!["sk-or-v1-finta-variabile", "ghp_finto_token_0123", "finto-segreto-minuscolo"]);
+        assert_eq!(
+            env_values(vars),
+            vec![
+                "sk-or-v1-finta-variabile",
+                "ghp_finto_token_0123",
+                "finto-segreto-minuscolo",
+                "finto-di-claude-nell-ambiente",
+                "finto-di-codex-nell-ambiente",
+            ]
+        );
     }
 
     #[test]
