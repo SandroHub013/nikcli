@@ -328,3 +328,27 @@ describe("gli argomenti di Codex non portano altro", () => {
     expect(args.slice(-3)).toEqual(["--", "t-1", "--dangerously-bypass-approvals-and-sandbox"])
   })
 })
+
+/*
+ * B1 review, BASSO 1: for `codex exec` and `exec resume`, a PROMPT of `-`
+ * means «read it from stdin», and the turn hung until stopped. A message
+ * that is only a dash is sent so that it is not that argument.
+ */
+describe("un messaggio fatto solo di un trattino", () => {
+  test("non diventa il «leggi da stdin» di Codex, né al primo turno né nel seguito", () => {
+    const plain = { ...bot, prompt: "" }
+    for (const message of ["-", "  -  "]) {
+      const first = turnCommand(runnerById("codex"), { bot: plain, message })
+      expect(first.args.at(-1)).not.toBe("-")
+      expect(first.args.at(-1)?.trim()).toBe("-")
+      const next = turnCommand(runnerById("codex"), { bot, message, sessionId: "t-1" })
+      expect(next.args.at(-1)).not.toBe("-")
+      expect(next.args.at(-2)).toBe("t-1")
+    }
+  })
+
+  test("un messaggio che contiene un trattino resta com'è", () => {
+    const { args } = turnCommand(runnerById("codex"), { bot, message: "a - b", sessionId: "t-1" })
+    expect(args.at(-1)).toBe("a - b")
+  })
+})

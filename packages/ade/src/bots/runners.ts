@@ -191,6 +191,14 @@ export function withInstructions(bot: AgentFile, message: string): string {
 const SAFE_EFFORT = /^[a-z]{1,16}$/
 const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
 
+/*
+ * For `codex exec` and `exec resume` a PROMPT of `-` means «read it from
+ * stdin», and the turn hung until stopped (B1 review, BASSO 1). A message
+ * that is only a dash goes with a space before it: the same text, not that
+ * argument.
+ */
+const notStdin = (prompt: string) => (prompt.trim() === "-" ? " -" : prompt)
+
 export function turnCommand(
   runner: Runner,
   spec: TurnSpec,
@@ -260,13 +268,13 @@ export function turnCommand(
         return {
           command: runner.command,
           // `--` first: a message that starts with `-` is a message, not an option.
-          args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, "--", sessionId, message],
+          args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, "--", sessionId, notStdin(message)],
           ...where,
         }
       }
       return {
         command: runner.command,
-        args: ["exec", "--json", "--skip-git-repo-check", ...model, ...config, "--", withInstructions(bot, message)],
+        args: ["exec", "--json", "--skip-git-repo-check", ...model, ...config, "--", notStdin(withInstructions(bot, message))],
         ...where,
       }
     }
