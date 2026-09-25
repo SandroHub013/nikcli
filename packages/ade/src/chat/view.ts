@@ -82,11 +82,15 @@ export function partView(part: Part): PartView | undefined {
   }
 }
 
-/** A permission request as the card shows it: what, and on what. */
+/**
+ * A permission request as the card shows it: what, and on what. The patterns
+ * whole, line breaks and spaces kept: for a shell command they are what the
+ * user says yes to, and a tail cut off (`; curl … | sh`) would be approved unseen.
+ */
 export function permissionView(request: PermissionRequest): { id: string; permission: string; patterns: string[] } {
   const raw = request as unknown as Record<string, any>
   const patterns = Array.isArray(raw.patterns) ? raw.patterns.filter((p: unknown): p is string => typeof p === "string") : []
-  return { id: raw.id, permission: String(raw.permission ?? "?"), patterns: patterns.map((p: string) => line(p)) }
+  return { id: raw.id, permission: String(raw.permission ?? "?"), patterns }
 }
 
 /** What the user has picked so far, per question: the labels, and what they typed. */

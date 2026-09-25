@@ -490,6 +490,9 @@
   font-size: var(--ade-font-sm);
   white-space: pre-wrap;
   word-break: break-word;
+  /* The whole command, never cut: a long one scrolls inside its box. */
+  max-height: 320px;
+  overflow: auto;
 }
 
 [data-slot="chat-permission-actions"],
