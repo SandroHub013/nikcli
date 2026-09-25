@@ -175,9 +175,13 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
  * and settings were written by whoever wrote the repository. It runs only
  * once the user trusted that file (`trust.ts`), and even then with nothing
- * pre-approved that runs commands: no shell or `ade-msg` for Claude Code,
- * none of the project's local Claude settings (which may hold hooks), and
- * Codex asking rather than `approval_policy="never"`.
+ * pre-approved that runs commands:
+ *
+ * - Claude Code: no shell or `ade-msg`, and none of the project's local
+ *   settings, which may hold hooks.
+ * - Codex: read-only, always. `codex exec` forces `approval_policy` to never
+ *   whatever `-c` says (review B3, A1), so the sandbox is the only limit, and
+ *   `workspace-write` would let it run anything inside the project.
  */
 function fromRepository(bot: AgentFile): boolean {
   return bot.scope === "project"
@@ -271,10 +275,12 @@ export function turnCommand(
     }
     case "codex": {
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
-      const inOutbox = !canWrite(bot) && spec.outbox !== undefined
-      const sandbox = canWrite(bot) || inOutbox ? "workspace-write" : "read-only"
-      // A repository's bot does not run commands unasked; `untrusted` still lets read-only ones through.
-      const approval = fromRepository(bot) ? "untrusted" : "never"
+      const repository = fromRepository(bot)
+      const inOutbox = !repository && !canWrite(bot) && spec.outbox !== undefined
+      const sandbox = !repository && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
+      // Ignored by `codex exec` today (see `fromRepository`); said anyway, so a
+      // Codex that starts honouring it asks rather than runs.
+      const approval = repository ? "untrusted" : "never"
       const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", `approval_policy="${approval}"`]
       if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []

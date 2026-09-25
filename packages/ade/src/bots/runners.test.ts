@@ -379,10 +379,25 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
     expect(args.some((arg) => arg.startsWith("approval_policy="))).toBe(true)
   })
 
+  test("Codex: sempre in sola lettura, perché codex exec ignora approval_policy (review B3, A1)", () => {
+    for (const spec of [
+      { bot: fromRepo, message: "x" },
+      { bot: fromRepo, message: "x", sessionId: "t-1" },
+      { bot: fromRepo, message: "x", outbox: "C:/mailbox/outbox" },
+    ]) {
+      const { args, cwd } = turnCommand(runnerById("codex"), spec)
+      expect(args).toContain('sandbox_mode="read-only"')
+      expect(args.join(" ")).not.toContain("workspace-write")
+      expect(cwd).toBeUndefined()
+    }
+  })
+
   test("un bot dell'utente resta com'era", () => {
     const claude = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args
     expect(claude[claude.indexOf("--allowedTools") + 1]).toContain("Bash")
     expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("local")
-    expect(turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args).toContain('approval_policy="never"')
+    const codex = turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args
+    expect(codex).toContain('approval_policy="never"')
+    expect(codex).toContain('sandbox_mode="workspace-write"')
   })
 })
