@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { createTalkArchive } from "./store"
+import { createTalkArchive, migrateTalkKeys, type TalkDisk } from "./store"
 import {
   TALK_ARCHIVE_MAX,
   TOOL_OUTPUT_MAX,
   answerKeys,
+  TALK_KEY_PREFIX,
   appendMessage,
   applyExit,
   applyLine,
@@ -311,6 +312,14 @@ describe("storage", () => {
     expect(disk.get(keyA)).not.toContain("sk-")
   })
 
+  test("a bot message that repeats a key does not keep it", () => {
+    const key = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
+    const talk = appendMessage(emptyTalk(), { role: "bot", text: `ho letto ${key}` }, T0)
+    expect(talk.messages[0]?.text).not.toContain(key)
+    expect(serializeTalk(talk)).not.toContain(key)
+    expect(serializeTalk(talk)).toContain("[nascosto]")
+  })
+
   test("a burst of lines is one write, not one per line", () => {
     const disk = new Map<string, string>()
     const queued: (() => void)[] = []
@@ -332,5 +341,107 @@ describe("storage", () => {
     expect(queued).toHaveLength(1)
     queued[0]!()
     expect(disk.size).toBe(1)
+  })
+})
+
+function memoryDisk(initial: Record<string, string> = {}): TalkDisk & { readonly data: Map<string, string> } {
+  const data = new Map(Object.entries(initial))
+  return {
+    data,
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => void data.set(key, value),
+    removeItem: (key) => void data.delete(key),
+    keys: () => [...data.keys()],
+  }
+}
+
+describe("old thread keys", () => {
+  const secret = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
+
+  test("a large project thread moves under the new key, capped, and the old key is gone", () => {
+    const path = "C:/proj/.nikcli/agent/revisore.md"
+    const old = `${TALK_KEY_PREFIX}${path}`
+    const disk = memoryDisk({
+      [old]: JSON.stringify({
+        sessionId: "ses_old",
+        messages: [
+          { id: "t-1", role: "tool", tool: "bash", text: "cat .env", output: `${secret}${"y".repeat(300_000)}`, at: 1 },
+          { id: "b-1", role: "bot", text: `ecco ${secret}`, at: 2 },
+        ],
+        tokens: 3,
+        costUsd: 0,
+        updatedAt: 2,
+      }),
+    })
+    migrateTalkKeys(disk, ["C:/proj"], "C:/proj")
+    expect(disk.data.has(old)).toBe(false)
+    const next = disk.data.get(talkKey(path, "C:/proj"))
+    expect(next).toBeDefined()
+    expect(next!.length).toBeLessThanOrEqual(TALK_ARCHIVE_MAX)
+    expect(next).not.toContain(secret)
+    expect(parseTalk(next).sessionId).toBe("ses_old")
+  })
+
+  test("a global bot's old thread follows the open project and drops the session id", () => {
+    const path = "C:/Users/me/AppData/Roaming/nikcli/agent/revisore.md"
+    const old = `${TALK_KEY_PREFIX}${path}`
+    const disk = memoryDisk({
+      [old]: JSON.stringify({
+        sessionId: "ses_global",
+        messages: [{ id: "u-1", role: "user", text: "ciao", at: 1 }],
+        tokens: 0,
+        costUsd: 0,
+        updatedAt: 1,
+      }),
+    })
+    migrateTalkKeys(disk, ["C:/proj"], "C:/proj")
+    expect(disk.data.has(old)).toBe(false)
+    const stored = parseTalk(disk.data.get(talkKey(path, "C:/proj")))
+    expect(stored.sessionId).toBeUndefined()
+    expect(stored.messages).toHaveLength(1)
+  })
+
+  test("a value that cannot be stored still loses the old key", () => {
+    const path = "C:/nope.md"
+    const old = `${TALK_KEY_PREFIX}${path}`
+    const disk = memoryDisk({ [old]: "{" })
+    disk.setItem = () => {
+      throw new Error("piena")
+    }
+    migrateTalkKeys(disk, [], "")
+    expect(disk.data.has(old)).toBe(false)
+  })
+})
+
+describe("a full archive", () => {
+  test("drops the least recent thread and retries the write once", () => {
+    const keep = talkKey("/b.md", "C:/proj")
+    const drop = talkKey("/a.md", "C:/proj")
+    const fresh = talkKey("/c.md", "C:/proj")
+    const data = new Map<string, string>([
+      [drop, JSON.stringify({ messages: [], updatedAt: 1 })],
+      [keep, JSON.stringify({ messages: [], updatedAt: 50 })],
+    ])
+    let blocked = true
+    const disk: TalkDisk = {
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => {
+        if (blocked && key === fresh) {
+          const error = new Error("quota")
+          error.name = "QuotaExceededError"
+          throw error
+        }
+        data.set(key, value)
+      },
+      removeItem: (key) => {
+        data.delete(key)
+        blocked = false
+      },
+      keys: () => [...data.keys()],
+    }
+    createTalkArchive(disk).flush(fresh, appendMessage(emptyTalk(), { role: "bot", text: "ok" }, T0))
+    expect(data.has(fresh)).toBe(true)
+    expect(data.has(drop)).toBe(false)
+    expect(data.has(keep)).toBe(true)
   })
 })

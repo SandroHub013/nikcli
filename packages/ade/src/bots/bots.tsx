@@ -45,6 +45,7 @@ import { runTurn } from "./turn"
 import {
   createBot,
   createTalkArchive,
+  migrateTalkKeys,
   deleteBot,
   listBots,
   listModels,
@@ -88,16 +89,32 @@ let openProject = ""
 /** Project pinned while a turn runs, so a switch does not file that turn under the new one. */
 const pinnedProject = new Map<string, string>()
 
-const archive = createTalkArchive({
-  getItem: (key) => {
+const talkDisk = {
+  getItem: (key: string) => {
     try {
       return localStorage.getItem(key)
     } catch {
       return null
     }
   },
-  setItem: (key, value) => localStorage.setItem(key, value),
-})
+  setItem: (key: string, value: string) => localStorage.setItem(key, value),
+  removeItem: (key: string) => localStorage.removeItem(key),
+  keys: (): string[] => {
+    const found: string[] = []
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key) found.push(key)
+      }
+    } catch {
+      // Storage blocked: there is nothing old to move.
+    }
+    return found
+  },
+}
+
+const archive = createTalkArchive(talkDisk)
+let legacyMoved = false
 
 function readStored(path: string): Talk {
   return archive.read(talkKey(path, openProject))
@@ -178,6 +195,11 @@ const shared = createRoot(() => {
     const next = root ?? ""
     if (next === openProject) return
     openProject = next
+    // The first real project, not the empty value the signal starts with: a global bot's old thread lands here.
+    if (!legacyMoved && root !== undefined) {
+      legacyMoved = true
+      migrateTalkKeys(talkDisk, next ? [next] : [], next)
+    }
     setTalks((all) => {
       const kept: Record<string, Talk> = {}
       for (const [path, talk] of Object.entries(all)) {

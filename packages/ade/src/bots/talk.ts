@@ -281,7 +281,7 @@ function forStorage<T extends { readonly role: TalkRole; readonly text: string; 
       ...(message.output !== undefined ? { output: limitToolOutput(message.output) } : {}),
     }
   }
-  if (message.role === "error") return { ...message, text: scrubSecrets(message.text) }
+  if (message.role === "error" || message.role === "bot") return { ...message, text: scrubSecrets(message.text) }
   return message
 }
 
@@ -606,6 +606,9 @@ export function parseTalk(raw: string | null | undefined): Talk {
   }
 }
 
+/** Prefix of every stored thread. A newline after it means the project is part of the key. */
+export const TALK_KEY_PREFIX = "ade.bots.talk:"
+
 /**
  * Where a bot's thread is kept.
  *
@@ -614,5 +617,10 @@ export function parseTalk(raw: string | null | undefined): Talk {
  * session id must not follow it into the next one.
  */
 export function talkKey(path: string, project = ""): string {
-  return `ade.bots.talk:${project}\n${path}`
+  return `${TALK_KEY_PREFIX}${project}\n${path}`
+}
+
+/** A thread saved before the project was part of the key: `ade.bots.talk:<path>`, with no newline. */
+export function isLegacyTalkKey(key: string): boolean {
+  return key.startsWith(TALK_KEY_PREFIX) && !key.slice(TALK_KEY_PREFIX.length).includes("\n")
 }
