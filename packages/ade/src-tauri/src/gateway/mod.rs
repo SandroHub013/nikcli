@@ -18,7 +18,7 @@ mod store;
 
 pub use adapter::Platform;
 use adapter::Adapter;
-use hub::{check_bot, AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo};
+use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -84,12 +84,13 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
         Arc::new(crate::secrets::SystemVault),
         service,
         Arc::new(store::Store::new(path)),
+        Arc::new(adapter_for),
     );
     Ok(state.0.get_or_init(|| Arc::new(made)).clone())
 }
 
 /// The adapter for `platform`. None exists yet: each comes with its own piece.
-fn adapter_for(platform: Platform, _token: &str) -> Result<Arc<dyn Adapter>, String> {
+fn adapter_for(platform: Platform, _token: &str, _cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     Err(format!("il gateway per {} non è ancora disponibile", platform.id()))
 }
 
@@ -118,14 +119,11 @@ pub async fn gateway_set_enabled(
     enabled: bool,
     project: Option<String>,
 ) -> Result<(), String> {
-    check_bot(&bot)?;
     let hub = hub(&app)?;
     if !enabled {
         return hub.stop(&bot, platform);
     }
-    let token = hub.token(&bot, platform)?.ok_or_else(|| "manca il token del bot per questa piattaforma".to_string())?;
-    let adapter = adapter_for(platform, &token)?;
-    hub.start(&bot, platform, project.as_deref().unwrap_or_default(), adapter)
+    hub.start(&bot, platform, project.as_deref().unwrap_or_default())
 }
 
 /// A reply to a chat an authorized sender wrote from; known secrets are taken out first.

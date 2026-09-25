@@ -149,13 +149,21 @@ struct Running {
     live: Arc<Mutex<Live>>,
 }
 
+/// Builds a platform's adapter from the bot's token and where its stream was
+/// last read up to.
+pub type Connect = Arc<dyn Fn(Platform, &str, Option<String>) -> Result<Arc<dyn Adapter>, String> + Send + Sync>;
+
 pub struct Hub {
     env: Arc<dyn Env>,
     vault: Arc<dyn Vault>,
     /// The keychain service the tokens are filed under, apart from the API keys.
     service: String,
     store: Arc<Store>,
+    connect: Connect,
     links: Mutex<HashMap<(String, Platform), Running>>,
+    /// Links switched on that could not start (no token, a platform refused):
+    /// the panel shows why, and they stay on for the user to fix.
+    failed: Mutex<HashMap<(String, Platform), String>>,
     /// The first pause after a failed read, and the longest.
     backoff: (Duration, Duration),
 }
@@ -194,13 +202,15 @@ fn check_token(token: &str) -> Result<(), String> {
 }
 
 impl Hub {
-    pub fn new(env: Arc<dyn Env>, vault: Arc<dyn Vault>, service: String, store: Arc<Store>) -> Hub {
+    pub fn new(env: Arc<dyn Env>, vault: Arc<dyn Vault>, service: String, store: Arc<Store>, connect: Connect) -> Hub {
         Hub {
             env,
             vault,
             service,
             store,
+            connect,
             links: Mutex::new(HashMap::new()),
+            failed: Mutex::new(HashMap::new()),
             backoff: (Duration::from_secs(1), Duration::from_secs(300)),
         }
     }
@@ -215,11 +225,16 @@ impl Hub {
         self.links.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    fn failed(&self) -> std::sync::MutexGuard<'_, HashMap<(String, Platform), String>> {
+        self.failed.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /* ── the token ─────────────────────────────────────────────────────── */
 
     /// Saves the bot's token for `platform` in the keychain. The same token on
     /// another bot or platform is refused: two gateways reading one bot
-    /// account would each take half of its messages.
+    /// account would each take half of its messages. A gateway switched on
+    /// starts again with the new token; the old one is no longer read.
     pub fn set_token(&self, bot: &str, platform: Platform, token: &str) -> Result<(), String> {
         check_bot(bot)?;
         let token = token.trim();
@@ -236,13 +251,18 @@ impl Hub {
             }
             link.token_hash = Some(hash.clone());
             Ok(())
-        })
+        })?;
+        if self.store.link(bot, platform).is_some_and(|link| link.enabled) {
+            self.relaunch(bot, platform);
+        }
+        Ok(())
     }
 
     /// Forgets the token: the gateway stops and is switched off.
     pub fn clear_token(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
         self.halt(bot, platform);
+        self.failed().remove(&(bot.to_string(), platform));
         self.vault.delete(&self.service, &token_name(bot, platform))?;
         self.store.update(bot, platform, |link, _| {
             link.token_hash = None;
@@ -269,18 +289,53 @@ impl Hub {
 
     /* ── on and off ────────────────────────────────────────────────────── */
 
-    /// Switches the gateway on with `adapter`, its turns fixed to `project`.
-    pub fn start(&self, bot: &str, platform: Platform, project: &str, adapter: Arc<dyn Adapter>) -> Result<(), String> {
+    /// Switches the gateway on, its turns fixed to `project`.
+    pub fn start(&self, bot: &str, platform: Platform, project: &str) -> Result<(), String> {
         check_bot(bot)?;
         if project.trim().is_empty() {
             return Err("scegli il progetto in cui gireranno i turni da chat".into());
         }
+        let adapter = self.connect(bot, platform)?;
         self.halt(bot, platform);
         self.store.update(bot, platform, |link, _| {
             link.enabled = true;
             link.project = Some(project.to_string());
             Ok(())
         })?;
+        self.launch(bot, platform, adapter);
+        Ok(())
+    }
+
+    /// The platform's adapter, with the bot's token and the saved position.
+    fn connect(&self, bot: &str, platform: Platform) -> Result<Arc<dyn Adapter>, String> {
+        let token = self.token(bot, platform)?.ok_or_else(|| "manca il token del bot per questa piattaforma".to_string())?;
+        let cursor = self.store.link(bot, platform).and_then(|link| link.cursor);
+        (self.connect)(platform, &token, cursor).map_err(|error| redact(&error, &[token]))
+    }
+
+    /// Starts a link that is switched on again, from what is saved: after a
+    /// new token, or when ADE opens. If it cannot, it stays on with the reason.
+    fn relaunch(&self, bot: &str, platform: Platform) {
+        self.halt(bot, platform);
+        match self.connect(bot, platform) {
+            Ok(adapter) => self.launch(bot, platform, adapter),
+            Err(error) => {
+                self.env.log(&format!("gateway {} {}: non riparte: {error}", platform.id(), &bot_key(bot)[..8]));
+                self.env.status(&LinkStatus {
+                    bot: bot.to_string(),
+                    platform,
+                    running: false,
+                    connected: false,
+                    last_error: Some(error.clone()),
+                    last_message_ms: None,
+                });
+                self.failed().insert((bot.to_string(), platform), error);
+            }
+        }
+    }
+
+    fn launch(&self, bot: &str, platform: Platform, adapter: Arc<dyn Adapter>) {
+        self.failed().remove(&(bot.to_string(), platform));
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live::default()));
         let task = Task {
@@ -295,13 +350,13 @@ impl Hub {
         };
         tokio::spawn(task.run(stopped));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, live });
-        Ok(())
     }
 
     /// Switches the gateway off, and remembers it is off.
     pub fn stop(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
         self.halt(bot, platform);
+        self.failed().remove(&(bot.to_string(), platform));
         self.store.update(bot, platform, |link, _| {
             link.enabled = false;
             Ok(())
@@ -451,6 +506,7 @@ impl Hub {
 
     pub fn status(&self) -> Vec<StatusInfo> {
         let links = self.links();
+        let failed = self.failed();
         self.store
             .read()
             .links
@@ -464,7 +520,7 @@ impl Hub {
                     capabilities: running.map(|running| running.adapter.capabilities()),
                     running: running.is_some(),
                     connected: live.connected,
-                    last_error: live.last_error,
+                    last_error: live.last_error.or_else(|| failed.get(&(link.bot.clone(), link.platform)).cloned()),
                     last_message_ms: live.last_message_ms,
                     has_token: link.token_hash.is_some(),
                     enabled: link.enabled,
@@ -709,10 +765,14 @@ mod tests {
         }
     }
 
+    /// Every adapter the hub asked for, with the token and position it was given.
+    type Made = Arc<Mutex<Vec<(String, Option<String>, Arc<FakeAdapter>, Feed)>>>;
+
     struct Setup {
         hub: Hub,
         env: Arc<Recorder>,
         path: std::path::PathBuf,
+        made: Made,
     }
 
     fn setup(name: &str) -> Setup {
@@ -723,10 +783,28 @@ mod tests {
 
     /// A hub on a state file that may already hold something: ADE started again.
     fn setup_at(path: std::path::PathBuf) -> Setup {
+        setup_with(path, Arc::new(MapVault::default()))
+    }
+
+    fn setup_with(path: std::path::PathBuf, vault: Arc<MapVault>) -> Setup {
         let env = Arc::new(Recorder::default());
-        let hub = Hub::new(env.clone(), Arc::new(MapVault::default()), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())))
+        let made: Made = Arc::default();
+        let record = made.clone();
+        let connect: Connect = Arc::new(move |_platform, token: &str, cursor: Option<String>| {
+            let (adapter, feed) = FakeAdapter::new();
+            record.lock().unwrap().push((token.to_string(), cursor, adapter.clone(), feed));
+            Ok(adapter as Arc<dyn Adapter>)
+        });
+        let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
             .with_backoff(Duration::from_millis(5), Duration::from_millis(20));
-        Setup { hub, env, path }
+        Setup { hub, env, path, made }
+    }
+
+    /// The last adapter the hub made, and the feed that drives it.
+    fn last_made(setup: &Setup) -> (Arc<FakeAdapter>, Feed) {
+        let made = setup.made.lock().unwrap();
+        let (_, _, adapter, feed) = made.last().expect("nessun adapter creato");
+        (adapter.clone(), feed.clone())
     }
 
     fn authorize(setup: &Setup, id: &str) {
@@ -751,9 +829,11 @@ mod tests {
     }
 
     fn start(setup: &Setup) -> (Arc<FakeAdapter>, Feed) {
-        let (adapter, feed) = FakeAdapter::new();
-        setup.hub.start(BOT, Platform::Fake, "C:/progetto", adapter.clone()).unwrap();
-        (adapter, feed)
+        if setup.hub.token(BOT, Platform::Fake).unwrap().is_none() {
+            setup.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        }
+        setup.hub.start(BOT, Platform::Fake, "C:/progetto").unwrap();
+        last_made(setup)
     }
 
     /// The code in the pairing message sent to `chat`, as the stranger reads it.
@@ -933,7 +1013,7 @@ mod tests {
         assert!(!status[0].running);
         assert!(status[0].capabilities.is_none());
         assert_eq!(status[0].project.as_deref(), Some("C:/progetto"));
-        assert!(s.hub.start(BOT, Platform::Fake, "  ", FakeAdapter::new().0).is_err());
+        assert!(s.hub.start(BOT, Platform::Fake, "  ").is_err());
     }
 
     #[tokio::test]
@@ -1008,6 +1088,43 @@ mod tests {
         assert!(list.pending.is_empty());
         assert_eq!(list.attempts_left, 3);
         assert_eq!(adapter.sent.lock().unwrap().len(), 3, "due codici e la conferma di 7, nient'altro");
+    }
+
+    #[tokio::test]
+    async fn a_new_token_on_a_running_gateway_starts_it_again_with_that_token() {
+        let s = setup("new-token");
+        authorize(&s, "42");
+        let (old, old_feed) = start(&s);
+        assert_eq!(s.made.lock().unwrap()[0].0, TOKEN);
+        let new_token = "987654321:ALTRO-token-di-prova_ZyXwVuTsRqPoNm";
+        s.hub.set_token(BOT, Platform::Fake, new_token).unwrap();
+        assert_eq!(s.made.lock().unwrap().len(), 2);
+        assert_eq!(s.made.lock().unwrap()[1].0, new_token);
+        let (new, new_feed) = last_made(&s);
+        // The old adapter is no longer read; the new one is, and answers go through it.
+        let _ = old_feed.send(Ok(vec![message("1", "c42", "42", "al token vecchio")]));
+        new_feed.send(Ok(vec![message("2", "c42", "42", "al token nuovo")])).unwrap();
+        eventually("il messaggio al token nuovo", || s.env.messages.lock().unwrap().len() == 1).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let texts: Vec<String> = s.env.messages.lock().unwrap().iter().map(|m| m.text.clone()).collect();
+        assert_eq!(texts, vec!["al token nuovo"]);
+        s.hub.send(BOT, Platform::Fake, "c42", "risposta").await.unwrap();
+        assert_eq!(new.sent.lock().unwrap().len(), 1);
+        assert!(old.sent.lock().unwrap().is_empty());
+        // A gateway switched off stays off when its token changes.
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        assert_eq!(s.made.lock().unwrap().len(), 2);
+        assert!(!s.hub.status()[0].running);
+    }
+
+    #[tokio::test]
+    async fn switching_on_without_a_token_is_refused() {
+        let s = setup("no-token");
+        let refused = s.hub.start(BOT, Platform::Fake, "C:/progetto").unwrap_err();
+        assert!(refused.contains("manca il token"), "{refused}");
+        assert!(s.made.lock().unwrap().is_empty());
+        assert!(s.hub.status().iter().all(|status| !status.enabled));
     }
 
     #[tokio::test]
