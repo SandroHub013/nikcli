@@ -89,6 +89,9 @@ pub struct PairingRequest {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PairingInfo {
+    /// Whether a stranger writing now gets a code.
+    pub open: bool,
+    pub open_until_ms: Option<u64>,
     pub pending: Vec<PairingRequest>,
     pub authorized: Vec<AuthorizedInfo>,
     pub locked_until_ms: Option<u64>,
@@ -355,6 +358,8 @@ impl Hub {
         let mut pairing = link.pairing.clone();
         pairing.prune(now);
         Ok(PairingInfo {
+            open: pairing.is_open(!link.authorized.is_empty(), now),
+            open_until_ms: pairing.open_until_ms,
             pending: pairing.pending.iter().map(|pending| pairing_request(bot, platform, pending)).collect(),
             authorized: link
                 .authorized
@@ -415,6 +420,14 @@ impl Hub {
         })?;
         self.env.log(&format!("gateway {} {}: autorizzazione revocata in ADE", platform.id(), &bot_key(bot)[..8]));
         Ok(())
+    }
+
+    /// The user asks to pair one more account: for 10 minutes, or until one is
+    /// approved, a stranger writing gets a code. Returns until when.
+    pub fn pairing_open(&self, bot: &str, platform: Platform) -> Result<u64, String> {
+        check_bot(bot)?;
+        let now = self.env.now_ms();
+        self.store.update(bot, platform, |link, _| Ok(link.pairing.open(now)))
     }
 
     /// The user refused a request from the panel. Nothing is sent to the stranger.
@@ -592,7 +605,8 @@ impl Task {
         let now = self.env.now_ms();
         let name = redact(&message.sender.name, &self.secrets);
         let outcome = self.store.update(&self.bot, self.platform, |link, _| {
-            link.pairing.request(&message.sender.id, &name, &message.chat, now, &mut authz::os_random)
+            let anyone_paired = !link.authorized.is_empty();
+            link.pairing.request(&message.sender.id, &name, &message.chat, anyone_paired, now, &mut authz::os_random)
         });
         let (code, pending) = match outcome {
             Ok(Request::Code { code, pending }) => (code, pending),
@@ -989,6 +1003,31 @@ mod tests {
         assert_eq!(list.authorized.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), vec!["43"]);
         // Only the one reply to 43 went out; nothing told 42 of the revocation.
         assert!(adapter.sent.lock().unwrap().iter().all(|(chat, text)| chat != "c42" || text.starts_with("Codice di abbinamento")));
+    }
+
+    #[tokio::test]
+    async fn once_an_account_is_paired_a_stranger_gets_silence_until_ade_opens_pairing() {
+        let s = setup("window");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", "chi sei?")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(adapter.sent.lock().unwrap().is_empty());
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        assert!(!s.hub.pairing_list(BOT, Platform::Fake).unwrap().open);
+        // The user pairs a second account of theirs.
+        let until = s.hub.pairing_open(BOT, Platform::Fake).unwrap();
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.open);
+        assert_eq!(list.open_until_ms, Some(until));
+        feed.send(Ok(vec![message("2", "c43", "43", "sono io")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        let code = code_sent_to(&adapter, "c43");
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+        assert!(!s.hub.pairing_list(BOT, Platform::Fake).unwrap().open, "si chiude con l'abbinamento");
+        feed.send(Ok(vec![message("3", "c8", "8", "e io?")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert_eq!(adapter.sent.lock().unwrap().len(), 2, "il codice a 43 e la sua conferma, niente a 8");
     }
 
     #[tokio::test]

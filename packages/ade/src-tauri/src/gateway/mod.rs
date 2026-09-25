@@ -165,6 +165,13 @@ pub async fn gateway_pairing_revoke(app: AppHandle, bot: String, platform: Platf
     hub(&app)?.pairing_revoke(&bot, platform, &sender)
 }
 
+/// Opens pairing for 10 minutes, to add one more account once one is paired.
+/// Returns until when, in ms.
+#[tauri::command]
+pub async fn gateway_pairing_open(app: AppHandle, bot: String, platform: Platform) -> Result<u64, String> {
+    hub(&app)?.pairing_open(&bot, platform)
+}
+
 #[tauri::command]
 pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platform, request: String) -> Result<(), String> {
     hub(&app)?.pairing_reject(&bot, platform, &request)

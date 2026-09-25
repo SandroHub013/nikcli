@@ -10,6 +10,12 @@
 //! hour; a sender gets at most one every 10 minutes; at most 3 wait at once;
 //! 5 wrong codes typed in ADE lock approvals for an hour. Everything here is
 //! saved with the link, so a restart forgets none of it.
+//!
+//! Codes go out only while pairing is open: until the first account is
+//! paired, and after that for 10 minutes each time the user asks for it in
+//! ADE. The bots answer only the user's own accounts (D92), so once one is in,
+//! a stranger writing gets silence rather than a code — no requests to wade
+//! through, and nothing that says the bot is there.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,6 +27,8 @@ pub const REQUEST_EVERY_MS: u64 = 10 * 60 * 1000;
 pub const MAX_PENDING: usize = 3;
 pub const MAX_FAILURES: u32 = 5;
 pub const LOCKOUT_MS: u64 = 60 * 60 * 1000;
+/// How long pairing stays open when the user opens it from ADE.
+pub const OPEN_MS: u64 = 10 * 60 * 1000;
 /// How much of a sender's name is kept: it is untrusted text, for display only.
 const NAME_LEN: usize = 64;
 
@@ -38,6 +46,9 @@ pub struct Pairing {
     pub failures: u32,
     #[serde(default)]
     pub locked_until_ms: Option<u64>,
+    /// Until when the user opened pairing from ADE, with someone already paired.
+    #[serde(default)]
+    pub open_until_ms: Option<u64>,
 }
 
 /// A request waiting for the user. Holds the code's hash, never the code.
@@ -70,7 +81,7 @@ pub enum Request {
     Code { code: String, pending: Pending },
     /// They already got one less than 10 minutes ago: nothing is sent.
     Waiting,
-    /// Three requests already wait for the user, or approvals are locked.
+    /// Pairing is not open, three requests already wait, or approvals are locked.
     Closed,
 }
 
@@ -138,16 +149,36 @@ impl Pairing {
         if self.locked_until_ms.is_some_and(|until| until <= now) {
             self.locked_until_ms = None;
         }
+        if self.open_until_ms.is_some_and(|until| until <= now) {
+            self.open_until_ms = None;
+        }
+    }
+
+    /// Whether a stranger writing gets a code: always while nobody is paired,
+    /// otherwise only while the user has pairing open.
+    pub fn is_open(&self, anyone_paired: bool, now: u64) -> bool {
+        !anyone_paired || self.open_until_ms.is_some_and(|until| until > now)
+    }
+
+    /// The user asked, from ADE, to pair one more account.
+    pub fn open(&mut self, now: u64) -> u64 {
+        let until = now + OPEN_MS;
+        self.open_until_ms = Some(until);
+        until
     }
 
     pub fn locked(&self, now: u64) -> bool {
         self.locked_until_ms.is_some_and(|until| until > now)
     }
 
-    /// A stranger wrote from `chat`: a code for them, unless they just got one
-    /// or no more requests may wait. A new code replaces their previous one.
-    pub fn request(&mut self, sender: &str, name: &str, chat: &str, now: u64, random: Random) -> Result<Request, String> {
+    /// A stranger wrote from `chat`: a code for them, unless pairing is not
+    /// open, they just got one or no more requests may wait. A new code
+    /// replaces their previous one.
+    pub fn request(&mut self, sender: &str, name: &str, chat: &str, anyone_paired: bool, now: u64, random: Random) -> Result<Request, String> {
         self.prune(now);
+        if !self.is_open(anyone_paired, now) {
+            return Ok(Request::Closed);
+        }
         if self.asked.iter().any(|asked| asked.sender == sender) {
             return Ok(Request::Waiting);
         }
@@ -198,6 +229,8 @@ impl Pairing {
         match found {
             Some(index) => {
                 self.failures = 0;
+                // One account per opening: the next one needs asking again.
+                self.open_until_ms = None;
                 Ok(self.pending.remove(index))
             }
             None => {
@@ -258,7 +291,7 @@ mod tests {
     fn a_code_is_kept_only_as_a_salted_hash_and_opens_its_own_request() {
         let mut random = counter();
         let mut pairing = Pairing::default();
-        let (code, pending) = code_of(pairing.request("42", "Ale", "c42", 0, &mut random).unwrap());
+        let (code, pending) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
         assert_eq!(code.len(), CODE_LEN);
         assert!(code.bytes().all(|b| ALPHABET.contains(&b)));
         let saved = serde_json::to_string(&pairing).unwrap();
@@ -266,7 +299,7 @@ mod tests {
         assert_ne!(pending.request, code.to_lowercase());
         // The same code under another salt hashes differently.
         assert_ne!(code_hash("aa", &code), code_hash("bb", &code));
-        let (other, _) = code_of(pairing.request("7", "Altro", "c7", 0, &mut random).unwrap());
+        let (other, _) = code_of(pairing.request("7", "Altro", "c7", false, 0, &mut random).unwrap());
         assert_ne!(code, other);
         // Typed as read off a phone: lower case, with the dash.
         let approved = pairing.approve(&show(&code).to_lowercase(), 1).unwrap();
@@ -281,7 +314,7 @@ mod tests {
     fn a_code_expires_after_an_hour() {
         let mut random = counter();
         let mut pairing = Pairing::default();
-        let (code, _) = code_of(pairing.request("42", "Ale", "c42", 0, &mut random).unwrap());
+        let (code, _) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
         let late = pairing.approve(&code, CODE_TTL_MS).unwrap_err();
         assert!(late.contains("scaduto"), "{late}");
         assert!(pairing.pending.is_empty());
@@ -291,15 +324,15 @@ mod tests {
     fn one_code_every_ten_minutes_and_at_most_three_waiting() {
         let mut random = counter();
         let mut pairing = Pairing::default();
-        let (first, _) = code_of(pairing.request("42", "Ale", "c42", 0, &mut random).unwrap());
-        assert_eq!(pairing.request("42", "Ale", "c42", REQUEST_EVERY_MS - 1, &mut random).unwrap(), Request::Waiting);
+        let (first, _) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
+        assert_eq!(pairing.request("42", "Ale", "c42", false, REQUEST_EVERY_MS - 1, &mut random).unwrap(), Request::Waiting);
         // After ten minutes a new code replaces the old one.
-        let (second, _) = code_of(pairing.request("42", "Ale", "c42", REQUEST_EVERY_MS, &mut random).unwrap());
+        let (second, _) = code_of(pairing.request("42", "Ale", "c42", false, REQUEST_EVERY_MS, &mut random).unwrap());
         assert_eq!(pairing.pending.len(), 1);
         assert!(pairing.approve(&first, REQUEST_EVERY_MS + 1).is_err());
-        code_of(pairing.request("2", "B", "c2", REQUEST_EVERY_MS, &mut random).unwrap());
-        code_of(pairing.request("3", "C", "c3", REQUEST_EVERY_MS, &mut random).unwrap());
-        assert_eq!(pairing.request("4", "D", "c4", REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
+        code_of(pairing.request("2", "B", "c2", false, REQUEST_EVERY_MS, &mut random).unwrap());
+        code_of(pairing.request("3", "C", "c3", false, REQUEST_EVERY_MS, &mut random).unwrap());
+        assert_eq!(pairing.request("4", "D", "c4", false, REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
         assert_eq!(pairing.pending.len(), 3);
         assert_eq!(pairing.approve(&second, REQUEST_EVERY_MS + 2).unwrap().sender, "42");
     }
@@ -308,7 +341,7 @@ mod tests {
     fn five_wrong_codes_lock_approvals_for_an_hour_and_a_typo_does_not_count() {
         let mut random = counter();
         let mut pairing = Pairing::default();
-        let (code, _) = code_of(pairing.request("42", "Ale", "c42", 0, &mut random).unwrap());
+        let (code, _) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
         let wrong = if code == "AAAAAAAA" { "BBBBBBBB" } else { "AAAAAAAA" };
         // Not a code at all: an I, too short. Nothing counts.
         assert!(pairing.approve("IIIIIIII", 1).unwrap_err().contains("caratteri"));
@@ -322,9 +355,9 @@ mod tests {
         // Locked: even the right code is refused, and no new code goes out.
         assert!(pairing.approve(&code, 2).unwrap_err().contains("riapre tra 60 minuti"));
         assert_eq!(pairing.attempts_left(2), 0);
-        assert_eq!(pairing.request("7", "B", "c7", 3, &mut random).unwrap(), Request::Closed);
+        assert_eq!(pairing.request("7", "B", "c7", false, 3, &mut random).unwrap(), Request::Closed);
         // An hour later it reopens, with five tries again.
-        let (again, _) = code_of(pairing.request("42", "Ale", "c42", LOCKOUT_MS + 1, &mut random).unwrap());
+        let (again, _) = code_of(pairing.request("42", "Ale", "c42", false, LOCKOUT_MS + 1, &mut random).unwrap());
         assert_eq!(pairing.attempts_left(LOCKOUT_MS + 1), MAX_FAILURES);
         assert_eq!(pairing.approve(&again, LOCKOUT_MS + 2).unwrap().sender, "42");
     }
@@ -333,7 +366,7 @@ mod tests {
     fn refusing_from_the_panel_is_not_a_wrong_code() {
         let mut random = counter();
         let mut pairing = Pairing::default();
-        let (code, pending) = code_of(pairing.request("42", "Ale", "c42", 0, &mut random).unwrap());
+        let (code, pending) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
         assert_eq!(pairing.reject(&pending.request).unwrap().sender, "42");
         assert!(pairing.reject(&pending.request).is_err());
         assert_eq!(pairing.failures, 0);
@@ -354,6 +387,24 @@ mod tests {
     #[test]
     fn no_code_without_random_bytes() {
         let mut broken = |_: &mut [u8]| Err::<(), String>("nessuna entropia".into());
-        assert!(Pairing::default().request("42", "Ale", "c42", 0, &mut broken).is_err());
+        assert!(Pairing::default().request("42", "Ale", "c42", false, 0, &mut broken).is_err());
+    }
+
+    #[test]
+    fn once_someone_is_paired_a_code_goes_out_only_while_ade_opened_pairing() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        assert_eq!(pairing.request("7", "B", "c7", true, 0, &mut random).unwrap(), Request::Closed);
+        // Not rate limited by the refusal: nothing was sent.
+        let until = pairing.open(1);
+        assert_eq!(until, 1 + OPEN_MS);
+        let (code, _) = code_of(pairing.request("7", "B", "c7", true, 2, &mut random).unwrap());
+        assert_eq!(pairing.approve(&code, 3).unwrap().sender, "7");
+        // Approving closes it again.
+        assert_eq!(pairing.request("8", "C", "c8", true, 4, &mut random).unwrap(), Request::Closed);
+        // And it closes by itself after ten minutes.
+        pairing.open(10);
+        assert_eq!(pairing.request("8", "C", "c8", true, 10 + OPEN_MS, &mut random).unwrap(), Request::Closed);
+        assert_eq!(pairing.open_until_ms, None);
     }
 }

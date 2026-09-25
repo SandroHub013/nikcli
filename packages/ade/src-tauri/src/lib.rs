@@ -1995,6 +1995,7 @@ pub fn run() {
             gateway::gateway_pairing_approve,
             gateway::gateway_pairing_reject,
             gateway::gateway_pairing_revoke,
+            gateway::gateway_pairing_open,
             serve::nikcli_serve_start,
             serve::nikcli_serve_status,
             serve::nikcli_serve_stop,
