@@ -522,6 +522,9 @@ export const en: Messages = {
   "bots.projectTrust.more": (count) => ` and ${count} more`,
   "bots.projectTrust.refused": (root) =>
     `Bots on nikcli do not start in ${root} until you accept the project's nikcli configuration. Bots on Claude Code and Codex do not read it.`,
+  "bots.ask.failed": (name) => `ADE could not ask you about this project's bot «${name}»: not started.`,
+  "bots.projectTrust.failed": (root) =>
+    `ADE could not ask you about the nikcli configuration of ${root}: bots on nikcli do not start here.`,
   "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",

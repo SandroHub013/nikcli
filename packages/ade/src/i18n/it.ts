@@ -529,6 +529,10 @@ export const it = {
   "bots.projectTrust.more": (count: number) => ` e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
     `I bot su nikcli non partono in ${root} finché non accetti la configurazione di nikcli del progetto. I bot su Claude Code e Codex non la leggono.`,
+  "bots.ask.failed": (name: string) =>
+    `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
+  "bots.projectTrust.failed": (root: string) =>
+    `ADE non è riuscita a farti la domanda sulla configurazione di nikcli di ${root}: i bot su nikcli qui non partono.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",

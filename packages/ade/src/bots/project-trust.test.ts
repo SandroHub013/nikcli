@@ -139,6 +139,15 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
     expect(paths).toEqual([".nikcli/agents/sub/furbo.md"])
   })
 
+  test("una domanda che non si apre è un no, con il motivo sullo schermo (B7)", async () => {
+    const s = setup({ [`${ROOT}/.nikcli/plugin/a.ts`]: "x" })
+    const deps = { ...s.deps, confirm: () => Promise.reject(new Error("dialog.confirm not allowed")) }
+    const result = await admitProject(ROOT, deps)
+    expect(result.ok).toBe(false)
+    expect("problem" in result && result.problem).toContain(ROOT)
+    expect(s.store.get(ROOT)).toBeUndefined()
+  })
+
   test("una domanda aperta non se ne apre una seconda", async () => {
     const s = setup({ [`${ROOT}/.nikcli/plugin/a.ts`]: "x" })
     let answer: (yes: boolean) => void = () => {}

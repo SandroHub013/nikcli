@@ -70,6 +70,19 @@ describe("fiducia nei bot di progetto", () => {
     expect(s.asked).toHaveLength(0)
   })
 
+  test("una domanda che non si apre è un no, con il motivo sullo schermo (B7)", async () => {
+    // In ADE window.confirm è il comando confirm del plugin dialog, che la finestra non ha: rifiuta.
+    const s = setup({ [projectBot.path]: "contenuto" })
+    const deps = { ...s.deps, confirm: () => Promise.reject("dialog.confirm not allowed. Command not found") }
+    const result = await admit(projectBot, deps)
+    expect(result.ok).toBe(false)
+    expect("problem" in result && result.problem).toContain("revisore")
+    expect(s.store.get(projectBot.path)).toBeUndefined()
+    // La domanda non resta «aperta»: il messaggio dopo chiede di nuovo.
+    expect(await admit(projectBot, s.deps)).toEqual({ ok: false })
+    expect(s.asked).toHaveLength(1)
+  })
+
   test("un bot dell'utente (globale) non chiede niente", async () => {
     const s = setup({})
     expect(await admit(globalBot, s.deps)).toEqual({ ok: true })

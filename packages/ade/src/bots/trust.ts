@@ -156,6 +156,10 @@ export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true
   asking.add(bot.path)
   try {
     if (!(await deps.confirm(question))) return { ok: false }
+  } catch {
+    // A question that cannot be put is a no, said on screen: otherwise the
+    // message comes back with no word of why (B7, live in ADE).
+    return { ok: false, problem: t("bots.ask.failed", bot.identifier) }
   } finally {
     asking.delete(bot.path)
   }

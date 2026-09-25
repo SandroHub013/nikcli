@@ -185,6 +185,8 @@ export async function admitProject(
   asking.add(root)
   try {
     if (!(await deps.confirm(question))) return { ok: false, problem: t("bots.projectTrust.refused", root) }
+  } catch {
+    return { ok: false, problem: t("bots.projectTrust.failed", root) }
   } finally {
     asking.delete(root)
   }
