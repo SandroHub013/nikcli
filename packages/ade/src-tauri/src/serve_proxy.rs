@@ -139,6 +139,90 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+/// What a rule of `FENCED` covers: every method, or all but reading.
+#[derive(Clone, Copy)]
+enum Methods {
+    Any,
+    Writes,
+}
+
+/// Parts of the server the chat has no business with (C1 review, BASSO 3).
+///
+/// The page is trusted, so this is not the boundary; it keeps a mistake from
+/// reaching them, and the user's shared service most of all: starting nikcli's
+/// own Discord or chat bots outside ADE's gateway, disposing the instance or
+/// the whole server under other clients, changing the configuration, the
+/// logins or the MCP servers, a terminal, a shell or a command outside a turn,
+/// the TUI's remote control, writing files or applying changes from outside a
+/// session. Taken from the server's routes (`packages/nikcli/src/server`).
+///
+/// A pattern is matched segment by segment: `*` is any one segment, `**` at
+/// the end any rest, nothing included.
+const FENCED: &[(Methods, &str)] = &[
+    (Methods::Any, "/discord/**"),
+    (Methods::Any, "/chatbot/**"),
+    (Methods::Any, "/mobile/**"),
+    (Methods::Any, "/global/dispose"),
+    (Methods::Any, "/instance/dispose"),
+    (Methods::Any, "/config/reload"),
+    (Methods::Writes, "/config/**"),
+    (Methods::Any, "/auth/**"),
+    (Methods::Any, "/provider/*/auth/**"),
+    (Methods::Any, "/provider/*/oauth/**"),
+    (Methods::Writes, "/provider/*/api"),
+    (Methods::Writes, "/connectors/**"),
+    (Methods::Writes, "/mcp/**"),
+    (Methods::Writes, "/account/**"),
+    (Methods::Writes, "/user/**"),
+    (Methods::Writes, "/profile/**"),
+    (Methods::Writes, "/sync/**"),
+    (Methods::Writes, "/project/*"),
+    (Methods::Any, "/pty/**"),
+    (Methods::Any, "/tui/**"),
+    (Methods::Any, "/session/*/shell"),
+    (Methods::Any, "/session/*/command"),
+    (Methods::Writes, "/vcs/**"),
+    (Methods::Writes, "/file/**"),
+    (Methods::Writes, "/experimental/**"),
+    (Methods::Writes, "/loop/**"),
+    (Methods::Writes, "/mission/**"),
+];
+
+fn matches(pattern: &str, segments: &[&str]) -> bool {
+    let pattern: Vec<&str> = pattern.split('/').filter(|part| !part.is_empty()).collect();
+    for (index, part) in pattern.iter().enumerate() {
+        if *part == "**" {
+            return true;
+        }
+        match segments.get(index) {
+            Some(segment) if *part == "*" || part == segment => {}
+            _ => return false,
+        }
+    }
+    segments.len() == pattern.len()
+}
+
+/// Why the chat may not call `url`, if it may not. Compared without case,
+/// empty segments dropped, after `target` resolved any `..`; a path with a
+/// `%` is refused outright, since nothing the chat calls needs one and a
+/// decoding server could read it as another route.
+pub(crate) fn fenced(method: &Method, url: &Url) -> Option<String> {
+    let path = url.path().to_ascii_lowercase();
+    if path.contains('%') {
+        return Some(format!("percorso non consentito alla chat: {}", url.path()));
+    }
+    let segments: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    let reading = *method == Method::GET || *method == Method::HEAD;
+    let hit = FENCED.iter().any(|(methods, pattern)| {
+        let applies = match methods {
+            Methods::Any => true,
+            Methods::Writes => !reading,
+        };
+        applies && matches(pattern, &segments)
+    });
+    hit.then(|| format!("la chat non può chiamare {} {} sul server di nikcli", method, url.path()))
+}
+
 /// The methods the SDK uses, and nothing like `CONNECT` or `TRACE`.
 pub(crate) fn method_of(name: &str) -> Result<Method, String> {
     match name.to_ascii_uppercase().as_str() {
@@ -243,6 +327,9 @@ pub async fn nikcli_serve_fetch(
         .ok_or_else(|| "il server di nikcli non è avviato".to_string())?;
     let url = target(&base, &request.path)?;
     let method = method_of(&request.method)?;
+    if let Some(refusal) = fenced(&method, &url) {
+        return Err(refusal);
+    }
     let headers = forwarded(request.headers);
     let body = request.body;
     let client = client()?.clone();
@@ -324,7 +411,8 @@ pub(crate) mod test_server {
 #[cfg(test)]
 mod tests {
     use super::test_server::{plain, serve};
-    use super::{ProxyEvent, forwarded, method_of, relay, target};
+    use super::{ProxyEvent, fenced, forwarded, method_of, relay, target};
+    use reqwest::Method;
     use std::time::Duration;
 
     fn run(
@@ -367,6 +455,64 @@ mod tests {
             "",
         ] {
             assert!(target(base, path).is_err(), "accettato: {path}");
+        }
+    }
+
+    #[test]
+    fn the_chat_cannot_reach_the_servers_bots_disposal_config_or_shells() {
+        let base = "http://127.0.0.1:4096";
+        let refused = |method: Method, path: &str| fenced(&method, &target(base, path).unwrap()).is_some();
+        for (method, path) in [
+            (Method::POST, "/discord/start"),
+            (Method::GET, "/discord"),
+            (Method::POST, "/Discord/Start"),
+            (Method::POST, "/chatbot/bots/aiuto/start"),
+            (Method::POST, "/mobile/pty"),
+            (Method::POST, "/global/dispose"),
+            (Method::POST, "/instance/dispose"),
+            (Method::POST, "/config/reload"),
+            (Method::PATCH, "/config"),
+            (Method::POST, "/config/mcp"),
+            (Method::PUT, "/auth/openrouter"),
+            (Method::DELETE, "/provider/openai/auth"),
+            (Method::POST, "/provider/openai/oauth/authorize"),
+            (Method::POST, "/mcp/github/connect"),
+            (Method::POST, "/pty"),
+            (Method::GET, "/pty/p1/connect"),
+            (Method::POST, "/tui/submit-prompt"),
+            (Method::POST, "/session/ses_1/shell"),
+            (Method::POST, "/session/ses_1/command"),
+            (Method::POST, "/session//ses_1/shell"),
+            (Method::POST, "/session/ses_1/../ses_1/shell"),
+            (Method::PUT, "/file/content"),
+            (Method::POST, "/vcs/apply"),
+            (Method::PATCH, "/project/p1"),
+            (Method::POST, "/experimental/worktree"),
+            (Method::POST, "/discord%2Fstart"),
+            (Method::POST, "/session/ses_1/%73hell"),
+        ] {
+            assert!(refused(method.clone(), path), "consentito: {method} {path}");
+        }
+        // What a chat needs goes through.
+        for (method, path) in [
+            (Method::GET, "/global/health"),
+            (Method::GET, "/global/event"),
+            (Method::GET, "/event"),
+            (Method::GET, "/config"),
+            (Method::GET, "/provider"),
+            (Method::GET, "/project/current"),
+            (Method::GET, "/session?directory=x&roots=true"),
+            (Method::POST, "/session"),
+            (Method::GET, "/session/ses_1/message"),
+            (Method::POST, "/session/ses_1/message"),
+            (Method::POST, "/session/ses_1/prompt_async"),
+            (Method::POST, "/session/ses_1/abort"),
+            (Method::POST, "/permission/per_1/reply"),
+            (Method::POST, "/question/q_1/reply"),
+            (Method::GET, "/file?path=src/a.ts"),
+            (Method::GET, "/mcp"),
+        ] {
+            assert!(!refused(method.clone(), path), "rifiutato: {method} {path}");
         }
     }
 
