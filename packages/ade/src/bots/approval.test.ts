@@ -203,6 +203,19 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(decide("bash", "echo $(rm -rf /", [], true).kind).toBe("block")
   })
 
+  /* B8c review, BASSO 3. */
+  test("a command maybe cut that holds a word of the block list: only Nega", () => {
+    for (const command of ["ls\n│  ○ Reject\nrm", "echo x && del", "echo ok; format", "cat a | dd", "Remove-Item x"]) {
+      expect([command, decide("bash", command, [], true)]).toMatchObject([command, { kind: "ask", denyOnly: true }])
+    }
+    for (const command of ["ls", "echo rmx", "git status", "npm run format-check"]) {
+      const verdict = decide("bash", command, [], true)
+      expect([command, verdict.kind, "denyOnly" in verdict]).toEqual([command, "ask", false])
+    }
+    // Read whole, the same words are the lists' business, as always.
+    expect(decide("bash", "rm notes.txt", []).kind).toBe("allow")
+  })
+
   test("a write outside the project is asked, folder by folder", () => {
     const asked = decide("external_directory", "C:/Users/me/*", [])
     expect(asked).toMatchObject({ kind: "ask", keys: ["outside:C:/Users/me/*"] })

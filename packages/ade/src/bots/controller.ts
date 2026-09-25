@@ -114,7 +114,16 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(path, (talk) =>
       talk.permission === asked
-        ? { ...talk, permission: { ...asked, reason: verdict.reason, ...(verdict.keys ? { always: verdict.keys } : {}), expiresAt } }
+        ? {
+            ...talk,
+            permission: {
+              ...asked,
+              reason: verdict.reason,
+              ...(verdict.keys ? { always: verdict.keys } : {}),
+              ...(verdict.denyOnly ? { denyOnly: true } : {}),
+              expiresAt,
+            },
+          }
         : talk,
     )
     cancelExpiry(path)
@@ -203,6 +212,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(bot.path).permission
       if (!turn || !asked) return
+      // Only Nega was offered: nothing else is sent, whatever reaches here.
+      if (asked.denyOnly && choice !== "reject") return
       // Every danger of the command: «Sempre» on one must not let the others through (M3).
       if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
       reply(bot.path, turn, choice === "reject" ? "reject" : "once")

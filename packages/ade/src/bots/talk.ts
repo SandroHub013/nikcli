@@ -56,8 +56,10 @@ export interface PendingPermission {
   readonly always?: readonly string[]
   /** When the question becomes a Nega. */
   readonly expiresAt?: number
-  /** The patterns may be cut: read to a `)` that may be the command's own. */
+  /** The patterns may go on past what shows: the question holds rows that mimic the menu. */
   readonly cut?: boolean
+  /** Nega is the only answer (`approval.ts`, `denyOnly`). */
+  readonly denyOnly?: boolean
 }
 
 export interface Talk {

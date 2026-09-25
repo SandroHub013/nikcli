@@ -741,14 +741,16 @@ function Thread(props: {
                   {t("bots.permission.deny")}
                 </button>
                 {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
-                <Show when={(asked().always?.length ?? 0) > 0}>
+                <Show when={!asked().denyOnly && (asked().always?.length ?? 0) > 0}>
                   <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
                     {t("bots.approval.always")}
                   </button>
                 </Show>
-                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
-                  {t("bots.permission.allow")}
-                </button>
+                <Show when={!asked().denyOnly}>
+                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
+                    {t("bots.permission.allow")}
+                  </button>
+                </Show>
               </span>
             </div>
           )}

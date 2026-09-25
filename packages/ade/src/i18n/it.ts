@@ -1353,7 +1353,9 @@ export const it = {
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
   "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
-  "bots.approval.reason.cut": "il comando potrebbe essere più lungo di quello che si legge qui",
+  "bots.approval.reason.cut": "il comando potrebbe continuare oltre quello che sembra: contiene righe che imitano questo menu",
+  "bots.approval.reason.cutBlocked":
+    "il comando potrebbe continuare oltre quello che sembra, e contiene un comando della lista di blocco: si può solo negare",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,

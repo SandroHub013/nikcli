@@ -286,8 +286,19 @@ export const DANGEROUS: readonly CommandRule[] = [
 export type Verdict =
   | { readonly kind: "allow"; readonly keys?: readonly string[] }
   | { readonly kind: "block"; readonly rule: CommandRule }
-  /** `keys` is what «Sempre» would keep, every one; none when it cannot be kept (a command not read whole). */
-  | { readonly kind: "ask"; readonly keys?: readonly string[]; readonly reason: string }
+  /**
+   * `keys` is what «Sempre» would keep, every one; none when it cannot be
+   * kept (a command not read whole). `denyOnly`: the only answer is Nega.
+   */
+  | { readonly kind: "ask"; readonly keys?: readonly string[]; readonly reason: string; readonly denyOnly?: true }
+
+/*
+ * The words of the block list's commands. In a command that may go on past
+ * what shows (`cut`), one of them leaves only Nega (B8c review, BASSO 3):
+ * what follows could be the rest of a command the list refuses.
+ */
+const BLOCK_WORDS =
+  /(?:^|[^\w-])(?:rm|rmdir|rd|del|erase|ri|remove-item|format|format-volume|mkfs(?:\.\w+)?|dd|diskpart|fdisk|wipefs|parted|clear-disk|remove-partition|initialize-disk|shutdown|reboot|poweroff|halt|stop-computer|restart-computer|init|bcdedit|vssadmin|reg|wmic|cipher)(?![\w-])/i
 
 /**
  * What `command` is: blocked, or every kind of danger in it (B8c review,
@@ -320,6 +331,7 @@ export function decide(permission: string, patterns: string, always: Always, cut
     const { blocked, dangers } = classifyCommand(patterns)
     if (blocked) return { kind: "block", rule: blocked }
     // What follows the cut is unknown: never let through unseen, nor on «Sempre».
+    if (cut && BLOCK_WORDS.test(patterns)) return { kind: "ask", reason: t("bots.approval.reason.cutBlocked"), denyOnly: true }
     if (cut) return { kind: "ask", reason: t("bots.approval.reason.cut") }
     if (dangers.length === 0) return { kind: "allow" }
     const keys = dangers.map((rule) => rule.id)

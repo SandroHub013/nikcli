@@ -111,6 +111,13 @@ export function permissionWatcher(deps: {
         talk = permissionAnswered(talk, Date.now())
         return
       }
+      // Only Nega: said in the chat, never put to the phone (BASSO 3).
+      if (verdict.kind === "ask" && verdict.denyOnly) {
+        deps.write(answerKeys("reject"))
+        deps.say(t("gateway.approve.blocked", shownCommand(pending.patterns), verdict.reason))
+        talk = permissionAnswered(talk, Date.now())
+        return
+      }
       if (deps.refuse) {
         deps.write(answerKeys("reject"))
         // Said once per permission: a bot that keeps trying does not flood the chat.

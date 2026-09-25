@@ -1342,7 +1342,9 @@ export const en: Messages = {
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
   "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
-  "bots.approval.reason.cut": "the command may be longer than what can be read here",
+  "bots.approval.reason.cut": "the command may go on past what it seems: it holds rows that mimic this menu",
+  "bots.approval.reason.cutBlocked":
+    "the command may go on past what it seems, and it holds a command of the block list: it can only be denied",
   "bots.approval.reason.outside": "works outside the project folder",
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your nikcli configuration asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,
