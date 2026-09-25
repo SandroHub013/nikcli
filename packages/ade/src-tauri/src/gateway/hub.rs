@@ -630,16 +630,23 @@ impl Task {
     }
 
     async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
+        // `biased`: when a stop and something else are both ready, the stop wins.
         tokio::select! {
+            biased;
             _ = stopped.changed() => return,
             _ = ready.wait_for(|ready| *ready) => {}
         }
         let mut pause = self.backoff.0;
         loop {
             let read = tokio::select! {
+                biased;
                 _ = stopped.changed() => break,
                 read = self.adapter.receive() => read,
             };
+            // Stopped while the batch came in: it is the next adapter's to hand on.
+            if *stopped.borrow() {
+                break;
+            }
             match read {
                 Ok(batch) => {
                     pause = self.backoff.0;
@@ -662,6 +669,7 @@ impl Task {
                         live.last_error = Some(error);
                     });
                     tokio::select! {
+                        biased;
                         _ = stopped.changed() => break,
                         _ = tokio::time::sleep(pause) => {}
                     }
