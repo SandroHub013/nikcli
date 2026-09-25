@@ -90,10 +90,21 @@ describe("isFreeModel", () => {
     expect(isFreeModel({ id: "meta-llama/llama-3.3-70b-instruct:free" })).toBe(true)
   })
 
-  test("recognises free models only when both input and output costs are zero numbers", () => {
-    expect(isFreeModel({ id: "custom/local", cost: { input: 0, output: 0 } })).toBe(true)
-    expect(isFreeModel({ id: "custom/local", cost: { input: 0 } })).toBe(false)
-    expect(isFreeModel({ id: "custom/local", cost: { input: 0, output: 1 } })).toBe(false)
+  test("a zero cost counts as free only for a provider running on the user's machine", () => {
+    expect(isFreeModel({ id: "local/one", providerID: "ollama", cost: { input: 0, output: 0 } })).toBe(true)
+    expect(isFreeModel({ id: "local/two", providerID: "lmstudio", cost: { input: 0, output: 0 } })).toBe(true)
+    expect(isFreeModel({ id: "local/three", providerID: "ollama", cost: { input: 0 } })).toBe(false)
+    expect(isFreeModel({ id: "local/four", providerID: "ollama", cost: { input: 0, output: 1 } })).toBe(false)
+  })
+
+  test("a hosted provider with a zero cost is not free", () => {
+    // What ADE Test showed as a thousand free models: ElevenLabs and the
+    // kilo/* families price at 0 and bill by characters or credits instead.
+    expect(isFreeModel({ id: "elevenlabs/tts-v2", providerID: "elevenlabs", cost: { input: 0, output: 0 } })).toBe(
+      false,
+    )
+    expect(isFreeModel({ id: "kilo/7b", providerID: "kilo", cost: { input: 0, output: 0 } })).toBe(false)
+    expect(isFreeModel({ id: "unknown/zero", cost: { input: 0, output: 0 } })).toBe(false)
   })
 
   test("a nikcli model without cost is not free and does not enter ADE Test", () => {
@@ -129,6 +140,237 @@ describe("isFreeModel", () => {
   })
 })
 
+/** A catalogue like the real one: a text-to-speech family and a hosted
+ * family that both price at 0, one genuinely free model, one local model. */
+const noisyCatalog: ProviderList = {
+  all: [
+    {
+      id: "elevenlabs",
+      name: "ElevenLabs",
+      source: "api",
+      env: ["ELEVENLABS_API_KEY"],
+      options: {},
+      models: {
+        "eleven_v3": {
+          id: "eleven_v3",
+          providerID: "elevenlabs",
+          name: "Eleven v3",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: false,
+            reasoning: false,
+            attachment: false,
+            toolcall: false,
+            input: { text: true, audio: true, image: false, video: false, pdf: false },
+            output: { text: false, audio: true, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+        "eleven_multilingual_v2": {
+          id: "eleven_multilingual_v2",
+          providerID: "elevenlabs",
+          name: "Eleven Multilingual v2",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: false,
+            reasoning: false,
+            attachment: false,
+            toolcall: false,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: false, audio: true, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+      },
+    },
+    {
+      id: "kilo",
+      name: "Kilo",
+      source: "api",
+      env: ["KILO_API_KEY"],
+      options: {},
+      models: {
+        "kilo-7b": {
+          id: "kilo-7b",
+          providerID: "kilo",
+          name: "Kilo 7B",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: true, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+      },
+    },
+    {
+      id: "ollama",
+      name: "Ollama",
+      source: "config",
+      env: [],
+      options: {},
+      models: {
+        "qwen3:8b": {
+          id: "qwen3:8b",
+          providerID: "ollama",
+          name: "Qwen3 8B",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+      },
+    },
+    {
+      id: "nikcli",
+      name: "nikcli",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {
+        "google/gemini-2.5-flash:free": {
+          id: "google/gemini-2.5-flash:free",
+          providerID: "nikcli",
+          name: "Gemini 2.5 Flash",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+        "eleven/tts-v2": {
+          id: "eleven/tts-v2",
+          providerID: "nikcli",
+          name: "Eleven tts via nikcli",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: false,
+            reasoning: false,
+            attachment: false,
+            toolcall: false,
+            input: { text: true, audio: true, image: false, video: false, pdf: false },
+            output: { text: false, audio: true, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+      },
+    },
+  ],
+  default: {},
+  connected: ["elevenlabs", "kilo", "ollama", "nikcli"],
+}
+
+describe("the selector shows chat models, and calls free only what is free (C3-bis)", () => {
+  test("a model that answers in audio or images never reaches the selector", () => {
+    const models = modelsFromProviderList(noisyCatalog, { isTest: false })
+    const ids = models.map((m) => m.id)
+    expect(ids).not.toContain("eleven_v3")
+    expect(ids).not.toContain("eleven_multilingual_v2")
+    expect(ids).not.toContain("eleven/tts-v2")
+  })
+
+  test("a chat model priced at zero on a hosted provider is offered but is not free", () => {
+    const models = modelsFromProviderList(noisyCatalog, { isTest: false })
+    const kilo = models.find((m) => m.id === "kilo-7b")
+    expect(kilo).toBeDefined()
+    expect(kilo!.free).toBe(false)
+    // Not free, so not labelled gratis: this label was the bug.
+    expect(kilo!.label).not.toContain("gratis")
+    expect(kilo!.label).not.toContain("free")
+  })
+
+  test("a local model priced at zero is free", () => {
+    const models = modelsFromProviderList(noisyCatalog, { isTest: false })
+    const local = models.find((m) => m.id === "qwen3:8b")
+    expect(local).toBeDefined()
+    expect(local!.free).toBe(true)
+  })
+
+  test("ADE Test keeps the :free model and the local one, and drops the hosted zero-cost chat model", () => {
+    const models = modelsFromProviderList(noisyCatalog, { isTest: true })
+    const ids = models.map((m) => m.id)
+    expect(ids).toEqual(["qwen3:8b", "google/gemini-2.5-flash:free"])
+    expect(models.every((m) => m.free)).toBe(true)
+  })
+
+  test("a model that says nothing about its capabilities is not thrown away", () => {
+    const list: ProviderList = {
+      all: [
+        {
+          id: "silenzioso",
+          name: "Silenzioso",
+          source: "api",
+          env: [],
+          options: {},
+          models: {
+            "senza-capacities": { id: "senza-capacities", providerID: "silenzioso", cost: { input: 1, output: 2 }, status: "active" } as any,
+            "capacities-vuote": { id: "capacities-vuote", providerID: "silenzioso", cost: { input: 1, output: 2 }, status: "active", capabilities: {} } as any,
+          },
+        },
+      ],
+      default: {},
+      connected: ["silenzioso"],
+    }
+    const models = modelsFromProviderList(list, { isTest: false })
+    expect(models.map((m) => m.id).sort()).toEqual(["capacities-vuote", "senza-capacities"])
+  })
+
+  test("a model that answers in text but cannot call tools does not reach the selector", () => {
+    const list: ProviderList = {
+      all: [
+        {
+          id: "solo-testo",
+          name: "Solo testo",
+          source: "api",
+          env: [],
+          options: {},
+          models: {
+            "no-toolcall": {
+              id: "no-toolcall",
+              providerID: "solo-testo",
+              cost: { input: 1, output: 2, cache: { read: 0, write: 0 } },
+              status: "active",
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: false,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+            } as any,
+          },
+        },
+      ],
+      default: {},
+      connected: ["solo-testo"],
+    }
+    expect(modelsFromProviderList(list, { isTest: false })).toEqual([])
+  })
+})
+
 describe("formatModelPrice and formatModelLabel", () => {
   test("formats free models in Italian as gratis", () => {
     setLocalePreference("it")
@@ -150,6 +392,17 @@ describe("formatModelPrice and formatModelLabel", () => {
 
   test("formats paid models with equal input and output price", () => {
     expect(formatModelPrice({ input: 5, output: 5 }, false)).toBe("$5/M")
+  })
+
+  test("a model that is not free is never labelled gratis, whatever its cost says", () => {
+    setLocalePreference("it")
+    // A hosted provider that prices at 0 and bills by characters instead: the
+    // dash says the price is not per token, without claiming it is free.
+    expect(formatModelPrice({ input: 0, output: 0 }, false)).toBe("—")
+    expect(formatModelLabel("Kilo 7B", { input: 0, output: 0 }, false)).toBe("Kilo 7B (—)")
+    // No price data at all is not a price of zero.
+    expect(formatModelPrice(undefined, false)).toBe("—")
+    expect(formatModelLabel("Sconosciuto", undefined, false)).toBe("Sconosciuto (—)")
   })
 })
 
@@ -323,51 +576,54 @@ describe("Model identity and ModelRef (C3 - Point 5)", () => {
   })
 
   test("disambiguates same model ID across different providers", () => {
+    // Two local providers, so both models are free and both stay in the list.
+    // What this asks is whether one id from two providers stays two models,
+    // not what makes a model free.
     const sharedIdList: ProviderList = {
       all: [
         {
-          id: "providerA",
-          name: "Provider A",
-          source: "custom",
+          id: "ollama",
+          name: "Ollama",
+          source: "config",
           env: [],
           options: {},
           models: {
             "llama-3": {
               id: "llama-3",
               name: "Llama 3 (A)",
-              providerID: "providerA",
+              providerID: "ollama",
               cost: { input: 0, output: 0 },
             } as any,
           },
         },
         {
-          id: "providerB",
-          name: "Provider B",
-          source: "custom",
+          id: "lmstudio",
+          name: "LM Studio",
+          source: "config",
           env: [],
           options: {},
           models: {
             "llama-3": {
               id: "llama-3",
               name: "Llama 3 (B)",
-              providerID: "providerB",
+              providerID: "lmstudio",
               cost: { input: 0, output: 0 },
             } as any,
           },
         },
       ],
       default: {},
-      connected: ["providerA", "providerB"],
+      connected: ["ollama", "lmstudio"],
     }
 
     const models = modelsFromProviderList(sharedIdList, { isTest: true })
     expect(models.length).toBe(2)
 
-    const choiceA = validateSelectedModel({ providerID: "providerA", modelID: "llama-3" }, models, true)
-    const choiceB = validateSelectedModel({ providerID: "providerB", modelID: "llama-3" }, models, true)
+    const choiceA = validateSelectedModel({ providerID: "ollama", modelID: "llama-3" }, models, true)
+    const choiceB = validateSelectedModel({ providerID: "lmstudio", modelID: "llama-3" }, models, true)
 
-    expect(choiceA).toEqual({ providerID: "providerA", modelID: "llama-3" })
-    expect(choiceB).toEqual({ providerID: "providerB", modelID: "llama-3" })
+    expect(choiceA).toEqual({ providerID: "ollama", modelID: "llama-3" })
+    expect(choiceB).toEqual({ providerID: "lmstudio", modelID: "llama-3" })
     expect(sameModel(choiceA, choiceB)).toBe(false)
   })
 
