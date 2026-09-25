@@ -528,7 +528,14 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
     case "turn.failed":
     case "error": {
       const text = errorText(event["error"] ?? event["message"] ?? event)
-      return { ...appendMessage(next, { role: "error", text }, at), status: "error", ...(event["type"] === "turn.failed" ? { ended: true } : {}) }
+      // Codex says a failure twice, as `error` and then `turn.failed`: once on the thread is enough.
+      const last = next.messages.at(-1)
+      const said = last?.role === "error" && last.text === text
+      return {
+        ...(said ? next : appendMessage(next, { role: "error", text }, at)),
+        status: "error",
+        ...(event["type"] === "turn.failed" ? { ended: true } : {}),
+      }
     }
     default:
       return next

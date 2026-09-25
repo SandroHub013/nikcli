@@ -186,6 +186,19 @@ describe("gli eventi di Codex", () => {
   })
 })
 
+describe("un errore di Codex detto due volte", () => {
+  test("error e poi turn.failed con lo stesso testo: sul thread una volta sola (review B7, BASSO 1)", () => {
+    const limit = "You've hit your usage limit."
+    const talk = fold("codex", [
+      `{"type":"error","message":${JSON.stringify(limit)}}`,
+      `{"type":"turn.failed","error":{"message":${JSON.stringify(limit)}}}`,
+    ])
+    expect(talk.messages.filter((message) => message.role === "error" && message.text === limit)).toHaveLength(1)
+    expect(talk.status).toBe("error")
+    expect(talk.ended).toBe(true)
+  })
+})
+
 describe("la risposta finale di un turno", () => {
   test("sono i messaggi del bot dopo l'ultima domanda, senza strumenti né errori", () => {
     const talk = fold("claude", [
