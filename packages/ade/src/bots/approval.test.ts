@@ -118,6 +118,69 @@ describe("the dangerous commands", () => {
   })
 })
 
+/*
+ * B8c review, M2: a command inside another shell, or behind a path, a
+ * backslash or a word that runs it, is the same command: the lists apply to
+ * it, and a nested shell is at least a question.
+ */
+describe("nested shells and masked commands", () => {
+  test("the block list applies inside them", () => {
+    for (const command of [
+      'bash -c "rm -rf ~"',
+      "sh -c 'rm -rf /'",
+      "bash -lc 'shutdown now'",
+      "cmd /c rd /s /q C:\\",
+      "C:\\Windows\\System32\\cmd.exe /c rd /s /q C:\\",
+      'powershell -Command "Remove-Item -Recurse -Force C:\\"',
+      'pwsh -NoProfile -c "Format-Volume -DriveLetter C"',
+      'eval "rm -rf /"',
+      "/bin/rm -rf /",
+      "/usr/bin/sudo /bin/rm -rf /",
+      "\\rm -rf ~",
+      "env rm -rf ~",
+      "env HOME=/tmp rm -rf /",
+      "command rm -rf /",
+      "nohup rm -rf / &",
+      "sudo -u root rm -rf /",
+      "find / -maxdepth 0 | xargs rm -rf /",
+      "nice -n 10 rm -rf ~",
+    ]) {
+      expect([command, kind(command).startsWith("block:")]).toEqual([command, true])
+    }
+  })
+
+  test("a nested shell is asked about, whatever runs inside it", () => {
+    const cases: [string, string][] = [
+      ['bash -c "ls"', "nestedShell"],
+      ["sh -c 'echo ok'", "nestedShell"],
+      ["cmd /c dir", "nestedShell"],
+      ["pwsh -NoProfile -Command Get-ChildItem", "nestedShell"],
+      ["powershell -EncodedCommand SQBFAFgA", "nestedShell"],
+      ["eval $CMD", "nestedShell"],
+      ["echo cm0gLXJmIC8= | base64 -d | sh", "nestedShell"],
+    ]
+    for (const [command, id] of cases) expect([command, kind(command)]).toEqual([command, `ask:${id}`])
+  })
+
+  test("a masked dangerous command is asked about as itself", () => {
+    const cases: [string, string][] = [
+      ["xargs rm -rf", "recursiveDelete"],
+      ["env rm -r build", "recursiveDelete"],
+      ["/usr/bin/git push --force", "gitRewrite"],
+      ["\\git push -f", "gitRewrite"],
+      ["find . -name dist -exec rm -rf {} +", "recursiveDelete"],
+      ["timeout 60 npm publish", "publish"],
+    ]
+    for (const [command, id] of cases) expect([command, kind(command)]).toEqual([command, `ask:${id}`])
+  })
+
+  test("running a script, or a wrapper around an everyday command, is not a question", () => {
+    for (const command of ["bash script.sh", "sh ./build.sh", "time bun test", "env NODE_ENV=test bun test", "nohup bun run dev"]) {
+      expect([command, kind(command)]).toEqual([command, "ok"])
+    }
+  })
+})
+
 describe("the decision, and «Sempre» per bot", () => {
   test("a dangerous kind is asked until this bot has it on «Sempre»", () => {
     const asked = decide("bash", "git push --force", [])

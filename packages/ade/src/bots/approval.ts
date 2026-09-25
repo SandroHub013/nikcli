@@ -41,6 +41,7 @@ type ReasonKey =
   | "bots.approval.reason.database"
   | "bots.approval.reason.publish"
   | "bots.approval.reason.containers"
+  | "bots.approval.reason.nestedShell"
 
 /** Five minutes, as the phone's question (`gateway/approval.ts`): then Nega. */
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000
@@ -58,8 +59,23 @@ export interface CommandRule {
   readonly prefixes: readonly string[]
 }
 
-/* A command word starts the text or follows a separator: `;`, `&`, `|`, `(`, a backtick or a new line. */
-const START = String.raw`(?:^|[;&|(\x60\n]\s*|\bsudo\s+|\bexec\s+)`
+/*
+ * A shell inside the command (B8c review, M2): `bash -c`, `sh -c`, `cmd /c`,
+ * `powershell -Command` (or `-EncodedCommand`, which no list can read) and
+ * `eval`. What follows is a command too, so the lists apply inside it; and
+ * the nesting alone is a danger (`nestedShell`), never let through unasked.
+ */
+const NESTED = String.raw`\b(?:cmd(?:\.exe)?\s+\/[ck]|(?:ba|z|da|k|fi)?sh(?:\.exe)?\s+(?:-\w+\s+)*-\w*c|(?:pwsh|powershell)(?:\.exe)?\s+(?:-\w+\s+)*?-(?:c|command|e|ec|encodedcommand)|eval)\s+`
+/* Words that run the command after them: `env rm`, `xargs rm`, `nohup`, `sudo -u x`, `nice -n 10`. */
+const WRAPPER = String.raw`\b(?:sudo|doas|exec|env|command|builtin|nohup|nice|time|timeout|stdbuf|xargs)\s+(?:[^;&|\n'"]*?\s)?`
+/*
+ * A command word starts the text or follows a separator (`;`, `&`, `|`, `(`,
+ * `{`, a backtick, a new line), a nested shell or a wrapper; a quote may open
+ * it there, and a path (`/bin/rm`, `C:\Windows\System32\cmd.exe`) or a
+ * backslash (`\rm`) may stand before it. A quote anywhere else is a string
+ * (`git commit -m 'rm -rf …'`), not a command.
+ */
+const START = String.raw`(?:^|[;&|({\x60\n]\s*|${NESTED}|${WRAPPER})["']?(?:\\|[^\s;&|'"(]*[\\/])?`
 const ROOT = String.raw`(?:\/|\/\*|~|~\/|\$HOME|\$\{HOME\}|[A-Za-z]:\\?|[A-Za-z]:\\\*|[A-Za-z]:\/)`
 const END = String.raw`(?=\s|$|[;&|)"'])`
 const re = (source: string) => new RegExp(source, "i")
@@ -246,6 +262,24 @@ export const DANGEROUS: readonly CommandRule[] = [
     reason: "bots.approval.reason.containers",
     pattern: re(String.raw`${START}docker\s+(?:system\s+prune|volume\s+(?:rm|prune)|rm\s+-f)\b`),
     prefixes: ["docker system prune", "docker volume rm", "docker volume prune", "docker rm -f"],
+  },
+  {
+    id: "nestedShell",
+    reason: "bots.approval.reason.nestedShell",
+    pattern: re(String.raw`${NESTED}|\bbase64\s+(?:-d|--decode)\b[^;&\n]*\|`),
+    prefixes: [
+      "bash -c",
+      "sh -c",
+      "zsh -c",
+      "cmd /c",
+      "cmd.exe /c",
+      "powershell -Command",
+      "powershell -c",
+      "powershell -EncodedCommand",
+      "pwsh -Command",
+      "pwsh -c",
+      "eval",
+    ],
   },
 ]
 

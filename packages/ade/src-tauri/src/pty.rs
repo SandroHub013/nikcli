@@ -2238,6 +2238,8 @@ mod tests {
         ("deleteRoot", "rm -rf ~/"),
         ("deleteRoot", "rm -r -f $HOME"),
         ("deleteRoot", "sudo rm -rf /"),
+        ("deleteRoot", "/bin/rm -rf /"),
+        ("deleteRoot", "\\rm -rf ~"),
         ("deleteRoot", "rm -rf \"/\""),
         ("deleteRoot", "rm -rf --no-preserve-root /"),
         ("deleteRoot", "rm -rf C:/"),

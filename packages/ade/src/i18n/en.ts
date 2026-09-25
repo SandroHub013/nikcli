@@ -1341,6 +1341,7 @@ export const en: Messages = {
   "bots.approval.reason.database": "drops database tables",
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
+  "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
   "bots.approval.reason.cut": "the command may be longer than what can be read here",
   "bots.approval.reason.outside": "works outside the project folder",
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your nikcli configuration asks to confirm`,

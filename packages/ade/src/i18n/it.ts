@@ -1352,6 +1352,7 @@ export const it = {
   "bots.approval.reason.database": "cancella tabelle di un database",
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
+  "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.cut": "il comando potrebbe essere più lungo di quello che si legge qui",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
