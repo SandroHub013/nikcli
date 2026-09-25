@@ -522,6 +522,8 @@ export const en: Messages = {
   "bots.projectTrust.more": (count) => ` and ${count} more`,
   "bots.projectTrust.refused": (root) =>
     `Bots on nikcli do not start in ${root} until you accept the project's nikcli configuration. Bots on Claude Code and Codex do not read it.`,
+  "bots.ask.yes": "Yes",
+  "bots.ask.no": "No",
   "bots.ask.failed": (name) => `ADE could not ask you about this project's bot «${name}»: not started.`,
   "bots.projectTrust.failed": (root) =>
     `ADE could not ask you about the nikcli configuration of ${root}: bots on nikcli do not start here.`,

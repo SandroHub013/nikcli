@@ -529,6 +529,8 @@ export const it = {
   "bots.projectTrust.more": (count: number) => ` e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
     `I bot su nikcli non partono in ${root} finché non accetti la configurazione di nikcli del progetto. I bot su Claude Code e Codex non la leggono.`,
+  "bots.ask.yes": "Sì",
+  "bots.ask.no": "No",
   "bots.ask.failed": (name: string) =>
     `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
   "bots.projectTrust.failed": (root: string) =>

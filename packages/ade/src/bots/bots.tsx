@@ -29,6 +29,7 @@
  * this file.
  */
 
+import { askUser } from "./ask"
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
 import { every } from "../host/every"
@@ -369,7 +370,7 @@ export function BotsMain(props: BotsMainProps) {
     const verdict = await admit(bot, {
       store: localTrustStore(),
       read: async (path) => (read = await readBotText(path)),
-      confirm: (question) => window.confirm(question),
+      confirm: askUser,
     })
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
@@ -387,7 +388,7 @@ export function BotsMain(props: BotsMainProps) {
       const project = await admitProject(root, {
         store: localTrustStore(PROJECT_TRUST_KEY),
         surface: () => projectSurface(root, projectFs),
-        confirm: (question) => window.confirm(question),
+        confirm: askUser,
       })
       if (!project.ok) {
         if (project.problem) updateTalk(bot.path, (talk) => applyProblem(talk, project.problem!, Date.now()))
