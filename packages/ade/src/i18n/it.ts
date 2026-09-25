@@ -1273,6 +1273,7 @@ export const it = {
   "chat.input.placeholder": "Scrivi un messaggio…",
   "chat.send": "Invia",
   "chat.stop": "Ferma",
+  "chat.stop.failed": "Ferma non è arrivato al server: la risposta continua. Riprova.",
   "chat.writing": "In scrittura",
   "chat.code.text": "testo",
   "chat.code.copied": "Copiato",

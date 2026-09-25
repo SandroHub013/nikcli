@@ -1262,6 +1262,7 @@ export const en: Messages = {
   "chat.input.placeholder": "Type a message…",
   "chat.send": "Send",
   "chat.stop": "Stop",
+  "chat.stop.failed": "Stop did not reach the server: the answer goes on. Try again.",
   "chat.writing": "Writing",
   "chat.code.text": "text",
   "chat.code.copied": "Copied",

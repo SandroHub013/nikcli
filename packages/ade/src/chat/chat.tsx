@@ -32,6 +32,7 @@ import {
 } from "./model"
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
 import { isOpenOn, useFolder } from "./first-use"
+import { stopAnswer } from "./stop"
 import { SessionList } from "./session-list"
 import {
   connectionNotice,
@@ -236,8 +237,8 @@ export function Chat(props: ChatProps) {
   }
 
   const stop = () => {
-    const id = open()
-    if (id) void store.abort(id).catch(() => {})
+    setProblem(undefined)
+    void stopAnswer(store, open(), setProblem)
   }
 
   const chooseModel = (raw: string) => {
