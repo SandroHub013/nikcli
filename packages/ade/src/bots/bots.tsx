@@ -32,9 +32,11 @@
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
 import { askDialog, askYesNo } from "../host/ask"
+import { getHost } from "../host/shell"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
+import { ACCOUNT_PLAN, localAccountStore, type BotAccount } from "./account"
 import { generationSpend, runnerAccount, runnerById, RUNNERS, spendKind, spendLine, type Runner, type SpendKind } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
@@ -156,7 +158,13 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
  * turn with its child processes and gives the plan's place back, and a
  * runner that does not start says so in the thread. See `controller.ts`.
  */
-const turns = createBotTurns({ runTurn: (request) => runTurn(request), talkOf, update: updateTalk })
+const accounts = localAccountStore()
+const turns = createBotTurns({
+  runTurn: (request) => runTurn(request),
+  talkOf,
+  update: updateTalk,
+  accountOf: (path) => accounts.get(path),
+})
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
 function ensureLoaded(paths: readonly string[]) {
@@ -394,6 +402,8 @@ export interface BotsMainProps {
   onLaunch?: (bot: AgentFile) => void
   /** Opens the bot's own file in the editor. */
   onOpenFile?: (path: string) => void
+  /** Opens Impostazioni › Chiavi API. */
+  onOpenKeys?: () => void
 }
 
 /** The conversation and the card, drawn in the main area. */
@@ -534,6 +544,7 @@ export function BotsMain(props: BotsMainProps) {
               {...(gateway ? { gateway } : {})}
               {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
+              {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
               onForget={() => forget(bot())}
               onChanged={() => reload()}
               onDeleted={() => {
@@ -785,13 +796,18 @@ function Thread(props: {
               <>
                 {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
                 {" · "}
-                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+                <LastFigures
+                  {...(turn().mode ? { mode: turn().mode } : {})}
+                  runner={props.bot.runner}
+                  model={turn().model}
+                  tokens={turn().tokens}
+                  costUsd={turn().costUsd}
+                />
                 {" · "}
               </>
             )}
           </Show>
-          {t("bots.conversation.total")}{" "}
-          <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
+          {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
           {t("bots.send")}
@@ -840,8 +856,23 @@ function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots
   return "bots.spend.api"
 }
 
-function Figures(props: { runner?: string; model?: string; tokens: number; costUsd: number }) {
-  const line = () => spendLine({ runnerId: props.runner, model: props.model, tokens: props.tokens, costUsd: props.costUsd })
+function Figures(props: {
+  runner?: string
+  model?: string
+  account?: BotAccount
+  kind?: SpendKind
+  tokens: number
+  costUsd: number
+}) {
+  const line = () =>
+    spendLine({
+      runnerId: props.runner,
+      model: props.model,
+      tokens: props.tokens,
+      costUsd: props.costUsd,
+      ...(props.account ? { account: props.account } : {}),
+      ...(props.kind ? { kind: props.kind } : {}),
+    })
   return (
     <>
       <Show when={props.tokens > 0}>{t("bots.tokens", formatCount(props.tokens))}</Show>
@@ -853,7 +884,59 @@ function Figures(props: { runner?: string; model?: string; tokens: number; costU
           </>
         )}
       </Show>
+      <Show when={line().unreported}>
+        {props.tokens > 0 ? " · " : ""}
+        {t("bots.spend.unreported")}
+      </Show>
     </>
+  )
+}
+
+function LastFigures(props: { runner?: string; model?: string; mode?: SpendKind; tokens: number; costUsd: number }) {
+  const kind = props.mode ?? (props.runner === "claude" || props.runner === "codex" ? "plan" : undefined)
+  return (
+    <Figures
+      {...(kind ? { kind } : {})}
+      runner={props.runner}
+      model={props.model}
+      tokens={props.tokens}
+      costUsd={props.costUsd}
+    />
+  )
+}
+
+/** One total per mode, so a subscription's figures are not added to a key's. */
+function ThreadTotals(props: { runner?: string; model?: string; talk: Talk }) {
+  const rows = () => {
+    const by = props.talk.byMode
+    if (!by) return []
+    return (["plan", "api", "free", "metered"] as const).flatMap((mode) => {
+      const row = by[mode]
+      return row ? [{ mode, tokens: row.tokens, costUsd: row.costUsd }] : []
+    })
+  }
+  return (
+    <Show
+      when={rows().length > 0}
+      fallback={
+        <Figures
+          runner={props.runner}
+          model={props.model}
+          tokens={props.talk.tokens}
+          costUsd={props.runner === "claude" || props.runner === "codex" ? 0 : props.talk.costUsd}
+        />
+      }
+    >
+      <For each={rows()}>
+        {(row, index) => (
+          <>
+            {index() > 0 ? " · " : ""}
+            {t(spendKey(row.mode))}{" "}
+            <Figures kind={row.mode} runner={props.runner} tokens={row.tokens} costUsd={row.costUsd} />
+          </>
+        )}
+      </For>
+    </Show>
   )
 }
 
@@ -877,7 +960,9 @@ function BotCard(props: {
   onForget: () => void
   onChanged: () => void
   onDeleted: () => void
+  onOpenKeys?: () => void
 }) {
+  const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
   const [editing, setEditing] = createSignal(false)
   const [confirming, setConfirming] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
@@ -887,6 +972,7 @@ function BotCard(props: {
     setEditing(false)
     setConfirming(false)
     setProblem(undefined)
+    setAccount(accounts.get(props.bot.path))
   }))
 
   const remove = async () => {
@@ -908,7 +994,7 @@ function BotCard(props: {
         <span data-slot="bots-card-meta">
           {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
           {" · "}
-          {t(spendKey(spendKind(props.bot.runner, props.bot.model)))}
+          {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
           {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
@@ -961,15 +1047,20 @@ function BotCard(props: {
           <span data-slot="bots-card-stat">
             {t("bots.card.messages", props.talk.messages.length)}
             {" · "}
-            {t("bots.conversation.total")}{" "}
-            <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
+            {t("bots.conversation.total")} <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
           </span>
           <Show when={props.talk.lastTurn}>
             {(turn) => (
               <span data-slot="bots-card-stat">
                 {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
                 {" · "}
-                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+                <LastFigures
+                  {...(turn().mode ? { mode: turn().mode } : {})}
+                  runner={props.bot.runner}
+                  model={turn().model}
+                  tokens={turn().tokens}
+                  costUsd={turn().costUsd}
+                />
               </span>
             )}
           </Show>
@@ -1030,6 +1121,12 @@ function BotCard(props: {
         <BotSettings
           bot={props.bot}
           models={props.models}
+          account={account()}
+          onAccount={(next) => {
+            accounts.set(props.bot.path, next)
+            setAccount(accounts.get(props.bot.path))
+          }}
+          {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
           onSaved={() => props.onChanged()}
         />
       </Show>
@@ -1265,8 +1362,21 @@ function EngineFields(props: {
   onRunner: (id: string) => void
   onModel: (value: string) => void
   onEffort: (value: string) => void
+  /** Present on a saved bot. The create form has no path yet, so no account. */
+  account?: BotAccount
+  onAccount?: (account: BotAccount) => void
+  onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
+  const [pickingKey, setPickingKey] = createSignal(false)
+  const [assigned] = createResource(
+    () => (props.onAccount && PLAN_RUNNERS.includes(runner().id) ? runner().command : null),
+    async (command) => (await (await getHost())?.assignedSecrets?.(command)) ?? [],
+  )
+  const showKey = () => props.account?.mode === "key" || pickingKey()
+  const names = () => assigned() ?? []
+  const savedName = () => (props.account?.mode === "key" ? props.account.key : "")
+  const savedKeyMissing = () => savedName().length > 0 && !names().some((row) => row.name === savedName())
   return (
     <>
       <label data-slot="bots-field">
@@ -1287,6 +1397,79 @@ function EngineFields(props: {
           </span>
         </Show>
       </label>
+      <Show when={PLAN_RUNNERS.includes(runner().id) && props.onAccount}>
+        <label data-slot="bots-field">
+          <span data-slot="bots-label">{t("bots.account.label")}</span>
+          <select
+            data-slot="bots-input"
+            value={showKey() ? "key" : "plan"}
+            onChange={(event) => {
+              if (event.currentTarget.value === "plan") {
+                setPickingKey(false)
+                props.onAccount?.(ACCOUNT_PLAN)
+                return
+              }
+              setPickingKey(true)
+            }}
+          >
+            <option value="plan">{t("bots.account.plan")}</option>
+            <option value="key">{t("bots.account.key")}</option>
+          </select>
+          <Show when={showKey()}>
+            <Show
+              when={names().length > 0 || props.account?.mode === "key"}
+              fallback={
+                <span data-slot="bots-hint">
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      props.onOpenKeys?.()
+                    }}
+                  >
+                    {t("bots.account.settings")}
+                  </button>{" "}
+                  {t("bots.account.empty")}
+                </span>
+              }
+            >
+              <select
+                data-slot="bots-input"
+                value={savedName()}
+                onChange={(event) => {
+                  const key = event.currentTarget.value
+                  if (!key) return
+                  setPickingKey(false)
+                  props.onAccount?.({ mode: "key", key })
+                }}
+              >
+                <option value="">{t("bots.account.pick")}</option>
+                <For each={names()}>{(row) => <option value={row.name}>{t("bots.account.option", row.name, row.env)}</option>}</For>
+                <Show when={savedKeyMissing()}>
+                  <option value={savedName()}>{savedName()}</option>
+                </Show>
+              </select>
+              <Show when={names().length === 0}>
+                <span data-slot="bots-hint">
+                  <button
+                    type="button"
+                    data-slot="bots-link"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      props.onOpenKeys?.()
+                    }}
+                  >
+                    {t("bots.account.settings")}
+                  </button>{" "}
+                  {t("bots.account.empty")}
+                </span>
+              </Show>
+            </Show>
+          </Show>
+          <span data-slot="bots-hint">{showKey() ? t("bots.account.hintKey") : t("bots.account.hintPlan")}</span>
+        </label>
+      </Show>
 
       <div data-slot="bots-row-fields">
         <label data-slot="bots-field">
@@ -1356,6 +1539,9 @@ function EngineFields(props: {
 function BotSettings(props: {
   bot: AgentFile
   models: readonly string[]
+  account: BotAccount
+  onAccount: (account: BotAccount) => void
+  onOpenKeys?: () => void
   onSaved: () => void
 }) {
   const parts = createMemo(() => splitPrompt(props.bot.prompt))
@@ -1468,6 +1654,9 @@ function BotSettings(props: {
         }}
         onModel={setModel}
         onEffort={setEffort}
+        account={props.account}
+        onAccount={props.onAccount}
+        {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
       />
 
       <label data-slot="bots-field">
