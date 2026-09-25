@@ -23,7 +23,7 @@ import { stripAnsi } from "../session/stream"
 import { registerSender, unregisterSender } from "../session/senders"
 import { acquireTurn } from "./terms"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RunnerId } from "./runners"
+import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RemoteTools, type RunnerId } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
 
 export interface TurnRequest {
@@ -62,6 +62,8 @@ export interface TurnRequest {
   readonly onLine?: (line: string) => void
   /** The raw output, for a permission menu drawn in place (nikcli). */
   readonly onData?: (chunk: string) => void
+  /** A turn from a chat, through a bot's gateway: its tools (G5, `RemoteTools`). */
+  readonly remote?: RemoteTools
 }
 
 /**
@@ -199,6 +201,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.lean ? { lean: true } : {}),
       ...(request.partial ? { partial: true } : {}),
       ...(outbox ? { outbox } : {}),
+      ...(request.remote ? { remote: request.remote } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 

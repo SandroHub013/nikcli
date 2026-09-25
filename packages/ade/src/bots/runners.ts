@@ -142,6 +142,39 @@ export interface TurnSpec {
    * up between them (`warm.ts`). `message` is then not passed.
    */
   readonly stdin?: boolean
+  /**
+   * A turn from a chat, through a bot's gateway (G5): nobody is at the
+   * computer to see what it does. See `remoteTools`.
+   */
+  readonly remote?: RemoteTools
+}
+
+/**
+ * What a turn from a chat may run (G5, D93). With `commands` off, the
+ * default, no shell at all. With it on (the bot's «Comandi da remoto», the
+ * owner's choice in ADE):
+ * - nikcli asks about every command, and the question goes to the phone;
+ * - Claude Code, which cannot ask mid-turn, runs only the `allowed` patterns;
+ * - Codex stays read-only: `codex exec` cannot ask either, and has no list.
+ * Writes stay in the project, never where a file becomes a command run later
+ * (`EXECUTES_LATER`). The approval is a heuristic, not a boundary: the
+ * boundary is the tools a turn is given.
+ */
+export interface RemoteTools {
+  readonly commands: boolean
+  /** Claude Code only: commands allowed as they are written, `*` as a wildcard (`npm test`, `git status *`). */
+  readonly allowed: readonly string[]
+}
+
+/*
+ * A pattern goes inside `Bash(…)` in a comma-separated `--allowedTools`: a
+ * comma or a parenthesis there would write another rule. One outside this
+ * shape is left out.
+ */
+const SAFE_COMMAND = /^[A-Za-z0-9][A-Za-z0-9 ._:/=*@+-]{0,79}$/
+
+export function safeCommandPattern(pattern: string): boolean {
+  return SAFE_COMMAND.test(pattern)
 }
 
 /**
@@ -250,7 +283,18 @@ export function turnCommand(
          * the same name taking its place. A project's bot needs that folder
          * to exist, so it keeps it, behind `project-trust.ts`.
          */
-        ...(fromRepository(bot) ? {} : { flags: ["no-project-config"] }),
+        /*
+         * From a chat, the shell goes through `NIKCLI_PERMISSION` (G5): denied,
+         * or asked about every command. The bot's own file can still grant
+         * it, so such a file is refused for a chat (`gateway/policy.ts`).
+         */
+        ...(() => {
+          const flags = [
+            ...(fromRepository(bot) ? [] : ["no-project-config"]),
+            ...(spec.remote ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"] : []),
+          ]
+          return flags.length > 0 ? { flags } : {}
+        })(),
       }
     case "claude": {
       /*
@@ -274,8 +318,13 @@ export function turnCommand(
        * included.
        */
       const repository = fromRepository(bot)
-      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash") && !repository
-      if (spec.lean) {
+      const remote = spec.remote
+      // From a chat: lean always, no `ade-msg`, and a shell only for the allowed commands.
+      const lean = spec.lean === true || remote !== undefined
+      const patterns =
+        remote?.commands && !repository && !bot.disabledTools.includes("bash") ? remote.allowed.filter(safeCommandPattern) : []
+      const adeMsgOnly = lean && bot.disabledTools.includes("bash") && !repository && !remote
+      if (lean) {
         /*
          * No settings file at all, the project's `.claude/settings.local.json`
          * included: it can hold hooks, which are commands (B3b review). What a
@@ -286,14 +335,17 @@ export function turnCommand(
       }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
-        .filter(([tool]) => !bot.disabledTools.includes(tool) && !(repository && tool === "bash"))
+        .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote) && tool === "bash"))
         .flatMap(([, names]) => names)
-      if (spec.lean && !repository) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
+      if (lean && !repository && !remote) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
+      for (const pattern of patterns) allowed.push(`Bash(${pattern})`, `PowerShell(${pattern})`)
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+      // No list: no shell. With one, a command not on it is one `-p` cannot ask about: refused.
+      if (remote && patterns.length === 0 && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
       // A refusal beats an allow, `acceptEdits` included.
-      if (repository && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
+      if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
@@ -303,7 +355,8 @@ export function turnCommand(
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
       const repository = fromRepository(bot)
       const inOutbox = !repository && !canWrite(bot) && spec.outbox !== undefined
-      const sandbox = !repository && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
+      // From a chat, read-only whatever the bot may do in ADE: `workspace-write` runs any command.
+      const sandbox = !repository && !spec.remote && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
       // A project's bot says no approval policy: `codex exec` runs as `never`
       // whatever it is told (see `fromRepository`), and codex-cli 0.154 exits 1
       // on `untrusted` ("no longer supported; remove this setting", B7 live).

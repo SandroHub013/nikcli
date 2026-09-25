@@ -15,7 +15,7 @@
 import { t } from "../../i18n"
 import { readAgentFile, type AgentFile } from "../nikcli"
 import { admitProject, type AdmitProjectDeps } from "../project-trust"
-import { admit, type TrustStore } from "../trust"
+import { admit, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
 export type ChatCommand = "new" | "stop" | "status" | "help"
@@ -110,6 +110,13 @@ export async function recheckTrust(
     return { ok: false, problem: t("bots.trust.unreadable", path.split(/[\\/]/).pop() ?? path) }
   }
   const bot = readAgentFile({ path, scope, text })
+  /*
+   * From a chat the shell is denied through nikcli's configuration, and a
+   * bot's own file overrides it: a nikcli bot that grants itself a tool —
+   * the user's own included — does not run from a chat (G5).
+   */
+  const granted = runnerById(bot.runner).id === "nikcli" ? selfApproval(text) : undefined
+  if (granted !== undefined) return { ok: false, problem: t("gateway.selfGrant", bot.identifier, granted) }
   const retrust = t("gateway.retrust", bot.identifier)
   const never = () => false
   const verdict = await admit(bot, { store: deps.bots, read: async () => text, confirm: never })

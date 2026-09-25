@@ -557,6 +557,8 @@ export const it = {
     `Questo bot gira su ${runner} con l'account del proprietario: risponde solo al proprietario.`,
   "gateway.empty": "Il turno è finito senza una risposta.",
   "gateway.failed": (problem: string) => `Il turno non è riuscito: ${problem}`,
+  "gateway.selfGrant": (name: string, what: string) =>
+    `Il bot «${name}» si concede «${what}» nel suo file, e da remoto quel permesso non si può togliere: da qui non lo avvio. Toglilo dal file per usarlo dal telefono.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
   "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",

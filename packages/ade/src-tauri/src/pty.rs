@@ -156,7 +156,15 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// the user's on nikcli runs with `no-project-config`: without it nikcli loads
 /// the open project's `.nikcli/` — plugins that run as it starts, and an agent
 /// of the same name that takes the bot's place.
-const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1")];
+///
+/// A turn from a chat (a bot's gateway, G5) runs nikcli with the shell denied,
+/// or asked about for every command when the user turned on the bot's remote
+/// commands: nikcli applies `NIKCLI_PERMISSION` over its whole configuration.
+const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
+    ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
+    ("remote-no-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny"}"#),
+    ("remote-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask"}"#),
+];
 
 /// The variables `flags` stand for, or why one is refused.
 pub(crate) fn spawn_flag_env(command: &str, flags: &[String]) -> Result<Vec<(&'static str, &'static str)>, String> {
@@ -1913,6 +1921,17 @@ mod tests {
         assert!(super::spawn_flag_env("nikcli", &["PATH=C:/x".to_string()]).is_err());
         assert!(super::spawn_flag_env("nikcli", &["NIKCLI_DISABLE_PROJECT_CONFIG".to_string()]).is_err());
         assert!(super::spawn_flag_env("nikcli", &[]).unwrap().is_empty());
+        // A turn from a chat: the shell denied, or asked about; nikcli only.
+        let from_chat = vec!["no-project-config".to_string(), "remote-no-shell".to_string()];
+        assert_eq!(
+            super::spawn_flag_env("nikcli", &from_chat).unwrap(),
+            vec![("NIKCLI_DISABLE_PROJECT_CONFIG", "1"), ("NIKCLI_PERMISSION", r#"{"bash":"deny"}"#)]
+        );
+        assert_eq!(
+            super::spawn_flag_env("nikcli", &["remote-ask-shell".to_string()]).unwrap(),
+            vec![("NIKCLI_PERMISSION", r#"{"bash":"ask"}"#)]
+        );
+        assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
     }
 
     #[test]

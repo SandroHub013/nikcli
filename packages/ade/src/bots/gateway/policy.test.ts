@@ -89,7 +89,19 @@ describe("the trust checked again on every turn, with no dialog", () => {
   test("a bot that grants itself the shell is refused with that reason", async () => {
     const text = file("nikcli", "permission:\n  bash: allow\n")
     const verdict = await recheckTrust(BOT, PROJECT, await deps(text, { bot: text, project: true }))
-    expect(verdict).toEqual({ ok: false, problem: t("bots.trust.selfApproves", "aiuto", "bash") })
+    expect(verdict).toEqual({ ok: false, problem: t("gateway.selfGrant", "aiuto", "bash") })
+  })
+
+  /*
+   * G5: from a chat nikcli's shell is denied through NIKCLI_PERMISSION, and an
+   * agent file's own permission overrides it. The user's own bot that grants
+   * itself a tool runs in the panel, not from a chat.
+   */
+  test("the user's own nikcli bot that grants itself a tool does not run from a chat", async () => {
+    const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
+    const text = file("nikcli", "permission:\n  bash: allow\n")
+    expect(await recheckTrust(own, PROJECT, await deps(text))).toEqual({ ok: false, problem: t("gateway.selfGrant", "mio", "bash") })
+    expect((await recheckTrust(own, PROJECT, await deps(file("nikcli")))).ok).toBe(true)
   })
 
   test("the user's own bot needs no trust, and an unreadable file is refused", async () => {
