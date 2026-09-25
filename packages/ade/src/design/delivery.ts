@@ -97,6 +97,27 @@ export function resolveRecipient(candidates: readonly DeliveryCandidate[], choic
   return { state: "non attiva", id: choice.id, title: pane?.title ?? choice.title }
 }
 
+/**
+ * Where an item is sent: if the item explicitly carries a recipient (e.g. a
+ * reopened notice returning to whoever had the choice), it goes there if that
+ * session is running. If it is closed, or the item has no designated recipient,
+ * it goes to the currently chosen recipient.
+ */
+export function resolveDeliveryTarget(
+  item: OutboxItem,
+  candidates: readonly DeliveryCandidate[],
+  current: RecipientStatus,
+): { readonly id: string; readonly title: string } | undefined {
+  if (item.to) {
+    const candidate = candidates.find((c) => c.running && (c.title === item.to || c.id === item.to))
+    if (candidate) return { id: candidate.id, title: candidate.title }
+  }
+  if (current.state === "pronta") {
+    return { id: current.id, title: current.title }
+  }
+  return undefined
+}
+
 export function deliveryLine(proposal: DesignProposal): string {
   return `[Design da utente] ${resolvedMessage(proposal)}`
 }
@@ -115,6 +136,7 @@ export interface OutboxItem {
   readonly deliveredAt?: number
   readonly kind?: "risposta" | "riaperta"
   readonly text?: string
+  readonly to?: string
 }
 
 export const OUTBOX_KEY = "ade.design.outbox"

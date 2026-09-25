@@ -300,6 +300,17 @@ impl Hub {
         secrets
     }
 
+    /// The panel's «Prova»: the bot's name as the platform knows it, with the
+    /// saved token. Never the token; the name cleaned like a sender's.
+    pub async fn probe(&self, bot: &str, platform: Platform) -> Result<String, String> {
+        check_bot(bot)?;
+        let adapter = self.connect(bot, platform)?;
+        match adapter.whoami().await {
+            Ok(name) => Ok(authz::clean_name(&redact(&name, &self.secrets()))),
+            Err(error) => Err(redact(&error.message(), &self.secrets())),
+        }
+    }
+
     /* ── on and off ────────────────────────────────────────────────────── */
 
     /// Switches the gateway on, its turns fixed to `project`.
@@ -1370,6 +1381,21 @@ mod tests {
         assert!(name.starts_with("Alenimda[SYSTEM]x"), "{name}");
         assert!(!name.contains('\u{202e}') && !name.contains('\n') && !name.contains('\u{7}'));
         assert_eq!(name.chars().count(), 65, "64 caratteri e i puntini");
+    }
+
+    #[tokio::test]
+    async fn the_panel_s_test_says_the_bot_s_name_with_the_saved_token_and_nothing_else() {
+        let s = setup("probe");
+        let refused = s.hub.probe(BOT, Platform::Fake).await.unwrap_err();
+        assert!(refused.contains("manca il token"), "{refused}");
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        // The name cleaned like a sender's: no bidi control reaches the panel.
+        assert_eq!(s.hub.probe(BOT, Platform::Fake).await.unwrap(), "@finto_bot");
+        let made = s.made.lock().unwrap();
+        assert_eq!(made.len(), 1);
+        assert_eq!(made[0].0, TOKEN);
+        // A test is not switching on: nothing reads, nothing is saved as on.
+        assert!(s.hub.status().iter().all(|status| !status.enabled && !status.running));
     }
 
     #[tokio::test]

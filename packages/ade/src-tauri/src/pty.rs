@@ -159,11 +159,27 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 ///
 /// A turn from a chat (a bot's gateway, G5) runs nikcli with the shell denied,
 /// or asked about for every command when the user turned on the bot's remote
-/// commands: nikcli applies `NIKCLI_PERMISSION` over its whole configuration.
+/// commands: nikcli merges `NIKCLI_PERMISSION` over its whole configuration.
+/// The user's configuration can allow more than the shell, so a chat's turn
+/// also asks before going outside the project, and never drives the computer
+/// or a browser (G5 review, M2). `external_directory` is a string: it replaces
+/// the user's rule whole, folders allowed one by one included, where an object
+/// would replace only its `*` (never outside the folder). The page answers
+/// every question: on the phone, or no at once with the commands off.
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
-    ("remote-no-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"deny"}"#),
-    ("remote-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask"}"#),
+    (
+        "remote-no-shell",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"deny","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
+    ),
+    (
+        "remote-ask-shell",
+        "nikcli",
+        "NIKCLI_PERMISSION",
+        r#"{"bash":"ask","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
+    ),
 ];
 
 /// The variables `flags` stand for, or why one is refused.
@@ -1923,14 +1939,29 @@ mod tests {
         assert!(super::spawn_flag_env("nikcli", &[]).unwrap().is_empty());
         // A turn from a chat: the shell denied, or asked about; nikcli only.
         let from_chat = vec!["no-project-config".to_string(), "remote-no-shell".to_string()];
-        assert_eq!(
-            super::spawn_flag_env("nikcli", &from_chat).unwrap(),
-            vec![("NIKCLI_DISABLE_PROJECT_CONFIG", "1"), ("NIKCLI_PERMISSION", r#"{"bash":"deny"}"#)]
-        );
-        assert_eq!(
-            super::spawn_flag_env("nikcli", &["remote-ask-shell".to_string()]).unwrap(),
-            vec![("NIKCLI_PERMISSION", r#"{"bash":"ask"}"#)]
-        );
+        let env = super::spawn_flag_env("nikcli", &from_chat).unwrap();
+        assert_eq!(env.len(), 2);
+        assert_eq!(env[0], ("NIKCLI_DISABLE_PROJECT_CONFIG", "1"));
+        assert_eq!(env[1].0, "NIKCLI_PERMISSION");
+        let permission = |flag: &str| -> serde_json::Value {
+            let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
+            serde_json::from_str(env[0].1).unwrap()
+        };
+        assert_eq!(serde_json::from_str::<serde_json::Value>(env[1].1).unwrap(), permission("remote-no-shell"));
+        for (flag, bash) in [("remote-no-shell", "deny"), ("remote-ask-shell", "ask")] {
+            // Outside the project asked about, the computer and a browser never (G5 review, M2).
+            assert_eq!(
+                permission(flag),
+                serde_json::json!({
+                    "bash": bash,
+                    // A string: the user's folders allowed one by one go too.
+                    "external_directory": "ask",
+                    "computer": "deny",
+                    "browser_control": "deny"
+                }),
+                "{flag}"
+            );
+        }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
     }
 

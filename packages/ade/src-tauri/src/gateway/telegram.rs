@@ -333,6 +333,15 @@ impl Adapter for Telegram {
         Ok(last)
     }
 
+    async fn whoami(&self) -> Result<String, AdapterError> {
+        let me = self.call_patiently("getMe", &json!({})).await.map_err(Failure::for_reading)?;
+        match (me["username"].as_str(), me["first_name"].as_str()) {
+            (Some(username), _) if !username.is_empty() => Ok(format!("@{username}")),
+            (_, Some(name)) => Ok(name.to_string()),
+            _ => Err(AdapterError::Fatal("Telegram non ha detto il nome del bot".into())),
+        }
+    }
+
     async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
         self.call_patiently("sendChatAction", &json!({ "chat_id": chat_id(chat), "action": "typing" }))
             .await
@@ -480,6 +489,19 @@ mod tests {
         assert_eq!(polls[1]["offset"], 13);
         assert_eq!(api.calls_to("getWebhookInfo").len(), 1, "una volta sola");
         assert!(api.calls_to("deleteWebhook").is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_panel_s_test_asks_telegram_who_the_bot_is_and_a_refused_token_says_so() {
+        let api = FakeApi::start();
+        api.then("getMe", 200, json!({ "ok": true, "result": { "id": 1, "is_bot": true, "first_name": "Mio", "username": "mio_bot" } }));
+        assert_eq!(adapter(&api, None).whoami().await.unwrap(), "@mio_bot");
+        assert_eq!(api.calls_to("getMe").len(), 1);
+        let api = FakeApi::start();
+        api.then("getMe", 401, json!({ "ok": false, "error_code": 401, "description": "Unauthorized" }));
+        let Err(AdapterError::Fatal(error)) = adapter(&api, None).whoami().await else { panic!("non fatale") };
+        assert!(error.contains("rifiuta il token"), "{error}");
+        assert!(!error.contains(TOKEN));
     }
 
     #[tokio::test]

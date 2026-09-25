@@ -271,6 +271,7 @@ describe("reopening an answered decision (ALTO 5)", () => {
   test("hub.reopen invokes onReopened when delivery is consegnata, but not when in coda", async () => {
     const { io } = memory(answeredFile("D1"))
     let reopenedCount = 0
+    let lastDeliveredTo: string | undefined
     let delivered = false
 
     await createRoot(async (dispose) => {
@@ -282,8 +283,9 @@ describe("reopening an answered decision (ALTO 5)", () => {
         choose: () => {},
         delivery: () => (delivered ? { state: "consegnata", to: "Master", at: 123 } : { state: "in coda" }),
         onAnswered: () => {},
-        onReopened: () => {
+        onReopened: (_decision, deliveredTo) => {
           reopenedCount++
+          lastDeliveredTo = deliveredTo
         },
       })
       await register.refresh()
@@ -302,6 +304,7 @@ describe("reopening an answered decision (ALTO 5)", () => {
       delivered = true
       await hub.reopen(decision)
       expect(reopenedCount).toBe(1)
+      expect(lastDeliveredTo).toBe("Master")
       dispose()
     })
   })
@@ -468,7 +471,9 @@ describe("sheet status line on submit (MEDIO 6)", () => {
 
     const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
     expect(statusEl).not.toBeNull()
-    expect(statusEl?.textContent).toBe("D1: B, inviata a Master")
+    expect(statusEl?.textContent).toBe("D1: B, a Master")
+    expect(statusEl?.getAttribute("role")).toBe("status")
+    expect(statusEl?.getAttribute("aria-live")).toBe("polite")
 
     dispose()
     host.remove()

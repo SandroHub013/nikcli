@@ -15,7 +15,7 @@
 import { t } from "../../i18n"
 import { agentDirs, readAgentFile, type AgentFile } from "../nikcli"
 import { admitProject, type AdmitProjectDeps } from "../project-trust"
-import { admit, selfApproval, type TrustStore } from "../trust"
+import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
 export type ChatCommand = "new" | "stop" | "status" | "help"
@@ -111,7 +111,7 @@ export async function recheckTrust(
   path: string,
   project: string,
   deps: RecheckDeps,
-): Promise<{ ok: true; bot: AgentFile } | { ok: false; problem: string }> {
+): Promise<{ ok: true; bot: AgentFile; fingerprint: string } | { ok: false; problem: string }> {
   const scope = scopeOf(path, deps.globalRoot)
   let text: string
   try {
@@ -135,5 +135,6 @@ export async function recheckTrust(
     const configuration = await admitProject(project, { store: deps.projects, surface: deps.surface, confirm: never })
     if (!configuration.ok) return { ok: false, problem: retrust }
   }
-  return { ok: true, bot }
+  // The file as it was read: what the remote commands were turned on for is compared with it.
+  return { ok: true, bot, fingerprint: await fileFingerprint(text) }
 }

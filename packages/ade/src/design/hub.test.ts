@@ -663,6 +663,7 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
   test("hub.reopen invokes onReopened when delivery is consegnata, but not when in coda", async () => {
     const { io } = memory(answeredFile("DS1"))
     let reopenedCount = 0
+    let lastDeliveredTo: string | undefined
     let delivered = false
 
     await createRoot(async (dispose) => {
@@ -675,8 +676,9 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
         choose: () => {},
         delivery: () => (delivered ? { state: "consegnata", to: "Master", at: 123 } : { state: "in coda" }),
         onAnswered: () => {},
-        onReopened: () => {
+        onReopened: (_proposal, deliveredTo) => {
           reopenedCount++
+          lastDeliveredTo = deliveredTo
         },
       })
       await register.refresh()
@@ -692,6 +694,7 @@ describe("reopening an answered design proposal (MEDIO 3 Part A)", () => {
       delivered = true
       await hub.reopen(proposal)
       expect(reopenedCount).toBe(1)
+      expect(lastDeliveredTo).toBe("Master")
       dispose()
     })
   })
@@ -861,7 +864,9 @@ describe("DesignSheet status line on submit (MEDIO 6)", () => {
 
     const statusEl = host.querySelector('[data-slot="sheet-foot"] [data-slot="sheet-status"]')
     expect(statusEl).not.toBeNull()
-    expect(statusEl?.textContent).toBe("DS1: A, inviata a Master")
+    expect(statusEl?.textContent).toBe("DS1: A, a Master")
+    expect(statusEl?.getAttribute("role")).toBe("status")
+    expect(statusEl?.getAttribute("aria-live")).toBe("polite")
 
     dispose()
     host.remove()

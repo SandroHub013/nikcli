@@ -138,6 +138,12 @@ pub async fn gateway_set_token(app: AppHandle, bot: String, platform: Platform, 
     hub(&app)?.set_token(&bot, platform, &token)
 }
 
+/// The panel's «Prova»: the bot's name on the platform, with the saved token.
+#[tauri::command]
+pub async fn gateway_probe(app: AppHandle, bot: String, platform: Platform) -> Result<String, String> {
+    hub(&app)?.probe(&bot, platform).await
+}
+
 #[tauri::command]
 pub async fn gateway_clear_token(app: AppHandle, bot: String, platform: Platform) -> Result<(), String> {
     hub(&app)?.clear_token(&bot, platform)

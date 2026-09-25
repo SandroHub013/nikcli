@@ -66,6 +66,10 @@ import {
   type Talk,
   type TalkMessage,
 } from "./talk"
+import { gatewayVisible } from "../surface/state"
+import { appGatewayPanelDeps } from "./gateway/bridge"
+import { GatewaySection } from "./gateway/panel"
+import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
 
 /*
@@ -466,6 +470,12 @@ export function BotsMain(props: BotsMainProps) {
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
 
+  // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
+  const gateway =
+    gatewayVisible() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+      ? appGatewayPanelDeps(() => props.projectRoot)
+      : undefined
+
   const stop = (bot: AgentFile) => turns.stop(bot)
 
   /** A fresh thread: the session id goes with it, so the model starts over too. */
@@ -521,6 +531,7 @@ export function BotsMain(props: BotsMainProps) {
               talk={talkOf(bot().path)}
               models={models() ?? []}
               expression={expression(bot())}
+              {...(gateway ? { gateway } : {})}
               {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
               onForget={() => forget(bot())}
@@ -859,6 +870,8 @@ function BotCard(props: {
   talk: Talk
   models: readonly string[]
   expression: Expression
+  /** The Gateway section's dependencies; absent, no section. */
+  gateway?: Omit<GatewayPanelDeps, "bot">
   onLaunch?: (bot: AgentFile) => void
   onOpenFile?: (path: string) => void
   onForget: () => void
@@ -973,6 +986,14 @@ function BotCard(props: {
             </button>
           </Show>
         </section>
+
+        <Show when={props.gateway}>
+          {(deps) => (
+            <Show when={props.bot.path} keyed>
+              <GatewaySection bot={props.bot} deps={deps()} />
+            </Show>
+          )}
+        </Show>
 
         <section data-slot="bots-card-section">
           <span data-slot="bots-label">{t("bots.card.file")}</span>

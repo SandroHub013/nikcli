@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, safeCommandPattern, spendLine, turnCommand } from "./runners"
+import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, spendLine, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -480,7 +480,8 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
  */
 describe("un turno da chat non ha la shell", () => {
   const mine: AgentFile = { ...bot, scope: "global" }
-  const off = { commands: false, allowed: [] }
+  const off = { commands: false }
+  const on = { commands: true }
   const allowedOf = (args: readonly string[]) => (args[args.indexOf("--allowedTools") + 1] ?? "").split(",")
   const disallowedOf = (args: readonly string[]) => (args[args.indexOf("--disallowedTools") + 1] ?? "").split(",")
 
@@ -496,22 +497,20 @@ describe("un turno da chat non ha la shell", () => {
     expect(disallowedOf(args)).toContain("Write(./.git/**)")
   })
 
-  test("Claude con i comandi da remoto: solo quelli dell'elenco, e uno scritto male resta fuori", () => {
-    const remote = { commands: true, allowed: ["npm test", "git status *", "rm -rf /,Bash", "x) Bash(*"] }
-    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", remote })
-    const shell = allowedOf(args).filter((tool) => /Bash|PowerShell/.test(tool))
-    expect(shell).toEqual(["Bash(npm test)", "PowerShell(npm test)", "Bash(git status *)", "PowerShell(git status *)"])
-    expect(disallowedOf(args)).not.toContain("Bash")
-  })
-
-  test("Claude con i comandi accesi ma nessun elenco: ancora niente shell", () => {
-    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", remote: { commands: true, allowed: [] } })
+  /*
+   * G5 review, M1: `claude -p` cannot have each command approved, so a list
+   * of allowed commands was an approval in advance (`npm *` runs any script).
+   * In V1 a Claude bot from a chat never has a shell.
+   */
+  test("Claude con i comandi da remoto accesi: ancora niente shell", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", remote: on })
     expect(allowedOf(args).filter((tool) => /Bash|PowerShell/.test(tool))).toEqual([])
     expect(disallowedOf(args)).toContain("Bash")
+    expect(disallowedOf(args)).toContain("PowerShell")
   })
 
   test("Codex: sola lettura anche per un bot che nel pannello scrive, e anche con i comandi accesi", () => {
-    for (const remote of [off, { commands: true, allowed: ["npm test"] }]) {
+    for (const remote of [off, on]) {
       const { args } = turnCommand(runnerById("codex"), { bot: mine, message: "x", remote })
       expect(args).toContain('sandbox_mode="read-only"')
       expect(args.join(" ")).not.toContain("workspace-write")
@@ -521,7 +520,7 @@ describe("un turno da chat non ha la shell", () => {
   test("nikcli: la shell negata, o chiesta per ogni comando quando i comandi sono accesi", () => {
     expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).toEqual(["no-project-config", "remote-no-shell"])
     expect(turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x", remote: off }).flags).toEqual(["remote-no-shell"])
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: { commands: true, allowed: [] } }).flags).toEqual([
+    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: on }).flags).toEqual([
       "no-project-config",
       "remote-ask-shell",
     ])
@@ -530,11 +529,6 @@ describe("un turno da chat non ha la shell", () => {
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
     expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config"])
-  })
-
-  test("un modello di comando: lettere, spazi e poco altro, mai virgole o parentesi", () => {
-    for (const ok of ["npm test", "git status *", "bun run test:unit", "ls ./src"]) expect(safeCommandPattern(ok)).toBe(true)
-    for (const bad of ["", " npm", "a,b", "a)", "a(b", "a;b", "a|b", "a`b", "a$b", "x".repeat(81), "a\nb"]) expect(safeCommandPattern(bad)).toBe(false)
   })
 })
 
