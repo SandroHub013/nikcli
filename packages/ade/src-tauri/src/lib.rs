@@ -1559,6 +1559,8 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 use tauri::Manager;
                 window.state::<pty::Registry>().end_all_in_background();
+                // Nor any listener for the chats' messages: they wait for the new page.
+                window.state::<gateway::Gateway>().page_loading();
             }
         })
         .inner_size(1440.0, 900.0)

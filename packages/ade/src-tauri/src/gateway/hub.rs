@@ -339,6 +339,13 @@ impl Hub {
         self.ready.send_replace(true);
     }
 
+    /// The page is loading again (a reload, a renderer that crashed): its
+    /// listener is gone until the new page says `ready`. Until then nothing is
+    /// handed on, and a batch already read waits, its position unsaved.
+    pub fn unready(&self) {
+        self.ready.send_replace(false);
+    }
+
     /// Starts a link that is switched on again, from what is saved: after a
     /// new token, or when ADE opens. If it cannot, it stays on with the reason.
     fn relaunch(&self, bot: &str, platform: Platform) {
@@ -594,6 +601,19 @@ fn pairing_request(bot: &str, platform: Platform, pending: &authz::Pending) -> P
     }
 }
 
+/// Waits until the page listens; false when the gateway is stopped first.
+/// `biased`: when a stop and something else are both ready, the stop wins.
+async fn listening(stopped: &mut watch::Receiver<bool>, ready: &mut watch::Receiver<bool>) -> bool {
+    if *stopped.borrow() {
+        return false;
+    }
+    tokio::select! {
+        biased;
+        _ = stopped.changed() => false,
+        _ = ready.wait_for(|ready| *ready) => true,
+    }
+}
+
 /// One gateway's reading loop.
 struct Task {
     env: Arc<dyn Env>,
@@ -630,14 +650,12 @@ impl Task {
     }
 
     async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
-        // `biased`: when a stop and something else are both ready, the stop wins.
-        tokio::select! {
-            biased;
-            _ = stopped.changed() => return,
-            _ = ready.wait_for(|ready| *ready) => {}
-        }
         let mut pause = self.backoff.0;
         loop {
+            // Nobody listens yet (ADE opening, the page reloading): nothing is read.
+            if !listening(&mut stopped, &mut ready).await {
+                break;
+            }
             let read = tokio::select! {
                 biased;
                 _ = stopped.changed() => break,
@@ -655,6 +673,10 @@ impl Task {
                             live.connected = true;
                             live.last_error = None;
                         });
+                    }
+                    // The page may have reloaded during a long poll: the batch waits for it.
+                    if !batch.is_empty() && !listening(&mut stopped, &mut ready).await {
+                        break;
                     }
                     for message in batch {
                         self.deliver(message).await;
@@ -1299,6 +1321,37 @@ mod tests {
         // Made again (a new token, ADE reopened): from where it was.
         s.hub.set_token(BOT, Platform::Fake, "987654321:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
         assert_eq!(s.made.lock().unwrap().last().unwrap().1.as_deref(), Some("501"));
+    }
+
+    #[tokio::test]
+    async fn after_the_page_reloads_nothing_is_handed_on_until_it_listens_again() {
+        let s = setup("reload");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("11".into());
+        feed.send(Ok(vec![message("10", "c42", "42", "prima del ricaricamento")])).unwrap();
+        eventually("il primo messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        eventually("la posizione", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("11")).await;
+        // The page reloads while the long poll is out: the batch that comes back waits.
+        s.hub.unready();
+        *adapter.position.lock().unwrap() = Some("12".into());
+        feed.send(Ok(vec![message("11", "c42", "42", "durante il ricaricamento")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1, "consegnato a una pagina che non ascolta");
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("11"), "posizione salvata per un messaggio perso");
+        let reads = adapter.receives.load(std::sync::atomic::Ordering::SeqCst);
+        // The new page listens: the message arrives, and only then its position is saved.
+        s.hub.ready();
+        eventually("il messaggio dopo il ricaricamento", || s.env.messages.lock().unwrap().len() == 2).await;
+        assert_eq!(s.env.messages.lock().unwrap()[1].text, "durante il ricaricamento");
+        eventually("la nuova posizione", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("12")).await;
+        // And no new read went out while nobody listened.
+        s.hub.unready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let quiet = adapter.receives.load(std::sync::atomic::Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(adapter.receives.load(std::sync::atomic::Ordering::SeqCst), quiet);
+        assert!(quiet >= reads);
     }
 
     #[tokio::test]

@@ -31,6 +31,13 @@ use tauri::{AppHandle, Emitter, Manager};
 pub struct Gateway(OnceLock<Arc<Hub>>);
 
 impl Gateway {
+    /// The main window is loading a page: the old one's listener is gone.
+    pub fn page_loading(&self) {
+        if let Some(hub) = self.0.get() {
+            hub.unready();
+        }
+    }
+
     /// ADE is closing: every gateway's task ends.
     pub fn shutdown(&self) {
         if let Some(hub) = self.0.get() {
