@@ -4109,7 +4109,11 @@ export function Workbench() {
     play: (wav, signal) => {
       // A take keeps the assistant's voice as its own track (S36).
       recorder.noteVoice(wav)
-      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter)
+      return playWav(wav, signal, voiceSettings().outputDeviceId, playbackMeter, () => {
+        // The device the user picked is not there: the answer comes out of the
+        // default speakers, and it says so once instead of never.
+        report(t("vui.device.missing"), "warning")
+      })
     },
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
