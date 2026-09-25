@@ -21,7 +21,7 @@
 import { getHost } from "../host/shell"
 import { stripAnsi } from "../session/stream"
 import { registerSender, unregisterSender } from "../session/senders"
-import { acquireTurn } from "./terms"
+import { acquireTurn, scrubSecrets } from "./terms"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RemoteTools, type RunnerId } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
@@ -252,7 +252,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
               update(applyRunnerLine(runner, talk, line, Date.now()))
               // stderr shares the stream: an error the CLI printed is the last plain line (review B7, BASSO 3).
               const plain = stripAnsi(line).trim()
-              if (plain && !before.partial && !talk.partial && !plain.startsWith("{")) lastWords = plain.slice(0, 300)
+              // Scrub before the cut, so a key that runs past the 300th character is not sliced in half and kept.
+              if (plain && !before.partial && !talk.partial && !plain.startsWith("{")) lastWords = scrubSecrets(plain).slice(0, 300)
               if (!before.sessionId && talk.sessionId) markTurn("cli-init")
               if (!before.streaming && talk.streaming) markTurn("cli-first-text")
               if (!before.ended && talk.ended) markTurn("cli-result")

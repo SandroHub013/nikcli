@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
-import { MAX_PARALLEL_TURNS, acquireTurn, limitReached, turnsRunning } from "./terms"
+import { MAX_PARALLEL_TURNS, SECRET_MARK, acquireTurn, limitReached, scrubSecrets, turnsRunning } from "./terms"
 
 describe("turns on a plan", () => {
   const held: { release: () => void }[] = []
@@ -29,6 +29,25 @@ describe("turns on a plan", () => {
     expect(turnsRunning("codex")).toBe(0)
     for (let i = 0; i < MAX_PARALLEL_TURNS + 2; i++) expect("release" in acquireTurn("nikcli")).toBe(true)
   })
+})
+
+test("an obvious key in a tool's printout is not kept", () => {
+  const text = scrubSecrets(
+    "trovato sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789 e ghp_abcdefghijklmnopqrstuvwxyz e xai-abcdefghijklmnopqrstuvwxyz",
+  )
+  expect(text).not.toContain("sk-or-v1-")
+  expect(text).not.toContain("ghp_")
+  expect(text).not.toContain("xai-")
+  expect(text).toContain(SECRET_MARK)
+  expect(scrubSecrets("sk-corto e il file limits.ts")).toBe("sk-corto e il file limits.ts")
+  const more = [
+    `AIza${"a".repeat(35)}`,
+    `xoxb-${"1".repeat(12)}`,
+    "AKIA1234567890ABCDEF",
+    `123456789:${"A".repeat(35)}`,
+    `Bearer ${"a".repeat(24)}`,
+  ]
+  for (const secret of more) expect(scrubSecrets(`visto ${secret} qui`)).not.toContain(secret)
 })
 
 test("a plan limit is recognised in what the CLIs say", () => {
