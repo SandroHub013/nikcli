@@ -36,8 +36,7 @@ import { splitSegments } from "./segments"
 import { streamChat } from "./client"
 import { locale } from "../i18n/locale"
 import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
-import { createNikcliClient } from "@nikcli-ai/sdk/client"
-import { SERVER_BASE, serverFetch, tauriServerBridge } from "./transport"
+import { openChat, appChatConnectionDeps, loadChatCatalog, type ChatConnectionDeps } from "./connection"
 import "./chat.css"
 
 const STORAGE_KEY = "ade.chat"
@@ -48,12 +47,16 @@ export interface ChatProps {
   /** OpenRouter key, from voice settings. Empty when not configured. */
   apiKey: string
   onOpenSettings: () => void
+  /** Project directory to open chat connection with trust check */
+  projectRoot?: string
+  /** Admitted client injected by callers or tests */
+  client?: NikcliClient
+  /** Connection deps override for testing openChat */
+  connectionDeps?: ChatConnectionDeps
   /** Injected by tests or callers */
   providerList?: ProviderList
   /** Injected by tests or callers */
   agents?: readonly Agent[]
-  /** Injected client for fetching provider.list and app.agents */
-  client?: NikcliClient
   /** Override for ADE Test mode (auto-detected if undefined) */
   isTest?: boolean
 }
@@ -139,26 +142,24 @@ export function Chat(props: ChatProps) {
 
     let pList = props.providerList
     let aList = props.agents
+    let cfgModel: string | undefined
 
-    if (props.client) {
+    let client = props.client
+    if (!client && props.projectRoot) {
       try {
-        const [pRes, aRes] = await Promise.all([
-          props.client.provider.list().catch(() => undefined),
-          props.client.app.agents().catch(() => undefined),
-        ])
-        if (pRes?.data) pList = pRes.data
-        if (aRes?.data) aList = aRes.data
+        const opened = await openChat(props.projectRoot, props.connectionDeps ?? appChatConnectionDeps())
+        if (opened.ok) {
+          client = opened.client
+        }
       } catch {}
-    } else if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    }
+
+    if (client) {
       try {
-        const bridge = tauriServerBridge()
-        const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch: serverFetch(bridge) })
-        const [pRes, aRes] = await Promise.all([
-          client.provider.list().catch(() => undefined),
-          client.app.agents().catch(() => undefined),
-        ])
-        if (pRes?.data) pList = pRes.data
-        if (aRes?.data) aList = aRes.data
+        const catalog = await loadChatCatalog(client)
+        if (catalog.providerList) pList = catalog.providerList
+        if (catalog.agents) aList = catalog.agents
+        if (catalog.configModel) cfgModel = catalog.configModel
       } catch {}
     }
 

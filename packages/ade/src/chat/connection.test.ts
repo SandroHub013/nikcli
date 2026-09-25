@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { admitProject, surfaceFingerprint } from "../bots/project-trust"
 import { memoryTrustStore } from "../bots/trust"
-import { FRESH_MS, isChatRefused, openChat } from "./connection"
+import { FRESH_MS, isChatRefused, openChat, loadChatCatalog } from "./connection"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -189,5 +189,14 @@ describe("the chat on a folder", () => {
     pending = false
     await again.client.session.status()
     expect(fake.sent).toHaveLength(1)
+  })
+
+  test("loadChatCatalog loads provider list, agents, and config model with admitted client", async () => {
+    const fake = fakeBridge()
+    const opened = await openChat(PROJECT, { bridge: fake.bridge, admit: async () => ({ ok: true }) })
+    if (!opened.ok) throw new Error("non aperta")
+    const catalog = await loadChatCatalog(opened.client)
+    expect(catalog).toBeDefined()
+    expect(fake.sent.length).toBeGreaterThanOrEqual(1)
   })
 })

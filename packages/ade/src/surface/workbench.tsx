@@ -7394,6 +7394,7 @@ export function Workbench() {
             <Chat
               apiKey={voiceSettings().openRouterApiKey ?? ""}
               onOpenSettings={() => setVoiceSettingsOpen(true)}
+              projectRoot={project()?.root}
             />
           </Show>
 

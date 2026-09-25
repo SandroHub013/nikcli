@@ -28,13 +28,35 @@
  * no answer, and that request fails as one that can be tried again.
  */
 
-import { createNikcliClient, type NikcliClient } from "@nikcli-ai/sdk/client"
+import { createNikcliClient, type NikcliClient, type ProviderList, type Agent } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import { askDialog } from "../host/ask"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "../bots/project-trust"
 import { projectFs } from "../bots/store"
 import { localTrustStore } from "../bots/trust"
 import { SERVER_BASE, serverFetch, tauriServerBridge, type ServerBridge } from "./transport"
+
+export interface ChatCatalog {
+  readonly providerList?: ProviderList
+  readonly agents?: readonly Agent[]
+  readonly configModel?: string
+}
+
+/**
+ * Loads provider list, agents, and config model using an admitted chat client.
+ */
+export async function loadChatCatalog(client: NikcliClient): Promise<ChatCatalog> {
+  const [pRes, aRes, cRes] = await Promise.all([
+    client.provider.list().catch(() => undefined),
+    client.app.agents().catch(() => undefined),
+    client.config.get().catch(() => undefined),
+  ])
+  return {
+    providerList: pRes?.data,
+    agents: aRes?.data,
+    configModel: cRes?.data?.model,
+  }
+}
 
 export interface ChatConnectionDeps {
   readonly bridge: ServerBridge
