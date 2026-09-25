@@ -26,6 +26,7 @@
  * prompt unnoticed is a turn that waits forever with nothing on screen.
  */
 
+import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import { limitNotice, limitReached, scrubSecrets } from "./terms"
 
@@ -70,6 +71,14 @@ export interface Talk {
   readonly updatedAt?: number
   /** A question nikcli is waiting on. The thread shows it; `answerKeys` answers it. */
   readonly permission?: PendingPermission
+  /**
+   * The turn ended because the plan's limit was reached.
+   *
+   * The voice reads this, not the sentence: the sentence follows the
+   * interface language, and a comparison with the Italian wording missed
+   * an English one.
+   */
+  readonly limited?: boolean
   /** What went wrong starting or running the last turn, if anything. */
   readonly problem?: string
   /**
@@ -214,6 +223,8 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     problem: undefined,
     permission: undefined,
     ended: undefined,
+    // One limit must not mark every later turn, including one reloaded from disk.
+    limited: undefined,
     pendingTurn: { tokens: 0, costUsd: 0 },
     turnSession: undefined,
   }
@@ -342,13 +353,14 @@ function parseObject(line: string): Record<string, unknown> | undefined {
  */
 export const TOOL_OUTPUT_MAX = 16 * 1024
 
-const TRUNCATED = "\n…troncato"
+const truncatedMark = () => `\n${t("bots.talk.truncated")}`
 
 /** A tool printout safe to show and to store: keys out, then the size cap. */
 export function limitToolOutput(text: string): string {
   const clean = scrubSecrets(text)
+  const mark = truncatedMark()
   if (clean.length <= TOOL_OUTPUT_MAX) return clean
-  return clean.slice(0, TOOL_OUTPUT_MAX - TRUNCATED.length) + TRUNCATED
+  return clean.slice(0, TOOL_OUTPUT_MAX - mark.length) + mark
 }
 
 function forStorage<T extends { readonly role: TalkRole; readonly text: string; readonly output?: string }>(message: T): T {
@@ -529,8 +541,8 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
             role: "error",
             // The CLI's last plain line — its error on stderr, which shares the stream — says why.
             text: lastWords
-              ? `${program} è uscito con codice ${code}: ${scrubSecrets(lastWords)}`
-              : `${program} è uscito con codice ${code}.`,
+              ? t("bots.talk.exitedBecause", program, code ?? 0, scrubSecrets(lastWords))
+              : t("bots.talk.exited", program, code ?? 0),
             at,
           },
         ],
@@ -551,6 +563,7 @@ function withLimitNotice(talk: Talk, code: number | null, at: number, program: s
   const notice = limitNotice(program)
   return {
     ...talk,
+    limited: true,
     status: "error",
     permission: undefined,
     updatedAt: at,
@@ -576,13 +589,13 @@ export function applyProblem(talk: Talk, problem: string, at: number): Talk {
  * bot's own description, which is what a contact with no history has.
  */
 export function lastLine(talk: Talk, fallback: string): string {
-  if (talk.status === "waiting" && talk.permission) return `Chiede il permesso: ${talk.permission.permission}`
+  if (talk.status === "waiting" && talk.permission) return t("bots.lastLine.permission", talk.permission.permission)
   const last = talk.messages.at(-1)
   if (!last) return fallback
   const oneLine = (text: string) => text.replace(/\s+/g, " ").trim()
   switch (last.role) {
     case "user":
-      return `Tu: ${oneLine(last.text)}`
+      return t("bots.lastLine.you", oneLine(last.text))
     case "tool":
       return `${last.tool}: ${oneLine(last.text)}`
     case "error":
@@ -600,16 +613,15 @@ export function lastLine(talk: Talk, fallback: string): string {
 export function formatWhen(at: number | undefined, now: number): string {
   if (at === undefined) return ""
   const diff = now - at
-  if (diff < 60_000 && diff > -60_000) return "ora"
+  if (diff < 60_000 && diff > -60_000) return t("bots.when.now")
   const date = new Date(at)
   const today = new Date(now)
   const sameDay = date.toDateString() === today.toDateString()
   if (sameDay) return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
   const yesterday = new Date(now - 86_400_000)
-  if (date.toDateString() === yesterday.toDateString()) return "ieri"
-  if (diff < 6 * 86_400_000 && diff > 0) return ["dom", "lun", "mar", "mer", "gio", "ven", "sab"][date.getDay()] ?? ""
-  const months = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
-  return `${date.getDate()} ${months[date.getMonth()] ?? ""}`
+  if (date.toDateString() === yesterday.toDateString()) return t("bots.when.yesterday")
+  if (diff < 6 * 86_400_000 && diff > 0) return t("bots.when.weekday", date.getDay())
+  return `${date.getDate()} ${t("bots.when.month", date.getMonth())}`
 }
 
 /**

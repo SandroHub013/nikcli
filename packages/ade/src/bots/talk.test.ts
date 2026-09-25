@@ -207,7 +207,13 @@ describe("applyExit", () => {
   test("a turn ended by the plan's limit says nothing will retry it, once", () => {
     const limited = applyLine(sendMessage(emptyTalk(), "x", T0), event("error", { error: "Claude AI usage limit reached" }), T0)
     const ended = applyExit(limited, 1, T0 + 1, "Claude Code")
+    expect(ended.limited).toBe(true)
     expect(ended.messages.at(-1)?.text).toContain("ADE non riprova")
+    const again = sendMessage(ended, "ancora", T0 + 3)
+    expect(again.limited).toBeUndefined()
+    const done = applyExit(applyLine(again, event("text", { part: { text: "Fatto." } }), T0 + 4), 0, T0 + 5, "Claude Code")
+    expect(done.limited).toBeUndefined()
+    expect(parseTalk(serializeTalk(ended)).limited).toBeUndefined()
     expect(applyExit(ended, 1, T0 + 2, "Claude Code").messages).toHaveLength(ended.messages.length)
   })
 })

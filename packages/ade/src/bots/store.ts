@@ -13,6 +13,7 @@
  * they are looking at.
  */
 
+import { t } from "../i18n"
 import { getHost, type Host } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
@@ -195,7 +196,7 @@ export type CreateBotResult =
  */
 export async function createBot(input: CreateBotInput, roots: BotRoots): Promise<CreateBotResult> {
   const host = await getHost()
-  if (!host) return { ok: false, problem: "Nessun host: i bot si creano solo nell'app desktop." }
+  if (!host) return { ok: false, problem: t("bots.store.noHost") }
 
   const base = input.scope === "project" ? roots.project : roots.global
   if (!base) {
@@ -203,8 +204,8 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
       ok: false,
       problem:
         input.scope === "project"
-          ? "Nessun progetto aperto: scegli «globale» o apri un progetto."
-          : "Cartella di configurazione di nikcli non trovata.",
+          ? t("bots.store.noProject")
+          : t("bots.store.noGlobal"),
     }
   }
 
@@ -215,7 +216,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     return writeBot({ ...input, mode, home, base }, host)
   }
 
-  if (!host.nikcliBot) return { ok: false, problem: "Questo host non può eseguire nikcli." }
+  if (!host.nikcliBot) return { ok: false, problem: t("bots.store.noNikcli") }
   const result = await host.nikcliBot(createArgs({
     home,
     description: input.description,
@@ -234,7 +235,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
      * user can act on, while "creazione non riuscita" is not.
      */
     const said = [result.stderr.trim(), result.stdout.trim()].filter((part) => part.length > 0).join("\n")
-    return { ok: false, problem: said || `nikcli è uscito con codice ${result.code ?? "sconosciuto"}.` }
+    return { ok: false, problem: said || t("bots.store.nikcliExited", String(result.code ?? t("bots.store.unknownCode"))) }
   }
 
   /*
@@ -276,7 +277,7 @@ async function writeBot(
   host: Host,
 ): Promise<CreateBotResult> {
   if (!host.writeTextFile) {
-    return { ok: false, problem: "Questo host non può scrivere file." }
+    return { ok: false, problem: t("bots.store.noWrite") }
   }
 
   const existing = await listBots(
@@ -342,7 +343,7 @@ export interface BotChanges {
  */
 export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<string | undefined> {
   const host = await getHost()
-  if (!host?.readTextFile || !host.writeTextFile) return "Questo host non può scrivere file."
+  if (!host?.readTextFile || !host.writeTextFile) return t("bots.store.noWrite")
 
   try {
     const read = await host.readTextFile(bot.path)
@@ -355,7 +356,7 @@ export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<st
 /** A bot's file as it is on disk now: what the trust in `trust.ts` is given to. */
 export async function readBotText(path: string): Promise<string> {
   const host = await getHost()
-  if (!host?.readTextFile) throw new Error("Questo host non può leggere file.")
+  if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
   return (await host.readTextFile(path)).text
 }
 
@@ -366,12 +367,12 @@ export async function readBotText(path: string): Promise<string> {
 export const projectFs: ProjectFs = {
   async readDir(path) {
     const host = await getHost()
-    if (!host?.readDir) throw new Error("Questo host non può leggere cartelle.")
+    if (!host?.readDir) throw new Error(t("bots.store.noDir"))
     return host.readDir(path)
   },
   async readText(path) {
     const host = await getHost()
-    if (!host?.readTextFile) throw new Error("Questo host non può leggere file.")
+    if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
     return host.readTextFile(path)
   },
 }
@@ -379,7 +380,7 @@ export const projectFs: ProjectFs = {
 /** Removes a bot's file. The roster is the directory, so this is the deletion. */
 export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
   const host = await getHost()
-  if (!host?.deleteBotFile) return "Nessun host."
+  if (!host?.deleteBotFile) return t("bots.store.hostMissing")
   /*
    * A command of its own, which deletes only a bot's file. This used to go
    * through `host.run("cmd", ["/c", "del", …])`, which `run` refuses — it runs

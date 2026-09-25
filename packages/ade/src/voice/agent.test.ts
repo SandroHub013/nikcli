@@ -156,6 +156,59 @@ describe("voice/agent", () => {
     expect(runner.stops()).toBe(1)
   })
 
+  test("the plan's limit is recognised with English active, without the Italian sentence", async () => {
+    setLocalePreference("en")
+    try {
+      const notice = limitNotice("Claude Code")
+      expect(notice).toContain("does not retry")
+      expect(notice).not.toContain("non riprova")
+      const runner = fakeRunner([
+        { status: "error", problem: notice, limited: true, talk: { limited: true } as never },
+        { status: "done", text: "Two sessions." },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+        codexFallback: () => true,
+      })
+      const answer = await agent.ask({ text: "how many sessions?", engine: "auto" })
+      expect(runner.requests.map((request) => request.runner)).toEqual(["claude", "codex"])
+      expect(answer.ok).toBe(true)
+      expect(answer.text).toContain("Two sessions.")
+    } finally {
+      resetLocaleForTests()
+    }
+  })
+
+  test("a later successful turn is not a plan limit, and an unrelated 'does not retry' is not either", async () => {
+    const limit = fakeRunner([
+      { status: "error", problem: limitNotice("Claude Code"), limited: true },
+      { status: "done", text: "Fatto.", limited: undefined, talk: { messages: [] } as never },
+    ])
+    const agent = createVoiceAgent({
+      runTurn: limit.runTurn,
+      statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+      cwd: () => "C:/p",
+      codexFallback: () => true,
+    })
+    await agent.ask({ text: "prima", engine: "claude" })
+    const second = await agent.ask({ text: "dopo", engine: "claude" })
+    expect(second).toMatchObject({ ok: true, text: "Fatto." })
+    expect(second.text).not.toContain("limite")
+
+    const unrelated = fakeRunner([{ status: "error", problem: "the client does not retry this request" }])
+    const again = createVoiceAgent({
+      runTurn: unrelated.runTurn,
+      statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+      cwd: () => "C:/p",
+      codexFallback: () => true,
+    })
+    const answer = await again.ask({ text: "x", engine: "auto" })
+    expect(unrelated.requests).toHaveLength(1)
+    expect(answer.text).toContain("does not retry")
+  })
+
   test("a turn ended by the plan's limit is said as the bots say it, and never asked again", async () => {
     const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })

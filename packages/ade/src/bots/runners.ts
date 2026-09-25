@@ -561,7 +561,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
           next,
           {
             role: "error",
-            text: `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${EXECUTES_LATER.join(", ")}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
+            text: t("bots.runner.protectedPath", EXECUTES_LATER.join(", ")),
           },
           at,
         )
@@ -572,7 +572,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
           next,
           {
             role: "error",
-            text: `Claude Code non ha avuto il permesso per: ${names}. Abilita lo strumento nella scheda del bot.`,
+            text: t("bots.runner.permissionDenied", names),
           },
           at,
         )
@@ -589,13 +589,13 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
           return {
             ...appendMessage(
               rest,
-              { role: "error", text: "Claude Code non ha più questa conversazione: il prossimo messaggio ne apre una nuova." },
+              { role: "error", text: t("bots.runner.conversationGone") },
               at,
             ),
             status: "error",
           }
         }
-        const text = str(event["result"]) || errors || str(event["subtype"]) || "Claude Code ha concluso con un errore."
+        const text = str(event["result"]) || errors || str(event["subtype"]) || t("bots.runner.claudeError")
         next = { ...appendMessage(next, { role: "error", text }, at), status: "error" }
       }
       return next
@@ -633,7 +633,7 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
           const output = str(item["aggregated_output"])
           return appendMessage(
             next,
-            { role: "tool", tool: "shell", text: str(item["command"]) ?? "comando", ...(output?.trim() ? { output } : {}) },
+            { role: "tool", tool: "shell", text: str(item["command"]) ?? t("bots.runner.command"), ...(output?.trim() ? { output } : {}) },
             at,
           )
         }
@@ -642,14 +642,14 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
             .map((c) => str(rec(c)?.["path"]))
             .filter(Boolean)
             .join(", ")
-          return appendMessage(next, { role: "tool", tool: "edit", text: paths || "modifica" }, at)
+          return appendMessage(next, { role: "tool", tool: "edit", text: paths || t("bots.runner.edit") }, at)
         }
         case "mcp_tool_call": {
           const tool = [str(item["server"]), str(item["tool"])].filter(Boolean).join(".") || "mcp"
           return appendMessage(next, { role: "tool", tool, text: describeInput(item["arguments"]) || tool }, at)
         }
         case "web_search":
-          return appendMessage(next, { role: "tool", tool: "web", text: str(item["query"]) ?? "ricerca" }, at)
+          return appendMessage(next, { role: "tool", tool: "web", text: str(item["query"]) ?? t("bots.runner.search") }, at)
         default:
           return next
       }
@@ -722,20 +722,20 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
           const method = str(parsed["authMethod"])
           return {
             state: "in",
-            detail: method === "claude.ai" ? "Abbonamento Claude" : method ? `Accesso: ${method}` : "Accesso eseguito",
+            detail: method === "claude.ai" ? t("bots.login.claudePlan") : method ? t("bots.login.method", method) : t("bots.login.done"),
           }
         }
-        return { state: "out", detail: "Non collegato" }
+        return { state: "out", detail: t("bots.login.out") }
       } catch {
-        return { state: "unknown", detail: first || "Stato non leggibile" }
+        return { state: "unknown", detail: first || t("bots.login.unreadable") }
       }
     }
     case "codex": {
       const line = text.split("\n").find((l) => /logged in/i.test(l))
       if (line && !/not logged in/i.test(line)) {
-        return { state: "in", detail: line.trim().replace(/^Logged in using /i, "Accesso con ") }
+        return { state: "in", detail: line.trim().replace(/^Logged in using /i, t("bots.login.using")) }
       }
-      return { state: line ? "out" : code === 0 ? "unknown" : "out", detail: first || "Non collegato" }
+      return { state: line ? "out" : code === 0 ? "unknown" : "out", detail: first || t("bots.login.out") }
     }
     case "nikcli": {
       const providers = text
@@ -746,8 +746,8 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
         .filter(Boolean)
       if (providers.length > 0) return { state: "in", detail: providers.join(", ") }
       /* "0 credentials" is an answer; a crash before the list is not one. */
-      if (/\b0 credentials\b/i.test(text)) return { state: "out", detail: "Nessun provider collegato" }
-      return { state: "unknown", detail: first || "Stato non leggibile" }
+      if (/\b0 credentials\b/i.test(text)) return { state: "out", detail: t("bots.login.noProvider") }
+      return { state: "unknown", detail: first || t("bots.login.unreadable") }
     }
   }
 }
