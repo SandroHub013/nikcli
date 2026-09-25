@@ -13,7 +13,7 @@
  */
 
 import { t } from "../../i18n"
-import { readAgentFile, type AgentFile } from "../nikcli"
+import { agentDirs, readAgentFile, type AgentFile } from "../nikcli"
 import { admitProject, type AdmitProjectDeps } from "../project-trust"
 import { admit, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
@@ -80,9 +80,17 @@ export function mayRun(runner: string, owner: boolean): { ok: true } | { ok: fal
 
 const normalize = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 
-/** A bot file inside the project is the repository's; anywhere else, the user's. */
-export function scopeOf(path: string, project: string): "project" | "global" {
-  return normalize(path).startsWith(`${normalize(project)}/`) ? "project" : "global"
+/**
+ * The user's own bot only in nikcli's global agent folders (`globalRoot`, as
+ * the Bots panel reads them in `store.ts`); anything else is a repository's,
+ * whichever repository: the path is a string the page gives, and a bot of a
+ * project other than the gateway's is no more the user's for that (G4
+ * review, M1). A path that climbs out with `..` is not trusted to be inside.
+ */
+export function scopeOf(path: string, globalRoot: string | undefined): "project" | "global" {
+  const file = normalize(path)
+  if (!globalRoot || file.split("/").includes("..")) return "project"
+  return agentDirs(globalRoot, "global").some((directory) => file.startsWith(`${normalize(directory)}/`)) ? "global" : "project"
 }
 
 export interface RecheckDeps {
@@ -90,6 +98,8 @@ export interface RecheckDeps {
   readonly projects: TrustStore
   readonly read: (path: string) => Promise<string>
   readonly surface: AdmitProjectDeps["surface"]
+  /** nikcli's global configuration directory (`resolveRoots`); absent, every bot is a repository's. */
+  readonly globalRoot?: string
 }
 
 /**
@@ -102,7 +112,7 @@ export async function recheckTrust(
   project: string,
   deps: RecheckDeps,
 ): Promise<{ ok: true; bot: AgentFile } | { ok: false; problem: string }> {
-  const scope = scopeOf(path, project)
+  const scope = scopeOf(path, deps.globalRoot)
   let text: string
   try {
     text = await deps.read(path)
