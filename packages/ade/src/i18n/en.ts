@@ -550,6 +550,11 @@ export const en: Messages = {
   "gateway.failed": (problem) => `The turn did not work: ${problem}`,
   "gateway.selfGrant": (name, what) =>
     `The bot «${name}» grants itself «${what}» in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
+  "gateway.approve.question": (permission, what) =>
+    `The bot asks for the permission «${permission}» for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
+  "gateway.approve.once": "Yes, this once",
+  "gateway.approve.no": "Refuse",
+  "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
   "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",

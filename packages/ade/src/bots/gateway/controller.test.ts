@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
-import { emptyTalk } from "../talk"
+import { answerKeys, emptyTalk } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
+import { localRemoteStore, memoryRemoteStore, REMOTE_OFF } from "./remote"
 import { memorySessionStore, sessionKey } from "./session"
 
 /*
@@ -268,5 +269,157 @@ describe("the gateways' controller", () => {
     b.emit("di nuovo")
     await until("di nuovo accettato", () => b.sent.length === before + 1)
     expect(b.sent.at(-1)!.text).toBe(t("gateway.queued", 30))
+  })
+})
+
+/*
+ * G5, D93: a turn from a chat has no shell unless the owner turned on the
+ * bot's remote commands; then every command nikcli asks about is asked on the
+ * phone, and no answer in time is a no.
+ */
+describe("the tools of a turn from a chat", () => {
+  const NIKCLI: AgentFile = { ...BOT, runner: "nikcli" }
+  const nikcli = async () => ({ ok: true as const, bot: NIKCLI })
+
+  /** Turns that record the keys typed into them. */
+  function typedTurns() {
+    const started: { request: TurnRequest; keys: string[]; finish: () => void }[] = []
+    const runTurn = (request: TurnRequest): Turn => {
+      let resolve!: (result: TurnResult) => void
+      const result = new Promise<TurnResult>((done) => (resolve = done))
+      const entry = {
+        request,
+        keys: [] as string[],
+        finish: () => resolve({ status: "done", text: "Fatto.", tokens: 0, costUsd: 0, talk: emptyTalk() }),
+      }
+      started.push(entry)
+      return { result, stop: () => entry.finish(), write: (keys) => void entry.keys.push(keys) }
+    }
+    return { started, runTurn }
+  }
+
+  test("with nothing turned on the turn gets no shell and no question is ever asked", async () => {
+    for (const loadBot of [trusted, nikcli]) {
+      const b = bridge()
+      const turns = typedTurns()
+      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot, sessions: memorySessionStore() })
+      b.emit("pulisci la build")
+      await until("il turno", () => turns.started.length === 1)
+      const request = turns.started[0]!.request
+      expect(request.remote).toEqual({ commands: false, allowed: [] })
+      expect(request.onData).toBeUndefined()
+    }
+  })
+
+  test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    const remote = { commands: true, allowed: [] }
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => remote })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    expect(turn.request.remote).toBe(remote)
+    turn.request.onData!("\u001b[1mPermission required:\u001b[0m bash (rm -rf build)\r\n")
+    await until("la domanda", () => b.questions.length === 1)
+    const question = b.questions[0]!
+    expect(question.chat).toBe("c42")
+    expect(question.text).toBe(t("gateway.approve.question", "bash", "rm -rf build"))
+    expect(question.buttons.map((button) => button.label)).toEqual([t("gateway.approve.once"), t("gateway.approve.no")])
+    // The menu redrawn while the question waits: still one question.
+    turn.request.onData!("Permission required: bash (rm -rf build)")
+    // From another chat, or made up: nothing is typed.
+    b.emit(question.buttons[0]!.data, { button: true, chat: "c7" })
+    b.emit("0123456789abcdef:0", { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual([])
+    expect(b.questions).toHaveLength(1)
+    b.emit(question.buttons[0]!.data, { button: true })
+    await until("il sì", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual([answerKeys("once")])
+    // The next command is asked again: a yes is for one command.
+    turn.request.onData!("Permission required: bash (npm publish)")
+    await until("la seconda domanda", () => b.questions.length === 2)
+    b.emit(b.questions[1]!.buttons[1]!.data, { button: true })
+    await until("il no", () => turn.keys.length === 2)
+    expect(turn.keys[1]).toBe(answerKeys("reject"))
+  })
+
+  test("no answer in time is a no, and the chat is told", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: () => ({ commands: true, allowed: [] }),
+      approvalTimeoutMs: 20,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onData!("Permission required: bash (rm -rf build)")
+    await until("il no allo scadere", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual([answerKeys("reject")])
+    await until("l'avviso", () => b.sent.some((sent) => sent.text === t("gateway.approve.expired")))
+    // A press after the time is ignored.
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual([answerKeys("reject")])
+  })
+
+  test("a question still waiting when the turn ends is dropped: nothing typed, a late yes ignored", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => ({ commands: true, allowed: [] }) })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onData!("Permission required: bash (rm -rf build)")
+    await until("la domanda", () => b.questions.length === 1)
+    turn.finish()
+    await until("la risposta", () => b.sent.some((sent) => sent.text === "Fatto."))
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual([])
+    expect(b.sent.some((sent) => sent.text === t("gateway.approve.expired"))).toBe(false)
+  })
+
+  test("the remote commands are the bot's own: another bot's setting does not count", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: nikcli,
+      sessions: memorySessionStore(),
+      remote: (bot) => (bot === "C:/altro.md" ? { commands: true, allowed: [] } : REMOTE_OFF),
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    expect(turns.started[0]!.request.remote).toBe(REMOTE_OFF)
+    expect(turns.started[0]!.request.onData).toBeUndefined()
+  })
+})
+
+describe("the remote commands saved per bot", () => {
+  test("off unless saved on; a pattern that could write another rule is dropped", () => {
+    const key = `ade.gateway.remote.test.${Math.random()}`
+    const store = localRemoteStore(key)
+    expect(store.get("a.md")).toEqual(REMOTE_OFF)
+    store.set("a.md", { commands: true, allowed: ["npm test", "x),Bash(*"] })
+    expect(localRemoteStore(key).get("a.md")).toEqual({ commands: true, allowed: ["npm test"] })
+    expect(localRemoteStore(key).get("b.md")).toEqual(REMOTE_OFF)
+    // Whatever else is found saved counts as off.
+    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes", allowed: "npm test" }, "c.md": true }))
+    expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
+    expect(localRemoteStore(key).get("c.md")).toEqual(REMOTE_OFF)
+    localStorage.setItem(key, "{")
+    expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
+    localStorage.removeItem(key)
+    const memory = memoryRemoteStore()
+    memory.set("a.md", { commands: true, allowed: ["git status *", "a;b"] })
+    expect(memory.get("a.md")).toEqual({ commands: true, allowed: ["git status *"] })
   })
 })

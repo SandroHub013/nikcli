@@ -18,6 +18,9 @@
  *   for a button ADE sent, from the same chat, while its question waits, and
  *   once: its data carry a random id, since a client can send any data it
  *   likes. Anything else pressed is ignored.
+ * - the turn gets the tools of a turn from a chat (G5, `RemoteTools`): no
+ *   shell unless the owner turned on the bot's remote commands, and then
+ *   nikcli's permission menu becomes a question on the phone (`approval.ts`).
  *
  * Nothing is read from a chat before this listens: `gateway_ready` is called
  * once the listener is in place, and Rust holds every gateway until then.
@@ -25,10 +28,12 @@
 
 import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
-import { runnerById } from "../runners"
+import { runnerById, type RemoteTools } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
+import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
+import { REMOTE_OFF } from "./remote"
 import { sessionKey, type SessionStore } from "./session"
 
 /** `gateway:message`, as Rust emits it. */
@@ -64,6 +69,10 @@ export interface GatewayControllerDeps {
   /** The bot at `path` as its file is now, if its trust still holds (`recheckTrust`). */
   readonly loadBot: (path: string, project: string) => Promise<{ ok: true; bot: AgentFile } | { ok: false; problem: string }>
   readonly sessions: SessionStore
+  /** The bot's remote commands (`remote.ts`); off when absent. */
+  readonly remote?: (bot: string) => RemoteTools
+  /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
+  readonly approvalTimeoutMs?: number
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
@@ -142,17 +151,21 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     question.answer(choice.value)
   }
 
-  const ask = (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs = ASK_TIMEOUT_MS) =>
+  /** `signal`: the question's turn ended, and the question with it. */
+  const ask = (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs = ASK_TIMEOUT_MS, signal?: AbortSignal) =>
     new Promise<string | undefined>((resolve) => {
-      if (closed || choices.length === 0) return resolve(undefined)
+      if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
       const id = nonce()
       const timer = setTimeout(() => answer(undefined), timeoutMs)
-      // Once: whichever comes first — a press, the timeout, the stop — ends it.
+      // Once: whichever comes first — a press, the timeout, the stop, the turn's end — ends it.
       const answer = (value: string | undefined) => {
         if (!questions.delete(id)) return
         clearTimeout(timer)
+        signal?.removeEventListener("abort", ended)
         resolve(value)
       }
+      const ended = () => answer(undefined)
+      signal?.addEventListener("abort", ended)
       questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), choices, answer })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
@@ -207,6 +220,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     state.starting = true
     state.cancelled = false
     let typing: ReturnType<typeof setInterval> | undefined
+    const ended = new AbortController()
     try {
       const project = await deps.bridge.project(message.bot, message.platform)
       if (!project) return void (await reply(message, t("gateway.noProject")))
@@ -222,13 +236,27 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
-      const turn = deps.runTurn({
+      const remote = deps.remote?.(message.bot) ?? REMOTE_OFF
+      let turn: Turn | undefined
+      // nikcli stops on its permission menu only when the shell is asked about.
+      const onData =
+        runner === "nikcli" && remote.commands
+          ? permissionWatcher({
+              ask: (question, choices, signal) => ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
+              write: (keys) => turn?.write?.(keys),
+              say: (text) => void reply(message, text),
+              signal: ended.signal,
+            })
+          : undefined
+      turn = deps.runTurn({
         runner,
         bot,
         message: framedMessage(message.platform, message.sender.name, message.text),
         cwd: project,
         timeoutMs: BOT_TURN_TIMEOUT_MS,
+        remote,
         ...(sessionId ? { sessionId } : {}),
+        ...(onData ? { onData } : {}),
       })
       state.turn = turn
       state.starting = false
@@ -243,6 +271,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     } catch (error) {
       await reply(message, t("gateway.failed", error instanceof Error ? error.message : String(error)))
     } finally {
+      ended.abort()
       if (typing) clearInterval(typing)
       state.turn = undefined
       state.starting = false

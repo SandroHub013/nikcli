@@ -9,6 +9,7 @@ import { localTrustStore } from "../trust"
 import { runTurn } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import { recheckTrust } from "./policy"
+import { localRemoteStore } from "./remote"
 import { localSessionStore } from "./session"
 
 interface LinkStatus {
@@ -49,5 +50,6 @@ export function startAppGatewayController(): Promise<GatewayController> {
         surface: () => projectSurface(project, projectFs),
       }),
     sessions: localSessionStore(),
+    remote: (bot) => localRemoteStore().get(bot),
   })
 }
