@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { createStore } from "solid-js/store"
 import { applyChatEvent, emptyChatData, type ChatEvent } from "./events"
+import { hasChatRules } from "./rules"
 
 /*
  * C2: real conversations, replayed. Recorded from `nikcli serve` 1.389 on this
@@ -28,6 +29,10 @@ import { applyChatEvent, emptyChatData, type ChatEvent } from "./events"
  *   answer, and a long answer stopped by the user.
  * - `errori`: three turns the provider refused (429, with the server's
  *   retries), the last one stopped.
+ * - `permesso` (C5): the same three turns on a session made with the chat's
+ *   rules (`rules.ts`), on this machine's `build` agent, whose config allows
+ *   every shell command: the read goes unasked, the `mkdir` asks, the chat
+ *   says no, and the tool fails with the server's refusal.
  */
 
 type Final = { info: { id: string; role: string; cost?: number; providerID?: string; modelID?: string }; parts: { id: string }[] }[]
@@ -60,7 +65,7 @@ const shown = (part: Record<string, any>) => ({
 })
 
 describe("a recorded conversation, replayed", () => {
-  for (const name of ["conversazione", "errori"]) {
+  for (const name of ["conversazione", "errori", "permesso"]) {
     test(`${name}: the messages and their parts are exactly what the server has at the end`, () => {
       const { events, final } = fixture(name)
       const { store, outcomes } = replay(events)
@@ -80,7 +85,7 @@ describe("a recorded conversation, replayed", () => {
   }
 
   test("recorded on a free model only", () => {
-    for (const name of ["conversazione", "errori"]) {
+    for (const name of ["conversazione", "errori", "permesso"]) {
       for (const message of fixture(name).final.filter((m) => m.info.role === "assistant")) {
         expect(message.info.modelID).toMatch(/:free$/)
         expect(message.info.cost ?? 0).toBe(0)
@@ -99,5 +104,28 @@ describe("a recorded conversation, replayed", () => {
     const last = store.message[store.session[0]!.id]!.at(-1) as { role: string; error?: { name: string } }
     expect(last.role).toBe("assistant")
     expect(last.error?.name).toBe("MessageAbortedError")
+  })
+
+  test("permesso: the chat's rules beat the agent's shell allow; the no reached the server", () => {
+    const { events } = fixture("permesso")
+    const [store, setStore] = createStore(emptyChatData())
+    const waiting: string[] = []
+    for (const event of events) {
+      applyChatEvent(event, store, setStore)
+      for (const permission of Object.values(store.permission).flat()) {
+        if (!waiting.includes(permission.permission)) waiting.push(permission.permission)
+      }
+    }
+    expect(hasChatRules(store.session[0])).toBe(true)
+    // Only the shell asked: the read did not.
+    expect(waiting).toEqual(["bash"])
+    const asked = events.find((event) => event.type === "permission.asked")!.properties as { patterns: string[] }
+    expect(asked.patterns).toEqual(["mkdir prova-permesso"])
+    expect(events.find((event) => event.type === "permission.replied")!.properties).toMatchObject({ reply: "reject" })
+    const bash = Object.values(store.part)
+      .flat()
+      .find((part) => part.type === "tool" && (part as { tool: string }).tool === "bash") as { state: { status: string; error: string } }
+    expect(bash.state.status).toBe("error")
+    expect(bash.state.error).toContain("PermissionRejectedError")
   })
 })
