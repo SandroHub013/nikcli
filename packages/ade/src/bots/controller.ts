@@ -77,7 +77,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const at = Date.now()
       deps.update(path, (talk) => {
         if (result.status === "stopped") return applyExit(talk, null, at, runner.label)
-        if (result.exitCode !== undefined) return applyExit(talk, result.exitCode, at, runner.label)
+        if (result.exitCode !== undefined) return applyExit(talk, result.exitCode, at, runner.label, result.lastWords)
         return applyProblem(talk, result.problem ?? `${runner.label} non ha risposto.`, at)
       })
     })

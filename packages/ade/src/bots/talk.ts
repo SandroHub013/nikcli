@@ -392,7 +392,7 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * The process is gone. A clean exit ends the turn; anything else, with no
  * error already on the thread, is said once so the silence has a reason.
  */
-export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli"): Talk {
+export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli", lastWords?: string): Talk {
   const limited = withLimitNotice(talk, code, at, program)
   if (limited) return limited
   if (code === 0 || code === null) {
@@ -406,7 +406,16 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
     updatedAt: at,
     messages: alreadySaid
       ? talk.messages
-      : [...talk.messages, { id: nextId("e", at), role: "error", text: `${program} è uscito con codice ${code}.`, at }],
+      : [
+          ...talk.messages,
+          {
+            id: nextId("e", at),
+            role: "error",
+            // The CLI's last plain line — its error on stderr, which shares the stream — says why.
+            text: lastWords ? `${program} è uscito con codice ${code}: ${lastWords}` : `${program} è uscito con codice ${code}.`,
+            at,
+          },
+        ],
   }
 }
 

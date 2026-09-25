@@ -121,6 +121,21 @@ describe("runTurn", () => {
     expect(m.kills).toEqual([])
   })
 
+  test("a CLI that fails says why: its last plain line goes with the exit code (review B7, BASSO 3)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "codex", message: "ciao" }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say("Reading additional input from stdin...")
+    m.say('Error: approval_policy = "untrusted" is no longer supported; remove this setting')
+    m.exit(1)
+    const result = await turn.result
+    expect(result.exitCode).toBe(1)
+    expect(result.talk.messages.at(-1)?.text).toBe(
+      'Codex è uscito con codice 1: Error: approval_policy = "untrusted" is no longer supported; remove this setting',
+    )
+  })
+
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {
     const m = machine()
     const running = Array.from({ length: MAX_PARALLEL_TURNS }, () => start(m))
