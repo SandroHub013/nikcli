@@ -348,6 +348,13 @@ export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<st
   }
 }
 
+/** A bot's file as it is on disk now: what the trust in `trust.ts` is given to. */
+export async function readBotText(path: string): Promise<string> {
+  const host = await getHost()
+  if (!host?.readTextFile) throw new Error("Questo host non può leggere file.")
+  return (await host.readTextFile(path)).text
+}
+
 /** Removes a bot's file. The roster is the directory, so this is the deletion. */
 export async function deleteBot(bot: AgentFile): Promise<string | undefined> {
   const host = await getHost()

@@ -508,6 +508,11 @@ export const it = {
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
+  "bots.trust.new": (name: string) =>
+    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. Non avrà comandi pre-approvati, ma potrà leggere e modificare file. Lo usi?`,
+  "bots.trust.changed": (name: string) =>
+    `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. Lo usi così com'è ora?`,
+  "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
   "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",

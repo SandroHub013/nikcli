@@ -33,16 +33,18 @@ import { createEffect, createMemo, createResource, createRoot, createSignal, For
 import { t } from "../i18n"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
-import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
+import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
 import { runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
+import { admit, localTrustStore } from "./trust"
 import { runTurn } from "./turn"
 import {
   createBot,
   deleteBot,
   listBots,
   listModels,
+  readBotText,
   resolveRoots,
   updateBot,
   type BotRoots,
@@ -54,6 +56,7 @@ import {
   mentionIn,
   parseTalk,
   serializeTalk,
+  applyProblem,
   talkKey,
   type PermissionAnswer,
   type Talk,
@@ -349,7 +352,27 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    turns.send(bot, message, props.projectRoot)
+    void start(bot, message)
+  }
+
+  /*
+   * A project's bot is asked about first (B3, `trust.ts`). What runs is the
+   * file as it was read and trusted just now, not the copy the roster loaded
+   * earlier: a file changed in between would otherwise run unseen.
+   */
+  const start = async (bot: AgentFile, message: string) => {
+    let read: string | undefined
+    const verdict = await admit(bot, {
+      store: localTrustStore(),
+      read: async (path) => (read = await readBotText(path)),
+      confirm: (question) => window.confirm(question),
+    })
+    if (!verdict.ok) {
+      if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
+      return
+    }
+    const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+    turns.send(trusted, message, props.projectRoot)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)

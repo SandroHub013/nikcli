@@ -503,6 +503,11 @@ export const en: Messages = {
   "browser.retry": "Try again",
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
+  "bots.trust.new": (name) =>
+    `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. It gets no pre-approved commands, but it can read and change files. Use it?`,
+  "bots.trust.changed": (name) =>
+    `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. Use it as it is now?`,
+  "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
   "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",
