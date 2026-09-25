@@ -7405,6 +7405,7 @@ export function Workbench() {
               {...(project()?.root ? { projectRoot: project()!.root } : {})}
               onLaunch={(bot) => openBotSession(bot)}
               onOpenFile={(path) => void openFile(path)}
+              onOpenKeys={() => openVoiceSettings("set-sec-keys")}
             />
           </Show>
 

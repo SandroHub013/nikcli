@@ -33,6 +33,7 @@ import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
+import type { BotAccount } from "../account"
 import { offersRemoteCommands, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, type SessionStore } from "./session"
 import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
@@ -77,6 +78,8 @@ export interface GatewayControllerDeps {
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
   readonly remote?: (bot: string) => RemoteSetting
+  /** The bot's account in ADE (`account.ts`). Absent is a subscription. */
+  readonly account?: (bot: string) => BotAccount
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   readonly now?: () => number
@@ -263,6 +266,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         cwd: project,
         timeoutMs: BOT_TURN_TIMEOUT_MS,
         remote,
+        account: deps.account?.(message.bot) ?? { mode: "plan" },
         ...(sessionId ? { sessionId } : {}),
         ...(onData ? { onData } : {}),
       })

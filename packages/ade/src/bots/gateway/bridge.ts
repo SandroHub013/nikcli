@@ -15,6 +15,7 @@ import { runTurn } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
 import type { GatewayPanelApi, GatewayPanelDeps, LinkStatus as LiveStatus, PairingRequest } from "./panel-state"
 import { recheckTrust, scopeOf } from "./policy"
+import { localAccountStore } from "../account"
 import { localRemoteStore } from "./remote"
 import { localSessionStore } from "./session"
 
@@ -130,5 +131,6 @@ export function startAppGatewayController(): Promise<GatewayController> {
     sessions: localSessionStore(),
     threads: localGatewayThreads(),
     remote: (bot) => localRemoteStore().get(bot),
+    account: (bot) => localAccountStore().get(bot),
   })
 }

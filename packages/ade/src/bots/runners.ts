@@ -20,6 +20,7 @@
 
 import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
+import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
 import { PLAN_RUNNERS } from "./terms"
@@ -109,8 +110,12 @@ export function isFreeModel(model?: string | undefined): boolean {
   return typeof model === "string" && /:free$/i.test(model.trim())
 }
 
-export function spendKind(runnerId?: string | undefined, model?: string | undefined): SpendKind {
-  if (typeof runnerId === "string" && PLAN_RUNNERS.includes(runnerId)) return "plan"
+export function spendKind(
+  runnerId?: string | undefined,
+  model?: string | undefined,
+  account?: BotAccount | undefined,
+): SpendKind {
+  if (typeof runnerId === "string" && PLAN_RUNNERS.includes(runnerId)) return account?.mode === "key" ? "api" : "plan"
   if (isFreeModel(model)) return "free"
   if (!model?.trim()) return "metered"
   return "api"
@@ -122,6 +127,8 @@ export interface SpendLine {
   readonly tokens: number
   /** Set only for a real charge. A plan and a free model never have one. */
   readonly usd?: string
+  /** Codex with a key reports tokens and no dollar amount. */
+  readonly unreported?: true
 }
 
 /** Dollars of a real charge: three places under a cent, two otherwise. */
@@ -133,16 +140,21 @@ export function formatUsd(usd: number): string {
 export function spendLine(input: {
   readonly runnerId?: string | undefined
   readonly model?: string | undefined
+  readonly account?: BotAccount | undefined
+  /** The mode of a turn already finished. It wins over the bot's account now. */
+  readonly kind?: SpendKind | undefined
   readonly tokens: number
   readonly costUsd: number
 }): SpendLine {
-  const kind = spendKind(input.runnerId, input.model)
+  const kind = input.kind ?? spendKind(input.runnerId, input.model, input.account)
   const model = input.model?.trim() ?? ""
+  const unreported = kind === "api" && input.runnerId === "codex"
   return {
     kind,
     model,
     tokens: input.tokens,
-    ...((kind === "api" || kind === "metered") && input.costUsd > 0 ? { usd: formatUsd(input.costUsd) } : {}),
+    ...(!unreported && (kind === "api" || kind === "metered") && input.costUsd > 0 ? { usd: formatUsd(input.costUsd) } : {}),
+    ...(unreported ? { unreported: true as const } : {}),
   }
 }
 
@@ -215,6 +227,11 @@ export interface TurnSpec {
    * computer to see what it does. See `remoteTools`.
    */
   readonly remote?: RemoteTools
+  /**
+   * Claude Code and Codex only. Absent is a subscription: the spawn strips
+   * inherited API keys. A key is the name in ADE's index, never the value.
+   */
+  readonly account?: BotAccount
 }
 
 /**
@@ -316,10 +333,29 @@ const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
  */
 const notStdin = (prompt: string) => (prompt.trim() === "-" ? " -" : prompt)
 
+/**
+ * The account flag for Claude Code or Codex.
+ *
+ * A missing account is a subscription. Key mode never falls back to that:
+ * no name still asks for `account-key`, and Rust refuses the spawn.
+ */
+function accountLaunch(account: BotAccount | undefined): { readonly flags: readonly string[]; readonly secrets?: readonly string[] } {
+  if (account?.mode === "key") {
+    return account.key ? { flags: ["account-key"], secrets: [account.key] } : { flags: ["account-key"] }
+  }
+  return { flags: ["account-plan"] }
+}
+
 export function turnCommand(
   runner: Runner,
   spec: TurnSpec,
-): { readonly command: string; readonly args: string[]; readonly cwd?: string; readonly flags?: readonly string[] } {
+): {
+  readonly command: string
+  readonly args: string[]
+  readonly cwd?: string
+  readonly flags?: readonly string[]
+  readonly secrets?: readonly string[]
+} {
   const { bot, message, sessionId } = spec
   switch (runner.id) {
     case "nikcli":
@@ -400,7 +436,7 @@ export function turnCommand(
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
-      return { command: runner.command, args }
+      return { command: runner.command, args, ...accountLaunch(spec.account) }
     }
     case "codex": {
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
@@ -422,12 +458,14 @@ export function turnCommand(
           // `--` first: a message that starts with `-` is a message, not an option.
           args: ["exec", "resume", "--json", "--skip-git-repo-check", ...model, ...config, "--", sessionId, notStdin(message)],
           ...where,
+          ...accountLaunch(spec.account),
         }
       }
       return {
         command: runner.command,
         args: ["exec", "--json", "--skip-git-repo-check", ...model, ...config, "--", notStdin(withInstructions(bot, message))],
         ...where,
+        ...accountLaunch(spec.account),
       }
     }
   }

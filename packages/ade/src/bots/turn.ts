@@ -23,8 +23,9 @@ import { stripAnsi } from "../session/stream"
 import { registerSender, unregisterSender } from "../session/senders"
 import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
+import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RemoteTools, type RunnerId } from "./runners"
+import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, spendKind, turnCommand, type RemoteTools, type RunnerId } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
 
 export interface TurnRequest {
@@ -65,6 +66,8 @@ export interface TurnRequest {
   readonly onData?: (chunk: string) => void
   /** A turn from a chat, through a bot's gateway: its tools (G5, `RemoteTools`). */
   readonly remote?: RemoteTools
+  /** Claude Code and Codex: subscription or one key name. Absent is a subscription. */
+  readonly account?: BotAccount
 }
 
 /**
@@ -190,6 +193,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.effort ? { effort: request.effort } : {}),
       runner: runner.id,
     }
+    update({ ...talk, turnMode: spendKind(runner.id, bot.model, request.account) })
     if (bot.disabledTools.length > 0 && !enforcesDisabledTools(runner.id)) {
       const problem = t("bots.turn.cannotRefuse", runner.label)
       update(applyProblem(talk, problem, Date.now()))
@@ -198,7 +202,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
     const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
     const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
-    const { command, args, cwd, flags } = turnCommand(runner, {
+    const { command, args, cwd, flags, secrets } = turnCommand(runner, {
       bot,
       message: request.message,
       ...(request.sessionId ? { sessionId: request.sessionId } : {}),
@@ -206,6 +210,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.partial ? { partial: true } : {}),
       ...(outbox ? { outbox } : {}),
       ...(request.remote ? { remote: request.remote } : {}),
+      ...(request.account ? { account: request.account } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 
@@ -245,6 +250,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
             ...(flags ? { flags } : {}),
+            ...(secrets && secrets.length > 0 ? { secrets: [...secrets] } : {}),
             ...(request.onData ? { onData: request.onData } : {}),
             onLine: (line, stream) => {
               if (stream === "err") {

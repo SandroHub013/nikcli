@@ -80,3 +80,134 @@ const SECRET =
 export function scrubSecrets(text: string): string {
   return text.replace(SECRET, SECRET_MARK)
 }
+
+/**
+ * Which routines may run (B11). One row per runner and mode.
+ *
+ * The scheduler, the daily counters and the "ADE was closed" rule are not
+ * here. `routinePolicy` is what that scheduler must ask before a run, and
+ * `routineConsentHash` is what suspends a routine when the account changes.
+ */
+
+export type RoutineMode = "plan" | "key" | "free" | "paid"
+
+export interface RoutineCap {
+  readonly perDay?: number
+  readonly minGapMin?: number
+  readonly perRunUsd?: number
+  readonly perDayUsd?: number
+  readonly spendCapRequired?: boolean
+}
+
+export interface RoutineRow {
+  readonly runner: string
+  readonly mode: RoutineMode
+  readonly allowed: boolean
+  readonly cap?: RoutineCap
+  readonly source?: string
+  readonly checked?: string
+  readonly reason?: string
+}
+
+const OPENROUTER = "https://openrouter.ai/docs/api-reference/limits"
+const CHECKED_TERMS = "2026-09-15"
+const CHECKED_OPENROUTER = "2026-09-25"
+
+export const ROUTINE_POLICY: readonly RoutineRow[] = [
+  {
+    runner: "nikcli",
+    mode: "free",
+    allowed: true,
+    cap: { perDay: 20, minGapMin: 15 },
+    source: OPENROUTER,
+    checked: CHECKED_OPENROUTER,
+  },
+  {
+    runner: "nikcli",
+    mode: "paid",
+    allowed: true,
+    cap: { perRunUsd: 0.1, perDayUsd: 0.5, spendCapRequired: true },
+    source: OPENROUTER,
+    checked: CHECKED_OPENROUTER,
+  },
+  {
+    runner: "claude",
+    mode: "key",
+    allowed: true,
+    cap: { perRunUsd: 0.1, perDayUsd: 0.5, spendCapRequired: true },
+    source: "https://www.anthropic.com/legal/consumer-terms",
+    checked: CHECKED_TERMS,
+  },
+  {
+    runner: "claude",
+    mode: "plan",
+    allowed: true,
+    cap: { perDay: 8, minGapMin: 60 },
+    source: "https://code.claude.com/docs/en/authentication",
+    checked: CHECKED_TERMS,
+  },
+  {
+    runner: "codex",
+    mode: "key",
+    allowed: false,
+    reason: "Codex non riporta un costo, quindi il tetto di spesa non si può controllare",
+    source: "https://learn.chatgpt.com/docs/auth",
+    checked: "2026-09-25",
+  },
+  {
+    runner: "codex",
+    mode: "plan",
+    allowed: true,
+    cap: { perDay: 8, minGapMin: 60 },
+    source: "https://learn.chatgpt.com/docs/non-interactive-mode",
+    checked: CHECKED_TERMS,
+  },
+  {
+    runner: "grok",
+    mode: "plan",
+    allowed: false,
+    reason: "i termini xAI non sono stati letti",
+    checked: CHECKED_TERMS,
+  },
+]
+
+/** nikcli's mode is the catalog model (`:free`), never the name the user typed. */
+export function routineModeOf(
+  runner: string | undefined,
+  accountMode: "plan" | "key" | undefined,
+  model: string | undefined,
+): RoutineMode {
+  if (!runner || runner === "nikcli") return typeof model === "string" && /:free$/i.test(model.trim()) ? "free" : "paid"
+  return accountMode === "key" ? "key" : "plan"
+}
+
+export function routinePolicy(
+  runner: string,
+  mode: RoutineMode,
+  model?: string | undefined,
+): { readonly allowed: true; readonly cap: RoutineCap } | { readonly allowed: false; readonly reason: string } {
+  if (runner === "grok") return { allowed: false, reason: "i termini xAI non sono stati letti" }
+  const effective: RoutineMode = runner === "nikcli" ? (typeof model === "string" && /:free$/i.test(model.trim()) ? "free" : "paid") : mode
+  const row = ROUTINE_POLICY.find((entry) => entry.runner === runner && entry.mode === effective)
+  if (!row || !row.allowed || !row.cap) {
+    return { allowed: false, reason: row?.reason ?? "questo runner non può eseguire routine" }
+  }
+  return { allowed: true, cap: row.cap }
+}
+
+/** Prompt, runner, mode, model, cap and the key's name. A change means the consent is gone. */
+export function routineConsentHash(input: {
+  readonly prompt: string
+  readonly runner: string
+  readonly mode: string
+  readonly model: string
+  readonly cap: string
+  readonly key?: string | undefined
+}): string {
+  return [input.prompt, input.runner, input.mode, input.model, input.cap, input.key ?? ""].join("\u001f")
+}
+
+/** False when the account (mode or key name) changed after the user agreed. */
+export function routineConsentHolds(saved: string, now: string): boolean {
+  return saved.length > 0 && saved === now
+}

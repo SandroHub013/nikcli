@@ -205,6 +205,36 @@ describe("the gateways' controller", () => {
     await until("niente da fermare", () => b.sent.at(-1)!.text === t("gateway.nothingToStop"))
   })
 
+  test("un turno dal gateway porta il flag dell'account", async () => {
+    const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
+    const machine: TurnDeps = {
+      host: async () =>
+        ({
+          spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[]; onExit: (code: number | null) => void }) => {
+            seen.push({
+              ...(options.flags ? { flags: options.flags } : {}),
+              ...(options.secrets ? { secrets: options.secrets } : {}),
+            })
+            options.onExit(0)
+            return { kill: () => {}, write: () => {}, resize: () => {} }
+          },
+        }) as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
+    }
+    const b = bridge()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: (request) => runTurn(request, machine),
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      account: () => ({ mode: "key", key: "lavoro" }),
+    })
+    b.emit("ciao")
+    await until("avviato", () => seen.length === 1)
+    expect(seen[0]!.flags).toEqual(["account-key"])
+    expect(seen[0]!.secrets).toEqual(["lavoro"])
+    await until("risposto", () => b.sent.length >= 1)
+  })
+
   test("a bot whose file changed since the user's yes is refused in the chat, and no turn starts", async () => {
     const b = bridge()
     const turns = fakeTurns()
