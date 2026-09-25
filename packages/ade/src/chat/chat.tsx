@@ -33,6 +33,17 @@ import {
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
 import { isOpenOn, useFolder } from "./first-use"
 import { stopAnswer } from "./stop"
+import {
+  addAttachment,
+  attachmentFor,
+  attachmentParts,
+  completeMention,
+  isEnvFile,
+  mentionAt,
+  mentionCandidates,
+  type Attachment,
+} from "./attachments"
+import { composerAction, liveAnnouncement } from "./composer"
 import { forgetLegacyConversation } from "./legacy"
 import { requestProblem, retryNotice } from "./errors"
 import { answerUsage, answerUsageText, sessionUsage, sessionUsageText } from "./usage"
@@ -116,6 +127,16 @@ export function Chat(props: ChatProps) {
 
   let scroller: HTMLDivElement | undefined
   let composer: HTMLTextAreaElement | undefined
+  // Files that go with the next message (C6): the project's only (`attachments.ts`).
+  const [attachments, setAttachments] = createSignal<readonly Attachment[]>([])
+  // The `@` word being typed, and the project files that match it.
+  const [mention, setMention] = createSignal<{ start: number; query: string }>()
+  const [mentionResults, setMentionResults] = createSignal<readonly string[]>([])
+  const [mentionIndex, setMentionIndex] = createSignal(0)
+  let mentionAsk = 0
+  let mentionTimer: ReturnType<typeof setTimeout> | undefined
+  // When the open session was put on screen: answers finished before it are not read out again.
+  let shownSince = Date.now()
 
   /**
    * C3's models and agents, from the catalog the store loads through the
@@ -157,7 +178,10 @@ export function Chat(props: ChatProps) {
     on(
       () => props.projectRoot,
       (_root, previous) => {
-        if (previous !== undefined) setCurrent(undefined)
+        if (previous !== undefined) {
+          setCurrent(undefined)
+          setAttachments([])
+        }
       },
       { defer: true },
     ),
@@ -222,12 +246,79 @@ export function Chat(props: ChatProps) {
   )
 
   const openSession = (sessionID: string) => {
+    shownSince = Date.now()
     setCurrent(sessionID)
     setProblem(undefined)
     void store
       .loadMessages(sessionID)
       .catch((error: unknown) => setProblem(requestProblem(error)))
   }
+
+  const closeMention = () => {
+    mentionAsk++
+    clearTimeout(mentionTimer)
+    setMention(undefined)
+    setMentionResults([])
+  }
+
+  // Typing `@` is a use: it opens the folder if needed, then asks the server for its files.
+  const lookUp = (value: string, caret: number) => {
+    const found = props.projectRoot && !foreign() ? mentionAt(value, caret) : undefined
+    if (!found) return closeMention()
+    setMention(found)
+    const ask = ++mentionAsk
+    clearTimeout(mentionTimer)
+    mentionTimer = setTimeout(() => {
+      void (async () => {
+        if (!(await use())) return
+        const paths = await store.findFiles(found.query).catch(() => [] as string[])
+        if (ask !== mentionAsk) return
+        setMentionResults(mentionCandidates(paths))
+        setMentionIndex(0)
+      })()
+    }, 120)
+  }
+
+  const pickMention = (relative: string | undefined) => {
+    const found = mention()
+    const root = props.projectRoot
+    closeMention()
+    if (!relative || !found || !root || !composer) return
+    if (isEnvFile(relative)) {
+      setProblem(t("chat.attach.env", relative))
+      return
+    }
+    const file = attachmentFor(root, relative)
+    if (!file) {
+      setProblem(t("chat.attach.outside", relative))
+      return
+    }
+    const next = completeMention(draft(), found, composer.selectionStart ?? draft().length, file.relative)
+    setDraft(next.text)
+    setAttachments((list) => addAttachment(list, file))
+    queueMicrotask(() => composer?.setSelectionRange(next.caret, next.caret))
+  }
+
+  const attach = async () => {
+    const root = props.projectRoot
+    if (!root) return
+    let picked: string | string[] | null = null
+    try {
+      const dialog = await import("@tauri-apps/plugin-dialog")
+      picked = await dialog.open({ multiple: true, directory: false, defaultPath: root, title: t("chat.attach.addHint") })
+    } catch {
+      return
+    }
+    setProblem(undefined)
+    for (const path of picked === null ? [] : Array.isArray(picked) ? picked : [picked]) {
+      const file = isEnvFile(path) ? undefined : attachmentFor(root, path)
+      if (file) setAttachments((list) => addAttachment(list, file))
+      else setProblem(t(isEnvFile(path) ? "chat.attach.env" : "chat.attach.outside", path))
+    }
+    composer?.focus()
+  }
+
+  const live = createMemo(() => liveAnnouncement(turns(), shownSince)?.text ?? "")
 
   const newSession = () => {
     setCurrent(undefined)
@@ -247,9 +338,10 @@ export function Chat(props: ChatProps) {
         setProblem(t("chat.model.choose"))
         return
       }
-      const id = await store.send(open(), text, ref, agent() || undefined)
+      const id = await store.send(open(), text, ref, agent() || undefined, attachmentParts(attachments()))
       setCurrent(id)
       setDraft("")
+      setAttachments([])
     } catch (error) {
       setProblem(requestProblem(error))
     } finally {
@@ -284,10 +376,15 @@ export function Chat(props: ChatProps) {
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      void send()
-    }
+    const results = mentionResults()
+    const action = composerAction(event, mention() !== undefined && results.length > 0)
+    if (action === "none") return
+    event.preventDefault()
+    if (action === "send") void send()
+    else if (action === "mentionNext") setMentionIndex((index) => (index + 1) % results.length)
+    else if (action === "mentionPrevious") setMentionIndex((index) => (index - 1 + results.length) % results.length)
+    else if (action === "mentionPick") pickMention(results[mentionIndex()])
+    else closeMention()
   }
 
   return (
@@ -421,7 +518,63 @@ export function Chat(props: ChatProps) {
 
           <Show when={problem()}>{(message) => <p data-slot="chat-error">{message()}</p>}</Show>
 
+          <Show when={attachments().length > 0}>
+            <ul data-slot="chat-attachments" aria-label={t("chat.attach.list")}>
+              <For each={attachments()}>
+                {(file) => (
+                  <li data-slot="chat-attachment">
+                    <span data-slot="chat-attachment-name">{file.relative}</span>
+                    <button
+                      type="button"
+                      data-slot="chat-attachment-remove"
+                      aria-label={t("chat.attach.remove", file.relative)}
+                      title={t("chat.attach.remove", file.relative)}
+                      onClick={() => setAttachments((list) => list.filter((item) => item.path !== file.path))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+          <Show when={mention()}>
+            <ul data-slot="chat-mentions" id="chat-mentions" role="listbox" aria-label={t("chat.mention.list")}>
+              <Show
+                when={mentionResults().length > 0}
+                fallback={<li data-slot="chat-mention-none">{t("chat.mention.none")}</li>}
+              >
+                <For each={mentionResults()}>
+                  {(path, index) => (
+                    <li
+                      data-slot="chat-mention"
+                      id={`chat-mention-${index()}`}
+                      role="option"
+                      aria-selected={index() === mentionIndex()}
+                      // Before the textarea blurs: the choice lands in it, with the focus.
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        pickMention(path)
+                      }}
+                    >
+                      {path}
+                    </li>
+                  )}
+                </For>
+              </Show>
+            </ul>
+          </Show>
+
           <div data-slot="chat-composer">
+            <button
+              type="button"
+              data-slot="chat-attach"
+              title={t("chat.attach.addHint")}
+              disabled={!props.projectRoot || foreign()}
+              onClick={() => void attach()}
+            >
+              {t("chat.attach.add")}
+            </button>
             <textarea
               ref={(el) => (composer = el)}
               data-slot="chat-input"
@@ -429,7 +582,18 @@ export function Chat(props: ChatProps) {
               placeholder={t("chat.input.placeholder")}
               value={draft()}
               disabled={foreign()}
-              onInput={(event) => setDraft(event.currentTarget.value)}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={mention() !== undefined}
+              aria-controls={mention() ? "chat-mentions" : undefined}
+              aria-activedescendant={
+                mention() && mentionResults().length > 0 ? `chat-mention-${mentionIndex()}` : undefined
+              }
+              onInput={(event) => {
+                setDraft(event.currentTarget.value)
+                lookUp(event.currentTarget.value, event.currentTarget.selectionStart ?? event.currentTarget.value.length)
+              }}
+              onBlur={closeMention}
               onKeyDown={onKeyDown}
             />
             <Show
@@ -452,6 +616,10 @@ export function Chat(props: ChatProps) {
           </div>
         </div>
       </div>
+      {/* What a screen reader hears when an answer is finished (`composer.ts`). */}
+      <p data-slot="chat-live" aria-live="polite">
+        {live()}
+      </p>
     </section>
   )
 }

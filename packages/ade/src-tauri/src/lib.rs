@@ -232,6 +232,56 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
     Err(format!("fuori dal progetto: {path}"))
 }
 
+/// Whether `path` is a file of the project at `root` once links and
+/// junctions are followed (C6 review, MEDIO): the chat's attachments.
+///
+/// nikcli reads a `file://` part itself, with `bypassCwdCheck` and without
+/// asking (`session/prompt.ts`), so a link or a junction inside the project
+/// aimed at `~/.ssh` or an `auth.json` would send that file to the provider.
+/// Both sides are resolved (`resolve_for_check`, which follows them) and
+/// compared by whole components (`starts_with`), so `app-backup` is not
+/// inside `app`. The path must be absolute and an existing file.
+///
+/// A `.env` or `.env.*` is refused by the name it resolves to (`env`): nikcli
+/// guards those files for its read tool, and an attachment skips that guard.
+///
+/// There is a window between this check and nikcli's read (TOCTOU): a link
+/// swapped in between is read where it points then. Closing it would mean
+/// sending the file's contents instead of its path; the check still stops
+/// every link already there when the user attaches.
+fn attachment_inside(root: &Path, path: &Path) -> Result<PathBuf, &'static str> {
+    if !path.is_absolute() || !root.is_absolute() {
+        return Err("outside");
+    }
+    let root = root.canonicalize().map_err(|_| "outside")?;
+    let resolved = resolve_for_check(path).map_err(|_| "outside")?;
+    if resolved == root || !resolved.starts_with(&root) {
+        return Err("outside");
+    }
+    if !resolved.is_file() {
+        return Err("notFile");
+    }
+    if is_env_file(&resolved) {
+        return Err("env");
+    }
+    Ok(resolved)
+}
+
+/// `.env` or `.env.<anything>`, in any case.
+fn is_env_file(path: &Path) -> bool {
+    let name = path.file_name().map(|name| name.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    name == ".env" || name.starts_with(".env.")
+}
+
+/// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
+#[tauri::command]
+fn chat_attachment_inside(root: String, path: String) -> String {
+    match attachment_inside(Path::new(&root), Path::new(&path)) {
+        Ok(_) => "ok".to_string(),
+        Err(reason) => reason.to_string(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Filesystem commands — let the frontend read the disk without shelling out
 // ---------------------------------------------------------------------------
@@ -2009,6 +2059,7 @@ pub fn run() {
             serve::nikcli_serve_stop,
             serve_proxy::nikcli_serve_fetch,
             serve_proxy::nikcli_serve_abort,
+            chat_attachment_inside,
             shots::shots_dir,
             shots::shots_recent,
             shots::shots_watch,
@@ -2059,6 +2110,93 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh folder under the test temp dir (`TMP`), with a project and a secret beside it.
+    fn attachment_fixture(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!("ade-attach-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let project = base.join("app");
+        let secrets = base.join("segreti");
+        std::fs::create_dir_all(project.join("src")).unwrap();
+        std::fs::create_dir_all(&secrets).unwrap();
+        std::fs::write(project.join("src").join("a.ts"), "export {}").unwrap();
+        std::fs::write(secrets.join("id_ed25519"), "CHIAVE-FINTA").unwrap();
+        std::fs::create_dir_all(base.join("app-backup")).unwrap();
+        std::fs::write(base.join("app-backup").join("x.ts"), "x").unwrap();
+        (base, project, secrets)
+    }
+
+    #[test]
+    fn an_attachment_is_a_real_file_of_the_project_and_nothing_else() {
+        let (base, project, _secrets) = attachment_fixture("real");
+        let inside = |path: PathBuf| attachment_inside(&project, &path);
+        assert!(inside(project.join("src").join("a.ts")).is_ok());
+        // Climbing out, a sibling with the same prefix, the folder itself, a folder, a missing file.
+        assert_eq!(inside(project.join("src").join("..").join("..").join("segreti").join("id_ed25519")), Err("outside"));
+        assert_eq!(inside(base.join("app-backup").join("x.ts")), Err("outside"));
+        assert_eq!(inside(project.clone()), Err("outside"));
+        assert_eq!(inside(project.join("src")), Err("notFile"));
+        assert_eq!(inside(project.join("src").join("manca.ts")), Err("notFile"));
+        assert_eq!(attachment_inside(&project, Path::new("src/a.ts")), Err("outside"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_dotenv_file_is_never_attached_whatever_it_is_called() {
+        let (base, project, _secrets) = attachment_fixture("env");
+        for name in [".env", ".env.local", ".ENV.production", ".env.example"] {
+            std::fs::write(project.join(name), "API_KEY=finta").unwrap();
+            assert_eq!(attachment_inside(&project, &project.join(name)), Err("env"), "{name}");
+        }
+        std::fs::write(project.join("env.ts"), "x").unwrap();
+        assert!(attachment_inside(&project, &project.join("env.ts")).is_ok());
+        // A link with another name, aimed at .env inside the project: refused by what it resolves to.
+        let link = project.join("docs");
+        #[cfg(windows)]
+        let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(&link).arg(project.join("src")).output().map(|o| o.status.success());
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(project.join("src"), &link).map(|_| true);
+        std::fs::write(project.join("src").join(".env"), "API_KEY=finta").unwrap();
+        if matches!(made, Ok(true)) {
+            assert_eq!(attachment_inside(&project, &link.join(".env")), Err("env"));
+        }
+        let _ = std::fs::remove_dir(&link);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_in_the_project_aimed_outside_is_refused() {
+        let (base, project, secrets) = attachment_fixture("junction");
+        let link = project.join("docs");
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&secrets)
+            .output()
+            .unwrap();
+        assert!(made.status.success(), "mklink /J: {}", String::from_utf8_lossy(&made.stderr));
+        assert_eq!(attachment_inside(&project, &link.join("id_ed25519")), Err("outside"));
+        let _ = std::fs::remove_dir(&link);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_link_in_the_project_aimed_outside_is_refused() {
+        let (base, project, secrets) = attachment_fixture("link");
+        let link = project.join("note.txt");
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(secrets.join("id_ed25519"), &link);
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(secrets.join("id_ed25519"), &link);
+        match made {
+            Ok(()) => assert_eq!(attachment_inside(&project, &link), Err("outside")),
+            // Windows without Developer Mode cannot make a symlink: the junction test covers the case.
+            Err(error) => eprintln!("symlink non creato, caso saltato: {error}"),
+        }
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     #[cfg(windows)]
     fn sleeper() -> std::process::Command {

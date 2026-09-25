@@ -789,3 +789,111 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* C6: the composer's files, the `@` list and what a screen reader hears. */
+[data-slot="chat-attach"] {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--ade-space-6);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-slot="chat-attach"]:hover:not(:disabled) {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-attach"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="chat-attachments"],
+[data-slot="chat-mentions"] {
+  flex: 0 0 auto;
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 0 var(--ade-space-7);
+  list-style: none;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-attachments"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  padding-top: var(--ade-space-4);
+}
+
+[data-slot="chat-attachment"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  max-width: 100%;
+  padding: var(--ade-space-1) var(--ade-space-2) var(--ade-space-1) var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-attachment-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="chat-attachment-remove"] {
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-slot="chat-attachment-remove"]:hover {
+  color: var(--ade-text);
+}
+
+[data-slot="chat-mentions"] {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-top: var(--ade-space-3);
+}
+
+[data-slot="chat-mention"],
+[data-slot="chat-mention-none"] {
+  padding: var(--ade-space-2) var(--ade-space-5);
+  border-radius: var(--ade-radius-md);
+  color: var(--ade-text-soft);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="chat-mention"] {
+  cursor: pointer;
+}
+
+[data-slot="chat-mention"][aria-selected="true"],
+[data-slot="chat-mention"]:hover {
+  background: var(--ade-surface);
+  color: var(--ade-text);
+}
+
+/* Heard, not seen: the answers are already on screen. */
+[data-slot="chat-live"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
