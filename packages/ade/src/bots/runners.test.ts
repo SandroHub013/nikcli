@@ -373,10 +373,15 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
     expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
   })
 
-  test("Codex: niente approval_policy=\"never\"", () => {
-    const { args } = turnCommand(runnerById("codex"), { bot: fromRepo, message: "x" })
-    expect(args).not.toContain('approval_policy="never"')
-    expect(args.some((arg) => arg.startsWith("approval_policy="))).toBe(true)
+  test("Codex: nessun approval_policy per un bot di progetto (codex-cli 0.154 esce con 1 su \"untrusted\", B7)", () => {
+    for (const spec of [
+      { bot: fromRepo, message: "x" },
+      { bot: fromRepo, message: "x", sessionId: "t-1" },
+    ]) {
+      const { args } = turnCommand(runnerById("codex"), spec)
+      expect(args.some((arg) => arg.startsWith("approval_policy="))).toBe(false)
+      expect(args).toContain('sandbox_mode="read-only"')
+    }
   })
 
   test("Codex: sempre in sola lettura, perché codex exec ignora approval_policy (review B3, A1)", () => {

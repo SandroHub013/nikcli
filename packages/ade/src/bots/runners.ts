@@ -304,10 +304,11 @@ export function turnCommand(
       const repository = fromRepository(bot)
       const inOutbox = !repository && !canWrite(bot) && spec.outbox !== undefined
       const sandbox = !repository && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
-      // Ignored by `codex exec` today (see `fromRepository`); said anyway, so a
-      // Codex that starts honouring it asks rather than runs.
-      const approval = repository ? "untrusted" : "never"
-      const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", `approval_policy="${approval}"`]
+      // A project's bot says no approval policy: `codex exec` runs as `never`
+      // whatever it is told (see `fromRepository`), and codex-cli 0.154 exits 1
+      // on `untrusted` ("no longer supported; remove this setting", B7 live).
+      // The read-only sandbox is its limit.
+      const config = ["-c", `sandbox_mode="${sandbox}"`, ...(repository ? [] : ["-c", `approval_policy="never"`])]
       if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []
       const where = inOutbox ? { cwd: spec.outbox } : {}
