@@ -29,7 +29,7 @@ import { runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
-import { sessionKey, type SessionStore } from "./session"
+import { resumable, sessionKey, type SessionStore } from "./session"
 
 /** `gateway:message`, as Rust emits it. */
 export interface GatewayMessage {
@@ -218,7 +218,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
-      const sessionId = deps.sessions.get(key)
+      const sessionId = resumable(deps.sessions.get(key), project, runner)
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
@@ -235,7 +235,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const result = await turn.result
       clearInterval(typing)
       typing = undefined
-      if (result.sessionId) deps.sessions.set(key, result.sessionId)
+      if (result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
       if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))
