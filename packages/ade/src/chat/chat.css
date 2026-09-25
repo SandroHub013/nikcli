@@ -87,6 +87,134 @@
   box-shadow: var(--ade-focus-ring);
 }
 
+/* ── sessions beside the conversation (C4) ────────────────────────────────── */
+
+[data-slot="chat-main"] {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-slot="chat-column"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+[data-slot="chat-column"] > [data-slot="chat-rules-note"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-3) var(--ade-space-7);
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
+[data-slot="chat-sessions"] {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 220px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ade-space-4) var(--ade-space-3);
+  border-right: 1px solid var(--ade-border-subtle);
+  background: var(--ade-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ade-scrollbar-thumb) transparent;
+}
+
+[data-slot="chat-sessions-empty"] {
+  margin: 0;
+  padding: var(--ade-space-3);
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-session-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="chat-session-open"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-1);
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-md);
+  background: none;
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--ade-btn-transition);
+}
+
+[data-slot="chat-session-open"]:hover {
+  background: var(--ade-hover);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-session-open"]:active {
+  transform: var(--ade-press);
+}
+
+[data-slot="chat-session-open"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="chat-session-open"][aria-current="true"] {
+  background: var(--ade-active);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-session-title"] {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="chat-session-mark"] {
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-session-mark"][data-kind="waiting"] {
+  color: var(--ade-warning);
+}
+
+[data-slot="chat-session-input"] {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid var(--ade-border-strong);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-session-input"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* A narrow window keeps the conversation, the list gives way. */
+@media (max-width: 720px) {
+  [data-slot="chat-sessions"] {
+    flex-basis: 160px;
+  }
+}
+
 /* ── notice ───────────────────────────────────────────────────────────────── */
 
 [data-slot="chat-notice"] {
@@ -477,7 +605,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--ade-space-3);
-  margin: var(--ade-space-3) 0;
+  /* The conversation's column, as the messages are. */
+  max-width: 720px;
+  margin: var(--ade-space-3) auto;
   padding: var(--ade-space-4) var(--ade-space-5);
   border: 1px solid var(--ade-warning);
   border-radius: var(--ade-radius-md);
@@ -508,6 +638,49 @@
   /* The whole command, never cut: a long one scrolls inside its box. */
   max-height: 320px;
   overflow: auto;
+}
+
+[data-slot="chat-permission-call"] {
+  display: grid;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="chat-permission-call-head"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+/* The change an edit would make: every line, scrolling inside its box. */
+[data-slot="chat-permission-diff"] {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--ade-space-2) 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-diff-line"] {
+  display: block;
+  padding: 0 var(--ade-space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="chat-diff-line"][data-kind="add"] {
+  background: var(--ade-done-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="del"] {
+  background: var(--ade-error-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="hunk"],
+[data-slot="chat-diff-line"][data-kind="file"] {
+  color: var(--ade-text-soft);
 }
 
 [data-slot="chat-permission-actions"],

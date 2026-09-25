@@ -27,7 +27,14 @@
 import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { t } from "../i18n"
-import { appChatConnectionDeps, isChatRefused, openChat, type ChatConnection } from "./connection"
+import {
+  appChatConnectionDeps,
+  isChatRefused,
+  loadChatCatalog,
+  openChat,
+  type ChatCatalog,
+  type ChatConnection,
+} from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { readEvents, StreamRefused } from "./stream"
@@ -59,18 +66,27 @@ export interface ChatStore {
    * Sends `text` to `sessionID`, or to a new session made with the chat's
    * permission rules (`rules.ts`); the id it went to. The answer comes as
    * events. A session made elsewhere is refused with `ForeignSession`.
+   * `agent` is the one chosen in the chat; without it the server's default.
    */
-  send(sessionID: string | undefined, text: string, model: ModelRef): Promise<string>
+  send(sessionID: string | undefined, text: string, model: ModelRef, agent?: string): Promise<string>
+  /** Gives `sessionID` a new title; an empty one, or a session made elsewhere, is refused before anything is sent. */
+  rename(sessionID: string, title: string): Promise<void>
   /** Answers a permission request: this once, or no. «Always» is not offered (C5). */
   replyPermission(requestID: string, reply: "once" | "reject"): Promise<void>
   /** Answers a question: for each of its questions, the labels chosen or typed. */
   answerQuestion(requestID: string, answers: readonly (readonly string[])[]): Promise<void>
   /** Declines a question: the model goes on without an answer. */
   rejectQuestion(requestID: string): Promise<void>
-  /** Stops the answer running in `sessionID` on the server. */
+  /** Stops the answer running in `sessionID` on the server; one made elsewhere is refused with `ForeignSession`. */
   abort(sessionID: string): Promise<void>
   /** Loads a session's messages, and keeps loading them after every reconnection. */
   loadMessages(sessionID: string): Promise<void>
+  /**
+   * The providers, the agents and the configured model, through this folder's
+   * own connection: the same admission, no second one (C4). Loaded once per
+   * opening; a load that did not get the providers is tried again next time.
+   */
+  catalog(): Promise<ChatCatalog>
 }
 
 export interface ChatStoreDeps {
@@ -94,6 +110,19 @@ export const BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000
 const MESSAGE_LIMIT = 100
 
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
+const TITLE_LIMIT = 60
+
+/**
+ * A new session's title: the first line of what was sent. Given at creation
+ * because nikcli titles an untitled session with the provider's small model,
+ * which ADE's server does not pin and which on OpenRouter is a paid one: a
+ * session that already has a title is never titled by a model.
+ */
+export function titleFrom(text: string): string {
+  const first = text.trim().split(/\r?\n/, 1)[0]!.replace(/\s+/g, " ").trim()
+  return first.length > TITLE_LIMIT ? `${first.slice(0, TITLE_LIMIT - 1)}…` : first
+}
 
 function bySession<T extends { id: string; sessionID: string }>(list: readonly T[]): Record<string, T[]> {
   const grouped: Record<string, T[]> = {}
@@ -131,8 +160,15 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   let current: { connection: Open; stop: AbortController } | undefined
   /** Sessions whose messages are shown, reloaded after a reconnection. */
   const watched = new Set<string>()
+  let catalogLoad: { mine: number; promise: Promise<ChatCatalog> } | undefined
   /** Sessions made here, with the chat's rules, before their event arrives. */
   const ours = new Set<string>()
+  // A session made outside the chat — the TUI's, the web app's — is read, never written to (C5).
+  const mustBeOurs = (id: string) => {
+    if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
+      throw new ForeignSession(t("chat.foreignSession"))
+    }
+  }
   /** One list per load in flight: the events that arrive while it runs, applied again over what it loaded. */
   const arriving = new Set<ChatEvent[]>()
 
@@ -280,23 +316,37 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       void run(connection, mine, stop.signal)
     },
     close,
-    async send(sessionID, text, model) {
+    async send(sessionID, text, model, agent) {
       const connection = opened()
       const mine = generation
       let id = sessionID
       if (!id) {
-        const created = await connection.client.session.create({ permission: [...CHAT_PERMISSION] })
+        const created = await connection.client.session.create({ title: titleFrom(text), permission: [...CHAT_PERMISSION] })
         id = (created.data as unknown as Session).id
         if (mine === generation) ours.add(id)
-      } else if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
-        throw new ForeignSession(t("chat.foreignSession"))
-      }
+      } else mustBeOurs(id)
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
-      await connection.client.session.promptAsync({ sessionID: id, parts: [{ type: "text", text }], model })
+      await connection.client.session.promptAsync({
+        sessionID: id,
+        parts: [{ type: "text", text }],
+        model,
+        ...(agent ? { agent } : {}),
+      })
       return id
     },
+    async rename(sessionID, title) {
+      const name = title.trim()
+      if (!name) throw new Error(t("chat.session.emptyTitle"))
+      mustBeOurs(sessionID)
+      const mine = generation
+      const result = await opened().client.session.update({ sessionID, title: name })
+      // The server's event says the same; this shows it at once, stream down or not.
+      const updated = result.data as unknown as Session | undefined
+      if (mine === generation && updated?.id === sessionID) applyChatEvent({ type: "session.updated", properties: { info: updated } }, state.data, setData)
+    },
     async abort(sessionID) {
+      mustBeOurs(sessionID)
       await opened().client.session.abort({ sessionID })
     },
     async replyPermission(requestID, reply) {
@@ -311,6 +361,18 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     async loadMessages(sessionID) {
       watched.add(sessionID)
       if (current) await fetchMessages(current.connection, sessionID, generation)
+    },
+    async catalog() {
+      const connection = opened()
+      const mine = generation
+      if (catalogLoad?.mine !== mine) {
+        const promise = loadChatCatalog(connection.client).then((catalog) => {
+          if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
+          return catalog
+        })
+        catalogLoad = { mine, promise }
+      }
+      return catalogLoad.promise
     },
   }
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createEffect } from "solid-js"
 import { openChat } from "./connection"
 import { CHAT_PERMISSION } from "./rules"
-import { createChatStore, ForeignSession, type ChatStoreDeps } from "./store"
+import { createChatStore, ForeignSession, titleFrom, type ChatStoreDeps } from "./store"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -84,6 +84,9 @@ function fakeServer() {
         const status = routes.status
         void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
       }
+      else if (request.method === "GET" && path === "/provider") reply(onEvent, 200, { all: [], default: {}, connected: [] })
+      else if (request.method === "GET" && path === "/agent") reply(onEvent, 200, [{ name: "build", mode: "primary" }])
+      else if (request.method === "GET" && path === "/config") reply(onEvent, 200, { model: "openrouter/x:free" })
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
       else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
       else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path)) reply(onEvent, 200, true)
@@ -93,7 +96,12 @@ function fakeServer() {
         // As the server does: the session keeps the rules it was made with.
         reply(onEvent, 200, { ...session("ses_nuova"), permission: JSON.parse(request.body ?? "{}").permission })
       }
-      else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
+      else if (request.method === "PATCH" && /^\/session\/[^/]+$/.test(path)) {
+        const id = path.split("/")[2]!
+        const found = routes.sessions.find((s) => (s as { id: string }).id === id)
+        if (!found) reply(onEvent, 404, { error: "non trovata" })
+        else reply(onEvent, 200, { ...found, title: JSON.parse(request.body ?? "{}").title, time: { created: 1, updated: 9 } })
+      } else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
       else if (request.method === "POST" && path.endsWith("/abort")) reply(onEvent, 200, true)
       else reply(onEvent, 404, { error: "non previsto" })
       return id
@@ -418,6 +426,20 @@ describe("the chat's store", () => {
     expect(server.calls("POST", /\/prompt_async$/).map((r) => r.path.split("?")[0])).toEqual(["/session/ses_2/prompt_async"])
   })
 
+  test("a session made elsewhere is neither renamed nor stopped: nothing reaches the server", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const renamed = await store.rename("ses_1", "Mio").then(() => undefined, (error: unknown) => error)
+    const stopped = await store.abort("ses_1").then(() => undefined, (error: unknown) => error)
+    expect(renamed).toBeInstanceOf(ForeignSession)
+    expect(stopped).toBeInstanceOf(ForeignSession)
+    expect(server.calls("PATCH", /^\/session\//)).toEqual([])
+    expect(server.calls("POST", /\/abort$/)).toEqual([])
+    expect(store.state.data.session.find((s) => s.id === "ses_1")?.title).not.toBe("Mio")
+  })
+
   test("yes this once, no, an answer and a declined question reach the server as sent", async () => {
     const server = fakeServer()
     const { store } = storeOn(server)
@@ -436,5 +458,74 @@ describe("the chat's store", () => {
       ["/question/que_1/reply", { answers: [["Sì"], ["rosso", "blu"]] }],
       ["/question/que_2/reject", null],
     ])
+  })
+
+  /* C4: the sessions the chat lists, opens, starts and renames. */
+  test("a message goes with the agent chosen; without one, the server's default", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const id = await store.send(undefined, "Ciao", FREE, "plan")
+    await store.send(id, "Ancora", FREE)
+    const bodies = server.calls("POST", /\/prompt_async$/).map((r) => JSON.parse(r.body!))
+    expect(bodies[0]).toMatchObject({ model: FREE, agent: "plan" })
+    expect(bodies[1]).toMatchObject({ model: FREE })
+    expect("agent" in bodies[1]).toBe(false)
+  })
+
+  test("a rename reaches the server and shows at once; an empty title sends nothing", async () => {
+    const server = fakeServer()
+    server.routes.sessions = [{ ...session("ses_1"), permission: [...CHAT_PERMISSION] }]
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.rename("ses_1", "  Il piano del lunedì  ")
+    const patch = server.calls("PATCH", /^\/session\/ses_1$/)
+    expect(patch.map((r) => JSON.parse(r.body!))).toEqual([{ title: "Il piano del lunedì" }])
+    expect(store.state.data.session.find((s) => s.id === "ses_1")?.title).toBe("Il piano del lunedì")
+    const empty = await store.rename("ses_1", "   ").then(() => undefined, (error: unknown) => error)
+    expect(empty).toBeInstanceOf(Error)
+    expect(server.calls("PATCH", /^\/session\//)).toHaveLength(1)
+  })
+
+  test("a new session is made with a title, so no model is called to name it", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.send(undefined, "  Spiegami   il file\nconnection.ts, per favore", FREE)
+    const created = JSON.parse(server.calls("POST", /^\/session$/)[0]!.body!)
+    expect(created.title).toBe("Spiegami il file")
+    // Not nikcli's default («New session - <ISO date>»), which it would title with its small model.
+    expect(created.title).not.toMatch(/^(New session|Child session) - \d{4}-/)
+    expect(titleFrom("x".repeat(80))).toBe(`${"x".repeat(59)}…`)
+  })
+
+  test("the catalog comes through the folder's own connection, once per opening", async () => {
+    const server = fakeServer()
+    let connects = 0
+    const { store } = storeOn(server, {
+      connect: (directory) => {
+        connects++
+        return openChat(directory, { bridge: server.bridge, admit: async () => ({ ok: true }), now: () => 0 })
+      },
+    })
+    const before = await store.catalog().then(() => "caricato", (error: unknown) => error)
+    // Not open: nothing to load it through, and nothing is called.
+    expect(before).toBeInstanceOf(Error)
+    expect(server.sent).toEqual([])
+    await store.open(A)
+    await live(server, store)
+    const [one, two] = await Promise.all([store.catalog(), store.catalog()])
+    expect(one).toEqual(two)
+    expect(one.configModel).toBe("openrouter/x:free")
+    expect(one.agents?.map((agent) => agent.name)).toEqual(["build"])
+    expect(connects).toBe(1)
+    const catalog = [...server.calls("GET", /^\/provider$/), ...server.calls("GET", /^\/agent$/), ...server.calls("GET", /^\/config$/)]
+    expect(catalog).toHaveLength(3)
+    for (const request of catalog) {
+      expect(decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")).toBe(A)
+    }
   })
 })

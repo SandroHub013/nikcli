@@ -82,15 +82,88 @@ export function partView(part: Part): PartView | undefined {
   }
 }
 
+/** One line of a unified diff, and what it is. */
+export interface DiffLine {
+  readonly kind: "file" | "hunk" | "add" | "del" | "context"
+  readonly text: string
+}
+
+export interface PermissionView {
+  readonly id: string
+  readonly permission: string
+  readonly patterns: string[]
+  /**
+   * The tool call that asks, when its part is loaded: which tool, what the
+   * model says it is for, and its input whole, unless that is already one of
+   * the patterns above it.
+   */
+  readonly call?: { readonly tool: string; readonly about?: string; readonly input: string }
+  /** For an edit or a write, the change it would make. */
+  readonly diff?: DiffLine[]
+}
+
+/** A call's input, whole: the value a person reads it by, or all of it. */
+function inputOf(input: unknown): string {
+  if (!input || typeof input !== "object") return ""
+  const record = input as Record<string, unknown>
+  for (const key of ["command", "filePath", "path", "url"]) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) return value
+  }
+  const json = JSON.stringify(record, null, 2)
+  return json === "{}" ? "" : json
+}
+
+export function diffLines(diff: string): DiffLine[] {
+  return diff
+    .replace(/\r\n/g, "\n")
+    .replace(/\n$/, "")
+    .split("\n")
+    .map((text): DiffLine => {
+      if (/^(Index: |={3,}|\+\+\+ |--- )/.test(text)) return { kind: "file", text }
+      if (text.startsWith("@@")) return { kind: "hunk", text }
+      if (text.startsWith("+")) return { kind: "add", text }
+      if (text.startsWith("-")) return { kind: "del", text }
+      return { kind: "context", text }
+    })
+}
+
 /**
  * A permission request as the card shows it: what, and on what. The patterns
  * whole, line breaks and spaces kept: for a shell command they are what the
  * user says yes to, and a tail cut off (`; curl … | sh`) would be approved unseen.
+ *
+ * With the parts of the message that asks (C4), also the call itself, found by
+ * its `callID`, and the diff an edit or a write puts in the request's metadata:
+ * for those the pattern is only the file's name.
  */
-export function permissionView(request: PermissionRequest): { id: string; permission: string; patterns: string[] } {
+export function permissionView(request: PermissionRequest, parts: readonly Part[] = []): PermissionView {
   const raw = request as unknown as Record<string, any>
   const patterns = Array.isArray(raw.patterns) ? raw.patterns.filter((p: unknown): p is string => typeof p === "string") : []
-  return { id: raw.id, permission: String(raw.permission ?? "?"), patterns }
+  const callID = raw.tool?.callID
+  const part = callID
+    ? (parts.find((item) => {
+        const candidate = item as unknown as Record<string, any>
+        return candidate.type === "tool" && candidate.callID === callID
+      }) as unknown as Record<string, any> | undefined)
+    : undefined
+  const input = part ? inputOf(part.state?.input) : ""
+  const about = part?.state?.input?.description ?? part?.state?.title
+  const call = part
+    ? {
+        tool: String(part.tool ?? "?"),
+        ...(typeof about === "string" && about.trim() ? { about: line(about) } : {}),
+        input: patterns.includes(input) ? "" : input,
+      }
+    : undefined
+  const diff = typeof raw.metadata?.diff === "string" && raw.metadata.diff.trim() ? diffLines(raw.metadata.diff) : undefined
+  return {
+    id: raw.id,
+    permission: String(raw.permission ?? "?"),
+    patterns,
+    ...(call ? { call } : {}),
+    ...(diff ? { diff } : {}),
+  }
 }
 
 /** What the user has picked so far, per question: the labels, and what they typed. */

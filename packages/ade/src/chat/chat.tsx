@@ -1,105 +1,78 @@
 /**
- * The chat section: a conversation with a language model, no terminal behind it.
+ * The chat section: a conversation with nikcli in the open project (C4).
  *
- * This is the one part of ADE with no agent and no process. It exists for the
- * questions that come before the work — how does this API behave, what is the
- * idiomatic shape here — which today are asked in a browser tab, with the
- * project's context left behind in the other window.
+ * Everything comes from the chat's store (`store.ts`): the folder's sessions,
+ * their messages as the server's events build them, the permission requests
+ * and the questions waiting. Leaving the section leaves the store running, so
+ * an answer goes on and is there on the way back. The direct OpenRouter path
+ * (`client.ts`) is no longer used here; C8 takes it out.
  *
- * Everything worth asserting is in the sibling `.ts` files: `model.ts` for the
- * state and the stream decoder, `segments.ts` for the code-block split,
- * `client.ts` for the request. A `.tsx` cannot be imported under `bun test`
- * here, so nothing that matters is allowed to live in this file.
+ * Everything worth asserting is in the sibling `.ts` files: `sessions.ts` for
+ * the list and the open session, `view.ts` for parts and cards, `store.ts`
+ * for the calls. A `.tsx` cannot be imported under `bun test` here, so
+ * nothing that matters is allowed to live in this file.
  */
 
-import { createEffect, createSignal, on, For, Show, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
 import { t } from "../i18n"
+import type { Agent, ProviderList } from "@nikcli-ai/sdk/client"
+import type { ChatCatalog } from "./connection"
 import {
-  appendDelta,
-  appendMessage,
-  createChatState,
-  messagesForRequest,
-  settleMessage,
-  modelsFromProviderList,
   agentsFromList,
-  defaultModelChoice,
   defaultAgentChoice,
+  defaultModelChoice,
   isAdeTestBuild,
-  validateSelectedModel,
+  modelsFromProviderList,
   sameModel,
   serializeModelRef,
-  parseModelRef,
-  type ModelRef,
-  type ChatMessage,
-  type ChatState,
-  type ChatModelChoice,
+  validateSelectedModel,
   type ChatAgentChoice,
+  type ChatModelChoice,
+  type ModelRef,
 } from "./model"
-import { splitSegments } from "./segments"
-import { CodeBlock } from "./code-block"
-import { streamChat, DEFAULT_CHAT_MODEL } from "./client"
-import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
-import { openChat, appChatConnectionDeps, loadChatCatalog, type ChatConnectionDeps } from "./connection"
+import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
+import { isOpenOn, useFolder } from "./first-use"
+import { stopAnswer } from "./stop"
+import { SessionList } from "./session-list"
+import {
+  connectionNotice,
+  conversationOf,
+  isBusy,
+  messageError,
+  partsOf,
+  followOpen,
+  sessionEntries,
+  type OpenSession,
+  type Turn,
+} from "./sessions"
+import { appChatStore, ForeignSession, type ChatStore } from "./store"
 import "./chat.css"
 
-const STORAGE_KEY = "ade.chat"
 const MODEL_KEY = "ade.chat.model"
 const AGENT_KEY = "ade.chat.agent"
 
+const STATUS = {
+  noProject: "chat.status.noProject",
+  notOpen: "chat.status.notOpen",
+  admitting: "chat.status.admitting",
+  connecting: "chat.status.connecting",
+  retrying: "chat.status.retrying",
+} as const
+
 export interface ChatProps {
-  /** OpenRouter key, from voice settings. Empty when not configured. */
+  /** OpenRouter key, from voice settings. No longer read here; C8 takes it out. */
   apiKey: string
   onOpenSettings: () => void
-  /** Project directory to open chat connection with trust check */
+  /** The open project: the chat works in its folder, once it is trusted. */
   projectRoot?: string
-  /** Admitted client injected by callers or tests */
-  client?: NikcliClient
-  /** Connection deps override for testing openChat */
-  connectionDeps?: ChatConnectionDeps
+  /** The window's store unless a caller brings one. */
+  store?: ChatStore
   /** Injected by tests or callers */
   providerList?: ProviderList
   /** Injected by tests or callers */
   agents?: readonly Agent[]
   /** Override for ADE Test mode (auto-detected if undefined) */
   isTest?: boolean
-}
-
-/**
- * Reads the saved conversation, tolerating anything.
- *
- * `localStorage` can be empty, stale or written by an older build, and in a
- * private window the accessor itself throws. A chat that refuses to open
- * because its history did not parse would be worse than one that starts
- * fresh, so every failure ends in the same place.
- */
-function loadState(): ChatState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return createChatState()
-    const parsed = JSON.parse(raw) as { messages?: unknown }
-    if (!Array.isArray(parsed.messages)) return createChatState()
-    const messages = parsed.messages.filter(
-      (m): m is ChatMessage =>
-        !!m &&
-        typeof m === "object" &&
-        typeof (m as ChatMessage).id === "string" &&
-        typeof (m as ChatMessage).text === "string" &&
-        ((m as ChatMessage).role === "user" || (m as ChatMessage).role === "assistant"),
-    )
-    // A message saved mid-stream is not streaming any more: the page reloaded.
-    return { messages: messages.map((m) => ({ ...m, streaming: false })) }
-  } catch {
-    return createChatState()
-  }
-}
-
-function save(state: ChatState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Quota, or a browser set to block site data. The conversation still works
-    // for this session; only its survival across a reload is lost.
-  }
 }
 
 function loadStoredModel(
@@ -125,74 +98,100 @@ function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
 }
 
 export function Chat(props: ChatProps) {
+  const store = props.store ?? appChatStore()
   const isTest = () => props.isTest ?? isAdeTestBuild()
-
-  const initialModels = () =>
-    modelsFromProviderList(props.providerList, { isTest: isTest() })
-  const initialAgents = () =>
-    agentsFromList(props.agents)
-
-  const [state, setState] = createSignal<ChatState>(createChatState())
   const [draft, setDraft] = createSignal("")
-  const [models, setModels] = createSignal<readonly ChatModelChoice[]>(initialModels())
-  const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(initialAgents())
+  const [models, setModels] = createSignal<readonly ChatModelChoice[]>(
+    modelsFromProviderList(props.providerList, { isTest: isTest() }),
+  )
+  const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(agentsFromList(props.agents))
   const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
   const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
-  const [busy, setBusy] = createSignal(false)
+  const [opened, setOpened] = createSignal<OpenSession>({ seen: false })
+  const setCurrent = (id: string | undefined) => setOpened({ id, seen: false })
+  const [sending, setSending] = createSignal(false)
+  const [problem, setProblem] = createSignal<string>()
 
   let scroller: HTMLDivElement | undefined
   let composer: HTMLTextAreaElement | undefined
-  let inFlight: AbortController | undefined
 
-  onMount(async () => {
-    setState(loadState())
-
-    let pList = props.providerList
-    let aList = props.agents
-    let cfgModel: string | undefined
-
-    let client = props.client
-    if (!client && props.projectRoot) {
-      try {
-        const opened = await openChat(props.projectRoot, props.connectionDeps ?? appChatConnectionDeps())
-        if (opened.ok) {
-          client = opened.client
-        }
-      } catch {}
-    }
-
-    if (client) {
-      try {
-        const catalog = await loadChatCatalog(client)
-        if (catalog.providerList) pList = catalog.providerList
-        if (catalog.agents) aList = catalog.agents
-        if (catalog.configModel) cfgModel = catalog.configModel
-      } catch {}
-    }
-
+  /**
+   * C3's models and agents, from the catalog the store loads through the
+   * folder's own connection (C4): the same admission, no second one.
+   */
+  const applyCatalog = (catalog: ChatCatalog) => {
     const testBuild = isTest()
-    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild })
+    const resolvedModels = modelsFromProviderList(catalog.providerList ?? props.providerList, { isTest: testBuild })
     setModels(resolvedModels)
-
-    const resolvedAgents = agentsFromList(aList)
+    const resolvedAgents = agentsFromList(catalog.agents ?? props.agents)
     setAgents(resolvedAgents)
-
-    setModel((current) => validateSelectedModel(current, resolvedModels, testBuild) ?? loadStoredModel(resolvedModels, testBuild, cfgModel))
+    setModel(
+      (current) =>
+        validateSelectedModel(current, resolvedModels, testBuild) ??
+        loadStoredModel(resolvedModels, testBuild, catalog.configModel),
+    )
     setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
+  }
 
+  /**
+   * A use of the chat: a picker opened, a message sent, «Collega» pressed.
+   * Only here does the chat admit and open the project and read its catalog
+   * (`first-use.ts`); showing the section calls nothing (C9).
+   */
+  const use = () => useFolder(store, props.projectRoot, applyCatalog)
+
+  onMount(() => {
     composer?.focus()
+    // Back to a folder already in use: its catalog is the store's, kept per opening.
+    if (isOpenOn(store, props.projectRoot)) void use()
   })
 
-  // Synchronous registration: an `onCleanup` after an `await` has a null owner
-  // and never runs, which here would leave a request streaming into a
-  // component that is gone.
-  onCleanup(() => {
-    inFlight?.abort()
-    inFlight = undefined
+  // Another project: its sessions are not the ones open here.
+  createEffect(
+    on(
+      () => props.projectRoot,
+      (_root, previous) => {
+        if (previous !== undefined) setCurrent(undefined)
+      },
+      { defer: true },
+    ),
+  )
+
+  const entries = createMemo(() =>
+    isOpenOn(store, props.projectRoot) ? sessionEntries(store.state.data, store.state.directory) : [],
+  )
+  createEffect(
+    on(entries, (list) => {
+      const next = followOpen(list, opened())
+      if (next.id !== opened().id || next.seen !== opened().seen) setOpened(next)
+    }),
+  )
+  const open = () => opened().id
+  const entry = () => entries().find((item) => item.id === open())
+  const turns = createMemo<Turn[]>(() => {
+    const id = open()
+    return id ? conversationOf(store.state.data, id) : []
   })
+  const permissions = () => {
+    const id = open()
+    return id ? (store.state.data.permission[id] ?? []) : []
+  }
+  const questions = () => {
+    const id = open()
+    return id ? (store.state.data.question[id] ?? []) : []
+  }
+  const answering = () => {
+    const id = open()
+    return id ? isBusy(store.state.data, id) : false
+  }
+  const notice = () => connectionNotice(store.state, props.projectRoot)
+  // A session made outside the chat is read, never written to (C5).
+  const foreign = () => entry() !== undefined && !entry()!.chat
+  // The first message is a use too: it opens the folder, then goes. The stream follows it.
+  const canSend = () => !!props.projectRoot && store.state.status !== "refused" && !foreign() && !sending()
 
   createEffect(
-    on([() => state().messages.length, () => state().messages.at(-1)?.text], () => {
+    on([() => turns().length, () => turns().at(-1)?.parts.length, permissions, questions], () => {
       const node = scroller
       if (!node) return
       const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight
@@ -200,63 +199,46 @@ export function Chat(props: ChatProps) {
     }),
   )
 
-  const commit = (next: ChatState) => {
-    setState(next)
-    save(next)
-    return next
+  const openSession = (sessionID: string) => {
+    setCurrent(sessionID)
+    setProblem(undefined)
+    void store
+      .loadMessages(sessionID)
+      .catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)))
+  }
+
+  const newSession = () => {
+    setCurrent(undefined)
+    setProblem(undefined)
+    composer?.focus()
   }
 
   const send = async () => {
     const text = draft().trim()
-    const currentModel = model()
-    if (!text || !currentModel || busy()) return
-
-    const now = Date.now()
-    const question: ChatMessage = { id: `u${now}`, role: "user", text, at: now }
-    const answer: ChatMessage = { id: `a${now}`, role: "assistant", text: "", at: now, streaming: true }
-
-    // The context is taken before the empty assistant turn is added, so the
-    // request never carries a blank message of its own.
-    const context = messagesForRequest(appendMessage(state(), question).messages)
-
-    commit(appendMessage(appendMessage(state(), question), answer))
-    setDraft("")
-    setBusy(true)
-
-    const controller = new AbortController()
-    inFlight = controller
-
+    if (!text || !canSend()) return
+    setSending(true)
+    setProblem(undefined)
     try {
-      await streamChat({
-        apiKey: props.apiKey,
-        model: DEFAULT_CHAT_MODEL,
-        messages: context,
-        signal: controller.signal,
-        onDelta: (delta) => setState((current) => appendDelta(current, answer.id, delta)),
-      })
-      commit(settleMessage(state(), answer.id))
+      if (!(await use())) return
+      const ref = model()
+      if (!ref) {
+        setProblem(t("chat.model.choose"))
+        return
+      }
+      const id = await store.send(open(), text, ref, agent() || undefined)
+      setCurrent(id)
+      setDraft("")
     } catch (error) {
-      const aborted = controller.signal.aborted
-      commit(
-        settleMessage(
-          state(),
-          answer.id,
-          aborted ? t("chat.aborted") : error instanceof Error ? error.message : t("chat.error.fallback"),
-        ),
-      )
+      setProblem(error instanceof ForeignSession || error instanceof Error ? error.message : String(error))
     } finally {
-      if (inFlight === controller) inFlight = undefined
-      setBusy(false)
+      setSending(false)
       composer?.focus()
     }
   }
 
-  const stop = () => inFlight?.abort()
-
-  const reset = () => {
-    inFlight?.abort()
-    commit(createChatState())
-    composer?.focus()
+  const stop = () => {
+    setProblem(undefined)
+    void stopAnswer(store, open(), setProblem)
   }
 
   const chooseModel = (raw: string) => {
@@ -266,7 +248,7 @@ export function Chat(props: ChatProps) {
     try {
       localStorage.setItem(MODEL_KEY, JSON.stringify(validated))
     } catch {
-      // Same as the conversation: this session keeps the choice regardless.
+      // This session keeps the choice regardless.
     }
   }
 
@@ -275,16 +257,14 @@ export function Chat(props: ChatProps) {
     try {
       localStorage.setItem(AGENT_KEY, name)
     } catch {
-      // Same as the conversation: this session keeps the choice regardless.
+      // This session keeps the choice regardless.
     }
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      if (model()) {
-        void send()
-      }
+      void send()
     }
   }
 
@@ -295,6 +275,7 @@ export function Chat(props: ChatProps) {
           <select
             data-slot="chat-agent"
             value={agent() || ""}
+            onFocus={() => void use()}
             onChange={(event) => chooseAgent(event.currentTarget.value)}
             aria-label={t("chat.agent.label")}
           >
@@ -312,6 +293,7 @@ export function Chat(props: ChatProps) {
           <select
             data-slot="chat-model"
             value={model() ? serializeModelRef(model()!) : ""}
+            onFocus={() => void use()}
             onChange={(event) => chooseModel(event.currentTarget.value)}
             aria-label={t("chat.model.label")}
           >
@@ -332,97 +314,138 @@ export function Chat(props: ChatProps) {
           </select>
         </div>
         <div data-slot="chat-head-actions">
-          <Show when={state().messages.length > 0}>
-            <button type="button" data-slot="chat-action" onClick={reset}>
-              {t("chat.new")}
-            </button>
-          </Show>
+          <button type="button" data-slot="chat-action" disabled={open() === undefined} onClick={newSession}>
+            {t("chat.new")}
+          </button>
         </div>
       </header>
 
-      <Show when={!props.apiKey}>
-        <p data-slot="chat-notice">
-          {t("chat.needKey")}{" "}
-          <button type="button" data-slot="chat-link" onClick={() => props.onOpenSettings()}>
-            {t("chat.openSettings")}
-          </button>{" "}
-          {t("chat.sameAsAssistant")}
-        </p>
-      </Show>
-
-      <div data-slot="chat-scroll" ref={(el) => (scroller = el)}>
-        <Show
-          when={state().messages.length > 0}
-          fallback={
-            <div data-slot="chat-empty">
-              <p data-slot="chat-empty-title">{t("chat.empty.title")}</p>
-              <p data-slot="chat-empty-body">
-                {t("chat.empty.body")}
-              </p>
-            </div>
-          }
-        >
-          <For each={state().messages}>{(message) => <Bubble message={message} />}</For>
-        </Show>
-      </div>
-
-      <div data-slot="chat-composer">
-        <textarea
-          ref={(el) => (composer = el)}
-          data-slot="chat-input"
-          rows="1"
-          placeholder={t("chat.input.placeholder")}
-          value={draft()}
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
+      <div data-slot="chat-main">
+        <SessionList
+          entries={entries()}
+          current={open()}
+          onOpen={openSession}
+          onRename={(id, title) => store.rename(id, title)}
         />
-        <Show
-          when={busy()}
-          fallback={
-            <button
-              type="button"
-              data-slot="chat-send"
-              disabled={!draft().trim() || !model()}
-              onClick={() => void send()}
+
+        <div data-slot="chat-column">
+          <RulesNote />
+
+          <Show when={notice()}>
+            {(shown) => (
+              <p data-slot="chat-notice" role="status">
+                {(() => {
+                  const now = shown()
+                  return now.kind === "refused" ? (now.problem ?? t("chat.status.refused")) : t(STATUS[now.kind])
+                })()}
+                <Show when={shown().kind === "notOpen"}>
+                  {" "}
+                  <button type="button" data-slot="chat-link" onClick={() => void use()}>
+                    {t("chat.connect")}
+                  </button>
+                </Show>
+              </p>
+            )}
+          </Show>
+          <Show when={foreign()}>
+            <p data-slot="chat-notice">
+              {t("chat.foreignSession")}{" "}
+              <button type="button" data-slot="chat-link" onClick={newSession}>
+                {t("chat.new")}
+              </button>
+            </p>
+          </Show>
+
+          <div data-slot="chat-scroll" ref={(el) => (scroller = el)}>
+            <Show
+              when={turns().length > 0}
+              fallback={
+                <div data-slot="chat-empty">
+                  <p data-slot="chat-empty-title">{t("chat.empty.title")}</p>
+                  <p data-slot="chat-empty-body">{t("chat.empty.body")}</p>
+                </div>
+              }
             >
-              {t("chat.send")}
-            </button>
-          }
-        >
-          <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
-            {t("chat.stop")}
-          </button>
-        </Show>
+              <For each={turns()}>{(turn) => <Turn turn={turn} />}</For>
+            </Show>
+            <For each={permissions()}>
+              {(request) => (
+                <PermissionCard
+                  request={request}
+                  parts={partsOf(store.state.data, request.sessionID)}
+                  onReply={(reply) => store.replyPermission(request.id, reply)}
+                />
+              )}
+            </For>
+            <For each={questions()}>
+              {(request) => (
+                <QuestionCard
+                  request={request}
+                  onAnswer={(answers) => store.answerQuestion(request.id, answers)}
+                  onReject={() => store.rejectQuestion(request.id)}
+                />
+              )}
+            </For>
+          </div>
+
+          <Show when={problem()}>{(message) => <p data-slot="chat-error">{message()}</p>}</Show>
+
+          <div data-slot="chat-composer">
+            <textarea
+              ref={(el) => (composer = el)}
+              data-slot="chat-input"
+              rows="1"
+              placeholder={t("chat.input.placeholder")}
+              value={draft()}
+              disabled={foreign()}
+              onInput={(event) => setDraft(event.currentTarget.value)}
+              onKeyDown={onKeyDown}
+            />
+            <Show
+              when={answering() && !foreign()}
+              fallback={
+                <button
+                  type="button"
+                  data-slot="chat-send"
+                  disabled={!draft().trim() || !canSend()}
+                  onClick={() => void send()}
+                >
+                  {t("chat.send")}
+                </button>
+              }
+            >
+              <button type="button" data-slot="chat-send" data-stop="true" onClick={stop}>
+                {t("chat.stop")}
+              </button>
+            </Show>
+          </div>
+        </div>
       </div>
     </section>
   )
 }
 
-function Bubble(props: { message: ChatMessage }) {
+function Turn(props: { turn: Turn }) {
+  const role = () => props.turn.info.role
   return (
-    <article data-slot="chat-message" data-role={props.message.role}>
-      <Show when={props.message.role === "assistant"}>
+    <article data-slot="chat-message" data-role={role()}>
+      <Show when={role() === "assistant"}>
         <span data-slot="chat-author">nik</span>
       </Show>
-
       <div data-slot="chat-body">
-        <For each={splitSegments(props.message.text)}>
-          {(segment) =>
-            segment.kind === "code" ? (
-              <CodeBlock language={segment.language} text={segment.text} />
-            ) : (
-              <p data-slot="chat-prose">{segment.text}</p>
-            )
-          }
-        </For>
-
+        <MessageParts parts={props.turn.parts} />
         {/* The cursor is the only signal that a silent model is still thinking
             rather than finished with nothing to say. */}
-        <Show when={props.message.streaming && !props.message.text}>
+        <Show
+          when={
+            role() === "assistant" &&
+            !(props.turn.info as { time?: { completed?: number } }).time?.completed &&
+            props.turn.parts.length === 0
+          }
+        >
           <span data-slot="chat-caret" aria-label={t("chat.writing")} />
         </Show>
-
-        <Show when={props.message.error}>{(error) => <p data-slot="chat-error">{error()}</p>}</Show>
+        <Show when={messageError(props.turn.info)}>{(error) => <p data-slot="chat-error">{error()}</p>}</Show>
       </div>
     </article>
   )

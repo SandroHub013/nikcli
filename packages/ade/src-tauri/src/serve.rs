@@ -28,6 +28,7 @@
 /// makes every call from here instead; the page gets the address, never the
 /// password.
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     Condvar, Mutex, MutexGuard,
@@ -62,6 +63,24 @@ const USERNAME: &str = "nikcli";
 /// that had them. With either one the chat's permission rules would not count,
 /// and the chat would not know.
 const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS"];
+
+/// The small model ADE's server gets when the user has not chosen one.
+///
+/// nikcli calls its small model on its own, without being asked: to title a
+/// session and to summarise every turn (`session/prompt-title.ts`,
+/// `session/summary.ts`). Unset, it picks one by provider, and that can be a
+/// paid one. No spending without the user's say (Master, C4): a free one here,
+/// the same for every such call. A `small_model` the user wrote — in their
+/// global config, in `NIKCLI_CONFIG` or in `NIKCLI_CONFIG_CONTENT`, even an
+/// empty one, which turns it off — is left as it is.
+///
+/// The project's config is not read here. `NIKCLI_CONFIG_CONTENT` is merged
+/// after `nikcli.json` at the project's root, so a `small_model` there gives
+/// way to this free one; `<project>/.nikcli/nikcli.json` and
+/// `NIKCLI_CONFIG_DIR` are merged after it (`config/config.ts`, the
+/// `directories` loop) and win. Should this model go away, only those calls
+/// fail, quietly: nikcli does not fall back to a paid one.
+pub(crate) const FREE_SMALL_MODEL: &str = "openrouter/nvidia/nemotron-3-super-120b-a12b:free";
 
 pub(crate) struct Serving {
     pub(crate) url: String,
@@ -294,6 +313,56 @@ fn install(server: &Server, mut serving: Serving) -> Result<ServerInfo, String> 
     Ok(info)
 }
 
+/// Where nikcli reads the user's global config: `Global.Path.config` in
+/// `@nikcli-ai/util`, then `nikcli.json` (`config.ts`, `global()`).
+fn user_config_file() -> Option<PathBuf> {
+    let base = if cfg!(windows) {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .or_else(|| dirs::home_dir().map(|home| home.join("AppData").join("Roaming")))?
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .or_else(|| dirs::home_dir().map(|home| home.join(".config")))?
+    };
+    Some(base.join("nikcli").join("nikcli.json"))
+}
+
+/// `NIKCLI_CONFIG_CONTENT` for ADE's server, or `None` to leave the
+/// environment as it is.
+///
+/// `inherited` is the variable ADE itself was started with, `user_files` the
+/// text of the config files the user writes. A `small_model` in any of them
+/// is theirs and stays; otherwise the inherited content gets `FREE_SMALL_MODEL`
+/// added, or is made of it. A file only has to mention the key: nikcli reads
+/// JSONC, and a commented-out line counting as a choice errs on the user's side.
+/// Content that is not a JSON object is not touched: nikcli refuses it anyway.
+fn small_model_content(inherited: Option<&str>, user_files: &[String]) -> Option<String> {
+    let mut content = match inherited.map(str::trim).filter(|text| !text.is_empty()) {
+        Some(text) => match serde_json::from_str::<serde_json::Value>(text) {
+            Ok(serde_json::Value::Object(object)) => object,
+            _ => return None,
+        },
+        None => serde_json::Map::new(),
+    };
+    if content.contains_key("small_model") || user_files.iter().any(|text| text.contains("\"small_model\"")) {
+        return None;
+    }
+    content.insert("small_model".into(), serde_json::Value::String(FREE_SMALL_MODEL.into()));
+    Some(serde_json::Value::Object(content).to_string())
+}
+
+/// The user's own config files, as text: the global one and `NIKCLI_CONFIG`.
+fn user_config_texts() -> Vec<String> {
+    let custom = std::env::var_os("NIKCLI_CONFIG").map(PathBuf::from);
+    user_config_file()
+        .into_iter()
+        .chain(custom)
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .collect()
+}
+
 /// 32 random bytes, in hex: the password of ADE's own server.
 fn random_password() -> Result<String, String> {
     let mut bytes = [0u8; 32];
@@ -304,7 +373,7 @@ fn random_password() -> Result<String, String> {
 /// The `nikcli serve` command line. The password goes in the environment, as
 /// Desktop's sidecar does it, never in the arguments: those are visible to
 /// every process on the machine.
-fn serve_command(program: &str, directory: Option<&str>, password: &str) -> Command {
+fn serve_command(program: &str, directory: Option<&str>, password: &str, config_content: Option<&str>) -> Command {
     let mut command = Command::new(program);
     command
         .arg("serve")
@@ -320,6 +389,9 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str) -> Comm
 
     for name in AUTO_APPROVE {
         command.env_remove(name);
+    }
+    if let Some(content) = config_content {
+        command.env("NIKCLI_CONFIG_CONTENT", content);
     }
 
     if let Some(dir) = directory.filter(|d| !d.is_empty()) {
@@ -360,7 +432,9 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
     let program = which_on_path("nikcli")
         .ok_or_else(|| "nikcli non è nel PATH: installalo per usare chat e assistente.".to_string())?;
     let password = random_password()?;
-    let mut command = serve_command(&program, directory.as_deref(), &password);
+    let inherited = std::env::var("NIKCLI_CONFIG_CONTENT").ok();
+    let content = small_model_content(inherited.as_deref(), &user_config_texts());
+    let mut command = serve_command(&program, directory.as_deref(), &password, content.as_deref());
 
     let mut child = command
         .spawn()
@@ -701,7 +775,7 @@ mod tests {
 
     #[test]
     fn the_password_goes_in_the_environment_never_in_the_arguments() {
-        let command = serve_command("nikcli", None, "finta-password");
+        let command = serve_command("nikcli", None, "finta-password", None);
         let args: Vec<String> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
         assert_eq!(args, ["serve", "--hostname=127.0.0.1", "--port=0"]);
         let envs: Vec<(String, String)> = command
@@ -713,8 +787,48 @@ mod tests {
     }
 
     #[test]
+    fn a_free_small_model_only_when_the_user_chose_none() {
+        use super::{FREE_SMALL_MODEL, small_model_content};
+        let free = format!(r#"{{"small_model":"{FREE_SMALL_MODEL}"}}"#);
+        // Nothing chosen anywhere: ADE's free one.
+        assert_eq!(small_model_content(None, &[]).as_deref(), Some(free.as_str()));
+        assert_eq!(small_model_content(None, &[r#"{"model":"openrouter/x"}"#.into()]).as_deref(), Some(free.as_str()));
+        // Chosen in a config file, even empty (off), or commented out in JSONC: theirs.
+        for file in [
+            r#"{"small_model":"anthropic/claude-haiku"}"#,
+            r#"{"small_model":""}"#,
+            "{\n  // \"small_model\": \"x/y\"\n}",
+        ] {
+            assert_eq!(small_model_content(None, &[file.into()]), None, "{file}");
+        }
+        // The inherited inline config: kept whole, with the free one added only if it has none.
+        let merged = small_model_content(Some(r#"{"model":"openrouter/a:free","enabled_providers":["openrouter"]}"#), &[]).unwrap();
+        let merged: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(merged["model"], "openrouter/a:free");
+        assert_eq!(merged["enabled_providers"][0], "openrouter");
+        assert_eq!(merged["small_model"], FREE_SMALL_MODEL);
+        assert_eq!(small_model_content(Some(r#"{"small_model":"x/y"}"#), &[]), None);
+        assert_eq!(small_model_content(Some("non json"), &[]), None);
+        assert!(FREE_SMALL_MODEL.ends_with(":free"));
+    }
+
+    #[test]
+    fn the_inline_config_reaches_the_server_only_when_there_is_one() {
+        let env_of = |command: &std::process::Command| {
+            command
+                .get_envs()
+                .find(|(name, _)| *name == "NIKCLI_CONFIG_CONTENT")
+                .map(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+        };
+        let without = serve_command("nikcli", None, "finta-password", None);
+        assert_eq!(env_of(&without), None);
+        let with = serve_command("nikcli", None, "finta-password", Some(r#"{"small_model":"x/y:free"}"#));
+        assert_eq!(env_of(&with), Some(Some(r#"{"small_model":"x/y:free"}"#.to_string())));
+    }
+
+    #[test]
     fn the_server_never_inherits_an_approve_everything_flag() {
-        let command = serve_command("nikcli", None, "finta-password");
+        let command = serve_command("nikcli", None, "finta-password", None);
         let removed: Vec<String> = command
             .get_envs()
             .filter(|(_, value)| value.is_none())

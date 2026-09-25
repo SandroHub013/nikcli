@@ -113,14 +113,40 @@ export function RulesNote() {
   return <p data-slot="chat-rules-note">{t("chat.rules.always")}</p>
 }
 
-/** «Yes this once» or «no». «Always» is not offered: it would outlive the chat's own rules (`rules.ts`). */
-export function PermissionCard(props: { request: PermissionRequest; onReply: (reply: "once" | "reject") => Promise<void> }) {
-  const view = () => permissionView(props.request)
+/**
+ * «Yes this once» or «no». «Always» is not offered: it would outlive the chat's own rules (`rules.ts`).
+ * With the asking message's parts, the card also shows the call and, for an edit, its diff (C4).
+ */
+export function PermissionCard(props: {
+  request: PermissionRequest
+  parts?: readonly Part[]
+  onReply: (reply: "once" | "reject") => Promise<void>
+}) {
+  const view = () => permissionView(props.request, props.parts)
   const answer = useAnswer()
   return (
     <section data-slot="chat-permission" role="group" aria-label={t("chat.permission.label")}>
       <p data-slot="chat-permission-title">{t("chat.permission.ask", view().permission)}</p>
       <For each={view().patterns}>{(pattern) => <code data-slot="chat-permission-pattern">{pattern}</code>}</For>
+      <Show when={view().call}>
+        {(call) => (
+          <div data-slot="chat-permission-call">
+            <p data-slot="chat-permission-call-head">
+              {call().about ? t("chat.permission.callAbout", call().tool, call().about!) : t("chat.permission.call", call().tool)}
+            </p>
+            <Show when={call().input}>
+              <code data-slot="chat-permission-pattern">{call().input}</code>
+            </Show>
+          </div>
+        )}
+      </Show>
+      <Show when={view().diff}>
+        {(diff) => (
+          <pre data-slot="chat-permission-diff" aria-label={t("chat.permission.diff")}>
+            <For each={diff()}>{(row) => <span data-slot="chat-diff-line" data-kind={row.kind}>{row.text}</span>}</For>
+          </pre>
+        )}
+      </Show>
       <div data-slot="chat-permission-actions">
         <button type="button" data-slot="chat-action" disabled={answer.busy()} onClick={() => void answer.run(() => props.onReply("once"))}>
           {t("chat.permission.once")}
