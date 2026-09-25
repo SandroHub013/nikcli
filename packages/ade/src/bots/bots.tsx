@@ -769,16 +769,18 @@ function Thread(props: {
           }}
         />
         <span data-slot="bots-composer-cap">
-          {props.bot.model?.trim() || t("bots.defaultModel")}
-          {" · "}
-          {t(spendKey(spendKind(props.bot.runner, props.bot.model)))}
-          <Show when={props.talk.tokens > 0}>
-            {" · "}
-            {t("bots.tokens", formatCount(props.talk.tokens))}
+          <Show when={props.talk.lastTurn}>
+            {(turn) => (
+              <>
+                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                {" · "}
+                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+                {" · "}
+              </>
+            )}
           </Show>
-          <Show when={spendLine({ runnerId: props.bot.runner, model: props.bot.model, tokens: props.talk.tokens, costUsd: props.talk.costUsd }).usd}>
-            {(usd) => <> · {usd()}</>}
-          </Show>
+          {t("bots.conversation.total")}{" "}
+          <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
           {t("bots.send")}
@@ -820,10 +822,28 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" {
+function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" | "bots.spend.metered" {
   if (kind === "plan") return "bots.spend.plan"
   if (kind === "free") return "bots.spend.free"
+  if (kind === "metered") return "bots.spend.metered"
   return "bots.spend.api"
+}
+
+function Figures(props: { runner?: string; model?: string; tokens: number; costUsd: number }) {
+  const line = () => spendLine({ runnerId: props.runner, model: props.model, tokens: props.tokens, costUsd: props.costUsd })
+  return (
+    <>
+      <Show when={props.tokens > 0}>{t("bots.tokens", formatCount(props.tokens))}</Show>
+      <Show when={line().usd}>
+        {(usd) => (
+          <>
+            {props.tokens > 0 ? " · " : ""}
+            {usd()}
+          </>
+        )}
+      </Show>
+    </>
+  )
 }
 
 function generationNotice(model: string): string {
@@ -927,14 +947,19 @@ function BotCard(props: {
           <span data-slot="bots-label">{t("bots.card.conversation")}</span>
           <span data-slot="bots-card-stat">
             {t("bots.card.messages", props.talk.messages.length)}
-            <Show when={props.talk.tokens > 0}>
-              {" "}
-              · {t("bots.tokens", formatCount(props.talk.tokens))}
-            </Show>
-            <Show when={spendLine({ runnerId: props.bot.runner, model: props.bot.model, tokens: props.talk.tokens, costUsd: props.talk.costUsd }).usd}>
-              {(usd) => <> · {usd()}</>}
-            </Show>
+            {" · "}
+            {t("bots.conversation.total")}{" "}
+            <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
           </span>
+          <Show when={props.talk.lastTurn}>
+            {(turn) => (
+              <span data-slot="bots-card-stat">
+                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                {" · "}
+                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+              </span>
+            )}
+          </Show>
           <Show when={props.talk.sessionId}>
             {(sessionId) => (
               <span data-slot="bots-card-path" title={sessionId()}>

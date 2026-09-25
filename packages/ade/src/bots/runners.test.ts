@@ -555,7 +555,7 @@ describe("il costo di un turno", () => {
     expect(free.kind).toBe("free")
     expect(free.usd).toBeUndefined()
     const unnamed = spendLine({ runnerId: "nikcli", tokens: 10, costUsd: 0.004 })
-    expect(unnamed.kind).toBe("api")
+    expect(unnamed.kind).toBe("metered")
     expect(unnamed.usd).toBe("$0.004")
     expect(spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
   })
@@ -564,6 +564,37 @@ describe("il costo di un turno", () => {
     expect(formatUsd(0.009)).toBe("$0.009")
     expect(formatUsd(0.01)).toBe("$0.01")
     expect(formatUsd(1.2)).toBe("$1.20")
+  })
+
+  test("l'ultimo turno di Claude Code tiene il modello dell'init e solo i token di quel result", () => {
+    const talk = fold("claude", [
+      '{"type":"system","subtype":"init","session_id":"s","model":"claude-sonnet-5"}',
+      '{"type":"result","is_error":false,"session_id":"s","total_cost_usd":0.04,"usage":{"input_tokens":10,"output_tokens":2}}',
+    ])
+    expect(talk.tokens).toBe(12)
+    expect(talk.lastTurn).toEqual({ model: "claude-sonnet-5", tokens: 12, costUsd: 0.04 })
+    const again = fold("claude", [
+      '{"type":"result","is_error":false,"session_id":"s","total_cost_usd":0.01,"usage":{"input_tokens":1,"output_tokens":1}}',
+    ])
+    const second = applyRunnerLine(
+      runnerById("claude"),
+      sendMessage(talk, "ancora", 2),
+      '{"type":"result","is_error":false,"session_id":"s","model":"claude-haiku-4-5","total_cost_usd":0.01,"usage":{"input_tokens":3,"output_tokens":1}}',
+      3,
+    )
+    expect(second.tokens).toBe(16)
+    expect(second.costUsd).toBeCloseTo(0.05)
+    expect(second.lastTurn).toEqual({ model: "claude-haiku-4-5", tokens: 4, costUsd: 0.01 })
+    expect(again.lastTurn?.tokens).toBe(2)
+  })
+
+  test("Codex tiene il modello di thread.started sull'ultimo turno", () => {
+    const talk = fold("codex", [
+      '{"type":"thread.started","thread_id":"t1","model":"gpt-5.5"}',
+      '{"type":"turn.completed","usage":{"input_tokens":3,"cached_input_tokens":1,"output_tokens":1}}',
+    ])
+    expect(talk.tokens).toBe(4)
+    expect(talk.lastTurn).toEqual({ model: "gpt-5.5", tokens: 4, costUsd: 0 })
   })
 
   test("Genera con nikcli: senza modello è il predefinito, a pagamento; :free no", () => {

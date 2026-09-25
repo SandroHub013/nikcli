@@ -312,6 +312,26 @@ describe("storage", () => {
     expect(disk.get(keyA)).not.toContain("sk-")
   })
 
+  test("the last turn keeps its own tokens and the model the event named", () => {
+    let talk = sendMessage(emptyTalk(), "uno", T0)
+    talk = applyLine(
+      talk,
+      event("step_start", { part: { type: "step-start", model: { providerID: "openai", modelID: "gpt-5" } } }),
+      T0,
+    )
+    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 10, output: 2 }, cost: 0.01 } }), T0)
+    expect(talk.tokens).toBe(12)
+    expect(talk.costUsd).toBeCloseTo(0.01)
+    expect(talk.lastTurn).toEqual({ model: "openai/gpt-5", tokens: 12, costUsd: 0.01 })
+    talk = sendMessage(talk, "due", T0 + 1)
+    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 4, output: 1 }, cost: 0.002 } }), T0 + 2)
+    expect(talk.tokens).toBe(17)
+    expect(talk.costUsd).toBeCloseTo(0.012)
+    expect(talk.lastTurn).toEqual({ tokens: 5, costUsd: 0.002 })
+    expect(parseTalk(serializeTalk(talk)).lastTurn).toEqual({ tokens: 5, costUsd: 0.002 })
+    expect(parseTalk(serializeTalk(talk)).tokens).toBe(17)
+  })
+
   test("a bot message that repeats a key does not keep it", () => {
     const key = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
     const talk = appendMessage(emptyTalk(), { role: "bot", text: `ho letto ${key}` }, T0)
