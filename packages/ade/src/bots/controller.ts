@@ -25,6 +25,7 @@ import {
   applyExit,
   applyProblem,
   noticePermission,
+  permissionMenuReader,
   permissionAnswered,
   sendMessage,
   emptyTalk,
@@ -140,6 +141,16 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     })
     const sessionId = deps.talkOf(path).sessionId
     const current = () => turns.get(path) === turn
+    const readMenu = permissionMenuReader({
+      schedule,
+      onMenu: (seen) => {
+        if (!current()) return
+        const before = deps.talkOf(path).permission
+        deps.update(path, (talk) => noticePermission(talk, seen, now()))
+        const asked = deps.talkOf(path).permission
+        if (asked && asked !== before) settle(bot, turn, asked)
+      },
+    })
     const turn = deps.runTurn({
       runner: runner.id,
       bot,
@@ -156,13 +167,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       onLine: (line) => {
         if (current()) deps.update(path, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
       },
-      /* Only nikcli draws a permission menu; the others decide up front. */
+      /* Only nikcli draws a permission menu, read whole (M1); the others decide up front. */
       onData: (chunk) => {
-        if (!current() || runner.id !== "nikcli") return
-        const before = deps.talkOf(path).permission
-        deps.update(path, (talk) => noticePermission(talk, chunk, now()))
-        const asked = deps.talkOf(path).permission
-        if (asked && asked !== before) settle(bot, turn, asked)
+        if (current() && runner.id === "nikcli") readMenu(chunk)
       },
     })
     turns.set(path, turn)

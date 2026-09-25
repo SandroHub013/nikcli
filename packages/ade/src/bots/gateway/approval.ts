@@ -25,7 +25,15 @@
 
 import { t } from "../../i18n"
 import { decide } from "../approval"
-import { answerKeys, emptyTalk, noticePermission, permissionAnswered, type PendingPermission, type PermissionAnswer } from "../talk"
+import {
+  answerKeys,
+  emptyTalk,
+  noticePermission,
+  permissionAnswered,
+  permissionMenuReader,
+  type PendingPermission,
+  type PermissionAnswer,
+} from "../talk"
 import type { Choice } from "./controller"
 
 /** Puts a question with buttons in the chat; `undefined` when nothing valid was pressed in time. */
@@ -81,40 +89,47 @@ export function permissionWatcher(deps: {
   readonly say: (text: string) => void
   /** Aborted when the turn ends: a question still waiting gets no answer. */
   readonly signal: AbortSignal
+  /** How long the output stays quiet before a menu is taken (`MENU_QUIET_MS`); for tests. */
+  readonly quietMs?: number
 }): (chunk: string) => void {
   let talk = emptyTalk()
   let asking = false
   const refused = new Set<string>()
-  return (chunk) => {
-    if (asking || deps.signal.aborted) return
-    talk = noticePermission(talk, chunk, Date.now())
-    const pending = talk.permission
-    if (!pending) return
-    // No «Sempre» from a chat: every command is asked, the block list refused.
-    const verdict = decide(pending.permission, pending.patterns, [], pending.cut === true)
-    if (verdict.kind === "block") {
-      deps.write(answerKeys("reject"))
-      deps.say(t("gateway.approve.blocked", shownCommand(pending.patterns), t(verdict.rule.reason)))
-      talk = permissionAnswered(talk, Date.now())
-      return
-    }
-    if (deps.refuse) {
-      deps.write(answerKeys("reject"))
-      // Said once per permission: a bot that keeps trying does not flood the chat.
-      if (!refused.has(pending.permission)) {
-        refused.add(pending.permission)
-        deps.say(t("gateway.approve.refused", pending.permission, shownCommand(pending.patterns)))
+  // The menu read whole, never from a line the model wrote (B8c review, M1).
+  return permissionMenuReader({
+    ...(deps.quietMs !== undefined ? { quietMs: deps.quietMs } : {}),
+    onMenu: (seen) => {
+      if (asking || deps.signal.aborted) return
+      talk = noticePermission(talk, seen, Date.now())
+      const pending = talk.permission
+      if (!pending) return
+      // No «Sempre» from a chat: every command is asked, the block list refused.
+      const verdict = decide(pending.permission, pending.patterns, [], pending.cut === true)
+      if (verdict.kind === "block") {
+        deps.write(answerKeys("reject"))
+        deps.say(t("gateway.approve.blocked", shownCommand(pending.patterns), t(verdict.rule.reason)))
+        talk = permissionAnswered(talk, Date.now())
+        return
       }
-      talk = permissionAnswered(talk, Date.now())
-      return
-    }
-    asking = true
-    const danger = verdict.kind === "ask" && verdict.key && !verdict.key.startsWith("tool:") ? verdict.reason : undefined
-    void approveOnPhone(pending, deps.ask, deps.signal, danger).then(({ answer, expired }) => {
-      if (!deps.signal.aborted) deps.write(answerKeys(answer))
-      if (expired) deps.say(t("gateway.approve.expired"))
-      talk = permissionAnswered(talk, Date.now())
-      asking = false
-    })
-  }
+      if (deps.refuse) {
+        deps.write(answerKeys("reject"))
+        // Said once per permission: a bot that keeps trying does not flood the chat.
+        if (!refused.has(pending.permission)) {
+          refused.add(pending.permission)
+          deps.say(t("gateway.approve.refused", pending.permission, shownCommand(pending.patterns)))
+        }
+        talk = permissionAnswered(talk, Date.now())
+        return
+      }
+      asking = true
+      const danger =
+        verdict.kind === "ask" && verdict.key && !verdict.key.startsWith("tool:") ? verdict.reason : undefined
+      void approveOnPhone(pending, deps.ask, deps.signal, danger).then(({ answer, expired }) => {
+        if (!deps.signal.aborted) deps.write(answerKeys(answer))
+        if (expired) deps.say(t("gateway.approve.expired"))
+        talk = permissionAnswered(talk, Date.now())
+        asking = false
+      })
+    },
+  })
 }

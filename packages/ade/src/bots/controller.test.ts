@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
 import { createBotTurns } from "./controller"
 import { acquireTurn, turnsRunning } from "./terms"
-import { emptyTalk, type Talk } from "./talk"
+import { emptyTalk, MENU_QUIET_MS, type Talk } from "./talk"
+import { clackMenu } from "./testing/clack-menu"
 import { runTurn, type TurnDeps } from "./turn"
 
 /*
@@ -84,12 +85,18 @@ function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mo
       return () => void (timer.cancelled = true)
     },
   })
-  return { turns, talk: (path: string) => talks[path] ?? emptyTalk(), kept, timers }
+  /** nikcli's output goes quiet: a menu drawn is taken (`MENU_QUIET_MS`). */
+  const quiet = () => {
+    for (const timer of timers.filter((timer) => !timer.cancelled && timer.ms === MENU_QUIET_MS)) {
+      timer.cancelled = true
+      timer.run()
+    }
+  }
+  return { turns, talk: (path: string) => talks[path] ?? emptyTalk(), kept, timers, quiet }
 }
 
-/** nikcli's menu line, as its pty draws it. */
-const menu = (permission: string, patterns: string) =>
-  `\u001b[1m△ Permission required: ${permission} (${patterns})\u001b[0m\r\n  Allow once   Always   Reject`
+/** nikcli's menu, as its pty draws it (M1: read whole). */
+const menu = (permission: string, patterns: string) => clackMenu(permission, patterns)
 const ONCE = "\r"
 const REJECT = "\u001b[B\u001b[B\r"
 
@@ -210,6 +217,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(nikcli, "ciao")
     await tick()
     m.print(menu("bash", "git push --force"))
+    p.quiet()
     p.turns.answer(nikcli, "once")
     expect(m.writes).toEqual([ONCE])
     // No question on screen: an answer goes nowhere.
@@ -238,6 +246,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(nikcli, "ciao")
     await tick()
     m.print(menu("bash", "git status"))
+    p.quiet()
     expect(m.writes).toEqual([ONCE])
     expect(p.talk(nikcli.path).permission).toBeUndefined()
     p.turns.stop(nikcli)
@@ -252,6 +261,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(nikcli, "ciao")
     await tick()
     m.print(menu("bash", "rm -rf /"))
+    p.quiet()
     expect(m.writes).toEqual([REJECT])
     expect(p.talk(nikcli.path).permission).toBeUndefined()
     expect(p.talk(nikcli.path).messages.at(-1)).toMatchObject({ role: "error" })
@@ -268,6 +278,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(first, "ciao")
     await tick()
     m.print(menu("bash", "git push --force origin main"))
+    p.quiet()
     expect(m.writes).toEqual([])
     const asked = p.talk(first.path).permission!
     expect(asked).toMatchObject({ always: "gitRewrite" })
@@ -280,12 +291,14 @@ describe("the Bots panel's turns", () => {
 
     // The same kind again, for the same bot: through.
     m.print(menu("bash", "git push -f"))
+    p.quiet()
     expect(m.writes).toEqual([ONCE, ONCE])
 
     // Another bot: asked.
     p.turns.send(second, "ciao")
     await tick()
     m.print(menu("bash", "git push -f"))
+    p.quiet()
     expect(m.writes).toEqual([ONCE, ONCE])
     expect(p.talk(second.path).permission).toMatchObject({ always: "gitRewrite" })
     p.turns.answer(second, "reject")
@@ -320,6 +333,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(nikcli, "ciao")
     await tick()
     m.print(menu("external_directory", "C:/Users/me/*"))
+    p.quiet()
     expect(p.talk(nikcli.path).permission).toMatchObject({ always: "outside:C:/Users/me/*" })
     const timer = p.timers.at(-1)!
     expect(timer.ms).toBe(300_000)
@@ -338,6 +352,7 @@ describe("the Bots panel's turns", () => {
     p.turns.send(nikcli, "ciao")
     await tick()
     m.print(menu("bash", "rm -rf build"))
+    p.quiet()
     p.turns.answer(nikcli, "once")
     expect(p.timers.at(-1)!.cancelled).toBe(true)
     p.turns.stop(nikcli)

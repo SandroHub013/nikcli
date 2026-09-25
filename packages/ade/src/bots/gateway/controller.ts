@@ -82,6 +82,8 @@ export interface GatewayControllerDeps {
   readonly account?: (bot: string) => BotAccount
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
+  /** How long nikcli's output stays quiet before its menu is taken (`MENU_QUIET_MS`); for tests. */
+  readonly menuQuietMs?: number
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
@@ -257,6 +259,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
               write: (keys) => turn?.write?.(keys),
               say: (text) => void reply(message, text),
               signal: ended.signal,
+              ...(deps.menuQuietMs !== undefined ? { quietMs: deps.menuQuietMs } : {}),
             })
           : undefined
       turn = deps.runTurn({
