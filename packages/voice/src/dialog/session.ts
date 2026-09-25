@@ -622,11 +622,10 @@ export function transition(
   if (event.type === "plan_ready") {
     const plan = { steps: event.steps, refusals: event.refusals, ...(event.speech ? { speech: event.speech } : {}) }
     if (state.status === "confirming" || state.status === "dictating" || state.status === "asleep") {
-      return withSpokenLocal(
-        { ...state, queuedPlan: state.queuedPlan ?? plan },
-        "Ho messo in coda il piano. Te lo chiedo appena posso.",
-        effects,
-      )
+      if (state.queuedPlan) {
+        return withSpokenLocal(state, "Ho già un piano in coda: non chiedo il nuovo, chiedo il primo.", effects)
+      }
+      return withSpokenLocal({ ...state, queuedPlan: plan }, "Ho messo in coda il piano. Te lo chiedo appena posso.", effects)
     }
     return askPlan(state, plan, now, effects)
   }

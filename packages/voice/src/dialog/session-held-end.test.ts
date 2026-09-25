@@ -27,3 +27,28 @@ describe("a third held message is refused, not lost", () => {
     expect(third.state.queuedSend?.id).toBe("m2")
   })
 })
+
+const plan = (text: string) => ({
+  steps: [{ action: "send_prompt" as const, paneIndex: 1, text }],
+  refusals: [] as string[],
+})
+
+describe("a second plan waiting is refused, not lost", () => {
+  test("P2, with P1 in line, is refused and said so; P1 is still asked and still runs", () => {
+    const asked = transition(createInitialDialogState("idle"), { type: "permission_requested", paneId: "pA", what: "cat README" }, 10_000, ctx).state
+    const p1 = transition(asked, { type: "plan_ready", ...plan("primo") }, 10_100, ctx).state
+    const refused = transition(p1, { type: "plan_ready", ...plan("secondo") }, 10_200, ctx)
+
+    expect(
+      refused.effects.some((e) => e.type === "speak" && e.text === "Ho già un piano in coda: non chiedo il nuovo, chiedo il primo."),
+    ).toBe(true)
+    expect(refused.effects.some((e) => e.type === "speak" && e.text.includes("in coda") && !e.text.includes("non"))).toBe(false)
+    expect(refused.state.queuedPlan?.steps).toEqual(plan("primo").steps)
+
+    const promoted = transition(refused.state, { type: "utterance", text: "sì" }, 20_000, ctx)
+    expect(promoted.state.pendingPlan?.steps).toEqual(plan("primo").steps)
+
+    const run = transition(promoted.state, { type: "utterance", text: "sì" }, 40_000, ctx)
+    expect(run.effects).toContainEqual({ type: "execute_plan", steps: plan("primo").steps, refusals: [] })
+  })
+})
