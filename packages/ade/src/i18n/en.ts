@@ -590,6 +590,8 @@ export const en: Messages = {
   "gateway.panel.locked": (time) => `Too many wrong codes: pairing locked until ${time}.`,
   "gateway.panel.openPairing": "Pair another account (for 10 minutes)",
   "gateway.panel.pairingOpen": "Whoever writes to the bot now gets a code.",
+  "chat.foreignSession":
+    "This session was started outside the Chat and does not have its permission rules: the Chat does not write to it. Start a new session.",
   "chat.trustPending": (directory) => `Trust in the project ${directory} is not decided yet: try again shortly.`,
   "gateway.panel.pairingAfterOn": "The gateway is off: once it is on, whoever writes to the bot gets a code.",
   "gateway.panel.needToken": "Switching on needs the bot's token: save it above.",

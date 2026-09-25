@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createEffect } from "solid-js"
 import { openChat } from "./connection"
-import { createChatStore, type ChatStoreDeps } from "./store"
+import { CHAT_PERMISSION } from "./rules"
+import { createChatStore, ForeignSession, type ChatStoreDeps } from "./store"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -85,9 +86,13 @@ function fakeServer() {
       }
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
       else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
+      else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path)) reply(onEvent, 200, true)
       else if (request.method === "GET" && /^\/session\/[^/]+\/message$/.test(path)) {
         reply(onEvent, 200, routes.messages[path.split("/")[2]!] ?? [])
-      } else if (request.method === "POST" && path === "/session") reply(onEvent, 200, session("ses_nuova"))
+      } else if (request.method === "POST" && path === "/session") {
+        // As the server does: the session keeps the rules it was made with.
+        reply(onEvent, 200, { ...session("ses_nuova"), permission: JSON.parse(request.body ?? "{}").permission })
+      }
       else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
       else if (request.method === "POST" && path.endsWith("/abort")) reply(onEvent, 200, true)
       else reply(onEvent, 404, { error: "non previsto" })
@@ -385,11 +390,51 @@ describe("the chat's store", () => {
     await live(server, store)
     const id = await store.send(undefined, "Ciao", FREE)
     expect(id).toBe("ses_nuova")
+    // Made with the chat's permission rules, which win over the agent's.
+    const created = server.calls("POST", /^\/session$/)
+    expect(JSON.parse(created[0]!.body!).permission).toEqual(CHAT_PERMISSION)
+    // And a second message to it goes, before its event has even arrived.
+    await store.send(id, "Ancora", FREE)
+    expect(server.calls("POST", /\/prompt_async$/)).toHaveLength(2)
     const prompt = server.calls("POST", /\/prompt_async$/)
-    expect(prompt).toHaveLength(1)
     expect(prompt[0]!.path.split("?")[0]).toBe("/session/ses_nuova/prompt_async")
     expect(JSON.parse(prompt[0]!.body!)).toMatchObject({ parts: [{ type: "text", text: "Ciao" }], model: FREE })
     await store.abort(id)
     expect(server.calls("POST", /^\/session\/ses_nuova\/abort$/)).toHaveLength(1)
+  })
+
+  /* C5: the chat's rules, and the answers that reach the server. */
+  test("a session made elsewhere gets nothing: its rules are not the chat's", async () => {
+    const server = fakeServer()
+    server.routes.sessions = [session("ses_1"), { ...session("ses_2"), permission: [...CHAT_PERMISSION] }]
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const refused = await store.send("ses_1", "rm -rf build", FREE).then(() => undefined, (error: unknown) => error)
+    expect(refused).toBeInstanceOf(ForeignSession)
+    expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
+    // One the chat made, listed by the server, is fine.
+    await store.send("ses_2", "Ciao", FREE)
+    expect(server.calls("POST", /\/prompt_async$/).map((r) => r.path.split("?")[0])).toEqual(["/session/ses_2/prompt_async"])
+  })
+
+  test("yes this once, no, an answer and a declined question reach the server as sent", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.replyPermission("per_1", "once")
+    await store.replyPermission("per_2", "reject")
+    await store.answerQuestion("que_1", [["Sì"], ["rosso", "blu"]])
+    await store.rejectQuestion("que_2")
+    const posts = server.sent
+      .filter((r) => r.method === "POST")
+      .map((r) => [r.path.split("?")[0], JSON.parse(r.body || "null")])
+    expect(posts).toEqual([
+      ["/permission/per_1/reply", { reply: "once" }],
+      ["/permission/per_2/reply", { reply: "reject" }],
+      ["/question/que_1/reply", { answers: [["Sì"], ["rosso", "blu"]] }],
+      ["/question/que_2/reject", null],
+    ])
   })
 })
