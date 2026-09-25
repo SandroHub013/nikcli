@@ -34,9 +34,10 @@ import { t } from "../i18n"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
-import { applyRunnerLine, runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
+import { runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
-import { startTurn, type TurnHandle } from "./session"
+import { createBotTurns } from "./controller"
+import { runTurn } from "./turn"
 import {
   createBot,
   deleteBot,
@@ -47,17 +48,11 @@ import {
   type BotRoots,
 } from "./store"
 import {
-  answerKeys,
-  applyExit,
-  applyProblem,
   emptyTalk,
   formatWhen,
   lastLine,
   mentionIn,
-  noticePermission,
   parseTalk,
-  permissionAnswered,
-  sendMessage,
   serializeTalk,
   talkKey,
   type PermissionAnswer,
@@ -75,7 +70,6 @@ import "./bots.css"
  * bot's path, because the identifier repeats across project and global scope.
  */
 const [talks, setTalks] = createSignal<Record<string, Talk>>({})
-const turns = new Map<string, TurnHandle>()
 
 function readStored(path: string): Talk {
   try {
@@ -105,6 +99,13 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
     return { ...all, [path]: next }
   })
 }
+
+/*
+ * The running turns, one per bot, through `runTurn` (B2): a stop ends the
+ * turn with its child processes and gives the plan's place back, and a
+ * runner that does not start says so in the thread. See `controller.ts`.
+ */
+const turns = createBotTurns({ runTurn: (request) => runTurn(request), talkOf, update: updateTalk })
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
 function ensureLoaded(paths: readonly string[]) {
@@ -348,50 +349,15 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    if (turns.has(bot.path)) return
-    const path = bot.path
-    const at = Date.now()
-    const runner = runnerById(bot.runner)
-    updateTalk(path, (talk) => sendMessage(talk, message, at))
-
-    const cwd = props.projectRoot
-    const sessionId = talkOf(path).sessionId
-    void startTurn({
-      bot,
-      message,
-      ...(sessionId ? { sessionId } : {}),
-      ...(cwd ? { cwd } : {}),
-      onLine: (line) => updateTalk(path, (talk) => applyRunnerLine(runner, talk, line, Date.now())),
-      /* Only nikcli draws a permission menu; the others decide up front. */
-      onData: (chunk) =>
-        runner.id === "nikcli" && updateTalk(path, (talk) => noticePermission(talk, chunk, Date.now())),
-      onExit: (code) => {
-        turns.delete(path)
-        updateTalk(path, (talk) => applyExit(talk, code, Date.now(), runner.label))
-      },
-    }).then((started) => {
-      if (started.ok) {
-        turns.set(path, started.handle)
-      } else {
-        updateTalk(path, (talk) => applyProblem(talk, started.problem, Date.now()))
-      }
-    })
+    turns.send(bot, message, props.projectRoot)
   }
 
-  const answer = (bot: AgentFile, choice: PermissionAnswer) => {
-    turns.get(bot.path)?.write(answerKeys(choice))
-    updateTalk(bot.path, (talk) => permissionAnswered(talk, Date.now()))
-  }
+  const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
 
-  const stop = (bot: AgentFile) => {
-    turns.get(bot.path)?.kill()
-  }
+  const stop = (bot: AgentFile) => turns.stop(bot)
 
   /** A fresh thread: the session id goes with it, so the model starts over too. */
-  const forget = (bot: AgentFile) => {
-    turns.get(bot.path)?.kill()
-    updateTalk(bot.path, () => emptyTalk())
-  }
+  const forget = (bot: AgentFile) => turns.forget(bot)
 
   return (
     <section data-component="ade-bots">
