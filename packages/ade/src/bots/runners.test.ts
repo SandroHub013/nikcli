@@ -392,10 +392,21 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
     }
   })
 
+  test("Claude: niente scritture nei percorsi che poi eseguono codice (review B3, M1)", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
+    const disallowed = (args[args.indexOf("--disallowedTools") + 1] ?? "").split(",")
+    for (const path of [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
+      for (const tool of ["Edit", "Write", "NotebookEdit"]) expect(disallowed).toContain(`${tool}(./${path}/**)`)
+    }
+    // Writing elsewhere is still what the user accepted.
+    expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+  })
+
   test("un bot dell'utente resta com'era", () => {
     const claude = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args
     expect(claude[claude.indexOf("--allowedTools") + 1]).toContain("Bash")
     expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(claude.join(" ")).not.toContain("(./.git/**)")
     const codex = turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args
     expect(codex).toContain('approval_policy="never"')
     expect(codex).toContain('sandbox_mode="workspace-write"')

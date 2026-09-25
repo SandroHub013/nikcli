@@ -177,8 +177,9 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
  * once the user trusted that file (`trust.ts`), and even then with nothing
  * pre-approved that runs commands:
  *
- * - Claude Code: no shell or `ade-msg`, and none of the project's local
- *   settings, which may hold hooks.
+ * - Claude Code: no shell or `ade-msg`, none of the project's local settings
+ *   (which may hold hooks), and no writes where a file becomes code that runs
+ *   later — `EXECUTES_LATER`. Writing elsewhere stays: the user was told so.
  * - Codex: read-only, always. `codex exec` forces `approval_policy` to never
  *   whatever `-c` says (review B3, A1), so the sandbox is the only limit, and
  *   `workspace-write` would let it run anything inside the project.
@@ -186,6 +187,16 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
 function fromRepository(bot: AgentFile): boolean {
   return bot.scope === "project"
 }
+
+/*
+ * Folders where a write turns into a command run later, by git, an editor, CI
+ * or the next agent session (review B3, M1): hooks, tasks, workflows, and the
+ * settings and plugins of Claude Code, nikcli and Codex.
+ */
+const EXECUTES_LATER = [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]
+const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
+  ["Edit", "Write", "NotebookEdit"].map((tool) => `${tool}(./${path}/**)`),
+)
 
 function canWrite(bot: AgentFile): boolean {
   return !bot.disabledTools.includes("edit") && !bot.disabledTools.includes("write")
@@ -268,6 +279,8 @@ export function turnCommand(
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+      // A refusal beats an allow, `acceptEdits` included.
+      if (repository && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
