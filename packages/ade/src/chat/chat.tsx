@@ -33,6 +33,7 @@ import {
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
 import { isOpenOn, useFolder } from "./first-use"
 import { stopAnswer } from "./stop"
+import { requestProblem, retryNotice } from "./errors"
 import { answerUsage, answerUsageText, sessionUsage, sessionUsageText } from "./usage"
 import { SessionList } from "./session-list"
 import {
@@ -46,7 +47,7 @@ import {
   type OpenSession,
   type Turn,
 } from "./sessions"
-import { appChatStore, ForeignSession, type ChatStore } from "./store"
+import { appChatStore, type ChatStore } from "./store"
 import "./chat.css"
 
 const MODEL_KEY = "ade.chat.model"
@@ -189,6 +190,11 @@ export function Chat(props: ChatProps) {
     const id = open()
     return id ? (store.state.data.question[id] ?? []) : []
   }
+  // The provider failed mid-answer and nikcli tries again: said, rather than a caret that just waits.
+  const retrying = () => {
+    const id = open()
+    return id ? retryNotice(store.state.data.session_status[id]) : undefined
+  }
   const answering = () => {
     const id = open()
     return id ? isBusy(store.state.data, id) : false
@@ -213,7 +219,7 @@ export function Chat(props: ChatProps) {
     setProblem(undefined)
     void store
       .loadMessages(sessionID)
-      .catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)))
+      .catch((error: unknown) => setProblem(requestProblem(error)))
   }
 
   const newSession = () => {
@@ -238,7 +244,7 @@ export function Chat(props: ChatProps) {
       setCurrent(id)
       setDraft("")
     } catch (error) {
-      setProblem(error instanceof ForeignSession || error instanceof Error ? error.message : String(error))
+      setProblem(requestProblem(error))
     } finally {
       setSending(false)
       composer?.focus()
@@ -379,6 +385,13 @@ export function Chat(props: ChatProps) {
             >
               <For each={turns()}>{(turn) => <Turn turn={turn} />}</For>
             </Show>
+            <Show when={retrying()}>
+              {(line) => (
+                <p data-slot="chat-retry" role="status">
+                  {line()}
+                </p>
+              )}
+            </Show>
             <For each={permissions()}>
               {(request) => (
                 <PermissionCard
@@ -456,7 +469,16 @@ function Turn(props: { turn: Turn }) {
         >
           <span data-slot="chat-caret" aria-label={t("chat.writing")} />
         </Show>
-        <Show when={messageError(props.turn.info)}>{(error) => <p data-slot="chat-error">{error()}</p>}</Show>
+        <Show when={messageError(props.turn.info)}>
+          {(error) => (
+            <p data-slot="chat-error">
+              {error().text}
+              <Show when={error().detail}>
+                {(detail) => <span data-slot="chat-error-detail">{detail()}</span>}
+              </Show>
+            </p>
+          )}
+        </Show>
         <Show when={answerUsage(props.turn.info)}>
           {(usage) => <p data-slot="chat-usage">{answerUsageText(usage())}</p>}
         </Show>

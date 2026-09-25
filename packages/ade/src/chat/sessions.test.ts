@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { t } from "../i18n"
 import { emptyChatData, type ChatData } from "./events"
 import { CHAT_PERMISSION } from "./rules"
 import { connectionNotice, conversationOf, messageError, followOpen, partsOf, sessionEntries } from "./sessions"
@@ -102,15 +103,22 @@ describe("the open session", () => {
     expect(conversationOf(loaded, "ses_none")).toEqual([])
   })
 
-  test("an answer that failed says why, as the server said it", () => {
+  test("an answer that failed says why in words, with what the provider said", () => {
     const failed = {
       id: "msg_1",
-      error: { name: "APIError", data: { message: "Rate limit exceeded: free-models-per-min." } },
+      error: {
+        name: "APIError",
+        data: { message: "Rate limit exceeded: free-models-per-min.", statusCode: 429, isRetryable: true },
+      },
     } as never
-    expect(messageError(failed)).toBe("Rate limit exceeded: free-models-per-min.")
-    expect(messageError({ id: "msg_2", error: { name: "MessageAbortedError", data: {} } } as never)).toBe(
-      "MessageAbortedError",
-    )
+    expect(messageError(failed)).toEqual({
+      text: t("chat.error.rateLimit"),
+      detail: "Rate limit exceeded: free-models-per-min.",
+    })
+    // No raw class name on screen.
+    expect(messageError({ id: "msg_2", error: { name: "MessageAbortedError", data: {} } } as never)).toEqual({
+      text: t("chat.error.aborted"),
+    })
     expect(messageError({ id: "msg_3" } as never)).toBeUndefined()
   })
 })

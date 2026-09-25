@@ -8,6 +8,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { requestProblem } from "./errors"
 import type { SessionEntry } from "./sessions"
 
 export function SessionList(props: {
@@ -32,7 +33,7 @@ export function SessionList(props: {
       await props.onRename(sessionID, title)
       setRenaming(undefined)
     } catch (error) {
-      setFailed(error instanceof Error ? error.message : t("chat.answer.failed"))
+      setFailed(requestProblem(error))
     }
   }
 

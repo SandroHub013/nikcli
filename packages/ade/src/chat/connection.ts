@@ -110,7 +110,7 @@ export function boundFetch(fetch: typeof globalThis.fetch, directory: string): t
     const request = new Request(input, init)
     const other = named(request).find((name) => !same(name, directory))
     if (other !== undefined) {
-      throw new TypeError(`La chat è aperta su ${directory}: una richiesta per ${other} non parte.`)
+      throw new TypeError(t("chat.error.otherFolder", directory, other))
     }
     return fetch(request)
   }
