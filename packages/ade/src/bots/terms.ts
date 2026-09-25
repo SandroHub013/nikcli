@@ -13,6 +13,8 @@
  * - the user is told, where bots are set up, whose account pays and on which terms.
  */
 
+import { t } from "../i18n"
+
 /** Runners that spend the user's Anthropic or ChatGPT plan, rather than keys the user gave nikcli. */
 export const PLAN_RUNNERS: readonly string[] = ["claude", "codex"]
 
@@ -32,7 +34,7 @@ export function acquireTurn(runnerId: string, label = runnerId): { release: () =
   const now = running.get(runnerId) ?? 0
   if (now >= MAX_PARALLEL_TURNS) {
     return {
-      problem: `Già ${now} turni di ${label} in corso: ADE ne tiene al massimo ${MAX_PARALLEL_TURNS} insieme sul tuo abbonamento. Riprova quando uno finisce.`,
+      problem: t("bots.terms.parallel", now, label, MAX_PARALLEL_TURNS),
     }
   }
   running.set(runnerId, now + 1)
@@ -59,7 +61,7 @@ export function limitReached(text: string): boolean {
 }
 
 export function limitNotice(label: string): string {
-  return `${label} ha raggiunto il limite del tuo piano. ADE non riprova e non cambia account: attendi il reset indicato dalla CLI oppure usa una chiave API.`
+  return t("bots.limit.notice", label)
 }
 
 /** What an obvious API key becomes once a thread is about to be stored (B4). */

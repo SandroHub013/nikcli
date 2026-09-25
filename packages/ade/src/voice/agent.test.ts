@@ -156,6 +156,31 @@ describe("voice/agent", () => {
     expect(runner.stops()).toBe(1)
   })
 
+  test("the plan's limit is recognised with English active, without the Italian sentence", async () => {
+    setLocalePreference("en")
+    try {
+      const notice = limitNotice("Claude Code")
+      expect(notice).toContain("does not retry")
+      expect(notice).not.toContain("non riprova")
+      const runner = fakeRunner([
+        { status: "error", problem: notice, limited: true, talk: { limited: true } as never },
+        { status: "done", text: "Two sessions." },
+      ])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+        codexFallback: () => true,
+      })
+      const answer = await agent.ask({ text: "how many sessions?", engine: "auto" })
+      expect(runner.requests.map((request) => request.runner)).toEqual(["claude", "codex"])
+      expect(answer.ok).toBe(true)
+      expect(answer.text).toContain("Two sessions.")
+    } finally {
+      resetLocaleForTests()
+    }
+  })
+
   test("a turn ended by the plan's limit is said as the bots say it, and never asked again", async () => {
     const runner = fakeRunner([{ status: "error", problem: limitNotice("Claude Code") }])
     const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })

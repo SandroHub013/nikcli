@@ -24,6 +24,7 @@
  * ```
  */
 
+import { t } from "../i18n"
 import { getHost, type SpawnedSession } from "../host/shell"
 import { registerSender, unregisterSender } from "../session/senders"
 import type { AgentFile } from "./nikcli"
@@ -295,7 +296,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
               return finish("error", problem)
             }
             case "nohost": {
-              const problem = "Nessun host: un turno si esegue solo nell'app desktop."
+              const problem = t("bots.turn.noHost")
               update(applyProblem(talk, problem, Date.now()))
               return finish("error", problem)
             }

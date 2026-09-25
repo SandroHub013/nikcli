@@ -199,13 +199,17 @@ function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
 
 /** Whether a turn's outcome indicates Claude reached the plan's usage/quota limit. */
 function isLimitTurn(result: TurnResult): boolean {
+  if (result.limited || result.talk?.limited) return true
+  // A thread saved before the flag, or a CLI line that names the limit itself.
   const check = (s?: string) => {
     if (!s) return false
     return (
       limitReached(s) ||
       s.includes("raggiunto il limite") ||
       s.includes("al limite del") ||
-      s.includes("limite del tuo piano")
+      s.includes("limite del tuo piano") ||
+      s.includes("reached the limit of your plan") ||
+      s.includes("does not retry")
     )
   }
   if (check(result.problem) || check(result.text)) return true

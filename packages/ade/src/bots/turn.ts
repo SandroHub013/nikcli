@@ -21,6 +21,7 @@
 import { getHost } from "../host/shell"
 import { stripAnsi } from "../session/stream"
 import { registerSender, unregisterSender } from "../session/senders"
+import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, turnCommand, type RemoteTools, type RunnerId } from "./runners"
@@ -92,9 +93,9 @@ export const TURN_EXIT_GRACE_MS = 10_000
 export function timeoutProblem(label: string, timeoutMs: number): string {
   const minutes = timeoutMs / 60_000
   const span = Number.isInteger(minutes)
-    ? `${minutes} ${minutes === 1 ? "minuto" : "minuti"}`
-    : `${Math.max(1, Math.round(timeoutMs / 1000))} secondi`
-  return `${label} non ha finito il turno in ${span}: l'ho fermato.`
+    ? `${minutes} ${t(minutes === 1 ? "bots.turn.minute" : "bots.turn.minutes")}`
+    : `${Math.max(1, Math.round(timeoutMs / 1000))} ${t("bots.turn.seconds")}`
+  return t("bots.turn.timeout", label, span)
 }
 
 /** What a turn needs from the app; the machine, passed in so a test can run one. */
@@ -112,6 +113,8 @@ export interface TurnResult {
   readonly costUsd: number
   /** Why it failed, when it did. */
   readonly problem?: string
+  /** The plan's limit ended the turn. The voice reads this, not the sentence. */
+  readonly limited?: boolean
   /**
    * How the process ended, when it ended on its own: its exit code, or 0 once
    * its final event arrived. Absent when it was stopped, ran out of time or
@@ -163,6 +166,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       tokens: talk.tokens,
       costUsd: talk.costUsd,
       ...(problem ? { problem } : {}),
+      ...(talk.limited ? { limited: true } : {}),
       ...(exitCode !== undefined ? { exitCode } : {}),
       ...(lastWords ? { lastWords } : {}),
       talk,
@@ -170,7 +174,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
 
     const host = await (deps.host ?? getHost)()
     if (!host?.spawn) {
-      update(applyProblem(talk, "Nessun host: un turno si esegue solo nell'app desktop.", Date.now()))
+      update(applyProblem(talk, t("bots.turn.noHost"), Date.now()))
       return finish("error", talk.problem)
     }
 
@@ -187,7 +191,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       runner: runner.id,
     }
     if (bot.disabledTools.length > 0 && !enforcesDisabledTools(runner.id)) {
-      const problem = `${runner.label} non può rifiutare gli strumenti che questo turno esclude.`
+      const problem = t("bots.turn.cannotRefuse", runner.label)
       update(applyProblem(talk, problem, Date.now()))
       return finish("error", problem)
     }
@@ -298,7 +302,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         return finish("stopped")
       }
       if (notStarted !== undefined) {
-        const problem = `${runner.label} non si avvia: ${notStarted}`
+        const problem = t("bots.turn.didNotStart", runner.label, notStarted)
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }
@@ -306,7 +310,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text, code) : finish("done", undefined, code)
     } catch (error) {
       const said = error instanceof Error ? error.message : String(error)
-      update(applyProblem(talk, `${runner.label} non si avvia: ${said}`, Date.now()))
+      update(applyProblem(talk, t("bots.turn.didNotStart", runner.label, said), Date.now()))
       return finish("error", talk.problem)
     } finally {
       clearTimeout(timer)
