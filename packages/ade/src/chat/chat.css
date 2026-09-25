@@ -30,9 +30,17 @@
   background: var(--ade-surface);
 }
 
-[data-slot="chat-model"] {
+[data-slot="chat-selectors"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  flex-wrap: wrap;
+}
+
+[data-slot="chat-model"],
+[data-slot="chat-agent"] {
   height: 26px;
-  max-width: 260px;
+  max-width: 280px;
   padding: 0 var(--ade-space-5);
   border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-md);
@@ -43,7 +51,8 @@
   cursor: pointer;
 }
 
-[data-slot="chat-model"]:focus-visible {
+[data-slot="chat-model"]:focus-visible,
+[data-slot="chat-agent"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
 }

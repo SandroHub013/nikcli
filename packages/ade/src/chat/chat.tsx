@@ -20,20 +20,42 @@ import {
   createChatState,
   messagesForRequest,
   settleMessage,
+  modelsFromProviderList,
+  agentsFromList,
+  defaultModelChoice,
+  defaultAgentChoice,
+  isAdeTestBuild,
+  validateSelectedModel,
+  DEFAULT_FALLBACK_MODEL,
   type ChatMessage,
   type ChatState,
+  type ChatModelChoice,
+  type ChatAgentChoice,
 } from "./model"
 import { splitSegments } from "./segments"
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, streamChat } from "./client"
+import { streamChat } from "./client"
+import { locale } from "../i18n/locale"
+import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
+import { createNikcliClient } from "@nikcli-ai/sdk/client"
+import { SERVER_BASE, serverFetch, tauriServerBridge } from "./transport"
 import "./chat.css"
 
 const STORAGE_KEY = "ade.chat"
 const MODEL_KEY = "ade.chat.model"
+const AGENT_KEY = "ade.chat.agent"
 
 export interface ChatProps {
   /** OpenRouter key, from voice settings. Empty when not configured. */
   apiKey: string
   onOpenSettings: () => void
+  /** Injected by tests or callers */
+  providerList?: ProviderList
+  /** Injected by tests or callers */
+  agents?: readonly Agent[]
+  /** Injected client for fetching provider.list and app.agents */
+  client?: NikcliClient
+  /** Override for ADE Test mode (auto-detected if undefined) */
+  isTest?: boolean
 }
 
 /**
@@ -74,27 +96,83 @@ function save(state: ChatState) {
   }
 }
 
-function loadModel(): string {
+function loadStoredModel(models: readonly ChatModelChoice[], isTest: boolean, providerList?: ProviderList): string {
   try {
-    return localStorage.getItem(MODEL_KEY) || DEFAULT_CHAT_MODEL
-  } catch {
-    return DEFAULT_CHAT_MODEL
-  }
+    const stored = localStorage.getItem(MODEL_KEY)
+    const validated = validateSelectedModel(stored, models, isTest)
+    if (validated) return validated
+  } catch {}
+  return defaultModelChoice(models, providerList, { isTest })?.id ?? DEFAULT_FALLBACK_MODEL
+}
+
+function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
+  try {
+    const stored = localStorage.getItem(AGENT_KEY)
+    if (stored && agents.some((a) => a.name === stored)) return stored
+  } catch {}
+  return defaultAgentChoice(agents)
 }
 
 export function Chat(props: ChatProps) {
+  const isTest = () => props.isTest ?? isAdeTestBuild()
+  const lang = () => locale()
+
+  const initialModels = () =>
+    modelsFromProviderList(props.providerList, { isTest: isTest(), lang: lang() })
+  const initialAgents = () =>
+    agentsFromList(props.agents)
+
   const [state, setState] = createSignal<ChatState>(createChatState())
   const [draft, setDraft] = createSignal("")
-  const [model, setModel] = createSignal(DEFAULT_CHAT_MODEL)
+  const [models, setModels] = createSignal<readonly ChatModelChoice[]>(initialModels())
+  const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(initialAgents())
+  const [model, setModel] = createSignal<string>(loadStoredModel(models(), isTest(), props.providerList))
+  const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
   const [busy, setBusy] = createSignal(false)
 
   let scroller: HTMLDivElement | undefined
   let composer: HTMLTextAreaElement | undefined
   let inFlight: AbortController | undefined
 
-  onMount(() => {
+  onMount(async () => {
     setState(loadState())
-    setModel(loadModel())
+
+    let pList = props.providerList
+    let aList = props.agents
+
+    if (props.client) {
+      try {
+        const [pRes, aRes] = await Promise.all([
+          props.client.provider.list().catch(() => undefined),
+          props.client.app.agents().catch(() => undefined),
+        ])
+        if (pRes?.data) pList = pRes.data
+        if (aRes?.data) aList = aRes.data
+      } catch {}
+    } else if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      try {
+        const bridge = tauriServerBridge()
+        const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch: serverFetch(bridge) })
+        const [pRes, aRes] = await Promise.all([
+          client.provider.list().catch(() => undefined),
+          client.app.agents().catch(() => undefined),
+        ])
+        if (pRes?.data) pList = pRes.data
+        if (aRes?.data) aList = aRes.data
+      } catch {}
+    }
+
+    const testBuild = isTest()
+    const resolvedLang = lang()
+    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild, lang: resolvedLang })
+    setModels(resolvedModels)
+
+    const resolvedAgents = agentsFromList(aList)
+    setAgents(resolvedAgents)
+
+    setModel((current) => validateSelectedModel(current, resolvedModels, testBuild) ?? loadStoredModel(resolvedModels, testBuild, pList))
+    setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
+
     composer?.focus()
   })
 
@@ -141,9 +219,11 @@ export function Chat(props: ChatProps) {
     inFlight = controller
 
     try {
+      // The Chat ALWAYS sends the chosen model, never server default!
+      const currentModel = model() || DEFAULT_FALLBACK_MODEL
       await streamChat({
         apiKey: props.apiKey,
-        model: model(),
+        model: currentModel,
         messages: context,
         signal: controller.signal,
         onDelta: (delta) => setState((current) => appendDelta(current, answer.id, delta)),
@@ -174,9 +254,19 @@ export function Chat(props: ChatProps) {
   }
 
   const chooseModel = (id: string) => {
-    setModel(id)
+    const validated = validateSelectedModel(id, models(), isTest()) ?? id
+    setModel(validated)
     try {
-      localStorage.setItem(MODEL_KEY, id)
+      localStorage.setItem(MODEL_KEY, validated)
+    } catch {
+      // Same as the conversation: this session keeps the choice regardless.
+    }
+  }
+
+  const chooseAgent = (name: string) => {
+    setAgent(name)
+    try {
+      localStorage.setItem(AGENT_KEY, name)
     } catch {
       // Same as the conversation: this session keeps the choice regardless.
     }
@@ -192,20 +282,31 @@ export function Chat(props: ChatProps) {
   return (
     <section data-component="ade-chat">
       <header data-slot="chat-head">
-        <select
-          data-slot="chat-model"
-          value={model()}
-          onChange={(event) => chooseModel(event.currentTarget.value)}
-          aria-label={t("chat.model.label")}
-        >
-          <For each={CHAT_MODELS}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
-          {/* A model chosen in an earlier build, or typed into storage by
-              hand, must still show as selected rather than silently
-              switching the picker to the first entry. */}
-          <Show when={!CHAT_MODELS.some((entry) => entry.id === model())}>
-            <option value={model()}>{model()}</option>
-          </Show>
-        </select>
+        <div data-slot="chat-selectors">
+          <select
+            data-slot="chat-agent"
+            value={agent()}
+            onChange={(event) => chooseAgent(event.currentTarget.value)}
+            aria-label={t("chat.agent.label")}
+          >
+            <For each={agents()}>{(entry) => <option value={entry.name}>{entry.name}</option>}</For>
+            <Show when={!agents().some((entry) => entry.name === agent())}>
+              <option value={agent()}>{agent()}</option>
+            </Show>
+          </select>
+
+          <select
+            data-slot="chat-model"
+            value={model()}
+            onChange={(event) => chooseModel(event.currentTarget.value)}
+            aria-label={t("chat.model.label")}
+          >
+            <For each={models()}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
+            <Show when={!models().some((entry) => entry.id === model())}>
+              <option value={model()}>{model()}</option>
+            </Show>
+          </select>
+        </div>
         <div data-slot="chat-head-actions">
           <Show when={state().messages.length > 0}>
             <button type="button" data-slot="chat-action" onClick={reset}>

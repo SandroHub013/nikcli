@@ -158,3 +158,282 @@ export function settleMessage(state: ChatState, id: string, error?: string): Cha
     ...(error ? { error } : {}),
   }))
 }
+
+// ---------------------------------------------------------------------------
+// Models and Agents resolution (C3)
+// ---------------------------------------------------------------------------
+
+import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+
+export interface ChatModelChoice {
+  readonly id: string
+  readonly providerID: string
+  readonly name: string
+  readonly providerName: string
+  readonly free: boolean
+  readonly cost?: { readonly input: number; readonly output: number }
+  readonly label: string
+}
+
+export interface ChatAgentChoice {
+  readonly name: string
+  readonly description?: string
+}
+
+/** Whether a model is free of charge (input tokens cost 0 or :free in ID). */
+export function isFreeModel(model: {
+  readonly id: string
+  readonly providerID?: string
+  readonly cost?: { readonly input?: number; readonly output?: number }
+}): boolean {
+  if (model.id.includes(":free")) return true
+  if (model.cost !== undefined) {
+    return model.cost.input === 0 && (model.cost.output === 0 || model.cost.output === undefined)
+  }
+  if (model.providerID === "nikcli") return true
+  return false
+}
+
+/** Format price in $/M tokens or "gratis" / "free" label. */
+export function formatModelPrice(
+  cost?: { readonly input: number; readonly output: number },
+  free?: boolean,
+  lang: "it" | "en" = "it",
+): string {
+  if (free || !cost || (cost.input === 0 && cost.output === 0)) {
+    return lang === "en" ? "free" : "gratis"
+  }
+  if (cost.input === cost.output) {
+    return `$${cost.input}/M`
+  }
+  return `$${cost.input}/$${cost.output} /M`
+}
+
+/** Formatted model label for the dropdown selector. */
+export function formatModelLabel(
+  name: string,
+  cost?: { readonly input: number; readonly output: number },
+  free?: boolean,
+  lang: "it" | "en" = "it",
+): string {
+  const price = formatModelPrice(cost, free, lang)
+  return `${name} (${price})`
+}
+
+export interface ModelListOptions {
+  /** If true, returns only free models (ADE Test requirement). */
+  readonly isTest?: boolean
+  /** Language for price label ("gratis" vs "free"). Defaults to "it". */
+  readonly lang?: "it" | "en"
+}
+
+export const DEFAULT_FALLBACK_MODEL = "google/gemini-2.5-flash:free"
+export const DEFAULT_FALLBACK_AGENT = "assistant"
+
+/** Fallback model choices when offline or before the provider list arrives. */
+export function fallbackModels(isTest?: boolean, lang: "it" | "en" = "it"): readonly ChatModelChoice[] {
+  const freeModels: ChatModelChoice[] = [
+    {
+      id: "google/gemini-2.5-flash:free",
+      providerID: "nikcli",
+      name: "Gemini 2.5 Flash",
+      providerName: "Google",
+      free: true,
+      cost: { input: 0, output: 0 },
+      label: formatModelLabel("Gemini 2.5 Flash", { input: 0, output: 0 }, true, lang),
+    },
+    {
+      id: "meta-llama/llama-3.3-70b-instruct:free",
+      providerID: "nikcli",
+      name: "Llama 3.3 70B",
+      providerName: "Meta",
+      free: true,
+      cost: { input: 0, output: 0 },
+      label: formatModelLabel("Llama 3.3 70B", { input: 0, output: 0 }, true, lang),
+    },
+    {
+      id: "qwen/qwen-2.5-coder-32b-instruct:free",
+      providerID: "nikcli",
+      name: "Qwen 2.5 Coder 32B",
+      providerName: "Qwen",
+      free: true,
+      cost: { input: 0, output: 0 },
+      label: formatModelLabel("Qwen 2.5 Coder 32B", { input: 0, output: 0 }, true, lang),
+    },
+  ]
+
+  if (isTest) return freeModels
+
+  return [
+    ...freeModels,
+    {
+      id: "anthropic/claude-sonnet-4.5",
+      providerID: "anthropic",
+      name: "Claude Sonnet 4.5",
+      providerName: "Anthropic",
+      free: false,
+      cost: { input: 3, output: 15 },
+      label: formatModelLabel("Claude Sonnet 4.5", { input: 3, output: 15 }, false, lang),
+    },
+    {
+      id: "openai/gpt-5",
+      providerID: "openai",
+      name: "GPT-5",
+      providerName: "OpenAI",
+      free: false,
+      cost: { input: 2.5, output: 10 },
+      label: formatModelLabel("GPT-5", { input: 2.5, output: 10 }, false, lang),
+    },
+  ]
+}
+
+export const FALLBACK_AGENTS: readonly ChatAgentChoice[] = [
+  { name: "assistant", description: "Default assistant" },
+]
+
+/**
+ * Extracts and filters selectable models from `provider.list`.
+ * In ADE Test (`options.isTest === true`), only free models are included.
+ */
+export function modelsFromProviderList(
+  providerList?: ProviderList | null,
+  options?: ModelListOptions,
+): readonly ChatModelChoice[] {
+  if (!providerList || !Array.isArray(providerList.all)) {
+    return fallbackModels(options?.isTest, options?.lang)
+  }
+
+  const isTest = options?.isTest ?? false
+  const lang = options?.lang ?? "it"
+  const result: ChatModelChoice[] = []
+
+  for (const provider of providerList.all) {
+    if (!provider || !provider.models) continue
+    for (const [id, model] of Object.entries(provider.models)) {
+      if (!model || model.status === "deprecated") continue
+      const modelId = model.id || id
+      const providerId = model.providerID || provider.id
+      const free = isFreeModel({ id: modelId, providerID: providerId, cost: model.cost })
+
+      // In ADE Test: only free models are allowed!
+      if (isTest && !free) continue
+
+      const cost =
+        model.cost && typeof model.cost.input === "number" && typeof model.cost.output === "number"
+          ? { input: model.cost.input, output: model.cost.output }
+          : undefined
+
+      result.push({
+        id: modelId,
+        providerID: providerId,
+        name: model.name || modelId,
+        providerName: provider.name || providerId,
+        free,
+        cost,
+        label: formatModelLabel(model.name || modelId, cost, free, lang),
+      })
+    }
+  }
+
+  if (result.length === 0) {
+    return fallbackModels(isTest, lang)
+  }
+
+  return result
+}
+
+/**
+ * Resolves the default model.
+ * In ADE Test: ALWAYS a free model, never paid!
+ * In normal mode: nikcli's default model (never server's paid default like OpenRouter).
+ */
+export function defaultModelChoice(
+  models: readonly ChatModelChoice[],
+  providerList?: ProviderList | null,
+  options?: { isTest?: boolean },
+): ChatModelChoice | undefined {
+  if (models.length === 0) return undefined
+
+  const isTest = options?.isTest ?? false
+
+  if (isTest) {
+    // In ADE Test: default is NEVER paid!
+    const nikcliFree = models.find((m) => m.providerID === "nikcli" && m.free)
+    if (nikcliFree) return nikcliFree
+    const anyFree = models.find((m) => m.free)
+    if (anyFree) return anyFree
+    return models[0]
+  }
+
+  // Normal mode: prefer nikcli's default model, NOT the server default (which might be paid OpenRouter)
+  const nikcliDefaultId = providerList?.default?.["nikcli"]
+  if (nikcliDefaultId) {
+    const match = models.find((m) => m.id === nikcliDefaultId || `${m.providerID}/${m.id}` === nikcliDefaultId)
+    if (match) return match
+  }
+
+  const nikcliFree = models.find((m) => m.providerID === "nikcli" && m.free)
+  if (nikcliFree) return nikcliFree
+
+  const anyNikcli = models.find((m) => m.providerID === "nikcli")
+  if (anyNikcli) return anyNikcli
+
+  const firstFree = models.find((m) => m.free)
+  if (firstFree) return firstFree
+
+  return models[0]
+}
+
+/** Extracts selectable agents (excluding subagents and hidden ones). */
+export function agentsFromList(
+  agents?: readonly (Agent | { name: string; description?: string; mode?: string; hidden?: boolean })[] | null,
+): readonly ChatAgentChoice[] {
+  if (!agents || agents.length === 0) return FALLBACK_AGENTS
+
+  const filtered = agents
+    .filter((a) => {
+      if (!a || !a.name) return false
+      if (a.mode === "subagent" || a.hidden === true) return false
+      return true
+    })
+    .map((a) => ({
+      name: a.name,
+      description: a.description,
+    }))
+
+  return filtered.length > 0 ? filtered : FALLBACK_AGENTS
+}
+
+/** Resolves default agent ("assistant" if available, else first agent). */
+export function defaultAgentChoice(agents: readonly ChatAgentChoice[]): string {
+  if (agents.length === 0) return DEFAULT_FALLBACK_AGENT
+  const assistant = agents.find((a) => a.name === "assistant")
+  if (assistant) return assistant.name
+  const chat = agents.find((a) => a.name === "chat")
+  if (chat) return chat.name
+  return agents[0].name
+}
+
+/** Detects whether ADE is running as ADE Test. */
+export function isAdeTestBuild(): boolean {
+  if (typeof document !== "undefined" && document.documentElement?.dataset?.adeBuild === "test") {
+    return true
+  }
+  return false
+}
+
+/**
+ * Validates a model ID against the available models and test constraints.
+ * Rejects paid models under ADE Test identity.
+ */
+export function validateSelectedModel(
+  selectedId: string | null | undefined,
+  models: readonly ChatModelChoice[],
+  isTest: boolean,
+): string | undefined {
+  if (!selectedId) return undefined
+  const match = models.find((m) => m.id === selectedId)
+  if (!match) return undefined
+  if (isTest && !match.free) return undefined
+  return match.id
+}

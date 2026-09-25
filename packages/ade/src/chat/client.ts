@@ -20,18 +20,18 @@ const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 /**
  * The default model.
  *
- * A conversation is not a planner call: it is read by a person, so the
- * trade-off runs the other way — quality over the latency the planner needs.
+ * A free nikcli model (A1): never a paid model as default in code, avoiding
+ * surprise charges when the user opens the chat.
  */
-export const DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4.5"
+export const DEFAULT_CHAT_MODEL = "google/gemini-2.5-flash:free"
 
-/** Models offered in the picker. The user can still type another. */
+/** Models offered in the picker when offline or before the provider list loads. */
 export const CHAT_MODELS: readonly { id: string; label: string }[] = [
-  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-  { id: "anthropic/claude-opus-4.1", label: "Claude Opus 4.1" },
-  { id: "openai/gpt-5", label: "GPT-5" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { id: "deepseek/deepseek-chat-v3.1", label: "DeepSeek V3.1" },
+  { id: "google/gemini-2.5-flash:free", label: "Gemini 2.5 Flash (gratis)" },
+  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (gratis)" },
+  { id: "qwen/qwen-2.5-coder-32b-instruct:free", label: "Qwen 2.5 Coder 32B (gratis)" },
+  { id: "anthropic/claude-sonnet-4.5", label: "Claude Sonnet 4.5 ($3/$15 /M)" },
+  { id: "openai/gpt-5", label: "GPT-5 ($2.5/$10 /M)" },
 ]
 
 export const DEFAULT_SYSTEM_PROMPT =

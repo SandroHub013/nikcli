@@ -1210,6 +1210,8 @@ export const en: Messages = {
   "chat.aborted": "Stopped.",
   "chat.error.fallback": "Something went wrong.",
   "chat.model.label": "Model",
+  "chat.model.free": "free",
+  "chat.agent.label": "Agent",
   "chat.new": "New conversation",
   "chat.needKey": "You need an OpenRouter key.",
   "chat.openSettings": "Open voice settings",

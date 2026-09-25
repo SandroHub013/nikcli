@@ -1221,6 +1221,8 @@ export const it = {
   "chat.aborted": "Interrotto.",
   "chat.error.fallback": "Qualcosa è andato storto.",
   "chat.model.label": "Modello",
+  "chat.model.free": "gratis",
+  "chat.agent.label": "Agente",
   "chat.new": "Nuova conversazione",
   "chat.needKey": "Serve una chiave OpenRouter.",
   "chat.openSettings": "Aprila nelle impostazioni vocali",
