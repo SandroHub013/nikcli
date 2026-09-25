@@ -37,7 +37,6 @@ import {
 } from "./model"
 import { splitSegments } from "./segments"
 import { streamChat, DEFAULT_CHAT_MODEL } from "./client"
-import { locale } from "../i18n/locale"
 import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
 import { openChat, appChatConnectionDeps, loadChatCatalog, type ChatConnectionDeps } from "./connection"
 import "./chat.css"
@@ -126,10 +125,9 @@ function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
 
 export function Chat(props: ChatProps) {
   const isTest = () => props.isTest ?? isAdeTestBuild()
-  const lang = () => locale()
 
   const initialModels = () =>
-    modelsFromProviderList(props.providerList, { isTest: isTest(), lang: lang() })
+    modelsFromProviderList(props.providerList, { isTest: isTest() })
   const initialAgents = () =>
     agentsFromList(props.agents)
 
@@ -172,8 +170,7 @@ export function Chat(props: ChatProps) {
     }
 
     const testBuild = isTest()
-    const resolvedLang = lang()
-    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild, lang: resolvedLang })
+    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild })
     setModels(resolvedModels)
 
     const resolvedAgents = agentsFromList(aList)

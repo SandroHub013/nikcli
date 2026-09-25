@@ -162,6 +162,7 @@ import {
   type ModelRef,
 } from "./model"
 import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import { setLocalePreference } from "../i18n/locale"
 
 const mockProviderList: ProviderList = {
   all: [
@@ -221,7 +222,7 @@ const mockProviderList: ProviderList = {
   ],
   default: {
     nikcli: "google/gemini-2.5-flash:free",
-    openrouter: "openai/gpt-6-astra-pro", // Note from Dario: default OpenRouter is paid!
+    openrouter: "openai/gpt-6-astra-pro", // Note from Dario: default OpenRouter is paid.
   },
   connected: ["nikcli", "openrouter"],
 }
@@ -273,28 +274,32 @@ describe("isFreeModel", () => {
 
 describe("formatModelPrice and formatModelLabel", () => {
   test("formats free models in Italian as gratis", () => {
-    expect(formatModelPrice({ input: 0, output: 0 }, true, "it")).toBe("gratis")
-    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true, "it")).toBe("Gemini Flash (gratis)")
+    setLocalePreference("it")
+    expect(formatModelPrice({ input: 0, output: 0 }, true)).toBe("gratis")
+    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash (gratis)")
   })
 
   test("formats free models in English as free", () => {
-    expect(formatModelPrice({ input: 0, output: 0 }, true, "en")).toBe("free")
-    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true, "en")).toBe("Gemini Flash (free)")
+    setLocalePreference("en")
+    expect(formatModelPrice({ input: 0, output: 0 }, true)).toBe("free")
+    expect(formatModelLabel("Gemini Flash", { input: 0, output: 0 }, true)).toBe("Gemini Flash (free)")
+    setLocalePreference("it")
   })
 
   test("formats paid models with input and output $/M tokens", () => {
-    expect(formatModelPrice({ input: 3, output: 15 }, false, "it")).toBe("$3/$15 /M")
-    expect(formatModelLabel("Claude Sonnet", { input: 3, output: 15 }, false, "it")).toBe("Claude Sonnet ($3/$15 /M)")
+    expect(formatModelPrice({ input: 3, output: 15 }, false)).toBe("$3/$15 /M")
+    expect(formatModelLabel("Claude Sonnet", { input: 3, output: 15 }, false)).toBe("Claude Sonnet ($3/$15 /M)")
   })
 
   test("formats paid models with equal input and output price", () => {
-    expect(formatModelPrice({ input: 5, output: 5 }, false, "it")).toBe("$5/M")
+    expect(formatModelPrice({ input: 5, output: 5 }, false)).toBe("$5/M")
   })
 })
 
 describe("modelsFromProviderList (C3)", () => {
   test("in standard mode includes all active models with price labels", () => {
-    const models = modelsFromProviderList(mockProviderList, { isTest: false, lang: "it" })
+    setLocalePreference("it")
+    const models = modelsFromProviderList(mockProviderList, { isTest: false })
     expect(models.length).toBe(5)
     const freeCount = models.filter((m) => m.free).length
     const paidCount = models.filter((m) => !m.free).length
@@ -309,20 +314,22 @@ describe("modelsFromProviderList (C3)", () => {
   })
 
   test("in ADE Test mode includes ONLY free models (never a paid model)", () => {
-    const testModels = modelsFromProviderList(mockProviderList, { isTest: true, lang: "it" })
+    const testModels = modelsFromProviderList(mockProviderList, { isTest: true })
     expect(testModels.length).toBe(3)
-    // Every single model in ADE Test must be free!
+    // Every single model in ADE Test must be free.
     expect(testModels.every((m) => m.free)).toBe(true)
 
-    // Paid models must be absent in ADE Test!
+    // Paid models must be absent in ADE Test.
     expect(testModels.some((m) => m.id === "openai/gpt-6-astra-pro")).toBe(false)
     expect(testModels.some((m) => m.id === "anthropic/claude-sonnet-4.5")).toBe(false)
   })
 
   test("in English uses 'free' instead of 'gratis'", () => {
-    const models = modelsFromProviderList(mockProviderList, { isTest: true, lang: "en" })
+    setLocalePreference("en")
+    const models = modelsFromProviderList(mockProviderList, { isTest: true })
     const freeModel = models.find((m) => m.id === "google/gemini-2.5-flash:free")
     expect(freeModel?.label).toContain("(free)")
+    setLocalePreference("it")
   })
 
   test("returns empty array without inventing models when provider list is null or empty", () => {

@@ -9,6 +9,12 @@
  * than carrying a second copy.
  */
 
+import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import type { ModelRef } from "./store"
+import { t } from "../i18n"
+
+export type { ModelRef }
+
 export type ChatRole = "user" | "assistant"
 
 export interface ChatMessage {
@@ -163,10 +169,6 @@ export function settleMessage(state: ChatState, id: string, error?: string): Cha
 // Models and Agents resolution (C3)
 // ---------------------------------------------------------------------------
 
-import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
-import type { ModelRef } from "./store"
-export type { ModelRef }
-
 export interface ChatModelChoice {
   readonly id: string
   readonly providerID: string
@@ -235,10 +237,9 @@ export function isFreeModel(model: {
 export function formatModelPrice(
   cost?: { readonly input: number; readonly output: number },
   free?: boolean,
-  lang: "it" | "en" = "it",
 ): string {
   if (free || !cost || (cost.input === 0 && cost.output === 0)) {
-    return lang === "en" ? "free" : "gratis"
+    return t("chat.model.free")
   }
   if (cost.input === cost.output) {
     return `$${cost.input}/M`
@@ -251,17 +252,14 @@ export function formatModelLabel(
   name: string,
   cost?: { readonly input: number; readonly output: number },
   free?: boolean,
-  lang: "it" | "en" = "it",
 ): string {
-  const price = formatModelPrice(cost, free, lang)
+  const price = formatModelPrice(cost, free)
   return `${name} (${price})`
 }
 
 export interface ModelListOptions {
   /** If true, returns only free models (ADE Test requirement). */
   readonly isTest?: boolean
-  /** Language for price label ("gratis" vs "free"). Defaults to "it". */
-  readonly lang?: "it" | "en"
 }
 
 /**
@@ -277,7 +275,6 @@ export function modelsFromProviderList(
   }
 
   const isTest = options?.isTest ?? false
-  const lang = options?.lang ?? "it"
   const result: ChatModelChoice[] = []
 
   for (const provider of providerList.all) {
@@ -288,7 +285,7 @@ export function modelsFromProviderList(
       const providerId = model.providerID || provider.id
       const free = isFreeModel({ id: modelId, providerID: providerId, cost: model.cost })
 
-      // In ADE Test: only free models are allowed!
+      // In ADE Test: only free models are allowed.
       if (isTest && !free) continue
 
       const cost =
@@ -304,7 +301,7 @@ export function modelsFromProviderList(
         providerName: provider.name || providerId,
         free,
         cost,
-        label: formatModelLabel(model.name || modelId, cost, free, lang),
+        label: formatModelLabel(model.name || modelId, cost, free),
       })
     }
   }
