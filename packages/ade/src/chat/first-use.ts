@@ -39,3 +39,16 @@ export async function useFolder(
   }
   return true
 }
+
+/**
+ * What showing the Chat section does (C9): nothing, unless the folder is
+ * already open in the store — then its catalog, which the store keeps per
+ * opening. No trust question, no server, no stream: those wait for a use.
+ */
+export async function sectionShown(
+  store: FirstUseStore,
+  root: string | undefined,
+  onCatalog: (catalog: ChatCatalog) => void,
+): Promise<void> {
+  if (isOpenOn(store, root)) await useFolder(store, root, onCatalog)
+}
