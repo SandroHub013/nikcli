@@ -52,6 +52,8 @@ export {
   type PartialTranscriptCallback,
   type Transcriber,
   type TranscriberErrorCallback,
+  type TranscriberErrorContext,
+  type TranscriberErrorPurpose,
   type TranscriberOptions,
   type TranscriptEvent,
 } from "./asr/transcriber"

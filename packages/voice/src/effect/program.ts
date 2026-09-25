@@ -9,7 +9,7 @@
  * - Pure functions (normalize, parse, session/transition) remain 100% pure and called directly.
  * - Dialogue timeouts use the Effect Clock / TestClock for deterministic, instant time travel in tests.
  * - Hardware, network, and host errors NEVER break the listening loop: every failure is caught,
- *   translated via `spokenMessage`, spoken to the user, and listening continues.
+ *   translated via `spokenMessage`, kept visible, and spoken unless throttled; listening continues.
  */
 
 import { markVoice } from "../timing"
@@ -290,6 +290,7 @@ export type ExternalCommand =
 
 /** How long the name said on its own, or the button, keeps the assistant listening without it. */
 export const WAKE_WINDOW_MS = 10_000
+export const PROBE_ERROR_SPEECH_COOLDOWN_MS = 60_000
 
 /**
  * How long, after the assistant has finished speaking, the next sentence is
@@ -1526,6 +1527,7 @@ export function makeVoiceProgram(
 
     /* Events taken off the stream whose handling has not finished; see `isIdle`. */
     let handling = 0
+    let lastProbeErrorSpokenAt: number | undefined
     /* The heard sentence being handled, so the next one can wait its turn. */
     let utteranceFiber: Fiber.RuntimeFiber<void, never> | null = null
 
@@ -1611,7 +1613,16 @@ export function makeVoiceProgram(
             }
             // In transcription mode, speech is strictly forbidden: errors are visual only.
             if (currentSettings.mode !== "transcription") {
-              yield* speaker.speak(spokenMessage(ev.error)).pipe(Effect.catchAll(() => Effect.void))
+              const purpose = ev.purpose ?? "turn"
+              let shouldSpeak = purpose === "turn"
+              if (purpose === "probe") {
+                const now = yield* getNowMs
+                shouldSpeak = lastProbeErrorSpokenAt === undefined || now - lastProbeErrorSpokenAt >= PROBE_ERROR_SPEECH_COOLDOWN_MS
+                if (shouldSpeak) lastProbeErrorSpokenAt = now
+              }
+              if (shouldSpeak) {
+                yield* speaker.speak(rawMsg).pipe(Effect.catchAll(() => Effect.void))
+              }
             }
             break
           }

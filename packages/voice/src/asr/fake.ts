@@ -10,6 +10,7 @@ import type {
   PartialTranscriptCallback,
   Transcriber,
   TranscriberErrorCallback,
+  TranscriberErrorContext,
   TranscriberOptions,
   TranscriptEvent,
 } from "./transcriber"
@@ -22,7 +23,7 @@ export interface FakeTranscriber extends Transcriber {
   emit(text: string, isFinal: boolean, confidence?: number): void
 
   /** Emit a recognition error directly to registered listeners. */
-  emitError(error: Error): void
+  emitError(error: Error, context?: TranscriberErrorContext): void
 
   /** Reset all listeners and state. */
   reset(): void
@@ -93,8 +94,8 @@ export function createFakeTranscriber(options: TranscriberOptions = {}): FakeTra
       }
     },
 
-    emitError(error: Error): void {
-      errorCb(error)
+    emitError(error: Error, context?: TranscriberErrorContext): void {
+      errorCb(error, context)
     },
 
     reset(): void {

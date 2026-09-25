@@ -20,6 +20,7 @@ import type {
   PartialTranscriptCallback,
   Transcriber,
   TranscriberErrorCallback,
+  TranscriberErrorPurpose,
   TranscriberOptions,
   TranscriptEvent,
 } from "./transcriber"
@@ -316,8 +317,14 @@ export function createOpenRouterTranscriber(
 
   const now = options.now ?? Date.now
 
-  async function transcribeSegment(segment: CapturedSegment, deliver: (text: string) => void, gated = false): Promise<void> {
+  async function transcribeSegment(
+    segment: CapturedSegment,
+    deliver: (text: string) => void,
+    purpose: TranscriberErrorPurpose,
+    gated = purpose === "probe",
+  ): Promise<void> {
     if (!segment.blob || segment.blob.size === 0) return
+    const report = (error: Error) => errorCb(error, { purpose })
 
     inFlightRequests++
     // Cleared once the body is read, not when the headers arrive: a body that
@@ -325,7 +332,7 @@ export function createOpenRouterTranscriber(
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       if (!apiKey || apiKey.trim().length === 0) {
-        errorCb(
+        report(
           new ApiKeyMissing({
             message:
               options.language?.startsWith("en")
@@ -338,7 +345,7 @@ export function createOpenRouterTranscriber(
 
       if (segment.blob.size > MAX_AUDIO_BYTES) {
         const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
-        errorCb(
+        report(
           new Error(
             `File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`
           )
@@ -374,7 +381,7 @@ export function createOpenRouterTranscriber(
         try {
           base64Audio = await blobToBase64(segment.blob)
         } catch (err: any) {
-          errorCb(
+          report(
             new Error(
               `Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`
             )
@@ -470,7 +477,7 @@ export function createOpenRouterTranscriber(
         }
       } catch (netErr: any) {
       if (controller.signal.aborted || netErr?.name === "AbortError") {
-        errorCb(
+        report(
           new RequestTimeout({
             timeoutMs,
             message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
@@ -483,7 +490,7 @@ export function createOpenRouterTranscriber(
         netErr?.message ?? "connessione fallita",
         apiKey
       )
-      errorCb(
+      report(
         new Error(
           `Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`
         )
@@ -493,7 +500,7 @@ export function createOpenRouterTranscriber(
 
     if (!response.ok) {
       if (response.status === 401) {
-        errorCb(
+        report(
           new ApiKeyInvalid({
             message:
               "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
@@ -503,7 +510,7 @@ export function createOpenRouterTranscriber(
       }
 
       if (response.status === 402) {
-        errorCb(
+        report(
           new QuotaExhausted({
             message:
               "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
@@ -513,7 +520,7 @@ export function createOpenRouterTranscriber(
       }
 
       if (response.status === 429) {
-        errorCb(
+        report(
           new Error(
             "Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."
           )
@@ -535,7 +542,7 @@ export function createOpenRouterTranscriber(
 
       const safeDetail = sanitizeApiKey(detail, apiKey)
       const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
-      errorCb(
+      report(
         new Error(
           `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`
         )
@@ -560,7 +567,7 @@ export function createOpenRouterTranscriber(
       if (text) deliver(text)
     } catch (parseErr: any) {
       if (parseErr?.name === "AbortError") {
-        errorCb(
+        report(
           new RequestTimeout({
             timeoutMs,
             message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
@@ -568,7 +575,7 @@ export function createOpenRouterTranscriber(
         )
         return
       }
-      errorCb(
+      report(
         new Error(
           `Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`
         )
@@ -602,7 +609,7 @@ export function createOpenRouterTranscriber(
         if (!earlyGate.active(now() - wholeUnderMs)) return
         earlyGate.onRequest?.()
         let heard = ""
-        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text), true)
+        const probe = transcribeSegment({ blob, format: "wav", mimeType: "audio/wav", durationMs: earlyGate.probeMs ?? NAME_PROBE_MS }, (text) => (heard = text), "probe", true)
           .then(() => heard)
           .catch(() => "")
         earlyProbes.set(sequence, probe)
@@ -618,6 +625,7 @@ export function createOpenRouterTranscriber(
     // Held for the whole exchange: between the two requests nothing is in
     // flight, and a stop that looked then would drop the sentence.
     inFlightRequests++
+    let purpose: TranscriberErrorPurpose = "turn"
     try {
       const spokenAt = now() - segment.durationMs
       const deliver = (text: string) => finalCb({ text, isFinal: true, confidence: 1.0, spokenAt })
@@ -627,6 +635,7 @@ export function createOpenRouterTranscriber(
         if (segment.sequence !== undefined && sequence <= segment.sequence) earlyProbes.delete(sequence)
       }
       const gated = early !== undefined || gate?.active(spokenAt) === true
+      purpose = gated ? "probe" : "turn"
       const long = segment.durationMs > (gate?.wholeUnderMs ?? NAME_PROBE_WHOLE_UNDER_MS)
       const head = early ? undefined : gated && long ? await probeFor(segment) : undefined
       /* Waiting for the name, a long sentence goes whole only once its start
@@ -639,7 +648,7 @@ export function createOpenRouterTranscriber(
       if (head || early) {
         let heard = ""
         if (early) heard = await early
-        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text), true)
+        else await transcribeSegment({ ...segment, blob: head! }, (text) => (heard = text), "probe", true)
         markVoice("asr-probe-back", heard)
         if (!heard) return
         if (!options.nameGate!.accepts(heard)) {
@@ -648,19 +657,20 @@ export function createOpenRouterTranscriber(
         }
         options.nameGate!.onAccepted?.()
         options.nameGate!.onRequest?.()
+        purpose = "turn"
       }
-      await transcribeSegment(segment, deliver, gated)
+      await transcribeSegment(segment, deliver, purpose, gated)
       markVoice("asr-back")
     } catch (err: any) {
       const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
-      errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`))
+      errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`), { purpose })
     } finally {
       inFlightRequests--
     }
   })
 
   micCapture.onError((err: Error) => {
-    errorCb(err)
+    errorCb(err, { purpose: "turn" })
   })
 
   return {
@@ -712,7 +722,7 @@ export function createOpenRouterTranscriber(
               ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
               : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
         })
-        errorCb(missing as unknown as Error)
+        errorCb(missing as unknown as Error, { purpose: "turn" })
         throw missing
       }
 
@@ -726,7 +736,7 @@ export function createOpenRouterTranscriber(
             message: "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
             cause: err,
           })
-          errorCb(permErr as unknown as Error)
+          errorCb(permErr as unknown as Error, { purpose: "turn" })
           throw permErr
         }
         if (lower.includes("nessun microfono") || lower.includes("notfound")) {
@@ -734,14 +744,14 @@ export function createOpenRouterTranscriber(
             message: "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova.",
             cause: err,
           })
-          errorCb(unavailErr as unknown as Error)
+          errorCb(unavailErr as unknown as Error, { purpose: "turn" })
           throw unavailErr
         }
         const failure = new TranscriptionFailed({
           cause: err,
           message: plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
         })
-        errorCb(failure as unknown as Error)
+        errorCb(failure as unknown as Error, { purpose: "turn" })
         throw failure
       }
     },

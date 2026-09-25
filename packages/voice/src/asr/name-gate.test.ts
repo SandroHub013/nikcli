@@ -75,6 +75,67 @@ describe("while it waits for the name, only the start of a sentence goes to the 
   })
 })
 
+describe("error purpose at the OpenRouter boundary", () => {
+  async function hearEarlySentence(
+    fetch: (...args: Parameters<typeof globalThis.fetch>) => Promise<Response>,
+  ) {
+    let clock = 10_000
+    const purposes: Array<string | undefined> = []
+    const accepted: string[] = []
+    const capture = createMicCapture({
+      now: () => clock,
+      preferredFormat: "wav",
+      mediaStream: { getTracks: () => [] } as any,
+      isTypeSupported: () => true,
+      speechDetectorConfig: { silenceDurationMs: 800 },
+    })
+    const transcriber = createOpenRouterTranscriber({
+      apiKey: "k",
+      capture,
+      now: () => clock,
+      fetch: fetch as typeof globalThis.fetch,
+      onError: (_error, context) => purposes.push(context?.purpose),
+      nameGate: {
+        active: () => true,
+        accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+        onAccepted: () => accepted.push("accepted"),
+      },
+    })
+    await transcriber.start()
+    for (let i = 0; i < 150; i++) {
+      clock += 20
+      capture.processAudioFrame(new Float32Array(320).fill(0.2))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    for (let i = 0; i < 50; i++) {
+      clock += 20
+      capture.processAudioFrame(new Float32Array(320))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    transcriber.stop()
+    return { accepted, purposes }
+  }
+
+  test("an early room probe failure is marked as a probe", async () => {
+    const { purposes } = await hearEarlySentence(async () => new Response("busy", { status: 503 }))
+
+    expect(purposes).toEqual(["probe"])
+  })
+
+  test("the full request after an accepted probe is marked as a turn", async () => {
+    let requests = 0
+    const { accepted, purposes } = await hearEarlySentence(async () => {
+      requests++
+      return requests === 1
+        ? new Response(JSON.stringify({ text: "ei nik raccontami" }), { status: 200 })
+        : new Response("busy", { status: 503 })
+    })
+
+    expect(accepted).toEqual(["accepted"])
+    expect(purposes).toEqual(["turn"])
+  })
+})
+
 describe("wavHead", () => {
   test("keeps the header valid for the shorter audio", async () => {
     const head = (await wavHead(wavOf(4_000), 1_500))!

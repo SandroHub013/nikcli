@@ -1,6 +1,6 @@
 import { Context, Effect, Stream } from "effect"
 import type { VoiceHost } from "../bridge/host"
-import type { TranscriptEvent } from "../asr/transcriber"
+import type { TranscriberErrorPurpose, TranscriptEvent } from "../asr/transcriber"
 import type { CapturedSegment } from "../audio/capture"
 import type { VoiceError } from "./errors"
 
@@ -10,7 +10,7 @@ import type { VoiceError } from "./errors"
 export type TranscriberEvent =
   | { readonly _tag: "partial"; readonly text: string }
   | { readonly _tag: "final"; readonly event: TranscriptEvent }
-  | { readonly _tag: "error"; readonly error: VoiceError }
+  | { readonly _tag: "error"; readonly error: VoiceError; readonly purpose?: TranscriberErrorPurpose }
 
 /**
  * Transcriber service interface.

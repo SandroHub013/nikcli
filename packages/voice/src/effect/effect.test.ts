@@ -33,7 +33,7 @@ import {
   VoiceHostLive,
   bridgeTranscriber,
 } from "./layers"
-import { WAKE_WINDOW_MS, makeVoiceProgram } from "./program"
+import { PROBE_ERROR_SPEECH_COOLDOWN_MS, WAKE_WINDOW_MS, makeVoiceProgram } from "./program"
 import { createFakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"
 import type {
@@ -334,6 +334,44 @@ describe("Effect-TS Voice Backend", () => {
     await Effect.runPromise(
       Effect.scoped(program.pipe(Effect.provide(appLayer)))
     )
+  })
+
+  test("probe failures stay visible but only one speaks per cooldown; turns and legacy errors still speak", async () => {
+    const fakeTranscriber = createFakeTranscriber()
+    const fakeSpeaker = createFakeSpeaker()
+    const mockHost = new MockVoiceHost()
+    const visible: string[] = []
+    let clock = 100_000
+    const appLayer = Layer.mergeAll(
+      TranscriberFake(fakeTranscriber),
+      SpeakerFake(fakeSpeaker),
+      VoiceHostLive(mockHost),
+    )
+
+    const program = Effect.gen(function* () {
+      yield* makeVoiceProgram({
+        getSettings: () => ({ ...DEFAULT_VOICE_SETTINGS, activation: "toggle" }),
+        now: () => clock,
+        onError: (error) => visible.push(error),
+      })
+
+      fakeTranscriber.emitError(new Error("Errore di rete temporaneo"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Troppe richieste (429)"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Errore di rete durante la richiesta"), { purpose: "turn" })
+      yield* Effect.sleep(Duration.millis(20))
+      fakeTranscriber.emitError(new Error("Errore di rete legacy"))
+      yield* Effect.sleep(Duration.millis(20))
+      clock += PROBE_ERROR_SPEECH_COOLDOWN_MS
+      fakeTranscriber.emitError(new Error("Servizio non disponibile (503)"), { purpose: "probe" })
+      yield* Effect.sleep(Duration.millis(20))
+    })
+
+    await Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(appLayer))))
+
+    expect(fakeSpeaker.spoken).toHaveLength(4)
+    expect(visible).toHaveLength(5)
   })
 
   test("dialogue timeouts advance deterministically via TestClock with zero real waiting", async () => {
