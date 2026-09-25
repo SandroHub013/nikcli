@@ -79,7 +79,7 @@ export function createDesignHub(deps: {
   choose: (id: string | undefined) => void
   delivery: (proposal: DesignProposal) => DeliveryState
   onAnswered: (proposal: DesignProposal, event: AnsweredDesignEvent) => void
-  onReopened?: (proposal: DesignProposal, deliveredTo?: string) => void
+  onReopened?: (proposal: DesignProposal, deliveredTo?: string, deliveredToId?: string) => void
   openVariant?: (proposal: DesignProposal, variant: number) => Promise<string | undefined>
 }): DesignHub {
   const [drafts, setDrafts] = createSignal<Record<string, DesignDraft>>({})
@@ -229,9 +229,10 @@ export function createDesignHub(deps: {
         const delivery = deps.delivery(proposal)
         const wasDelivered = delivery.state === "consegnata"
         const deliveredTo = wasDelivered ? delivery.to : undefined
+        const deliveredToId = wasDelivered && delivery.state === "consegnata" ? delivery.toId : undefined
         await deps.register.append(reopenEvent(proposal.k, new Date()))
         if (wasDelivered) {
-          deps.onReopened?.(proposal, deliveredTo)
+          deps.onReopened?.(proposal, deliveredTo, deliveredToId)
         }
       }),
   }

@@ -108,8 +108,13 @@ export function resolveDeliveryTarget(
   candidates: readonly DeliveryCandidate[],
   current: RecipientStatus,
 ): { readonly id: string; readonly title: string } | undefined {
+  if (item.toId) {
+    const byId = candidates.find((c) => c.running && c.id === item.toId)
+    if (byId) return { id: byId.id, title: byId.title }
+  }
+  // An entry saved before the id: `to` is the title, and the first match is all it can be.
   if (item.to) {
-    const candidate = candidates.find((c) => c.running && (c.title === item.to || c.id === item.to))
+    const candidate = candidates.find((c) => c.running && (c.id === item.to || c.title === item.to))
     if (candidate) return { id: candidate.id, title: candidate.title }
   }
   if (current.state === "pronta") {
@@ -132,11 +137,17 @@ export interface OutboxItem {
   readonly k: string
   readonly answeredAt: string
   readonly queuedAt: number
+  /** The title, for what the sheet shows. An old entry has only this. */
   readonly deliveredTo?: string
+  /** The session the answer was typed into. Delivery prefers this over the title. */
+  readonly deliveredToId?: string
   readonly deliveredAt?: number
   readonly kind?: "risposta" | "riaperta"
   readonly text?: string
+  /** The title of the session the notice is for. */
   readonly to?: string
+  /** The id of that session. Absent on an entry saved before ids were kept. */
+  readonly toId?: string
 }
 
 export const OUTBOX_KEY = "ade.design.outbox"
@@ -163,8 +174,17 @@ export function enqueue(outbox: readonly OutboxItem[], item: Omit<OutboxItem, "d
   return [...outbox.filter((entry) => !(entry.path === item.path && entry.k === item.k)), { ...item }]
 }
 
-export function markDelivered(outbox: readonly OutboxItem[], item: OutboxItem, to: string, at: number): OutboxItem[] {
-  return outbox.map((entry) => (entry === item ? { ...entry, deliveredTo: to, deliveredAt: at } : entry))
+export function markDelivered(
+  outbox: readonly OutboxItem[],
+  item: OutboxItem,
+  to: string | { readonly id: string; readonly title: string },
+  at: number,
+): OutboxItem[] {
+  const title = typeof to === "string" ? to : to.title
+  const id = typeof to === "string" ? undefined : to.id
+  return outbox.map((entry) =>
+    entry === item ? { ...entry, deliveredTo: title, ...(id ? { deliveredToId: id } : {}), deliveredAt: at } : entry,
+  )
 }
 
 export function pruneOutbox(outbox: readonly OutboxItem[], path: string, proposals: readonly DesignProposal[]): OutboxItem[] {
@@ -185,13 +205,15 @@ export function pendingFor(outbox: readonly OutboxItem[], path: string): OutboxI
 }
 
 export type DeliveryState =
-  | { readonly state: "consegnata"; readonly to: string; readonly at: number }
+  | { readonly state: "consegnata"; readonly to: string; readonly toId?: string; readonly at: number }
   | { readonly state: "in coda" }
   | { readonly state: "fuori da ADE" }
 
 export function deliveryState(outbox: readonly OutboxItem[], path: string, proposal: DesignProposal): DeliveryState {
   const item = outbox.find((entry) => entry.path === path && entry.k === proposal.k && entry.answeredAt === proposal.answer?.at)
   if (!item) return { state: "fuori da ADE" }
-  if (item.deliveredAt !== undefined && item.deliveredTo) return { state: "consegnata", to: item.deliveredTo, at: item.deliveredAt }
+  if (item.deliveredAt !== undefined && item.deliveredTo) {
+    return { state: "consegnata", to: item.deliveredTo, ...(item.deliveredToId ? { toId: item.deliveredToId } : {}), at: item.deliveredAt }
+  }
   return { state: "in coda" }
 }

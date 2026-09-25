@@ -1238,7 +1238,7 @@ export function Workbench() {
         // Through the inbox when the line is long (a note of a few paragraphs), like every other message.
         if ((await deliverText(host, target.id, item.text ?? deliveryLine(decision), { id: `decisione-${decision.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = decisionsOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
-        if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, target.title, Date.now()))
+        if (stored) saveDecisionsOutbox(markDelivered(decisionsOutbox(), stored, { id: target.id, title: target.title }, Date.now()))
         appendLine(target.id, item.kind === "riaperta" ? t("decisions.reopened.delivered", decision.k) : t("decisions.delivered", decision.k), "note")
       }
     } finally {
@@ -1258,7 +1258,7 @@ export function Workbench() {
       saveDecisionsOutbox(enqueue(decisionsOutbox(), { path, k: decision.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDecisions()
     },
-    onReopened: (decision, deliveredTo) => {
+    onReopened: (decision, deliveredTo, deliveredToId) => {
       const path = decisionsRegister.path()
       if (!path) return
       saveDecisionsOutbox(
@@ -1270,6 +1270,7 @@ export function Workbench() {
           kind: "riaperta",
           text: reopenLine(decision.k),
           to: deliveredTo,
+          ...(deliveredToId ? { toId: deliveredToId } : {}),
         }),
       )
       void deliverDecisions()
@@ -1363,7 +1364,7 @@ export function Workbench() {
         if (!target || !running.has(target.id) || !(await freeNow(host, target.id))) continue
         if ((await deliverText(host, target.id, item.text ?? designDeliveryLine(proposal), { id: `design-${proposal.k}`, kind: "send", from: "" })) !== "given") continue
         const stored = designOutbox().find((entry) => entry.path === item.path && entry.k === item.k && entry.answeredAt === item.answeredAt)
-        if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, target.title, Date.now()))
+        if (stored) saveDesignOutbox(markDesignDelivered(designOutbox(), stored, { id: target.id, title: target.title }, Date.now()))
         appendLine(
           target.id,
           item.kind === "riaperta"
@@ -1390,7 +1391,7 @@ export function Workbench() {
       saveDesignOutbox(enqueueDesign(designOutbox(), { path, k: proposal.k, answeredAt: event.at, queuedAt: Date.now() }))
       void deliverDesign()
     },
-    onReopened: (proposal, deliveredTo) => {
+    onReopened: (proposal, deliveredTo, deliveredToId) => {
       const path = designRegister.path()
       if (!path) return
       saveDesignOutbox(
@@ -1402,6 +1403,7 @@ export function Workbench() {
           kind: "riaperta",
           text: designReopenLine(proposal.k),
           to: deliveredTo,
+          ...(deliveredToId ? { toId: deliveredToId } : {}),
         }),
       )
       void deliverDesign()

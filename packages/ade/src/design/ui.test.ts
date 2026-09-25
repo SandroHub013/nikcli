@@ -235,6 +235,26 @@ describe("who receives design answers", () => {
     const fallbackTarget = resolveDeliveryTarget(reopenItem, candidatesWithoutA, recipientB)
     expect(fallbackTarget).toEqual({ id: "s-b", title: "Sessione B" })
   })
+
+  test("two sessions with the same title: the notice goes to the saved id, and an old entry still uses the title", () => {
+    const same: DeliveryCandidate[] = [
+      { id: "s-1", title: "Master", project: "nikcli", running: true },
+      { id: "s-2", title: "Master", project: "nikcli", running: true },
+    ]
+    const current: RecipientStatus = { state: "pronta", id: "s-1", title: "Master" }
+    const file = "C:\\p\\.ade\\design.jsonl"
+    const byId = resolveDeliveryTarget(
+      { path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master", toId: "s-2" },
+      same,
+      current,
+    )
+    expect(byId).toEqual({ id: "s-2", title: "Master" })
+    const byTitle = resolveDeliveryTarget({ path: file, k: "DS1", answeredAt: "t", queuedAt: 1, to: "Master" }, same, current)
+    expect(byTitle).toEqual({ id: "s-1", title: "Master" })
+    let outbox = enqueue([], { path: file, k: "DS1", answeredAt: "t", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, { id: "s-2", title: "Master" }, 50)
+    expect(outbox[0]).toMatchObject({ deliveredTo: "Master", deliveredToId: "s-2" })
+  })
 })
 
 describe("preview type security detection and path resolution", () => {
