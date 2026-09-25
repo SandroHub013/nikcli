@@ -232,70 +232,6 @@ export interface ModelListOptions {
   readonly lang?: "it" | "en"
 }
 
-export const DEFAULT_FALLBACK_MODEL = "google/gemini-2.5-flash:free"
-export const DEFAULT_FALLBACK_AGENT = "assistant"
-
-/** Fallback model choices when offline or before the provider list arrives. */
-export function fallbackModels(isTest?: boolean, lang: "it" | "en" = "it"): readonly ChatModelChoice[] {
-  const freeModels: ChatModelChoice[] = [
-    {
-      id: "google/gemini-2.5-flash:free",
-      providerID: "nikcli",
-      name: "Gemini 2.5 Flash",
-      providerName: "Google",
-      free: true,
-      cost: { input: 0, output: 0 },
-      label: formatModelLabel("Gemini 2.5 Flash", { input: 0, output: 0 }, true, lang),
-    },
-    {
-      id: "meta-llama/llama-3.3-70b-instruct:free",
-      providerID: "nikcli",
-      name: "Llama 3.3 70B",
-      providerName: "Meta",
-      free: true,
-      cost: { input: 0, output: 0 },
-      label: formatModelLabel("Llama 3.3 70B", { input: 0, output: 0 }, true, lang),
-    },
-    {
-      id: "qwen/qwen-2.5-coder-32b-instruct:free",
-      providerID: "nikcli",
-      name: "Qwen 2.5 Coder 32B",
-      providerName: "Qwen",
-      free: true,
-      cost: { input: 0, output: 0 },
-      label: formatModelLabel("Qwen 2.5 Coder 32B", { input: 0, output: 0 }, true, lang),
-    },
-  ]
-
-  if (isTest) return freeModels
-
-  return [
-    ...freeModels,
-    {
-      id: "anthropic/claude-sonnet-4.5",
-      providerID: "anthropic",
-      name: "Claude Sonnet 4.5",
-      providerName: "Anthropic",
-      free: false,
-      cost: { input: 3, output: 15 },
-      label: formatModelLabel("Claude Sonnet 4.5", { input: 3, output: 15 }, false, lang),
-    },
-    {
-      id: "openai/gpt-5",
-      providerID: "openai",
-      name: "GPT-5",
-      providerName: "OpenAI",
-      free: false,
-      cost: { input: 2.5, output: 10 },
-      label: formatModelLabel("GPT-5", { input: 2.5, output: 10 }, false, lang),
-    },
-  ]
-}
-
-export const FALLBACK_AGENTS: readonly ChatAgentChoice[] = [
-  { name: "assistant", description: "Default assistant" },
-]
-
 /**
  * Extracts and filters selectable models from `provider.list`.
  * In ADE Test (`options.isTest === true`), only free models are included.
@@ -305,7 +241,7 @@ export function modelsFromProviderList(
   options?: ModelListOptions,
 ): readonly ChatModelChoice[] {
   if (!providerList || !Array.isArray(providerList.all)) {
-    return fallbackModels(options?.isTest, options?.lang)
+    return []
   }
 
   const isTest = options?.isTest ?? false
@@ -338,10 +274,6 @@ export function modelsFromProviderList(
         label: formatModelLabel(model.name || modelId, cost, free, lang),
       })
     }
-  }
-
-  if (result.length === 0) {
-    return fallbackModels(isTest, lang)
   }
 
   return result
@@ -382,7 +314,7 @@ export function defaultModelChoice(
 export function agentsFromList(
   agents?: readonly (Agent | { name: string; description?: string; mode?: string; hidden?: boolean })[] | null,
 ): readonly ChatAgentChoice[] {
-  if (!agents || agents.length === 0) return FALLBACK_AGENTS
+  if (!agents || agents.length === 0) return []
 
   const filtered = agents
     .filter((a) => {
@@ -395,12 +327,12 @@ export function agentsFromList(
       description: a.description,
     }))
 
-  return filtered.length > 0 ? filtered : FALLBACK_AGENTS
+  return filtered
 }
 
-/** Resolves default agent ("assistant" if available, else first agent). */
-export function defaultAgentChoice(agents: readonly ChatAgentChoice[]): string {
-  if (agents.length === 0) return DEFAULT_FALLBACK_AGENT
+/** Resolves default agent ("assistant" if available, else first agent, else undefined). */
+export function defaultAgentChoice(agents: readonly ChatAgentChoice[]): string | undefined {
+  if (agents.length === 0) return undefined
   const assistant = agents.find((a) => a.name === "assistant")
   if (assistant) return assistant.name
   const chat = agents.find((a) => a.name === "chat")

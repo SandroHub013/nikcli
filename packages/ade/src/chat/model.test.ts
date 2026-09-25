@@ -151,7 +151,6 @@ import {
   agentsFromList,
   defaultAgentChoice,
   defaultModelChoice,
-  fallbackModels,
   formatModelLabel,
   formatModelPrice,
   isFreeModel,
@@ -322,10 +321,10 @@ describe("modelsFromProviderList (C3)", () => {
     expect(freeModel?.label).toContain("(free)")
   })
 
-  test("returns fallback free models when provider list is null or empty", () => {
-    const models = modelsFromProviderList(null, { isTest: true })
-    expect(models.length).toBeGreaterThan(0)
-    expect(models.every((m) => m.free)).toBe(true)
+  test("returns empty array without inventing models when provider list is null or empty", () => {
+    expect(modelsFromProviderList(null)).toEqual([])
+    expect(modelsFromProviderList(undefined)).toEqual([])
+    expect(modelsFromProviderList({ all: [], default: {}, connected: [] })).toEqual([])
   })
 })
 
@@ -401,6 +400,13 @@ describe("agentsFromList and defaultAgentChoice (C3)", () => {
   test("defaultAgentChoice falls back to first agent if assistant is not present", () => {
     const agents = [{ name: "build", description: "Build agent" }]
     expect(defaultAgentChoice(agents)).toBe("build")
+  })
+
+  test("returns empty array without inventing agents when agents list is null or empty", () => {
+    expect(agentsFromList(null)).toEqual([])
+    expect(agentsFromList(undefined)).toEqual([])
+    expect(agentsFromList([])).toEqual([])
+    expect(defaultAgentChoice([])).toBeUndefined()
   })
 })
 

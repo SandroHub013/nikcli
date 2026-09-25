@@ -26,7 +26,6 @@ import {
   defaultAgentChoice,
   isAdeTestBuild,
   validateSelectedModel,
-  DEFAULT_FALLBACK_MODEL,
   type ChatMessage,
   type ChatState,
   type ChatModelChoice,
@@ -117,7 +116,7 @@ function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
     const stored = localStorage.getItem(AGENT_KEY)
     if (stored && agents.some((a) => a.name === stored)) return stored
   } catch {}
-  return defaultAgentChoice(agents)
+  return defaultAgentChoice(agents) ?? ""
 }
 
 export function Chat(props: ChatProps) {
@@ -292,12 +291,17 @@ export function Chat(props: ChatProps) {
         <div data-slot="chat-selectors">
           <select
             data-slot="chat-agent"
-            value={agent()}
+            value={agent() || ""}
             onChange={(event) => chooseAgent(event.currentTarget.value)}
             aria-label={t("chat.agent.label")}
           >
+            <Show when={agents().length === 0}>
+              <option value="" disabled selected>
+                {t("chat.agent.none")}
+              </option>
+            </Show>
             <For each={agents()}>{(entry) => <option value={entry.name}>{entry.name}</option>}</For>
-            <Show when={!agents().some((entry) => entry.name === agent())}>
+            <Show when={agent() && !agents().some((entry) => entry.name === agent())}>
               <option value={agent()}>{agent()}</option>
             </Show>
           </select>
@@ -308,7 +312,12 @@ export function Chat(props: ChatProps) {
             onChange={(event) => chooseModel(event.currentTarget.value)}
             aria-label={t("chat.model.label")}
           >
-            <Show when={!model()}>
+            <Show when={models().length === 0}>
+              <option value="" disabled selected>
+                {t("chat.model.none")}
+              </option>
+            </Show>
+            <Show when={models().length > 0 && !model()}>
               <option value="" disabled selected>
                 {t("chat.model.choose")}
               </option>
