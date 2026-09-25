@@ -5,6 +5,7 @@ import { answerKeys, emptyTalk } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
+import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
@@ -127,7 +128,7 @@ describe("the gateways' controller", () => {
     expect(first.cwd).toBe(PROJECT)
     expect(first.bot).toBe(BOT)
     expect(first.sessionId).toBeUndefined()
-    expect(first.message).toBe(`${t("gateway.header", "Telegram", "Ale")}\n\nprima domanda`)
+    expect(first.message).toBe(`${chatHeader("Telegram", "Ale")}\n\nprima domanda`)
     await until("«sta scrivendo» ripetuto", () => b.typing.length >= 2)
     turns.started[0]!.finish({ text: "Prima risposta.", sessionId: "s-1" })
     await until("il secondo turno", () => turns.started.length === 2)

@@ -139,6 +139,88 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+/// The only parts of the server the chat may call (C2 review, M1).
+///
+/// An allowlist, not a list of what is forbidden: nikcli's server gains routes
+/// often, and a new one must stay closed until the chat needs it. Before, a
+/// list of forbidden parts left open publishing a conversation
+/// (`/session/*/share`), the server's voice, its autonomous work (`/brain`)
+/// and writing analytics. The page is trusted, so this is not the boundary;
+/// it keeps a mistake from reaching the user's shared service.
+///
+/// What is here: the health and the folder's event stream, reading the
+/// configuration, providers, agents, commands and MCP servers the chat shows,
+/// the sessions and their messages, sending, stopping, going back and
+/// forking, the answers to permissions and questions, and reading files for
+/// `@file`. Each with its methods: `GET` also allows `HEAD`.
+///
+/// A pattern is matched segment by segment: `*` is any one segment, `**` at
+/// the end any rest, nothing included.
+const ALLOWED: &[(&str, &str)] = &[
+    ("GET", "/global/health"),
+    ("GET", "/event"),
+    ("GET", "/path"),
+    ("GET", "/config"),
+    ("GET", "/config/providers"),
+    ("GET", "/provider"),
+    ("GET", "/agent"),
+    ("GET", "/command"),
+    ("GET", "/mcp"),
+    ("GET", "/project/current"),
+    ("GET POST", "/session"),
+    ("GET", "/session/status"),
+    ("GET PATCH DELETE", "/session/*"),
+    ("GET POST", "/session/*/message"),
+    ("GET", "/session/*/message/*"),
+    ("POST", "/session/*/prompt_async"),
+    ("POST", "/session/*/abort"),
+    ("POST", "/session/*/revert"),
+    ("POST", "/session/*/unrevert"),
+    ("POST", "/session/*/fork"),
+    ("POST", "/session/*/summarize"),
+    ("GET", "/session/*/todo"),
+    ("GET", "/session/*/children"),
+    ("GET", "/session/*/diff"),
+    ("GET", "/permission"),
+    ("POST", "/permission/*/reply"),
+    ("GET", "/question"),
+    ("POST", "/question/*/reply"),
+    ("POST", "/question/*/reject"),
+    ("GET", "/file"),
+    ("GET", "/file/**"),
+    ("GET", "/find/**"),
+];
+
+fn matches(pattern: &str, segments: &[&str]) -> bool {
+    let pattern: Vec<&str> = pattern.split('/').filter(|part| !part.is_empty()).collect();
+    for (index, part) in pattern.iter().enumerate() {
+        if *part == "**" {
+            return true;
+        }
+        match segments.get(index) {
+            Some(segment) if *part == "*" || part == segment => {}
+            _ => return false,
+        }
+    }
+    segments.len() == pattern.len()
+}
+
+/// Why the chat may not call `url`, if it may not: anything `ALLOWED` does
+/// not name. Compared without case, empty segments dropped, after `target`
+/// resolved any `..`; a path with a `%` is refused outright, since nothing
+/// the chat calls needs one and a decoding server could read it as another
+/// route.
+pub(crate) fn fenced(method: &Method, url: &Url) -> Option<String> {
+    let path = url.path().to_ascii_lowercase();
+    let segments: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    let name = if *method == Method::HEAD { "GET" } else { method.as_str() };
+    let allowed = !path.contains('%')
+        && ALLOWED
+            .iter()
+            .any(|(methods, pattern)| methods.split(' ').any(|m| m == name) && matches(pattern, &segments));
+    (!allowed).then(|| format!("la chat non può chiamare {} {} sul server di nikcli", method, url.path()))
+}
+
 /// The methods the SDK uses, and nothing like `CONNECT` or `TRACE`.
 pub(crate) fn method_of(name: &str) -> Result<Method, String> {
     match name.to_ascii_uppercase().as_str() {
@@ -243,6 +325,9 @@ pub async fn nikcli_serve_fetch(
         .ok_or_else(|| "il server di nikcli non è avviato".to_string())?;
     let url = target(&base, &request.path)?;
     let method = method_of(&request.method)?;
+    if let Some(refusal) = fenced(&method, &url) {
+        return Err(refusal);
+    }
     let headers = forwarded(request.headers);
     let body = request.body;
     let client = client()?.clone();
@@ -324,7 +409,8 @@ pub(crate) mod test_server {
 #[cfg(test)]
 mod tests {
     use super::test_server::{plain, serve};
-    use super::{ProxyEvent, forwarded, method_of, relay, target};
+    use super::{ProxyEvent, fenced, forwarded, method_of, relay, target};
+    use reqwest::Method;
     use std::time::Duration;
 
     fn run(
@@ -367,6 +453,80 @@ mod tests {
             "",
         ] {
             assert!(target(base, path).is_err(), "accettato: {path}");
+        }
+    }
+
+    #[test]
+    fn the_chat_cannot_reach_the_servers_bots_disposal_config_or_shells() {
+        let base = "http://127.0.0.1:4096";
+        let refused = |method: Method, path: &str| fenced(&method, &target(base, path).unwrap()).is_some();
+        for (method, path) in [
+            (Method::POST, "/discord/start"),
+            (Method::GET, "/discord"),
+            (Method::POST, "/Discord/Start"),
+            (Method::POST, "/chatbot/bots/aiuto/start"),
+            (Method::POST, "/mobile/pty"),
+            (Method::POST, "/global/dispose"),
+            (Method::POST, "/instance/dispose"),
+            (Method::POST, "/config/reload"),
+            (Method::PATCH, "/config"),
+            (Method::POST, "/config/mcp"),
+            (Method::PUT, "/auth/openrouter"),
+            (Method::DELETE, "/provider/openai/auth"),
+            (Method::POST, "/provider/openai/oauth/authorize"),
+            (Method::POST, "/mcp/github/connect"),
+            (Method::POST, "/pty"),
+            (Method::GET, "/pty/p1/connect"),
+            (Method::POST, "/tui/submit-prompt"),
+            (Method::POST, "/session/ses_1/shell"),
+            (Method::POST, "/session/ses_1/command"),
+            (Method::POST, "/session//ses_1/shell"),
+            (Method::POST, "/session/ses_1/../ses_1/shell"),
+            (Method::PUT, "/file/content"),
+            (Method::POST, "/vcs/apply"),
+            (Method::PATCH, "/project/p1"),
+            (Method::POST, "/experimental/worktree"),
+            (Method::POST, "/discord%2Fstart"),
+            (Method::POST, "/session/ses_1/%73hell"),
+            // What the list of forbidden parts left open (C2 review, M1).
+            (Method::POST, "/session/ses_1/share"),
+            (Method::DELETE, "/session/ses_1/share"),
+            (Method::POST, "/voice/speak"),
+            (Method::GET, "/voice/models"),
+            (Method::POST, "/brain"),
+            (Method::POST, "/analytics/event"),
+            // Every other directory's events: the chat reads its folder's only.
+            (Method::GET, "/global/event"),
+            // A part of the server added tomorrow stays closed until named here.
+            (Method::POST, "/nuovo-gruppo/avvia"),
+            (Method::GET, "/nuovo-gruppo"),
+        ] {
+            assert!(refused(method.clone(), path), "consentito: {method} {path}");
+        }
+        // What a chat needs goes through.
+        for (method, path) in [
+            (Method::GET, "/global/health"),
+            (Method::HEAD, "/global/health"),
+            (Method::GET, "/event"),
+            (Method::GET, "/config"),
+            (Method::GET, "/provider"),
+            (Method::GET, "/project/current"),
+            (Method::GET, "/session?directory=x&roots=true"),
+            (Method::POST, "/session"),
+            (Method::GET, "/session/status"),
+            (Method::PATCH, "/session/ses_1"),
+            (Method::GET, "/session/ses_1/message"),
+            (Method::POST, "/session/ses_1/message"),
+            (Method::POST, "/session/ses_1/prompt_async"),
+            (Method::POST, "/session/ses_1/abort"),
+            (Method::POST, "/permission/per_1/reply"),
+            (Method::POST, "/question/q_1/reply"),
+            (Method::POST, "/question/q_1/reject"),
+            (Method::GET, "/file?path=src/a.ts"),
+            (Method::GET, "/find/file?query=a"),
+            (Method::GET, "/mcp"),
+        ] {
+            assert!(!refused(method.clone(), path), "rifiutato: {method} {path}");
         }
     }
 

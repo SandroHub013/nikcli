@@ -148,7 +148,8 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
     expect(s.store.get(ROOT)).toBeUndefined()
   })
 
-  test("una domanda aperta non se ne apre una seconda", async () => {
+  /* C2 review, M2: who asks meanwhile gets the same answer, not a bare no. */
+  test("una domanda aperta non se ne apre una seconda: chi arriva intanto riceve la stessa risposta", async () => {
     const s = setup({ [`${ROOT}/.nikcli/plugin/a.ts`]: "x" })
     let answer: (yes: boolean) => void = () => {}
     const deps = {
@@ -160,9 +161,10 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
     }
     const first = admitProject(ROOT, deps)
     while (s.asked.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
-    expect(await admitProject(ROOT, deps)).toEqual({ ok: false })
+    const second = admitProject(ROOT, deps)
     answer(true)
     expect(await first).toEqual({ ok: true })
+    expect(await second).toEqual({ ok: true })
     expect(s.asked).toHaveLength(1)
   })
 })
