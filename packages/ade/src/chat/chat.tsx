@@ -26,13 +26,17 @@ import {
   defaultAgentChoice,
   isAdeTestBuild,
   validateSelectedModel,
+  sameModel,
+  serializeModelRef,
+  parseModelRef,
+  type ModelRef,
   type ChatMessage,
   type ChatState,
   type ChatModelChoice,
   type ChatAgentChoice,
 } from "./model"
 import { splitSegments } from "./segments"
-import { streamChat } from "./client"
+import { streamChat, DEFAULT_CHAT_MODEL } from "./client"
 import { locale } from "../i18n/locale"
 import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
 import { openChat, appChatConnectionDeps, loadChatCatalog, type ChatConnectionDeps } from "./connection"
@@ -102,13 +106,14 @@ function loadStoredModel(
   models: readonly ChatModelChoice[],
   isTest: boolean,
   configModel?: string | null,
-): string {
+): ModelRef | undefined {
   try {
     const stored = localStorage.getItem(MODEL_KEY)
     const validated = validateSelectedModel(stored, models, isTest)
     if (validated) return validated
   } catch {}
-  return defaultModelChoice(models, configModel)?.id ?? ""
+  const def = defaultModelChoice(models, configModel)
+  return def ? { providerID: def.providerID, modelID: def.modelID } : undefined
 }
 
 function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
@@ -132,7 +137,7 @@ export function Chat(props: ChatProps) {
   const [draft, setDraft] = createSignal("")
   const [models, setModels] = createSignal<readonly ChatModelChoice[]>(initialModels())
   const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(initialAgents())
-  const [model, setModel] = createSignal<string>(loadStoredModel(models(), isTest()))
+  const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
   const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
   const [busy, setBusy] = createSignal(false)
 
@@ -226,7 +231,7 @@ export function Chat(props: ChatProps) {
     try {
       await streamChat({
         apiKey: props.apiKey,
-        model: currentModel,
+        model: DEFAULT_CHAT_MODEL,
         messages: context,
         signal: controller.signal,
         onDelta: (delta) => setState((current) => appendDelta(current, answer.id, delta)),
@@ -256,12 +261,12 @@ export function Chat(props: ChatProps) {
     composer?.focus()
   }
 
-  const chooseModel = (id: string) => {
-    const validated = validateSelectedModel(id, models(), isTest())
+  const chooseModel = (raw: string) => {
+    const validated = validateSelectedModel(raw, models(), isTest())
     if (!validated) return
     setModel(validated)
     try {
-      localStorage.setItem(MODEL_KEY, validated)
+      localStorage.setItem(MODEL_KEY, JSON.stringify(validated))
     } catch {
       // Same as the conversation: this session keeps the choice regardless.
     }
@@ -308,7 +313,7 @@ export function Chat(props: ChatProps) {
 
           <select
             data-slot="chat-model"
-            value={model() || ""}
+            value={model() ? serializeModelRef(model()!) : ""}
             onChange={(event) => chooseModel(event.currentTarget.value)}
             aria-label={t("chat.model.label")}
           >
@@ -322,9 +327,9 @@ export function Chat(props: ChatProps) {
                 {t("chat.model.choose")}
               </option>
             </Show>
-            <For each={models()}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
-            <Show when={model() && !models().some((entry) => entry.id === model())}>
-              <option value={model()}>{model()}</option>
+            <For each={models()}>{(entry) => <option value={serializeModelRef(entry)}>{entry.label}</option>}</For>
+            <Show when={model() && !models().some((entry) => sameModel(entry, model()))}>
+              <option value={serializeModelRef(model()!)}>{serializeModelRef(model()!)}</option>
             </Show>
           </select>
         </div>

@@ -156,6 +156,10 @@ import {
   isFreeModel,
   modelsFromProviderList,
   validateSelectedModel,
+  sameModel,
+  serializeModelRef,
+  parseModelRef,
+  type ModelRef,
 } from "./model"
 import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
 
@@ -351,6 +355,7 @@ describe("defaultModelChoice (C3)", () => {
       {
         id: "paid/model-1",
         providerID: "p1",
+        modelID: "model-1",
         name: "Paid 1",
         providerName: "P1",
         free: false,
@@ -360,6 +365,7 @@ describe("defaultModelChoice (C3)", () => {
       {
         id: "paid/model-2",
         providerID: "p2",
+        modelID: "model-2",
         name: "Paid 2",
         providerName: "P2",
         free: false,
@@ -414,7 +420,10 @@ describe("validateSelectedModel (C3)", () => {
   const models = modelsFromProviderList(mockProviderList, { isTest: false })
 
   test("allows paid model in standard mode when explicitly chosen", () => {
-    expect(validateSelectedModel("anthropic/claude-sonnet-4.5", models, false)).toBe("anthropic/claude-sonnet-4.5")
+    expect(validateSelectedModel("anthropic/claude-sonnet-4.5", models, false)).toEqual({
+      providerID: "openrouter",
+      modelID: "anthropic/claude-sonnet-4.5",
+    })
   })
 
   test("rejects paid model in ADE Test mode even if stored in localStorage", () => {
@@ -424,6 +433,88 @@ describe("validateSelectedModel (C3)", () => {
   })
 
   test("accepts free model in ADE Test mode", () => {
-    expect(validateSelectedModel("google/gemini-2.5-flash:free", models, true)).toBe("google/gemini-2.5-flash:free")
+    expect(validateSelectedModel("google/gemini-2.5-flash:free", models, true)).toEqual({
+      providerID: "nikcli",
+      modelID: "google/gemini-2.5-flash:free",
+    })
+  })
+})
+
+describe("Model identity and ModelRef (C3 - Point 5)", () => {
+  test("sameModel compares providerID and modelID", () => {
+    expect(sameModel({ providerID: "p1", modelID: "m1" }, { providerID: "p1", modelID: "m1" })).toBe(true)
+    expect(sameModel({ providerID: "p1", modelID: "m1" }, { providerID: "p2", modelID: "m1" })).toBe(false)
+    expect(sameModel({ providerID: "p1", modelID: "m1" }, { providerID: "p1", modelID: "m2" })).toBe(false)
+    expect(sameModel(null, { providerID: "p1", modelID: "m1" })).toBe(false)
+    expect(sameModel(undefined, undefined)).toBe(false)
+  })
+
+  test("serializes and parses ModelRef", () => {
+    const ref: ModelRef = { providerID: "nikcli", modelID: "google/gemini-2.5-flash:free" }
+    expect(serializeModelRef(ref)).toBe("nikcli/google/gemini-2.5-flash:free")
+    expect(parseModelRef("nikcli/google/gemini-2.5-flash:free")).toEqual(ref)
+    expect(parseModelRef(JSON.stringify(ref))).toEqual(ref)
+    expect(parseModelRef(null)).toBeUndefined()
+    expect(parseModelRef("invalid")).toBeUndefined()
+  })
+
+  test("disambiguates same model ID across different providers", () => {
+    const sharedIdList: ProviderList = {
+      all: [
+        {
+          id: "providerA",
+          name: "Provider A",
+          source: "custom",
+          env: [],
+          options: {},
+          models: {
+            "llama-3": {
+              id: "llama-3",
+              name: "Llama 3 (A)",
+              providerID: "providerA",
+              cost: { input: 0, output: 0 },
+            } as any,
+          },
+        },
+        {
+          id: "providerB",
+          name: "Provider B",
+          source: "custom",
+          env: [],
+          options: {},
+          models: {
+            "llama-3": {
+              id: "llama-3",
+              name: "Llama 3 (B)",
+              providerID: "providerB",
+              cost: { input: 0, output: 0 },
+            } as any,
+          },
+        },
+      ],
+      default: {},
+      connected: ["providerA", "providerB"],
+    }
+
+    const models = modelsFromProviderList(sharedIdList, { isTest: true })
+    expect(models.length).toBe(2)
+
+    const choiceA = validateSelectedModel({ providerID: "providerA", modelID: "llama-3" }, models, true)
+    const choiceB = validateSelectedModel({ providerID: "providerB", modelID: "llama-3" }, models, true)
+
+    expect(choiceA).toEqual({ providerID: "providerA", modelID: "llama-3" })
+    expect(choiceB).toEqual({ providerID: "providerB", modelID: "llama-3" })
+    expect(sameModel(choiceA, choiceB)).toBe(false)
+  })
+
+  test("defaultModelChoice matches ModelRef config model", () => {
+    const models = modelsFromProviderList(mockProviderList, { isTest: false })
+    const choice = defaultModelChoice(models, {
+      providerID: "nikcli",
+      modelID: "google/gemini-2.5-flash:free",
+    })
+    expect(choice).toBeDefined()
+    expect(choice!.providerID).toBe("nikcli")
+    expect(choice!.modelID).toBe("google/gemini-2.5-flash:free")
   })
 })

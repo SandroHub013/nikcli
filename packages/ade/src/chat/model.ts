@@ -164,10 +164,13 @@ export function settleMessage(state: ChatState, id: string, error?: string): Cha
 // ---------------------------------------------------------------------------
 
 import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import type { ModelRef } from "./store"
+export type { ModelRef }
 
 export interface ChatModelChoice {
   readonly id: string
   readonly providerID: string
+  readonly modelID: string
   readonly name: string
   readonly providerName: string
   readonly free: boolean
@@ -178,6 +181,35 @@ export interface ChatModelChoice {
 export interface ChatAgentChoice {
   readonly name: string
   readonly description?: string
+}
+
+/** Whether two model references point to the exact same provider and model. */
+export function sameModel(a?: ModelRef | null, b?: ModelRef | null): boolean {
+  if (!a || !b) return false
+  return a.providerID === b.providerID && a.modelID === b.modelID
+}
+
+/** Serializes a ModelRef to a string key. */
+export function serializeModelRef(ref: ModelRef): string {
+  return `${ref.providerID}/${ref.modelID}`
+}
+
+/** Parses a ModelRef from JSON or slash-delimited string. */
+export function parseModelRef(raw?: string | null): ModelRef | undefined {
+  if (!raw) return undefined
+  try {
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw) as { providerID?: unknown; modelID?: unknown }
+      if (typeof parsed?.providerID === "string" && typeof parsed?.modelID === "string") {
+        return { providerID: parsed.providerID, modelID: parsed.modelID }
+      }
+    }
+  } catch {}
+  const slash = raw.indexOf("/")
+  if (slash > 0 && slash < raw.length - 1) {
+    return { providerID: raw.slice(0, slash), modelID: raw.slice(slash + 1) }
+  }
+  return undefined
 }
 
 /** Whether a model is free of charge (id ends with :free or both input and output costs are 0 numbers). */
@@ -267,6 +299,7 @@ export function modelsFromProviderList(
       result.push({
         id: modelId,
         providerID: providerId,
+        modelID: modelId,
         name: model.name || modelId,
         providerName: provider.name || providerId,
         free,
@@ -286,19 +319,34 @@ export function modelsFromProviderList(
  */
 export function defaultModelChoice(
   models: readonly ChatModelChoice[],
-  configModel?: string | null,
+  configModel?: ModelRef | string | null,
 ): ChatModelChoice | undefined {
   if (models.length === 0) return undefined
 
   if (configModel) {
-    const match = models.find(
-      (m) =>
-        m.id === configModel ||
-        `${m.providerID}/${m.id}` === configModel ||
-        m.name === configModel,
-    )
-    if (match && match.free) {
-      return match
+    if (typeof configModel === "object") {
+      const match = models.find((m) => sameModel(m, configModel))
+      if (match && match.free) {
+        return match
+      }
+    } else {
+      const ref = parseModelRef(configModel)
+      if (ref) {
+        const match = models.find((m) => sameModel(m, ref))
+        if (match && match.free) {
+          return match
+        }
+      }
+      const match = models.find(
+        (m) =>
+          m.id === configModel ||
+          m.modelID === configModel ||
+          serializeModelRef(m) === configModel ||
+          m.name === configModel,
+      )
+      if (match && match.free) {
+        return match
+      }
     }
   }
 
@@ -349,17 +397,43 @@ export function isAdeTestBuild(): boolean {
 }
 
 /**
- * Validates a model ID against the available models and test constraints.
+ * Validates a model against the available models and test constraints.
+ * Compares by providerID and modelID pair.
  * Rejects paid models under ADE Test identity.
  */
 export function validateSelectedModel(
-  selectedId: string | null | undefined,
+  selected: ModelRef | string | null | undefined,
   models: readonly ChatModelChoice[],
   isTest: boolean,
-): string | undefined {
-  if (!selectedId) return undefined
-  const match = models.find((m) => m.id === selectedId)
-  if (!match) return undefined
-  if (isTest && !match.free) return undefined
-  return match.id
+): ModelRef | undefined {
+  if (!selected) return undefined
+
+  if (typeof selected === "object") {
+    const match = models.find((m) => sameModel(m, selected))
+    if (!match) return undefined
+    if (isTest && !match.free) return undefined
+    return { providerID: match.providerID, modelID: match.modelID }
+  }
+
+  const ref = parseModelRef(selected)
+  if (ref) {
+    const match = models.find((m) => sameModel(m, ref))
+    if (match) {
+      if (isTest && !match.free) return undefined
+      return { providerID: match.providerID, modelID: match.modelID }
+    }
+  }
+
+  const match = models.find(
+    (m) =>
+      m.id === selected ||
+      m.modelID === selected ||
+      serializeModelRef(m) === selected,
+  )
+  if (match) {
+    if (isTest && !match.free) return undefined
+    return { providerID: match.providerID, modelID: match.modelID }
+  }
+
+  return undefined
 }
