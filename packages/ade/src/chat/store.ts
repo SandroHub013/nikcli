@@ -59,8 +59,11 @@ export interface ChatStore {
    * Sends `text` to `sessionID`, or to a new session made with the chat's
    * permission rules (`rules.ts`); the id it went to. The answer comes as
    * events. A session made elsewhere is refused with `ForeignSession`.
+   * `agent` is the one chosen in the chat; without it the server's default.
    */
-  send(sessionID: string | undefined, text: string, model: ModelRef): Promise<string>
+  send(sessionID: string | undefined, text: string, model: ModelRef, agent?: string): Promise<string>
+  /** Gives `sessionID` a new title; an empty one is refused before anything is sent. */
+  rename(sessionID: string, title: string): Promise<void>
   /** Answers a permission request: this once, or no. «Always» is not offered (C5). */
   replyPermission(requestID: string, reply: "once" | "reject"): Promise<void>
   /** Answers a question: for each of its questions, the labels chosen or typed. */
@@ -280,7 +283,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       void run(connection, mine, stop.signal)
     },
     close,
-    async send(sessionID, text, model) {
+    async send(sessionID, text, model, agent) {
       const connection = opened()
       const mine = generation
       let id = sessionID
@@ -293,8 +296,22 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       }
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
-      await connection.client.session.promptAsync({ sessionID: id, parts: [{ type: "text", text }], model })
+      await connection.client.session.promptAsync({
+        sessionID: id,
+        parts: [{ type: "text", text }],
+        model,
+        ...(agent ? { agent } : {}),
+      })
       return id
+    },
+    async rename(sessionID, title) {
+      const name = title.trim()
+      if (!name) throw new Error(t("chat.session.emptyTitle"))
+      const mine = generation
+      const result = await opened().client.session.update({ sessionID, title: name })
+      // The server's event says the same; this shows it at once, stream down or not.
+      const updated = result.data as unknown as Session | undefined
+      if (mine === generation && updated?.id === sessionID) applyChatEvent({ type: "session.updated", properties: { info: updated } }, state.data, setData)
     },
     async abort(sessionID) {
       await opened().client.session.abort({ sessionID })

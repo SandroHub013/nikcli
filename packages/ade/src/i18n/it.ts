@@ -612,6 +612,7 @@ export const it = {
   "chat.permission.ask": (permission: string) => `Il modello chiede il permesso per: ${permission}`,
   "chat.permission.once": "Sì, questa volta",
   "chat.permission.reject": "No, rifiuta",
+  "chat.session.emptyTitle": "Il titolo non può essere vuoto.",
   "chat.rules.always":
     "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche qui: quella richiesta non comparirà.",
   "chat.question.label": "Domanda del modello",

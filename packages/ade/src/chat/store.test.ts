@@ -93,7 +93,12 @@ function fakeServer() {
         // As the server does: the session keeps the rules it was made with.
         reply(onEvent, 200, { ...session("ses_nuova"), permission: JSON.parse(request.body ?? "{}").permission })
       }
-      else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
+      else if (request.method === "PATCH" && /^\/session\/[^/]+$/.test(path)) {
+        const id = path.split("/")[2]!
+        const found = routes.sessions.find((s) => (s as { id: string }).id === id)
+        if (!found) reply(onEvent, 404, { error: "non trovata" })
+        else reply(onEvent, 200, { ...found, title: JSON.parse(request.body ?? "{}").title, time: { created: 1, updated: 9 } })
+      } else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
       else if (request.method === "POST" && path.endsWith("/abort")) reply(onEvent, 200, true)
       else reply(onEvent, 404, { error: "non previsto" })
       return id
@@ -436,5 +441,33 @@ describe("the chat's store", () => {
       ["/question/que_1/reply", { answers: [["Sì"], ["rosso", "blu"]] }],
       ["/question/que_2/reject", null],
     ])
+  })
+
+  /* C4: the sessions the chat lists, opens, starts and renames. */
+  test("a message goes with the agent chosen; without one, the server's default", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const id = await store.send(undefined, "Ciao", FREE, "plan")
+    await store.send(id, "Ancora", FREE)
+    const bodies = server.calls("POST", /\/prompt_async$/).map((r) => JSON.parse(r.body!))
+    expect(bodies[0]).toMatchObject({ model: FREE, agent: "plan" })
+    expect(bodies[1]).toMatchObject({ model: FREE })
+    expect("agent" in bodies[1]).toBe(false)
+  })
+
+  test("a rename reaches the server and shows at once; an empty title sends nothing", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.rename("ses_1", "  Il piano del lunedì  ")
+    const patch = server.calls("PATCH", /^\/session\/ses_1$/)
+    expect(patch.map((r) => JSON.parse(r.body!))).toEqual([{ title: "Il piano del lunedì" }])
+    expect(store.state.data.session.find((s) => s.id === "ses_1")?.title).toBe("Il piano del lunedì")
+    const empty = await store.rename("ses_1", "   ").then(() => undefined, (error: unknown) => error)
+    expect(empty).toBeInstanceOf(Error)
+    expect(server.calls("PATCH", /^\/session\//)).toHaveLength(1)
   })
 })
