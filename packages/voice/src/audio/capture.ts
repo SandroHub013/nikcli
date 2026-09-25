@@ -46,6 +46,23 @@ export const MAX_SEGMENT_DURATION_MS = 45_000
  */
 export const PRE_ROLL_MS = 400
 
+/**
+ * How often a level reaches its listener at most.
+ *
+ * The audio callback arrives 50-70 times a second, and every level used to be
+ * passed on: a volume ring cannot draw more than a frame, and each of those
+ * crossings ended in a synchronous effect on the Effect side. Twenty a second
+ * is more than the ring can show.
+ */
+export const LEVEL_INTERVAL_MS = 50
+
+/**
+ * A level this close to the last one published is the same level as far as
+ * anything drawing it is concerned. Without it, a microphone in a quiet room
+ * publishes the same number over and over.
+ */
+export const LEVEL_EPSILON = 0.01
+
 // ---------------------------------------------------------------------------
 // Format Detection
 // ---------------------------------------------------------------------------
@@ -211,6 +228,13 @@ export interface MicCaptureOptions {
   preferredFormat?: AudioFormat
   /** Tuning parameters for silence detection state machine. */
   speechDetectorConfig?: SpeechDetectorConfig
+  /**
+   * How often a level is published at most; `LEVEL_INTERVAL_MS` unless a test
+   * needs it faster. See the level throttle in the factory.
+   */
+  levelIntervalMs?: number
+  /** A level this close to the last one published is the same level; 0.01 unless a test needs other. */
+  levelEpsilon?: number
   /** Test double injection: AudioContext constructor. */
   audioContextClass?: any
   /** Test double injection: MediaRecorder constructor. */
@@ -281,6 +305,8 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   const nowFn = options.now ?? (() => Date.now())
   const minDuration = options.minSegmentDurationMs ?? MIN_SEGMENT_DURATION_MS
   const maxDuration = options.maxSegmentDurationMs ?? MAX_SEGMENT_DURATION_MS
+  const levelInterval = options.levelIntervalMs ?? LEVEL_INTERVAL_MS
+  const levelEpsilon = options.levelEpsilon ?? LEVEL_EPSILON
 
   let onLevelCb: MicLevelCallback = options.onLevel ?? (() => {})
   let onPcmChunkCb: PcmChunkCallback = options.onPcmChunk ?? (() => {})
@@ -296,6 +322,9 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
   const detector = createSpeechDetector(options.speechDetectorConfig)
 
   let running = false
+  /** The level last published, and when: what the throttle compares against. */
+  let lastLevel = -1
+  let lastLevelAt = Number.NEGATIVE_INFINITY
   let audioContext: AudioContext | null = null
   let mediaStream: MediaStream | null = options.mediaStream ?? null
   let sourceNode: MediaStreamAudioSourceNode | null = null
@@ -651,6 +680,23 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     }
   }
 
+  /**
+   * Passes a level on at most every `levelInterval`, and only when it has moved
+   * further than `levelEpsilon`. `forced` is for the two moments that must not
+   * wait: the first level after a start, and the zero that says the microphone
+   * is closed.
+   */
+  function publishLevel(level: number, forced = false): void {
+    const at = nowFn()
+    if (!forced) {
+      if (at - lastLevelAt < levelInterval) return
+      if (Math.abs(level - lastLevel) < levelEpsilon) return
+    }
+    lastLevelAt = at
+    lastLevel = level
+    onLevelCb(level)
+  }
+
   function processAudioFrame(samples: Float32Array, inputSampleRate: number = 16000, at?: number): void {
     if (!running) return
 
@@ -664,7 +710,7 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
 
     // Compute RMS amplitude and stream to level listeners
     const rms = calculateRms(pcm16k)
-    onLevelCb(rms)
+    publishLevel(rms)
 
     // Drive speech/silence detector state machine
     const currentTime = at ?? nowFn()
@@ -823,7 +869,8 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
       releaseHardware()
       detector.reset()
       preRoll = []
-      onLevelCb(0.0)
+      // The ring has to go quiet now, not at the end of the next interval.
+      publishLevel(0, true)
     },
 
     startSegment(): void {

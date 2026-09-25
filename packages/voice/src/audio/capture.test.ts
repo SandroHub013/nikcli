@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import {
   chooseSupportedAudioMimeType,
   createMicCapture,
+  LEVEL_EPSILON,
+  LEVEL_INTERVAL_MS,
   MAX_SEGMENT_DURATION_MS,
   MIN_SEGMENT_DURATION_MS,
   resamplePcm,
@@ -344,6 +346,74 @@ describe("audio/capture pre-roll", () => {
 
     expect(segments).toHaveLength(1)
     expect((segments[0].blob.size - 44) / 2).toBe(1600)
+    capture.stop()
+  })
+
+  test("a level is published at most every interval, and not at all when it has not moved", async () => {
+    let simulatedTime = 10_000
+    const levels: number[] = []
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      levelIntervalMs: 50,
+      levelEpsilon: LEVEL_EPSILON,
+      speechDetectorConfig: { speechThreshold: 0.9 },
+      onLevel: (level) => levels.push(level),
+    })
+    await capture.start()
+
+    // A second of audio at 16 kHz, one 20 ms buffer at a time: 50 frames, the
+    // rate the callback really arrives at. Every frame is the same loudness.
+    const loud = new Float32Array(320).fill(0.5)
+    for (let i = 0; i < 50; i++) {
+      simulatedTime += 20
+      capture.processAudioFrame(loud)
+    }
+    // One level for the first frame, and one per interval after it: not 50.
+    expect(levels.length).toBeLessThanOrEqual(2)
+    expect(levels.length).toBeGreaterThanOrEqual(1)
+    // The rate a ring can draw is the ceiling, not the frame rate.
+    expect(LEVEL_INTERVAL_MS).toBeGreaterThanOrEqual(20)
+
+    // A level that moves is published as soon as the interval has passed.
+    const quiet = new Float32Array(320).fill(0)
+    simulatedTime += LEVEL_INTERVAL_MS
+    capture.processAudioFrame(quiet)
+    expect(levels.at(-1)).toBe(0)
+
+    // Stopping says the microphone is closed without waiting for the interval.
+    const before = levels.length
+    capture.stop()
+    expect(levels.length).toBe(before + 1)
+    expect(levels.at(-1)).toBe(0)
+  })
+
+  test("a level within the epsilon of the last one is not published again", async () => {
+    let simulatedTime = 10_000
+    const levels: number[] = []
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      mediaStream: new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      levelIntervalMs: 0,
+      levelEpsilon: 0.05,
+      speechDetectorConfig: { speechThreshold: 0.9 },
+      onLevel: (level) => levels.push(level),
+    })
+    await capture.start()
+
+    // No interval to wait out: only the epsilon decides.
+    capture.processAudioFrame(new Float32Array(320).fill(0.5))
+    capture.processAudioFrame(new Float32Array(320).fill(0.5))
+    expect(levels).toHaveLength(1)
+
+    // A real change goes straight through.
+    capture.processAudioFrame(new Float32Array(320).fill(0.9))
+    expect(levels).toHaveLength(2)
+    expect(levels.at(-1)).toBeGreaterThan(0.5)
     capture.stop()
   })
 })
