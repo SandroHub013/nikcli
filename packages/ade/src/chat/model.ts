@@ -73,8 +73,32 @@ export function parseModelRef(raw?: string | null): ModelRef | undefined {
 const LOCAL_PROVIDERS: ReadonlySet<string> = new Set(["ollama", "lmstudio"])
 
 /**
+ * Hosted providers that price their catalogue honestly, so a cost of 0 there
+ * is a real price and not a missing one.
+ *
+ * OpenCode Zen is the one. It serves named third-party models at their public
+ * per-token prices — gpt-5.4 at 2.5/15, claude-opus-5-5 at 4/20, gpt-5.4-nano
+ * at 0.2/1.25 — and prices its free tier at 0, so 0 there means free. Its free
+ * models are named after the tier rather than after a tag, and most do not end
+ * in `:free`, so the suffix alone would have thrown them out: space-bunny-free
+ * costs nothing, is free, and does not end in a colon.
+ */
+const RELIABLE_COST_PROVIDERS: ReadonlySet<string> = new Set(["opencode"])
+
+/**
+ * Whether a cost of 0 from this provider can be believed, and therefore whether
+ * a model that costs nothing to run is free.
+ */
+function hasReliableCost(providerID: string | undefined): boolean {
+  return (
+    providerID !== undefined &&
+    (LOCAL_PROVIDERS.has(providerID) || RELIABLE_COST_PROVIDERS.has(providerID))
+  )
+}
+
+/**
  * Whether a model is free of charge: the id ends with :free, or it costs
- * nothing to run because a local provider serves it.
+ * nothing to run and the provider says what its prices mean.
  */
 export function isFreeModel(model: {
   readonly id: string
@@ -82,7 +106,7 @@ export function isFreeModel(model: {
   readonly cost?: { readonly input?: number; readonly output?: number }
 }): boolean {
   if (model.id.endsWith(":free")) return true
-  if (model.providerID === undefined || !LOCAL_PROVIDERS.has(model.providerID)) return false
+  if (!hasReliableCost(model.providerID)) return false
   return (
     model.cost !== undefined &&
     typeof model.cost.input === "number" &&
