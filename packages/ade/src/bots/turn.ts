@@ -51,6 +51,16 @@ export interface TurnRequest {
   readonly timeoutMs?: number
   /** How long the CLI may take to exit after its final event before it is killed; `TURN_EXIT_GRACE_MS` when absent. */
   readonly exitGraceMs?: number
+  /**
+   * The Bots panel's own bot file, whole: its persona, tools and identifier
+   * (B2). Absent: a bot made from `instructions`, `model`, `effort`, `agent`
+   * and `disabledTools` above, as the voice asks for one.
+   */
+  readonly bot?: AgentFile
+  /** Every line the CLI writes, as it comes: the panel folds them into its own thread. */
+  readonly onLine?: (line: string) => void
+  /** The raw output, for a permission menu drawn in place (nikcli). */
+  readonly onData?: (chunk: string) => void
 }
 
 /**
@@ -99,14 +109,22 @@ export interface TurnResult {
   readonly costUsd: number
   /** Why it failed, when it did. */
   readonly problem?: string
+  /**
+   * How the process ended, when it ended on its own: its exit code, or 0 once
+   * its final event arrived. Absent when it was stopped, ran out of time or
+   * never started.
+   */
+  readonly exitCode?: number | null
   /** Everything that happened, message by message. */
   readonly talk: Talk
 }
 
 export interface Turn {
   readonly result: Promise<TurnResult>
-  /** Ends the turn early; the result resolves as `stopped`. */
+  /** Ends the turn early, with the CLI's child processes; the result resolves as `stopped`. */
   readonly stop: () => void
+  /** Keystrokes to the CLI, exactly as given: the answer to nikcli's permission menu. Absent where nothing can be typed. */
+  readonly write?: (keys: string) => void
 }
 
 /* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */
@@ -119,6 +137,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
   let kill: (() => void) | undefined
+  let write: ((keys: string) => void) | undefined
   /*
    * Ends the wait for the exit. A killed session unlistens before it could
    * report one, so a stopped or timed-out turn resolved here or never.
@@ -131,13 +150,14 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       talk = next
       request.onUpdate?.(talk)
     }
-    const finish = (status: TurnResult["status"], problem?: string): TurnResult => ({
+    const finish = (status: TurnResult["status"], problem?: string, exitCode?: number | null): TurnResult => ({
       status,
       text: finalText(talk),
       ...(talk.sessionId ? { sessionId: talk.sessionId } : {}),
       tokens: talk.tokens,
       costUsd: talk.costUsd,
       ...(problem ? { problem } : {}),
+      ...(exitCode !== undefined ? { exitCode } : {}),
       talk,
     })
 
@@ -147,7 +167,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       return finish("error", talk.problem)
     }
 
-    const bot: AgentFile = {
+    const bot: AgentFile = request.bot ?? {
       identifier: request.agent ?? "",
       path: "",
       scope: "global",
@@ -190,6 +210,12 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     let timer: ReturnType<typeof setTimeout> | undefined
     let exited = false
     let lingering: ReturnType<typeof setTimeout> | undefined
+    /*
+     * What the host said when it could not start the CLI (audit A3): it
+     * reports that as an "err" line and an exit, then hands back a session
+     * anyway. Without this the turn ended «done» with nothing said.
+     */
+    let notStarted: string | undefined
     try {
       const code = await new Promise<number | null>((resolve, reject) => {
         settle = resolve
@@ -206,7 +232,13 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             cols: 400,
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
-            onLine: (line) => {
+            ...(request.onData ? { onData: request.onData } : {}),
+            onLine: (line, stream) => {
+              if (stream === "err") {
+                notStarted = notStarted ? `${notStarted} ${line}` : line
+                return
+              }
+              request.onLine?.(line)
               const before = talk
               update(applyRunnerLine(runner, talk, line, Date.now()))
               if (!before.sessionId && talk.sessionId) markTurn("cli-init")
@@ -235,6 +267,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
           .then((session) => {
             markTurn("cli-spawned")
             kill = () => session.kill({ tree: true })
+            write = (keys) => session.write(keys)
             if (stopped || timedOut) {
               kill()
               resolve(null)
@@ -247,9 +280,17 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }
+      if (stopped) {
+        update(applyExit(talk, code, Date.now(), runner.label))
+        return finish("stopped")
+      }
+      if (notStarted !== undefined) {
+        const problem = `${runner.label} non si avvia: ${notStarted}`
+        update(applyProblem(talk, problem, Date.now()))
+        return finish("error", problem)
+      }
       update(applyExit(talk, code, Date.now(), runner.label))
-      if (stopped) return finish("stopped")
-      return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text) : finish("done")
+      return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text, code) : finish("done", undefined, code)
     } catch (error) {
       const said = error instanceof Error ? error.message : String(error)
       update(applyProblem(talk, `${runner.label} non si avvia: ${said}`, Date.now()))
@@ -269,5 +310,6 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       kill?.()
       settle?.(null)
     },
+    write: (keys) => write?.(keys),
   }
 }

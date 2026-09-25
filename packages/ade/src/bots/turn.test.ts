@@ -167,3 +167,26 @@ describe("bots/turn, stopped by newer questions", () => {
     expect(turnsRunning("claude")).toBe(0)
   })
 })
+
+/*
+ * B2 (audit A3): the host reports a CLI it could not start as an "err" line
+ * and an exit, then returns a session anyway. The turn ended «done» with
+ * nothing said, and the voice read out nothing.
+ */
+describe("a CLI that does not start", () => {
+  test("ends the turn in error with the host's reason, and gives the place back", async () => {
+    const host = {
+      spawn: async (options: { onExit: (code: number | null) => void; onLine: (line: string, stream: "out" | "err") => void }) => {
+        options.onLine("comando non consentito: codex", "err")
+        options.onExit(null)
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const result = await runTurn({ runner: "codex", message: "ciao" }, deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toBe("Codex non si avvia: comando non consentito: codex")
+    expect(result.exitCode).toBeUndefined()
+    expect(turnsRunning("codex")).toBe(0)
+  })
+})
