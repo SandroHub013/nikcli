@@ -121,6 +121,62 @@ describe("proactive-alerts", () => {
     expect(windows[0].durationMs).toBe(RESPONSE_WINDOW_MS)
   })
 
+  test("two consecutive turns of a full pane both notify", async () => {
+    let clock = 100_000
+    const spoken: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async () => {},
+    })
+    const full = (tail: string) => [
+      ...Array.from({ length: 199 }, (_, i) => ({ text: `riga ${i}` })),
+      { text: tail },
+    ]
+
+    alerts.notifyCompletion("p1", "Pieno", full("primo turno"))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
+
+    clock += 25_000
+    alerts.notifyCompletion("p1", "Pieno", full("secondo turno"))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(2)
+  })
+
+  test("two consecutive turns of a full pane both notify when the turn is named", async () => {
+    let clock = 100_000
+    const spoken: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async () => {},
+    })
+    const full = Array.from({ length: 200 }, (_, i) => ({ text: `riga ${i}` }))
+
+    alerts.notifyCompletion("p1", "Pieno", full, 1_000)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
+
+    clock += 25_000
+    alerts.notifyCompletion("p1", "Pieno", full, 1_000)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
+
+    clock += 25_000
+    alerts.notifyCompletion("p1", "Pieno", full, 2_000)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(2)
+  })
+
   test("speaks decision alert", async () => {
     const spoken: string[] = []
     const windows: any[] = []

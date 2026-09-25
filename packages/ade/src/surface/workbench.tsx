@@ -4368,6 +4368,8 @@ export function Workbench() {
     onCleanup(() => clearInterval(timer))
   })
 
+  const completionTurns = new Map<string, number>()
+
   // Proactive alerts: session completed work
   createEffect(
     on(
@@ -4376,8 +4378,18 @@ export function Workbench() {
         if (!previousPanes) return
         for (const pane of currentPanes) {
           const prev = previousPanes.find((p) => p.id === pane.id)
-          if (prev && prev.status === "working" && pane.status === "idle") {
-            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines)
+          if (!prev) continue
+          if (pane.status === "working" && prev.status !== "working") {
+            completionTurns.set(pane.id, (completionTurns.get(pane.id) ?? 0) + 1)
+            continue
+          }
+          if (prev.status === "working" && pane.status === "idle") {
+            proactiveAlerts.notifyCompletion(
+              pane.id,
+              pane.title,
+              pane.lines,
+              completionTurns.get(pane.id) ?? 0,
+            )
           }
         }
       },

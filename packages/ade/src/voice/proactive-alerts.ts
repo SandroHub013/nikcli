@@ -121,6 +121,13 @@ export function summarizeCompletion(lines: readonly { text: string }[], currentL
   return undefined
 }
 
+function completionTurn(lines: readonly { text: string }[], turnId?: string | number): string {
+  if (turnId !== undefined) return String(turnId)
+  const previous = lines[lines.length - 2]
+  const last = lines[lines.length - 1]
+  return `${lines.length}:${previous?.text ?? ""}:${last?.text ?? ""}`
+}
+
 export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
   const queue: AlertEvent[] = []
   const seenEvents = new Map<string, number>()
@@ -320,12 +327,16 @@ export function createProactiveAlerts(deps: ProactiveAlertsDeps) {
       })
     },
 
-    notifyCompletion(paneId: string, paneTitle: string, lines: readonly { text: string }[], turnId?: string | number): void {
+    notifyCompletion(
+      paneId: string,
+      paneTitle: string,
+      lines: readonly { text: string }[],
+      turnId?: string | number,
+    ): void {
       const summary = summarizeCompletion(lines)
-      const turnKey = turnId !== undefined ? String(turnId) : `${lines.length}`
       enqueue({
         type: "completion",
-        key: `comp:${paneId}:${turnKey}`,
+        key: `comp:${paneId}:${completionTurn(lines, turnId)}`,
         paneId,
         paneTitle,
         summary,
