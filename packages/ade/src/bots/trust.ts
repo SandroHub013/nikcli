@@ -25,11 +25,14 @@ export interface TrustStore {
 
 const STORAGE_KEY = "ade.bots.trusted"
 
-/** In the renderer's storage: a trust given on this machine, by this user. */
-export function localTrustStore(): TrustStore {
+/**
+ * In the renderer's storage: a trust given on this machine, by this user.
+ * Bots under one key, projects (`project-trust.ts`) under another.
+ */
+export function localTrustStore(key: string = STORAGE_KEY): TrustStore {
   const read = (): Record<string, string> => {
     try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as unknown
+      const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {}
     } catch {
       return {}
@@ -42,7 +45,7 @@ export function localTrustStore(): TrustStore {
     },
     set: (path, fingerprint) => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...read(), [path]: fingerprint }))
+        localStorage.setItem(key, JSON.stringify({ ...read(), [path]: fingerprint }))
       } catch {
         // Storage blocked: the trust lasts until the file is asked about again.
       }

@@ -39,12 +39,14 @@ import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runTurn } from "./turn"
 import {
   createBot,
   deleteBot,
   listBots,
   listModels,
+  projectFs,
   readBotText,
   resolveRoots,
   updateBot,
@@ -374,6 +376,20 @@ export function BotsMain(props: BotsMainProps) {
       return false
     }
     const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+
+    // nikcli also loads the project's own configuration, plugins included (B3b).
+    const root = props.projectRoot
+    if (root && runnerById(trusted.runner).id === "nikcli") {
+      const project = await admitProject(root, {
+        store: localTrustStore(PROJECT_TRUST_KEY),
+        surface: () => projectSurface(root, projectFs),
+        confirm: (question) => window.confirm(question),
+      })
+      if (!project.ok) {
+        if (project.problem) updateTalk(bot.path, (talk) => applyProblem(talk, project.problem!, Date.now()))
+        return false
+      }
+    }
     return turns.send(trusted, message, props.projectRoot)
   }
 

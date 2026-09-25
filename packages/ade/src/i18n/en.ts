@@ -515,6 +515,13 @@ export const en: Messages = {
   "bots.trust.can.nikcli": "It can do what your nikcli configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what) =>
     `This project's bot «${name}» grants itself «${what}» in its file (permission or tools), and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
+  "bots.projectTrust.new": (root, files) =>
+    `The folder ${root} has a nikcli configuration of its own (${files}): plugins, tools and settings nikcli loads and runs on every turn, on your account, written by whoever wrote the project. Load them? If not, bots on nikcli do not start here; bots on Claude Code and Codex do, since they do not read it.`,
+  "bots.projectTrust.changed": (root, files) =>
+    `The nikcli configuration of the folder ${root} changed since you accepted it (${files}): nikcli loads and runs it on every turn. Load it as it is now?`,
+  "bots.projectTrust.more": (count) => ` and ${count} more`,
+  "bots.projectTrust.refused": (root) =>
+    `Bots on nikcli do not start in ${root} until you accept the project's nikcli configuration. Bots on Claude Code and Codex do not read it.`,
   "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
