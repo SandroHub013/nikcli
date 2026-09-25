@@ -560,7 +560,7 @@ export const it = {
   "gateway.selfGrant": (name: string, what: string) =>
     `Il bot «${name}» si concede «${what}» nel suo file, e da remoto quel permesso non si può togliere: da qui non lo avvio. Toglilo dal file per usarlo dal telefono.`,
   "gateway.approve.question": (permission: string, what: string) =>
-    `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
+    `Il bot chiede il permesso «${permission}» per:\n${what}\n\nIl comando è letto dal terminale e può essere incompleto: se non lo riconosci per intero, rispondi No.\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
