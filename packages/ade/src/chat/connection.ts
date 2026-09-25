@@ -12,6 +12,14 @@
  * The client handed back is bound to that one folder: a request that names
  * another one, in the header or the query, is refused here, so the SDK's
  * per-call `directory` cannot reach a folder nobody said yes to.
+ *
+ * The trust is checked again before every request, not only at the opening
+ * (C2 review, BASSO): a `git pull` that adds a plugin to `.nikcli/` during a
+ * conversation reaches the server the next time it builds the instance, and
+ * that can be any request. Unchanged, the check is silent; changed, the user
+ * is asked again, in front of the screen. After a no the connection is closed
+ * for good: every request fails with `ChatRefused`, without asking again, so
+ * a stream that reconnects does not reopen the dialog each time.
  */
 
 import { createNikcliClient, type NikcliClient } from "@nikcli-ai/sdk/client"
@@ -29,6 +37,19 @@ export interface ChatConnectionDeps {
 }
 
 export type ChatConnection = { ok: true; client: NikcliClient; directory: string } | { ok: false; problem?: string }
+
+/** A request refused because the user no longer trusts the project: not to be retried. */
+export class ChatRefused extends Error {
+  override readonly name = "ChatRefused"
+}
+
+/** Whether `error` is, or was caused by, a `ChatRefused`: the SDK wraps what `fetch` throws. */
+export function isChatRefused(error: unknown): boolean {
+  for (let at = error, depth = 0; at instanceof Error && depth < 5; at = at.cause, depth++) {
+    if (at instanceof ChatRefused) return true
+  }
+  return false
+}
 
 const same = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 
@@ -59,13 +80,27 @@ export function boundFetch(fetch: typeof globalThis.fetch, directory: string): t
   return Object.assign(bound, { preconnect: () => {} }) as typeof globalThis.fetch
 }
 
+/** `fetch`, with the project's trust checked again before each request; closed for good after a no. */
+function trustedFetch(fetch: typeof globalThis.fetch, directory: string, admit: ChatConnectionDeps["admit"]): typeof globalThis.fetch {
+  let refused: string | undefined
+  const trusted = async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (refused === undefined) {
+      const again = await admit(directory)
+      if (!again.ok) refused = again.problem ?? t("bots.projectTrust.refused", directory)
+    }
+    if (refused !== undefined) throw new ChatRefused(refused)
+    return fetch(input, init)
+  }
+  return Object.assign(trusted, { preconnect: () => {} }) as typeof globalThis.fetch
+}
+
 /** The client for `directory`, once its project is admitted; nothing is sent before. */
 export async function openChat(directory: string, deps: ChatConnectionDeps): Promise<ChatConnection> {
   const admitted = await deps.admit(directory)
   if (!admitted.ok) return admitted.problem === undefined ? { ok: false } : { ok: false, problem: admitted.problem }
   const client = createNikcliClient({
     baseUrl: SERVER_BASE,
-    fetch: boundFetch(serverFetch(deps.bridge, { directory }), directory),
+    fetch: boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit), directory),
     directory,
     throwOnError: true,
   })

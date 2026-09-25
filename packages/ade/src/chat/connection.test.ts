@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { openChat } from "./connection"
+import { isChatRefused, openChat } from "./connection"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -69,5 +69,32 @@ describe("the chat on a folder", () => {
     await expect(opened.client.session.list({ directory: "c:\\PROGETTO\\" })).resolves.toBeDefined()
     expect(fake.sent).toHaveLength(1)
     for (const request of fake.sent) expect(request.path).not.toContain("altro")
+  })
+
+  /* C2 review, BASSO: a plugin added to `.nikcli/` during the conversation. */
+  test("the trust is checked again before every request; after a no nothing leaves and nothing is asked again", async () => {
+    const fake = fakeBridge()
+    let trusted = true
+    let asked = 0
+    const opened = await openChat(PROJECT, {
+      bridge: fake.bridge,
+      admit: async () => {
+        asked++
+        return trusted ? { ok: true } : { ok: false, problem: "Il progetto è cambiato e non ti fidi più." }
+      },
+    })
+    if (!opened.ok) throw new Error("non aperta")
+    await opened.client.session.list({ roots: true })
+    expect(asked).toBe(2)
+    expect(fake.sent).toHaveLength(1)
+
+    trusted = false
+    const refusal = (error: unknown) => isChatRefused(error) && String(error).includes("Il progetto è cambiato e non ti fidi più.")
+    expect(await opened.client.session.list({ roots: true }).then(() => undefined, refusal)).toBe(true)
+    // Trusted again meanwhile, it stays closed: the store opens a new chat, nothing retries into a dialog.
+    trusted = true
+    expect(await opened.client.session.list({ roots: true }).then(() => undefined, refusal)).toBe(true)
+    expect(asked).toBe(3)
+    expect(fake.sent).toHaveLength(1)
   })
 })
