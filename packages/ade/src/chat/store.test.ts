@@ -103,6 +103,7 @@ function fakeServer() {
         else reply(onEvent, 200, { ...found, title: JSON.parse(request.body ?? "{}").title, time: { created: 1, updated: 9 } })
       } else if (request.method === "POST" && path.endsWith("/prompt_async")) reply(onEvent, 204)
       else if (request.method === "POST" && path.endsWith("/abort")) reply(onEvent, 200, true)
+      else if (request.method === "GET" && path === "/find/file") reply(onEvent, 200, ["src/app.ts", "src/api.ts"])
       else reply(onEvent, 404, { error: "non previsto" })
       return id
     },
@@ -487,6 +488,50 @@ describe("the chat's store", () => {
     const empty = await store.rename("ses_1", "   ").then(() => undefined, (error: unknown) => error)
     expect(empty).toBeInstanceOf(Error)
     expect(server.calls("PATCH", /^\/session\//)).toHaveLength(1)
+  })
+
+  /* C6: files go with the text, and only the folder's. */
+  test("a message goes with the project's files it names", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const file = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src/app.ts", filename: "app.ts" }
+    await store.send(undefined, "Guarda @src/app.ts", FREE, undefined, [file])
+    const body = JSON.parse(server.calls("POST", /\/prompt_async$/)[0]!.body!)
+    expect(body.parts).toEqual([{ type: "text", text: "Guarda @src/app.ts" }, file])
+  })
+
+  test("a file outside the folder: nothing is sent, not even the session", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    for (const url of [
+      "file:///C:/Users/me/.ssh/id_ed25519",
+      "file:///C:/progetto-a/../progetto-b/x.ts",
+      "file:///C:/progetto-a-vecchio/x.ts",
+      "file:///D:/progetto-a/x.ts",
+      "file://server/share/x.ts",
+      "https://example.test/x.ts",
+    ]) {
+      const refused = await store
+        .send(undefined, "Leggi", FREE, undefined, [{ type: "file", mime: "text/plain", url }])
+        .then(() => undefined, (error: unknown) => error)
+      expect([url, refused instanceof Error]).toEqual([url, true])
+    }
+    expect(server.calls("POST", /^\/session$/)).toEqual([])
+    expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
+  })
+
+  test("@ looks the folder's files up on the server", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    expect(await store.findFiles("ap")).toEqual(["src/app.ts", "src/api.ts"])
+    const query = new URLSearchParams(server.calls("GET", /^\/find\/file$/)[0]!.path.split("?")[1])
+    expect([query.get("query"), query.get("type")]).toEqual(["ap", "file"])
   })
 
   test("a new session is made with a title, so no model is called to name it", async () => {

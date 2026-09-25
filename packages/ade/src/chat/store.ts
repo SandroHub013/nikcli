@@ -24,7 +24,15 @@
  * review).
  */
 
-import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
+import type {
+  FilePartInput,
+  Message,
+  Part,
+  PermissionRequest,
+  QuestionRequest,
+  Session,
+  SessionStatus,
+} from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { t } from "../i18n"
 import {
@@ -37,6 +45,7 @@ import {
 } from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
+import { insideProject, pathOfFileUrl } from "./attachments"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -67,8 +76,18 @@ export interface ChatStore {
    * permission rules (`rules.ts`); the id it went to. The answer comes as
    * events. A session made elsewhere is refused with `ForeignSession`.
    * `agent` is the one chosen in the chat; without it the server's default.
+   * `files` go with the text; each must be a file of the open folder
+   * (`attachments.ts`), or nothing is sent at all.
    */
-  send(sessionID: string | undefined, text: string, model: ModelRef, agent?: string): Promise<string>
+  send(
+    sessionID: string | undefined,
+    text: string,
+    model: ModelRef,
+    agent?: string,
+    files?: readonly FilePartInput[],
+  ): Promise<string>
+  /** The folder's files whose path matches `query`, relative to it, for `@`. */
+  findFiles(query: string): Promise<string[]>
   /** Gives `sessionID` a new title; an empty one, or a session made elsewhere, is refused before anything is sent. */
   rename(sessionID: string, title: string): Promise<void>
   /** Answers a permission request: this once, or no. «Always» is not offered (C5). */
@@ -316,8 +335,13 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       void run(connection, mine, stop.signal)
     },
     close,
-    async send(sessionID, text, model, agent) {
+    async send(sessionID, text, model, agent, files = []) {
       const connection = opened()
+      const folder = state.directory ?? ""
+      for (const file of files) {
+        const path = pathOfFileUrl(file.url)
+        if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
+      }
       const mine = generation
       let id = sessionID
       if (!id) {
@@ -329,7 +353,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       if (mine === generation) watched.add(id)
       await connection.client.session.promptAsync({
         sessionID: id,
-        parts: [{ type: "text", text }],
+        parts: [{ type: "text", text }, ...files],
         model,
         ...(agent ? { agent } : {}),
       })
@@ -361,6 +385,10 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     async loadMessages(sessionID) {
       watched.add(sessionID)
       if (current) await fetchMessages(current.connection, sessionID, generation)
+    },
+    async findFiles(query) {
+      const found = await opened().client.find.files({ query, type: "file", limit: 20 })
+      return Array.isArray(found.data) ? found.data.filter((path): path is string => typeof path === "string") : []
     },
     async catalog() {
       const connection = opened()
