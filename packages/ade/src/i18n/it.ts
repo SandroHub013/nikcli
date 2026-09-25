@@ -513,9 +513,11 @@ export const it = {
   "bots.trust.changed": (name: string, can: string) =>
     `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
   // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
-  "bots.trust.can.codex": "Girerà in sola lettura: potrà leggere i file del progetto, non modificarli né eseguire comandi.",
+  "bots.trust.can.codex":
+    "Girerà in sola lettura: potrà leggere i file del progetto ed eseguire comandi che non scrivono niente, ma non modificare file.",
   "bots.trust.can.claude":
     "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
+  "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.nikcli":
     "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string) =>

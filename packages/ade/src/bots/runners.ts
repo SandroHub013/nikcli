@@ -200,7 +200,7 @@ const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
   ["Edit", "Write", "NotebookEdit"].map((tool) => `${tool}(./${path}/**)`),
 )
 
-function canWrite(bot: AgentFile): boolean {
+export function canWrite(bot: AgentFile): boolean {
   return !bot.disabledTools.includes("edit") && !bot.disabledTools.includes("write")
 }
 

@@ -104,6 +104,21 @@ describe("fiducia nei bot di progetto", () => {
     expect(new Set(Object.values(questions)).size).toBe(3)
   })
 
+  test("Codex in sola lettura esegue comandi, solo non scrive; Claude senza scrittura non promette modifiche (B3-bis)", async () => {
+    const ask = async (bot: AgentFile) => {
+      const s = setup({ [projectBot.path]: "contenuto" }, [false])
+      await admit(bot, s.deps)
+      return s.asked[0]!
+    }
+    const codex = await ask({ ...projectBot, runner: "codex" })
+    expect(codex).toContain("sola lettura")
+    expect(codex).toContain("comandi che non scrivono")
+    const readOnly = await ask({ ...projectBot, runner: "claude", disabledTools: ["edit", "write"] })
+    expect(readOnly).not.toContain("modificare gli altri file")
+    expect(readOnly).toContain("solo leggere")
+    expect(await ask({ ...projectBot, runner: "claude" })).toContain("modificare gli altri file")
+  })
+
   test("l'impronta è quella del contenuto", async () => {
     expect(await fileFingerprint("a")).toBe(await fileFingerprint("a"))
     expect(await fileFingerprint("a")).not.toBe(await fileFingerprint("b"))

@@ -507,9 +507,11 @@ export const en: Messages = {
     `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
   "bots.trust.changed": (name, can) =>
     `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
-  "bots.trust.can.codex": "It runs read-only: it can read the project's files, not change them or run commands.",
+  "bots.trust.can.codex":
+    "It runs read-only: it can read the project's files and run commands that write nothing, but not change files.",
   "bots.trust.can.claude":
     "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
+  "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
   "bots.trust.can.nikcli": "It can do what your nikcli configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what) =>
     `This project's bot «${name}» grants itself «${what}» in its file (permission or tools), and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,

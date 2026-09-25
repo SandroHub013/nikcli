@@ -14,7 +14,7 @@
  */
 
 import { parseAgentFile, type AgentFile } from "./nikcli"
-import { runnerById } from "./runners"
+import { canWrite, runnerById } from "./runners"
 import { t } from "../i18n"
 
 /** The trusted fingerprint of each file, by path. */
@@ -139,7 +139,15 @@ export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true
   const fingerprint = await fileFingerprint(text)
   const trusted = deps.store.get(bot.path)
   if (trusted === fingerprint) return { ok: true }
-  const can = t(runner === "codex" ? "bots.trust.can.codex" : runner === "claude" ? "bots.trust.can.claude" : "bots.trust.can.nikcli")
+  const can = t(
+    runner === "codex"
+      ? "bots.trust.can.codex"
+      : runner === "claude"
+        ? canWrite(bot)
+          ? "bots.trust.can.claude"
+          : "bots.trust.can.claudeReadOnly"
+        : "bots.trust.can.nikcli",
+  )
   const question =
     trusted === undefined ? t("bots.trust.new", bot.identifier, can) : t("bots.trust.changed", bot.identifier, can)
   asking.add(bot.path)
