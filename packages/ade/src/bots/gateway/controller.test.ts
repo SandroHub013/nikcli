@@ -29,6 +29,7 @@ function bridge(project: string | null = PROJECT) {
   let handler: ((message: GatewayMessage) => void) | undefined
   const calls: string[] = []
   const sent: { chat: string; text: string }[] = []
+  const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
@@ -43,6 +44,10 @@ function bridge(project: string | null = PROJECT) {
     send: async (_bot, _platform, chat, text) => {
       sent.push({ chat, text })
       return String(sent.length)
+    },
+    sendButtons: async (_bot, _platform, chat, text, buttons) => {
+      questions.push({ chat, text, buttons })
+      return "q"
     },
     typing: async (_bot, _platform, chat) => void typing.push(chat),
     project: async () => project ?? undefined,
@@ -59,7 +64,7 @@ function bridge(project: string | null = PROJECT) {
       button: false,
       ...extra,
     })
-  return { fake, calls, sent, typing, emit }
+  return { fake, calls, sent, typing, questions, emit }
 }
 
 /** Turns that end when the test says so. */
@@ -198,7 +203,53 @@ describe("the gateways' controller", () => {
     expect(none.sent[0]!.text).toBe(t("gateway.noProject"))
   })
 
-  test("past the hourly ceiling the chat is told once, then silence; a button press starts nothing yet", async () => {
+  test("a press counts only for a button ADE sent, in that chat, while its question waits, and once", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    const target = { bot: BOT.path, platform: "telegram", chat: "c42" }
+    const answer = controller.ask(target, "Eseguo `ls`?", [
+      { label: "Sì", value: "yes" },
+      { label: "No", value: "no" },
+    ])
+    await until("la domanda", () => b.questions.length === 1)
+    const [yes, no] = b.questions[0]!.buttons
+    expect(yes!.label).toBe("Sì")
+    expect(yes!.data).toMatch(/^[0-9a-f]{16}:0$/)
+    const id = yes!.data.split(":")[0]!
+    // Made up by the client, from another chat, an index that is not there: ignored.
+    b.emit("0123456789abcdef:0", { button: true })
+    b.emit(yes!.data, { button: true, chat: "c7" })
+    b.emit(`${id}:9`, { button: true })
+    b.emit(`${id}:01`, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    let settled = false
+    void answer.then(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(settled).toBe(false)
+    b.emit(no!.data, { button: true })
+    expect(await answer).toBe("no")
+    // Once: a second press of the same question does nothing, and no press starts a turn.
+    b.emit(yes!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turns.started).toHaveLength(0)
+    expect(b.sent).toHaveLength(0)
+  })
+
+  test("a question nobody answers in time, or still waiting when the controller stops, has no answer", async () => {
+    const b = bridge()
+    const controller = await startGatewayController({ bridge: b.fake, runTurn: fakeTurns().runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    const target = { bot: BOT.path, platform: "telegram", chat: "c42" }
+    expect(await controller.ask(target, "Procedo?", [{ label: "Sì", value: "yes" }], 20)).toBeUndefined()
+    const late = b.questions[0]!.buttons[0]!.data
+    b.emit(late, { button: true })
+    const waiting = controller.ask(target, "E ora?", [{ label: "Sì", value: "yes" }])
+    await until("la seconda domanda", () => b.questions.length === 2)
+    controller.stop()
+    expect(await waiting).toBeUndefined()
+  })
+
+  test("past the hourly ceiling the chat is told once, then silence; a button press starts nothing", async () => {
     const b = bridge()
     const turns = fakeTurns()
     let now = 1_000

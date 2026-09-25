@@ -13,7 +13,11 @@
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
  * - «sta scrivendo» while it runs, and the answer, or why there is none;
- * - a message Rust took a key out of is answered first by saying so.
+ * - a message Rust took a key out of is answered first by saying so;
+ * - `ask` puts a question with buttons under a message. A press counts only
+ *   for a button ADE sent, from the same chat, while its question waits, and
+ *   once: its data carry a random id, since a client can send any data it
+ *   likes. Anything else pressed is ignored.
  *
  * Nothing is read from a chat before this listens: `gateway_ready` is called
  * once the listener is in place, and Rust holds every gateway until then.
@@ -48,6 +52,7 @@ export interface GatewayBridge {
   /** Tells Rust the page listens: the gateways may read. */
   ready: () => Promise<void>
   send: (bot: string, platform: string, chat: string, text: string) => Promise<string>
+  sendButtons: (bot: string, platform: string, chat: string, text: string, buttons: readonly { label: string; data: string }[]) => Promise<string>
   typing: (bot: string, platform: string, chat: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
@@ -66,9 +71,30 @@ export interface GatewayControllerDeps {
   readonly warn?: (line: string) => void
 }
 
+/** Where a question goes: one chat of one bot's gateway. */
+export interface ChatTarget {
+  readonly bot: string
+  readonly platform: string
+  readonly chat: string
+}
+
+export interface Choice {
+  readonly label: string
+  readonly value: string
+}
+
+/** How long a question waits for a press before it counts as no answer. */
+export const ASK_TIMEOUT_MS = 5 * 60_000
+
 export interface GatewayController {
-  /** Stops listening and every turn from a chat. */
+  /** Stops listening and every turn from a chat; questions still waiting get no answer. */
   stop: () => void
+  /**
+   * Sends `question` with a button per choice, and resolves with the value of
+   * the one pressed; `undefined` when nothing valid was pressed in time, or
+   * the question could not be sent.
+   */
+  ask: (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs?: number) => Promise<string | undefined>
   /** Chats with a turn running, for tests and the panel. */
   busy: () => string[]
 }
@@ -87,11 +113,53 @@ interface ChatState {
 
 const TYPING_EVERY_MS = 4_000
 
+interface Question {
+  readonly key: string
+  readonly choices: readonly Choice[]
+  readonly answer: (value: string | undefined) => void
+}
+
+/** 16 hex characters from the platform's random source: what a button's data start with. */
+function nonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
 export async function startGatewayController(deps: GatewayControllerDeps): Promise<GatewayController> {
   const now = deps.now ?? Date.now
   const warn = deps.warn ?? ((line: string) => console.warn(line))
   const chats = new Map<string, ChatState>()
+  const questions = new Map<string, Question>()
   let closed = false
+
+  /** A press: the answer to a question still waiting in that chat, or nothing. */
+  const press = (message: GatewayMessage) => {
+    const [id, index] = message.text.split(":")
+    const question = id ? questions.get(id) : undefined
+    if (!question || question.key !== sessionKey(message.bot, message.platform, message.chat)) return
+    const choice = question.choices[Number(index)]
+    if (!choice || String(Number(index)) !== index) return
+    question.answer(choice.value)
+  }
+
+  const ask = (target: ChatTarget, question: string, choices: readonly Choice[], timeoutMs = ASK_TIMEOUT_MS) =>
+    new Promise<string | undefined>((resolve) => {
+      if (closed || choices.length === 0) return resolve(undefined)
+      const id = nonce()
+      const timer = setTimeout(() => answer(undefined), timeoutMs)
+      // Once: whichever comes first — a press, the timeout, the stop — ends it.
+      const answer = (value: string | undefined) => {
+        if (!questions.delete(id)) return
+        clearTimeout(timer)
+        resolve(value)
+      }
+      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), choices, answer })
+      const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
+      deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
+        warn(`ADE: domanda del gateway non mandata (${target.platform}): ${error instanceof Error ? error.message : String(error)}`)
+        answer(undefined)
+      })
+    })
 
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
@@ -184,8 +252,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
 
   const receive = async (message: GatewayMessage) => {
     if (closed) return
-    // Buttons answer questions a turn asks (G5): none is asked yet.
-    if (message.button) return
+    // A press answers a question; it never starts a turn.
+    if (message.button) return press(message)
     const key = sessionKey(message.bot, message.platform, message.chat)
     const which = chatCommand(message.text)
     if (which) return command(message, key, which)
@@ -218,7 +286,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         state.queue.length = 0
         state.turn?.stop()
       }
+      for (const question of [...questions.values()]) question.answer(undefined)
     },
+    ask,
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
   }
 }
