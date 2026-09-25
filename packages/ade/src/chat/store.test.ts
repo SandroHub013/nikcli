@@ -189,6 +189,21 @@ describe("the chat's store", () => {
     expect(store.state.data.question.ses_1).toBeUndefined()
   })
 
+  test("an event the chat cannot read is skipped: the stream stays, the next event is applied", async () => {
+    const server = fakeServer()
+    const { store, sleeps } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    server.stream().push({ type: "message.updated", properties: {} })
+    server.stream().push({ type: "message.part.updated", properties: { part: null } })
+    server.stream().push({ type: "message.updated", properties: { info: assistant("msg_1") } })
+    await until("il messaggio dopo", () => store.state.data.message.ses_1?.length === 1)
+    expect(server.streams).toHaveLength(1)
+    expect(server.aborted).toEqual([])
+    expect(sleeps).toEqual([])
+    expect(store.state.status).toBe("live")
+  })
+
   test("opening the folder already open changes nothing", async () => {
     const server = fakeServer()
     const { store } = storeOn(server)

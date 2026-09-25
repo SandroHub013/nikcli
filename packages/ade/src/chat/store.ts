@@ -27,7 +27,7 @@
 import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { appChatConnectionDeps, isChatRefused, openChat, type ChatConnection } from "./connection"
-import { applyChatEvent, emptyChatData, type ChatData } from "./events"
+import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -115,6 +115,15 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   /** Sessions whose messages are shown, reloaded after a reconnection. */
   const watched = new Set<string>()
 
+  /** Applies an event; one the reducer cannot read is skipped, not a reason to reconnect. */
+  function apply(event: ChatEvent): ChatEventOutcome {
+    try {
+      return applyChatEvent(event, state.data, setData)
+    } catch {
+      return undefined
+    }
+  }
+
   const refuse = (mine: number, error: unknown) => {
     if (mine !== generation) return
     setState({ status: "refused", problem: error instanceof Error ? error.message : undefined })
@@ -180,7 +189,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
           }
           // The server drops a client too far behind: what it missed is lost, so start over.
           if (event.type === "server.error") break
-          if (applyChatEvent(event, state.data, setData) === "resync") {
+          if (apply(event) === "resync") {
             void bootstrap(connection, mine).then((loaded) => loaded || stopRound())
           }
         }
