@@ -168,6 +168,54 @@ function tryParse(text: string): unknown {
 }
 
 /**
+ * What to say when the planner's own call could not be made.
+ *
+ * The provider's message is not what the user hears. It arrives in English or
+ * as a code nobody can act on - "il servizio ha risposto 429" tells a person
+ * standing at the microphone nothing - and a fetch failure arrives as
+ * `TypeError: fetch failed`. What is said instead is a sentence in Italian
+ * that names the situation and, where there is one, what to do about it.
+ *
+ * A missing key keeps the message this module writes itself: it is already a
+ * sentence for the user and it points at the settings.
+ *
+ * `undefined` means there is nothing to say: the user pressed «annulla», so
+ * the one thing wrong is that something is being said at all.
+ */
+export function plannerFailure(error: unknown): string | undefined {
+  const name = error instanceof Error ? error.name : ""
+  const raw = error instanceof Error ? error.message : String(error ?? "")
+  // Case and punctuation vary between runtimes, and the message is the only
+  // thing a fetch failure has.
+  const text = raw.toLowerCase()
+
+  // Our own two sentences, already written for the user.
+  if (raw.startsWith("Manca la chiave") || raw.startsWith("Risposta del servizio")) return raw
+
+  // A timeout is read before a cancellation, because a timed-out fetch is
+  // aborted too and says so: only the name tells the two apart. Neither is a
+  // user cancellation, and a user cancellation is not a failure to report.
+  if (name === "TimeoutError" || (!name.includes("Abort") && /\btimed? ?out\b|timeout/.test(text))) {
+    return "Non ho raggiunto il servizio in tempo. Riprova fra un momento."
+  }
+  if (name === "AbortError" || text.includes("operation was aborted")) return undefined
+
+  if (/\b429\b|rate limit|too many requests/.test(text)) {
+    return "Il servizio ha ricevuto troppe richieste in poco tempo. Riprova fra un momento."
+  }
+  if (/\b40[13]\b|unauthorized|forbidden|api[- ]?key|invalid.*key/.test(text)) {
+    return "La chiave del servizio non è valida. Puoi correggerla nelle impostazioni della voce."
+  }
+  if (/\b5\d\d\b|internal server error|bad gateway|service unavailable|overloaded/.test(text)) {
+    return "Il servizio ha risposto con un errore. Riprova fra un momento."
+  }
+  if (/fetch failed|network|econnrefused|econnreset|enotfound|eai_again|socket|dns|certificate|unable to/.test(text)) {
+    return "Non ho raggiunto il servizio. Controlla la connessione e riprova."
+  }
+  return "Non sono riuscito a ottenere un piano. Riprova fra un momento."
+}
+
+/**
  * Plans one utterance. Never throws: every failure becomes something to say.
  */
 export async function planUtterance(
@@ -182,11 +230,8 @@ export async function planUtterance(
   try {
     answer = await complete({ ...prompt, signal: options.signal })
   } catch (error) {
-    return {
-      steps: [],
-      refusals: [],
-      failure: error instanceof Error ? error.message : "Non sono riuscito a interpretare la frase.",
-    }
+    const failure = plannerFailure(error)
+    return failure ? { steps: [], refusals: [], failure } : { steps: [], refusals: [] }
   }
 
   const raw = extractJson(answer)

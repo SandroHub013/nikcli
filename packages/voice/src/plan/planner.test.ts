@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildPlannerPrompt, createOpenRouterCompletion, extractJson, planUtterance } from "./planner"
+import { buildPlannerPrompt, createOpenRouterCompletion, extractJson, plannerFailure, planUtterance } from "./planner"
 import type { PlanContext } from "./schema"
 
 const context: PlanContext = {
@@ -171,5 +171,71 @@ describe("createOpenRouterCompletion", () => {
     expect(authorizations).toEqual(["Bearer key"])
     expect(sent?.usage).toEqual({ include: true })
     expect(usage).toEqual({ cost: 0.002 })
+  })
+})
+
+describe("plannerFailure", () => {
+  /*
+   * Il messaggio del provider finiva a voce. «Il servizio ha risposto 429» non
+   * dice niente a chi sta al microfono, e un fetch fallito arriva come
+   * `TypeError: fetch failed`.
+   */
+  test("un codice del servizio diventa una frase che dice cosa fare", () => {
+    const said = plannerFailure(new Error("Il servizio ha risposto 429."))
+    expect(said).toContain("troppe richieste")
+    expect(said).toMatch(/riprova/i)
+    expect(said).not.toContain("429")
+  })
+
+  test("una chiave rifiutata dice dove correggarla, senza nome del servizio né chiave", () => {
+    const said = plannerFailure(new Error("401 Unauthorized"))
+    expect(said).toContain("chiave")
+    expect(said).toContain("impostazioni")
+    expect(said).not.toMatch(/openrouter|bearer|sk-/i)
+  })
+
+  test("un errore del servizio e una rete che non c'è si distinguono", () => {
+    expect(plannerFailure(new Error("Il servizio ha risposto 503."))).toContain("errore")
+    const rete = plannerFailure(new TypeError("fetch failed"))
+    expect(rete).toContain("connessione")
+    expect(rete).not.toContain("fetch")
+  })
+
+  test("un timeout è un timeout, non una cancellazione", () => {
+    const timeout = Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" })
+    expect(plannerFailure(timeout)).toContain("in tempo")
+  })
+
+  test("l'annullamento dell'utente non dice niente", () => {
+    const abort = Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
+    expect(plannerFailure(abort)).toBeUndefined()
+  })
+
+  test("i due messaggi già scritti per l'utente passano come sono", () => {
+    const chiave = "Manca la chiave OpenRouter: aggiungila nelle impostazioni della voce."
+    expect(plannerFailure(new Error(chiave))).toBe(chiave)
+    const formato = "Risposta del servizio in un formato inatteso."
+    expect(plannerFailure(new Error(formato))).toBe(formato)
+  })
+
+  test("un errore che non si sa classificare resta in italiano e non grezzo", () => {
+    const said = plannerFailure("ECONNRESET while reading from socket")
+    expect(said).toBeTypeOf("string")
+    expect(said).not.toContain("ECONNRESET")
+  })
+
+  test("il piano annullato non porta alcun messaggio da dire", async () => {
+    const abort = Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
+    const result = await planUtterance("avvia due sessioni", context, () => Promise.reject(abort))
+    expect(result.failure).toBeUndefined()
+    expect(result.steps).toEqual([])
+  })
+
+  test("un 429 dal provider non viene detto con il suo codice", async () => {
+    const result = await planUtterance("avvia due sessioni", context, () =>
+      Promise.reject(new Error("Il servizio ha risposto 429.")),
+    )
+    expect(result.failure).toBeDefined()
+    expect(result.failure).not.toContain("429")
   })
 })

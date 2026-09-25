@@ -312,7 +312,10 @@ describe("il pianificatore dentro il motore", () => {
     transcriber.emit("orchestrami qualcosa di elaborato", true)
     await settle()
 
-    expect(speaker.lastSpoken).toContain("429")
+    // Dice che non è riuscito, e non il codice del provider: «ha risposto 429»
+    // non dice niente a chi sta al microfono (BASSO 9).
+    expect(speaker.lastSpoken).toContain("troppe richieste")
+    expect(speaker.lastSpoken).not.toContain("429")
 
     await engine.stop()
   })
