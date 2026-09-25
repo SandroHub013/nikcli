@@ -1,0 +1,169 @@
+//! What a chat platform has to do for a bot's gateway, whatever it is.
+//!
+//! One adapter per bot and platform: it owns the connection (a long poll, a
+//! socket) and speaks the platform's API. Everything else — who may write,
+//! which chats may be answered, what the page is told, the secrets taken out
+//! of a reply — is the same for every platform and lives in `hub.rs`.
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+/// The platforms a gateway can connect to. An adapter for each comes in its
+/// own piece (Telegram first); until then enabling one is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Platform {
+    Telegram,
+    Discord,
+    Slack,
+    /// The tests' platform: no network, no token of any real service.
+    #[cfg(test)]
+    Fake,
+}
+
+impl Platform {
+    pub fn id(self) -> &'static str {
+        match self {
+            Platform::Telegram => "telegram",
+            Platform::Discord => "discord",
+            Platform::Slack => "slack",
+            #[cfg(test)]
+            Platform::Fake => "fake",
+        }
+    }
+}
+
+/// Who wrote: the platform's fixed id, never the user name, which can change hands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sender {
+    pub id: String,
+    /// What the platform shows. Untrusted text: for display only.
+    pub name: String,
+    /// Another bot, the gateway's own included. Never answered.
+    pub is_bot: bool,
+}
+
+/// A message as it arrived, before anything decided about it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Inbound {
+    /// The platform's id for the message.
+    pub id: String,
+    pub chat: String,
+    /// A one-to-one chat with the bot. V1 answers nothing else.
+    pub private: bool,
+    pub sender: Sender,
+    pub text: String,
+}
+
+/// What a platform can do beyond sending text.
+// Built by the platforms' adapters, the first of which (Telegram) is its own piece.
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Capabilities {
+    /// Characters per message; longer replies are split (with the platform's adapter).
+    pub max_len: usize,
+    pub edit: bool,
+    pub typing: bool,
+    pub buttons: bool,
+}
+
+// `Transient` and `Fatal` come from the platforms' adapters, the first in its own piece.
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AdapterError {
+    /// The platform has no such operation.
+    Unsupported,
+    /// Worth trying again after a pause: the network, a timeout, a 5xx.
+    Transient(String),
+    /// Not worth trying again: a refused token, a token in use elsewhere.
+    Fatal(String),
+}
+
+impl AdapterError {
+    pub fn message(&self) -> String {
+        match self {
+            AdapterError::Unsupported => "operazione non disponibile su questa piattaforma".into(),
+            AdapterError::Transient(text) | AdapterError::Fatal(text) => text.clone(),
+        }
+    }
+}
+
+/// A platform connection. Errors must not carry the token: the hub also takes
+/// every known secret out of them, but an adapter does not put it there.
+#[async_trait]
+pub trait Adapter: Send + Sync {
+    fn capabilities(&self) -> Capabilities;
+    /// Waits for what arrived since the last call. An empty batch is a quiet
+    /// period (a long poll that timed out), not an error.
+    async fn receive(&self) -> Result<Vec<Inbound>, AdapterError>;
+    /// Sends `text` to `chat` as one message; returns the platform's id for it.
+    async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError>;
+    async fn edit(&self, _chat: &str, _message: &str, _text: &str) -> Result<(), AdapterError> {
+        Err(AdapterError::Unsupported)
+    }
+    /// «Sta scrivendo»; a platform without it does nothing.
+    async fn typing(&self, _chat: &str) -> Result<(), AdapterError> {
+        Ok(())
+    }
+}
+
+/// The tests' adapter: batches go in through a channel, what is sent is kept.
+#[cfg(test)]
+pub mod fake {
+    use super::*;
+    use std::sync::Mutex;
+    use tokio::sync::mpsc;
+
+    pub struct FakeAdapter {
+        inbox: tokio::sync::Mutex<mpsc::UnboundedReceiver<Result<Vec<Inbound>, AdapterError>>>,
+        pub sent: Mutex<Vec<(String, String)>>,
+        pub edited: Mutex<Vec<(String, String, String)>>,
+        pub typing: Mutex<Vec<String>>,
+        pub receives: std::sync::atomic::AtomicUsize,
+    }
+
+    pub type Feed = mpsc::UnboundedSender<Result<Vec<Inbound>, AdapterError>>;
+
+    impl FakeAdapter {
+        pub fn new() -> (std::sync::Arc<FakeAdapter>, Feed) {
+            let (tx, rx) = mpsc::unbounded_channel();
+            let adapter = FakeAdapter {
+                inbox: tokio::sync::Mutex::new(rx),
+                sent: Mutex::new(Vec::new()),
+                edited: Mutex::new(Vec::new()),
+                typing: Mutex::new(Vec::new()),
+                receives: std::sync::atomic::AtomicUsize::new(0),
+            };
+            (std::sync::Arc::new(adapter), tx)
+        }
+    }
+
+    #[async_trait]
+    impl Adapter for FakeAdapter {
+        fn capabilities(&self) -> Capabilities {
+            Capabilities { max_len: 4096, edit: true, typing: true, buttons: false }
+        }
+        async fn receive(&self) -> Result<Vec<Inbound>, AdapterError> {
+            self.receives.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            match self.inbox.lock().await.recv().await {
+                Some(batch) => batch,
+                // The test dropped its feed: wait like a quiet long poll would.
+                None => std::future::pending().await,
+            }
+        }
+        async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError> {
+            let mut sent = self.sent.lock().unwrap();
+            sent.push((chat.into(), text.into()));
+            Ok(format!("m{}", sent.len()))
+        }
+        async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<(), AdapterError> {
+            self.edited.lock().unwrap().push((chat.into(), message.into(), text.into()));
+            Ok(())
+        }
+        async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
+            self.typing.lock().unwrap().push(chat.into());
+            Ok(())
+        }
+    }
+}

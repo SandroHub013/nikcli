@@ -18,6 +18,7 @@ mod append;
 mod browse;
 mod browser_shot;
 mod frontend;
+mod gateway;
 mod media;
 mod project_bytes;
 mod pty;
@@ -1883,6 +1884,7 @@ pub fn run() {
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
         .manage(secrets::SecretsLock::default())
+        .manage(gateway::Gateway::default())
         .manage(stats::Stats::new())
         .manage(tts::Piper::default())
         .manage(usage::UsageCache::default())
@@ -1982,6 +1984,13 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             pty::pty_which,
+            gateway::gateway_status,
+            gateway::gateway_set_token,
+            gateway::gateway_clear_token,
+            gateway::gateway_set_enabled,
+            gateway::gateway_send,
+            gateway::gateway_edit,
+            gateway::gateway_typing,
             serve::nikcli_serve_start,
             serve::nikcli_serve_status,
             serve::nikcli_serve_stop,
@@ -2024,6 +2033,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 use tauri::Manager;
+                app.state::<gateway::Gateway>().shutdown();
                 app.state::<serve::Server>().shutdown();
                 app.state::<frontend::DevServer>().shutdown();
                 app.state::<pty::Registry>().end_all();

@@ -54,8 +54,13 @@ tauri-plugin-clipboard-manager = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
-# Only `time` and `select!`, for the updater's stall watchdog; the runtime is Tauri's.
-tokio = { version = "1", features = ["time", "macros"] }
+# `time` and `select!` for the updater's stall watchdog and the gateways'
+# reading loops, `sync` for their stop signal; the runtime is Tauri's.
+tokio = { version = "1", features = ["time", "macros", "sync"] }
+# The gateways (src/gateway): the platform adapters' trait, and hashing a bot
+# into a keychain name and a token into the check that refuses it twice.
+async-trait = "0.1"
+sha2 = "0.10"
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
 serde_json = "1"
