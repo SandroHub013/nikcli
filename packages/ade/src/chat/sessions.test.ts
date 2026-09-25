@@ -135,5 +135,7 @@ describe("the connection, in words", () => {
       kind: "refused",
     })
     expect(connectionNotice({ directory: "C:/progetto", status: "live" }, "C:/progetto")).toBeUndefined()
+    // The same folder written as Recent or the server write it: open, not «not open».
+    expect(connectionNotice({ directory: "c:/Progetto", status: "live" }, "C:\\progetto\\")).toBeUndefined()
   })
 })

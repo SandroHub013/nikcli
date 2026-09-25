@@ -55,6 +55,14 @@ describe("the chat's first use of a folder", () => {
     expect(isOpenOn(store, A)).toBe(false)
   })
 
+  test("the same folder written another way is the one open: no second opening", async () => {
+    const { store, state, calls } = fakeStore()
+    Object.assign(state, { directory: "C:/Progetto-A", status: "live" })
+    expect(isOpenOn(store, "c:\\progetto-a\\")).toBe(true)
+    expect(await useFolder(store, "c:\\progetto-a\\", () => {})).toBe(true)
+    expect(calls).toEqual(["catalog"])
+  })
+
   test("the view opens a folder only through a use: no open, no catalog, no connection of its own", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")

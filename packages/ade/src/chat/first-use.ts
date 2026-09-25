@@ -6,6 +6,7 @@
  */
 
 import type { ChatCatalog } from "./connection"
+import { folderKey } from "./sessions"
 import type { ChatStore } from "./store"
 
 export type FirstUseStore = Pick<ChatStore, "state" | "open" | "catalog">
@@ -13,7 +14,8 @@ export type FirstUseStore = Pick<ChatStore, "state" | "open" | "catalog">
 /** The folder is open in the store, and not refused: its data can be shown and its catalog read. */
 export function isOpenOn(store: Pick<ChatStore, "state">, root: string | undefined): boolean {
   const { directory, status } = store.state
-  return !!root && directory === root && status !== "idle" && status !== "refused"
+  if (!root || directory === undefined || folderKey(directory) !== folderKey(root)) return false
+  return status !== "idle" && status !== "refused"
 }
 
 /**

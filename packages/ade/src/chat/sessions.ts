@@ -36,8 +36,13 @@ export function isBusy(data: ChatData, sessionID: string): boolean {
   return type === "busy" || type === "retry"
 }
 
-/** A folder as a key: one slash, no trailing one, and a Windows drive path in one case. */
-function folderKey(path: string): string {
+/**
+ * A folder as a key: one slash, no trailing one, and a Windows drive path in
+ * one case. Every place the chat asks «is this the folder?» compares these, so
+ * `C:\x` from Recent and `c:/x` from the server are one folder, not two
+ * openings. UNC and `\\?\` paths keep their case: nikcli does not produce them.
+ */
+export function folderKey(path: string): string {
   const slashes = path.replace(/\\/g, "/").replace(/\/+$/, "")
   return /^[A-Za-z]:\//.test(slashes) ? slashes.toLowerCase() : slashes
 }
@@ -124,7 +129,9 @@ export function connectionNotice(
   root: string | undefined,
 ): ChatNotice | undefined {
   if (!root) return { kind: "noProject" }
-  if (state.directory !== root || state.status === "idle") return { kind: "notOpen" }
+  if (state.directory === undefined || folderKey(state.directory) !== folderKey(root) || state.status === "idle") {
+    return { kind: "notOpen" }
+  }
   switch (state.status) {
     case "admitting":
     case "connecting":
