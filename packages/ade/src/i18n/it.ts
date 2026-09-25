@@ -564,6 +564,8 @@ export const it = {
   "gateway.approve.once": "Sì, questa volta",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
+  "gateway.approve.refused": (permission: string, what: string) =>
+    `Il bot ha chiesto il permesso «${permission}» per:\n${what}\n\nDa remoto non è concesso: ho detto di no.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
   "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",

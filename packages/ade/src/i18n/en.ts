@@ -555,6 +555,8 @@ export const en: Messages = {
   "gateway.approve.once": "Yes, this once",
   "gateway.approve.no": "Refuse",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
+  "gateway.approve.refused": (permission, what) =>
+    `The bot asked for the permission «${permission}» for:\n${what}\n\nNot granted from a chat: I said no.`,
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",
   "browser.design.noBridge": "Inspect didn't start on this variant: the page shows, without selection.",

@@ -340,16 +340,54 @@ describe("the tools of a turn from a chat", () => {
     return { started, runTurn }
   }
 
-  test("with nothing turned on the turn gets no shell and no question is ever asked", async () => {
+  test("with nothing turned on the turn gets no shell", async () => {
     for (const loadBot of [trusted, nikcli]) {
       const b = bridge()
       const turns = typedTurns()
       await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot, sessions: memorySessionStore() })
       b.emit("pulisci la build")
       await until("il turno", () => turns.started.length === 1)
-      const request = turns.started[0]!.request
-      expect(request.remote).toEqual({ commands: false })
-      expect(request.onData).toBeUndefined()
+      expect(turns.started[0]!.request.remote).toEqual({ commands: false })
+    }
+  })
+
+  /*
+   * G5 review, M2: with the commands off nobody was watching nikcli's menu, so
+   * any question (outside the project, a `.env`, a loop) left the turn waiting
+   * until it timed out, «sta scrivendo» on the phone the whole time.
+   */
+  test("with the commands off nikcli's every question is answered no at once, and the chat is told once", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore() })
+    b.emit("leggi i file fuori")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    expect(turn.request.onData).toBeDefined()
+    turn.request.onData!("Permission required: external_directory (C:/Users/me/Documents/*)")
+    expect(turn.keys).toEqual([answerKeys("reject")])
+    await until("l'avviso", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.approve.refused", "external_directory", "C:/Users/me/Documents/*"))
+    // The same permission again: refused again, said once.
+    turn.request.onData!("Permission required: external_directory (D:/altro/*)")
+    turn.request.onData!("Permission required: read (C:/progetto/.env)")
+    expect(turn.keys).toEqual([answerKeys("reject"), answerKeys("reject"), answerKeys("reject")])
+    await until("il secondo avviso", () => b.sent.length === 2)
+    expect(b.sent[1]!.text).toBe(t("gateway.approve.refused", "read", "C:/progetto/.env"))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.questions).toHaveLength(0)
+    expect(b.sent).toHaveLength(2)
+  })
+
+  test("a Claude or Codex turn has nothing to watch", async () => {
+    for (const runner of ["claude", "codex"]) {
+      const b = bridge()
+      const turns = typedTurns()
+      const loadBot = async () => ({ ok: true as const, bot: { ...BOT, runner } })
+      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot, sessions: memorySessionStore() })
+      b.emit("ciao")
+      await until("il turno", () => turns.started.length === 1)
+      expect(turns.started[0]!.request.onData).toBeUndefined()
     }
   })
 
@@ -450,7 +488,6 @@ describe("the tools of a turn from a chat", () => {
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     expect(turns.started[0]!.request.remote).toBe(REMOTE_OFF)
-    expect(turns.started[0]!.request.onData).toBeUndefined()
   })
 })
 

@@ -238,11 +238,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
       const remote = (offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined) ?? REMOTE_OFF
       let turn: Turn | undefined
-      // nikcli stops on its permission menu only when the shell is asked about.
+      // nikcli stops on its permission menu: answered on the phone, or no at once.
       const onData =
-        runner === "nikcli" && remote.commands
+        runner === "nikcli"
           ? permissionWatcher({
               ask: (question, choices, signal) => ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
+              refuse: !remote.commands,
               write: (keys) => turn?.write?.(keys),
               say: (text) => void reply(message, text),
               signal: ended.signal,

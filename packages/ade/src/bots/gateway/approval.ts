@@ -38,12 +38,17 @@ export async function approveOnPhone(
 }
 
 /**
- * Watches a nikcli turn's raw output for its permission menu and answers it
- * from the phone, one question at a time. The returned function takes the
- * output as it comes (`TurnRequest.onData`).
+ * Watches a nikcli turn's raw output for its permission menu and answers it,
+ * one question at a time. The returned function takes the output as it comes
+ * (`TurnRequest.onData`). Every turn from a chat on nikcli has one: with the
+ * remote commands on the question goes to the phone; off, it is answered no
+ * at once and the chat is told what was refused, instead of the turn waiting
+ * on a menu nobody sees until it times out (G5 review, M2).
  */
 export function permissionWatcher(deps: {
   readonly ask: Ask
+  /** Answer no at once, without asking: the bot's remote commands are off. */
+  readonly refuse: boolean
   /** Keystrokes to the turn's CLI. */
   readonly write: (keys: string) => void
   /** A line for the chat, when a question went unanswered. */
@@ -53,11 +58,22 @@ export function permissionWatcher(deps: {
 }): (chunk: string) => void {
   let talk = emptyTalk()
   let asking = false
+  const refused = new Set<string>()
   return (chunk) => {
     if (asking || deps.signal.aborted) return
     talk = noticePermission(talk, chunk, Date.now())
     const pending = talk.permission
     if (!pending) return
+    if (deps.refuse) {
+      deps.write(answerKeys("reject"))
+      // Said once per permission: a bot that keeps trying does not flood the chat.
+      if (!refused.has(pending.permission)) {
+        refused.add(pending.permission)
+        deps.say(t("gateway.approve.refused", pending.permission, pending.patterns.trim() || "?"))
+      }
+      talk = permissionAnswered(talk, Date.now())
+      return
+    }
     asking = true
     void approveOnPhone(pending, deps.ask, deps.signal).then(({ answer, expired }) => {
       if (!deps.signal.aborted) deps.write(answerKeys(answer))
