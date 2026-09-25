@@ -44,7 +44,15 @@ export interface ChatConnectionDeps {
   readonly now?: () => number
 }
 
-export type ChatConnection = { ok: true; client: NikcliClient; directory: string } | { ok: false; problem?: string }
+export type ChatConnection =
+  | {
+      ok: true
+      client: NikcliClient
+      directory: string
+      /** The client's own `fetch`, bound to the folder and its trust: for the event stream (`stream.ts`). */
+      fetch: typeof globalThis.fetch
+    }
+  | { ok: false; problem?: string }
 
 /** A request refused because the user no longer trusts the project: not to be retried. */
 export class ChatRefused extends Error {
@@ -119,13 +127,9 @@ function trustedFetch(
 export async function openChat(directory: string, deps: ChatConnectionDeps): Promise<ChatConnection> {
   const admitted = await deps.admit(directory)
   if (!admitted.ok) return admitted.problem === undefined ? { ok: false } : { ok: false, problem: admitted.problem }
-  const client = createNikcliClient({
-    baseUrl: SERVER_BASE,
-    fetch: boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now), directory),
-    directory,
-    throwOnError: true,
-  })
-  return { ok: true, client, directory }
+  const fetch = boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now), directory)
+  const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch, directory, throwOnError: true })
+  return { ok: true, client, directory, fetch }
 }
 
 /** In the app: the Rust bridge, and the Bots' own trust in the project, with ADE's dialog. */
