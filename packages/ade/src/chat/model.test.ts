@@ -330,27 +330,53 @@ describe("modelsFromProviderList (C3)", () => {
 })
 
 describe("defaultModelChoice (C3)", () => {
-  test("in ADE Test mode the default model is NEVER paid", () => {
-    const testModels = modelsFromProviderList(mockProviderList, { isTest: true })
-    const choice = defaultModelChoice(testModels, mockProviderList, { isTest: true })
+  test("picks the config model if it is free", () => {
+    const models = modelsFromProviderList(mockProviderList, { isTest: false })
+    const choice = defaultModelChoice(models, "google/gemini-2.5-flash:free")
+    expect(choice).toBeDefined()
+    expect(choice!.id).toBe("google/gemini-2.5-flash:free")
+    expect(choice!.free).toBe(true)
+  })
+
+  test("if config model is paid, falls back to the first free model, never paid", () => {
+    const models = modelsFromProviderList(mockProviderList, { isTest: false })
+    const choice = defaultModelChoice(models, "openai/gpt-6-astra-pro")
     expect(choice).toBeDefined()
     expect(choice!.free).toBe(true)
-    expect(choice!.id).toBe("google/gemini-2.5-flash:free")
-  })
-
-  test("in normal mode default is nikcli's default, NEVER server's paid default (A1 / Dario note)", () => {
-    const models = modelsFromProviderList(mockProviderList, { isTest: false })
-    const choice = defaultModelChoice(models, mockProviderList, { isTest: false })
-    expect(choice).toBeDefined()
-    // It must pick nikcli's default ("google/gemini-2.5-flash:free"), NOT OpenRouter's paid default ("openai/gpt-6-astra-pro")!
-    expect(choice!.id).toBe("google/gemini-2.5-flash:free")
     expect(choice!.id).not.toBe("openai/gpt-6-astra-pro")
+    expect(choice!.id).toBe("google/gemini-2.5-flash:free")
   })
 
-  test("fallback models default is also free", () => {
-    const fallback = fallbackModels(true)
-    const choice = defaultModelChoice(fallback, null, { isTest: true })
-    expect(choice?.free).toBe(true)
+  test("if no model is free, returns undefined (no default, send disabled)", () => {
+    const onlyPaidModels = [
+      {
+        id: "paid/model-1",
+        providerID: "p1",
+        name: "Paid 1",
+        providerName: "P1",
+        free: false,
+        cost: { input: 10, output: 20 },
+        label: "Paid 1",
+      },
+      {
+        id: "paid/model-2",
+        providerID: "p2",
+        name: "Paid 2",
+        providerName: "P2",
+        free: false,
+        cost: { input: 5, output: 10 },
+        label: "Paid 2",
+      },
+    ]
+    const choice = defaultModelChoice(onlyPaidModels, "paid/model-1")
+    expect(choice).toBeUndefined()
+
+    const choiceNoCfg = defaultModelChoice(onlyPaidModels)
+    expect(choiceNoCfg).toBeUndefined()
+  })
+
+  test("empty models returns undefined", () => {
+    expect(defaultModelChoice([])).toBeUndefined()
   })
 })
 

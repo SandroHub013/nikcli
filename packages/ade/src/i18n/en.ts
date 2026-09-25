@@ -1211,6 +1211,7 @@ export const en: Messages = {
   "chat.error.fallback": "Something went wrong.",
   "chat.model.label": "Model",
   "chat.model.free": "free",
+  "chat.model.choose": "Choose a model",
   "chat.agent.label": "Agent",
   "chat.new": "New conversation",
   "chat.needKey": "You need an OpenRouter key.",

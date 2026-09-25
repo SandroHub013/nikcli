@@ -348,45 +348,34 @@ export function modelsFromProviderList(
 }
 
 /**
- * Resolves the default model.
- * In ADE Test: ALWAYS a free model, never paid!
- * In normal mode: nikcli's default model (never server's paid default like OpenRouter).
+ * Resolves the default model choice.
+ * Rule: The default is the model from nikcli config (GET /config, field model) IF it is free,
+ * otherwise the first free model, otherwise undefined (none: the Chat asks to choose and Send is disabled).
  */
 export function defaultModelChoice(
   models: readonly ChatModelChoice[],
-  providerList?: ProviderList | null,
-  options?: { isTest?: boolean },
+  configModel?: string | null,
 ): ChatModelChoice | undefined {
   if (models.length === 0) return undefined
 
-  const isTest = options?.isTest ?? false
-
-  if (isTest) {
-    // In ADE Test: default is NEVER paid!
-    const nikcliFree = models.find((m) => m.providerID === "nikcli" && m.free)
-    if (nikcliFree) return nikcliFree
-    const anyFree = models.find((m) => m.free)
-    if (anyFree) return anyFree
-    return models[0]
+  if (configModel) {
+    const match = models.find(
+      (m) =>
+        m.id === configModel ||
+        `${m.providerID}/${m.id}` === configModel ||
+        m.name === configModel,
+    )
+    if (match && match.free) {
+      return match
+    }
   }
-
-  // Normal mode: prefer nikcli's default model, NOT the server default (which might be paid OpenRouter)
-  const nikcliDefaultId = providerList?.default?.["nikcli"]
-  if (nikcliDefaultId) {
-    const match = models.find((m) => m.id === nikcliDefaultId || `${m.providerID}/${m.id}` === nikcliDefaultId)
-    if (match) return match
-  }
-
-  const nikcliFree = models.find((m) => m.providerID === "nikcli" && m.free)
-  if (nikcliFree) return nikcliFree
-
-  const anyNikcli = models.find((m) => m.providerID === "nikcli")
-  if (anyNikcli) return anyNikcli
 
   const firstFree = models.find((m) => m.free)
-  if (firstFree) return firstFree
+  if (firstFree) {
+    return firstFree
+  }
 
-  return models[0]
+  return undefined
 }
 
 /** Extracts selectable agents (excluding subagents and hidden ones). */

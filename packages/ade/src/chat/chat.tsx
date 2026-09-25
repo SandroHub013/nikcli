@@ -99,13 +99,17 @@ function save(state: ChatState) {
   }
 }
 
-function loadStoredModel(models: readonly ChatModelChoice[], isTest: boolean, providerList?: ProviderList): string {
+function loadStoredModel(
+  models: readonly ChatModelChoice[],
+  isTest: boolean,
+  configModel?: string | null,
+): string {
   try {
     const stored = localStorage.getItem(MODEL_KEY)
     const validated = validateSelectedModel(stored, models, isTest)
     if (validated) return validated
   } catch {}
-  return defaultModelChoice(models, providerList, { isTest })?.id ?? DEFAULT_FALLBACK_MODEL
+  return defaultModelChoice(models, configModel)?.id ?? ""
 }
 
 function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
@@ -129,7 +133,7 @@ export function Chat(props: ChatProps) {
   const [draft, setDraft] = createSignal("")
   const [models, setModels] = createSignal<readonly ChatModelChoice[]>(initialModels())
   const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(initialAgents())
-  const [model, setModel] = createSignal<string>(loadStoredModel(models(), isTest(), props.providerList))
+  const [model, setModel] = createSignal<string>(loadStoredModel(models(), isTest()))
   const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
   const [busy, setBusy] = createSignal(false)
 
@@ -171,7 +175,7 @@ export function Chat(props: ChatProps) {
     const resolvedAgents = agentsFromList(aList)
     setAgents(resolvedAgents)
 
-    setModel((current) => validateSelectedModel(current, resolvedModels, testBuild) ?? loadStoredModel(resolvedModels, testBuild, pList))
+    setModel((current) => validateSelectedModel(current, resolvedModels, testBuild) ?? loadStoredModel(resolvedModels, testBuild, cfgModel))
     setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
 
     composer?.focus()
@@ -202,7 +206,8 @@ export function Chat(props: ChatProps) {
 
   const send = async () => {
     const text = draft().trim()
-    if (!text || busy()) return
+    const currentModel = model()
+    if (!text || !currentModel || busy()) return
 
     const now = Date.now()
     const question: ChatMessage = { id: `u${now}`, role: "user", text, at: now }
@@ -220,8 +225,6 @@ export function Chat(props: ChatProps) {
     inFlight = controller
 
     try {
-      // The Chat ALWAYS sends the chosen model, never server default!
-      const currentModel = model() || DEFAULT_FALLBACK_MODEL
       await streamChat({
         apiKey: props.apiKey,
         model: currentModel,
@@ -255,7 +258,8 @@ export function Chat(props: ChatProps) {
   }
 
   const chooseModel = (id: string) => {
-    const validated = validateSelectedModel(id, models(), isTest()) ?? id
+    const validated = validateSelectedModel(id, models(), isTest())
+    if (!validated) return
     setModel(validated)
     try {
       localStorage.setItem(MODEL_KEY, validated)
@@ -276,7 +280,9 @@ export function Chat(props: ChatProps) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      void send()
+      if (model()) {
+        void send()
+      }
     }
   }
 
@@ -298,12 +304,17 @@ export function Chat(props: ChatProps) {
 
           <select
             data-slot="chat-model"
-            value={model()}
+            value={model() || ""}
             onChange={(event) => chooseModel(event.currentTarget.value)}
             aria-label={t("chat.model.label")}
           >
+            <Show when={!model()}>
+              <option value="" disabled selected>
+                {t("chat.model.choose")}
+              </option>
+            </Show>
             <For each={models()}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
-            <Show when={!models().some((entry) => entry.id === model())}>
+            <Show when={model() && !models().some((entry) => entry.id === model())}>
               <option value={model()}>{model()}</option>
             </Show>
           </select>
@@ -356,7 +367,12 @@ export function Chat(props: ChatProps) {
         <Show
           when={busy()}
           fallback={
-            <button type="button" data-slot="chat-send" disabled={!draft().trim()} onClick={() => void send()}>
+            <button
+              type="button"
+              data-slot="chat-send"
+              disabled={!draft().trim() || !model()}
+              onClick={() => void send()}
+            >
               {t("chat.send")}
             </button>
           }

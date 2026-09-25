@@ -1222,6 +1222,7 @@ export const it = {
   "chat.error.fallback": "Qualcosa è andato storto.",
   "chat.model.label": "Modello",
   "chat.model.free": "gratis",
+  "chat.model.choose": "Scegli un modello",
   "chat.agent.label": "Agente",
   "chat.new": "Nuova conversazione",
   "chat.needKey": "Serve una chiave OpenRouter.",
