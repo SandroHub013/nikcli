@@ -359,6 +359,11 @@ export function withAlways(always: Always, ...keys: readonly string[]): string[]
  * for Bash and for PowerShell. `-p` cannot ask mid-turn, so what would be a
  * question is a refusal the thread reports. Without `always` (the voice),
  * only the block list.
+ *
+ * Weak by construction (B8c review, BASSO 1): a prefix does not see
+ * `rm -r -f /`, `bash -c "…"` or `git -C x push --force`. It is a defence
+ * more, not a block list: a Claude Code bot's boundary is the tools it is
+ * given, and Bash only where it needs it (`runners.ts`).
  */
 export function claudeRefusals(always?: Always): string[] {
   const rules = [...BLOCKED, ...(always ? DANGEROUS.filter((rule) => !always.includes(rule.id)) : [])]
