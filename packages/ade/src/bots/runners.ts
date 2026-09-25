@@ -231,7 +231,7 @@ const notStdin = (prompt: string) => (prompt.trim() === "-" ? " -" : prompt)
 export function turnCommand(
   runner: Runner,
   spec: TurnSpec,
-): { readonly command: string; readonly args: string[]; readonly cwd?: string } {
+): { readonly command: string; readonly args: string[]; readonly cwd?: string; readonly flags?: readonly string[] } {
   const { bot, message, sessionId } = spec
   switch (runner.id) {
     case "nikcli":
@@ -244,6 +244,13 @@ export function turnCommand(
           ...(bot.model ? { model: bot.model } : {}),
           ...(bot.effort ? { effort: bot.effort } : {}),
         }),
+        /*
+         * A bot of the user's runs without the project's `.nikcli/` (B3b,
+         * review M1): no plugins from the repository, and no project agent of
+         * the same name taking its place. A project's bot needs that folder
+         * to exist, so it keeps it, behind `project-trust.ts`.
+         */
+        ...(fromRepository(bot) ? {} : { flags: ["no-project-config"] }),
       }
     case "claude": {
       /*

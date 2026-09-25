@@ -377,9 +377,13 @@ export function BotsMain(props: BotsMainProps) {
     }
     const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
 
-    // nikcli also loads the project's own configuration, plugins included (B3b).
+    /*
+     * nikcli also loads the project's own configuration, plugins included
+     * (B3b). A bot of the user's runs without it (`no-project-config` in
+     * `runners.ts`); a project's bot needs it, so the project is asked about.
+     */
     const root = props.projectRoot
-    if (root && runnerById(trusted.runner).id === "nikcli") {
+    if (root && trusted.scope === "project" && runnerById(trusted.runner).id === "nikcli") {
       const project = await admitProject(root, {
         store: localTrustStore(PROJECT_TRUST_KEY),
         surface: () => projectSurface(root, projectFs),

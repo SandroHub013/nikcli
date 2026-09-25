@@ -150,6 +150,30 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     }
 }
 
+/// What a spawn may ask for by name: one fixed variable each, for one agent.
+///
+/// The page never sends variables, only these names (B3b, review M1). A bot of
+/// the user's on nikcli runs with `no-project-config`: without it nikcli loads
+/// the open project's `.nikcli/` — plugins that run as it starts, and an agent
+/// of the same name that takes the bot's place.
+const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1")];
+
+/// The variables `flags` stand for, or why one is refused.
+pub(crate) fn spawn_flag_env(command: &str, flags: &[String]) -> Result<Vec<(&'static str, &'static str)>, String> {
+    let agent = command_stem(command.trim()).to_ascii_lowercase();
+    flags
+        .iter()
+        .map(|flag| {
+            SPAWN_FLAGS
+                .iter()
+                .find(|(name, _, _, _)| *name == flag.as_str())
+                .filter(|(_, only, _, _)| *only == agent)
+                .map(|(_, _, key, value)| (*key, *value))
+                .ok_or_else(|| format!("opzione di avvio non consentita per {command}: {flag}"))
+        })
+        .collect()
+}
+
 /// Variables every terminal ADE opens carries, whatever runs in it.
 ///
 /// `PSExecutionPolicyPreference=Bypass`: the user's choice, D77 A (2026-09-23).
@@ -675,11 +699,17 @@ pub async fn pty_spawn(
      * refuses to when stdin is a terminal. See `src/bots/warm.ts`.
      */
     pipe: Option<bool>,
+    /*
+     * Named switches from `SPAWN_FLAGS`, each one fixed variable for one agent.
+     * Not an environment: the page cannot set anything else through here.
+     */
+    flags: Option<Vec<String>>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
     }
     check_args(&command, &args)?;
+    let flag_env = spawn_flag_env(&command, flags.as_deref().unwrap_or_default())?;
     let pipe = pipe == Some(true);
     if pipe && !is_pipe_command(&command) {
         return Err(format!("{command} non si avvia senza terminale"));
@@ -799,6 +829,9 @@ pub async fn pty_spawn(
     // After the scrub too: a `NIKCLI_SERVICE=1` in the user's shell would
     // otherwise send this pane's tools back to the shared server.
     for (key, value) in agent_env(&command) {
+        builder.env(key, value);
+    }
+    for (key, value) in &flag_env {
         builder.env(key, value);
     }
     // After the scrub as well, so the user's own shell cannot take it back.
@@ -1863,6 +1896,23 @@ mod tests {
         let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
         assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
         assert!(tree_of(999, &rows).is_empty());
+    }
+
+    #[test]
+    fn a_spawn_flag_is_one_fixed_variable_for_one_agent() {
+        let no_project = vec!["no-project-config".to_string()];
+        for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
+            assert_eq!(
+                super::spawn_flag_env(name, &no_project).unwrap(),
+                vec![("NIKCLI_DISABLE_PROJECT_CONFIG", "1")],
+                "{name}"
+            );
+        }
+        // Not for another agent, and nothing that is not on the list.
+        assert!(super::spawn_flag_env("claude", &no_project).is_err());
+        assert!(super::spawn_flag_env("nikcli", &["PATH=C:/x".to_string()]).is_err());
+        assert!(super::spawn_flag_env("nikcli", &["NIKCLI_DISABLE_PROJECT_CONFIG".to_string()]).is_err());
+        assert!(super::spawn_flag_env("nikcli", &[]).unwrap().is_empty());
     }
 
     #[test]

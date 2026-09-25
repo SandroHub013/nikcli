@@ -412,3 +412,25 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
     expect(codex).toContain('sandbox_mode="workspace-write"')
   })
 })
+
+/*
+ * B3b review, M1: nikcli merges the project's `.nikcli/` over the user's own
+ * configuration, so a project agent of the same name took the place of the
+ * user's bot, and the project's plugins ran, with no question asked. A bot of
+ * the user's runs without the project's configuration; a project's bot needs
+ * it, and `project-trust.ts` asks about it.
+ */
+describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
+  test("il bot globale gira con no-project-config, quello di progetto no", () => {
+    const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
+    expect(mine.flags).toEqual(["no-project-config"])
+    const fromRepo = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x" })
+    expect(fromRepo.flags).toBeUndefined()
+  })
+
+  test("Claude Code e Codex non ricevono l'opzione, che vale solo per nikcli", () => {
+    for (const runner of ["claude", "codex"]) {
+      expect(turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags).toBeUndefined()
+    }
+  })
+})

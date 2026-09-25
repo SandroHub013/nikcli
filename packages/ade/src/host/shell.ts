@@ -114,6 +114,12 @@ export interface Host {
      * the values from the system keychain; they never pass through here.
      */
     secrets?: string[]
+    /**
+     * Named switches the host turns into one fixed variable each, for one
+     * agent (`SPAWN_FLAGS` in `pty.rs`). `no-project-config`: nikcli without
+     * the open project's `.nikcli/`.
+     */
+    flags?: readonly string[]
   }) => Promise<SpawnedSession>
 
   // -- API keys (see `src-tauri/src/secrets.rs`) ----------------------------
@@ -443,7 +449,7 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe }) {
+    async spawn({ command, args, cwd, cols, rows, onData, onLine, onExit, link, pane, paneToken, secrets, pipe, flags }) {
       const { invoke } = await import("@tauri-apps/api/core")
       const { listen } = await import("@tauri-apps/api/event")
 
@@ -508,6 +514,7 @@ export async function getHost(): Promise<Host | undefined> {
           paneToken: paneToken ?? null,
           secrets: secrets && secrets.length > 0 ? secrets : null,
           pipe: pipe === true,
+          flags: flags && flags.length > 0 ? [...flags] : null,
         })
       } catch (error) {
         dead = true

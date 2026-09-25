@@ -190,3 +190,23 @@ describe("a CLI that does not start", () => {
     expect(turnsRunning("codex")).toBe(0)
   })
 })
+
+describe("le opzioni di avvio arrivano all'host", () => {
+  test("un bot dell'utente su nikcli parte con no-project-config", async () => {
+    const seen: { flags?: readonly string[] }[] = []
+    let exit: (code: number | null) => void = () => {}
+    const host = {
+      spawn: async (options: { flags?: readonly string[]; onExit: (code: number | null) => void }) => {
+        seen.push({ ...(options.flags ? { flags: options.flags } : {}) })
+        exit = options.onExit
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const turn = runTurn({ runner: "nikcli", message: "ciao", exitGraceMs: 30 }, deps)
+    while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
+    exit(0)
+    await turn.result
+    expect(seen[0]!.flags).toEqual(["no-project-config"])
+  })
+})
