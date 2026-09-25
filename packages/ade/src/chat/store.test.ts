@@ -38,6 +38,9 @@ function fakeServer() {
     messages: {} as Record<string, object[]>,
     permissions: [] as object[],
     questions: [] as object[],
+    status: {} as Record<string, object>,
+    /** Holds the answer to GET /session/status until it settles. */
+    statusGate: undefined as Promise<void> | undefined,
   }
   const reply = (onEvent: (event: ProxyEvent) => void, status: number, body?: unknown) =>
     setTimeout(() => {
@@ -76,7 +79,10 @@ function fakeServer() {
         return id
       }
       if (request.method === "GET" && path === "/session") reply(onEvent, 200, routes.sessions)
-      else if (request.method === "GET" && path === "/session/status") reply(onEvent, 200, {})
+      else if (request.method === "GET" && path === "/session/status") {
+        const status = routes.status
+        void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
+      }
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
       else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
       else if (request.method === "GET" && /^\/session\/[^/]+\/message$/.test(path)) {
@@ -202,6 +208,24 @@ describe("the chat's store", () => {
     expect(server.aborted).toEqual([])
     expect(sleeps).toEqual([])
     expect(store.state.status).toBe("live")
+  })
+
+  test("an event that arrives while the folder loads is not undone by the older list", async () => {
+    const server = fakeServer()
+    let open!: () => void
+    server.routes.statusGate = new Promise((resolve) => (open = resolve))
+    // The server read its status list before the answer started.
+    server.routes.status = {}
+    const { store } = storeOn(server)
+    await store.open(A)
+    await until("lo stream", () => server.streams.length === 1)
+    server.stream().push({ type: "server.connected", properties: {} })
+    await until("il caricamento", () => server.calls("GET", /^\/session\/status$/).length === 1)
+    server.stream().push({ type: "session.status", properties: { sessionID: "ses_1", status: { type: "busy" } } })
+    await until("occupata", () => store.state.data.session_status.ses_1?.type === "busy")
+    open()
+    await until("live", () => store.state.status === "live")
+    expect(store.state.data.session_status.ses_1).toEqual({ type: "busy" })
   })
 
   test("opening the folder already open changes nothing", async () => {

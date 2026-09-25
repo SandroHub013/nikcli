@@ -114,6 +114,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   let current: { connection: Open; stop: AbortController } | undefined
   /** Sessions whose messages are shown, reloaded after a reconnection. */
   const watched = new Set<string>()
+  /** One list per load in flight: the events that arrive while it runs, applied again over what it loaded. */
+  const arriving = new Set<ChatEvent[]>()
 
   /** Applies an event; one the reducer cannot read is skipped, not a reason to reconnect. */
   function apply(event: ChatEvent): ChatEventOutcome {
@@ -140,6 +142,10 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
 
   /** The folder's sessions, their status and the watched messages; false when it did not load. */
   async function bootstrap(connection: Open, mine: number): Promise<boolean> {
+    // What the server lists was read at some point during the fetch: an event
+    // that came meanwhile (an answer starting) may be newer, so it goes again on top.
+    const meanwhile: ChatEvent[] = []
+    arriving.add(meanwhile)
     try {
       const [sessions, status, permissions, questions] = await Promise.all([
         connection.client.session.list({}),
@@ -154,10 +160,14 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       setData("permission", reconcile(bySession((permissions.data ?? []) as unknown as PermissionRequest[])))
       setData("question", reconcile(bySession((questions.data ?? []) as unknown as QuestionRequest[])))
       await Promise.all([...watched].map((id) => fetchMessages(connection, id, mine)))
-      return mine === generation
+      if (mine !== generation) return false
+      for (const event of meanwhile) apply(event)
+      return true
     } catch (error) {
       if (isChatRefused(error)) refuse(mine, error)
       return false
+    } finally {
+      arriving.delete(meanwhile)
     }
   }
 
@@ -189,6 +199,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
           }
           // The server drops a client too far behind: what it missed is lost, so start over.
           if (event.type === "server.error") break
+          for (const list of arriving) list.push(event)
           if (apply(event) === "resync") {
             void bootstrap(connection, mine).then((loaded) => loaded || stopRound())
           }
