@@ -5,10 +5,25 @@ import { createAdeVoiceHost } from "./host"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { limitNotice } from "../bots/terms"
 import { setLocalePreference, resetLocaleForTests } from "../i18n/locale"
+import { runnerById, turnCommand } from "../bots/runners"
 import { createVoiceAgent, resolveVoiceAgentRunner, VOICE_AGENT_DISABLED_TOOLS, VOICE_AGENT_INSTRUCTIONS, VOICE_AGENT_TIMEOUT_MS } from "./agent"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
   ({ agent: { id, label: id, command: id }, availability }) as AgentStatus
+
+function fakeRunner(results: Partial<TurnResult>[]) {
+  const requests: TurnRequest[] = []
+  let stops = 0
+  const runTurn = (request: TurnRequest) => {
+    requests.push(request)
+    const next = results.shift() ?? {}
+    return {
+      result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult),
+      stop: () => stops++,
+    }
+  }
+  return { runTurn, requests, stops: () => stops }
+}
 
 describe("voice/agent", () => {
   test("auto takes the first installed CLI, in subscription order", () => {
@@ -64,20 +79,6 @@ describe("voice/agent", () => {
     void agent.ask({ text: "tre", engine: "claude" })
     expect(requests[2]!.sessionId).toBe("new")
   })
-
-  function fakeRunner(results: Partial<TurnResult>[]) {
-    const requests: TurnRequest[] = []
-    let stops = 0
-    const runTurn = (request: TurnRequest) => {
-      requests.push(request)
-      const next = results.shift() ?? {}
-      return {
-        result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never, ...next } as TurnResult),
-        stop: () => stops++,
-      }
-    }
-    return { runTurn, requests, stops: () => stops }
-  }
 
   test("the fast setting asks Claude Code for Sonnet 5 with little effort, and cli leaves the CLI alone", async () => {
     const runner = fakeRunner([{ text: "a" }, { text: "b" }, { text: "c" }])
@@ -477,5 +478,67 @@ describe("the warm process", () => {
     })
     await agent.ask({ text: "q", engine: "claude", onText: (t) => heard.push(t) })
     expect(heard).toEqual(["Fa", "Fa 4\n\n"])
+  })
+
+  test("dopo B10 l'agente vocale gira in account-plan e perde ANTHROPIC_API_KEY e ANTHROPIC_BASE_URL ereditati", async () => {
+    const runner = fakeRunner([{ text: "risposta vocale" }])
+    const agent = createVoiceAgent({ runTurn: runner.runTurn, statuses: () => undefined, cwd: () => "C:/p" })
+    await agent.ask({ text: "ciao", engine: "claude" })
+
+    const req = runner.requests[0]!
+    expect(req.account).toBeUndefined()
+
+    // Con account non specificato (abbonamento), turnCommand produce flags con account-plan e nessun secret
+    const cmd = turnCommand(runnerById("claude"), {
+      bot: {
+        identifier: "",
+        path: "",
+        scope: "global",
+        description: "",
+        mode: "primary",
+        prompt: req.instructions ?? "",
+        disabledTools: req.disabledTools ?? [],
+        runner: "claude",
+      },
+      message: req.message,
+      account: req.account,
+    })
+    expect(cmd.flags).toEqual(["account-plan"])
+    expect(cmd.secrets).toBeUndefined()
+
+    // Anche per il processo warm preparato per Claude:
+    let preparedReq: TurnRequest | undefined
+    const warmAgent = createVoiceAgent({
+      runTurn: runner.runTurn,
+      warm: {
+        prepare: (r) => {
+          preparedReq = r
+        },
+        run: () => ({ result: Promise.resolve({ status: "done", text: "", tokens: 0, costUsd: 0, talk: {} as never }), stop: () => {} }),
+        forget: () => {},
+        close: () => {},
+      },
+      statuses: () => undefined,
+      cwd: () => "C:/p",
+    })
+    warmAgent.prepare({ engine: "claude", speed: "fast" })
+    expect(preparedReq).toBeDefined()
+    expect(preparedReq!.account).toBeUndefined()
+    const warmCmd = turnCommand(runnerById("claude"), {
+      bot: {
+        identifier: "",
+        path: "",
+        scope: "global",
+        description: "",
+        mode: "primary",
+        prompt: preparedReq!.instructions ?? "",
+        disabledTools: preparedReq!.disabledTools ?? [],
+        runner: "claude",
+      },
+      message: preparedReq!.message,
+      account: preparedReq!.account,
+    })
+    expect(warmCmd.flags).toEqual(["account-plan"])
+    expect(warmCmd.secrets).toBeUndefined()
   })
 })

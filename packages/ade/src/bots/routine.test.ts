@@ -47,14 +47,52 @@ describe("quali routine sono consentite", () => {
     if (claude.allowed) expect(claude.cap.spendCapRequired).toBe(true)
   })
 
-  test("cambiare modo o nome della chiave toglie il consenso", () => {
+  test("cambiare modo o nome della chiave toglie il consenso", async () => {
     const base = { prompt: "fai il punto", runner: "claude", mode: "plan", model: "opus", cap: "8" }
-    const saved = routineConsentHash(base)
+    const saved = await routineConsentHash(base)
     expect(routineConsentHolds(saved, saved)).toBe(true)
-    expect(routineConsentHolds(saved, routineConsentHash({ ...base, mode: "key", key: "lavoro" }))).toBe(false)
-    expect(routineConsentHolds(saved, routineConsentHash({ ...base, mode: "key", key: "altra" }))).toBe(false)
-    const keyed = routineConsentHash({ ...base, mode: "key", key: "lavoro" })
-    expect(routineConsentHolds(keyed, routineConsentHash({ ...base, mode: "key", key: "altra" }))).toBe(false)
+    expect(routineConsentHolds(saved, await routineConsentHash({ ...base, mode: "key", key: "lavoro" }))).toBe(false)
+    expect(routineConsentHolds(saved, await routineConsentHash({ ...base, mode: "key", key: "altra" }))).toBe(false)
+    const keyed = await routineConsentHash({ ...base, mode: "key", key: "lavoro" })
+    expect(routineConsentHolds(keyed, await routineConsentHash({ ...base, mode: "key", key: "altra" }))).toBe(false)
+  })
+
+  test("routineConsentHash con SHA-256 (crypto.subtle): stesso input stesso hash, ogni campo cambiato cambia l'hash, vecchio hash non accettato", async () => {
+    const base = {
+      prompt: "fai il punto",
+      runner: "claude",
+      mode: "plan",
+      model: "opus",
+      cap: "8",
+      key: "lavoro",
+    }
+    const hash1 = await routineConsentHash(base)
+    const hash2 = await routineConsentHash(base)
+
+    // Stesso input: produce lo stesso hash SHA-256 in esadecimale (64 caratteri)
+    expect(hash1).toBe(hash2)
+    expect(hash1).toMatch(/^[0-9a-f]{64}$/)
+    expect(routineConsentHolds(hash1, hash2)).toBe(true)
+
+    // Ogni campo cambiato cambia l'hash:
+    // 1. prompt
+    expect(await routineConsentHash({ ...base, prompt: "altro prompt" })).not.toBe(hash1)
+    // 2. runner
+    expect(await routineConsentHash({ ...base, runner: "codex" })).not.toBe(hash1)
+    // 3. modo
+    expect(await routineConsentHash({ ...base, mode: "key" })).not.toBe(hash1)
+    // 4. nome della chiave
+    expect(await routineConsentHash({ ...base, key: "altra_chiave" })).not.toBe(hash1)
+    expect(await routineConsentHash({ ...base, key: undefined })).not.toBe(hash1)
+    // 5. modello
+    expect(await routineConsentHash({ ...base, model: "sonnet" })).not.toBe(hash1)
+    // 6. tetto
+    expect(await routineConsentHash({ ...base, cap: "10" })).not.toBe(hash1)
+
+    // Un consenso salvato con l'hash vecchio va ridato, non accettato
+    const oldLegacyHash = [base.prompt, base.runner, base.mode, base.model, base.cap, base.key ?? ""].join("\u001f")
+    expect(routineConsentHolds(oldLegacyHash, hash1)).toBe(false)
+    expect(routineConsentHolds(oldLegacyHash, oldLegacyHash)).toBe(false)
   })
 })
 

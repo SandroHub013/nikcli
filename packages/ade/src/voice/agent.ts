@@ -5,8 +5,11 @@
  * signed in with the user's own account — Claude Code with an Anthropic
  * subscription, Codex with ChatGPT, nikcli with its providers — so a spoken
  * request costs the subscription the user already has, not a key billed per
- * call. The turn gets an `ade-msg` identity, which is what lets it list, ask,
- * start and close ADE's sessions: the same hook every session in a pane has.
+ * call. A voice turn runs under the CLI's own sign-in (account-plan): an
+ * ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL inherited from ADE's environment is
+ * not passed on. The turn gets an `ade-msg` identity, which is what lets it
+ * list, ask, start and close ADE's sessions: the same hook every session in a
+ * pane has.
  *
  * The decisions — which CLI, what to tell it, when a conversation continues —
  * are pure and tested here; `createVoiceAgent` only holds the conversation and
