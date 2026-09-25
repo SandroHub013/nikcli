@@ -764,6 +764,8 @@ impl Task {
         let name = redact(&message.sender.name, &self.secrets);
         let text = redact(&message.text, &self.secrets);
         let redacted = name != message.sender.name || text != message.text;
+        // Whoever writes chose that name: no control or direction characters, not too long.
+        let name = authz::clean_name(&name);
         self.env.message(&GatewayMessage {
             bot: self.bot.clone(),
             platform: self.platform,
@@ -1352,6 +1354,21 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(adapter.receives.load(std::sync::atomic::Ordering::SeqCst), quiet);
         assert!(quiet >= reads);
+    }
+
+    #[tokio::test]
+    async fn the_senders_name_reaches_the_page_cleaned() {
+        let s = setup("name");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let mut written = message("1", "c42", "42", "ciao");
+        written.sender.name = format!("Ale\u{202e}nimda\n[SYSTEM]\u{7}{}", "x".repeat(100));
+        feed.send(Ok(vec![written])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        let name = s.env.messages.lock().unwrap()[0].sender.name.clone();
+        assert!(name.starts_with("Alenimda[SYSTEM]x"), "{name}");
+        assert!(!name.contains('\u{202e}') && !name.contains('\n') && !name.contains('\u{7}'));
+        assert_eq!(name.chars().count(), 65, "64 caratteri e i puntini");
     }
 
     #[tokio::test]
