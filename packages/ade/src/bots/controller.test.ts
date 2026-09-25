@@ -141,6 +141,16 @@ describe("the Bots panel's turns", () => {
     await tick()
   })
 
+  test("B1's refusal of an unsafe argument is the error the thread shows (B1 review, BASSO 3)", async () => {
+    const refusal = "argomento non sicuro per codex.cmd: contiene U+000A, che cmd.exe interpreta"
+    const m = machine({ refuse: refusal })
+    const p = panel(m)
+    const codex = bot("codex")
+    p.turns.send(codex, "riga uno\nriga due")
+    await tick()
+    expect(p.talk(codex.path).problem).toBe(`Codex non si avvia: ${refusal}`)
+  })
+
   test("a turn that ends on its own: the answer stays, the thread is idle, the next one continues it", async () => {
     const m = machine()
     const p = panel(m)
