@@ -65,6 +65,17 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
 export const CHAT_ENABLED = false
 export const BOT_ENABLED = true
 
+/**
+ * The Gateway section of a bot's card (G6). Off in a release until the live
+ * test with a real Telegram bot (G8); on in development and ADE Test, where
+ * that test is made.
+ */
+export const GATEWAY_ENABLED = false
+
+export function gatewayVisible(enabled: boolean = GATEWAY_ENABLED, development: boolean = import.meta.env.DEV === true): boolean {
+  return enabled || development
+}
+
 /** Which of the two switchable sections are on. */
 export interface SectionSwitches {
   readonly chat: boolean

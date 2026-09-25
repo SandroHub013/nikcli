@@ -1994,6 +1994,7 @@ pub fn run() {
             gateway::gateway_status,
             gateway::gateway_set_token,
             gateway::gateway_clear_token,
+            gateway::gateway_probe,
             gateway::gateway_set_enabled,
             gateway::gateway_send,
             gateway::gateway_edit,

@@ -31,11 +31,11 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
-import { askDialog } from "../host/ask"
+import { askDialog, askYesNo } from "../host/ask"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
-import { runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
+import { generationSpend, runnerAccount, runnerById, RUNNERS, spendKind, spendLine, type Runner, type SpendKind } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
@@ -66,6 +66,10 @@ import {
   type Talk,
   type TalkMessage,
 } from "./talk"
+import { gatewayVisible } from "../surface/state"
+import { appGatewayPanelDeps } from "./gateway/bridge"
+import { GatewaySection } from "./gateway/panel"
+import type { GatewayPanelDeps } from "./gateway/panel-state"
 import "./bots.css"
 
 /*
@@ -193,13 +197,13 @@ const shared = createRoot(() => {
    */
   createEffect(on(projectRoot, (root) => {
     const next = root ?? ""
+    // Project bots are recognised from their path, so this runs with no project open too.
+    if (!legacyMoved) {
+      legacyMoved = true
+      migrateTalkKeys(talkDisk, next)
+    }
     if (next === openProject) return
     openProject = next
-    // The first real project, not the empty value the signal starts with: a global bot's old thread lands here.
-    if (!legacyMoved && root !== undefined) {
-      legacyMoved = true
-      migrateTalkKeys(talkDisk, next ? [next] : [], next)
-    }
     setTalks((all) => {
       const kept: Record<string, Talk> = {}
       for (const [path, talk] of Object.entries(all)) {
@@ -466,6 +470,12 @@ export function BotsMain(props: BotsMainProps) {
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
 
+  // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
+  const gateway =
+    gatewayVisible() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
+      ? appGatewayPanelDeps(() => props.projectRoot)
+      : undefined
+
   const stop = (bot: AgentFile) => turns.stop(bot)
 
   /** A fresh thread: the session id goes with it, so the model starts over too. */
@@ -521,6 +531,7 @@ export function BotsMain(props: BotsMainProps) {
               talk={talkOf(bot().path)}
               models={models() ?? []}
               expression={expression(bot())}
+              {...(gateway ? { gateway } : {})}
               {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
               onForget={() => forget(bot())}
@@ -769,10 +780,18 @@ function Thread(props: {
           }}
         />
         <span data-slot="bots-composer-cap">
-          <Show when={props.talk.tokens > 0}>
-            {t("bots.tokens", formatCount(props.talk.tokens))}
-            <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
+          <Show when={props.talk.lastTurn}>
+            {(turn) => (
+              <>
+                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                {" · "}
+                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+                {" · "}
+              </>
+            )}
           </Show>
+          {t("bots.conversation.total")}{" "}
+          <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
         </span>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy() || draft().trim().length === 0}>
           {t("bots.send")}
@@ -814,8 +833,34 @@ function formatCount(n: number): string {
   return String(n)
 }
 
-function formatUsd(usd: number): string {
-  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
+function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" | "bots.spend.metered" {
+  if (kind === "plan") return "bots.spend.plan"
+  if (kind === "free") return "bots.spend.free"
+  if (kind === "metered") return "bots.spend.metered"
+  return "bots.spend.api"
+}
+
+function Figures(props: { runner?: string; model?: string; tokens: number; costUsd: number }) {
+  const line = () => spendLine({ runnerId: props.runner, model: props.model, tokens: props.tokens, costUsd: props.costUsd })
+  return (
+    <>
+      <Show when={props.tokens > 0}>{t("bots.tokens", formatCount(props.tokens))}</Show>
+      <Show when={line().usd}>
+        {(usd) => (
+          <>
+            {props.tokens > 0 ? " · " : ""}
+            {usd()}
+          </>
+        )}
+      </Show>
+    </>
+  )
+}
+
+function generationNotice(model: string): string {
+  const spend = generationSpend(model)
+  if (!spend.model) return t("bots.form.generateCostDefault")
+  return spend.paid ? t("bots.form.generateCostPaid", spend.model) : t("bots.form.generateCostFree", spend.model)
 }
 
 /* ── the card ───────────────────────────────────────────────────────────── */
@@ -825,6 +870,8 @@ function BotCard(props: {
   talk: Talk
   models: readonly string[]
   expression: Expression
+  /** The Gateway section's dependencies; absent, no section. */
+  gateway?: Omit<GatewayPanelDeps, "bot">
   onLaunch?: (bot: AgentFile) => void
   onOpenFile?: (path: string) => void
   onForget: () => void
@@ -860,6 +907,8 @@ function BotCard(props: {
         <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
         <span data-slot="bots-card-meta">
           {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
+          {" · "}
+          {t(spendKey(spendKind(props.bot.runner, props.bot.model)))}
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
           {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
@@ -911,12 +960,19 @@ function BotCard(props: {
           <span data-slot="bots-label">{t("bots.card.conversation")}</span>
           <span data-slot="bots-card-stat">
             {t("bots.card.messages", props.talk.messages.length)}
-            <Show when={props.talk.tokens > 0}>
-              {" "}
-              · {t("bots.tokens", formatCount(props.talk.tokens))}
-            </Show>
-            <Show when={props.talk.costUsd > 0}> · {formatUsd(props.talk.costUsd)}</Show>
+            {" · "}
+            {t("bots.conversation.total")}{" "}
+            <Figures runner={props.bot.runner} model={props.bot.model} tokens={props.talk.tokens} costUsd={props.talk.costUsd} />
           </span>
+          <Show when={props.talk.lastTurn}>
+            {(turn) => (
+              <span data-slot="bots-card-stat">
+                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
+                {" · "}
+                <Figures runner={props.bot.runner} model={turn().model} tokens={turn().tokens} costUsd={turn().costUsd} />
+              </span>
+            )}
+          </Show>
           <Show when={props.talk.sessionId}>
             {(sessionId) => (
               <span data-slot="bots-card-path" title={sessionId()}>
@@ -930,6 +986,14 @@ function BotCard(props: {
             </button>
           </Show>
         </section>
+
+        <Show when={props.gateway}>
+          {(deps) => (
+            <Show when={props.bot.path} keyed>
+              <GatewaySection bot={props.bot} deps={deps()} />
+            </Show>
+          )}
+        </Show>
 
         <section data-slot="bots-card-section">
           <span data-slot="bots-label">{t("bots.card.file")}</span>
@@ -1022,6 +1086,14 @@ function BotForm(props: {
     if (!generating() && name().trim().length === 0) {
       setProblem(t("bots.form.problemName"))
       return
+    }
+
+    if (generating()) {
+      const yes = await askYesNo(generationNotice(model()), {
+        ok: t("bots.form.generateWithNikcli"),
+        cancel: t("bots.form.cancel"),
+      })
+      if (!yes) return
     }
 
     setProblem(undefined)
@@ -1149,6 +1221,10 @@ function BotForm(props: {
       </label>
 
       <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+
+      <Show when={generating()}>
+        <p data-slot="bots-hint">{generationNotice(model())}</p>
+      </Show>
 
       <div data-slot="bots-form-actions">
         <button type="button" data-slot="bots-btn" onClick={() => props.onCancel()} disabled={busy()}>

@@ -312,6 +312,26 @@ describe("storage", () => {
     expect(disk.get(keyA)).not.toContain("sk-")
   })
 
+  test("the last turn keeps its own tokens and the model the event named", () => {
+    let talk = sendMessage(emptyTalk(), "uno", T0)
+    talk = applyLine(
+      talk,
+      event("step_start", { part: { type: "step-start", model: { providerID: "openai", modelID: "gpt-5" } } }),
+      T0,
+    )
+    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 10, output: 2 }, cost: 0.01 } }), T0)
+    expect(talk.tokens).toBe(12)
+    expect(talk.costUsd).toBeCloseTo(0.01)
+    expect(talk.lastTurn).toEqual({ model: "openai/gpt-5", tokens: 12, costUsd: 0.01 })
+    talk = sendMessage(talk, "due", T0 + 1)
+    talk = applyLine(talk, event("step_finish", { part: { reason: "stop", tokens: { input: 4, output: 1 }, cost: 0.002 } }), T0 + 2)
+    expect(talk.tokens).toBe(17)
+    expect(talk.costUsd).toBeCloseTo(0.012)
+    expect(talk.lastTurn).toEqual({ tokens: 5, costUsd: 0.002 })
+    expect(parseTalk(serializeTalk(talk)).lastTurn).toEqual({ tokens: 5, costUsd: 0.002 })
+    expect(parseTalk(serializeTalk(talk)).tokens).toBe(17)
+  })
+
   test("a bot message that repeats a key does not keep it", () => {
     const key = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
     const talk = appendMessage(emptyTalk(), { role: "bot", text: `ho letto ${key}` }, T0)
@@ -373,7 +393,7 @@ describe("old thread keys", () => {
         updatedAt: 2,
       }),
     })
-    migrateTalkKeys(disk, ["C:/proj"], "C:/proj")
+    migrateTalkKeys(disk, "C:/proj")
     expect(disk.data.has(old)).toBe(false)
     const next = disk.data.get(talkKey(path, "C:/proj"))
     expect(next).toBeDefined()
@@ -394,7 +414,7 @@ describe("old thread keys", () => {
         updatedAt: 1,
       }),
     })
-    migrateTalkKeys(disk, ["C:/proj"], "C:/proj")
+    migrateTalkKeys(disk, "C:/proj")
     expect(disk.data.has(old)).toBe(false)
     const stored = parseTalk(disk.data.get(talkKey(path, "C:/proj")))
     expect(stored.sessionId).toBeUndefined()
@@ -408,8 +428,72 @@ describe("old thread keys", () => {
     disk.setItem = () => {
       throw new Error("piena")
     }
-    migrateTalkKeys(disk, [], "")
+    migrateTalkKeys(disk, "")
     expect(disk.data.has(old)).toBe(false)
+  })
+
+  test("a bot from another project keeps that project's root and its session", () => {
+    const path = "C:/repo-A/.nikcli/agent/x.md"
+    const old = `${TALK_KEY_PREFIX}${path}`
+    const disk = memoryDisk({
+      [old]: JSON.stringify({
+        sessionId: "ses_a",
+        messages: [{ id: "u-1", role: "user", text: "ciao", at: 1 }],
+        tokens: 0,
+        costUsd: 0,
+        updatedAt: 1,
+      }),
+    })
+    migrateTalkKeys(disk, "C:/repo-B")
+    expect(disk.data.has(old)).toBe(false)
+    expect(disk.data.has(talkKey(path, "C:/repo-B"))).toBe(false)
+    const stored = parseTalk(disk.data.get(talkKey(path, "C:/repo-A")))
+    expect(stored.sessionId).toBe("ses_a")
+    expect(stored.messages).toHaveLength(1)
+  })
+
+  test("the agents spelling is a project too, and a closed window still migrates", () => {
+    const path = "D:\\work\\app\\.nikcli\\agents\\team\\bot.md"
+    const globalPath = "C:/Users/me/AppData/Roaming/nikcli/agent/revisore.md"
+    const disk = memoryDisk({
+      [`${TALK_KEY_PREFIX}${path}`]: JSON.stringify({
+        sessionId: "ses_app",
+        messages: [{ id: "u-1", role: "user", text: "a", at: 1 }],
+        tokens: 0,
+        costUsd: 0,
+        updatedAt: 1,
+      }),
+      [`${TALK_KEY_PREFIX}${globalPath}`]: JSON.stringify({
+        sessionId: "ses_global",
+        messages: [{ id: "u-2", role: "user", text: "b", at: 2 }],
+        tokens: 0,
+        costUsd: 0,
+        updatedAt: 2,
+      }),
+    })
+    migrateTalkKeys(disk, "")
+    expect(parseTalk(disk.data.get(talkKey(path, "D:\\work\\app"))).sessionId).toBe("ses_app")
+    const globalTalk = parseTalk(disk.data.get(talkKey(globalPath, "")))
+    expect(globalTalk.sessionId).toBeUndefined()
+    expect(globalTalk.messages).toHaveLength(1)
+  })
+
+  test("the old key is removed before the new one is written", () => {
+    const path = "C:/repo-A/.nikcli/agent/x.md"
+    const old = `${TALK_KEY_PREFIX}${path}`
+    const disk = memoryDisk({
+      [old]: JSON.stringify({ sessionId: "s", messages: [], tokens: 0, costUsd: 0, updatedAt: 1 }),
+    })
+    let wroteWhileOldRemained = false
+    const write = disk.setItem.bind(disk)
+    disk.setItem = (key, value) => {
+      if (disk.data.has(old)) wroteWhileOldRemained = true
+      write(key, value)
+    }
+    migrateTalkKeys(disk, "")
+    expect(wroteWhileOldRemained).toBe(false)
+    expect(disk.data.has(old)).toBe(false)
+    expect(disk.data.has(talkKey(path, "C:/repo-A"))).toBe(true)
   })
 })
 

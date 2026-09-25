@@ -81,6 +81,8 @@ describe("record/sensitive", () => {
     const noti = [
       { file: "secrets/keys-section.tsx", che: "la lista delle chiavi salvate (coda mascherata, variabile)" },
       { file: "secrets/keys-section.tsx", che: "il form: nome, variabile d'ambiente, valore" },
+      { file: "bots/gateway/panel.tsx", che: "il token del bot per il gateway (G6)" },
+      { file: "bots/gateway/panel.tsx", che: "il codice di abbinamento (G6-bis)" },
     ]
     for (const { file, che } of noti) {
       const text = readFileSync(join(src, file), "utf8")
@@ -89,6 +91,9 @@ describe("record/sensitive", () => {
     // Two zones in that file: the list and the form.
     const keys = readFileSync(join(src, "secrets/keys-section.tsx"), "utf8")
     expect(keys.split(SECRET_ZONE_ATTRIBUTE).length - 1).toBeGreaterThanOrEqual(2)
+    // And two in the gateway's: the token and the pairing code.
+    const gateway = readFileSync(join(src, "bots/gateway/panel.tsx"), "utf8")
+    expect(gateway.split(SECRET_ZONE_ATTRIBUTE).length - 1).toBeGreaterThanOrEqual(2)
   })
 
   test("nessun campo password vive fuori da una zona marcata senza essere coperto", () => {
@@ -100,7 +105,7 @@ describe("record/sensitive", () => {
     const conPassword = sources()
       .filter((path) => /type="password"|autocomplete="(new|current)-password"/.test(readFileSync(path, "utf8")))
       .map((path) => path.slice(src.length + 1).replace(/\\/g, "/"))
-    expect(conPassword).toEqual(["secrets/keys-section.tsx"])
+    expect(conPassword).toEqual(["bots/gateway/panel.tsx", "secrets/keys-section.tsx"])
   })
 
   test("a take covers them and the end of the take uncovers them", () => {

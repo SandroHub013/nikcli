@@ -22,13 +22,17 @@ import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
+import { PLAN_RUNNERS } from "./terms"
 import {
   appendMessage,
   applyJsonLine,
   applyLine,
   attachOutput,
   errorText,
+  noteTurnUsage,
+  noteReportedModel,
   runArgs,
+  sealTurn,
   type Talk,
 } from "./talk"
 
@@ -90,6 +94,70 @@ export const RUNNERS: readonly Runner[] = [
     status: ["login", "status"],
   },
 ]
+
+/**
+ * How a turn is paid for.
+ *
+ * `plan` is Claude Code or Codex: the CLI may print a dollar figure, and it
+ * is not a charge on a card. `free` is a model whose id ends in `:free`.
+ * `api` is a named nikcli model. No model at all is `metered`: the default
+ * can be paid, and calling it an API key would be a guess.
+ */
+export type SpendKind = "plan" | "api" | "free" | "metered"
+
+export function isFreeModel(model?: string | undefined): boolean {
+  return typeof model === "string" && /:free$/i.test(model.trim())
+}
+
+export function spendKind(runnerId?: string | undefined, model?: string | undefined): SpendKind {
+  if (typeof runnerId === "string" && PLAN_RUNNERS.includes(runnerId)) return "plan"
+  if (isFreeModel(model)) return "free"
+  if (!model?.trim()) return "metered"
+  return "api"
+}
+
+export interface SpendLine {
+  readonly kind: SpendKind
+  readonly model: string
+  readonly tokens: number
+  /** Set only for a real charge. A plan and a free model never have one. */
+  readonly usd?: string
+}
+
+/** Dollars of a real charge: three places under a cent, two otherwise. */
+export function formatUsd(usd: number): string {
+  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
+}
+
+/** What a turn shows for its model and its cost. The dollar amount is omitted when it is not money spent. */
+export function spendLine(input: {
+  readonly runnerId?: string | undefined
+  readonly model?: string | undefined
+  readonly tokens: number
+  readonly costUsd: number
+}): SpendLine {
+  const kind = spendKind(input.runnerId, input.model)
+  const model = input.model?.trim() ?? ""
+  return {
+    kind,
+    model,
+    tokens: input.tokens,
+    ...((kind === "api" || kind === "metered") && input.costUsd > 0 ? { usd: formatUsd(input.costUsd) } : {}),
+  }
+}
+
+/**
+ * What «Genera con nikcli» spends.
+ *
+ * The model named in the form is the one `agent create --model` writes the
+ * file with. With none named, nikcli's own default writes it, and a default
+ * is not free.
+ */
+export function generationSpend(model?: string | undefined): { readonly model: string; readonly paid: boolean } {
+  const named = model?.trim() ?? ""
+  if (!named) return { model: "", paid: true }
+  return { model: named, paid: !isFreeModel(named) }
+}
 
 export function runnerAccount(id: RunnerId | string): string {
   switch (id) {
@@ -425,7 +493,7 @@ function claudeTokens(usage: unknown): number {
  * `result` closes the turn with its cost and whatever was refused.
  */
 export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at: number): Talk {
-  let next = withSession(talk, event["session_id"])
+  let next = noteReportedModel(withSession(talk, event["session_id"]), event)
   const message = rec(event["message"])
   switch (event["type"]) {
     case "stream_event": {
@@ -468,7 +536,13 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
     }
     case "result": {
       const cost = typeof event["total_cost_usd"] === "number" ? (event["total_cost_usd"] as number) : 0
-      next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost, ended: true }
+      const tokens = claudeTokens(event["usage"])
+      next = noteTurnUsage(
+        { ...next, tokens: next.tokens + tokens, costUsd: next.costUsd + cost, ended: true },
+        tokens,
+        cost,
+        true,
+      )
       /*
        * A write refused by a path rule (`EXECUTES_LATER`, a project's bot) is
        * not a tool to enable in the card: it is refused on purpose (review
@@ -545,7 +619,7 @@ function codexTokens(usage: unknown): number {
  * `turn.completed` carries the usage.
  */
 export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: number): Talk {
-  const next = withSession(talk, event["thread_id"])
+  const next = noteReportedModel(withSession(talk, event["thread_id"]), event)
   switch (event["type"]) {
     case "item.completed": {
       const item = rec(event["item"])
@@ -580,20 +654,23 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
           return next
       }
     }
-    case "turn.completed":
+    case "turn.completed": {
       /* `cached_input_tokens` is part of `input_tokens`, not on top of it. */
-      return { ...next, tokens: next.tokens + codexTokens(event["usage"]), ended: true }
+      const tokens = codexTokens(event["usage"])
+      return noteTurnUsage({ ...next, tokens: next.tokens + tokens, ended: true }, tokens, 0, true)
+    }
     case "turn.failed":
     case "error": {
       const text = errorText(event["error"] ?? event["message"] ?? event)
       // Codex says a failure twice, as `error` and then `turn.failed`: once on the thread is enough.
       const last = next.messages.at(-1)
       const said = last?.role === "error" && last.text === text
-      return {
+      const failed = {
         ...(said ? next : appendMessage(next, { role: "error", text }, at)),
-        status: "error",
+        status: "error" as const,
         ...(event["type"] === "turn.failed" ? { ended: true } : {}),
       }
+      return event["type"] === "turn.failed" ? sealTurn(failed) : failed
     }
     default:
       return next
