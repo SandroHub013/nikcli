@@ -125,20 +125,11 @@ async function adeWindowClose() {
   }
 }
 
-async function askCloseConfirmation(message: string): Promise<boolean> {
-  try {
-    const { ask } = await import("@tauri-apps/plugin-dialog")
-    return await ask(message, {
-      title: "ADE",
-      kind: "warning",
-      okLabel: t("window.closeConfirm.ok"),
-      cancelLabel: t("window.closeConfirm.cancel"),
-    })
-  } catch {
-    return window.confirm(message)
-  }
+function askCloseConfirmation(message: string): Promise<boolean> {
+  return askYesNo(message, { ok: t("window.closeConfirm.ok"), cancel: t("window.closeConfirm.cancel") })
 }
 
+import { askYesNo } from "../host/ask"
 import {
   createWorkbench,
   type Pane,
@@ -5079,7 +5070,7 @@ export function Workbench() {
       for (const pane of wb().panes) if (pane.gone && !running.has(pane.id)) close(pane.id)
     } else if (id === "recents.forgetGone") {
       const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
-      if (count > 0 && confirm(t("confirm.forgetGone", count))) {
+      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count)))) {
         const next = withoutMissing(recents(), missingRoots())
         setRecents(next)
         localStorage.setItem("ade.recents", serializeRecents(next))
@@ -5334,22 +5325,30 @@ export function Workbench() {
     bracketedPaste.delete(id)
   }
 
+  /*
+   * An unsaved file is not closed without asking.
+   *
+   * The buffer model has always known whether there is anything to lose;
+   * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
+   * command — dropped the draft with no warning and no way back. The question
+   * is the dialog plugin's, so it is answered later: `close` stays a plain
+   * call for its callers, and the pane goes only on the yes. A second close
+   * while the question is open does not ask twice.
+   */
+  const askingToClose = new Set<string>()
   const close = (id: string) => {
-    /*
-     * An unsaved file is not closed without asking.
-     *
-     * The buffer model has always known whether there is anything to lose;
-     * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
-     * command — dropped the draft with no warning and no way back.
-     */
     const buffer = buffers()[id]
-    if (buffer?.dirty) {
-      const discard = confirm(
-        t("editor.closeDirty", buffer.path),
-      )
-      if (!discard) return
-    }
+    if (!buffer?.dirty) return closeNow(id)
+    if (askingToClose.has(id)) return
+    askingToClose.add(id)
+    void askYesNo(t("editor.closeDirty", buffer.path))
+      .then((discard) => {
+        if (discard && wb().panes.some((pane) => pane.id === id)) closeNow(id)
+      })
+      .finally(() => askingToClose.delete(id))
+  }
 
+  const closeNow = (id: string) => {
     running.get(id)?.kill()
     running.delete(id)
     touchRunning()
@@ -5571,17 +5570,13 @@ export function Workbench() {
       }
 
       if (unreadable !== undefined) {
-        const anyway = confirm(
-          t("editor.saveUnreadable", buffer.path, String(unreadable)),
-        )
+        const anyway = await askYesNo(t("editor.saveUnreadable", buffer.path, String(unreadable)))
         if (!anyway) {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
       } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
-        const overwrite = confirm(
-          t("editor.saveChanged", buffer.path),
-        )
+        const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
           return
