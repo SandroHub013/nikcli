@@ -4,7 +4,6 @@ import { CHAT_PERMISSION } from "./rules"
 import {
   connectionNotice,
   conversationOf,
-  freeModelRef,
   messageError,
   followOpen,
   partsOf,
@@ -120,17 +119,6 @@ describe("the open session", () => {
       "MessageAbortedError",
     )
     expect(messageError({ id: "msg_3" } as never)).toBeUndefined()
-  })
-})
-
-describe("before C3", () => {
-  test("only a free OpenRouter model is sent; a paid one, or none, sends nothing", () => {
-    expect(freeModelRef("nvidia/nemotron-3-super-120b-a12b:free")).toEqual({
-      providerID: "openrouter",
-      modelID: "nvidia/nemotron-3-super-120b-a12b:free",
-    })
-    expect(freeModelRef("anthropic/claude-sonnet-4.5")).toBeUndefined()
-    expect(freeModelRef("")).toBeUndefined()
   })
 })
 

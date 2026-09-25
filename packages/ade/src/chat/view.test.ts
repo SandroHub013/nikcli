@@ -78,7 +78,10 @@ describe("a permission request", () => {
       always: [],
       tool: { messageID: "msg_1", callID: "call_b" },
     } as unknown as PermissionRequest
-    expect(permissionView(request, parts).call).toEqual({ tool: "bash", input: command })
+    // The command is the pattern already: said once, with what the model says it is for.
+    expect(permissionView(request, parts).call).toEqual({ tool: "bash", about: "pulizia", input: "" })
+    const other = { ...request, patterns: ["git status *"] } as unknown as PermissionRequest
+    expect(permissionView(other, parts).call).toEqual({ tool: "bash", about: "pulizia", input: command })
     // Without the parts, or with a call not there, the card shows what it has.
     expect(permissionView(request).call).toBeUndefined()
     expect(permissionView({ ...request, tool: { messageID: "msg_1", callID: "call_z" } }, parts).call).toBeUndefined()

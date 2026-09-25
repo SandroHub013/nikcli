@@ -92,8 +92,12 @@ export interface PermissionView {
   readonly id: string
   readonly permission: string
   readonly patterns: string[]
-  /** The tool call that asks, when its part is loaded: which tool, and its input whole. */
-  readonly call?: { readonly tool: string; readonly input: string }
+  /**
+   * The tool call that asks, when its part is loaded: which tool, what the
+   * model says it is for, and its input whole, unless that is already one of
+   * the patterns above it.
+   */
+  readonly call?: { readonly tool: string; readonly about?: string; readonly input: string }
   /** For an edit or a write, the change it would make. */
   readonly diff?: DiffLine[]
 }
@@ -143,7 +147,15 @@ export function permissionView(request: PermissionRequest, parts: readonly Part[
         return candidate.type === "tool" && candidate.callID === callID
       }) as unknown as Record<string, any> | undefined)
     : undefined
-  const call = part ? { tool: String(part.tool ?? "?"), input: inputOf(part.state?.input) } : undefined
+  const input = part ? inputOf(part.state?.input) : ""
+  const about = part?.state?.input?.description ?? part?.state?.title
+  const call = part
+    ? {
+        tool: String(part.tool ?? "?"),
+        ...(typeof about === "string" && about.trim() ? { about: line(about) } : {}),
+        input: patterns.includes(input) ? "" : input,
+      }
+    : undefined
   const diff = typeof raw.metadata?.diff === "string" && raw.metadata.diff.trim() ? diffLines(raw.metadata.diff) : undefined
   return {
     id: raw.id,

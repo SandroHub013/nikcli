@@ -11,7 +11,7 @@
 import type { Message, Part, Session } from "@nikcli-ai/sdk/httpapi"
 import type { ChatData } from "./events"
 import { hasChatRules } from "./rules"
-import type { ChatState, ModelRef } from "./store"
+import type { ChatState } from "./store"
 
 export interface SessionEntry {
   readonly id: string
@@ -106,17 +106,6 @@ export function followOpen(entries: readonly SessionEntry[], open: OpenSession):
   if (!open.id) return { seen: false }
   if (entries.some((entry) => entry.id === open.id)) return { id: open.id, seen: true }
   return open.seen ? { seen: false } : open
-}
-
-/**
- * The picker's choice as the server names it, until C3 brings the provider's
- * list: only an OpenRouter model marked `:free` becomes one. Anything else
- * gives nothing, and the chat does not send: the server's default and the
- * picker's own entries can be paid models.
- */
-export function freeModelRef(id: string): ModelRef | undefined {
-  const modelID = id.trim()
-  return modelID.endsWith(":free") ? { providerID: "openrouter", modelID } : undefined
 }
 
 export type ChatNotice =

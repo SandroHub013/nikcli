@@ -131,7 +131,9 @@ export function PermissionCard(props: {
       <Show when={view().call}>
         {(call) => (
           <div data-slot="chat-permission-call">
-            <p data-slot="chat-permission-call-head">{t("chat.permission.call", call().tool)}</p>
+            <p data-slot="chat-permission-call-head">
+              {call().about ? t("chat.permission.callAbout", call().tool, call().about!) : t("chat.permission.call", call().tool)}
+            </p>
             <Show when={call().input}>
               <code data-slot="chat-permission-pattern">{call().input}</code>
             </Show>
