@@ -152,29 +152,16 @@ export interface TurnSpec {
 /**
  * What a turn from a chat may run (G5, D93). With `commands` off, the
  * default, no shell at all. With it on (the bot's «Comandi da remoto», the
- * owner's choice in ADE):
- * - nikcli asks about every command, and the question goes to the phone;
- * - Claude Code, which cannot ask mid-turn, runs only the `allowed` patterns;
- * - Codex stays read-only: `codex exec` cannot ask either, and has no list.
+ * owner's choice in ADE), nikcli asks about every command, and the question
+ * goes to the phone. Only nikcli: Claude Code and Codex cannot ask mid-turn,
+ * so every command would be approved in advance, not one by one as D93
+ * wants; from a chat they never have a shell (G5 review, M1).
  * Writes stay in the project, never where a file becomes a command run later
  * (`EXECUTES_LATER`). The approval is a heuristic, not a boundary: the
  * boundary is the tools a turn is given.
  */
 export interface RemoteTools {
   readonly commands: boolean
-  /** Claude Code only: commands allowed as they are written, `*` as a wildcard (`npm test`, `git status *`). */
-  readonly allowed: readonly string[]
-}
-
-/*
- * A pattern goes inside `Bash(…)` in a comma-separated `--allowedTools`: a
- * comma or a parenthesis there would write another rule. One outside this
- * shape is left out.
- */
-const SAFE_COMMAND = /^[A-Za-z0-9][A-Za-z0-9 ._:/=*@+-]{0,79}$/
-
-export function safeCommandPattern(pattern: string): boolean {
-  return SAFE_COMMAND.test(pattern)
 }
 
 /**
@@ -319,10 +306,8 @@ export function turnCommand(
        */
       const repository = fromRepository(bot)
       const remote = spec.remote
-      // From a chat: lean always, no `ade-msg`, and a shell only for the allowed commands.
+      // From a chat: lean always, no `ade-msg`, and never a shell, remote commands or not.
       const lean = spec.lean === true || remote !== undefined
-      const patterns =
-        remote?.commands && !repository && !bot.disabledTools.includes("bash") ? remote.allowed.filter(safeCommandPattern) : []
       const adeMsgOnly = lean && bot.disabledTools.includes("bash") && !repository && !remote
       if (lean) {
         /*
@@ -338,12 +323,10 @@ export function turnCommand(
         .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote) && tool === "bash"))
         .flatMap(([, names]) => names)
       if (lean && !repository && !remote) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
-      for (const pattern of patterns) allowed.push(`Bash(${pattern})`, `PowerShell(${pattern})`)
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
-      // No list: no shell. With one, a command not on it is one `-p` cannot ask about: refused.
-      if (remote && patterns.length === 0 && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
+      if (remote && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))

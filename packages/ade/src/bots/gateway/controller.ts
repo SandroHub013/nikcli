@@ -33,7 +33,7 @@ import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
-import { REMOTE_OFF } from "./remote"
+import { offersRemoteCommands, REMOTE_OFF } from "./remote"
 import { resumable, sessionKey, type SessionStore } from "./session"
 
 /** `gateway:message`, as Rust emits it. */
@@ -236,7 +236,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
-      const remote = deps.remote?.(message.bot) ?? REMOTE_OFF
+      const remote = (offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined) ?? REMOTE_OFF
       let turn: Turn | undefined
       // nikcli stops on its permission menu only when the shell is asked about.
       const onData =

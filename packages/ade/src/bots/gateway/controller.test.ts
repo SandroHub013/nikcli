@@ -5,7 +5,7 @@ import { answerKeys, emptyTalk } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
-import { localRemoteStore, memoryRemoteStore, REMOTE_OFF } from "./remote"
+import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 
 /*
@@ -348,7 +348,7 @@ describe("the tools of a turn from a chat", () => {
       b.emit("pulisci la build")
       await until("il turno", () => turns.started.length === 1)
       const request = turns.started[0]!.request
-      expect(request.remote).toEqual({ commands: false, allowed: [] })
+      expect(request.remote).toEqual({ commands: false })
       expect(request.onData).toBeUndefined()
     }
   })
@@ -356,7 +356,7 @@ describe("the tools of a turn from a chat", () => {
   test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
     const b = bridge()
     const turns = typedTurns()
-    const remote = { commands: true, allowed: [] }
+    const remote = { commands: true }
     await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => remote })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
@@ -395,7 +395,7 @@ describe("the tools of a turn from a chat", () => {
       runTurn: turns.runTurn,
       loadBot: nikcli,
       sessions: memorySessionStore(),
-      remote: () => ({ commands: true, allowed: [] }),
+      remote: () => ({ commands: true }),
       approvalTimeoutMs: 20,
     })
     b.emit("pulisci la build")
@@ -414,7 +414,7 @@ describe("the tools of a turn from a chat", () => {
   test("a question still waiting when the turn ends is dropped: nothing typed, a late yes ignored", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => ({ commands: true, allowed: [] }) })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => ({ commands: true }) })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -428,6 +428,15 @@ describe("the tools of a turn from a chat", () => {
     expect(b.sent.some((sent) => sent.text === t("gateway.approve.expired"))).toBe(false)
   })
 
+  test("a Claude bot gets them off even when saved on", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), remote: () => ({ commands: true }) })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
+  })
+
   test("the remote commands are the bot's own: another bot's setting does not count", async () => {
     const b = bridge()
     const turns = typedTurns()
@@ -436,7 +445,7 @@ describe("the tools of a turn from a chat", () => {
       runTurn: turns.runTurn,
       loadBot: nikcli,
       sessions: memorySessionStore(),
-      remote: (bot) => (bot === "C:/altro.md" ? { commands: true, allowed: [] } : REMOTE_OFF),
+      remote: (bot) => (bot === "C:/altro.md" ? { commands: true } : REMOTE_OFF),
     })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
@@ -446,22 +455,29 @@ describe("the tools of a turn from a chat", () => {
 })
 
 describe("the remote commands saved per bot", () => {
-  test("off unless saved on; a pattern that could write another rule is dropped", () => {
+  test("off unless saved on", () => {
     const key = `ade.gateway.remote.test.${Math.random()}`
     const store = localRemoteStore(key)
     expect(store.get("a.md")).toEqual(REMOTE_OFF)
-    store.set("a.md", { commands: true, allowed: ["npm test", "x),Bash(*"] })
-    expect(localRemoteStore(key).get("a.md")).toEqual({ commands: true, allowed: ["npm test"] })
+    store.set("a.md", { commands: true })
+    expect(localRemoteStore(key).get("a.md")).toEqual({ commands: true })
     expect(localRemoteStore(key).get("b.md")).toEqual(REMOTE_OFF)
     // Whatever else is found saved counts as off.
-    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes", allowed: "npm test" }, "c.md": true }))
+    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes" }, "c.md": true }))
     expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
     expect(localRemoteStore(key).get("c.md")).toEqual(REMOTE_OFF)
     localStorage.setItem(key, "{")
     expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
     localStorage.removeItem(key)
     const memory = memoryRemoteStore()
-    memory.set("a.md", { commands: true, allowed: ["git status *", "a;b"] })
-    expect(memory.get("a.md")).toEqual({ commands: true, allowed: ["git status *"] })
+    memory.set("a.md", { commands: true })
+    expect(memory.get("a.md")).toEqual({ commands: true })
+  })
+
+  test("offered for nikcli only: Claude Code and Codex cannot ask about each command (G5 review, M1)", () => {
+    expect(offersRemoteCommands("nikcli")).toBe(true)
+    expect(offersRemoteCommands(undefined)).toBe(true)
+    expect(offersRemoteCommands("claude")).toBe(false)
+    expect(offersRemoteCommands("codex")).toBe(false)
   })
 })
