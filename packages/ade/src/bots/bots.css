@@ -777,6 +777,14 @@
   font-family: var(--ade-mono);
 }
 
+[data-slot="gateway-row"] [data-slot="bots-input"]::placeholder {
+  font-family: var(--ade-sans);
+}
+
+[data-slot="gateway-row"] [data-slot="bots-link"] { align-self: center; }
+
+[data-slot="gateway-block"] > [data-slot="bots-btn"] { align-self: flex-start; }
+
 [data-slot="gateway-state"] {
   display: flex;
   flex-wrap: wrap;
