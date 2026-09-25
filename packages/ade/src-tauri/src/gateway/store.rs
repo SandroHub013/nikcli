@@ -1,15 +1,16 @@
 //! A gateway's state on disk, in the app data folder.
 //!
 //! Per bot and platform: whether it is on, the project its turns run in (fixed
-//! when it was switched on), who may write, the chats they wrote from, where
-//! the platform's stream was read up to, and a hash of the token — to refuse
-//! the same token on a second bot without keeping the token itself. The token
-//! is in the keychain and nowhere else.
+//! when it was switched on), who may write and who asked to, the chats they
+//! wrote from, where the platform's stream was read up to, and a hash of the
+//! token — to refuse the same token on a second bot without keeping the token
+//! itself. The token is in the keychain and nowhere else.
 //!
 //! Written whole to a temporary file and renamed over the old one: a crash
 //! mid-write leaves the previous state, never half of one.
 
 use super::adapter::Platform;
+use super::authz::Pairing;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -43,6 +44,9 @@ pub struct LinkState {
     /// after the message was handed on.
     #[serde(default)]
     pub cursor: Option<String>,
+    /// Strangers' requests waiting for the user, and the limits on them.
+    #[serde(default)]
+    pub pairing: Pairing,
 }
 
 impl LinkState {
@@ -56,6 +60,7 @@ impl LinkState {
             authorized: Vec::new(),
             chats: Vec::new(),
             cursor: None,
+            pairing: Pairing::default(),
         }
     }
 

@@ -61,6 +61,8 @@ tokio = { version = "1", features = ["time", "macros", "sync"] }
 # into a keychain name and a token into the check that refuses it twice.
 async-trait = "0.1"
 sha2 = "0.10"
+# The pairing codes and their salts, from the OS.
+getrandom = "0.3"
 # home_dir() is not in std anymore; this small crate is the canonical replacement.
 dirs = "6"
 serde_json = "1"

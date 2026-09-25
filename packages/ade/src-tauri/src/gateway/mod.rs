@@ -10,13 +10,14 @@
 //! one exists, switching a gateway on for it is refused.
 
 mod adapter;
+mod authz;
 mod hub;
 mod redact;
 mod store;
 
 pub use adapter::Platform;
 use adapter::Adapter;
-use hub::{check_bot, Env, GatewayMessage, Hub, LinkStatus, StatusInfo};
+use hub::{check_bot, AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -40,6 +41,9 @@ struct AppEnv {
 impl Env for AppEnv {
     fn message(&self, message: &GatewayMessage) {
         let _ = self.app.emit("gateway:message", message);
+    }
+    fn pairing(&self, request: &PairingRequest) {
+        let _ = self.app.emit("gateway:pairing", request);
     }
     fn status(&self, status: &LinkStatus) {
         let _ = self.app.emit("gateway:status", status);
@@ -141,4 +145,21 @@ pub async fn gateway_edit(
 #[tauri::command]
 pub async fn gateway_typing(app: AppHandle, bot: String, platform: Platform, chat: String) -> Result<(), String> {
     hub(&app)?.typing(&bot, platform, &chat).await
+}
+
+/// Who waits to pair, who is paired, and whether wrong codes locked it. Never a code.
+#[tauri::command]
+pub async fn gateway_pairing_list(app: AppHandle, bot: String, platform: Platform) -> Result<PairingInfo, String> {
+    hub(&app)?.pairing_list(&bot, platform)
+}
+
+/// The code a stranger got in the chat, typed by the user: the only way to authorize anyone.
+#[tauri::command]
+pub async fn gateway_pairing_approve(app: AppHandle, bot: String, platform: Platform, code: String) -> Result<AuthorizedInfo, String> {
+    hub(&app)?.pairing_approve(&bot, platform, &code).await
+}
+
+#[tauri::command]
+pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platform, request: String) -> Result<(), String> {
+    hub(&app)?.pairing_reject(&bot, platform, &request)
 }

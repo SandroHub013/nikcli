@@ -3,7 +3,8 @@
 //! Each task reads its adapter and decides, here in Rust, what reaches the
 //! page: a message from an authorized sender, in a private chat, from a
 //! person and not a bot. Anything else stops here, so a stranger's text never
-//! becomes a turn. The page answers with `send`, which goes only to chats an
+//! becomes a turn: a stranger gets a pairing code instead (`authz.rs`), and
+//! becomes authorized only when the user types it in ADE. The page answers with `send`, which goes only to chats an
 //! authorized sender wrote from and loses every known secret on the way out.
 //!
 //! Nothing here needs the app: the events, the log and the secrets to hide
@@ -11,8 +12,9 @@
 //! with a fake adapter and no token of any real service.
 
 use super::adapter::{Adapter, AdapterError, Capabilities, Inbound, Platform};
+use super::authz::{self, Request};
 use super::redact::redact;
-use super::store::{LinkState, Store};
+use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -68,9 +70,53 @@ pub struct StatusInfo {
     pub capabilities: Option<Capabilities>,
 }
 
+/// A stranger asked to pair: for the panel, which asks the user for the code.
+/// The code itself is only in the stranger's chat.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingRequest {
+    pub bot: String,
+    pub platform: Platform,
+    /// For refusing it; unrelated to the code.
+    pub request: String,
+    pub sender: MessageSender,
+    pub created_ms: u64,
+    pub expires_ms: u64,
+}
+
+/// What the panel shows of a link's pairing: who waits, who is in, and
+/// whether wrong codes locked it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingInfo {
+    pub pending: Vec<PairingRequest>,
+    pub authorized: Vec<AuthorizedInfo>,
+    pub locked_until_ms: Option<u64>,
+    pub attempts_left: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizedInfo {
+    pub id: String,
+    pub name: String,
+    pub added_ms: u64,
+}
+
+/// What a stranger reads: the only text a gateway sends on its own.
+fn code_message(code: &str) -> String {
+    let code = authz::show(code);
+    format!(
+        "Codice di abbinamento: {code}\nPer collegare questo account al bot, inseriscilo in ADE, nella scheda del bot, alla voce Gateway. Scade tra un'ora.\n\nPairing code: {code}\nTo link this account to the bot, enter it in ADE, in the bot's Gateway section. It expires in one hour."
+    )
+}
+
+const PAIRED_MESSAGE: &str = "Abbinamento fatto: ora questo bot ti risponde.\nPaired: this bot now answers you.";
+
 /// Where the hub reports, and what it hides.
 pub trait Env: Send + Sync {
     fn message(&self, message: &GatewayMessage);
+    fn pairing(&self, request: &PairingRequest);
     fn status(&self, status: &LinkStatus);
     /// A diagnostic line. Called with metadata only: never a message's text or a token.
     fn log(&self, line: &str);
@@ -300,6 +346,69 @@ impl Hub {
         adapter.typing(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
     }
 
+    /* ── pairing ───────────────────────────────────────────────────────── */
+
+    pub fn pairing_list(&self, bot: &str, platform: Platform) -> Result<PairingInfo, String> {
+        check_bot(bot)?;
+        let now = self.env.now_ms();
+        let link = self.store.link(bot, platform).unwrap_or_else(|| LinkState::new(bot, platform));
+        let mut pairing = link.pairing.clone();
+        pairing.prune(now);
+        Ok(PairingInfo {
+            pending: pairing.pending.iter().map(|pending| pairing_request(bot, platform, pending)).collect(),
+            authorized: link
+                .authorized
+                .into_iter()
+                .map(|a| AuthorizedInfo { id: a.id, name: a.name, added_ms: a.added_ms })
+                .collect(),
+            locked_until_ms: pairing.locked_until_ms,
+            attempts_left: pairing.attempts_left(now),
+        })
+    }
+
+    /// The user typed a code in ADE. Its sender becomes authorized, and their
+    /// chat may be answered; a running gateway tells them so.
+    pub async fn pairing_approve(&self, bot: &str, platform: Platform, code: &str) -> Result<AuthorizedInfo, String> {
+        check_bot(bot)?;
+        let now = self.env.now_ms();
+        // A wrong code is saved too: it counts toward the lockout even across a restart.
+        let outcome = self.store.update(bot, platform, |link, _| {
+            let pending = match link.pairing.approve(code, now) {
+                Ok(pending) => pending,
+                Err(error) => return Ok(Err(error)),
+            };
+            if !link.is_authorized(&pending.sender) {
+                link.authorized.push(Authorized { id: pending.sender.clone(), name: pending.name.clone(), added_ms: now });
+            }
+            if !link.chats.iter().any(|known| known == &pending.chat) {
+                link.chats.push(pending.chat.clone());
+            }
+            Ok(Ok(pending))
+        })?;
+        let tag = format!("gateway {} {}", platform.id(), &bot_key(bot)[..8]);
+        let pending = match outcome {
+            Ok(pending) => pending,
+            Err(error) => {
+                self.env.log(&format!("{tag}: codice di abbinamento rifiutato"));
+                return Err(error);
+            }
+        };
+        self.env.log(&format!("{tag}: abbinamento approvato in ADE"));
+        let running = self.links().get(&(bot.to_string(), platform)).map(|running| running.adapter.clone());
+        if let Some(adapter) = running {
+            if let Err(error) = adapter.send(&pending.chat, PAIRED_MESSAGE).await {
+                self.env.log(&format!("{tag}: conferma dell'abbinamento non mandata: {}", redact(&error.message(), &self.secrets())));
+            }
+        }
+        Ok(AuthorizedInfo { id: pending.sender, name: pending.name, added_ms: now })
+    }
+
+    /// The user refused a request from the panel. Nothing is sent to the stranger.
+    pub fn pairing_reject(&self, bot: &str, platform: Platform, request: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        self.store.update(bot, platform, |link, _| link.pairing.reject(request).map(|_| ()))
+    }
+
     /* ── the panel ─────────────────────────────────────────────────────── */
 
     pub fn status(&self) -> Vec<StatusInfo> {
@@ -326,6 +435,17 @@ impl Hub {
                 }
             })
             .collect()
+    }
+}
+
+fn pairing_request(bot: &str, platform: Platform, pending: &authz::Pending) -> PairingRequest {
+    PairingRequest {
+        bot: bot.to_string(),
+        platform,
+        request: pending.request.clone(),
+        sender: MessageSender { id: pending.sender.clone(), name: pending.name.clone() },
+        created_ms: pending.created_ms,
+        expires_ms: pending.expires_ms,
     }
 }
 
@@ -380,7 +500,7 @@ impl Task {
                         });
                     }
                     for message in batch {
-                        self.deliver(message);
+                        self.deliver(message).await;
                     }
                 }
                 Err(AdapterError::Transient(error)) => {
@@ -409,8 +529,9 @@ impl Task {
         }
     }
 
-    /// Hands `message` to the page, or drops it. Only metadata reaches the log.
-    fn deliver(&self, message: Inbound) {
+    /// Hands `message` to the page, answers a stranger with a pairing code, or
+    /// drops it. Only metadata reaches the log.
+    async fn deliver(&self, message: Inbound) {
         let tag = self.tag();
         if message.sender.is_bot {
             self.env.log(&format!("{tag}: ignorato un messaggio di un bot"));
@@ -422,8 +543,7 @@ impl Task {
         }
         let authorized = self.store.link(&self.bot, self.platform).is_some_and(|link| link.is_authorized(&message.sender.id));
         if !authorized {
-            // Silent for now; the pairing code for a stranger comes with its own piece.
-            self.env.log(&format!("{tag}: ignorato un mittente non autorizzato"));
+            self.pair(message).await;
             return;
         }
         let chat = message.chat.clone();
@@ -448,6 +568,38 @@ impl Task {
             id: message.id,
         });
         self.report(|live| live.last_message_ms = Some(at));
+    }
+
+    /// A stranger wrote: a code in their chat, and a request in ADE. Their
+    /// text goes nowhere. While they wait, and past the limits, silence.
+    async fn pair(&self, message: Inbound) {
+        let tag = self.tag();
+        let now = self.env.now_ms();
+        let name = redact(&message.sender.name, &self.secrets);
+        let outcome = self.store.update(&self.bot, self.platform, |link, _| {
+            link.pairing.request(&message.sender.id, &name, &message.chat, now, &mut authz::os_random)
+        });
+        let (code, pending) = match outcome {
+            Ok(Request::Code { code, pending }) => (code, pending),
+            Ok(Request::Waiting) => {
+                self.env.log(&format!("{tag}: ignorato un mittente non autorizzato, codice già mandato"));
+                return;
+            }
+            Ok(Request::Closed) => {
+                self.env.log(&format!("{tag}: ignorato un mittente non autorizzato, abbinamento chiuso"));
+                return;
+            }
+            Err(error) => {
+                self.env.log(&format!("{tag}: codice di abbinamento non creato: {error}"));
+                return;
+            }
+        };
+        if let Err(error) = self.adapter.send(&message.chat, &code_message(&code)).await {
+            self.env.log(&format!("{tag}: codice di abbinamento non mandato: {}", redact(&error.message(), &self.secrets)));
+            return;
+        }
+        self.env.log(&format!("{tag}: codice di abbinamento mandato a un mittente non autorizzato"));
+        self.env.pairing(&pairing_request(&self.bot, self.platform, &pending));
     }
 }
 
@@ -482,12 +634,18 @@ mod tests {
     #[derive(Default)]
     struct Recorder {
         messages: Mutex<Vec<GatewayMessage>>,
+        pairings: Mutex<Vec<PairingRequest>>,
         statuses: Mutex<Vec<LinkStatus>>,
         log: Mutex<Vec<String>>,
+        /// Added to the clock, to move time on.
+        later: std::sync::atomic::AtomicU64,
     }
     impl Env for Recorder {
         fn message(&self, message: &GatewayMessage) {
             self.messages.lock().unwrap().push(message.clone());
+        }
+        fn pairing(&self, request: &PairingRequest) {
+            self.pairings.lock().unwrap().push(request.clone());
         }
         fn status(&self, status: &LinkStatus) {
             self.statuses.lock().unwrap().push(status.clone());
@@ -499,7 +657,7 @@ mod tests {
             vec![KEY.into()]
         }
         fn now_ms(&self) -> u64 {
-            1_000
+            1_000 + self.later.load(std::sync::atomic::Ordering::SeqCst)
         }
     }
 
@@ -512,7 +670,11 @@ mod tests {
     fn setup(name: &str) -> Setup {
         let dir = std::env::temp_dir().join(format!("ade-gateway-hub-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let path = dir.join("state.json");
+        setup_at(dir.join("state.json"))
+    }
+
+    /// A hub on a state file that may already hold something: ADE started again.
+    fn setup_at(path: std::path::PathBuf) -> Setup {
         let env = Arc::new(Recorder::default());
         let hub = Hub::new(env.clone(), Arc::new(MapVault::default()), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())))
             .with_backoff(Duration::from_millis(5), Duration::from_millis(20));
@@ -544,6 +706,13 @@ mod tests {
         let (adapter, feed) = FakeAdapter::new();
         setup.hub.start(BOT, Platform::Fake, "C:/progetto", adapter.clone()).unwrap();
         (adapter, feed)
+    }
+
+    /// The code in the pairing message sent to `chat`, as the stranger reads it.
+    fn code_sent_to(adapter: &FakeAdapter, chat: &str) -> String {
+        let sent = adapter.sent.lock().unwrap();
+        let (_, text) = sent.iter().find(|(to, text)| to == chat && text.starts_with("Codice di abbinamento: ")).expect("nessun codice mandato");
+        text["Codice di abbinamento: ".len()..][.."XXXX-XXXX".len()].to_string()
     }
 
     async fn eventually(what: &str, check: impl Fn() -> bool) {
@@ -705,5 +874,95 @@ mod tests {
         assert!(status[0].capabilities.is_none());
         assert_eq!(status[0].project.as_deref(), Some("C:/progetto"));
         assert!(s.hub.start(BOT, Platform::Fake, "  ", FakeAdapter::new().0).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_stranger_gets_a_code_and_only_that_code_typed_in_ade_lets_them_in() {
+        let s = setup("pairing");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", "fammi entrare")])).unwrap();
+        eventually("il codice arriva in chat", || adapter.sent.lock().unwrap().len() == 1).await;
+        let code = code_sent_to(&adapter, "c7");
+        assert_eq!(code.len(), 9, "{code}");
+        let bare = code.replace('-', "");
+        // The page is asked about a request, and sees neither the text nor the code.
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        let requests = s.env.pairings.lock().unwrap().clone();
+        assert_eq!(requests.len(), 1);
+        assert_eq!((requests[0].sender.id.as_str(), requests[0].sender.name.as_str()), ("7", "utente 7"));
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert_eq!(list.pending, requests);
+        assert_eq!(list.attempts_left, 5);
+        let shown = format!("{}{}", serde_json::to_string(&requests).unwrap(), serde_json::to_string(&list).unwrap());
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        let log = s.env.log.lock().unwrap().join("\n");
+        for (place, text) in [("evento e lista", &shown), ("stato", &saved), ("log", &log)] {
+            assert!(!text.contains(&code) && !text.contains(&bare), "il codice in {place}: {text}");
+        }
+        assert!(!log.contains("fammi entrare"), "{log}");
+        // Still a stranger: no answer to them, and writing again brings no second code.
+        assert!(s.hub.send(BOT, Platform::Fake, "c7", "x").await.is_err());
+        feed.send(Ok(vec![message("2", "c7", "7", "allora?")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(adapter.sent.lock().unwrap().len(), 1);
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        // A wrong code counts; the right one, typed as read, lets them in.
+        let wrong = if bare == "AAAAAAAA" { "BBBBBBBB" } else { "AAAAAAAA" };
+        assert!(s.hub.pairing_approve(BOT, Platform::Fake, wrong).await.unwrap_err().contains("restano 4"));
+        let approved = s.hub.pairing_approve(BOT, Platform::Fake, &format!(" {} ", code.to_lowercase())).await.unwrap();
+        assert_eq!((approved.id.as_str(), approved.name.as_str()), ("7", "utente 7"));
+        assert_eq!(adapter.sent.lock().unwrap()[1], ("c7".to_string(), PAIRED_MESSAGE.to_string()));
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.pending.is_empty());
+        assert_eq!(list.attempts_left, 5);
+        assert_eq!(list.authorized.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), vec!["7"]);
+        s.hub.send(BOT, Platform::Fake, "c7", "benvenuto").await.unwrap();
+        feed.send(Ok(vec![message("3", "c7", "7", "eccomi")])).unwrap();
+        eventually("ora il suo messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        assert_eq!(s.env.messages.lock().unwrap()[0].text, "eccomi");
+        // Used once: typing it again does nothing.
+        assert!(s.hub.pairing_approve(BOT, Platform::Fake, &code).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn approvals_requests_and_wrong_codes_survive_a_restart() {
+        let s = setup("restart");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", "io"), message("2", "c8", "8", "anch'io")])).unwrap();
+        eventually("due codici", || adapter.sent.lock().unwrap().len() == 2).await;
+        let code = code_sent_to(&adapter, "c7");
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+        for _ in 0..2 {
+            assert!(s.hub.pairing_approve(BOT, Platform::Fake, "ZZZZZZZZ").await.is_err());
+        }
+        s.hub.shutdown();
+
+        let again = setup_at(s.path.clone());
+        let list = again.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert_eq!(list.authorized.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), vec!["7"]);
+        assert_eq!(list.pending.iter().map(|p| p.sender.id.as_str()).collect::<Vec<_>>(), vec!["8"]);
+        assert_eq!(list.attempts_left, 3);
+        // Refusing from the panel is not a wrong code, and tells the stranger nothing.
+        again.hub.pairing_reject(BOT, Platform::Fake, &list.pending[0].request).unwrap();
+        let list = again.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.pending.is_empty());
+        assert_eq!(list.attempts_left, 3);
+        assert_eq!(adapter.sent.lock().unwrap().len(), 3, "due codici e la conferma di 7, nient'altro");
+    }
+
+    #[tokio::test]
+    async fn an_hour_later_the_request_is_gone_and_the_code_no_longer_works() {
+        let s = setup("expiry");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", "io")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        let code = code_sent_to(&adapter, "c7");
+        s.env.later.store(authz::CODE_TTL_MS, std::sync::atomic::Ordering::SeqCst);
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.is_empty());
+        assert!(s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap_err().contains("scaduto"));
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty());
+        // Writing again, they get a new one.
+        feed.send(Ok(vec![message("2", "c7", "7", "di nuovo")])).unwrap();
+        eventually("un codice nuovo", || adapter.sent.lock().unwrap().len() == 2).await;
     }
 }
