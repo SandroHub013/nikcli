@@ -198,6 +198,80 @@ pub(crate) fn spawn_flag_env(command: &str, flags: &[String]) -> Result<Vec<(&'s
         .collect()
 }
 
+/// Variables an `account-plan` or `account-key` spawn must not inherit (B10).
+///
+/// A subscription must not silently spend a key ADE was started with. A key
+/// mode strips the same names first, then sets the one key the user chose.
+const CLAUDE_ACCOUNT_VARS: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+    "AWS_BEARER_TOKEN_BEDROCK",
+];
+const CODEX_ACCOUNT_VARS: &[&str] = &["OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"];
+
+/// What `flags` do: variables to set, and variables to take out of the inherited environment.
+///
+/// `secret_names` are key names. `secret_envs` are the variables those names
+/// stand for, from the index, never their values. A wrong variable is named
+/// in the error; a value is not an argument of this function.
+pub(crate) fn spawn_flag_effect(
+    command: &str,
+    flags: &[String],
+    secret_names: &[String],
+    secret_envs: &[String],
+) -> Result<(Vec<(&'static str, &'static str)>, Vec<&'static str>), String> {
+    let agent = command_stem(command.trim()).to_ascii_lowercase();
+    let mut plain = Vec::new();
+    let mut account: Option<&str> = None;
+    for flag in flags {
+        if flag == "account-plan" || flag == "account-key" {
+            if account.is_some() || (agent != "claude" && agent != "codex") {
+                return Err(format!("opzione di avvio non consentita per {command}: {flag}"));
+            }
+            account = Some(flag.as_str());
+        } else {
+            plain.push(flag.clone());
+        }
+    }
+    let set = spawn_flag_env(command, &plain)?;
+    let remove: Vec<&'static str> = match (account, agent.as_str()) {
+        (Some(_), "claude") => CLAUDE_ACCOUNT_VARS.to_vec(),
+        (Some(_), "codex") => CODEX_ACCOUNT_VARS.to_vec(),
+        (Some(flag), _) => return Err(format!("opzione di avvio non consentita per {command}: {flag}")),
+        (None, _) => Vec::new(),
+    };
+    match account {
+        Some("account-key") => {
+            if secret_names.len() != 1 {
+                return Err("modalità chiave senza una chiave".into());
+            }
+            // An empty list means the index has not been read yet. `pty_spawn`
+            // asks again once `env_for` has named the variable. A value is
+            // never an argument of this function.
+            if !secret_envs.is_empty() {
+                if secret_envs.len() != 1 {
+                    return Err("modalità chiave senza una chiave".into());
+                }
+                let env = secret_envs[0].as_str();
+                if agent == "claude" && env != "ANTHROPIC_API_KEY" {
+                    return Err("modalità chiave: attesa la variabile ANTHROPIC_API_KEY".into());
+                }
+                if agent == "codex" && env != "CODEX_API_KEY" && env != "OPENAI_API_KEY" {
+                    return Err("modalità chiave: attesa la variabile CODEX_API_KEY o OPENAI_API_KEY".into());
+                }
+            }
+        }
+        Some("account-plan") if !secret_names.is_empty() => {
+            return Err("un abbonamento non riceve chiavi".into());
+        }
+        _ => {}
+    }
+    Ok((set, remove))
+}
+
 /// Variables every terminal ADE opens carries, whatever runs in it.
 ///
 /// `PSExecutionPolicyPreference=Bypass`: the user's choice, D77 A (2026-09-23).
@@ -711,7 +785,9 @@ pub async fn pty_spawn(
      * are read here from the system keychain (`secrets.rs`) and go straight
      * into the child's environment. Which keys a session gets is chosen per
      * key, per agent, in Impostazioni › Chiavi API, and checked again here
-     * against the agent the command starts; bot turns pass none.
+     * against the agent the command starts. A bot in key mode passes one
+     * name; a subscription passes none, and the account flag strips inherited
+     * keys so a key ADE was started with is not spent by surprise.
      */
     secrets: Option<Vec<String>>,
     /*
@@ -733,7 +809,17 @@ pub async fn pty_spawn(
         return Err(format!("comando non consentito: {command}"));
     }
     check_args(&command, &args)?;
-    let flag_env = spawn_flag_env(&command, flags.as_deref().unwrap_or_default())?;
+    let secret_names = secrets.clone().unwrap_or_default();
+    let flag_list = flags.clone().unwrap_or_default();
+    // Count and shape before the keychain: a plan must not even read a key.
+    let _ = spawn_flag_effect(&command, &flag_list, &secret_names, &[])?;
+    let keyed = if secret_names.is_empty() {
+        Vec::new()
+    } else {
+        crate::secrets::env_for(&app, &command, &secret_names)?
+    };
+    let secret_envs: Vec<String> = keyed.iter().map(|(env, _)| env.clone()).collect();
+    let (flag_env, account_remove) = spawn_flag_effect(&command, &flag_list, &secret_names, &secret_envs)?;
     let pipe = pipe == Some(true);
     if pipe && !is_pipe_command(&command) {
         return Err(format!("{command} non si avvia senza terminale"));
@@ -769,14 +855,6 @@ pub async fn pty_spawn(
      */
     builder.env("TERM", "xterm-256color");
     builder.env("COLORTERM", "truecolor");
-    /*
-     * The user's keys, before ADE's own variables so those always win. A key
-     * that cannot be read fails the launch: an agent started without the key
-     * it was meant to have fails later, somewhere less obvious.
-     */
-    for (name, value) in crate::secrets::env_for(&app, &command, secrets.as_deref().unwrap_or_default())? {
-        builder.env(name, value);
-    }
 
     /*
      * Somebody else's session does not come along.
@@ -812,9 +890,17 @@ pub async fn pty_spawn(
          * output goes to a pipe, or from a bench runner, both of which set
          * `NO_COLOR`. The pane is not that pipe.
          */
-        if is_session_marker || is_launcher_colour_switch(&key) {
+        let dropped_for_account = account_remove.iter().any(|name| name.eq_ignore_ascii_case(&key));
+        if is_session_marker || is_launcher_colour_switch(&key) || dropped_for_account {
             builder.env_remove(&key);
         }
+    }
+    /*
+     * The chosen key, after the sweep and the account removals, so it is not
+     * taken back out and no inherited key of the same name survives (B10).
+     */
+    for (name, value) in &keyed {
+        builder.env(name, value);
     }
 
     /*
@@ -1963,6 +2049,79 @@ mod tests {
             );
         }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
+    }
+
+    #[test]
+    fn an_account_flag_removes_inherited_keys_and_never_names_a_value() {
+        let fake = "sk-or-v1-VALORE-FINTO-NON-DEVE-USCIRE";
+        let (set, remove) = super::spawn_flag_effect("claude", &["account-plan".to_string()], &[], &[]).unwrap();
+        assert!(set.is_empty());
+        for name in [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_BEDROCK_BASE_URL",
+            "ANTHROPIC_VERTEX_PROJECT_ID",
+            "AWS_BEARER_TOKEN_BEDROCK",
+        ] {
+            assert!(remove.contains(&name), "{name}");
+        }
+        let (set, remove) = super::spawn_flag_effect("codex", &["account-plan".to_string()], &[], &[]).unwrap();
+        assert!(set.is_empty());
+        for name in ["OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL"] {
+            assert!(remove.contains(&name), "{name}");
+        }
+        let missing = super::spawn_flag_effect("claude", &["account-key".to_string()], &[], &[]).unwrap_err();
+        assert_eq!(missing, "modalità chiave senza una chiave");
+        assert!(!missing.contains(fake));
+        // One name, variable not known yet: the spawn looks it up, then checks.
+        let pending = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &[],
+        )
+        .unwrap();
+        assert!(pending.1.contains(&"ANTHROPIC_API_KEY"));
+        let two = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["a".to_string(), "b".to_string()],
+            &["ANTHROPIC_API_KEY".to_string(), "ANTHROPIC_API_KEY".to_string()],
+        )
+        .unwrap_err();
+        assert_eq!(two, "modalità chiave senza una chiave");
+        let wrong = super::spawn_flag_effect(
+            "claude",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &["OPENAI_API_KEY".to_string()],
+        )
+        .unwrap_err();
+        assert!(wrong.contains("ANTHROPIC_API_KEY"), "{wrong}");
+        assert!(!wrong.contains(fake), "{wrong}");
+        assert!(!wrong.contains("OPENAI_API_KEY"), "{wrong}");
+        let plan_with_key =
+            super::spawn_flag_effect("claude", &["account-plan".to_string()], &["finta".to_string()], &[]).unwrap_err();
+        assert_eq!(plan_with_key, "un abbonamento non riceve chiavi");
+        assert!(super::spawn_flag_effect("nikcli", &["account-plan".to_string()], &[], &[]).is_err());
+        assert!(super::spawn_flag_effect("powershell", &["account-key".to_string()], &[], &[]).is_err());
+        assert!(super::spawn_flag_effect(
+            "claude",
+            &["account-plan".to_string(), "account-key".to_string()],
+            &[],
+            &[]
+        )
+        .is_err());
+        let ok = super::spawn_flag_effect(
+            "codex",
+            &["account-key".to_string()],
+            &["finta".to_string()],
+            &["CODEX_API_KEY".to_string()],
+        )
+        .unwrap();
+        assert!(ok.0.is_empty());
+        assert!(ok.1.contains(&"CODEX_API_KEY"));
     }
 
     #[test]
