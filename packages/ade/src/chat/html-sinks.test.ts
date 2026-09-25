@@ -21,6 +21,11 @@ const SINKS = [
   /dangerouslySetInnerHTML/,
   /\bmarked\b/,
   /\bDOMPurify\b/,
+  // A link or an image the model wrote (`javascript:`, a tracking pixel): not before C4 decides how.
+  /\bhref\s*=/,
+  /\bsrc\s*=/,
+  /\bsrcset\b/,
+  /\bopenUrl\b/,
 ]
 
 function sources(dir: string): string[] {
