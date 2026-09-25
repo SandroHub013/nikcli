@@ -27,7 +27,14 @@
 import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { t } from "../i18n"
-import { appChatConnectionDeps, isChatRefused, openChat, type ChatConnection } from "./connection"
+import {
+  appChatConnectionDeps,
+  isChatRefused,
+  loadChatCatalog,
+  openChat,
+  type ChatCatalog,
+  type ChatConnection,
+} from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { readEvents, StreamRefused } from "./stream"
@@ -74,6 +81,12 @@ export interface ChatStore {
   abort(sessionID: string): Promise<void>
   /** Loads a session's messages, and keeps loading them after every reconnection. */
   loadMessages(sessionID: string): Promise<void>
+  /**
+   * The providers, the agents and the configured model, through this folder's
+   * own connection: the same admission, no second one (C4). Loaded once per
+   * opening; a load that did not get the providers is tried again next time.
+   */
+  catalog(): Promise<ChatCatalog>
 }
 
 export interface ChatStoreDeps {
@@ -147,6 +160,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   let current: { connection: Open; stop: AbortController } | undefined
   /** Sessions whose messages are shown, reloaded after a reconnection. */
   const watched = new Set<string>()
+  let catalogLoad: { mine: number; promise: Promise<ChatCatalog> } | undefined
   /** Sessions made here, with the chat's rules, before their event arrives. */
   const ours = new Set<string>()
   /** One list per load in flight: the events that arrive while it runs, applied again over what it loaded. */
@@ -341,6 +355,18 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     async loadMessages(sessionID) {
       watched.add(sessionID)
       if (current) await fetchMessages(current.connection, sessionID, generation)
+    },
+    async catalog() {
+      const connection = opened()
+      const mine = generation
+      if (catalogLoad?.mine !== mine) {
+        const promise = loadChatCatalog(connection.client).then((catalog) => {
+          if (!catalog.providerList && catalogLoad?.promise === promise) catalogLoad = undefined
+          return catalog
+        })
+        catalogLoad = { mine, promise }
+      }
+      return catalogLoad.promise
     },
   }
 }

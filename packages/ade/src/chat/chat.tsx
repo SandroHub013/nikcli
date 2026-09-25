@@ -15,8 +15,8 @@
 
 import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
 import { t } from "../i18n"
-import type { Agent, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
-import { appChatConnectionDeps, loadChatCatalog, openChat, type ChatConnectionDeps } from "./connection"
+import type { Agent, ProviderList } from "@nikcli-ai/sdk/client"
+import type { ChatCatalog } from "./connection"
 import {
   agentsFromList,
   defaultAgentChoice,
@@ -64,10 +64,6 @@ export interface ChatProps {
   projectRoot?: string
   /** The window's store unless a caller brings one. */
   store?: ChatStore
-  /** Admitted client injected by callers or tests */
-  client?: NikcliClient
-  /** Connection deps override for testing openChat */
-  connectionDeps?: ChatConnectionDeps
   /** Injected by tests or callers */
   providerList?: ProviderList
   /** Injected by tests or callers */
@@ -116,46 +112,33 @@ export function Chat(props: ChatProps) {
   let scroller: HTMLDivElement | undefined
   let composer: HTMLTextAreaElement | undefined
 
-  onMount(async () => {
-    let pList = props.providerList
-    let aList = props.agents
-    let cfgModel: string | undefined
-
-    let client = props.client
-    if (!client && props.projectRoot) {
-      try {
-        const opened = await openChat(props.projectRoot, props.connectionDeps ?? appChatConnectionDeps())
-        if (opened.ok) {
-          client = opened.client
-        }
-      } catch {}
-    }
-
-    if (client) {
-      try {
-        const catalog = await loadChatCatalog(client)
-        if (catalog.providerList) pList = catalog.providerList
-        if (catalog.agents) aList = catalog.agents
-        if (catalog.configModel) cfgModel = catalog.configModel
-      } catch {}
-    }
-
+  /**
+   * C3's models and agents, from the catalog the store loads through the
+   * folder's own connection (C4): the same admission, no second one.
+   */
+  const applyCatalog = (catalog: ChatCatalog) => {
     const testBuild = isTest()
-    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild })
+    const resolvedModels = modelsFromProviderList(catalog.providerList ?? props.providerList, { isTest: testBuild })
     setModels(resolvedModels)
-
-    const resolvedAgents = agentsFromList(aList)
+    const resolvedAgents = agentsFromList(catalog.agents ?? props.agents)
     setAgents(resolvedAgents)
-
     setModel(
       (current) =>
         validateSelectedModel(current, resolvedModels, testBuild) ??
-        loadStoredModel(resolvedModels, testBuild, cfgModel),
+        loadStoredModel(resolvedModels, testBuild, catalog.configModel),
     )
     setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
+  }
 
-    composer?.focus()
-  })
+  const loadCatalog = async () => {
+    try {
+      applyCatalog(await store.catalog())
+    } catch {
+      // Not open, or refused: the notice says why, and the pickers stay as they are.
+    }
+  }
+
+  onMount(() => composer?.focus())
 
   // The project's folder: opening the one already open changes nothing, so
   // coming back to the section finds the stream and the answer where they were.
@@ -165,7 +148,7 @@ export function Chat(props: ChatProps) {
       (root, previous) => {
         if (root && root !== previous) {
           if (previous !== undefined) setCurrent(undefined)
-          void store.open(root)
+          void store.open(root).then(loadCatalog)
         }
       },
     ),

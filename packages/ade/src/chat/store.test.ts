@@ -84,6 +84,9 @@ function fakeServer() {
         const status = routes.status
         void (routes.statusGate ?? Promise.resolve()).then(() => reply(onEvent, 200, status))
       }
+      else if (request.method === "GET" && path === "/provider") reply(onEvent, 200, { all: [], default: {}, connected: [] })
+      else if (request.method === "GET" && path === "/agent") reply(onEvent, 200, [{ name: "build", mode: "primary" }])
+      else if (request.method === "GET" && path === "/config") reply(onEvent, 200, { model: "openrouter/x:free" })
       else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
       else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
       else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path)) reply(onEvent, 200, true)
@@ -482,5 +485,32 @@ describe("the chat's store", () => {
     // Not nikcli's default («New session - <ISO date>»), which it would title with its small model.
     expect(created.title).not.toMatch(/^(New session|Child session) - \d{4}-/)
     expect(titleFrom("x".repeat(80))).toBe(`${"x".repeat(59)}…`)
+  })
+
+  test("the catalog comes through the folder's own connection, once per opening", async () => {
+    const server = fakeServer()
+    let connects = 0
+    const { store } = storeOn(server, {
+      connect: (directory) => {
+        connects++
+        return openChat(directory, { bridge: server.bridge, admit: async () => ({ ok: true }), now: () => 0 })
+      },
+    })
+    const before = await store.catalog().then(() => "caricato", (error: unknown) => error)
+    // Not open: nothing to load it through, and nothing is called.
+    expect(before).toBeInstanceOf(Error)
+    expect(server.sent).toEqual([])
+    await store.open(A)
+    await live(server, store)
+    const [one, two] = await Promise.all([store.catalog(), store.catalog()])
+    expect(one).toEqual(two)
+    expect(one.configModel).toBe("openrouter/x:free")
+    expect(one.agents?.map((agent) => agent.name)).toEqual(["build"])
+    expect(connects).toBe(1)
+    const catalog = [...server.calls("GET", /^\/provider$/), ...server.calls("GET", /^\/agent$/), ...server.calls("GET", /^\/config$/)]
+    expect(catalog).toHaveLength(3)
+    for (const request of catalog) {
+      expect(decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")).toBe(A)
+    }
   })
 })
