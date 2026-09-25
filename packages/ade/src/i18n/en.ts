@@ -1258,6 +1258,11 @@ export const en: Messages = {
   "chat.send": "Send",
   "chat.stop": "Stop",
   "chat.stop.failed": "Stop did not reach the server: the answer goes on. Try again.",
+  "chat.usage.answer": (tokens: string, cost: string) => `${tokens} tokens · ${cost}`,
+  "chat.usage.session": (cost: string) => `Session: ${cost}`,
+  "chat.usage.sessionContext": (cost: string, tokens: string) => `Session: ${cost} · context ${tokens} tokens`,
+  "chat.usage.sessionWindow": (cost: string, tokens: string, percent: number) =>
+    `Session: ${cost} · context ${tokens} tokens (${percent}% of the model's window)`,
   "chat.writing": "Writing",
   "chat.code.text": "text",
   "chat.code.copied": "Copied",

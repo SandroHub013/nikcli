@@ -24,6 +24,8 @@ export interface ChatModelChoice {
   readonly providerName: string
   readonly free: boolean
   readonly cost?: { readonly input: number; readonly output: number }
+  /** The model's context window, in tokens, when the provider says it. */
+  readonly context?: number
   readonly label: string
 }
 
@@ -148,6 +150,7 @@ export function modelsFromProviderList(
         providerName: provider.name || providerId,
         free,
         cost,
+        ...(typeof model.limit?.context === "number" && model.limit.context > 0 ? { context: model.limit.context } : {}),
         label: formatModelLabel(model.name || modelId, cost, free),
       })
     }

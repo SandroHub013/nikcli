@@ -1269,6 +1269,11 @@ export const it = {
   "chat.send": "Invia",
   "chat.stop": "Ferma",
   "chat.stop.failed": "Ferma non è arrivato al server: la risposta continua. Riprova.",
+  "chat.usage.answer": (tokens: string, cost: string) => `${tokens} token · ${cost}`,
+  "chat.usage.session": (cost: string) => `Sessione: ${cost}`,
+  "chat.usage.sessionContext": (cost: string, tokens: string) => `Sessione: ${cost} · contesto ${tokens} token`,
+  "chat.usage.sessionWindow": (cost: string, tokens: string, percent: number) =>
+    `Sessione: ${cost} · contesto ${tokens} token (${percent}% della finestra del modello)`,
   "chat.writing": "In scrittura",
   "chat.code.text": "testo",
   "chat.code.copied": "Copiato",
