@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { askYesNo, type AskDeps, type AskOptions } from "./ask"
+import { askDialog, askYesNo, type AskDeps, type AskOptions } from "./ask"
 
 /*
  * F-confirm (found live in B7): in ADE `confirm()` is the dialog plugin's
@@ -56,6 +56,20 @@ describe("una domanda sì/no in ADE", () => {
     })
     expect(await askYesNo("Chiudo?", {}, browser)).toBe(false)
     expect(seen).toEqual(["Chiudo?"])
+  })
+
+  test("askDialog lascia passare il rifiuto, per chi ne dice il motivo (i bot)", async () => {
+    const refused = deps({ load: async () => ({ ask: () => Promise.reject("dialog.ask not allowed") }) })
+    await expect(askDialog("Lo usi?", {}, refused)).rejects.toBe("dialog.ask not allowed")
+  })
+
+  test("la sezione Bot chiede con askDialog, con Sì e No, e la finestra ha ask e non confirm (B7)", () => {
+    const capabilities = readFileSync(join(import.meta.dir, "../../src-tauri/capabilities/default.json"), "utf8")
+    expect(capabilities).toContain('"dialog:allow-ask"')
+    expect(capabilities).not.toContain('"dialog:allow-confirm"')
+    const bots = readFileSync(join(import.meta.dir, "../bots/bots.tsx"), "utf8")
+    expect(bots).not.toMatch(/(?<![\w$])(?:window\.)?confirm\s*\(/)
+    expect(bots).toContain('askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") })')
   })
 
   test("il workbench non chiama più confirm()", () => {

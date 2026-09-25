@@ -29,9 +29,9 @@
  * this file.
  */
 
-import { askUser } from "./ask"
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
+import { askDialog } from "../host/ask"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
 import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
@@ -76,6 +76,12 @@ import "./bots.css"
  * here, at module level, and the components only read them. Keyed by the
  * bot's path, because the identifier repeats across project and global scope.
  */
+/*
+ * The trust question (B3, B3b), through the dialog ADE may open (B7): one that
+ * cannot be put rejects, and `admit` says why on screen.
+ */
+const askTrust = (question: string) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") })
+
 const [talks, setTalks] = createSignal<Record<string, Talk>>({})
 
 function readStored(path: string): Talk {
@@ -370,7 +376,7 @@ export function BotsMain(props: BotsMainProps) {
     const verdict = await admit(bot, {
       store: localTrustStore(),
       read: async (path) => (read = await readBotText(path)),
-      confirm: askUser,
+      confirm: askTrust,
     })
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
@@ -388,7 +394,7 @@ export function BotsMain(props: BotsMainProps) {
       const project = await admitProject(root, {
         store: localTrustStore(PROJECT_TRUST_KEY),
         surface: () => projectSurface(root, projectFs),
-        confirm: askUser,
+        confirm: askTrust,
       })
       if (!project.ok) {
         if (project.problem) updateTalk(bot.path, (talk) => applyProblem(talk, project.problem!, Date.now()))

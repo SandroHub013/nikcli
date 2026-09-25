@@ -32,23 +32,35 @@ const defaultDeps: AskDeps = {
   browserConfirm: (message) => window.confirm(message),
 }
 
+/**
+ * True only on the user's yes; rejects when the question cannot be put, for a
+ * caller that says why on screen (the Bot section's trust, `bots.ask.failed`).
+ */
+export async function askDialog(
+  question: string,
+  labels: { readonly ok?: string; readonly cancel?: string } = {},
+  deps: AskDeps = defaultDeps,
+): Promise<boolean> {
+  if (!deps.inTauri()) return deps.browserConfirm(question) === true
+  const { ask } = await deps.load()
+  return (
+    (await ask(question, {
+      title: "ADE",
+      kind: "warning",
+      ...(labels.ok ? { okLabel: labels.ok } : {}),
+      ...(labels.cancel ? { cancelLabel: labels.cancel } : {}),
+    })) === true
+  )
+}
+
 /** True only on the user's yes. A question that cannot be put is a no. */
 export async function askYesNo(
   question: string,
   labels: { readonly ok?: string; readonly cancel?: string } = {},
   deps: AskDeps = defaultDeps,
 ): Promise<boolean> {
-  if (!deps.inTauri()) return deps.browserConfirm(question) === true
   try {
-    const { ask } = await deps.load()
-    return (
-      (await ask(question, {
-        title: "ADE",
-        kind: "warning",
-        ...(labels.ok ? { okLabel: labels.ok } : {}),
-        ...(labels.cancel ? { cancelLabel: labels.cancel } : {}),
-      })) === true
-    )
+    return await askDialog(question, labels, deps)
   } catch {
     return false
   }
