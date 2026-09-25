@@ -203,6 +203,18 @@ describe("the gateways' controller", () => {
     expect(none.sent[0]!.text).toBe(t("gateway.noProject"))
   })
 
+  test("a message a key was taken out of keeps its place: the one after it does not go first", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    b.emit("la prima, con una chiave", { redacted: true })
+    b.emit("la seconda")
+    await until("il primo turno", () => turns.started.length === 1)
+    await until("la seconda in coda", () => b.sent.length === 2)
+    expect(turns.started[0]!.request.message.endsWith("la prima, con una chiave")).toBe(true)
+    expect(b.sent.map((sent) => sent.text)).toEqual([t("gateway.redacted"), t("gateway.queued", 1)])
+  })
+
   test("a press counts only for a button ADE sent, in that chat, while its question waits, and once", async () => {
     const b = bridge()
     const turns = fakeTurns()

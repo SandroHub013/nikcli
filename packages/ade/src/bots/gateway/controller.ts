@@ -260,15 +260,19 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const state = stateOf(key)
     const counted = countMessage(state.times, now())
     state.times = counted.times
+    /*
+     * Said without waiting for the send: a message that came meanwhile would
+     * otherwise be queued first, and answered first (G4 review, BASSO 1).
+     */
     if (!counted.allowed) {
       if (!state.limited) {
         state.limited = true
-        await reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
+        void reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
       }
       return
     }
     state.limited = false
-    if (message.redacted) await reply(message, t("gateway.redacted"))
+    if (message.redacted) void reply(message, t("gateway.redacted"))
     state.queue.push(message)
     const busy = state.turn !== undefined || state.starting
     if (busy) return reply(message, t("gateway.queued", state.queue.length))
