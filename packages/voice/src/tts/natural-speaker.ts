@@ -281,6 +281,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         if (!(await usable(voice))) {
           if (mine === generation) {
             await announceFallbackOnce(voice)
+            if (mine !== generation) return
             await deps.fallback.speak(clean)
           }
           return
@@ -301,6 +302,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
             // The rest of the reply goes out in the old voice rather than not at all.
             if (mine === generation) {
               await announceFallbackOnce(voice)
+              if (mine !== generation) return
               await deps.fallback.speak(sentences.slice(i).join(" "))
             }
             return
@@ -315,6 +317,7 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
             // Synthesised but not playable: the old voice still gets the words out.
             if (mine === generation) {
               await announceFallbackOnce(voice)
+              if (mine !== generation) return
               await deps.fallback.speak(sentences.slice(i).join(" "))
             }
             return

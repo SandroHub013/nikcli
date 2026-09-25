@@ -99,6 +99,39 @@ describe("tts/natural-speaker", () => {
     expect(mac.installs).toEqual([])
   })
 
+  test("cancelling while the fallback notice plays never speaks the abandoned reply", async () => {
+    let releaseNotice: (() => void) | undefined
+    let markNoticeStarted: (() => void) | undefined
+    const noticeStarted = new Promise<void>((resolve) => {
+      markNoticeStarted = resolve
+    })
+    const spoken: string[] = []
+    const h = harness({
+      status: async () => ({ supported: false, installed: false }),
+      fallbackNotice: () => "Avviso naturale.",
+      fallback: {
+        speak: async (text) => {
+          spoken.push(text)
+          if (text === "Avviso naturale.") {
+            markNoticeStarted?.()
+            await new Promise<void>((resolve) => {
+              releaseNotice = resolve
+            })
+          }
+        },
+        cancel: () => {},
+      },
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    const old = speaker.speak("Vecchia risposta lunga.")
+    await noticeStarted
+    speaker.cancel()
+    releaseNotice?.()
+    await old
+    await speaker.speak("Nuova risposta lunga.")
+    expect(spoken).toEqual(["Avviso naturale.", "Nuova risposta lunga."])
+  })
+
   test("a sentence Piper fails leaves the rest of the reply to the old voice", async () => {
     const h = harness({
       synthesize: async (_voice, text) => {
