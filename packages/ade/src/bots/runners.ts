@@ -276,8 +276,12 @@ export function turnCommand(
       const repository = fromRepository(bot)
       const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash") && !repository
       if (spec.lean) {
-        const sources = repository || adeMsgOnly || !canWrite(bot) ? "" : "local"
-        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", sources)
+        /*
+         * No settings file at all, the project's `.claude/settings.local.json`
+         * included: it can hold hooks, which are commands (B3b review). What a
+         * bot may do is said below, tool by tool.
+         */
+        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")

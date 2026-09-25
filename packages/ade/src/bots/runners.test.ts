@@ -69,7 +69,7 @@ describe("gli argomenti di un turno", () => {
     const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true })
     expect(args).toContain("--strict-mcp-config")
     expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
-    expect(args[args.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
     expect(args[args.indexOf("--settings") + 1]).toBe('{"autoMemoryEnabled":false}')
     expect(args[args.indexOf("--allowedTools") + 1]).toContain("PowerShell(ade-msg *)")
     expect(turnCommand(runnerById("claude"), { bot, message: "x" }).args).not.toContain("--strict-mcp-config")
@@ -405,7 +405,7 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
   test("un bot dell'utente resta com'era", () => {
     const claude = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args
     expect(claude[claude.indexOf("--allowedTools") + 1]).toContain("Bash")
-    expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("")
     expect(claude.join(" ")).not.toContain("(./.git/**)")
     const codex = turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args
     expect(codex).toContain('approval_policy="never"')
@@ -431,6 +431,13 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
   test("Claude Code e Codex non ricevono l'opzione, che vale solo per nikcli", () => {
     for (const runner of ["claude", "codex"]) {
       expect(turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags).toBeUndefined()
+    }
+  })
+
+  test("un bot Claude del pannello non legge nessun file di impostazioni, nemmeno quello locale del progetto", () => {
+    for (const scope of ["global", "project"] as const) {
+      const { args } = turnCommand(runnerById("claude"), { bot: { ...bot, scope }, message: "x", lean: true })
+      expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
     }
   })
 })
