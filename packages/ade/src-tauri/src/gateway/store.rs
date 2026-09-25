@@ -39,7 +39,7 @@ pub struct LinkState {
     pub authorized: Vec<Authorized>,
     /// Chats an authorized sender wrote from: the only ones a reply may go to.
     #[serde(default)]
-    pub chats: Vec<String>,
+    pub chats: Vec<Chat>,
     /// Where the platform's stream was read up to (Telegram's offset), saved
     /// after the message was handed on.
     #[serde(default)]
@@ -67,6 +67,25 @@ impl LinkState {
     pub fn is_authorized(&self, sender: &str) -> bool {
         self.authorized.iter().any(|entry| entry.id == sender)
     }
+
+    pub fn knows_chat(&self, chat: &str) -> bool {
+        self.chats.iter().any(|known| known.id == chat)
+    }
+
+    /// `chat` may be answered from now on, as long as `sender` stays authorized.
+    pub fn remember_chat(&mut self, chat: &str, sender: &str) {
+        if !self.chats.iter().any(|known| known.id == chat && known.sender == sender) {
+            self.chats.push(Chat { id: chat.into(), sender: sender.into() });
+        }
+    }
+}
+
+/// A chat a reply may go to, and the authorized sender it is there for: revoking
+/// them forgets it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Chat {
+    pub id: String,
+    pub sender: String,
 }
 
 /// Someone who may write to the bot on that platform, by the platform's fixed id.

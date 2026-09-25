@@ -159,6 +159,12 @@ pub async fn gateway_pairing_approve(app: AppHandle, bot: String, platform: Plat
     hub(&app)?.pairing_approve(&bot, platform, &code).await
 }
 
+/// Takes an account off the authorized: the bot stops hearing and answering it.
+#[tauri::command]
+pub async fn gateway_pairing_revoke(app: AppHandle, bot: String, platform: Platform, sender: String) -> Result<(), String> {
+    hub(&app)?.pairing_revoke(&bot, platform, &sender)
+}
+
 #[tauri::command]
 pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platform, request: String) -> Result<(), String> {
     hub(&app)?.pairing_reject(&bot, platform, &request)

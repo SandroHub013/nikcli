@@ -319,7 +319,7 @@ impl Hub {
             .get(&(bot.to_string(), platform))
             .map(|running| running.adapter.clone())
             .ok_or_else(|| "il gateway di questo bot è spento".to_string())?;
-        let known = self.store.link(bot, platform).is_some_and(|link| link.chats.iter().any(|known| known == chat));
+        let known = self.store.link(bot, platform).is_some_and(|link| link.knows_chat(chat));
         if !known {
             return Err("questa chat non ha mai scritto al bot da un account autorizzato".into());
         }
@@ -380,9 +380,7 @@ impl Hub {
             if !link.is_authorized(&pending.sender) {
                 link.authorized.push(Authorized { id: pending.sender.clone(), name: pending.name.clone(), added_ms: now });
             }
-            if !link.chats.iter().any(|known| known == &pending.chat) {
-                link.chats.push(pending.chat.clone());
-            }
+            link.remember_chat(&pending.chat, &pending.sender);
             Ok(Ok(pending))
         })?;
         let tag = format!("gateway {} {}", platform.id(), &bot_key(bot)[..8]);
@@ -401,6 +399,22 @@ impl Hub {
             }
         }
         Ok(AuthorizedInfo { id: pending.sender, name: pending.name, added_ms: now })
+    }
+
+    /// Takes `sender` off the authorized: their messages stop reaching the
+    /// page, and their chats can no longer be answered. Nothing is sent to them.
+    pub fn pairing_revoke(&self, bot: &str, platform: Platform, sender: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        self.store.update(bot, platform, |link, _| {
+            if !link.is_authorized(sender) {
+                return Err("questo account non è tra gli autorizzati".into());
+            }
+            link.authorized.retain(|entry| entry.id != sender);
+            link.chats.retain(|chat| chat.sender != sender);
+            Ok(())
+        })?;
+        self.env.log(&format!("gateway {} {}: autorizzazione revocata in ADE", platform.id(), &bot_key(bot)[..8]));
+        Ok(())
     }
 
     /// The user refused a request from the panel. Nothing is sent to the stranger.
@@ -546,11 +560,12 @@ impl Task {
             self.pair(message).await;
             return;
         }
-        let chat = message.chat.clone();
         let remembered = self.store.update(&self.bot, self.platform, |link, _| {
-            if !link.chats.iter().any(|known| known == &chat) {
-                link.chats.push(chat.clone());
+            // Revoked between the check and now: not theirs to hand on.
+            if !link.is_authorized(&message.sender.id) {
+                return Err("mittente non più autorizzato".into());
             }
+            link.remember_chat(&message.chat, &message.sender.id);
             Ok(())
         });
         if let Err(error) = remembered {
@@ -744,7 +759,8 @@ mod tests {
         assert_eq!(messages[0].text, "ciao");
         assert_eq!(messages[0].bot, BOT);
         // Only its chat may be answered.
-        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().chats, vec!["c42".to_string()]);
+        let chats = s.hub.store.link(BOT, Platform::Fake).unwrap().chats;
+        assert_eq!(chats.iter().map(|chat| (chat.id.as_str(), chat.sender.as_str())).collect::<Vec<_>>(), vec![("c42", "42")]);
     }
 
     #[tokio::test]
@@ -948,6 +964,31 @@ mod tests {
         assert!(list.pending.is_empty());
         assert_eq!(list.attempts_left, 3);
         assert_eq!(adapter.sent.lock().unwrap().len(), 3, "due codici e la conferma di 7, nient'altro");
+    }
+
+    #[tokio::test]
+    async fn a_revoked_sender_is_no_longer_heard_or_answered() {
+        let s = setup("revoke");
+        authorize(&s, "42");
+        authorize(&s, "43");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "ciao"), message("2", "c43", "43", "ciao")])).unwrap();
+        eventually("i due messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        s.hub.pairing_revoke(BOT, Platform::Fake, "42").unwrap();
+        assert!(s.hub.pairing_revoke(BOT, Platform::Fake, "42").is_err());
+        let refused = s.hub.send(BOT, Platform::Fake, "c42", "ancora qui?").await.unwrap_err();
+        assert!(refused.contains("non ha mai scritto"), "{refused}");
+        // The other one is untouched.
+        s.hub.send(BOT, Platform::Fake, "c43", "sì").await.unwrap();
+        feed.send(Ok(vec![message("3", "c42", "42", "dopo la revoca"), message("4", "c43", "43", "io ci sono")])).unwrap();
+        eventually("il messaggio dell'altro", || s.env.messages.lock().unwrap().len() == 3).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let texts: Vec<String> = s.env.messages.lock().unwrap().iter().map(|m| m.text.clone()).collect();
+        assert_eq!(texts, vec!["ciao", "ciao", "io ci sono"]);
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert_eq!(list.authorized.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), vec!["43"]);
+        // Only the one reply to 43 went out; nothing told 42 of the revocation.
+        assert!(adapter.sent.lock().unwrap().iter().all(|(chat, text)| chat != "c42" || text.starts_with("Codice di abbinamento")));
     }
 
     #[tokio::test]
