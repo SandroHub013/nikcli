@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
 import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, spendLine, turnCommand } from "./runners"
-import { emptyTalk, sendMessage, type Talk } from "./talk"
+import { emptyTalk, parseTalk, sendMessage, serializeTalk, type Talk } from "./talk"
 
 const bot: AgentFile = {
   identifier: "tester",
@@ -458,9 +458,11 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
     expect(fromRepo.flags).toBeUndefined()
   })
 
-  test("Claude Code e Codex non ricevono l'opzione, che vale solo per nikcli", () => {
+  test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
     for (const runner of ["claude", "codex"]) {
-      expect(turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags).toBeUndefined()
+      const flags = turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags
+      expect(flags).toEqual(["account-plan"])
+      expect(flags).not.toContain("no-project-config")
     }
   })
 
@@ -532,6 +534,24 @@ describe("un turno da chat non ha la shell", () => {
   })
 })
 
+describe("abbonamento o chiave", () => {
+  test("plan mette account-plan e nessuna chiave; key mette il nome; nikcli non ha il flag", () => {
+    const plan = turnCommand(runnerById("claude"), { bot, message: "x" })
+    expect(plan.flags).toEqual(["account-plan"])
+    expect(plan.secrets).toBeUndefined()
+    const key = turnCommand(runnerById("codex"), { bot, message: "x", account: { mode: "key", key: "lavoro" } })
+    expect(key.flags).toEqual(["account-key"])
+    expect(key.secrets).toEqual(["lavoro"])
+    const nik = turnCommand(runnerById("nikcli"), { bot, message: "x", account: { mode: "key", key: "lavoro" } })
+    expect(nik.flags ?? []).not.toContain("account-key")
+    expect(nik.flags ?? []).not.toContain("account-plan")
+    expect(nik.secrets).toBeUndefined()
+    const missing = turnCommand(runnerById("claude"), { bot, message: "x", account: { mode: "key", key: "" } })
+    expect(missing.flags).toEqual(["account-key"])
+    expect(missing.secrets).toBeUndefined()
+  })
+})
+
 describe("il costo di un turno", () => {
   test("Claude Code e Codex non mostrano dollari: il numero della CLI non è un addebito", () => {
     for (const runnerId of ["claude", "codex"]) {
@@ -552,6 +572,50 @@ describe("il costo di un turno", () => {
     expect(unnamed.kind).toBe("metered")
     expect(unnamed.usd).toBe("$0.004")
     expect(spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
+  })
+
+  test("con la chiave Claude mostra i dollari, Codex i token e nessun dollaro, l'abbonamento niente", () => {
+    const claude = spendLine({
+      runnerId: "claude",
+      model: "opus",
+      tokens: 12,
+      costUsd: 0.04,
+      account: { mode: "key", key: "lavoro" },
+    })
+    expect(claude).toMatchObject({ kind: "api", usd: "$0.04" })
+    const codex = spendLine({
+      runnerId: "codex",
+      model: "gpt-5.5",
+      tokens: 12,
+      costUsd: 0.04,
+      account: { mode: "key", key: "lavoro" },
+    })
+    expect(codex.kind).toBe("api")
+    expect(codex.usd).toBeUndefined()
+    expect(codex.unreported).toBe(true)
+    expect(JSON.stringify(codex)).not.toContain("$")
+    const plan = spendLine({ runnerId: "claude", model: "opus", tokens: 12, costUsd: 0.42, account: { mode: "plan" } })
+    expect(plan.kind).toBe("plan")
+    expect(plan.usd).toBeUndefined()
+    expect(plan.unreported).toBeUndefined()
+    expect(JSON.stringify(plan)).not.toContain("$")
+  })
+
+  test("il totale di un filo non mescola i modi", () => {
+    const runner = runnerById("claude")
+    const line = (cost: number) =>
+      `{"type":"result","is_error":false,"session_id":"s","total_cost_usd":${cost},"usage":{"input_tokens":1,"output_tokens":1}}`
+    let talk = applyRunnerLine(runner, { ...sendMessage(emptyTalk(), "a", 1), turnMode: "plan" }, line(0.04), 2)
+    talk = applyRunnerLine(runner, { ...sendMessage(talk, "b", 3), turnMode: "api" }, line(0.01), 4)
+    expect(talk.lastTurn).toMatchObject({ mode: "api", costUsd: 0.01 })
+    expect(talk.byMode?.plan?.costUsd).toBe(0.04)
+    expect(talk.byMode?.api?.costUsd).toBe(0.01)
+    expect(talk.costUsd).toBeCloseTo(0.05)
+    const restored = parseTalk(serializeTalk(talk))
+    expect(restored.byMode?.plan?.costUsd).toBe(0.04)
+    expect(restored.byMode?.api?.costUsd).toBe(0.01)
+    expect(restored.lastTurn?.mode).toBe("api")
+    expect(restored.turnMode).toBeUndefined()
   })
 
   test("i dollari hanno tre cifre sotto il centesimo e due sopra", () => {

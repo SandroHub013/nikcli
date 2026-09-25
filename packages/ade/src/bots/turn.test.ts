@@ -239,4 +239,41 @@ describe("le opzioni di avvio arrivano all'host", () => {
     await turn.result
     expect(seen[0]!.flags).toEqual(["no-project-config"])
   })
+
+  test("Claude in abbonamento toglie le chiavi ereditate e non ne passa", async () => {
+    const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
+    let exit: (code: number | null) => void = () => {}
+    const host = {
+      spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[]; onExit: (code: number | null) => void }) => {
+        seen.push({ ...(options.flags ? { flags: options.flags } : {}), ...(options.secrets ? { secrets: options.secrets } : {}) })
+        exit = options.onExit
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const turn = runTurn({ runner: "claude", message: "ciao", exitGraceMs: 30 }, deps)
+    while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
+    exit(0)
+    await turn.result
+    expect(seen[0]!.flags).toEqual(["account-plan"])
+    expect(seen[0]!.secrets).toBeUndefined()
+  })
+
+  test("una chiave tolta fallisce il turno e non parte in abbonamento", async () => {
+    const seen: { flags?: readonly string[]; secrets?: readonly string[] }[] = []
+    const host = {
+      spawn: async (options: { flags?: readonly string[]; secrets?: readonly string[] }) => {
+        seen.push({ ...(options.flags ? { flags: options.flags } : {}), ...(options.secrets ? { secrets: options.secrets } : {}) })
+        throw new Error("chiave «finta» non assegnata a claude-code in Impostazioni › Chiavi API")
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const result = await runTurn({ runner: "claude", message: "ciao", account: { mode: "key", key: "finta" } }, deps).result
+    expect(seen[0]!.flags).toEqual(["account-key"])
+    expect(seen[0]!.flags).not.toContain("account-plan")
+    expect(seen[0]!.secrets).toEqual(["finta"])
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain("chiave «finta» non assegnata a claude-code")
+    expect(result.problem).not.toContain("sk-")
+  })
 })

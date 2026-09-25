@@ -65,6 +65,13 @@ export interface Talk {
    * turn's tokens and cost. The thread totals above keep growing.
    */
   readonly lastTurn?: LastTurn
+  /**
+   * How the turn under way is paid for. Set when it starts, not stored:
+   * a reload ends the turn. Usage lands in `byMode` under this name.
+   */
+  readonly turnMode?: TalkSpend | undefined
+  /** Tokens and cost of the thread, split by how each turn was paid for. */
+  readonly byMode?: Readonly<Partial<Record<TalkSpend, ModeTotal>>>
   /** Usage of the turn under way, until its result. Not stored. */
   readonly pendingTurn?: LastTurn
   /** When anything last happened, for the roster's clock. */
@@ -108,10 +115,19 @@ export interface Talk {
   readonly streaming?: string
 }
 
+/** How that turn was paid for. A thread keeps one total per mode, so they are not added together. */
+export type TalkSpend = "plan" | "api" | "free" | "metered"
+
+export interface ModeTotal {
+  readonly tokens: number
+  readonly costUsd: number
+}
+
 export interface LastTurn {
   readonly model?: string
   readonly tokens: number
   readonly costUsd: number
+  readonly mode?: TalkSpend
 }
 
 export function emptyTalk(): Talk {
@@ -161,15 +177,33 @@ export function noteReportedModel(talk: Talk, event: Record<string, unknown>): T
   return rememberModel(talk, reportedModel(event))
 }
 
+const TALK_SPENDS: readonly TalkSpend[] = ["plan", "api", "free", "metered"]
+
+function isTalkSpend(value: unknown): value is TalkSpend {
+  return typeof value === "string" && (TALK_SPENDS as readonly string[]).includes(value)
+}
+
+function addMode(byMode: Talk["byMode"], mode: TalkSpend, tokens: number, costUsd: number): NonNullable<Talk["byMode"]> {
+  const prev = byMode?.[mode] ?? { tokens: 0, costUsd: 0 }
+  return { ...byMode, [mode]: { tokens: prev.tokens + tokens, costUsd: prev.costUsd + costUsd } }
+}
+
 /** Adds this event's usage to the turn under way, and keeps it when the turn ends. */
 export function noteTurnUsage(talk: Talk, tokens: number, costUsd: number, close: boolean): Talk {
   const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
   const next = { ...pending, tokens: pending.tokens + tokens, costUsd: pending.costUsd + costUsd }
-  if (!close) return { ...talk, pendingTurn: next }
+  const byMode = talk.turnMode ? addMode(talk.byMode, talk.turnMode, tokens, costUsd) : talk.byMode
+  if (!close) return { ...talk, pendingTurn: next, ...(byMode ? { byMode } : {}) }
   return {
     ...talk,
     pendingTurn: undefined,
-    lastTurn: { ...(next.model ? { model: next.model } : {}), tokens: next.tokens, costUsd: next.costUsd },
+    ...(byMode ? { byMode } : {}),
+    lastTurn: {
+      ...(next.model ? { model: next.model } : {}),
+      tokens: next.tokens,
+      costUsd: next.costUsd,
+      ...(talk.turnMode ? { mode: talk.turnMode } : {}),
+    },
   }
 }
 
@@ -225,6 +259,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     ended: undefined,
     // One limit must not mark every later turn, including one reloaded from disk.
     limited: undefined,
+    turnMode: undefined,
     pendingTurn: { tokens: 0, costUsd: 0 },
     turnSession: undefined,
   }
@@ -666,6 +701,7 @@ export function serializeTalk(talk: Talk): string {
       tokens: talk.tokens,
       costUsd: talk.costUsd,
       ...(talk.lastTurn ? { lastTurn: talk.lastTurn } : {}),
+      ...(talk.byMode ? { byMode: talk.byMode } : {}),
       updatedAt: talk.updatedAt,
     })
   let encoded = pack(messages)
@@ -682,8 +718,23 @@ function parseLastTurn(value: unknown): LastTurn | undefined {
   const tokens = typeof record.tokens === "number" ? record.tokens : 0
   const costUsd = typeof record.costUsd === "number" ? record.costUsd : 0
   const model = typeof record.model === "string" && record.model.trim() ? record.model : undefined
-  if (!model && tokens === 0 && costUsd === 0) return undefined
-  return { ...(model ? { model } : {}), tokens, costUsd }
+  const mode = isTalkSpend((record as { mode?: unknown }).mode) ? (record as { mode: TalkSpend }).mode : undefined
+  if (!model && tokens === 0 && costUsd === 0 && !mode) return undefined
+  return { ...(model ? { model } : {}), tokens, costUsd, ...(mode ? { mode } : {}) }
+}
+
+function parseByMode(value: unknown): Talk["byMode"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const out: Partial<Record<TalkSpend, ModeTotal>> = {}
+  for (const mode of TALK_SPENDS) {
+    const row = (value as Record<string, unknown>)[mode]
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue
+    const tokens = (row as { tokens?: unknown }).tokens
+    const costUsd = (row as { costUsd?: unknown }).costUsd
+    if (typeof tokens !== "number" || typeof costUsd !== "number") continue
+    out[mode] = { tokens, costUsd }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 /** The stored thread, tolerating anything: an unreadable one is an empty one. */
@@ -711,6 +762,10 @@ export function parseTalk(raw: string | null | undefined): Talk {
       ...(() => {
         const last = parseLastTurn(parsed.lastTurn)
         return last ? { lastTurn: last } : {}
+      })(),
+      ...(() => {
+        const byMode = parseByMode((parsed as { byMode?: unknown }).byMode)
+        return byMode ? { byMode } : {}
       })(),
       ...(typeof parsed.updatedAt === "number" ? { updatedAt: parsed.updatedAt } : {}),
     }

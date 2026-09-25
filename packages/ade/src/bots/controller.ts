@@ -14,8 +14,9 @@
  * forgotten is left behind: whatever it still says goes nowhere.
  */
 
+import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
-import { applyRunnerLine, runnerById } from "./runners"
+import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import { answerKeys, applyExit, applyProblem, noticePermission, permissionAnswered, sendMessage, emptyTalk, type PermissionAnswer, type Talk } from "./talk"
 import type { Turn, TurnRequest } from "./turn"
 
@@ -30,6 +31,8 @@ export interface BotTurnsDeps {
   readonly runTurn: (request: TurnRequest) => Turn
   readonly talkOf: (path: string) => Talk
   readonly update: (path: string, change: (talk: Talk) => Talk) => void
+  /** The bot's account in ADE. Absent is a subscription. */
+  readonly accountOf?: (path: string) => BotAccount
 }
 
 export interface BotTurns {
@@ -50,13 +53,18 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const path = bot.path
     if (turns.has(path)) return false
     const runner = runnerById(bot.runner)
-    deps.update(path, (talk) => sendMessage(talk, message, Date.now()))
+    const account = deps.accountOf?.(path) ?? { mode: "plan" as const }
+    deps.update(path, (talk) => ({
+      ...sendMessage(talk, message, Date.now()),
+      turnMode: spendKind(runner.id, bot.model, account),
+    }))
     const sessionId = deps.talkOf(path).sessionId
     const current = () => turns.get(path) === turn
     const turn = deps.runTurn({
       runner: runner.id,
       bot,
       message,
+      account,
       ...(sessionId ? { sessionId } : {}),
       ...(cwd ? { cwd } : {}),
       // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).

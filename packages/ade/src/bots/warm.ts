@@ -61,6 +61,8 @@ function configKey(request: TurnRequest): string {
     request.mailbox?.id ?? "",
     request.lean === true,
     request.partial === true,
+    request.account?.mode ?? "plan",
+    request.account?.mode === "key" ? request.account.key : "",
   ])
 }
 
@@ -136,7 +138,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
       const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
       const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
       const resumeId = resumes.get(cwdOf(request))
-      const { command, args } = turnCommand(runner, {
+      const { command, args, flags, secrets } = turnCommand(runner, {
         bot,
         message: "",
         stdin: true,
@@ -144,6 +146,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         ...(request.lean ? { lean: true } : {}),
         ...(request.partial ? { partial: true } : {}),
         ...(outbox ? { outbox } : {}),
+        ...(request.account ? { account: request.account } : {}),
       })
       if (request.mailbox) {
         target.token = crypto.randomUUID()
@@ -158,6 +161,8 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
         rows: 50,
         pipe: true,
         ...(request.mailbox && target.token ? { pane: request.mailbox.id, paneToken: target.token } : {}),
+        ...(flags ? { flags } : {}),
+        ...(secrets && secrets.length > 0 ? { secrets: [...secrets] } : {}),
         onLine: (line) => target.line?.(line),
         onExit: (code) => {
           const wasLive = !target.exited

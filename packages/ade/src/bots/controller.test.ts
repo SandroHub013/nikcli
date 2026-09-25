@@ -21,10 +21,19 @@ function machine(options: { refuse?: string } = {}) {
   const exits: ((code: number | null) => void)[] = []
   const lines: ((line: string, stream: "out" | "err") => void)[] = []
   const writes: string[] = []
+  const flags: (readonly string[] | undefined)[] = []
+  const secrets: (readonly string[] | undefined)[] = []
   const host = {
-    spawn: async (spawn: { onExit: (code: number | null) => void; onLine: (line: string, stream: "out" | "err") => void }) => {
+    spawn: async (spawn: {
+      flags?: readonly string[]
+      secrets?: readonly string[]
+      onExit: (code: number | null) => void
+      onLine: (line: string, stream: "out" | "err") => void
+    }) => {
       exits.push(spawn.onExit)
       lines.push(spawn.onLine)
+      flags.push(spawn.flags)
+      secrets.push(spawn.secrets)
       if (options.refuse) {
         spawn.onLine(options.refuse, "err")
         spawn.onExit(null)
@@ -42,12 +51,14 @@ function machine(options: { refuse?: string } = {}) {
     kills,
     writes,
     spawned: () => exits.length,
+    flags,
+    secrets,
     exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
     say: (line: string, at = lines.length - 1) => lines[at]?.(line, "out"),
   }
 }
 
-function panel(m: ReturnType<typeof machine>) {
+function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mode: "plan" } | { mode: "key"; key: string }) {
   const talks: Record<string, Talk> = {}
   const turns = createBotTurns({
     runTurn: (request) => runTurn(request, m.deps),
@@ -55,6 +66,7 @@ function panel(m: ReturnType<typeof machine>) {
     update: (path, change) => {
       talks[path] = change(talks[path] ?? emptyTalk())
     },
+    ...(accountOf ? { accountOf } : {}),
   })
   return { turns, talk: (path: string) => talks[path] ?? emptyTalk() }
 }
@@ -189,6 +201,18 @@ describe("the Bots panel's turns", () => {
     expect(p.turns.send(claude, "due")).toBe(false)
     await tick()
     expect(m.spawned()).toBe(1)
+    p.turns.stop(claude)
+    await tick()
+  })
+
+  test("il turno del pannello porta il flag dell'account, e una chiave il suo nome", async () => {
+    const m = machine()
+    const p = panel(m, () => ({ mode: "key", key: "lavoro" }))
+    const claude = bot("claude")
+    p.turns.send(claude, "ciao")
+    await tick()
+    expect(m.flags[0]).toEqual(["account-key"])
+    expect(m.secrets[0]).toEqual(["lavoro"])
     p.turns.stop(claude)
     await tick()
   })
