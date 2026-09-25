@@ -601,6 +601,11 @@ export const it = {
   "gateway.panel.locked": (time: string) => `Troppi codici sbagliati: abbinamento bloccato fino alle ${time}.`,
   "gateway.panel.openPairing": "Abbina un altro account (per 10 minuti)",
   "gateway.panel.pairingOpen": "Chi scrive al bot adesso riceve un codice.",
+  "gateway.panel.pairingAfterOn": "Il gateway è spento: dopo l'accensione, chi scrive al bot riceve un codice.",
+  "gateway.panel.needToken": "Per accendere serve il token del bot: salvalo qui sopra.",
+  "gateway.panel.previousProject": (project: string) => `Prima i turni da chat giravano in: ${project}`,
+  "gateway.panel.moveProject": (from: string, to: string) =>
+    `Il gateway di questo bot girava in:\n${from}\n\nSe lo accendi adesso, i turni da chat gireranno in:\n${to}\n\nAccendo in questo progetto?`,
   "gateway.panel.pairingOpenUntil": (time: string) => `Chi scrive al bot fino alle ${time} riceve un codice.`,
   "gateway.panel.remote": "Comandi da remoto",
   "gateway.panel.remoteNever": (runner: string) => `Da chat questo bot non esegue comandi: ${runner} non può chiederti il permesso comando per comando.`,

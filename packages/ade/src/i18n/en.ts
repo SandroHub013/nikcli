@@ -592,6 +592,11 @@ export const en: Messages = {
   "gateway.panel.locked": (time) => `Too many wrong codes: pairing locked until ${time}.`,
   "gateway.panel.openPairing": "Pair another account (for 10 minutes)",
   "gateway.panel.pairingOpen": "Whoever writes to the bot now gets a code.",
+  "gateway.panel.pairingAfterOn": "The gateway is off: once it is on, whoever writes to the bot gets a code.",
+  "gateway.panel.needToken": "Switching on needs the bot's token: save it above.",
+  "gateway.panel.previousProject": (project) => `Chat turns used to run in: ${project}`,
+  "gateway.panel.moveProject": (from, to) =>
+    `This bot's gateway ran in:\n${from}\n\nSwitched on now, chat turns will run in:\n${to}\n\nSwitch on in this project?`,
   "gateway.panel.pairingOpenUntil": (time) => `Whoever writes to the bot until ${time} gets a code.`,
   "gateway.panel.remote": "Remote commands",
   "gateway.panel.remoteNever": (runner) => `From a chat this bot runs no commands: ${runner} cannot ask you command by command.`,

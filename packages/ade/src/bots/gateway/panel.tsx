@@ -106,6 +106,12 @@ export function GatewaySection(props: {
             {(project) => t("gateway.panel.project", project())}
           </Show>
         </p>
+        <Show when={panel.previous()}>
+          {(before) => <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.previousProject", before())}</p>}
+        </Show>
+        <Show when={!panel.link().enabled && !panel.link().hasToken}>
+          <p data-slot="bots-hint">{t("gateway.panel.needToken")}</p>
+        </Show>
         <div data-slot="gateway-row">
           <Show
             when={panel.link().enabled}
@@ -165,8 +171,11 @@ export function GatewaySection(props: {
               )}
             </For>
           </ul>
+          {/* A secret zone too: the code is short-lived, but a recording has no business keeping it. */}
           <form
             data-slot="gateway-row"
+            data-secrets
+            autocomplete="off"
             onSubmit={(event) => {
               event.preventDefault()
               approve()
@@ -198,8 +207,10 @@ export function GatewaySection(props: {
           }
         >
           <p data-slot="bots-hint">
-            <Show when={panel.pairing().openUntilMs} fallback={t("gateway.panel.pairingOpen")}>
-              {(until) => t("gateway.panel.pairingOpenUntil", time(until()))}
+            <Show when={panel.live()} fallback={t("gateway.panel.pairingAfterOn")}>
+              <Show when={panel.pairing().openUntilMs} fallback={t("gateway.panel.pairingOpen")}>
+                {(until) => t("gateway.panel.pairingOpenUntil", time(until()))}
+              </Show>
             </Show>
           </p>
         </Show>

@@ -26,9 +26,18 @@ const BOT: AgentFile = {
   runner: "nikcli",
 }
 
-function fakeApi() {
+function fakeApi(initial: Partial<GatewayStatus> = {}) {
   const calls: string[] = []
-  let status: GatewayStatus = { bot: BOT.path, platform: "telegram", enabled: false, running: false, connected: false, hasToken: false, authorized: [] }
+  let status: GatewayStatus = {
+    bot: BOT.path,
+    platform: "telegram",
+    enabled: false,
+    running: false,
+    connected: false,
+    hasToken: false,
+    authorized: [],
+    ...initial,
+  }
   let pairing: PairingInfo = { open: true, pending: [], authorized: [], attemptsLeft: 5 }
   const handlers: {
     status?: (status: LinkStatus) => void
@@ -82,9 +91,13 @@ function fakeApi() {
 
 type Approve = (bot: AgentFile, project: string) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
 
-function panelWith(fake: ReturnType<typeof fakeApi>, options: { bot?: AgentFile; approve?: Approve; project?: string } = {}) {
+function panelWith(
+  fake: ReturnType<typeof fakeApi>,
+  options: { bot?: AgentFile; approve?: Approve; project?: string; confirm?: boolean } = {},
+) {
   const remote = memoryRemoteStore()
   const asked: string[] = []
+  const confirmed: string[] = []
   const approve: Approve =
     options.approve ??
     (async (bot, project) => {
@@ -98,10 +111,14 @@ function panelWith(fake: ReturnType<typeof fakeApi>, options: { bot?: AgentFile;
       project: () => ("project" in options ? options.project : PROJECT),
       remote,
       approve,
+      confirm: async (question) => {
+        confirmed.push(question)
+        return options.confirm ?? false
+      },
       now: () => Date.UTC(2026, 8, 25, 10, 30),
     }),
   )
-  return { panel, remote, asked }
+  return { panel, remote, asked, confirmed }
 }
 
 describe("the Gateway section of a bot's card", () => {
@@ -165,9 +182,10 @@ describe("the Gateway section of a bot's card", () => {
   })
 
   test("switching on asks for the trust first and fixes the project; refused, nothing starts", async () => {
-    const fake = fakeApi()
+    const fake = fakeApi({ hasToken: true })
     const { panel, asked } = panelWith(fake)
     await panel.ready
+    await panel.refresh()
     await panel.setEnabled(true)
     expect(asked).toEqual([`aiuto ${PROJECT}`])
     expect(fake.calls).toEqual([`setEnabled true ${PROJECT}`])
@@ -175,8 +193,9 @@ describe("the Gateway section of a bot's card", () => {
     await panel.setEnabled(false)
     expect(fake.calls.at(-1)).toBe("setEnabled false -")
 
-    const refused = fakeApi()
+    const refused = fakeApi({ hasToken: true })
     const { panel: other } = panelWith(refused, { approve: async () => ({ ok: false, problem: t("gateway.selfGrant", "aiuto", "bash") }) })
+    await other.refresh()
     await other.setEnabled(true)
     expect(refused.calls).toEqual([])
     expect(other.problem()).toBe(t("gateway.selfGrant", "aiuto", "bash"))
@@ -186,6 +205,59 @@ describe("the Gateway section of a bot's card", () => {
     await lost.setEnabled(true)
     expect(nowhere.calls).toEqual([])
     expect(lost.problem()).toBe(t("gateway.panel.noProject"))
+  })
+
+  /* G6 review, BASSI 1-3. */
+  test("without a token switching on is refused with the reason, before any trust is asked", async () => {
+    const fake = fakeApi()
+    const { panel, asked } = panelWith(fake)
+    await panel.refresh()
+    await panel.setEnabled(true)
+    expect(asked).toEqual([])
+    expect(fake.calls).toEqual([])
+    expect(panel.problem()).toBe(t("gateway.panel.needToken"))
+  })
+
+  test("switched on again with another project open, the move is asked about first", async () => {
+    const before = "C:/vecchio-progetto"
+    const fake = fakeApi({ hasToken: true, project: before })
+    const { panel, asked, confirmed } = panelWith(fake)
+    await panel.refresh()
+    // Off, the panel shows where it would run now, and where it ran before.
+    expect(panel.where()).toBe(PROJECT)
+    expect(panel.previous()).toBe(before)
+    await panel.setEnabled(true)
+    expect(confirmed).toEqual([t("gateway.panel.moveProject", before, PROJECT)])
+    expect(asked).toEqual([])
+    expect(fake.calls).toEqual([])
+
+    const agreed = fakeApi({ hasToken: true, project: before })
+    const { panel: moved } = panelWith(agreed, { confirm: true })
+    await moved.refresh()
+    await moved.setEnabled(true)
+    expect(agreed.calls).toEqual([`setEnabled true ${PROJECT}`])
+    expect(moved.where()).toBe(PROJECT)
+    expect(moved.previous()).toBeUndefined()
+
+    // The same project as before: nothing to ask.
+    const same = fakeApi({ hasToken: true, project: PROJECT })
+    const { panel: again, confirmed: none } = panelWith(same)
+    await again.refresh()
+    await again.setEnabled(true)
+    expect(none).toEqual([])
+    expect(same.calls).toEqual([`setEnabled true ${PROJECT}`])
+  })
+
+  test("a stranger gets a code only while the gateway reads: live only switched on and running", async () => {
+    const fake = fakeApi({ hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.refresh()
+    expect(panel.live()).toBe(false)
+    await panel.setEnabled(true)
+    expect(panel.live()).toBe(true)
+    fake.handlers.status!({ bot: BOT.path, platform: "telegram", running: false, connected: false, lastError: "il token è in uso altrove" })
+    expect(panel.live()).toBe(false)
   })
 
   test("the remote commands go on only after the yes, with the fingerprint checked at that yes", async () => {

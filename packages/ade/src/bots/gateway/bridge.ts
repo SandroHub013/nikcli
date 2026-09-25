@@ -105,7 +105,13 @@ export async function approveForChat(
 
 /** What the panel needs in the app, but the bot. */
 export function appGatewayPanelDeps(project: () => string | undefined): Omit<GatewayPanelDeps, "bot"> {
-  return { api: tauriGatewayPanelApi(), project, remote: localRemoteStore(), approve: approveForChat }
+  return {
+    api: tauriGatewayPanelApi(),
+    project,
+    remote: localRemoteStore(),
+    approve: approveForChat,
+    confirm: (question) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") }),
+  }
 }
 
 /** Starts listening for the chats' messages; the gateways read from then on. */

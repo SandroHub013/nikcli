@@ -98,6 +98,8 @@ export interface GatewayPanelDeps {
    * every chat turn checks it; with the fingerprint of the file as read.
    */
   readonly approve: (bot: AgentFile, project: string) => Promise<{ ok: true; fingerprint: string } | { ok: false; problem?: string }>
+  /** Asks the user a yes or no in ADE: switching on in another project than before. */
+  readonly confirm: (question: string) => Promise<boolean>
   readonly platform?: string
   readonly now?: () => number
 }
@@ -176,7 +178,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     })
     .catch((error) => setProblem(reason(error)))
 
-  const where = () => link().project ?? deps.project()
+  /** On: the project fixed then. Off: the one open now, where switching on would fix it. */
+  const where = () => (link().enabled ? link().project : undefined) ?? deps.project()
+  /** Off, fixed before on another project than the one open now: switching on moves the turns (G6 review, BASSO 2). */
+  const previous = () => {
+    const before = link().project
+    return !link().enabled && before && before !== deps.project() ? before : undefined
+  }
 
   return {
     platform,
@@ -194,6 +202,9 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     offersRemote: () => offersRemoteCommands(deps.bot().runner),
     /** Where the chat's turns run: the project fixed when switched on, or the one open now. */
     where,
+    previous,
+    /** Reading: only then does a stranger writing get a code (G6 review, BASSO 1). */
+    live: () => link().enabled && link().running,
     ready,
     refresh,
 
@@ -218,6 +229,9 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         if (!on) return deps.api.setEnabled(path(), platform, false)
         const project = deps.project()
         if (!project) throw new Error(t("gateway.panel.noProject"))
+        if (!link().hasToken) throw new Error(t("gateway.panel.needToken"))
+        const before = previous()
+        if (before && !(await deps.confirm(t("gateway.panel.moveProject", before, project)))) return
         const trusted = await deps.approve(deps.bot(), project)
         if (!trusted.ok) {
           if (trusted.problem) throw new Error(trusted.problem)
