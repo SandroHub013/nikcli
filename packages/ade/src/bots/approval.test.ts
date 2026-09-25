@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import {
   APPROVAL_TIMEOUT_MS,
   BLOCKED,
@@ -177,5 +178,38 @@ describe("Claude Code, which cannot ask mid-turn", () => {
     expect(withGit).not.toContain("Bash(git push --force:*)")
     expect(withGit).toContain("Bash(rm -rf /:*)")
     expect(claudeRefusals(BLOCKED.map((rule) => rule.id))).toContain("Bash(shutdown:*)")
+  })
+})
+
+/*
+ * B8c review, M1: the block list also goes to nikcli as its own denials
+ * (`blocked_bash_denials` in `pty.rs`), so no answer typed ahead of a false
+ * menu lets one through. The two lists are written apart; this keeps them
+ * together: every rule here has a command in Rust's `BLOCKED_SAMPLES` (which
+ * Rust checks nikcli denies), and every such command is blocked here too.
+ */
+describe("la lista di blocco è la stessa in nikcli (pty.rs)", () => {
+  const rust = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
+  const table = rust.slice(rust.indexOf("const BLOCKED_SAMPLES"), rust.indexOf("];", rust.indexOf("const BLOCKED_SAMPLES")))
+  const samples = [...table.matchAll(/\("(\w+)",\s*("(?:[^"\\]|\\.)*")\)/g)].map(
+    ([, rule, literal]) => [rule!, JSON.parse(literal!) as string] as const,
+  )
+
+  test("la tabella si legge", () => {
+    expect(samples.length).toBeGreaterThan(10)
+  })
+
+  test("ogni regola di BLOCKED ha un comando che nikcli nega, tranne la fork bomb", () => {
+    const covered = new Set(samples.map(([rule]) => rule))
+    for (const rule of BLOCKED) {
+      if (rule.id === "forkBomb") continue
+      expect([rule.id, covered.has(rule.id)]).toEqual([rule.id, true])
+    }
+  })
+
+  test("ogni comando che nikcli nega è bloccato anche qui, per la stessa regola", () => {
+    for (const [rule, command] of samples) {
+      expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
+    }
   })
 })

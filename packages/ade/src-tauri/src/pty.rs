@@ -171,7 +171,14 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// outside the project, so that the page can answer each one: an everyday
 /// command at once, a blocked one never, a dangerous one after the user said
 /// so. A bot without a shell gets only the second. The bot's own file still
-/// wins over this, as it does for a chat's turn (`gateway/policy.ts`).
+/// wins over this, as it does for a chat's turn (`gateway/policy.ts`), so a
+/// bot that grants itself the shell does not start (`project-trust.ts`).
+///
+/// Every nikcli turn of a bot also carries the block list (B8c review, M1):
+/// see `blocked_bash_denials`. `bot-block` is that alone, for a turn with no
+/// rule of its own on the shell (a routine). `remote-no-shell` does without:
+/// the shell is denied whole, and a rule after it would show the tool to the
+/// model again (`disabled` in nikcli's `permission/ruleset.ts`).
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
     (
@@ -188,22 +195,140 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ),
     ("bot-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask","external_directory":"ask"}"#),
     ("bot-ask-outside", "nikcli", "NIKCLI_PERMISSION", r#"{"external_directory":"ask"}"#),
+    ("bot-block", "nikcli", "NIKCLI_PERMISSION", "{}"),
 ];
+
+/// The flags whose `NIKCLI_PERMISSION` carries the block list.
+const BLOCK_LIST_FLAGS: &[&str] = &["remote-ask-shell", "bot-ask-shell", "bot-ask-outside", "bot-block"];
+
+/*
+ * The permission key the block list goes under. `?` is nikcli's wildcard for
+ * one character, so this is `bash` to nikcli's `evaluate`, but a key of its
+ * own to the merge: `NIKCLI_PERMISSION` is merged over the configuration with
+ * `mergeDeep`, and an object under `bash` would take the place of the user's
+ * `"bash": "ask"` whole. A new key goes after the configuration's own, and the
+ * last rule that matches wins, so a denial here wins over the user's rules on
+ * the shell and leaves every other command to them.
+ */
+const BLOCK_KEY: &str = "b?sh";
+
+/*
+ * The block list (`BLOCKED` in `approval.ts`) as nikcli's own denials: nikcli
+ * refuses these before its menu, so no answer from ADE can let one through,
+ * not an Enter typed ahead of a false «Permission required» line (B8c review,
+ * M1). Patterns are nikcli's: `*` any text, `?` one character, matched on the
+ * command's words joined by one space, quotes kept, case counted. What they
+ * cannot see — a command inside `bash -c "…"`, a variable — ADE asks about
+ * (M2). A fork bomb is not a command nikcli names: `approval.ts` alone.
+ */
+fn blocked_bash_denials() -> Vec<String> {
+    const PREFIXES: &[&str] = &["", "sudo ", "*/", "\\"];
+    const ROOTS: &[&str] = &[
+        "/", "/?", "~", "~/", "~/?", "$HOME", "$HOME/", "${HOME}", "?:", "?:/", "?:\\", "?:/?", "?:\\?",
+    ];
+    const QUOTES: &[&str] = &["", "\"", "'"];
+    // An rm with no target nikcli can see: `rm -rf $HOME` reaches it as `rm -rf`.
+    const BARE: &[&str] = &[
+        "-r", "-rf", "-fr", "-R", "-Rf", "-fR", "-r -f", "-f -r", "--recursive", "--recursive --force", "--force --recursive",
+    ];
+    const WINDOWS_DELETE: &[&str] = &["Remove-Item", "remove-item", "ri", "rd", "rmdir", "del", "erase"];
+    const DRIVES: &[&str] = &["?:", "?:\\", "?:/", "?:\\?", "?:/?"];
+    const WORDS: &[&str] = &[
+        "mkfs", "diskpart", "fdisk", "wipefs", "parted", "Format-Volume", "format-volume", "Clear-Disk", "clear-disk",
+        "Remove-Partition", "remove-partition", "Initialize-Disk", "initialize-disk", "shutdown", "reboot", "poweroff",
+        "halt", "Stop-Computer", "stop-computer", "Restart-Computer", "restart-computer", "bcdedit", "vssadmin delete",
+        "reg delete HKLM", "reg delete hklm", "wmic shadowcopy delete",
+    ];
+    let mut denied = Vec::new();
+    for prefix in PREFIXES {
+        for root in ROOTS {
+            for quote in QUOTES {
+                denied.push(format!("{prefix}rm * {quote}{root}{quote}"));
+                denied.push(format!("{prefix}rm * {quote}{root}{quote} *"));
+            }
+        }
+        for flags in BARE {
+            denied.push(format!("{prefix}rm {flags}"));
+        }
+        denied.push(format!("{prefix}rm *--no-preserve-root*"));
+    }
+    for command in WINDOWS_DELETE {
+        for drive in DRIVES {
+            for quote in &QUOTES[..2] {
+                denied.push(format!("{command} * {quote}{drive}{quote}"));
+                denied.push(format!("{command} * {quote}{drive}{quote} *"));
+            }
+        }
+    }
+    for prefix in &PREFIXES[..2] {
+        for word in WORDS {
+            denied.push(format!("{prefix}{word}"));
+            denied.push(format!("{prefix}{word} *"));
+        }
+        for other in [
+            "mkfs.*",
+            "format ?:*",
+            "dd *of=/dev/*",
+            "cipher /w*",
+            "init 0",
+            "init 6",
+            "reg delete HKLM\\*",
+            "reg delete hklm\\*",
+        ] {
+            denied.push(format!("{prefix}{other}"));
+        }
+    }
+    denied
+}
+
+/*
+ * `value` (a flag's `NIKCLI_PERMISSION`, a JSON object) with the block list
+ * under `BLOCK_KEY`, written as its **last** key: nikcli keeps the keys in
+ * the order written, and the last matching rule wins. Written by hand, as
+ * `serde_json::Map` here sorts its keys, and `b?sh` sorts before `bash`.
+ */
+fn with_block_list(value: &str) -> String {
+    let denials: serde_json::Map<String, serde_json::Value> =
+        blocked_bash_denials().into_iter().map(|pattern| (pattern, serde_json::Value::from("deny"))).collect();
+    let body = value.trim().strip_suffix('}').unwrap_or("{");
+    let comma = if body.trim_end().ends_with('{') { "" } else { "," };
+    format!("{body}{comma}{}:{}}}", serde_json::Value::from(BLOCK_KEY), serde_json::Value::Object(denials))
+}
+
+/// Each flag's variable as it is set: the fixed value, with the block list where it goes.
+fn flag_value(name: &str, value: &'static str) -> &'static str {
+    static WITH_BLOCK: std::sync::OnceLock<HashMap<&'static str, String>> = std::sync::OnceLock::new();
+    let table = WITH_BLOCK.get_or_init(|| {
+        SPAWN_FLAGS
+            .iter()
+            .filter(|(name, _, _, _)| BLOCK_LIST_FLAGS.contains(name))
+            .map(|(name, _, _, value)| (*name, with_block_list(value)))
+            .collect()
+    });
+    table.get(name).map(String::as_str).unwrap_or(value)
+}
 
 /// The variables `flags` stand for, or why one is refused.
 pub(crate) fn spawn_flag_env(command: &str, flags: &[String]) -> Result<Vec<(&'static str, &'static str)>, String> {
     let agent = command_stem(command.trim()).to_ascii_lowercase();
-    flags
+    let env: Vec<(&'static str, &'static str)> = flags
         .iter()
         .map(|flag| {
             SPAWN_FLAGS
                 .iter()
                 .find(|(name, _, _, _)| *name == flag.as_str())
                 .filter(|(_, only, _, _)| *only == agent)
-                .map(|(_, _, key, value)| (*key, *value))
+                .map(|(name, _, key, value)| (*key, flag_value(name, value)))
                 .ok_or_else(|| format!("opzione di avvio non consentita per {command}: {flag}"))
         })
-        .collect()
+        .collect::<Result<_, _>>()?;
+    // Two flags for one variable: the second would silently undo the first.
+    for (index, (key, _)) in env.iter().enumerate() {
+        if env[..index].iter().any(|(other, _)| other == key) {
+            return Err(format!("opzioni di avvio in conflitto per {command}: {key}"));
+        }
+    }
+    Ok(env)
 }
 
 /// Variables an `account-plan` or `account-key` spawn must not inherit (B10).
@@ -2037,9 +2162,12 @@ mod tests {
         assert_eq!(env.len(), 2);
         assert_eq!(env[0], ("NIKCLI_DISABLE_PROJECT_CONFIG", "1"));
         assert_eq!(env[1].0, "NIKCLI_PERMISSION");
+        // What each flag sets besides the block list (below).
         let permission = |flag: &str| -> serde_json::Value {
             let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
-            serde_json::from_str(env[0].1).unwrap()
+            let mut value: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
+            value.as_object_mut().unwrap().remove(super::BLOCK_KEY);
+            value
         };
         assert_eq!(serde_json::from_str::<serde_json::Value>(env[1].1).unwrap(), permission("remote-no-shell"));
         for (flag, bash) in [("remote-no-shell", "deny"), ("remote-ask-shell", "ask")] {
@@ -2058,9 +2186,124 @@ mod tests {
         }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
         // A turn in ADE (B8c): every command and every step outside asked, for the page to answer.
+        assert_eq!(permission("bot-block"), serde_json::json!({}));
         assert_eq!(permission("bot-ask-shell"), serde_json::json!({ "bash": "ask", "external_directory": "ask" }));
         assert_eq!(permission("bot-ask-outside"), serde_json::json!({ "external_directory": "ask" }));
         assert!(super::spawn_flag_env("claude", &["bot-ask-shell".to_string()]).is_err());
+    }
+
+    /// nikcli's `Wildcard.match` (`util/wildcard.ts`): `*` any text, `?` one character, a final ` *` optional.
+    fn nikcli_wildcard(text: &str, pattern: &str) -> bool {
+        fn matches(text: &[char], pattern: &[char]) -> bool {
+            match pattern.split_first() {
+                None => text.is_empty(),
+                Some(('*', rest)) => (0..=text.len()).any(|skip| matches(&text[skip..], rest)),
+                Some(('?', rest)) => !text.is_empty() && matches(&text[1..], rest),
+                Some((char, rest)) => text.first() == Some(char) && matches(&text[1..], rest),
+            }
+        }
+        let text: Vec<char> = text.chars().collect();
+        let pattern: Vec<char> = pattern.chars().collect();
+        matches(&text, &pattern) || (pattern.ends_with(&[' ', '*']) && matches(&text, &pattern[..pattern.len() - 2]))
+    }
+
+    /*
+     * Whether nikcli, given `flag`, denies the command it names `pattern`:
+     * `BLOCK_KEY` is the last key as written (checked on the text, since
+     * `serde_json::Value` here sorts its keys), and one of its globs matches.
+     */
+    fn nikcli_denies(flag: &str, pattern: &str) -> bool {
+        let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
+        let raw = env[0].1;
+        let block = raw.find(&format!("\"{}\":", super::BLOCK_KEY)).expect("the block list");
+        let value: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for key in value.as_object().unwrap().keys() {
+            if key != super::BLOCK_KEY {
+                assert!(raw.find(&serde_json::Value::from(key.as_str()).to_string()).unwrap() < block, "{flag}: {key}");
+            }
+        }
+        assert!(nikcli_wildcard("bash", super::BLOCK_KEY));
+        value[super::BLOCK_KEY].as_object().unwrap().iter().any(|(glob, action)| action == "deny" && nikcli_wildcard(pattern, glob))
+    }
+
+    /*
+     * Commands the block list stops, as nikcli names them, by rule of
+     * `BLOCKED` in `approval.ts`. `approval.test.ts` reads this table: every
+     * rule there has a line here, and every line here is blocked there.
+     */
+    const BLOCKED_SAMPLES: &[(&str, &str)] = &[
+        ("deleteRoot", "rm -rf /"),
+        ("deleteRoot", "rm -rf /*"),
+        ("deleteRoot", "rm -fr ~"),
+        ("deleteRoot", "rm -rf ~/"),
+        ("deleteRoot", "rm -r -f $HOME"),
+        ("deleteRoot", "sudo rm -rf /"),
+        ("deleteRoot", "rm -rf \"/\""),
+        ("deleteRoot", "rm -rf --no-preserve-root /"),
+        ("deleteRoot", "rm -rf C:/"),
+        ("deleteDrive", "Remove-Item -Recurse -Force C:\\"),
+        ("deleteDrive", "rd /s /q C:\\"),
+        ("deleteDrive", "del /s /q D:\\*"),
+        ("disk", "mkfs.ext4 /dev/sda1"),
+        ("disk", "diskpart"),
+        ("disk", "format C:"),
+        ("disk", "dd if=/dev/zero of=/dev/sda"),
+        ("disk", "Clear-Disk -Number 0"),
+        ("power", "shutdown /s /t 0"),
+        ("power", "sudo reboot"),
+        ("power", "Stop-Computer"),
+        ("system", "bcdedit /deletevalue"),
+        ("system", "vssadmin delete shadows /all"),
+        ("system", "reg delete HKLM\\Software\\X"),
+    ];
+
+    #[test]
+    fn every_bot_turn_on_nikcli_denies_the_block_list_before_its_menu() {
+        for flag in super::BLOCK_LIST_FLAGS {
+            for (rule, command) in BLOCKED_SAMPLES {
+                assert!(nikcli_denies(flag, command), "{flag}: {rule}: {command}");
+            }
+        }
+        // Everyday commands, and deletions inside the project, stay to the rules they had.
+        for command in [
+            "ls -la",
+            "git status",
+            "git push --force origin x",
+            "rm -rf build",
+            "rm -rf ./node_modules",
+            "rm -rf /tmp/build",
+            "rm -rf ~/progetto/build",
+            "rm -rf C:/Users/me/progetto/dist",
+            "Remove-Item -Recurse dist",
+            "rd /s /q build",
+            "formatter --check",
+            "shutdownhook.sh",
+            "npm run halt-test",
+            "del notes.txt",
+        ] {
+            assert!(!nikcli_denies("bot-ask-shell", command), "{command}");
+            assert!(!nikcli_denies("bot-block", command), "{command}");
+        }
+        // The block list goes under its own key: the user's own rule on the shell stays theirs.
+        let env = super::spawn_flag_env("nikcli", &["bot-block".to_string()]).unwrap();
+        let value: serde_json::Value = serde_json::from_str(env[0].1).unwrap();
+        assert_eq!(value.as_object().unwrap().keys().collect::<Vec<_>>(), vec![super::BLOCK_KEY]);
+        // Not in a chat's turn with the shell denied whole: the tool stays hidden from the model.
+        let env = super::spawn_flag_env("nikcli", &["remote-no-shell".to_string()]).unwrap();
+        assert!(!env[0].1.contains(super::BLOCK_KEY));
+        // Well under what Windows allows a variable (32767).
+        for flag in super::BLOCK_LIST_FLAGS {
+            let env = super::spawn_flag_env("nikcli", &[flag.to_string()]).unwrap();
+            assert!(env[0].1.len() < 20_000, "{flag}: {}", env[0].1.len());
+        }
+    }
+
+    #[test]
+    fn two_flags_for_one_variable_are_refused() {
+        let both = vec!["bot-block".to_string(), "bot-ask-shell".to_string()];
+        assert!(super::spawn_flag_env("nikcli", &both).is_err());
+        let fine = vec!["no-project-config".to_string(), "bot-block".to_string()];
+        assert_eq!(super::spawn_flag_env("nikcli", &fine).unwrap().len(), 2);
     }
 
     #[test]
