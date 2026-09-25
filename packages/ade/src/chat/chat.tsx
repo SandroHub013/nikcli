@@ -20,21 +20,48 @@ import {
   createChatState,
   messagesForRequest,
   settleMessage,
+  modelsFromProviderList,
+  agentsFromList,
+  defaultModelChoice,
+  defaultAgentChoice,
+  isAdeTestBuild,
+  validateSelectedModel,
+  sameModel,
+  serializeModelRef,
+  parseModelRef,
+  type ModelRef,
   type ChatMessage,
   type ChatState,
+  type ChatModelChoice,
+  type ChatAgentChoice,
 } from "./model"
 import { splitSegments } from "./segments"
 import { CodeBlock } from "./code-block"
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL, streamChat } from "./client"
+import { streamChat, DEFAULT_CHAT_MODEL } from "./client"
+import type { ProviderList, Agent, NikcliClient } from "@nikcli-ai/sdk/client"
+import { openChat, appChatConnectionDeps, loadChatCatalog, type ChatConnectionDeps } from "./connection"
 import "./chat.css"
 
 const STORAGE_KEY = "ade.chat"
 const MODEL_KEY = "ade.chat.model"
+const AGENT_KEY = "ade.chat.agent"
 
 export interface ChatProps {
   /** OpenRouter key, from voice settings. Empty when not configured. */
   apiKey: string
   onOpenSettings: () => void
+  /** Project directory to open chat connection with trust check */
+  projectRoot?: string
+  /** Admitted client injected by callers or tests */
+  client?: NikcliClient
+  /** Connection deps override for testing openChat */
+  connectionDeps?: ChatConnectionDeps
+  /** Injected by tests or callers */
+  providerList?: ProviderList
+  /** Injected by tests or callers */
+  agents?: readonly Agent[]
+  /** Override for ADE Test mode (auto-detected if undefined) */
+  isTest?: boolean
 }
 
 /**
@@ -75,27 +102,84 @@ function save(state: ChatState) {
   }
 }
 
-function loadModel(): string {
+function loadStoredModel(
+  models: readonly ChatModelChoice[],
+  isTest: boolean,
+  configModel?: string | null,
+): ModelRef | undefined {
   try {
-    return localStorage.getItem(MODEL_KEY) || DEFAULT_CHAT_MODEL
-  } catch {
-    return DEFAULT_CHAT_MODEL
-  }
+    const stored = localStorage.getItem(MODEL_KEY)
+    const validated = validateSelectedModel(stored, models, isTest)
+    if (validated) return validated
+  } catch {}
+  const def = defaultModelChoice(models, configModel)
+  return def ? { providerID: def.providerID, modelID: def.modelID } : undefined
+}
+
+function loadStoredAgent(agents: readonly ChatAgentChoice[]): string {
+  try {
+    const stored = localStorage.getItem(AGENT_KEY)
+    if (stored && agents.some((a) => a.name === stored)) return stored
+  } catch {}
+  return defaultAgentChoice(agents) ?? ""
 }
 
 export function Chat(props: ChatProps) {
+  const isTest = () => props.isTest ?? isAdeTestBuild()
+
+  const initialModels = () =>
+    modelsFromProviderList(props.providerList, { isTest: isTest() })
+  const initialAgents = () =>
+    agentsFromList(props.agents)
+
   const [state, setState] = createSignal<ChatState>(createChatState())
   const [draft, setDraft] = createSignal("")
-  const [model, setModel] = createSignal(DEFAULT_CHAT_MODEL)
+  const [models, setModels] = createSignal<readonly ChatModelChoice[]>(initialModels())
+  const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(initialAgents())
+  const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
+  const [agent, setAgent] = createSignal<string>(loadStoredAgent(agents()))
   const [busy, setBusy] = createSignal(false)
 
   let scroller: HTMLDivElement | undefined
   let composer: HTMLTextAreaElement | undefined
   let inFlight: AbortController | undefined
 
-  onMount(() => {
+  onMount(async () => {
     setState(loadState())
-    setModel(loadModel())
+
+    let pList = props.providerList
+    let aList = props.agents
+    let cfgModel: string | undefined
+
+    let client = props.client
+    if (!client && props.projectRoot) {
+      try {
+        const opened = await openChat(props.projectRoot, props.connectionDeps ?? appChatConnectionDeps())
+        if (opened.ok) {
+          client = opened.client
+        }
+      } catch {}
+    }
+
+    if (client) {
+      try {
+        const catalog = await loadChatCatalog(client)
+        if (catalog.providerList) pList = catalog.providerList
+        if (catalog.agents) aList = catalog.agents
+        if (catalog.configModel) cfgModel = catalog.configModel
+      } catch {}
+    }
+
+    const testBuild = isTest()
+    const resolvedModels = modelsFromProviderList(pList, { isTest: testBuild })
+    setModels(resolvedModels)
+
+    const resolvedAgents = agentsFromList(aList)
+    setAgents(resolvedAgents)
+
+    setModel((current) => validateSelectedModel(current, resolvedModels, testBuild) ?? loadStoredModel(resolvedModels, testBuild, cfgModel))
+    setAgent((current) => (resolvedAgents.some((a) => a.name === current) ? current : loadStoredAgent(resolvedAgents)))
+
     composer?.focus()
   })
 
@@ -124,7 +208,8 @@ export function Chat(props: ChatProps) {
 
   const send = async () => {
     const text = draft().trim()
-    if (!text || busy()) return
+    const currentModel = model()
+    if (!text || !currentModel || busy()) return
 
     const now = Date.now()
     const question: ChatMessage = { id: `u${now}`, role: "user", text, at: now }
@@ -144,7 +229,7 @@ export function Chat(props: ChatProps) {
     try {
       await streamChat({
         apiKey: props.apiKey,
-        model: model(),
+        model: DEFAULT_CHAT_MODEL,
         messages: context,
         signal: controller.signal,
         onDelta: (delta) => setState((current) => appendDelta(current, answer.id, delta)),
@@ -174,10 +259,21 @@ export function Chat(props: ChatProps) {
     composer?.focus()
   }
 
-  const chooseModel = (id: string) => {
-    setModel(id)
+  const chooseModel = (raw: string) => {
+    const validated = validateSelectedModel(raw, models(), isTest())
+    if (!validated) return
+    setModel(validated)
     try {
-      localStorage.setItem(MODEL_KEY, id)
+      localStorage.setItem(MODEL_KEY, JSON.stringify(validated))
+    } catch {
+      // Same as the conversation: this session keeps the choice regardless.
+    }
+  }
+
+  const chooseAgent = (name: string) => {
+    setAgent(name)
+    try {
+      localStorage.setItem(AGENT_KEY, name)
     } catch {
       // Same as the conversation: this session keeps the choice regardless.
     }
@@ -186,27 +282,55 @@ export function Chat(props: ChatProps) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      void send()
+      if (model()) {
+        void send()
+      }
     }
   }
 
   return (
     <section data-component="ade-chat">
       <header data-slot="chat-head">
-        <select
-          data-slot="chat-model"
-          value={model()}
-          onChange={(event) => chooseModel(event.currentTarget.value)}
-          aria-label={t("chat.model.label")}
-        >
-          <For each={CHAT_MODELS}>{(entry) => <option value={entry.id}>{entry.label}</option>}</For>
-          {/* A model chosen in an earlier build, or typed into storage by
-              hand, must still show as selected rather than silently
-              switching the picker to the first entry. */}
-          <Show when={!CHAT_MODELS.some((entry) => entry.id === model())}>
-            <option value={model()}>{model()}</option>
-          </Show>
-        </select>
+        <div data-slot="chat-selectors">
+          <select
+            data-slot="chat-agent"
+            value={agent() || ""}
+            onChange={(event) => chooseAgent(event.currentTarget.value)}
+            aria-label={t("chat.agent.label")}
+          >
+            <Show when={agents().length === 0}>
+              <option value="" disabled selected>
+                {t("chat.agent.none")}
+              </option>
+            </Show>
+            <For each={agents()}>{(entry) => <option value={entry.name}>{entry.name}</option>}</For>
+            <Show when={agent() && !agents().some((entry) => entry.name === agent())}>
+              <option value={agent()}>{agent()}</option>
+            </Show>
+          </select>
+
+          <select
+            data-slot="chat-model"
+            value={model() ? serializeModelRef(model()!) : ""}
+            onChange={(event) => chooseModel(event.currentTarget.value)}
+            aria-label={t("chat.model.label")}
+          >
+            <Show when={models().length === 0}>
+              <option value="" disabled selected>
+                {t("chat.model.none")}
+              </option>
+            </Show>
+            <Show when={models().length > 0 && !model()}>
+              <option value="" disabled selected>
+                {t("chat.model.choose")}
+              </option>
+            </Show>
+            <For each={models()}>{(entry) => <option value={serializeModelRef(entry)}>{entry.label}</option>}</For>
+            <Show when={model() && !models().some((entry) => sameModel(entry, model()))}>
+              <option value={serializeModelRef(model()!)}>{serializeModelRef(model()!)}</option>
+            </Show>
+          </select>
+        </div>
         <div data-slot="chat-head-actions">
           <Show when={state().messages.length > 0}>
             <button type="button" data-slot="chat-action" onClick={reset}>
@@ -255,7 +379,12 @@ export function Chat(props: ChatProps) {
         <Show
           when={busy()}
           fallback={
-            <button type="button" data-slot="chat-send" disabled={!draft().trim()} onClick={() => void send()}>
+            <button
+              type="button"
+              data-slot="chat-send"
+              disabled={!draft().trim() || !model()}
+              onClick={() => void send()}
+            >
               {t("chat.send")}
             </button>
           }
