@@ -146,6 +146,18 @@ describe("gli eventi di Claude Code", () => {
     expect(talk.messages.at(-1)?.text).toContain("Bash")
   })
 
+  test("una scrittura negata su un percorso protetto non dice di abilitare lo strumento (review B7, BASSO 2)", () => {
+    const talk = fold("claude", [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_9","name":"Write","input":{"file_path":"C:\\\\p\\\\.Git\\\\hooks\\\\x"}}]},"session_id":"s"}',
+      '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_9","type":"tool_result","is_error":true,"content":"<tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>"}]},"session_id":"s"}',
+      '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_9","tool_input":{}}]}',
+    ])
+    const said = talk.messages.filter((message) => message.role === "error").map((message) => message.text)
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain("percorso protetto")
+    expect(said[0]).not.toContain("Abilita")
+  })
+
   test("una conversazione che Claude Code non ha più si dimentica", () => {
     const talk = fold("claude", [
       '{"type":"system","subtype":"init","session_id":"vecchia"}',

@@ -433,9 +433,31 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
     case "result": {
       const cost = typeof event["total_cost_usd"] === "number" ? (event["total_cost_usd"] as number) : 0
       next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost, ended: true }
-      const denials = list(event["permission_denials"])
-      if (denials.length > 0) {
-        const names = [...new Set(denials.map((d) => str(rec(d)?.["tool_name"]) ?? "tool"))].join(", ")
+      /*
+       * A write refused by a path rule (`EXECUTES_LATER`, a project's bot) is
+       * not a tool to enable in the card: it is refused on purpose (review
+       * B7, BASSO 2). Told apart by what Claude Code answered the call.
+       */
+      const denials = list(event["permission_denials"]).map(rec)
+      const onProtectedPath = (denial: Record<string, unknown> | undefined) => {
+        const id = str(denial?.["tool_use_id"])
+        const output = id ? next.messages.find((message) => message.id === `t-${id}`)?.output : undefined
+        return output !== undefined && /denied by your permission settings/i.test(output)
+      }
+      const guarded = denials.filter(onProtectedPath)
+      const others = denials.filter((denial) => !onProtectedPath(denial))
+      if (guarded.length > 0) {
+        next = appendMessage(
+          next,
+          {
+            role: "error",
+            text: `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${EXECUTES_LATER.join(", ")}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
+          },
+          at,
+        )
+      }
+      if (others.length > 0) {
+        const names = [...new Set(others.map((d) => str(d?.["tool_name"]) ?? "tool"))].join(", ")
         next = appendMessage(
           next,
           {
