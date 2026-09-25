@@ -283,7 +283,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   }
 
   function opened(): Open {
-    if (!current) throw new Error("La chat non è aperta su una cartella.")
+    if (!current) throw new Error(t("chat.error.notOpen"))
     return current.connection
   }
 

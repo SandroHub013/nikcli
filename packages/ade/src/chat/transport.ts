@@ -16,6 +16,8 @@
  * before it goes anywhere.
  */
 
+import { t } from "../i18n"
+
 /** The base URL the SDK is given. Not an address anything listens on. */
 export const SERVER_BASE = "http://nikcli.ade"
 
@@ -72,7 +74,7 @@ export function tauriServerBridge(): ServerBridge {
 const NO_BODY = new Set([101, 204, 205, 304])
 
 function abortError(): Error {
-  return new DOMException("La richiesta è stata interrotta.", "AbortError")
+  return new DOMException(t("chat.error.requestAborted"), "AbortError")
 }
 
 /**
@@ -97,7 +99,7 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
     const request = new Request(input, init)
     const url = new URL(request.url)
     if (url.origin !== base.origin) {
-      throw new TypeError(`Il trasporto della chat parla solo con il server di nikcli, non con ${url.origin}.`)
+      throw new TypeError(t("chat.error.otherOrigin", url.origin))
     }
     const signal = init?.signal ?? request.signal
     if (signal?.aborted) throw abortError()

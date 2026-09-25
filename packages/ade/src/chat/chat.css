@@ -316,6 +316,38 @@
   color: var(--ade-error);
 }
 
+/* What the provider said, under the sentence: its words, smaller. */
+[data-slot="chat-error-detail"] {
+  display: block;
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+  overflow-wrap: anywhere;
+}
+
+[data-slot="chat-retry"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  line-height: var(--ade-leading);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="chat-usage"],
+[data-slot="chat-usage-session"] {
+  margin: 0;
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-sm);
+  line-height: var(--ade-leading);
+  color: var(--ade-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="chat-usage-session"] {
+  flex: 0 0 auto;
+  padding: var(--ade-space-3) var(--ade-space-7);
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
 [data-slot="chat-caret"] {
   display: inline-block;
   width: 7px;

@@ -9,6 +9,7 @@
  */
 
 import type { Message, Part, Session } from "@nikcli-ai/sdk/httpapi"
+import { answerError, type ErrorView } from "./errors"
 import type { ChatData } from "./events"
 import { hasChatRules } from "./rules"
 import type { ChatState } from "./store"
@@ -88,12 +89,9 @@ export function partsOf(data: ChatData, sessionID: string): Part[] {
   return (data.message[sessionID] ?? []).flatMap((info) => data.part[info.id] ?? [])
 }
 
-/** What went wrong in an answer, as the server says it; nothing when it did not. */
-export function messageError(info: Message): string | undefined {
-  const error = (info as unknown as Raw).error
-  if (!error) return undefined
-  const message = error.data?.message
-  return typeof message === "string" && message.trim() ? message : String(error.name ?? "Error")
+/** What went wrong in an answer, in words (`errors.ts`); nothing when it did not. */
+export function messageError(info: Message): ErrorView | undefined {
+  return answerError((info as unknown as Raw).error)
 }
 
 /** The session open, and whether the list has shown it yet. */
