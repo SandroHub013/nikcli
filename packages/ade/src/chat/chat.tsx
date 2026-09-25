@@ -38,6 +38,7 @@ import {
   attachmentFor,
   attachmentParts,
   completeMention,
+  isEnvFile,
   mentionAt,
   type Attachment,
 } from "./attachments"
@@ -271,7 +272,7 @@ export function Chat(props: ChatProps) {
         if (!(await use())) return
         const paths = await store.findFiles(found.query).catch(() => [] as string[])
         if (ask !== mentionAsk) return
-        setMentionResults(paths)
+        setMentionResults(paths.filter((path) => !isEnvFile(path)))
         setMentionIndex(0)
       })()
     }, 120)
@@ -282,6 +283,10 @@ export function Chat(props: ChatProps) {
     const root = props.projectRoot
     closeMention()
     if (!relative || !found || !root || !composer) return
+    if (isEnvFile(relative)) {
+      setProblem(t("chat.attach.env", relative))
+      return
+    }
     const file = attachmentFor(root, relative)
     if (!file) {
       setProblem(t("chat.attach.outside", relative))
@@ -305,9 +310,9 @@ export function Chat(props: ChatProps) {
     }
     setProblem(undefined)
     for (const path of picked === null ? [] : Array.isArray(picked) ? picked : [picked]) {
-      const file = attachmentFor(root, path)
+      const file = isEnvFile(path) ? undefined : attachmentFor(root, path)
       if (file) setAttachments((list) => addAttachment(list, file))
-      else setProblem(t("chat.attach.outside", path))
+      else setProblem(t(isEnvFile(path) ? "chat.attach.env" : "chat.attach.outside", path))
     }
     composer?.focus()
   }

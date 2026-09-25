@@ -242,6 +242,9 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
 /// compared by whole components (`starts_with`), so `app-backup` is not
 /// inside `app`. The path must be absolute and an existing file.
 ///
+/// A `.env` or `.env.*` is refused by the name it resolves to (`env`): nikcli
+/// guards those files for its read tool, and an attachment skips that guard.
+///
 /// There is a window between this check and nikcli's read (TOCTOU): a link
 /// swapped in between is read where it points then. Closing it would mean
 /// sending the file's contents instead of its path; the check still stops
@@ -258,7 +261,16 @@ fn attachment_inside(root: &Path, path: &Path) -> Result<PathBuf, &'static str> 
     if !resolved.is_file() {
         return Err("notFile");
     }
+    if is_env_file(&resolved) {
+        return Err("env");
+    }
     Ok(resolved)
+}
+
+/// `.env` or `.env.<anything>`, in any case.
+fn is_env_file(path: &Path) -> bool {
+    let name = path.file_name().map(|name| name.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    name == ".env" || name.starts_with(".env.")
 }
 
 /// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
@@ -2126,6 +2138,29 @@ mod tests {
         assert_eq!(inside(project.join("src")), Err("notFile"));
         assert_eq!(inside(project.join("src").join("manca.ts")), Err("notFile"));
         assert_eq!(attachment_inside(&project, Path::new("src/a.ts")), Err("outside"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_dotenv_file_is_never_attached_whatever_it_is_called() {
+        let (base, project, _secrets) = attachment_fixture("env");
+        for name in [".env", ".env.local", ".ENV.production", ".env.example"] {
+            std::fs::write(project.join(name), "API_KEY=finta").unwrap();
+            assert_eq!(attachment_inside(&project, &project.join(name)), Err("env"), "{name}");
+        }
+        std::fs::write(project.join("env.ts"), "x").unwrap();
+        assert!(attachment_inside(&project, &project.join("env.ts")).is_ok());
+        // A link with another name, aimed at .env inside the project: refused by what it resolves to.
+        let link = project.join("docs");
+        #[cfg(windows)]
+        let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(&link).arg(project.join("src")).output().map(|o| o.status.success());
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(project.join("src"), &link).map(|_| true);
+        std::fs::write(project.join("src").join(".env"), "API_KEY=finta").unwrap();
+        if matches!(made, Ok(true)) {
+            assert_eq!(attachment_inside(&project, &link.join(".env")), Err("env"));
+        }
+        let _ = std::fs::remove_dir(&link);
         let _ = std::fs::remove_dir_all(&base);
     }
 

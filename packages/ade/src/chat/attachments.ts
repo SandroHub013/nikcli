@@ -75,6 +75,15 @@ export function mimeOf(path: string): string {
   return IMAGE[extension] ?? "text/plain"
 }
 
+/**
+ * `.env` or `.env.*`: never attached (C6 review). nikcli guards those files for
+ * its read tool, and an attachment is read without that guard.
+ */
+export function isEnvFile(path: string): boolean {
+  const name = (path.replace(/\\/g, "/").split("/").at(-1) ?? "").toLowerCase()
+  return name === ".env" || name.startsWith(".env.")
+}
+
 /** An attachment for `path` in `root`, or undefined when the path is outside it. */
 export function attachmentFor(root: string, path: string): Attachment | undefined {
   const absolute = insideProject(root, path)

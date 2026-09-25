@@ -1292,6 +1292,8 @@ export const it = {
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
   "chat.attach.outside": (path: string) => `${path} non è un file di questo progetto: la Chat allega solo file della cartella aperta.`,
   "chat.attach.notFile": (path: string) => `${path} non è un file: la Chat allega solo file.`,
+  "chat.attach.env": (path: string) =>
+    `${path} non si allega: i file .env contengono di solito chiavi e password, e un allegato arriva al fornitore del modello.`,
   "chat.attach.add": "Allega",
   "chat.attach.addHint": "Allega un file del progetto",
   "chat.attach.remove": (name: string) => `Togli ${name}`,

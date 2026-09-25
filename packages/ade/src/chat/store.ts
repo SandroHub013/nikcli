@@ -45,7 +45,7 @@ import {
 } from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
 import { CHAT_PERMISSION, hasChatRules } from "./rules"
-import { insideProject, pathOfFileUrl } from "./attachments"
+import { insideProject, isEnvFile, pathOfFileUrl } from "./attachments"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -123,14 +123,14 @@ export interface ChatStoreDeps {
   readonly checkAttachment?: (root: string, path: string) => Promise<AttachmentCheck>
 }
 
-export type AttachmentCheck = "ok" | "outside" | "notFile"
+export type AttachmentCheck = "ok" | "outside" | "notFile" | "env"
 
 /** Rust's check, in the desktop app; anything that fails to answer is a no. */
 export async function tauriAttachmentCheck(root: string, path: string): Promise<AttachmentCheck> {
   try {
     const { invoke } = await import("@tauri-apps/api/core")
     const answer = await invoke<string>("chat_attachment_inside", { root, path })
-    return answer === "ok" || answer === "notFile" ? answer : "outside"
+    return answer === "ok" || answer === "notFile" || answer === "env" ? answer : "outside"
   } catch {
     return "outside"
   }
@@ -361,9 +361,11 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       for (const file of files) {
         const path = pathOfFileUrl(file.url)
         if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
+        if (isEnvFile(path)) throw new Error(t("chat.attach.env", path))
         // nikcli reads it without asking: Rust follows links and junctions before it goes.
         const check = await checkAttachment(folder, path)
         if (check === "notFile") throw new Error(t("chat.attach.notFile", path))
+        if (check === "env") throw new Error(t("chat.attach.env", path))
         if (check !== "ok") throw new Error(t("chat.attach.outside", path))
       }
       const mine = generation

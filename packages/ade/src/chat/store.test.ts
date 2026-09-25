@@ -549,6 +549,20 @@ describe("the chat's store", () => {
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
   })
 
+  test("a .env is refused with its reason, by its name or by what Rust finds it is", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server, { checkAttachment: async (_root, path) => (path.endsWith("note.txt") ? "env" : "ok") })
+    await store.open(A)
+    await live(server, store)
+    const byName = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/.env.local" }
+    const named = await store.send(undefined, "Leggi", FREE, undefined, [byName]).then(() => undefined, (error: unknown) => error)
+    expect((named as Error).message).toBe(t("chat.attach.env", "C:/progetto-a/.env.local"))
+    const linked = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/note.txt" }
+    const followed = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(() => undefined, (error: unknown) => error)
+    expect((followed as Error).message).toBe(t("chat.attach.env", "C:/progetto-a/note.txt"))
+    expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
+  })
+
   test("without Rust's check, a file is refused: the store does not guess", async () => {
     const server = fakeServer()
     const { store } = storeOn(server, { checkAttachment: undefined })

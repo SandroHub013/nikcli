@@ -5,6 +5,7 @@ import {
   attachmentParts,
   completeMention,
   fileUrl,
+  isEnvFile,
   insideProject,
   mentionAt,
   mimeOf,
@@ -73,6 +74,15 @@ describe("a file of the project, and nothing else", () => {
     expect(pathOfFileUrl("https://x.test/a")).toBeUndefined()
     // A host in the URL is a share on another machine.
     expect(pathOfFileUrl("file://server/share/x.ts")).toBeUndefined()
+  })
+
+  test("a .env or .env.* is never attached, a file that only looks like one is", () => {
+    for (const path of [".env", "C:\\Progetti\\app\\.env", "config/.env.local", ".ENV.Production", ".env.example"]) {
+      expect([path, isEnvFile(path)]).toEqual([path, true])
+    }
+    for (const path of ["env.ts", "src/.envrc", "docs/dotenv.md", ".environment"]) {
+      expect([path, isEnvFile(path)]).toEqual([path, false])
+    }
   })
 
   test("the same file twice is one attachment", () => {
