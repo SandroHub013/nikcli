@@ -97,6 +97,23 @@ describe("isFreeModel", () => {
     expect(isFreeModel({ id: "local/four", providerID: "ollama", cost: { input: 0, output: 1 } })).toBe(false)
   })
 
+  test("a provider that prices its catalogue keeps its free models", () => {
+    // OpenCode Zen: 111 models, every one priced at its public per-token
+    // figure, free tier at 0. Its free models are named after the tier and do
+    // not end in ":free", which is the whole reason the suffix was not enough.
+    expect(isFreeModel({ id: "space-bunny-free", providerID: "opencode", cost: { input: 0, output: 0 } })).toBe(true)
+    expect(isFreeModel({ id: "ling-3.0-flash-fin-free", providerID: "opencode", cost: { input: 0, output: 0 } })).toBe(
+      true,
+    )
+    expect(isFreeModel({ id: "big-pickle", providerID: "opencode", cost: { input: 0, output: 0 } })).toBe(true)
+  })
+
+  test("a provider that prices its catalogue still charges for its paid models", () => {
+    expect(isFreeModel({ id: "gpt-5.4", providerID: "opencode", cost: { input: 2.5, output: 15 } })).toBe(false)
+    expect(isFreeModel({ id: "claude-opus-5-5", providerID: "opencode", cost: { input: 4, output: 20 } })).toBe(false)
+    expect(isFreeModel({ id: "gpt-5.4-nano", providerID: "opencode", cost: { input: 0.2, output: 1.25 } })).toBe(false)
+  })
+
   test("a hosted provider with a zero cost is not free", () => {
     // What ADE Test showed as a thousand free models: ElevenLabs and the
     // kilo/* families price at 0 and bill by characters or credits instead.
@@ -236,6 +253,47 @@ const noisyCatalog: ProviderList = {
       },
     },
     {
+      id: "opencode",
+      name: "OpenCode Zen",
+      source: "api",
+      env: ["OPENCODE_API_KEY"],
+      options: {},
+      models: {
+        "space-bunny-free": {
+          id: "space-bunny-free",
+          providerID: "opencode",
+          name: "Space Bunny Free",
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          status: "active",
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: true, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: { field: "reasoning_content" },
+          },
+        } as any,
+        "gpt-5.4-nano": {
+          id: "gpt-5.4-nano",
+          providerID: "opencode",
+          name: "GPT-5.4 Nano",
+          cost: { input: 0.2, output: 1.25, cache: { read: 0.02 } },
+          status: "active",
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        } as any,
+      },
+    },
+    {
       id: "nikcli",
       name: "nikcli",
       source: "custom",
@@ -278,7 +336,7 @@ const noisyCatalog: ProviderList = {
     },
   ],
   default: {},
-  connected: ["elevenlabs", "kilo", "ollama", "nikcli"],
+  connected: ["elevenlabs", "kilo", "ollama", "opencode", "nikcli"],
 }
 
 describe("the selector shows chat models, and calls free only what is free (C3-bis)", () => {
@@ -300,6 +358,18 @@ describe("the selector shows chat models, and calls free only what is free (C3-b
     expect(kilo!.label).not.toContain("free")
   })
 
+  test("the free models of a provider that prices its catalogue are offered in ADE Test", () => {
+    const models = modelsFromProviderList(noisyCatalog, { isTest: true })
+    const ids = models.map((m) => m.id)
+    // Free, and not for the ":free" reason: it ends in "-free" and costs 0.
+    expect(ids).toContain("space-bunny-free")
+    // The same provider's paid model stays out.
+    expect(ids).not.toContain("gpt-5.4-nano")
+    const bunny = models.find((m) => m.id === "space-bunny-free")
+    expect(bunny!.free).toBe(true)
+    expect(bunny!.label).toContain("gratis")
+  })
+
   test("a local model priced at zero is free", () => {
     const models = modelsFromProviderList(noisyCatalog, { isTest: false })
     const local = models.find((m) => m.id === "qwen3:8b")
@@ -310,7 +380,11 @@ describe("the selector shows chat models, and calls free only what is free (C3-b
   test("ADE Test keeps the :free model and the local one, and drops the hosted zero-cost chat model", () => {
     const models = modelsFromProviderList(noisyCatalog, { isTest: true })
     const ids = models.map((m) => m.id)
-    expect(ids).toEqual(["qwen3:8b", "google/gemini-2.5-flash:free"])
+    expect(ids).toContain("qwen3:8b")
+    expect(ids).toContain("google/gemini-2.5-flash:free")
+    expect(ids).toContain("space-bunny-free")
+    // The whole point of C3-bis: still not free.
+    expect(ids).not.toContain("kilo-7b")
     expect(models.every((m) => m.free)).toBe(true)
   })
 
