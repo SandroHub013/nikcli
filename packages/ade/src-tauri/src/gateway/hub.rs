@@ -1,0 +1,709 @@
+//! The gateways' core: one task per bot and platform that is switched on.
+//!
+//! Each task reads its adapter and decides, here in Rust, what reaches the
+//! page: a message from an authorized sender, in a private chat, from a
+//! person and not a bot. Anything else stops here, so a stranger's text never
+//! becomes a turn. The page answers with `send`, which goes only to chats an
+//! authorized sender wrote from and loses every known secret on the way out.
+//!
+//! Nothing here needs the app: the events, the log and the secrets to hide
+//! come through `Env`, the keychain through `Vault`, so the tests drive it
+//! with a fake adapter and no token of any real service.
+
+use super::adapter::{Adapter, AdapterError, Capabilities, Inbound, Platform};
+use super::redact::redact;
+use super::store::{LinkState, Store};
+use crate::secrets::Vault;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::sync::watch;
+
+/// A message for the page: from an authorized sender, secrets already out.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayMessage {
+    pub bot: String,
+    pub platform: Platform,
+    pub chat: String,
+    pub sender: MessageSender,
+    pub text: String,
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct MessageSender {
+    pub id: String,
+    pub name: String,
+}
+
+/// How a running link is doing, sent to the page as it changes.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkStatus {
+    pub bot: String,
+    pub platform: Platform,
+    pub connected: bool,
+    pub last_error: Option<String>,
+    pub last_message_ms: Option<u64>,
+}
+
+/// What the panel shows of a gateway. No token: only whether there is one.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusInfo {
+    pub bot: String,
+    pub platform: Platform,
+    pub enabled: bool,
+    pub running: bool,
+    pub connected: bool,
+    pub has_token: bool,
+    pub project: Option<String>,
+    pub last_error: Option<String>,
+    pub last_message_ms: Option<u64>,
+    pub authorized: Vec<MessageSender>,
+    /// The running adapter's: how long a message may be, whether it can be edited.
+    pub capabilities: Option<Capabilities>,
+}
+
+/// Where the hub reports, and what it hides.
+pub trait Env: Send + Sync {
+    fn message(&self, message: &GatewayMessage);
+    fn status(&self, status: &LinkStatus);
+    /// A diagnostic line. Called with metadata only: never a message's text or a token.
+    fn log(&self, line: &str);
+    /// Secret values besides the gateway tokens: the keys in the keychain.
+    fn secrets(&self) -> Vec<String>;
+    fn now_ms(&self) -> u64;
+}
+
+#[derive(Clone, Default)]
+struct Live {
+    connected: bool,
+    last_error: Option<String>,
+    last_message_ms: Option<u64>,
+}
+
+struct Running {
+    adapter: Arc<dyn Adapter>,
+    stop: watch::Sender<bool>,
+    live: Arc<Mutex<Live>>,
+}
+
+pub struct Hub {
+    env: Arc<dyn Env>,
+    vault: Arc<dyn Vault>,
+    /// The keychain service the tokens are filed under, apart from the API keys.
+    service: String,
+    store: Arc<Store>,
+    links: Mutex<HashMap<(String, Platform), Running>>,
+    /// The first pause after a failed read, and the longest.
+    backoff: (Duration, Duration),
+}
+
+/// A bot as the keychain names it: a hash, since a file path can be long and
+/// hold characters a credential name may not.
+pub fn bot_key(bot: &str) -> String {
+    hex(&Sha256::digest(bot.as_bytes()))[..32].to_string()
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn token_name(bot: &str, platform: Platform) -> String {
+    format!("{}:{}", platform.id(), bot_key(bot))
+}
+
+fn token_hash(token: &str) -> String {
+    hex(&Sha256::digest(token.as_bytes()))
+}
+
+pub fn check_bot(bot: &str) -> Result<(), String> {
+    if bot.trim().is_empty() || bot.len() > 1024 || bot.chars().any(char::is_control) {
+        return Err("bot non valido".into());
+    }
+    Ok(())
+}
+
+fn check_token(token: &str) -> Result<(), String> {
+    let length = token.chars().count();
+    if !(8..=1024).contains(&length) || token.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("token non valido: incollalo intero, senza spazi".into());
+    }
+    Ok(())
+}
+
+impl Hub {
+    pub fn new(env: Arc<dyn Env>, vault: Arc<dyn Vault>, service: String, store: Arc<Store>) -> Hub {
+        Hub {
+            env,
+            vault,
+            service,
+            store,
+            links: Mutex::new(HashMap::new()),
+            backoff: (Duration::from_secs(1), Duration::from_secs(300)),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_backoff(mut self, first: Duration, max: Duration) -> Hub {
+        self.backoff = (first, max);
+        self
+    }
+
+    fn links(&self) -> std::sync::MutexGuard<'_, HashMap<(String, Platform), Running>> {
+        self.links.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /* ── the token ─────────────────────────────────────────────────────── */
+
+    /// Saves the bot's token for `platform` in the keychain. The same token on
+    /// another bot or platform is refused: two gateways reading one bot
+    /// account would each take half of its messages.
+    pub fn set_token(&self, bot: &str, platform: Platform, token: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        let token = token.trim();
+        check_token(token)?;
+        let hash = token_hash(token);
+        let taken = |others: &[LinkState]| others.iter().any(|other| other.token_hash.as_deref() == Some(hash.as_str()));
+        if taken(&self.store.read().links.into_iter().filter(|l| !(l.bot == bot && l.platform == platform)).collect::<Vec<_>>()) {
+            return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
+        }
+        self.vault.set(&self.service, &token_name(bot, platform), token)?;
+        self.store.update(bot, platform, |link, others| {
+            if taken(others) {
+                return Err("questo token è già di un altro bot o di un'altra piattaforma".into());
+            }
+            link.token_hash = Some(hash.clone());
+            Ok(())
+        })
+    }
+
+    /// Forgets the token: the gateway stops and is switched off.
+    pub fn clear_token(&self, bot: &str, platform: Platform) -> Result<(), String> {
+        check_bot(bot)?;
+        self.halt(bot, platform);
+        self.vault.delete(&self.service, &token_name(bot, platform))?;
+        self.store.update(bot, platform, |link, _| {
+            link.token_hash = None;
+            link.enabled = false;
+            Ok(())
+        })
+    }
+
+    /// The token, for building the platform's adapter. Rust only: never sent to the page.
+    pub fn token(&self, bot: &str, platform: Platform) -> Result<Option<String>, String> {
+        self.vault.get(&self.service, &token_name(bot, platform))
+    }
+
+    /// Every value that must not leave through a gateway: the tokens and the keychain's keys.
+    fn secrets(&self) -> Vec<String> {
+        let mut secrets = self.env.secrets();
+        for link in self.store.read().links.iter().filter(|link| link.token_hash.is_some()) {
+            if let Ok(Some(token)) = self.vault.get(&self.service, &token_name(&link.bot, link.platform)) {
+                secrets.push(token);
+            }
+        }
+        secrets
+    }
+
+    /* ── on and off ────────────────────────────────────────────────────── */
+
+    /// Switches the gateway on with `adapter`, its turns fixed to `project`.
+    pub fn start(&self, bot: &str, platform: Platform, project: &str, adapter: Arc<dyn Adapter>) -> Result<(), String> {
+        check_bot(bot)?;
+        if project.trim().is_empty() {
+            return Err("scegli il progetto in cui gireranno i turni da chat".into());
+        }
+        self.halt(bot, platform);
+        self.store.update(bot, platform, |link, _| {
+            link.enabled = true;
+            link.project = Some(project.to_string());
+            Ok(())
+        })?;
+        let (stop, stopped) = watch::channel(false);
+        let live = Arc::new(Mutex::new(Live::default()));
+        let task = Task {
+            env: self.env.clone(),
+            store: self.store.clone(),
+            adapter: adapter.clone(),
+            bot: bot.to_string(),
+            platform,
+            live: live.clone(),
+            secrets: self.secrets(),
+            backoff: self.backoff,
+        };
+        tokio::spawn(task.run(stopped));
+        self.links().insert((bot.to_string(), platform), Running { adapter, stop, live });
+        Ok(())
+    }
+
+    /// Switches the gateway off, and remembers it is off.
+    pub fn stop(&self, bot: &str, platform: Platform) -> Result<(), String> {
+        check_bot(bot)?;
+        self.halt(bot, platform);
+        self.store.update(bot, platform, |link, _| {
+            link.enabled = false;
+            Ok(())
+        })
+    }
+
+    fn halt(&self, bot: &str, platform: Platform) {
+        if let Some(running) = self.links().remove(&(bot.to_string(), platform)) {
+            let _ = running.stop.send(true);
+        }
+    }
+
+    /// ADE is closing: every task ends, and each gateway stays as the user left it.
+    pub fn shutdown(&self) {
+        for (_, running) in self.links().drain() {
+            let _ = running.stop.send(true);
+        }
+    }
+
+    /* ── replies ───────────────────────────────────────────────────────── */
+
+    /// The running adapter, when `chat` is one an authorized sender wrote from.
+    fn reply_target(&self, bot: &str, platform: Platform, chat: &str) -> Result<Arc<dyn Adapter>, String> {
+        let adapter = self
+            .links()
+            .get(&(bot.to_string(), platform))
+            .map(|running| running.adapter.clone())
+            .ok_or_else(|| "il gateway di questo bot è spento".to_string())?;
+        let known = self.store.link(bot, platform).is_some_and(|link| link.chats.iter().any(|known| known == chat));
+        if !known {
+            return Err("questa chat non ha mai scritto al bot da un account autorizzato".into());
+        }
+        Ok(adapter)
+    }
+
+    pub async fn send(&self, bot: &str, platform: Platform, chat: &str, text: &str) -> Result<String, String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        let secrets = self.secrets();
+        adapter.send(chat, &redact(text, &secrets)).await.map_err(|error| redact(&error.message(), &secrets))
+    }
+
+    pub async fn edit(&self, bot: &str, platform: Platform, chat: &str, message: &str, text: &str) -> Result<(), String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        let secrets = self.secrets();
+        adapter
+            .edit(chat, message, &redact(text, &secrets))
+            .await
+            .map_err(|error| redact(&error.message(), &secrets))
+    }
+
+    pub async fn typing(&self, bot: &str, platform: Platform, chat: &str) -> Result<(), String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        adapter.typing(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
+    }
+
+    /* ── the panel ─────────────────────────────────────────────────────── */
+
+    pub fn status(&self) -> Vec<StatusInfo> {
+        let links = self.links();
+        self.store
+            .read()
+            .links
+            .into_iter()
+            .map(|link| {
+                let running = links.get(&(link.bot.clone(), link.platform));
+                let live = running.map(|running| running.live.lock().map(|live| live.clone()).unwrap_or_default()).unwrap_or_default();
+                StatusInfo {
+                    capabilities: running.map(|running| running.adapter.capabilities()),
+                    running: running.is_some(),
+                    connected: live.connected,
+                    last_error: live.last_error,
+                    last_message_ms: live.last_message_ms,
+                    has_token: link.token_hash.is_some(),
+                    enabled: link.enabled,
+                    project: link.project,
+                    authorized: link.authorized.into_iter().map(|a| MessageSender { id: a.id, name: a.name }).collect(),
+                    bot: link.bot,
+                    platform: link.platform,
+                }
+            })
+            .collect()
+    }
+}
+
+/// One gateway's reading loop.
+struct Task {
+    env: Arc<dyn Env>,
+    store: Arc<Store>,
+    adapter: Arc<dyn Adapter>,
+    bot: String,
+    platform: Platform,
+    live: Arc<Mutex<Live>>,
+    /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
+    secrets: Vec<String>,
+    backoff: (Duration, Duration),
+}
+
+impl Task {
+    /// `gateway telegram 3f2a…:` — the bot by the first characters of its key, never its path.
+    fn tag(&self) -> String {
+        format!("gateway {} {}", self.platform.id(), &bot_key(&self.bot)[..8])
+    }
+
+    fn report(&self, change: impl FnOnce(&mut Live)) {
+        let live = {
+            let mut live = self.live.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            change(&mut live);
+            live.clone()
+        };
+        self.env.status(&LinkStatus {
+            bot: self.bot.clone(),
+            platform: self.platform,
+            connected: live.connected,
+            last_error: live.last_error,
+            last_message_ms: live.last_message_ms,
+        });
+    }
+
+    async fn run(self, mut stopped: watch::Receiver<bool>) {
+        let mut pause = self.backoff.0;
+        loop {
+            let read = tokio::select! {
+                _ = stopped.changed() => break,
+                read = self.adapter.receive() => read,
+            };
+            match read {
+                Ok(batch) => {
+                    pause = self.backoff.0;
+                    if !self.live.lock().map(|live| live.connected).unwrap_or(false) {
+                        self.report(|live| {
+                            live.connected = true;
+                            live.last_error = None;
+                        });
+                    }
+                    for message in batch {
+                        self.deliver(message);
+                    }
+                }
+                Err(AdapterError::Transient(error)) => {
+                    let error = redact(&error, &self.secrets);
+                    self.env.log(&format!("{}: lettura non riuscita, riprovo tra {} s: {error}", self.tag(), pause.as_secs()));
+                    self.report(|live| {
+                        live.connected = false;
+                        live.last_error = Some(error);
+                    });
+                    tokio::select! {
+                        _ = stopped.changed() => break,
+                        _ = tokio::time::sleep(pause) => {}
+                    }
+                    pause = (pause * 2).min(self.backoff.1);
+                }
+                Err(error) => {
+                    let error = redact(&error.message(), &self.secrets);
+                    self.env.log(&format!("{}: fermo: {error}", self.tag()));
+                    self.report(|live| {
+                        live.connected = false;
+                        live.last_error = Some(error);
+                    });
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Hands `message` to the page, or drops it. Only metadata reaches the log.
+    fn deliver(&self, message: Inbound) {
+        let tag = self.tag();
+        if message.sender.is_bot {
+            self.env.log(&format!("{tag}: ignorato un messaggio di un bot"));
+            return;
+        }
+        if !message.private {
+            self.env.log(&format!("{tag}: ignorato un messaggio fuori da una chat privata"));
+            return;
+        }
+        let authorized = self.store.link(&self.bot, self.platform).is_some_and(|link| link.is_authorized(&message.sender.id));
+        if !authorized {
+            // Silent for now; the pairing code for a stranger comes with its own piece.
+            self.env.log(&format!("{tag}: ignorato un mittente non autorizzato"));
+            return;
+        }
+        let chat = message.chat.clone();
+        let remembered = self.store.update(&self.bot, self.platform, |link, _| {
+            if !link.chats.iter().any(|known| known == &chat) {
+                link.chats.push(chat.clone());
+            }
+            Ok(())
+        });
+        if let Err(error) = remembered {
+            self.env.log(&format!("{tag}: messaggio non consegnato, stato non salvato: {error}"));
+            return;
+        }
+        let at = self.env.now_ms();
+        self.env.log(&format!("{tag}: messaggio da un mittente autorizzato ({} caratteri)", message.text.chars().count()));
+        self.env.message(&GatewayMessage {
+            bot: self.bot.clone(),
+            platform: self.platform,
+            chat: message.chat,
+            sender: MessageSender { id: message.sender.id, name: redact(&message.sender.name, &self.secrets) },
+            text: redact(&message.text, &self.secrets),
+            id: message.id,
+        });
+        self.report(|live| live.last_message_ms = Some(at));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::adapter::fake::{FakeAdapter, Feed};
+    use super::super::adapter::Sender;
+    use super::super::store::Authorized;
+    use super::*;
+    use std::collections::BTreeMap;
+
+    const TOKEN: &str = "123456789:FINTO-token-di-prova_AbCdEfGhIjKlMnOp";
+    const KEY: &str = "sk-finta-chiave-0123456789";
+    const BOT: &str = "C:/progetto/.nikcli/agent/aiuto.md";
+
+    #[derive(Default)]
+    struct MapVault(Mutex<BTreeMap<(String, String), String>>);
+    impl Vault for MapVault {
+        fn get(&self, service: &str, name: &str) -> Result<Option<String>, String> {
+            Ok(self.0.lock().unwrap().get(&(service.into(), name.into())).cloned())
+        }
+        fn set(&self, service: &str, name: &str, value: &str) -> Result<(), String> {
+            self.0.lock().unwrap().insert((service.into(), name.into()), value.into());
+            Ok(())
+        }
+        fn delete(&self, service: &str, name: &str) -> Result<(), String> {
+            self.0.lock().unwrap().remove(&(service.into(), name.into()));
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct Recorder {
+        messages: Mutex<Vec<GatewayMessage>>,
+        statuses: Mutex<Vec<LinkStatus>>,
+        log: Mutex<Vec<String>>,
+    }
+    impl Env for Recorder {
+        fn message(&self, message: &GatewayMessage) {
+            self.messages.lock().unwrap().push(message.clone());
+        }
+        fn status(&self, status: &LinkStatus) {
+            self.statuses.lock().unwrap().push(status.clone());
+        }
+        fn log(&self, line: &str) {
+            self.log.lock().unwrap().push(line.into());
+        }
+        fn secrets(&self) -> Vec<String> {
+            vec![KEY.into()]
+        }
+        fn now_ms(&self) -> u64 {
+            1_000
+        }
+    }
+
+    struct Setup {
+        hub: Hub,
+        env: Arc<Recorder>,
+        path: std::path::PathBuf,
+    }
+
+    fn setup(name: &str) -> Setup {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state.json");
+        let env = Arc::new(Recorder::default());
+        let hub = Hub::new(env.clone(), Arc::new(MapVault::default()), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())))
+            .with_backoff(Duration::from_millis(5), Duration::from_millis(20));
+        Setup { hub, env, path }
+    }
+
+    fn authorize(setup: &Setup, id: &str) {
+        setup
+            .hub
+            .store
+            .update(BOT, Platform::Fake, |link, _| {
+                link.authorized.push(Authorized { id: id.into(), name: "Io".into(), added_ms: 1 });
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    fn message(id: &str, chat: &str, sender: &str, text: &str) -> Inbound {
+        Inbound {
+            id: id.into(),
+            chat: chat.into(),
+            private: true,
+            sender: Sender { id: sender.into(), name: format!("utente {sender}"), is_bot: false },
+            text: text.into(),
+        }
+    }
+
+    fn start(setup: &Setup) -> (Arc<FakeAdapter>, Feed) {
+        let (adapter, feed) = FakeAdapter::new();
+        setup.hub.start(BOT, Platform::Fake, "C:/progetto", adapter.clone()).unwrap();
+        (adapter, feed)
+    }
+
+    async fn eventually(what: &str, check: impl Fn() -> bool) {
+        for _ in 0..400 {
+            if check() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("non è successo: {what}");
+    }
+
+    #[tokio::test]
+    async fn only_an_authorized_person_in_a_private_chat_reaches_the_page() {
+        let s = setup("authorized");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let mut group = message("3", "g1", "42", "nel gruppo");
+        group.private = false;
+        let mut robot = message("4", "c9", "9", "sono un bot");
+        robot.sender.is_bot = true;
+        feed.send(Ok(vec![message("1", "c7", "7", "sconosciuto"), group, robot, message("2", "c42", "42", "ciao")])).unwrap();
+        eventually("il messaggio autorizzato arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert_eq!(messages.len(), 1, "{messages:?}");
+        assert_eq!(messages[0].chat, "c42");
+        assert_eq!(messages[0].sender.id, "42");
+        assert_eq!(messages[0].text, "ciao");
+        assert_eq!(messages[0].bot, BOT);
+        // Only its chat may be answered.
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().chats, vec!["c42".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn no_token_in_an_event_and_no_token_or_text_in_the_log() {
+        let s = setup("leaks");
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        let text = format!("testo privato dell'utente con il token {TOKEN}");
+        feed.send(Ok(vec![message("1", "c42", "42", &text), message("2", "c7", "7", "testo dello sconosciuto")])).unwrap();
+        feed.send(Err(AdapterError::Transient(format!("rete giù per bot{TOKEN}")))).unwrap();
+        eventually("l'errore arriva allo stato", || {
+            s.env.statuses.lock().unwrap().iter().any(|status| status.last_error.is_some())
+        })
+        .await;
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert_eq!(messages.len(), 1);
+        let event = serde_json::to_string(&messages[0]).unwrap();
+        assert!(!event.contains(TOKEN), "{event}");
+        assert!(event.contains("[nascosto]"), "{event}");
+        let statuses = serde_json::to_string(&*s.env.statuses.lock().unwrap()).unwrap();
+        assert!(!statuses.contains(TOKEN), "{statuses}");
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.is_empty());
+        for leak in [TOKEN, "testo privato", "testo dello sconosciuto", "utente 42"] {
+            assert!(!log.contains(leak), "{leak} nel log:\n{log}");
+        }
+        // Not in the state file either: only its hash.
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        assert!(!saved.contains(TOKEN));
+        assert!(saved.contains(&token_hash(TOKEN)));
+    }
+
+    #[tokio::test]
+    async fn a_reply_loses_every_known_secret_before_it_leaves() {
+        let s = setup("redact");
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "leggimi il file .env")])).unwrap();
+        eventually("il messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        let id = s.hub.send(BOT, Platform::Fake, "c42", &format!("TOKEN={TOKEN}\nOPENAI_API_KEY={KEY}\nfine")).await.unwrap();
+        assert_eq!(id, "m1");
+        s.hub.edit(BOT, Platform::Fake, "c42", "m1", &format!("ancora {KEY}")).await.unwrap();
+        let sent = adapter.sent.lock().unwrap().clone();
+        assert_eq!(sent, vec![("c42".to_string(), "TOKEN=[nascosto]\nOPENAI_API_KEY=[nascosto]\nfine".to_string())]);
+        assert_eq!(adapter.edited.lock().unwrap()[0].2, "ancora [nascosto]");
+    }
+
+    #[tokio::test]
+    async fn a_reply_goes_only_to_a_chat_an_authorized_sender_wrote_from() {
+        let s = setup("chats");
+        authorize(&s, "42");
+        assert!(s.hub.send(BOT, Platform::Fake, "c42", "x").await.unwrap_err().contains("spento"));
+        let (adapter, feed) = start(&s);
+        let refused = s.hub.send(BOT, Platform::Fake, "c999", "dati rubati").await.unwrap_err();
+        assert!(refused.contains("non ha mai scritto"), "{refused}");
+        assert!(s.hub.typing(BOT, Platform::Fake, "c999").await.is_err());
+        feed.send(Ok(vec![message("1", "c42", "42", "ciao")])).unwrap();
+        eventually("il messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.typing(BOT, Platform::Fake, "c42").await.unwrap();
+        s.hub.send(BOT, Platform::Fake, "c42", "risposta").await.unwrap();
+        assert_eq!(adapter.sent.lock().unwrap().len(), 1);
+        assert_eq!(adapter.typing.lock().unwrap().clone(), vec!["c42".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn the_same_token_on_a_second_bot_is_refused_and_a_cleared_one_is_gone() {
+        let s = setup("tokens");
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        // Saving it again on the same bot is fine.
+        s.hub.set_token(BOT, Platform::Fake, &format!("  {TOKEN}\n")).unwrap();
+        let other = "C:/progetto/.nikcli/agent/altro.md";
+        assert!(s.hub.set_token(other, Platform::Fake, TOKEN).unwrap_err().contains("già"));
+        assert!(s.hub.token(other, Platform::Fake).unwrap().is_none());
+        assert!(s.hub.set_token(BOT, Platform::Fake, "con spazi dentro 123").is_err());
+        assert_eq!(s.hub.token(BOT, Platform::Fake).unwrap().as_deref(), Some(TOKEN));
+        let status = s.hub.status();
+        assert!(status[0].has_token);
+        assert!(!serde_json::to_string(&status).unwrap().contains(TOKEN));
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+        assert!(s.hub.token(BOT, Platform::Fake).unwrap().is_none());
+        assert!(!s.hub.status()[0].has_token);
+        s.hub.set_token(other, Platform::Fake, TOKEN).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_failed_read_is_tried_again_and_a_fatal_one_stops_the_gateway() {
+        let s = setup("errors");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        feed.send(Err(AdapterError::Transient("timeout".into()))).unwrap();
+        feed.send(Ok(vec![message("1", "c42", "42", "dopo il guasto")])).unwrap();
+        eventually("arriva dopo il nuovo tentativo", || s.env.messages.lock().unwrap().len() == 1).await;
+        eventually("di nuovo connesso", || s.env.statuses.lock().unwrap().last().is_some_and(|status| status.connected)).await;
+        feed.send(Err(AdapterError::Fatal("token rifiutato dalla piattaforma".into()))).unwrap();
+        eventually("fermo con il motivo", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| !status.connected && status.last_error.as_deref() == Some("token rifiutato dalla piattaforma"))
+        })
+        .await;
+        let reads = adapter.receives.load(std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("2", "c42", "42", "non letto")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert_eq!(adapter.receives.load(std::sync::atomic::Ordering::SeqCst), reads);
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1);
+        let status = s.hub.status();
+        assert_eq!(status[0].last_error.as_deref(), Some("token rifiutato dalla piattaforma"));
+        assert!(status[0].enabled, "resta acceso finché l'utente non lo spegne");
+    }
+
+    #[tokio::test]
+    async fn switching_off_ends_the_task_and_keeps_the_project_it_ran_in() {
+        let s = setup("stop");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().project.as_deref(), Some("C:/progetto"));
+        assert!(s.hub.status()[0].running);
+        assert_eq!(s.hub.status()[0].capabilities.map(|c| c.max_len), Some(4096));
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let _ = feed.send(Ok(vec![message("1", "c42", "42", "dopo lo stop")]));
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        let status = s.hub.status();
+        assert!(!status[0].enabled);
+        assert!(!status[0].running);
+        assert!(status[0].capabilities.is_none());
+        assert_eq!(status[0].project.as_deref(), Some("C:/progetto"));
+        assert!(s.hub.start(BOT, Platform::Fake, "  ", FakeAdapter::new().0).is_err());
+    }
+}
