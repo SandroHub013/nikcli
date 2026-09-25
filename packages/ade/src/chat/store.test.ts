@@ -283,6 +283,27 @@ describe("the chat's store", () => {
     expect(server.sent).toEqual([])
   })
 
+  test("a connection that throws leaves the folder refused, with why, and opening it again tries again", async () => {
+    const server = fakeServer()
+    let fail = true
+    const failing = createChatStore({
+      connect: async (directory) => {
+        if (fail) throw new Error("Il server di ADE non è partito.")
+        return openChat(directory, { bridge: server.bridge, admit: async () => ({ ok: true }), now: () => 0 })
+      },
+      sleep: async () => void (await tick(1)),
+      random: () => 0,
+    })
+    await failing.open(A)
+    expect(failing.state.status).toBe("refused")
+    expect(failing.state.problem).toBe("Il server di ADE non è partito.")
+    expect(server.sent).toEqual([])
+    fail = false
+    await failing.open(A)
+    await live(server, failing)
+    expect(failing.state.data.session.map((s) => s.id)).toEqual(["ses_1"])
+  })
+
   test("trust refused on a reconnection: final, no more requests and no retry", async () => {
     const server = fakeServer()
     let trusted = true

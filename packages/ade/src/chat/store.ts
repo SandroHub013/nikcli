@@ -221,7 +221,15 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       watched.clear()
       setState({ directory, status: "admitting", problem: undefined })
       setState("data", reconcile(emptyChatData()))
-      const connection = await deps.connect(directory)
+      let connection: Awaited<ReturnType<ChatStoreDeps["connect"]>>
+      try {
+        connection = await deps.connect(directory)
+      } catch (error) {
+        // The folder's files could not be read, or the server did not start:
+        // refused, so that opening it again tries again.
+        refuse(mine, error)
+        return
+      }
       if (mine !== generation) return
       if (!connection.ok) {
         setState({ status: "refused", problem: connection.problem })
