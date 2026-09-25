@@ -115,6 +115,25 @@ export interface ChatStoreDeps {
   /** Waits `ms`, or less if `signal` aborts. */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>
   readonly random?: () => number
+  /**
+   * Whether `path` is a file of the folder `root` once links and junctions
+   * are followed: Rust's `chat_attachment_inside` (C6 review, MEDIO). `"ok"`,
+   * or why not. Absent, every file is refused.
+   */
+  readonly checkAttachment?: (root: string, path: string) => Promise<AttachmentCheck>
+}
+
+export type AttachmentCheck = "ok" | "outside" | "notFile"
+
+/** Rust's check, in the desktop app; anything that fails to answer is a no. */
+export async function tauriAttachmentCheck(root: string, path: string): Promise<AttachmentCheck> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core")
+    const answer = await invoke<string>("chat_attachment_inside", { root, path })
+    return answer === "ok" || answer === "notFile" ? answer : "outside"
+  } catch {
+    return "outside"
+  }
 }
 
 /** A session the chat did not make: its permission rules are not the chat's, so nothing is sent to it. */
@@ -170,6 +189,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   const backoff = deps.backoffMs ?? BACKOFF_MS
   const sleep = deps.sleep ?? wait
   const random = deps.random ?? Math.random
+  const checkAttachment = deps.checkAttachment ?? (async () => "outside" as const)
 
   const [state, setState] = createStore<ChatState>({ status: "idle", data: emptyChatData() })
   const setData = ((...args: unknown[]) => (setState as (...a: unknown[]) => void)("data", ...args)) as SetStoreFunction<ChatData>
@@ -341,6 +361,10 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       for (const file of files) {
         const path = pathOfFileUrl(file.url)
         if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
+        // nikcli reads it without asking: Rust follows links and junctions before it goes.
+        const check = await checkAttachment(folder, path)
+        if (check === "notFile") throw new Error(t("chat.attach.notFile", path))
+        if (check !== "ok") throw new Error(t("chat.attach.outside", path))
       }
       const mine = generation
       let id = sessionID
@@ -409,6 +433,9 @@ let app: ChatStore | undefined
 
 /** The window's chat: made on first use, with the Rust bridge and the Bots' trust in the project. */
 export function appChatStore(): ChatStore {
-  app ??= createChatStore({ connect: (directory) => openChat(directory, appChatConnectionDeps()) })
+  app ??= createChatStore({
+    connect: (directory) => openChat(directory, appChatConnectionDeps()),
+    checkAttachment: tauriAttachmentCheck,
+  })
   return app
 }

@@ -1280,6 +1280,7 @@ export const en: Messages = {
   "chat.error.requestAborted": "The request was stopped.",
   "chat.retry": (attempt: number) => `The provider returned an error: trying again, attempt ${attempt}…`,
   "chat.attach.outside": (path: string) => `${path} is not a file of this project: the chat only attaches files of the open folder.`,
+  "chat.attach.notFile": (path: string) => `${path} is not a file: the chat only attaches files.`,
   "chat.attach.add": "Attach",
   "chat.attach.addHint": "Attach a project file",
   "chat.attach.remove": (name: string) => `Remove ${name}`,

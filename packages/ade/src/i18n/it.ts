@@ -1291,6 +1291,7 @@ export const it = {
   "chat.error.requestAborted": "La richiesta è stata interrotta.",
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
   "chat.attach.outside": (path: string) => `${path} non è un file di questo progetto: la Chat allega solo file della cartella aperta.`,
+  "chat.attach.notFile": (path: string) => `${path} non è un file: la Chat allega solo file.`,
   "chat.attach.add": "Allega",
   "chat.attach.addHint": "Allega un file del progetto",
   "chat.attach.remove": (name: string) => `Togli ${name}`,

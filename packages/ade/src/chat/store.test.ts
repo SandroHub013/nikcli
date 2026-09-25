@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { t } from "../i18n"
 import { createRoot, createEffect } from "solid-js"
 import { openChat } from "./connection"
 import { CHAT_PERMISSION } from "./rules"
@@ -133,6 +134,7 @@ function storeOn(
       await tick(1)
     },
     random: () => 0,
+    checkAttachment: async () => "ok",
     ...extra,
   })
   return { store, sleeps }
@@ -521,6 +523,39 @@ describe("the chat's store", () => {
       expect([url, refused instanceof Error]).toEqual([url, true])
     }
     expect(server.calls("POST", /^\/session$/)).toEqual([])
+    expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
+  })
+
+  test("a file that Rust finds outside once links are followed: nothing is sent", async () => {
+    const server = fakeServer()
+    const asked: [string, string][] = []
+    const { store } = storeOn(server, {
+      checkAttachment: async (root, path) => {
+        asked.push([root, path])
+        return path.endsWith("note.txt") ? "outside" : path.endsWith("src") ? "notFile" : "ok"
+      },
+    })
+    await store.open(A)
+    await live(server, store)
+    // A junction or a link inside the folder, aimed at ~/.ssh: inside as written, outside once followed.
+    const linked = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/note.txt" }
+    const refused = await store.send(undefined, "Leggi", FREE, undefined, [linked]).then(() => undefined, (error: unknown) => error)
+    expect(refused).toBeInstanceOf(Error)
+    expect((refused as Error).message).toBe(t("chat.attach.outside", "C:/progetto-a/note.txt"))
+    expect(asked).toEqual([[A, "C:/progetto-a/note.txt"]])
+    const folder = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src" }
+    expect(await store.send(undefined, "Leggi", FREE, undefined, [folder]).then(() => "sent", () => "refused")).toBe("refused")
+    expect(server.calls("POST", /^\/session$/)).toEqual([])
+    expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
+  })
+
+  test("without Rust's check, a file is refused: the store does not guess", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server, { checkAttachment: undefined })
+    await store.open(A)
+    await live(server, store)
+    const file = { type: "file" as const, mime: "text/plain", url: "file:///C:/progetto-a/src/app.ts" }
+    expect(await store.send(undefined, "Leggi", FREE, undefined, [file]).then(() => "sent", () => "refused")).toBe("refused")
     expect(server.calls("POST", /\/prompt_async$/)).toEqual([])
   })
 
