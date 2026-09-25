@@ -146,8 +146,21 @@ pub async fn gateway_set_enabled(
 
 /// A reply to a chat an authorized sender wrote from; known secrets are taken out first.
 #[tauri::command]
-pub async fn gateway_send(app: AppHandle, bot: String, platform: Platform, chat: String, text: String) -> Result<String, String> {
-    hub(&app)?.send(&bot, platform, &chat, &text).await
+/// With `buttons`, they go under the last message; a press comes back as a
+/// `gateway:message` with `button: true`.
+pub async fn gateway_send(
+    app: AppHandle,
+    bot: String,
+    platform: Platform,
+    chat: String,
+    text: String,
+    buttons: Option<Vec<adapter::Button>>,
+) -> Result<String, String> {
+    let hub = hub(&app)?;
+    match buttons {
+        Some(buttons) => hub.send_buttons(&bot, platform, &chat, &text, &buttons).await,
+        None => hub.send(&bot, platform, &chat, &text).await,
+    }
 }
 
 #[tauri::command]

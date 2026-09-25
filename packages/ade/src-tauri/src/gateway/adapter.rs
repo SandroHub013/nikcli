@@ -52,7 +52,18 @@ pub struct Inbound {
     /// A one-to-one chat with the bot. V1 answers nothing else.
     pub private: bool,
     pub sender: Sender,
+    /// The message's text; for a button, the data it carries.
     pub text: String,
+    /// A button under one of the bot's messages was pressed. Whoever pressed
+    /// it is checked like a sender; a stranger's press gets no pairing code.
+    pub button: bool,
+}
+
+/// A button under a message: what it shows, and what comes back when pressed.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct Button {
+    pub label: String,
+    pub data: String,
 }
 
 /// What a platform can do beyond sending text.
@@ -97,8 +108,19 @@ pub trait Adapter: Send + Sync {
     /// Waits for what arrived since the last call. An empty batch is a quiet
     /// period (a long poll that timed out), not an error.
     async fn receive(&self) -> Result<Vec<Inbound>, AdapterError>;
-    /// Sends `text` to `chat` as one message; returns the platform's id for it.
+    /// Sends `text` to `chat`, in as many messages as the platform's limit
+    /// needs; returns the platform's id for the last one.
     async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError>;
+    /// The same, with buttons under the last message.
+    async fn send_buttons(&self, _chat: &str, _text: &str, _buttons: &[Button]) -> Result<String, AdapterError> {
+        Err(AdapterError::Unsupported)
+    }
+    /// Where the stream has been read up to, after the last `receive`: saved
+    /// once that batch was handed on, and given back when the adapter is made
+    /// again. None for a platform that does not need one.
+    fn cursor(&self) -> Option<String> {
+        None
+    }
     async fn edit(&self, _chat: &str, _message: &str, _text: &str) -> Result<(), AdapterError> {
         Err(AdapterError::Unsupported)
     }
@@ -120,7 +142,10 @@ pub mod fake {
         pub sent: Mutex<Vec<(String, String)>>,
         pub edited: Mutex<Vec<(String, String, String)>>,
         pub typing: Mutex<Vec<String>>,
+        pub buttons: Mutex<Vec<(String, String, Vec<Button>)>>,
         pub receives: std::sync::atomic::AtomicUsize,
+        /// What `cursor` reports: the tests set it with each batch.
+        pub position: Mutex<Option<String>>,
     }
 
     pub type Feed = mpsc::UnboundedSender<Result<Vec<Inbound>, AdapterError>>;
@@ -133,7 +158,9 @@ pub mod fake {
                 sent: Mutex::new(Vec::new()),
                 edited: Mutex::new(Vec::new()),
                 typing: Mutex::new(Vec::new()),
+                buttons: Mutex::new(Vec::new()),
                 receives: std::sync::atomic::AtomicUsize::new(0),
+                position: Mutex::new(None),
             };
             (std::sync::Arc::new(adapter), tx)
         }
@@ -164,6 +191,13 @@ pub mod fake {
         async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
             self.typing.lock().unwrap().push(chat.into());
             Ok(())
+        }
+        async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
+            self.buttons.lock().unwrap().push((chat.into(), text.into(), buttons.to_vec()));
+            Ok("b1".into())
+        }
+        fn cursor(&self) -> Option<String> {
+            self.position.lock().unwrap().clone()
         }
     }
 }

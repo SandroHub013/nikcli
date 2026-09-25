@@ -11,7 +11,7 @@
 //! come through `Env`, the keychain through `Vault`, so the tests drive it
 //! with a fake adapter and no token of any real service.
 
-use super::adapter::{Adapter, AdapterError, Capabilities, Inbound, Platform};
+use super::adapter::{Adapter, AdapterError, Button, Capabilities, Inbound, Platform};
 use super::authz::{self, Request};
 use super::redact::redact;
 use super::store::{Authorized, LinkState, Store};
@@ -36,7 +36,15 @@ pub struct GatewayMessage {
     /// A known secret was taken out of the text or the name: the page tells the
     /// user it was hidden and not used, or they would not know why.
     pub redacted: bool,
+    /// A button was pressed; `text` is the data it carried.
+    pub button: bool,
 }
+
+/// How many buttons a message may carry, and how long their parts may be:
+/// Telegram's callback data is at most 64 bytes.
+const MAX_BUTTONS: usize = 12;
+const MAX_BUTTON_DATA: usize = 64;
+const MAX_BUTTON_LABEL: usize = 64;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MessageSender {
@@ -419,6 +427,29 @@ impl Hub {
         adapter.send(chat, &redact(text, &secrets)).await.map_err(|error| redact(&error.message(), &secrets))
     }
 
+    /// A reply with buttons under it. A press comes back as a message with
+    /// `button: true`, and only from an authorized sender.
+    pub async fn send_buttons(&self, bot: &str, platform: Platform, chat: &str, text: &str, buttons: &[Button]) -> Result<String, String> {
+        if buttons.is_empty() || buttons.len() > MAX_BUTTONS {
+            return Err(format!("da 1 a {MAX_BUTTONS} bottoni per messaggio"));
+        }
+        if buttons.iter().any(|button| {
+            button.label.trim().is_empty() || button.label.chars().count() > MAX_BUTTON_LABEL || button.data.is_empty() || button.data.len() > MAX_BUTTON_DATA
+        }) {
+            return Err(format!("ogni bottone vuole un'etichetta (al massimo {MAX_BUTTON_LABEL} caratteri) e dati di al massimo {MAX_BUTTON_DATA} byte"));
+        }
+        let adapter = self.reply_target(bot, platform, chat)?;
+        let secrets = self.secrets();
+        let buttons: Vec<Button> = buttons
+            .iter()
+            .map(|button| Button { label: redact(&button.label, &secrets), data: button.data.clone() })
+            .collect();
+        adapter
+            .send_buttons(chat, &redact(text, &secrets), &buttons)
+            .await
+            .map_err(|error| redact(&error.message(), &secrets))
+    }
+
     pub async fn edit(&self, bot: &str, platform: Platform, chat: &str, message: &str, text: &str) -> Result<(), String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         let secrets = self.secrets();
@@ -621,6 +652,7 @@ impl Task {
                     for message in batch {
                         self.deliver(message).await;
                     }
+                    self.save_cursor();
                 }
                 Err(AdapterError::Transient(error)) => {
                     let error = redact(&error, &self.secrets);
@@ -649,6 +681,20 @@ impl Task {
         }
     }
 
+    /// The batch was handed on: the platform need not send it again.
+    fn save_cursor(&self) {
+        let Some(cursor) = self.adapter.cursor() else { return };
+        if self.store.link(&self.bot, self.platform).is_some_and(|link| link.cursor.as_deref() == Some(cursor.as_str())) {
+            return;
+        }
+        if let Err(error) = self.store.update(&self.bot, self.platform, |link, _| {
+            link.cursor = Some(cursor.clone());
+            Ok(())
+        }) {
+            self.env.log(&format!("{}: posizione non salvata: {error}", self.tag()));
+        }
+    }
+
     /// Hands `message` to the page, answers a stranger with a pairing code, or
     /// drops it. Only metadata reaches the log.
     async fn deliver(&self, message: Inbound) {
@@ -662,6 +708,11 @@ impl Task {
             return;
         }
         let authorized = self.store.link(&self.bot, self.platform).is_some_and(|link| link.is_authorized(&message.sender.id));
+        if !authorized && message.button {
+            // A press under a message a stranger can see only if it was forwarded: never theirs to make.
+            self.env.log(&format!("{tag}: ignorato un bottone premuto da un non autorizzato"));
+            return;
+        }
         if !authorized {
             self.pair(message).await;
             return;
@@ -691,6 +742,7 @@ impl Task {
             text,
             id: message.id,
             redacted,
+            button: message.button,
         });
         self.report(|live| live.last_message_ms = Some(at));
     }
@@ -848,7 +900,12 @@ mod tests {
             private: true,
             sender: Sender { id: sender.into(), name: format!("utente {sender}"), is_bot: false },
             text: text.into(),
+            button: false,
         }
+    }
+
+    fn press(id: &str, chat: &str, sender: &str, data: &str) -> Inbound {
+        Inbound { button: true, ..message(id, chat, sender, data) }
     }
 
     fn start(setup: &Setup) -> (Arc<FakeAdapter>, Feed) {
@@ -1194,6 +1251,46 @@ mod tests {
         assert!(missing.enabled && !missing.running);
         assert!(missing.last_error.as_deref().is_some_and(|error| error.contains("manca il token")), "{missing:?}");
         assert!(s.env.statuses.lock().unwrap().iter().any(|status| status.bot == other && status.last_error.is_some()));
+    }
+
+    #[tokio::test]
+    async fn a_button_press_counts_only_from_an_authorized_sender_and_brings_no_code() {
+        let s = setup("buttons");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "ciao")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        let buttons = vec![Button { label: "Sì".into(), data: "ok:1".into() }, Button { label: format!("No {KEY}"), data: "no:1".into() }];
+        s.hub.send_buttons(BOT, Platform::Fake, "c42", "Procedo?", &buttons).await.unwrap();
+        let sent = adapter.buttons.lock().unwrap().clone();
+        assert_eq!(sent[0].2[1].label, "No [nascosto]");
+        assert!(s.hub.send_buttons(BOT, Platform::Fake, "c42", "x", &[Button { label: "a".into(), data: "d".repeat(65) }]).await.is_err());
+        assert!(s.hub.send_buttons(BOT, Platform::Fake, "c42", "x", &[]).await.is_err());
+        assert!(s.hub.send_buttons(BOT, Platform::Fake, "c999", "x", &buttons).await.is_err());
+        // A stranger's press is dropped, and gets no pairing code either.
+        feed.send(Ok(vec![press("2", "c7", "7", "ok:1"), press("3", "c42", "42", "ok:1")])).unwrap();
+        eventually("la pressione dell'autorizzato", || s.env.messages.lock().unwrap().len() == 2).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert_eq!(messages.len(), 2);
+        assert!(messages[1].button && messages[1].sender.id == "42" && messages[1].text == "ok:1");
+        assert!(!messages[0].button);
+        assert!(adapter.sent.lock().unwrap().is_empty(), "nessun codice per chi preme");
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_position_is_saved_once_a_batch_was_handed_on() {
+        let s = setup("cursor");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("501".into());
+        feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
+        // Made again (a new token, ADE reopened): from where it was.
+        s.hub.set_token(BOT, Platform::Fake, "987654321:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
+        assert_eq!(s.made.lock().unwrap().last().unwrap().1.as_deref(), Some("501"));
     }
 
     #[tokio::test]
