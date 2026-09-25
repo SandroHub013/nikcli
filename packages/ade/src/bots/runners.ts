@@ -22,6 +22,7 @@ import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
+import { PLAN_RUNNERS } from "./terms"
 import {
   appendMessage,
   applyJsonLine,
@@ -90,6 +91,69 @@ export const RUNNERS: readonly Runner[] = [
     status: ["login", "status"],
   },
 ]
+
+/**
+ * How a turn is paid for.
+ *
+ * `plan` is Claude Code or Codex: the CLI may print a dollar figure, and it
+ * is not a charge on a card. `free` is a nikcli model whose id ends in
+ * `:free`. Anything else on nikcli, including no model at all, is `api`:
+ * the default can be a paid provider, so it is not called free.
+ */
+export type SpendKind = "plan" | "api" | "free"
+
+export function isFreeModel(model?: string | undefined): boolean {
+  return typeof model === "string" && /:free$/i.test(model.trim())
+}
+
+export function spendKind(runnerId?: string | undefined, model?: string | undefined): SpendKind {
+  if (typeof runnerId === "string" && PLAN_RUNNERS.includes(runnerId)) return "plan"
+  if (isFreeModel(model)) return "free"
+  return "api"
+}
+
+export interface SpendLine {
+  readonly kind: SpendKind
+  readonly model: string
+  readonly tokens: number
+  /** Set only for a real charge. A plan and a free model never have one. */
+  readonly usd?: string
+}
+
+/** Dollars of a real charge: three places under a cent, two otherwise. */
+export function formatUsd(usd: number): string {
+  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
+}
+
+/** What a turn shows for its model and its cost. The dollar amount is omitted when it is not money spent. */
+export function spendLine(input: {
+  readonly runnerId?: string | undefined
+  readonly model?: string | undefined
+  readonly tokens: number
+  readonly costUsd: number
+}): SpendLine {
+  const kind = spendKind(input.runnerId, input.model)
+  const model = input.model?.trim() ?? ""
+  return {
+    kind,
+    model,
+    tokens: input.tokens,
+    ...(kind === "api" && input.costUsd > 0 ? { usd: formatUsd(input.costUsd) } : {}),
+  }
+}
+
+/**
+ * What «Genera con nikcli» spends.
+ *
+ * The model named in the form is the one `agent create --model` writes the
+ * file with. With none named, nikcli's own default writes it, and a default
+ * is not free.
+ */
+export function generationSpend(model?: string | undefined): { readonly model: string; readonly paid: boolean } {
+  const named = model?.trim() ?? ""
+  if (!named) return { model: "", paid: true }
+  return { model: named, paid: !isFreeModel(named) }
+}
 
 export function runnerAccount(id: RunnerId | string): string {
   switch (id) {

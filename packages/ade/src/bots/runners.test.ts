@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
-import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, readLoginStatus, runnerById, safeCommandPattern, turnCommand } from "./runners"
+import { answerSoFar, applyRunnerLine, enforcesDisabledTools, finalText, formatUsd, generationSpend, readLoginStatus, runnerById, safeCommandPattern, spendLine, turnCommand } from "./runners"
 import { emptyTalk, sendMessage, type Talk } from "./talk"
 
 const bot: AgentFile = {
@@ -535,5 +535,41 @@ describe("un turno da chat non ha la shell", () => {
   test("un modello di comando: lettere, spazi e poco altro, mai virgole o parentesi", () => {
     for (const ok of ["npm test", "git status *", "bun run test:unit", "ls ./src"]) expect(safeCommandPattern(ok)).toBe(true)
     for (const bad of ["", " npm", "a,b", "a)", "a(b", "a;b", "a|b", "a`b", "a$b", "x".repeat(81), "a\nb"]) expect(safeCommandPattern(bad)).toBe(false)
+  })
+})
+
+describe("il costo di un turno", () => {
+  test("Claude Code e Codex non mostrano dollari: il numero della CLI non è un addebito", () => {
+    for (const runnerId of ["claude", "codex"]) {
+      const line = spendLine({ runnerId, model: "opus", tokens: 1200, costUsd: 0.42 })
+      expect(line.kind).toBe("plan")
+      expect(line.usd).toBeUndefined()
+      expect(JSON.stringify(line)).not.toContain("$")
+    }
+  })
+
+  test("nikcli mostra il costo del turno, e un modello :free no", () => {
+    const paid = spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 800, costUsd: 0.04 })
+    expect(paid).toMatchObject({ kind: "api", model: "openai/gpt-4o", usd: "$0.04" })
+    const free = spendLine({ runnerId: "nikcli", model: "google/gemini-2.0-flash:free", tokens: 800, costUsd: 0.5 })
+    expect(free.kind).toBe("free")
+    expect(free.usd).toBeUndefined()
+    const unnamed = spendLine({ runnerId: "nikcli", tokens: 10, costUsd: 0.004 })
+    expect(unnamed.kind).toBe("api")
+    expect(unnamed.usd).toBe("$0.004")
+    expect(spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
+  })
+
+  test("i dollari hanno tre cifre sotto il centesimo e due sopra", () => {
+    expect(formatUsd(0.009)).toBe("$0.009")
+    expect(formatUsd(0.01)).toBe("$0.01")
+    expect(formatUsd(1.2)).toBe("$1.20")
+  })
+
+  test("Genera con nikcli: senza modello è il predefinito, a pagamento; :free no", () => {
+    expect(generationSpend()).toEqual({ model: "", paid: true })
+    expect(generationSpend("  ")).toEqual({ model: "", paid: true })
+    expect(generationSpend("openai/gpt-4o")).toEqual({ model: "openai/gpt-4o", paid: true })
+    expect(generationSpend("google/gemini-2.0-flash:free")).toEqual({ model: "google/gemini-2.0-flash:free", paid: false })
   })
 })
