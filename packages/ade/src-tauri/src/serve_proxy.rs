@@ -139,53 +139,56 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
     Ok(url)
 }
 
-/// What a rule of `FENCED` covers: every method, or all but reading.
-#[derive(Clone, Copy)]
-enum Methods {
-    Any,
-    Writes,
-}
-
-/// Parts of the server the chat has no business with (C1 review, BASSO 3).
+/// The only parts of the server the chat may call (C2 review, M1).
 ///
-/// The page is trusted, so this is not the boundary; it keeps a mistake from
-/// reaching them, and the user's shared service most of all: starting nikcli's
-/// own Discord or chat bots outside ADE's gateway, disposing the instance or
-/// the whole server under other clients, changing the configuration, the
-/// logins or the MCP servers, a terminal, a shell or a command outside a turn,
-/// the TUI's remote control, writing files or applying changes from outside a
-/// session. Taken from the server's routes (`packages/nikcli/src/server`).
+/// An allowlist, not a list of what is forbidden: nikcli's server gains routes
+/// often, and a new one must stay closed until the chat needs it. Before, a
+/// list of forbidden parts left open publishing a conversation
+/// (`/session/*/share`), the server's voice, its autonomous work (`/brain`)
+/// and writing analytics. The page is trusted, so this is not the boundary;
+/// it keeps a mistake from reaching the user's shared service.
+///
+/// What is here: the health and the folder's event stream, reading the
+/// configuration, providers, agents, commands and MCP servers the chat shows,
+/// the sessions and their messages, sending, stopping, going back and
+/// forking, the answers to permissions and questions, and reading files for
+/// `@file`. Each with its methods: `GET` also allows `HEAD`.
 ///
 /// A pattern is matched segment by segment: `*` is any one segment, `**` at
 /// the end any rest, nothing included.
-const FENCED: &[(Methods, &str)] = &[
-    (Methods::Any, "/discord/**"),
-    (Methods::Any, "/chatbot/**"),
-    (Methods::Any, "/mobile/**"),
-    (Methods::Any, "/global/dispose"),
-    (Methods::Any, "/instance/dispose"),
-    (Methods::Any, "/config/reload"),
-    (Methods::Writes, "/config/**"),
-    (Methods::Any, "/auth/**"),
-    (Methods::Any, "/provider/*/auth/**"),
-    (Methods::Any, "/provider/*/oauth/**"),
-    (Methods::Writes, "/provider/*/api"),
-    (Methods::Writes, "/connectors/**"),
-    (Methods::Writes, "/mcp/**"),
-    (Methods::Writes, "/account/**"),
-    (Methods::Writes, "/user/**"),
-    (Methods::Writes, "/profile/**"),
-    (Methods::Writes, "/sync/**"),
-    (Methods::Writes, "/project/*"),
-    (Methods::Any, "/pty/**"),
-    (Methods::Any, "/tui/**"),
-    (Methods::Any, "/session/*/shell"),
-    (Methods::Any, "/session/*/command"),
-    (Methods::Writes, "/vcs/**"),
-    (Methods::Writes, "/file/**"),
-    (Methods::Writes, "/experimental/**"),
-    (Methods::Writes, "/loop/**"),
-    (Methods::Writes, "/mission/**"),
+const ALLOWED: &[(&str, &str)] = &[
+    ("GET", "/global/health"),
+    ("GET", "/event"),
+    ("GET", "/path"),
+    ("GET", "/config"),
+    ("GET", "/config/providers"),
+    ("GET", "/provider"),
+    ("GET", "/agent"),
+    ("GET", "/command"),
+    ("GET", "/mcp"),
+    ("GET", "/project/current"),
+    ("GET POST", "/session"),
+    ("GET", "/session/status"),
+    ("GET PATCH DELETE", "/session/*"),
+    ("GET POST", "/session/*/message"),
+    ("GET", "/session/*/message/*"),
+    ("POST", "/session/*/prompt_async"),
+    ("POST", "/session/*/abort"),
+    ("POST", "/session/*/revert"),
+    ("POST", "/session/*/unrevert"),
+    ("POST", "/session/*/fork"),
+    ("POST", "/session/*/summarize"),
+    ("GET", "/session/*/todo"),
+    ("GET", "/session/*/children"),
+    ("GET", "/session/*/diff"),
+    ("GET", "/permission"),
+    ("POST", "/permission/*/reply"),
+    ("GET", "/question"),
+    ("POST", "/question/*/reply"),
+    ("POST", "/question/*/reject"),
+    ("GET", "/file"),
+    ("GET", "/file/**"),
+    ("GET", "/find/**"),
 ];
 
 fn matches(pattern: &str, segments: &[&str]) -> bool {
@@ -202,25 +205,20 @@ fn matches(pattern: &str, segments: &[&str]) -> bool {
     segments.len() == pattern.len()
 }
 
-/// Why the chat may not call `url`, if it may not. Compared without case,
-/// empty segments dropped, after `target` resolved any `..`; a path with a
-/// `%` is refused outright, since nothing the chat calls needs one and a
-/// decoding server could read it as another route.
+/// Why the chat may not call `url`, if it may not: anything `ALLOWED` does
+/// not name. Compared without case, empty segments dropped, after `target`
+/// resolved any `..`; a path with a `%` is refused outright, since nothing
+/// the chat calls needs one and a decoding server could read it as another
+/// route.
 pub(crate) fn fenced(method: &Method, url: &Url) -> Option<String> {
     let path = url.path().to_ascii_lowercase();
-    if path.contains('%') {
-        return Some(format!("percorso non consentito alla chat: {}", url.path()));
-    }
     let segments: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
-    let reading = *method == Method::GET || *method == Method::HEAD;
-    let hit = FENCED.iter().any(|(methods, pattern)| {
-        let applies = match methods {
-            Methods::Any => true,
-            Methods::Writes => !reading,
-        };
-        applies && matches(pattern, &segments)
-    });
-    hit.then(|| format!("la chat non può chiamare {} {} sul server di nikcli", method, url.path()))
+    let name = if *method == Method::HEAD { "GET" } else { method.as_str() };
+    let allowed = !path.contains('%')
+        && ALLOWED
+            .iter()
+            .any(|(methods, pattern)| methods.split(' ').any(|m| m == name) && matches(pattern, &segments));
+    (!allowed).then(|| format!("la chat non può chiamare {} {} sul server di nikcli", method, url.path()))
 }
 
 /// The methods the SDK uses, and nothing like `CONNECT` or `TRACE`.
@@ -490,26 +488,42 @@ mod tests {
             (Method::POST, "/experimental/worktree"),
             (Method::POST, "/discord%2Fstart"),
             (Method::POST, "/session/ses_1/%73hell"),
+            // What the list of forbidden parts left open (C2 review, M1).
+            (Method::POST, "/session/ses_1/share"),
+            (Method::DELETE, "/session/ses_1/share"),
+            (Method::POST, "/voice/speak"),
+            (Method::GET, "/voice/models"),
+            (Method::POST, "/brain"),
+            (Method::POST, "/analytics/event"),
+            // Every other directory's events: the chat reads its folder's only.
+            (Method::GET, "/global/event"),
+            // A part of the server added tomorrow stays closed until named here.
+            (Method::POST, "/nuovo-gruppo/avvia"),
+            (Method::GET, "/nuovo-gruppo"),
         ] {
             assert!(refused(method.clone(), path), "consentito: {method} {path}");
         }
         // What a chat needs goes through.
         for (method, path) in [
             (Method::GET, "/global/health"),
-            (Method::GET, "/global/event"),
+            (Method::HEAD, "/global/health"),
             (Method::GET, "/event"),
             (Method::GET, "/config"),
             (Method::GET, "/provider"),
             (Method::GET, "/project/current"),
             (Method::GET, "/session?directory=x&roots=true"),
             (Method::POST, "/session"),
+            (Method::GET, "/session/status"),
+            (Method::PATCH, "/session/ses_1"),
             (Method::GET, "/session/ses_1/message"),
             (Method::POST, "/session/ses_1/message"),
             (Method::POST, "/session/ses_1/prompt_async"),
             (Method::POST, "/session/ses_1/abort"),
             (Method::POST, "/permission/per_1/reply"),
             (Method::POST, "/question/q_1/reply"),
+            (Method::POST, "/question/q_1/reject"),
             (Method::GET, "/file?path=src/a.ts"),
+            (Method::GET, "/find/file?query=a"),
             (Method::GET, "/mcp"),
         ] {
             assert!(!refused(method.clone(), path), "rifiutato: {method} {path}");
