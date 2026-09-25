@@ -136,6 +136,21 @@ describe("runTurn", () => {
     )
   })
 
+  test("a nikcli turn is over at its own last step, and gives its slot back (B7)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "nikcli", message: "ciao" }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say('{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}')
+    m.say('{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"GLOBALE"}}')
+    m.say('{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","tokens":{"input":10,"output":1},"cost":0}}')
+    const result = await turn.result
+    expect(result.status).toBe("done")
+    expect(result.text).toContain("GLOBALE")
+    expect(result.sessionId).toBe("ses_1")
+    expect(turnsRunning("nikcli")).toBe(0)
+  })
+
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {
     const m = machine()
     const running = Array.from({ length: MAX_PARALLEL_TURNS }, () => start(m))
