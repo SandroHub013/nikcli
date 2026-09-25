@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createEffect } from "solid-js"
 import { openChat } from "./connection"
 import { CHAT_PERMISSION } from "./rules"
-import { createChatStore, ForeignSession, type ChatStoreDeps } from "./store"
+import { createChatStore, ForeignSession, titleFrom, type ChatStoreDeps } from "./store"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -469,5 +469,18 @@ describe("the chat's store", () => {
     const empty = await store.rename("ses_1", "   ").then(() => undefined, (error: unknown) => error)
     expect(empty).toBeInstanceOf(Error)
     expect(server.calls("PATCH", /^\/session\//)).toHaveLength(1)
+  })
+
+  test("a new session is made with a title, so no model is called to name it", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    await store.send(undefined, "  Spiegami   il file\nconnection.ts, per favore", FREE)
+    const created = JSON.parse(server.calls("POST", /^\/session$/)[0]!.body!)
+    expect(created.title).toBe("Spiegami il file")
+    // Not nikcli's default («New session - <ISO date>»), which it would title with its small model.
+    expect(created.title).not.toMatch(/^(New session|Child session) - \d{4}-/)
+    expect(titleFrom("x".repeat(80))).toBe(`${"x".repeat(59)}…`)
   })
 })

@@ -98,6 +98,19 @@ const MESSAGE_LIMIT = 100
 
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
+const TITLE_LIMIT = 60
+
+/**
+ * A new session's title: the first line of what was sent. Given at creation
+ * because nikcli titles an untitled session with the provider's small model,
+ * which ADE's server does not pin and which on OpenRouter is a paid one: a
+ * session that already has a title is never titled by a model.
+ */
+export function titleFrom(text: string): string {
+  const first = text.trim().split(/\r?\n/, 1)[0]!.replace(/\s+/g, " ").trim()
+  return first.length > TITLE_LIMIT ? `${first.slice(0, TITLE_LIMIT - 1)}…` : first
+}
+
 function bySession<T extends { id: string; sessionID: string }>(list: readonly T[]): Record<string, T[]> {
   const grouped: Record<string, T[]> = {}
   for (const item of list) (grouped[item.sessionID] ??= []).push(item)
@@ -288,7 +301,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const mine = generation
       let id = sessionID
       if (!id) {
-        const created = await connection.client.session.create({ permission: [...CHAT_PERMISSION] })
+        const created = await connection.client.session.create({ title: titleFrom(text), permission: [...CHAT_PERMISSION] })
         id = (created.data as unknown as Session).id
         if (mine === generation) ours.add(id)
       } else if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
