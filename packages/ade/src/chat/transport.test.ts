@@ -30,7 +30,7 @@ function fakeBridge(options: { startFails?: number } = {}) {
         failures--
         throw new Error("nikcli non è nel PATH")
       }
-      return { url: "http://127.0.0.1:49374", version: "1.384.0", shared: true }
+      return { url: "http://127.0.0.1:49374", version: "1.384.0" }
     },
     async send(request, onEvent) {
       const entry = { request, emit: onEvent, id: sent.length + 1 }

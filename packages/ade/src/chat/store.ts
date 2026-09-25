@@ -26,8 +26,10 @@
 
 import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
+import { t } from "../i18n"
 import { appChatConnectionDeps, isChatRefused, openChat, type ChatConnection } from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData, type ChatEvent, type ChatEventOutcome } from "./events"
+import { CHAT_PERMISSION, hasChatRules } from "./rules"
 import { readEvents, StreamRefused } from "./stream"
 
 export type ChatStatus = "idle" | "admitting" | "connecting" | "live" | "retrying" | "refused"
@@ -53,8 +55,18 @@ export interface ChatStore {
   open(directory: string): Promise<void>
   /** Stops the stream. What was loaded stays readable until the next `open`. */
   close(): void
-  /** Sends `text` to `sessionID`, or to a new session; the id it went to. The answer comes as events. */
+  /**
+   * Sends `text` to `sessionID`, or to a new session made with the chat's
+   * permission rules (`rules.ts`); the id it went to. The answer comes as
+   * events. A session made elsewhere is refused with `ForeignSession`.
+   */
   send(sessionID: string | undefined, text: string, model: ModelRef): Promise<string>
+  /** Answers a permission request: this once, or no. «Always» is not offered (C5). */
+  replyPermission(requestID: string, reply: "once" | "reject"): Promise<void>
+  /** Answers a question: for each of its questions, the labels chosen or typed. */
+  answerQuestion(requestID: string, answers: readonly (readonly string[])[]): Promise<void>
+  /** Declines a question: the model goes on without an answer. */
+  rejectQuestion(requestID: string): Promise<void>
   /** Stops the answer running in `sessionID` on the server. */
   abort(sessionID: string): Promise<void>
   /** Loads a session's messages, and keeps loading them after every reconnection. */
@@ -68,6 +80,11 @@ export interface ChatStoreDeps {
   /** Waits `ms`, or less if `signal` aborts. */
   readonly sleep?: (ms: number, signal: AbortSignal) => Promise<void>
   readonly random?: () => number
+}
+
+/** A session the chat did not make: its permission rules are not the chat's, so nothing is sent to it. */
+export class ForeignSession extends Error {
+  override readonly name = "ForeignSession"
 }
 
 /** Two and a half of the server's 30 s heartbeats. */
@@ -114,6 +131,8 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   let current: { connection: Open; stop: AbortController } | undefined
   /** Sessions whose messages are shown, reloaded after a reconnection. */
   const watched = new Set<string>()
+  /** Sessions made here, with the chat's rules, before their event arrives. */
+  const ours = new Set<string>()
   /** One list per load in flight: the events that arrive while it runs, applied again over what it loaded. */
   const arriving = new Set<ChatEvent[]>()
 
@@ -239,6 +258,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       close()
       const mine = ++generation
       watched.clear()
+      ours.clear()
       setState({ directory, status: "admitting", problem: undefined })
       setState("data", reconcile(emptyChatData()))
       let connection: Awaited<ReturnType<ChatStoreDeps["connect"]>>
@@ -265,8 +285,11 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       const mine = generation
       let id = sessionID
       if (!id) {
-        const created = await connection.client.session.create({})
+        const created = await connection.client.session.create({ permission: [...CHAT_PERMISSION] })
         id = (created.data as unknown as Session).id
+        if (mine === generation) ours.add(id)
+      } else if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
+        throw new ForeignSession(t("chat.foreignSession"))
       }
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
@@ -275,6 +298,15 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     },
     async abort(sessionID) {
       await opened().client.session.abort({ sessionID })
+    },
+    async replyPermission(requestID, reply) {
+      await opened().client.permission.reply({ requestID, reply })
+    },
+    async answerQuestion(requestID, answers) {
+      await opened().client.question.reply({ requestID, answers: answers.map((labels) => [...labels]) })
+    },
+    async rejectQuestion(requestID) {
+      await opened().client.question.reject({ requestID })
     },
     async loadMessages(sessionID) {
       watched.add(sessionID)

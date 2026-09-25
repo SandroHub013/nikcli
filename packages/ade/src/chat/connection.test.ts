@@ -19,7 +19,7 @@ function fakeBridge() {
   const bridge: ServerBridge = {
     async start(directory) {
       starts.push(directory)
-      return { url: "http://127.0.0.1:49374", version: "1.389.0", shared: true }
+      return { url: "http://127.0.0.1:49374", version: "1.389.0" }
     },
     async send(request, onEvent: (event: ProxyEvent) => void) {
       sent.push(request)

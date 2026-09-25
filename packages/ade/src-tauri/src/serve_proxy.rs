@@ -4,8 +4,8 @@
 /// Vite serves it from `http://localhost:1420`, which the server's CORS
 /// accepts. A release is served from `tauri.localhost`, which it does not, so
 /// every call failed before it left the WebView — the review's A3. Changing
-/// the CORS of the user's shared service is not ADE's to do, and ADE's own
-/// server has a password the page must not hold either.
+/// nikcli's CORS is not ADE's to do, and ADE's own server has a password the
+/// page must not hold either.
 ///
 /// So the page hands a request to `nikcli_serve_fetch` — a method, a path and
 /// a body, never an address — and gets the answer back on a channel: first
@@ -107,7 +107,8 @@ fn client() -> Result<&'static Client, String> {
         .map_err(Clone::clone)
 }
 
-/// The same, with a deadline for the whole call: for probes, not streams.
+/// The same, with a deadline for the whole call: for the live tests, not streams.
+#[cfg(test)]
 pub(crate) fn client_with_timeout(timeout: Duration) -> Result<Client, String> {
     tls_ready();
     Client::builder()
@@ -146,7 +147,7 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
 /// list of forbidden parts left open publishing a conversation
 /// (`/session/*/share`), the server's voice, its autonomous work (`/brain`)
 /// and writing analytics. The page is trusted, so this is not the boundary;
-/// it keeps a mistake from reaching the user's shared service.
+/// it keeps a mistake from reaching the server.
 ///
 /// What is here: the health and the folder's event stream, reading the
 /// configuration, providers, agents, commands and MCP servers the chat shows,
@@ -319,7 +320,7 @@ pub async fn nikcli_serve_fetch(
     request: ProxyRequest,
     on_event: Channel<ProxyEvent>,
 ) -> Result<u64, String> {
-    let (base, auth, shared) = app
+    let (base, auth) = app
         .state::<Server>()
         .endpoint()
         .ok_or_else(|| "il server di nikcli non è avviato".to_string())?;
@@ -339,10 +340,7 @@ pub async fn nikcli_serve_fetch(
     // once cannot remove its entry before it is there.
     let mut running = requests.lock();
     let handle = tauri::async_runtime::spawn(async move {
-        let unreachable = relay(&client, url, method, headers, body, auth, |event| on_event.send(event).is_ok()).await;
-        if unreachable && shared {
-            task_app.state::<Server>().forget_shared(&base);
-        }
+        relay(&client, url, method, headers, body, auth, |event| on_event.send(event).is_ok()).await;
         task_app.state::<Requests>().lock().remove(&id);
     });
     running.insert(id, handle);

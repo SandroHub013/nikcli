@@ -23,8 +23,6 @@ export const SERVER_BASE = "http://nikcli.ade"
 export interface ServerInfo {
   readonly url: string
   readonly version: string | null
-  /** The user's background service rather than ADE's own. */
-  readonly shared: boolean
 }
 
 export interface ProxyRequest {
@@ -170,7 +168,7 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
             done()
             if (!settled) {
               settled = true
-              // Worth finding the server again: a shared one may have gone.
+              // Worth finding the server again: ADE starts a new one if it stopped.
               started = undefined
               reject(new TypeError(event.message))
             } else controller?.error(new TypeError(event.message))

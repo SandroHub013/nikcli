@@ -393,3 +393,185 @@
     max-width: 100%;
   }
 }
+
+/* ── C5: reasoning, tools, permission requests, questions ──────────────────── */
+
+[data-slot="chat-reasoning"],
+[data-slot="chat-tool"] {
+  margin: var(--ade-space-2) 0;
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-sunken);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-reasoning"] > summary,
+[data-slot="chat-tool"] > summary {
+  display: flex;
+  gap: var(--ade-space-3);
+  align-items: baseline;
+  padding: var(--ade-space-2) var(--ade-space-4);
+  color: var(--ade-text-soft);
+  cursor: pointer;
+  min-width: 0;
+}
+
+[data-slot="chat-reasoning-text"] {
+  margin: 0;
+  padding: 0 var(--ade-space-4) var(--ade-space-3);
+  color: var(--ade-text-weak);
+  white-space: pre-wrap;
+}
+
+[data-slot="chat-tool-name"] {
+  font-family: var(--ade-mono);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-tool-subject"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ade-mono);
+}
+
+[data-slot="chat-tool-status"] {
+  flex: 0 0 auto;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="chat-tool"][data-status="error"] [data-slot="chat-tool-status"] {
+  color: var(--ade-error);
+}
+
+[data-slot="chat-tool-output"] {
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-4);
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--ade-border-subtle);
+  font-family: var(--ade-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="chat-tool-note"] {
+  margin: 0;
+  padding: 0 var(--ade-space-4) var(--ade-space-3);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="chat-permission"],
+[data-slot="chat-question"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  margin: var(--ade-space-3) 0;
+  padding: var(--ade-space-4) var(--ade-space-5);
+  border: 1px solid var(--ade-warning);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+}
+
+[data-slot="chat-rules-note"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-permission-title"],
+[data-slot="chat-question-text"] {
+  margin: 0;
+  color: var(--ade-text);
+}
+
+[data-slot="chat-permission-pattern"] {
+  display: block;
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* The whole command, never cut: a long one scrolls inside its box. */
+  max-height: 320px;
+  overflow: auto;
+}
+
+[data-slot="chat-permission-actions"],
+[data-slot="chat-question-options"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="chat-question-item"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+[data-slot="chat-question-head"] {
+  padding: 0;
+  font-size: var(--ade-font-sm);
+  font-weight: var(--ade-weight-semibold);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="chat-option"] {
+  height: 26px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+  transition:
+    border-color var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="chat-option"]:hover {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-option"][aria-pressed="true"] {
+  border-color: var(--ade-accent);
+  color: var(--ade-text);
+}
+
+[data-slot="chat-option"]:focus-visible,
+[data-slot="chat-question-typed"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="chat-question-typed"] {
+  height: 28px;
+  padding: 0 var(--ade-space-4);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-bg);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="chat-action"][data-tone="danger"]:hover {
+  border-color: var(--ade-error);
+}
+
+[data-slot="chat-action"]:disabled,
+[data-slot="chat-option"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
