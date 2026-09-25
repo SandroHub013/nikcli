@@ -5,7 +5,7 @@ import { answerKeys, emptyTalk } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
-import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF } from "./remote"
+import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 
 /*
@@ -321,7 +321,8 @@ describe("the gateways' controller", () => {
  */
 describe("the tools of a turn from a chat", () => {
   const NIKCLI: AgentFile = { ...BOT, runner: "nikcli" }
-  const nikcli = async () => ({ ok: true as const, bot: NIKCLI })
+  const nikcli = async () => ({ ok: true as const, bot: NIKCLI, fingerprint: "f-1" })
+  const on = { commands: true, fingerprint: "f-1" }
 
   /** Turns that record the keys typed into them. */
   function typedTurns() {
@@ -394,12 +395,11 @@ describe("the tools of a turn from a chat", () => {
   test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
     const b = bridge()
     const turns = typedTurns()
-    const remote = { commands: true }
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => remote })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
-    expect(turn.request.remote).toBe(remote)
+    expect(turn.request.remote).toEqual({ commands: true })
     turn.request.onData!("\u001b[1mPermission required:\u001b[0m bash (rm -rf build)\r\n")
     await until("la domanda", () => b.questions.length === 1)
     const question = b.questions[0]!
@@ -433,7 +433,7 @@ describe("the tools of a turn from a chat", () => {
       runTurn: turns.runTurn,
       loadBot: nikcli,
       sessions: memorySessionStore(),
-      remote: () => ({ commands: true }),
+      remote: () => on,
       approvalTimeoutMs: 20,
     })
     b.emit("pulisci la build")
@@ -452,7 +452,7 @@ describe("the tools of a turn from a chat", () => {
   test("a question still waiting when the turn ends is dropped: nothing typed, a late yes ignored", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => ({ commands: true }) })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
@@ -466,10 +466,21 @@ describe("the tools of a turn from a chat", () => {
     expect(b.sent.some((sent) => sent.text === t("gateway.approve.expired"))).toBe(false)
   })
 
+  test("saved on for another version of the bot's file, or for no file, they are off (G5 review, BASSO 1)", async () => {
+    for (const saved of [{ commands: true, fingerprint: "f-vecchia" }, { commands: true }]) {
+      const b = bridge()
+      const turns = typedTurns()
+      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => saved })
+      b.emit("pulisci la build")
+      await until("il turno", () => turns.started.length === 1)
+      expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
+    }
+  })
+
   test("a Claude bot gets them off even when saved on", async () => {
     const b = bridge()
     const turns = typedTurns()
-    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), remote: () => ({ commands: true }) })
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore(), remote: () => on })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
     expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
@@ -483,7 +494,7 @@ describe("the tools of a turn from a chat", () => {
       runTurn: turns.runTurn,
       loadBot: nikcli,
       sessions: memorySessionStore(),
-      remote: (bot) => (bot === "C:/altro.md" ? { commands: true } : REMOTE_OFF),
+      remote: (bot) => (bot === "C:/altro.md" ? on : REMOTE_OFF),
     })
     b.emit("pulisci la build")
     await until("il turno", () => turns.started.length === 1)
@@ -492,23 +503,27 @@ describe("the tools of a turn from a chat", () => {
 })
 
 describe("the remote commands saved per bot", () => {
-  test("off unless saved on", () => {
+  test("off unless saved on, for one version of the file", () => {
     const key = `ade.gateway.remote.test.${Math.random()}`
     const store = localRemoteStore(key)
     expect(store.get("a.md")).toEqual(REMOTE_OFF)
-    store.set("a.md", { commands: true })
-    expect(localRemoteStore(key).get("a.md")).toEqual({ commands: true })
+    store.set("a.md", { commands: true, fingerprint: "f-1" })
+    expect(localRemoteStore(key).get("a.md")).toEqual({ commands: true, fingerprint: "f-1" })
     expect(localRemoteStore(key).get("b.md")).toEqual(REMOTE_OFF)
-    // Whatever else is found saved counts as off.
-    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes" }, "c.md": true }))
+    expect(remoteTools(localRemoteStore(key).get("a.md"), "f-1")).toEqual({ commands: true })
+    expect(remoteTools(localRemoteStore(key).get("a.md"), "f-2")).toEqual(REMOTE_OFF)
+    expect(remoteTools(localRemoteStore(key).get("a.md"), undefined)).toEqual(REMOTE_OFF)
+    // Whatever else is found saved counts as off, on for no file included.
+    localStorage.setItem(key, JSON.stringify({ "a.md": { commands: "yes", fingerprint: "f-1" }, "c.md": true, "d.md": { commands: true } }))
     expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
     expect(localRemoteStore(key).get("c.md")).toEqual(REMOTE_OFF)
+    expect(localRemoteStore(key).get("d.md")).toEqual(REMOTE_OFF)
     localStorage.setItem(key, "{")
     expect(localRemoteStore(key).get("a.md")).toEqual(REMOTE_OFF)
     localStorage.removeItem(key)
     const memory = memoryRemoteStore()
-    memory.set("a.md", { commands: true })
-    expect(memory.get("a.md")).toEqual({ commands: true })
+    memory.set("a.md", { commands: true, fingerprint: "f-1" })
+    expect(memory.get("a.md")).toEqual({ commands: true, fingerprint: "f-1" })
   })
 
   test("offered for nikcli only: Claude Code and Codex cannot ask about each command (G5 review, M1)", () => {

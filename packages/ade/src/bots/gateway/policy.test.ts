@@ -77,6 +77,8 @@ describe("the trust checked again on every turn, with no dialog", () => {
     const verdict = await recheckTrust(BOT, PROJECT, await deps(text, { bot: text }))
     expect(verdict.ok).toBe(true)
     if (verdict.ok) expect(verdict.bot.runner).toBe("claude")
+    // With the fingerprint of the file as read, for the remote commands' switch.
+    if (verdict.ok) expect(verdict.fingerprint).toBe(await fileFingerprint(text))
   })
 
   test("a bot file changed since the yes is refused, and the chat is told to approve it again in ADE", async () => {

@@ -28,12 +28,12 @@
 
 import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
-import { runnerById, type RemoteTools } from "../runners"
+import { runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
-import { offersRemoteCommands, REMOTE_OFF } from "./remote"
+import { offersRemoteCommands, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, type SessionStore } from "./session"
 
 /** `gateway:message`, as Rust emits it. */
@@ -67,10 +67,13 @@ export interface GatewayControllerDeps {
   readonly bridge: GatewayBridge
   readonly runTurn: (request: TurnRequest) => Turn
   /** The bot at `path` as its file is now, if its trust still holds (`recheckTrust`). */
-  readonly loadBot: (path: string, project: string) => Promise<{ ok: true; bot: AgentFile } | { ok: false; problem: string }>
+  readonly loadBot: (
+    path: string,
+    project: string,
+  ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string }>
   readonly sessions: SessionStore
-  /** The bot's remote commands (`remote.ts`); off when absent. */
-  readonly remote?: (bot: string) => RemoteTools
+  /** The bot's remote commands as saved (`remote.ts`); off when absent. */
+  readonly remote?: (bot: string) => RemoteSetting
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   readonly now?: () => number
@@ -236,7 +239,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
-      const remote = (offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined) ?? REMOTE_OFF
+      const remote = remoteTools(offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined, loaded.fingerprint)
       let turn: Turn | undefined
       // nikcli stops on its permission menu: answered on the phone, or no at once.
       const onData =
