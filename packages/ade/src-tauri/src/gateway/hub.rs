@@ -33,6 +33,9 @@ pub struct GatewayMessage {
     pub sender: MessageSender,
     pub text: String,
     pub id: String,
+    /// A known secret was taken out of the text or the name: the page tells the
+    /// user it was hidden and not used, or they would not know why.
+    pub redacted: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -587,13 +590,17 @@ impl Task {
         }
         let at = self.env.now_ms();
         self.env.log(&format!("{tag}: messaggio da un mittente autorizzato ({} caratteri)", message.text.chars().count()));
+        let name = redact(&message.sender.name, &self.secrets);
+        let text = redact(&message.text, &self.secrets);
+        let redacted = name != message.sender.name || text != message.text;
         self.env.message(&GatewayMessage {
             bot: self.bot.clone(),
             platform: self.platform,
             chat: message.chat,
-            sender: MessageSender { id: message.sender.id, name: redact(&message.sender.name, &self.secrets) },
-            text: redact(&message.text, &self.secrets),
+            sender: MessageSender { id: message.sender.id, name },
+            text,
             id: message.id,
+            redacted,
         });
         self.report(|live| live.last_message_ms = Some(at));
     }
@@ -772,6 +779,7 @@ mod tests {
         assert_eq!(messages[0].sender.id, "42");
         assert_eq!(messages[0].text, "ciao");
         assert_eq!(messages[0].bot, BOT);
+        assert!(!messages[0].redacted);
         // Only its chat may be answered.
         let chats = s.hub.store.link(BOT, Platform::Fake).unwrap().chats;
         assert_eq!(chats.iter().map(|chat| (chat.id.as_str(), chat.sender.as_str())).collect::<Vec<_>>(), vec![("c42", "42")]);
@@ -792,7 +800,10 @@ mod tests {
         .await;
         let messages = s.env.messages.lock().unwrap().clone();
         assert_eq!(messages.len(), 1);
+        // The page is told, so it can say the key was hidden and not used.
+        assert!(messages[0].redacted);
         let event = serde_json::to_string(&messages[0]).unwrap();
+        assert!(event.contains("\"redacted\":true"), "{event}");
         assert!(!event.contains(TOKEN), "{event}");
         assert!(event.contains("[nascosto]"), "{event}");
         let statuses = serde_json::to_string(&*s.env.statuses.lock().unwrap()).unwrap();
