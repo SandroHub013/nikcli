@@ -171,7 +171,36 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   todowrite: ["TodoWrite"],
 }
 
-function canWrite(bot: AgentFile): boolean {
+/*
+ * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
+ * and settings were written by whoever wrote the repository. It runs only
+ * once the user trusted that file (`trust.ts`), and even then with nothing
+ * pre-approved that runs commands:
+ *
+ * - Claude Code: no shell or `ade-msg`, none of the project's local settings
+ *   (which may hold hooks), and no writes where a file becomes code that runs
+ *   later — `EXECUTES_LATER`. Writing elsewhere stays: the user was told so.
+ * - Codex: read-only, always. `codex exec` forces `approval_policy` to never
+ *   whatever `-c` says (review B3, A1), so the sandbox is the only limit, and
+ *   `workspace-write` would let it run anything inside the project.
+ * - nikcli reads the file itself, so `trust.ts` refuses one that grants
+ *   itself permissions.
+ */
+function fromRepository(bot: AgentFile): boolean {
+  return bot.scope === "project"
+}
+
+/*
+ * Folders where a write turns into a command run later, by git, an editor, CI
+ * or the next agent session (review B3, M1): hooks, tasks, workflows, and the
+ * settings and plugins of Claude Code, nikcli and Codex.
+ */
+const EXECUTES_LATER = [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]
+const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
+  ["Edit", "Write", "NotebookEdit"].map((tool) => `${tool}(./${path}/**)`),
+)
+
+export function canWrite(bot: AgentFile): boolean {
   return !bot.disabledTools.includes("edit") && !bot.disabledTools.includes("write")
 }
 
@@ -202,7 +231,7 @@ const notStdin = (prompt: string) => (prompt.trim() === "-" ? " -" : prompt)
 export function turnCommand(
   runner: Runner,
   spec: TurnSpec,
-): { readonly command: string; readonly args: string[]; readonly cwd?: string } {
+): { readonly command: string; readonly args: string[]; readonly cwd?: string; readonly flags?: readonly string[] } {
   const { bot, message, sessionId } = spec
   switch (runner.id) {
     case "nikcli":
@@ -215,6 +244,13 @@ export function turnCommand(
           ...(bot.model ? { model: bot.model } : {}),
           ...(bot.effort ? { effort: bot.effort } : {}),
         }),
+        /*
+         * A bot of the user's runs without the project's `.nikcli/` (B3b,
+         * review M1): no plugins from the repository, and no project agent of
+         * the same name taking its place. A project's bot needs that folder
+         * to exist, so it keeps it, behind `project-trust.ts`.
+         */
+        ...(fromRepository(bot) ? {} : { flags: ["no-project-config"] }),
       }
     case "claude": {
       /*
@@ -237,20 +273,27 @@ export function turnCommand(
        * settings file may pre-approve a command, the project's local one
        * included.
        */
-      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash")
+      const repository = fromRepository(bot)
+      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash") && !repository
       if (spec.lean) {
-        const sources = adeMsgOnly || !canWrite(bot) ? "" : "local"
-        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", sources)
+        /*
+         * No settings file at all, the project's `.claude/settings.local.json`
+         * included: it can hold hooks, which are commands (B3b review). What a
+         * bot may do is said below, tool by tool.
+         */
+        args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
-        .filter(([tool]) => !bot.disabledTools.includes(tool))
+        .filter(([tool]) => !bot.disabledTools.includes(tool) && !(repository && tool === "bash"))
         .flatMap(([, names]) => names)
-      if (spec.lean) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
+      if (spec.lean && !repository) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+      // A refusal beats an allow, `acceptEdits` included.
+      if (repository && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
@@ -258,9 +301,14 @@ export function turnCommand(
     }
     case "codex": {
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
-      const inOutbox = !canWrite(bot) && spec.outbox !== undefined
-      const sandbox = canWrite(bot) || inOutbox ? "workspace-write" : "read-only"
-      const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", 'approval_policy="never"']
+      const repository = fromRepository(bot)
+      const inOutbox = !repository && !canWrite(bot) && spec.outbox !== undefined
+      const sandbox = !repository && (canWrite(bot) || inOutbox) ? "workspace-write" : "read-only"
+      // A project's bot says no approval policy: `codex exec` runs as `never`
+      // whatever it is told (see `fromRepository`), and codex-cli 0.154 exits 1
+      // on `untrusted` ("no longer supported; remove this setting", B7 live).
+      // The read-only sandbox is its limit.
+      const config = ["-c", `sandbox_mode="${sandbox}"`, ...(repository ? [] : ["-c", `approval_policy="never"`])]
       if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []
       const where = inOutbox ? { cwd: spec.outbox } : {}
@@ -385,9 +433,31 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
     case "result": {
       const cost = typeof event["total_cost_usd"] === "number" ? (event["total_cost_usd"] as number) : 0
       next = { ...next, tokens: next.tokens + claudeTokens(event["usage"]), costUsd: next.costUsd + cost, ended: true }
-      const denials = list(event["permission_denials"])
-      if (denials.length > 0) {
-        const names = [...new Set(denials.map((d) => str(rec(d)?.["tool_name"]) ?? "tool"))].join(", ")
+      /*
+       * A write refused by a path rule (`EXECUTES_LATER`, a project's bot) is
+       * not a tool to enable in the card: it is refused on purpose (review
+       * B7, BASSO 2). Told apart by what Claude Code answered the call.
+       */
+      const denials = list(event["permission_denials"]).map(rec)
+      const onProtectedPath = (denial: Record<string, unknown> | undefined) => {
+        const id = str(denial?.["tool_use_id"])
+        const output = id ? next.messages.find((message) => message.id === `t-${id}`)?.output : undefined
+        return output !== undefined && /denied by your permission settings/i.test(output)
+      }
+      const guarded = denials.filter(onProtectedPath)
+      const others = denials.filter((denial) => !onProtectedPath(denial))
+      if (guarded.length > 0) {
+        next = appendMessage(
+          next,
+          {
+            role: "error",
+            text: `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${EXECUTES_LATER.join(", ")}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
+          },
+          at,
+        )
+      }
+      if (others.length > 0) {
+        const names = [...new Set(others.map((d) => str(d?.["tool_name"]) ?? "tool"))].join(", ")
         next = appendMessage(
           next,
           {
@@ -480,7 +550,14 @@ export function applyCodexEvent(talk: Talk, event: Record<string, unknown>, at: 
     case "turn.failed":
     case "error": {
       const text = errorText(event["error"] ?? event["message"] ?? event)
-      return { ...appendMessage(next, { role: "error", text }, at), status: "error", ...(event["type"] === "turn.failed" ? { ended: true } : {}) }
+      // Codex says a failure twice, as `error` and then `turn.failed`: once on the thread is enough.
+      const last = next.messages.at(-1)
+      const said = last?.role === "error" && last.text === text
+      return {
+        ...(said ? next : appendMessage(next, { role: "error", text }, at)),
+        status: "error",
+        ...(event["type"] === "turn.failed" ? { ended: true } : {}),
+      }
     }
     default:
       return next

@@ -121,6 +121,36 @@ describe("runTurn", () => {
     expect(m.kills).toEqual([])
   })
 
+  test("a CLI that fails says why: its last plain line goes with the exit code (review B7, BASSO 3)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "codex", message: "ciao" }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say("Reading additional input from stdin...")
+    m.say('Error: approval_policy = "untrusted" is no longer supported; remove this setting')
+    m.exit(1)
+    const result = await turn.result
+    expect(result.exitCode).toBe(1)
+    expect(result.talk.messages.at(-1)?.text).toBe(
+      'Codex è uscito con codice 1: Error: approval_policy = "untrusted" is no longer supported; remove this setting',
+    )
+  })
+
+  test("a nikcli turn is over at its own last step, and gives its slot back (B7)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "nikcli", message: "ciao" }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say('{"type":"step_start","sessionID":"ses_1","part":{"type":"step-start"}}')
+    m.say('{"type":"text","sessionID":"ses_1","part":{"type":"text","text":"GLOBALE"}}')
+    m.say('{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"stop","tokens":{"input":10,"output":1},"cost":0}}')
+    const result = await turn.result
+    expect(result.status).toBe("done")
+    expect(result.text).toContain("GLOBALE")
+    expect(result.sessionId).toBe("ses_1")
+    expect(turnsRunning("nikcli")).toBe(0)
+  })
+
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {
     const m = machine()
     const running = Array.from({ length: MAX_PARALLEL_TURNS }, () => start(m))
@@ -188,5 +218,25 @@ describe("a CLI that does not start", () => {
     expect(result.problem).toBe("Codex non si avvia: comando non consentito: codex")
     expect(result.exitCode).toBeUndefined()
     expect(turnsRunning("codex")).toBe(0)
+  })
+})
+
+describe("le opzioni di avvio arrivano all'host", () => {
+  test("un bot dell'utente su nikcli parte con no-project-config", async () => {
+    const seen: { flags?: readonly string[] }[] = []
+    let exit: (code: number | null) => void = () => {}
+    const host = {
+      spawn: async (options: { flags?: readonly string[]; onExit: (code: number | null) => void }) => {
+        seen.push({ ...(options.flags ? { flags: options.flags } : {}) })
+        exit = options.onExit
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const turn = runTurn({ runner: "nikcli", message: "ciao", exitGraceMs: 30 }, deps)
+    while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
+    exit(0)
+    await turn.result
+    expect(seen[0]!.flags).toEqual(["no-project-config"])
   })
 })

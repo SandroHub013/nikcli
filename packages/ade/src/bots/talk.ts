@@ -80,6 +80,11 @@ export interface Talk {
    */
   readonly ended?: boolean
   /**
+   * The session of the turn under way: the `sessionID` of its first event.
+   * A sub-agent's events carry their own, and do not end the turn.
+   */
+  readonly turnSession?: string
+  /**
    * The answer being written, before its message is complete: Claude Code's
    * text deltas, for a turn that asked for them. Gone once the whole message
    * arrives.
@@ -132,6 +137,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     problem: undefined,
     permission: undefined,
     ended: undefined,
+    turnSession: undefined,
   }
 }
 
@@ -148,6 +154,7 @@ interface RunEvent {
     readonly state?: { readonly title?: string; readonly output?: string; readonly input?: unknown; readonly status?: string }
     readonly tokens?: unknown
     readonly cost?: unknown
+    readonly reason?: string
   }
   readonly error?: unknown
 }
@@ -278,7 +285,10 @@ export { sumTokens, errorText }
 
 function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
   const when = typeof event.timestamp === "number" ? event.timestamp : at
-  const withSession = event.sessionID && !talk.sessionId ? { ...talk, sessionId: event.sessionID } : talk
+  const withSession =
+    event.sessionID && (!talk.sessionId || !talk.turnSession)
+      ? { ...talk, sessionId: talk.sessionId ?? event.sessionID, turnSession: talk.turnSession ?? event.sessionID }
+      : talk
 
   switch (event.type) {
     case "text": {
@@ -311,7 +321,21 @@ function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
     case "step_finish": {
       const tokens = sumTokens(event.part?.tokens)
       const cost = typeof event.part?.cost === "number" ? event.part.cost : 0
-      return { ...withSession, tokens: withSession.tokens + tokens, costUsd: withSession.costUsd + cost }
+      /*
+       * The answer is complete at the turn's own last step (`reason: "stop"`;
+       * `tool-calls` means another step follows). nikcli 1.389 does not exit
+       * after it inside a git repository — minutes of «sta rispondendo» and a
+       * slot held (B7, live) — so the turn ends here, and `turn.ts` kills the
+       * process after its grace. A sub-agent's step, in its own session, does
+       * not end it.
+       */
+      const ended = event.part?.reason === "stop" && !!event.sessionID && event.sessionID === withSession.turnSession
+      return {
+        ...withSession,
+        tokens: withSession.tokens + tokens,
+        costUsd: withSession.costUsd + cost,
+        ...(ended ? { ended: true } : {}),
+      }
     }
     case "error": {
       const text = errorText(event.error)
@@ -368,7 +392,7 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * The process is gone. A clean exit ends the turn; anything else, with no
  * error already on the thread, is said once so the silence has a reason.
  */
-export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli"): Talk {
+export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli", lastWords?: string): Talk {
   const limited = withLimitNotice(talk, code, at, program)
   if (limited) return limited
   if (code === 0 || code === null) {
@@ -382,7 +406,16 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
     updatedAt: at,
     messages: alreadySaid
       ? talk.messages
-      : [...talk.messages, { id: nextId("e", at), role: "error", text: `${program} è uscito con codice ${code}.`, at }],
+      : [
+          ...talk.messages,
+          {
+            id: nextId("e", at),
+            role: "error",
+            // The CLI's last plain line — its error on stderr, which shares the stream — says why.
+            text: lastWords ? `${program} è uscito con codice ${code}: ${lastWords}` : `${program} è uscito con codice ${code}.`,
+            at,
+          },
+        ],
   }
 }
 

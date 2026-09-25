@@ -64,10 +64,12 @@ describe("gli argomenti di un turno", () => {
   })
 
   test("un turno leggero di Claude Code salta MCP e impostazioni utente, ma può usare ade-msg", () => {
-    const { args } = turnCommand(runnerById("claude"), { bot, message: "x", lean: true })
+    // The user's own bot: a project's gets none of this (B3, below).
+    const mine: AgentFile = { ...bot, scope: "global" }
+    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true })
     expect(args).toContain("--strict-mcp-config")
     expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
-    expect(args[args.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
     expect(args[args.indexOf("--settings") + 1]).toBe('{"autoMemoryEnabled":false}')
     expect(args[args.indexOf("--allowedTools") + 1]).toContain("PowerShell(ade-msg *)")
     expect(turnCommand(runnerById("claude"), { bot, message: "x" }).args).not.toContain("--strict-mcp-config")
@@ -79,7 +81,8 @@ describe("gli argomenti di un turno", () => {
   })
 
   test("un turno vocale non scrive e non esegue altro che ade-msg, su ogni motore che lo sa rifiutare", () => {
-    const voice = { ...bot, disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
+    // As `turn.ts` builds it: the voice's bot is ADE's, not a project's.
+    const voice: AgentFile = { ...bot, scope: "global", disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
 
     const claude = turnCommand(runnerById("claude"), { bot: voice, message: "x", lean: true }).args
     const allowed = claude[claude.indexOf("--allowedTools") + 1]!.split(",")
@@ -143,6 +146,18 @@ describe("gli eventi di Claude Code", () => {
     expect(talk.messages.at(-1)?.text).toContain("Bash")
   })
 
+  test("una scrittura negata su un percorso protetto non dice di abilitare lo strumento (review B7, BASSO 2)", () => {
+    const talk = fold("claude", [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_9","name":"Write","input":{"file_path":"C:\\\\p\\\\.Git\\\\hooks\\\\x"}}]},"session_id":"s"}',
+      '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_9","type":"tool_result","is_error":true,"content":"<tool_use_error>File is in a directory that is denied by your permission settings.</tool_use_error>"}]},"session_id":"s"}',
+      '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Write","tool_use_id":"toolu_9","tool_input":{}}]}',
+    ])
+    const said = talk.messages.filter((message) => message.role === "error").map((message) => message.text)
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain("percorso protetto")
+    expect(said[0]).not.toContain("Abilita")
+  })
+
   test("una conversazione che Claude Code non ha più si dimentica", () => {
     const talk = fold("claude", [
       '{"type":"system","subtype":"init","session_id":"vecchia"}',
@@ -180,6 +195,19 @@ describe("gli eventi di Codex", () => {
     const talk = fold("codex", ['{"type":"turn.failed","error":{"message":"usage limit reached"}}'])
     expect(talk.status).toBe("error")
     expect(talk.messages.at(-1)?.text).toBe("usage limit reached")
+  })
+})
+
+describe("un errore di Codex detto due volte", () => {
+  test("error e poi turn.failed con lo stesso testo: sul thread una volta sola (review B7, BASSO 1)", () => {
+    const limit = "You've hit your usage limit."
+    const talk = fold("codex", [
+      `{"type":"error","message":${JSON.stringify(limit)}}`,
+      `{"type":"turn.failed","error":{"message":${JSON.stringify(limit)}}}`,
+    ])
+    expect(talk.messages.filter((message) => message.role === "error" && message.text === limit)).toHaveLength(1)
+    expect(talk.status).toBe("error")
+    expect(talk.ended).toBe(true)
   })
 })
 
@@ -350,5 +378,96 @@ describe("un messaggio fatto solo di un trattino", () => {
   test("un messaggio che contiene un trattino resta com'è", () => {
     const { args } = turnCommand(runnerById("codex"), { bot, message: "a - b", sessionId: "t-1" })
     expect(args.at(-1)).toBe("a - b")
+  })
+})
+
+/*
+ * B3 (audit A4): a bot from the project's `.nikcli/agent/` was run with the
+ * shell pre-approved, the project's local Claude settings (hooks included)
+ * loaded, and Codex never asking. A bot the user wrote keeps what it had.
+ */
+describe("un bot di progetto non ha pre-approvazioni", () => {
+  const fromRepo: AgentFile = { ...bot, scope: "project" }
+  const mine: AgentFile = { ...bot, scope: "global" }
+
+  test("Claude: niente shell pre-approvata, niente ade-msg, niente impostazioni locali", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
+    const allowed = args[args.indexOf("--allowedTools") + 1] ?? ""
+    expect(allowed).not.toMatch(/Bash|PowerShell/)
+    expect(args.join(" ")).not.toContain("ade-msg")
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
+  })
+
+  test("Codex: nessun approval_policy per un bot di progetto (codex-cli 0.154 esce con 1 su \"untrusted\", B7)", () => {
+    for (const spec of [
+      { bot: fromRepo, message: "x" },
+      { bot: fromRepo, message: "x", sessionId: "t-1" },
+    ]) {
+      const { args } = turnCommand(runnerById("codex"), spec)
+      expect(args.some((arg) => arg.startsWith("approval_policy="))).toBe(false)
+      expect(args).toContain('sandbox_mode="read-only"')
+    }
+  })
+
+  test("Codex: sempre in sola lettura, perché codex exec ignora approval_policy (review B3, A1)", () => {
+    for (const spec of [
+      { bot: fromRepo, message: "x" },
+      { bot: fromRepo, message: "x", sessionId: "t-1" },
+      { bot: fromRepo, message: "x", outbox: "C:/mailbox/outbox" },
+    ]) {
+      const { args, cwd } = turnCommand(runnerById("codex"), spec)
+      expect(args).toContain('sandbox_mode="read-only"')
+      expect(args.join(" ")).not.toContain("workspace-write")
+      expect(cwd).toBeUndefined()
+    }
+  })
+
+  test("Claude: niente scritture nei percorsi che poi eseguono codice (review B3, M1)", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
+    const disallowed = (args[args.indexOf("--disallowedTools") + 1] ?? "").split(",")
+    for (const path of [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
+      for (const tool of ["Edit", "Write", "NotebookEdit"]) expect(disallowed).toContain(`${tool}(./${path}/**)`)
+    }
+    // Writing elsewhere is still what the user accepted.
+    expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+  })
+
+  test("un bot dell'utente resta com'era", () => {
+    const claude = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args
+    expect(claude[claude.indexOf("--allowedTools") + 1]).toContain("Bash")
+    expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("")
+    expect(claude.join(" ")).not.toContain("(./.git/**)")
+    const codex = turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args
+    expect(codex).toContain('approval_policy="never"')
+    expect(codex).toContain('sandbox_mode="workspace-write"')
+  })
+})
+
+/*
+ * B3b review, M1: nikcli merges the project's `.nikcli/` over the user's own
+ * configuration, so a project agent of the same name took the place of the
+ * user's bot, and the project's plugins ran, with no question asked. A bot of
+ * the user's runs without the project's configuration; a project's bot needs
+ * it, and `project-trust.ts` asks about it.
+ */
+describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
+  test("il bot globale gira con no-project-config, quello di progetto no", () => {
+    const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
+    expect(mine.flags).toEqual(["no-project-config"])
+    const fromRepo = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x" })
+    expect(fromRepo.flags).toBeUndefined()
+  })
+
+  test("Claude Code e Codex non ricevono l'opzione, che vale solo per nikcli", () => {
+    for (const runner of ["claude", "codex"]) {
+      expect(turnCommand(runnerById(runner), { bot: { ...bot, scope: "global" }, message: "x", lean: true }).flags).toBeUndefined()
+    }
+  })
+
+  test("un bot Claude del pannello non legge nessun file di impostazioni, nemmeno quello locale del progetto", () => {
+    for (const scope of ["global", "project"] as const) {
+      const { args } = turnCommand(runnerById("claude"), { bot: { ...bot, scope }, message: "x", lean: true })
+      expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
+    }
   })
 })

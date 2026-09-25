@@ -31,18 +31,24 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
+import { askDialog } from "../host/ask"
 import { every } from "../host/every"
 import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
-import { COMMON_EFFORTS, OBJECTIVES_HEADING, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
+import { COMMON_EFFORTS, OBJECTIVES_HEADING, readAgentFile, splitPrompt, type AgentFile, type AgentScope } from "./nikcli"
 import { runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
+import { admit, localTrustStore } from "./trust"
+import { submitDraft } from "./composer"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runTurn } from "./turn"
 import {
   createBot,
   deleteBot,
   listBots,
   listModels,
+  projectFs,
+  readBotText,
   resolveRoots,
   updateBot,
   type BotRoots,
@@ -54,6 +60,7 @@ import {
   mentionIn,
   parseTalk,
   serializeTalk,
+  applyProblem,
   talkKey,
   type PermissionAnswer,
   type Talk,
@@ -69,6 +76,12 @@ import "./bots.css"
  * here, at module level, and the components only read them. Keyed by the
  * bot's path, because the identifier repeats across project and global scope.
  */
+/*
+ * The trust question (B3, B3b), through the dialog ADE may open (B7): one that
+ * cannot be put rejects, and `admit` says why on screen.
+ */
+const askTrust = (question: string) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") })
+
 const [talks, setTalks] = createSignal<Record<string, Talk>>({})
 
 function readStored(path: string): Talk {
@@ -333,9 +346,10 @@ export function BotsMain(props: BotsMainProps) {
    * smallest version of "call another bot in", and the one that costs no
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
-  const send = (from: AgentFile, raw: string) => {
+  /** Resolves to whether the message went; one that did not goes back into the composer. */
+  const send = async (from: AgentFile, raw: string): Promise<boolean> => {
     const text = raw.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return false
 
     let bot = from
     let message = text
@@ -349,7 +363,45 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    turns.send(bot, message, props.projectRoot)
+    return start(bot, message)
+  }
+
+  /*
+   * A project's bot is asked about first (B3, `trust.ts`). What runs is the
+   * file as it was read and trusted just now, not the copy the roster loaded
+   * earlier: a file changed in between would otherwise run unseen.
+   */
+  const start = async (bot: AgentFile, message: string): Promise<boolean> => {
+    let read: string | undefined
+    const verdict = await admit(bot, {
+      store: localTrustStore(),
+      read: async (path) => (read = await readBotText(path)),
+      confirm: askTrust,
+    })
+    if (!verdict.ok) {
+      if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
+      return false
+    }
+    const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+
+    /*
+     * nikcli also loads the project's own configuration, plugins included
+     * (B3b). A bot of the user's runs without it (`no-project-config` in
+     * `runners.ts`); a project's bot needs it, so the project is asked about.
+     */
+    const root = props.projectRoot
+    if (root && trusted.scope === "project" && runnerById(trusted.runner).id === "nikcli") {
+      const project = await admitProject(root, {
+        store: localTrustStore(PROJECT_TRUST_KEY),
+        surface: () => projectSurface(root, projectFs),
+        confirm: askTrust,
+      })
+      if (!project.ok) {
+        if (project.problem) updateTalk(bot.path, (talk) => applyProblem(talk, project.problem!, Date.now()))
+        return false
+      }
+    }
+    return turns.send(trusted, message, props.projectRoot)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
@@ -517,7 +569,8 @@ function Thread(props: {
   talk: Talk
   others: readonly string[]
   expression: Expression
-  onSend: (text: string) => void
+  /** Whether the message went: one that did not comes back into the composer. */
+  onSend: (text: string) => boolean | Promise<boolean>
   onAnswer: (choice: PermissionAnswer) => void
   onStop: () => void
 }) {
@@ -545,8 +598,7 @@ function Thread(props: {
   const submit = () => {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
-    setDraft("")
-    props.onSend(text)
+    void submitDraft(text, props.onSend, { get: draft, set: setDraft })
   }
 
   const subagent = () => props.bot.mode === "subagent"

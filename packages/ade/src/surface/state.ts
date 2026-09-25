@@ -51,25 +51,36 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
 }
 
 /**
- * Whether Chat and Bot can be reached. The one switch for both (S40).
+ * Whether Chat and Bot can be reached (S40): one switch each.
  *
- * They are hidden for now, not removed: the code, the tests and the stored
- * conversations all stay, and turning this back on brings back every way in —
+ * S40 hid both behind one switch. The Bots came back first (B7), once their
+ * turns were safe to run (B1-B3b); the Chat stays hidden until its own pieces
+ * are in (C1-C9). Hidden is not removed: the code, the tests and the stored
+ * conversations all stay, and turning a switch on brings back every way in —
  * the section bar, the palette, the section shortcut, the voice command and a
- * workbench restored into one of them. Nothing else in the app needs to change,
+ * workbench restored into it. Nothing else in the app needs to change,
  * because everything that lists or opens a section asks `VISIBLE_VIEWS` or
  * `reachableView` rather than `ADE_VIEWS`.
  */
-export const CHAT_AND_BOT_ENABLED = false
+export const CHAT_ENABLED = false
+export const BOT_ENABLED = true
+
+/** Which of the two switchable sections are on. */
+export interface SectionSwitches {
+  readonly chat: boolean
+  readonly bot: boolean
+}
 
 /**
  * The sections a person can get to: what the bar shows and the palette offers.
  *
- * Takes the switch as a parameter so the tests can check the "on" branch
- * too; the app only ever calls it with the constant, through `VISIBLE_VIEWS`.
+ * Takes the switches as a parameter so the tests can check every branch; the
+ * app only ever calls it with the constants, through `VISIBLE_VIEWS`.
  */
-export function visibleViews(enabled: boolean = CHAT_AND_BOT_ENABLED): readonly AdeView[] {
-  return ADE_VIEWS.filter((view) => enabled || (view !== "chat" && view !== "bot"))
+export function visibleViews(
+  enabled: SectionSwitches = { chat: CHAT_ENABLED, bot: BOT_ENABLED },
+): readonly AdeView[] {
+  return ADE_VIEWS.filter((view) => (view !== "chat" || enabled.chat) && (view !== "bot" || enabled.bot))
 }
 
 export const VISIBLE_VIEWS: readonly AdeView[] = visibleViews()

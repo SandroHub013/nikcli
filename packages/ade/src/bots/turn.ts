@@ -19,6 +19,7 @@
  */
 
 import { getHost } from "../host/shell"
+import { stripAnsi } from "../session/stream"
 import { registerSender, unregisterSender } from "../session/senders"
 import { acquireTurn } from "./terms"
 import type { AgentFile } from "./nikcli"
@@ -115,6 +116,8 @@ export interface TurnResult {
    * never started.
    */
   readonly exitCode?: number | null
+  /** The CLI's last line that was not one of its events: on a failure, usually why. */
+  readonly lastWords?: string
   /** Everything that happened, message by message. */
   readonly talk: Talk
 }
@@ -150,6 +153,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       talk = next
       request.onUpdate?.(talk)
     }
+    let lastWords: string | undefined
     const finish = (status: TurnResult["status"], problem?: string, exitCode?: number | null): TurnResult => ({
       status,
       text: finalText(talk),
@@ -158,6 +162,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       costUsd: talk.costUsd,
       ...(problem ? { problem } : {}),
       ...(exitCode !== undefined ? { exitCode } : {}),
+      ...(lastWords ? { lastWords } : {}),
       talk,
     })
 
@@ -187,7 +192,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
     const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
     const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
-    const { command, args, cwd } = turnCommand(runner, {
+    const { command, args, cwd, flags } = turnCommand(runner, {
       bot,
       message: request.message,
       ...(request.sessionId ? { sessionId: request.sessionId } : {}),
@@ -232,6 +237,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             cols: 400,
             rows: 50,
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
+            ...(flags ? { flags } : {}),
             ...(request.onData ? { onData: request.onData } : {}),
             onLine: (line, stream) => {
               if (stream === "err") {
@@ -241,6 +247,9 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
               request.onLine?.(line)
               const before = talk
               update(applyRunnerLine(runner, talk, line, Date.now()))
+              // stderr shares the stream: an error the CLI printed is the last plain line (review B7, BASSO 3).
+              const plain = stripAnsi(line).trim()
+              if (plain && !before.partial && !talk.partial && !plain.startsWith("{")) lastWords = plain.slice(0, 300)
               if (!before.sessionId && talk.sessionId) markTurn("cli-init")
               if (!before.streaming && talk.streaming) markTurn("cli-first-text")
               if (!before.ended && talk.ended) markTurn("cli-result")
@@ -289,7 +298,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }
-      update(applyExit(talk, code, Date.now(), runner.label))
+      update(applyExit(talk, code, Date.now(), runner.label, lastWords))
       return talk.status === "error" ? finish("error", talk.messages.at(-1)?.text, code) : finish("done", undefined, code)
     } catch (error) {
       const said = error instanceof Error ? error.message : String(error)

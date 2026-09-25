@@ -78,6 +78,43 @@ describe("applyLine", () => {
     expect(two.costUsd).toBeCloseTo(0.015)
   })
 
+  /*
+   * B7, live: nikcli 1.389 answers and then does not exit inside a git
+   * repository, for minutes. The turn ends at its own last step instead.
+   */
+  test("the turn's own step_finish with reason stop ends it, with that step's tokens and cost", () => {
+    const asked = sendMessage(emptyTalk(), "ciao", T0)
+    const working = applyLine(asked, event("step_start", { part: { type: "step-start" } }), T0)
+    const text = applyLine(working, event("text", { part: { type: "text", text: "GLOBALE" } }), T0)
+    expect(text.ended).toBeUndefined()
+    const done = applyLine(text, event("step_finish", { part: { reason: "stop", tokens: { input: 100, output: 5 }, cost: 0.002 } }), T0)
+    expect(done.ended).toBe(true)
+    expect(done.tokens).toBe(105)
+    expect(done.costUsd).toBeCloseTo(0.002)
+    // The next message is a turn of its own again.
+    expect(sendMessage(done, "ancora", T0).ended).toBeUndefined()
+  })
+
+  test("a step that calls tools does not end the turn, nor does a length or error stop", () => {
+    const asked = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("step_start", {}), T0)
+    for (const reason of ["tool-calls", "tool_calls", "length", "error", undefined]) {
+      const step = applyLine(asked, event("step_finish", { part: { reason, tokens: { input: 1 } } }), T0)
+      expect(step.ended).toBeUndefined()
+    }
+  })
+
+  test("a sub-agent's step_finish stop, in another session, does not end the turn", () => {
+    const asked = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("step_start", {}), T0)
+    const child = applyLine(asked, event("step_finish", { sessionID: "ses_figlio", part: { reason: "stop", tokens: { input: 7 } } }), T0)
+    expect(child.ended).toBeUndefined()
+    expect(child.tokens).toBe(7)
+    const own = applyLine(child, event("step_finish", { part: { reason: "stop" } }), T0)
+    expect(own.ended).toBe(true)
+    // A resumed conversation ends on its own session too.
+    const resumed = applyLine(sendMessage(own, "e poi?", T0), event("step_finish", { part: { reason: "stop" } }), T0)
+    expect(resumed.ended).toBe(true)
+  })
+
   test("an error event ends the turn as an error with its message", () => {
     const talk = applyLine(emptyTalk(), event("error", { error: { name: "ProviderError", data: { message: "chiave scaduta" } } }), T0)
     expect(talk.status).toBe("error")

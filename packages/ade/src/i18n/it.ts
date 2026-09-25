@@ -508,6 +508,34 @@ export const it = {
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
+  "bots.trust.new": (name: string, can: string) =>
+    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
+  "bots.trust.changed": (name: string, can: string) =>
+    `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
+  // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
+  "bots.trust.can.codex":
+    "Girerà in sola lettura: potrà leggere i file del progetto ed eseguire comandi che non scrivono niente, ma non modificare file.",
+  "bots.trust.can.claude":
+    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
+  "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
+  "bots.trust.can.nikcli":
+    "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
+  "bots.trust.selfApproves": (name: string, what: string) =>
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file (permission o tools), e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+  "bots.projectTrust.new": (root: string, files: string) =>
+    `La cartella ${root} ha una configurazione di nikcli sua (${files}): plugin, strumenti e impostazioni che nikcli carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su nikcli non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
+  "bots.projectTrust.changed": (root: string, files: string) =>
+    `La configurazione di nikcli della cartella ${root} è cambiata da quando l'hai accettata (${files}): nikcli la carica ed esegue a ogni turno. La carichi così com'è ora?`,
+  "bots.projectTrust.more": (count: number) => ` e altri ${count}`,
+  "bots.projectTrust.refused": (root: string) =>
+    `I bot su nikcli non partono in ${root} finché non accetti la configurazione di nikcli del progetto. I bot su Claude Code e Codex non la leggono.`,
+  "bots.ask.yes": "Sì",
+  "bots.ask.no": "No",
+  "bots.ask.failed": (name: string) =>
+    `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
+  "bots.projectTrust.failed": (root: string) =>
+    `ADE non è riuscita a farti la domanda sulla configurazione di nikcli di ${root}: i bot su nikcli qui non partono.`,
+  "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",
   "browser.design.noBridge": "Ispeziona non è partito su questa variante: la pagina si vede, senza selezione.",

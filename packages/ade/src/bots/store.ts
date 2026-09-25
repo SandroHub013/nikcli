@@ -14,6 +14,7 @@
  */
 
 import { getHost, type Host } from "../host/shell"
+import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
 import {
   agentDir,
@@ -346,6 +347,30 @@ export async function updateBot(bot: AgentFile, changes: BotChanges): Promise<st
   } catch (error) {
     return error instanceof Error ? error.message : String(error)
   }
+}
+
+/** A bot's file as it is on disk now: what the trust in `trust.ts` is given to. */
+export async function readBotText(path: string): Promise<string> {
+  const host = await getHost()
+  if (!host?.readTextFile) throw new Error("Questo host non può leggere file.")
+  return (await host.readTextFile(path)).text
+}
+
+/**
+ * The project's files, as `project-trust.ts` reads them. A host that cannot
+ * list or read files throws, and such a host cannot start a turn either.
+ */
+export const projectFs: ProjectFs = {
+  async readDir(path) {
+    const host = await getHost()
+    if (!host?.readDir) throw new Error("Questo host non può leggere cartelle.")
+    return host.readDir(path)
+  },
+  async readText(path) {
+    const host = await getHost()
+    if (!host?.readTextFile) throw new Error("Questo host non può leggere file.")
+    return host.readTextFile(path)
+  },
 }
 
 /** Removes a bot's file. The roster is the directory, so this is the deletion. */
