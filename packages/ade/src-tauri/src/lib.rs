@@ -24,6 +24,7 @@ mod pty;
 mod record;
 mod secrets;
 mod serve;
+mod serve_proxy;
 mod shots;
 mod mailbox;
 mod stats;
@@ -1880,6 +1881,7 @@ pub fn run() {
         .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
+        .manage(serve_proxy::Requests::default())
         .manage(shots::Watch::default())
         .manage(WriteRoots::default())
         .manage(secrets::SecretsLock::default())
@@ -1985,6 +1987,8 @@ pub fn run() {
             serve::nikcli_serve_start,
             serve::nikcli_serve_status,
             serve::nikcli_serve_stop,
+            serve_proxy::nikcli_serve_fetch,
+            serve_proxy::nikcli_serve_abort,
             shots::shots_dir,
             shots::shots_recent,
             shots::shots_watch,

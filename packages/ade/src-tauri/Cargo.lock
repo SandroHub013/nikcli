@@ -7,10 +7,13 @@ name = "ade-desktop"
 version = "0.0.0"
 dependencies = [
  "dirs",
+ "getrandom 0.3.4",
  "image",
  "junction",
  "keyring",
  "portable-pty",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sysinfo",

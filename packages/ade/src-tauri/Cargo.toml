@@ -66,6 +66,17 @@ keyring = { version = "3", features = ["windows-native", "apple-native", "sync-s
 # Cropping and blanking a capture before it reaches the disk (S35); PNG only.
 image = { version = "0.25", default-features = false, features = ["png"] }
 window-vibrancy = "0.6.0"
+# The chat's calls to the nikcli server go from here, not from the WebView (C1):
+# the page's origin is `tauri.localhost` in a release, which the server's CORS
+# does not know, and the server's password must not reach the page. Already
+# built for the updater, so no new crate: no default features, no TLS.
+reqwest = { version = "0.13", default-features = false }
+# reqwest is built with `rustls-no-provider` for the updater, and refuses to
+# build a client, even a plain-HTTP one, until a provider is installed. The
+# same `ring` the updater installs, already in the tree.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# The nikcli server's random password.
+getrandom = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-version = "0.1"
