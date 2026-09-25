@@ -142,6 +142,34 @@ describe("proactive-alerts", () => {
     expect(spoken).toHaveLength(1)
     expect(spoken[0]).toContain("decisione aperta")
     expect(spoken[0]).toContain("Tema scuro o chiaro")
+    expect(windows).toHaveLength(0)
+  })
+
+  test("announces a reopened decision with a new signature", async () => {
+    let clock = 100_000
+    let open = true
+    const spoken: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      isDecisionOpen: () => open,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async () => {},
+    })
+
+    alerts.notifyDecision("D1", "Decisione richiusa", "open:100000")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
+
+    open = false
+    open = true
+    clock += 25_000
+    alerts.notifyDecision("D1", "Decisione richiusa", "reopen:125000")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(2)
   })
 
   test("deduplicates identical events", async () => {
@@ -271,7 +299,7 @@ describe("proactive-alerts", () => {
     resolveSpeak()
   })
 
-  test("prunes seenEvents older than 1 hour allowing re-notification", async () => {
+  test("prunes seenEvents older than 1 hour for completion alerts", async () => {
     let clock = 100_000
     const spoken: string[] = []
     const alerts = createProactiveAlerts({
@@ -284,21 +312,43 @@ describe("proactive-alerts", () => {
       openResponseWindow: async () => {},
     })
 
-    alerts.notifyDecision("D1", "Stesso evento")
+    alerts.notifyCompletion("p1", "Sessione", [{ text: "3 passed" }], 1)
     await new Promise((r) => setTimeout(r, 20))
     expect(spoken).toHaveLength(1)
 
-    // Immediate duplicate is ignored
     clock += 25_000
-    alerts.notifyDecision("D1", "Stesso evento")
+    alerts.notifyCompletion("p1", "Sessione", [{ text: "3 passed" }], 1)
     await new Promise((r) => setTimeout(r, 20))
     expect(spoken).toHaveLength(1)
 
-    // After > 1 hour (3_600_001 ms), seenEvents key is pruned
     clock += 3_600_001
-    alerts.notifyDecision("D1", "Stesso evento")
+    alerts.notifyCompletion("p1", "Sessione", [{ text: "3 passed" }], 1)
     await new Promise((r) => setTimeout(r, 20))
     expect(spoken).toHaveLength(2)
+  })
+
+  test("does not replay an open decision after seen-event expiry", async () => {
+    let clock = 100_000
+    const spoken: string[] = []
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      isDecisionOpen: () => true,
+      speak: async (text) => {
+        spoken.push(text)
+      },
+      openResponseWindow: async () => {},
+    })
+
+    alerts.notifyDecision("D1", "Stessa decisione")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
+
+    clock += 3_600_001
+    alerts.notifyDecision("D1", "Stessa decisione")
+    await new Promise((r) => setTimeout(r, 20))
+    expect(spoken).toHaveLength(1)
   })
 
   test("shows a proactive alert on screen instead of speaking while voice is busy", async () => {

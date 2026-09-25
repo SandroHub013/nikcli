@@ -4393,7 +4393,12 @@ export function Workbench() {
         if (!decisions) return
         for (const dec of decisions) {
           if (dec.status === "aperta") {
-            proactiveAlerts.notifyDecision(dec.k, dec.title)
+            const latest = dec.history.at(-1)
+            proactiveAlerts.notifyDecision(
+              dec.k,
+              dec.title,
+              `${dec.openedAt}:${dec.history.length}:${latest?.type ?? "aperta"}:${latest?.at ?? ""}`,
+            )
           }
         }
       },
