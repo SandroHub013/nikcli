@@ -195,19 +195,30 @@ export function routinePolicy(
   return { allowed: true, cap: row.cap }
 }
 
-/** Prompt, runner, mode, model, cap and the key's name. A change means the consent is gone. */
-export function routineConsentHash(input: {
+/**
+ * Prompt, runner, mode, model, cap and the key's name hashed with SHA-256 via crypto.subtle.
+ * A change in any of these fields invalidates the stored consent.
+ */
+export async function routineConsentHash(input: {
   readonly prompt: string
   readonly runner: string
   readonly mode: string
   readonly model: string
   readonly cap: string
   readonly key?: string | undefined
-}): string {
-  return [input.prompt, input.runner, input.mode, input.model, input.cap, input.key ?? ""].join("\u001f")
+}): Promise<string> {
+  const payload = [input.prompt, input.runner, input.mode, input.model, input.cap, input.key ?? ""].join("\u001f")
+  const buffer = new TextEncoder().encode(payload)
+  const digest = await crypto.subtle.digest("SHA-256", buffer)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
 }
 
-/** False when the account (mode or key name) changed after the user agreed. */
+/**
+ * True only when the stored consent matches the current hash and is a valid SHA-256 digest.
+ * A consent stored with the legacy (pre-SHA-256) format is rejected and must be granted again.
+ */
 export function routineConsentHolds(saved: string, now: string): boolean {
-  return saved.length > 0 && saved === now
+  return /^[0-9a-f]{64}$/i.test(saved) && saved === now
 }
