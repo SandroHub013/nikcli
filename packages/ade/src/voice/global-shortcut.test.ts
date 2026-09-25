@@ -3,6 +3,7 @@ import {
   globalVoiceAction,
   modeForGlobalChord,
   registerVoiceShortcuts,
+  serialiseRegistrations,
   unknownChordMessage,
   parseGlobalChord,
   readGlobalVoicePayload,
@@ -176,5 +177,74 @@ describe("globalVoiceAction", () => {
   test("an empty or malformed payload does nothing at all", () => {
     expect(globalVoiceAction(undefined, settings, "other")).toEqual({ kind: "ignore" })
     expect(globalVoiceAction({ state: "pressed" }, settings, "other")).toEqual({ kind: "ignore" })
+  })
+})
+
+describe("serialiseRegistrations", () => {
+  /** A registration the test releases by hand, so two calls can overlap. */
+  function gate() {
+    const opened: string[] = []
+    const gates = new Map<string, () => void>()
+    const released = new Set<string>()
+    const register = async (chord: string) => {
+      opened.push(chord)
+      // A release that arrived before the registration is remembered.
+      if (released.has(chord)) return
+      await new Promise<void>((resolve) => gates.set(chord, resolve))
+    }
+    return { register, opened, release: (chord: string) => void (released.add(chord), gates.get(chord)?.()) }
+  }
+
+  test("two saves in a row do not overlap: the second waits for the first", async () => {
+    const g = gate()
+    const save = serialiseRegistrations(g.register)
+
+    const first = save("ctrl+space")
+    // The second save arrives while the first is still at the OS.
+    const second = save("ctrl+k")
+    expect(g.opened).toEqual(["ctrl+space"])
+
+    g.release("ctrl+space")
+    g.release("ctrl+k")
+    await Promise.all([first, second])
+    expect(g.opened).toEqual(["ctrl+space", "ctrl+k"])
+  })
+
+  test("a save still waiting when a newer one arrives never reaches the OS", async () => {
+    const g = gate()
+    const save = serialiseRegistrations(g.register)
+
+    const first = save("ctrl+space")
+    const superseded = save("ctrl+j")
+    const newest = save("ctrl+k")
+    // The middle chord is not worth claiming, and claiming it would report a
+    // chord the user had already changed away from as busy.
+    g.release("ctrl+space")
+    g.release("ctrl+k")
+    await Promise.all([first, superseded, newest])
+    expect(g.opened).toEqual(["ctrl+space", "ctrl+k"])
+  })
+
+  test("a registration that fails does not leave the next one stuck", async () => {
+    const opened: string[] = []
+    const save = serialiseRegistrations(async (chord: string) => {
+      opened.push(chord)
+      if (chord === "ctrl+broken") throw new Error("il sistema ha rifiutato")
+    })
+
+    await save("ctrl+broken")
+    await save("ctrl+k")
+    expect(opened).toEqual(["ctrl+broken", "ctrl+k"])
+  })
+
+  test("saves made one after another all run, in order", async () => {
+    const opened: string[] = []
+    const save = serialiseRegistrations(async (chord: string) => {
+      opened.push(chord)
+    })
+    await save("ctrl+a")
+    await save("ctrl+b")
+    await save("ctrl+c")
+    expect(opened).toEqual(["ctrl+a", "ctrl+b", "ctrl+c"])
   })
 })

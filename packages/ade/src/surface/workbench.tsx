@@ -427,6 +427,7 @@ import {
   GLOBAL_VOICE_EVENT,
   globalVoiceAction,
   registerVoiceShortcuts,
+  serialiseRegistrations,
   unknownChordMessage,
 } from "../voice/global-shortcut"
 import { createListenGuard, LOCK_POLL_MS } from "../voice/listen-guard"
@@ -4900,14 +4901,18 @@ export function Workbench() {
            * they change: the panel used to save a new chord that the OS kept
            * ignoring until the next launch, while the old one still opened
            * the microphone from anywhere.
+           *
+           * Through the serialiser, because a second save arriving while this
+           * one is still claiming used to unregister what it had just claimed:
+           * the chords the user kept were whichever finished last.
            */
-          const syncGlobalShortcuts = async (settings: VoiceSettings) => {
+          const syncGlobalShortcuts = serialiseRegistrations(async (settings: VoiceSettings) => {
             await registerVoiceShortcuts(settings, {
               unregisterAll: () => invoke("unregister_global_voice_shortcuts") as Promise<void>,
               register: (chord) => invoke("register_global_voice_shortcut", { chord }) as Promise<void>,
               report: (message) => report(message, "warning"),
             })
-          }
+          })
 
           await syncGlobalShortcuts(voiceSettings())
           registerGlobalShortcuts = syncGlobalShortcuts
