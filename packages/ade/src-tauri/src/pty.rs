@@ -161,9 +161,10 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// or asked about for every command when the user turned on the bot's remote
 /// commands: nikcli merges `NIKCLI_PERMISSION` over its whole configuration.
 /// The user's configuration can allow more than the shell, so a chat's turn
-/// also asks before going outside the project (the object form replaces the
-/// `*` rule of the user's `external_directory`, a string the whole of it), and
-/// never drives the computer or a browser (G5 review, M2). The page answers
+/// also asks before going outside the project, and never drives the computer
+/// or a browser (G5 review, M2). `external_directory` is a string: it replaces
+/// the user's rule whole, folders allowed one by one included, where an object
+/// would replace only its `*` (never outside the folder). The page answers
 /// every question: on the phone, or no at once with the commands off.
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
@@ -171,13 +172,13 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
         "remote-no-shell",
         "nikcli",
         "NIKCLI_PERMISSION",
-        r#"{"bash":"deny","external_directory":{"*":"ask"},"computer":"deny","browser_control":"deny"}"#,
+        r#"{"bash":"deny","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
     ),
     (
         "remote-ask-shell",
         "nikcli",
         "NIKCLI_PERMISSION",
-        r#"{"bash":"ask","external_directory":{"*":"ask"},"computer":"deny","browser_control":"deny"}"#,
+        r#"{"bash":"ask","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
     ),
 ];
 
@@ -1953,7 +1954,8 @@ mod tests {
                 permission(flag),
                 serde_json::json!({
                     "bash": bash,
-                    "external_directory": { "*": "ask" },
+                    // A string: the user's folders allowed one by one go too.
+                    "external_directory": "ask",
                     "computer": "deny",
                     "browser_control": "deny"
                 }),
