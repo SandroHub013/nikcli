@@ -179,7 +179,7 @@ export function DesignSheet(props: { hub: DesignHub; onClose: () => void; onOpen
         <footer data-slot="sheet-foot">
           <span>{t("design.sheet.keys")}</span>
           <Show when={statusMessage()}>
-            <span data-slot="sheet-status">{statusMessage()}</span>
+            <span data-slot="sheet-status" role="status" aria-live="polite">{statusMessage()}</span>
           </Show>
           <Show when={props.hub.recipient().state !== "pronta" && queued() > 0}>
             <span data-tone="warn">

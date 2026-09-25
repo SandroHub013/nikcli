@@ -57,7 +57,7 @@ export function createDecisionsHub(deps: {
   /** Called after an answer is in the register, to queue the message. */
   onAnswered: (decision: Decision, event: AnsweredEvent) => void
   /** Called after a delivered decision is reopened, to queue the reopen message. */
-  onReopened?: (decision: Decision) => void
+  onReopened?: (decision: Decision, deliveredTo?: string) => void
 }): DecisionsHub {
   const [drafts, setDrafts] = createSignal<Record<string, DecisionDraft>>({})
   const [busyKeys, setBusyKeys] = createSignal<ReadonlySet<string>>(new Set())
@@ -155,10 +155,12 @@ export function createDecisionsHub(deps: {
     defer: (decision, until) => write(decision.k, () => deps.register.append(deferEvent(decision.k, until, new Date()))),
     reopen: (decision) =>
       write(decision.k, async () => {
-        const wasDelivered = deps.delivery(decision).state === "consegnata"
+        const delivery = deps.delivery(decision)
+        const wasDelivered = delivery.state === "consegnata"
+        const deliveredTo = wasDelivered ? delivery.to : undefined
         await deps.register.append(reopenEvent(decision.k, new Date()))
         if (wasDelivered) {
-          deps.onReopened?.(decision)
+          deps.onReopened?.(decision, deliveredTo)
         }
       }),
   }

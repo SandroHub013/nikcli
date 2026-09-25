@@ -17,13 +17,15 @@ import {
   pruneOutbox,
   recipientChange,
   recipientOptions,
+  reopenLine,
+  resolveDeliveryTarget,
   resolveRecipient,
   type DeliveryCandidate,
   type OutboxItem,
 } from "./delivery"
 import { DesignPreview, frameProps, isHtmlPreview, isImagePreview, isInsideRoot, loadFailure, previewPlan, previewSize, resolvePreviewPath, sharedPreview, shortenPath, thumbnailScale } from "./design-preview"
 import { mediaUrl } from "../video/video"
-import type { DesignProposal } from "./state"
+import { foldProposals, type DesignProposal } from "./state"
 import type { DesignEvent } from "./log"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -132,6 +134,106 @@ describe("who receives design answers", () => {
 
     outbox = markDelivered(outbox, outbox[0]!, "Master", 2000)
     expect(pendingFor(outbox, "C:\\p\\.ade\\design.jsonl").length).toBe(0)
+  })
+
+  test("reopening a delivered design enqueues a riaperta notice and keeps it until delivered", () => {
+    const path = "C:\\p\\.ade\\design.jsonl"
+    const events: DesignEvent[] = [
+      {
+        type: "aperta",
+        k: "DS1",
+        at: "2026-09-21T10:00:00Z",
+        by: "fable",
+        title: "Impostazioni",
+        spec: "S54",
+        variants: [{ name: "A", description: "", preview: "" }, { name: "B", description: "", preview: "" }],
+      },
+      {
+        type: "risposta",
+        k: "DS1",
+        at: "2026-09-21T11:00:00Z",
+        by: "utente",
+        choice: "A",
+        words: "A",
+      },
+    ]
+    let outbox = enqueue([], { path, k: "DS1", answeredAt: "2026-09-21T11:00:00Z", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 99)
+
+    // Reopen event occurs: status becomes "aperta"
+    const reopened = foldProposals([
+      ...events,
+      { type: "riaperta", k: "DS1", at: "2026-09-21T11:10:00Z", by: "utente" },
+    ]).proposals
+
+    // Old delivered answer is pruned
+    outbox = pruneOutbox(outbox, path, reopened)
+    expect(outbox).toHaveLength(0)
+
+    // Reopening enqueues a riaperta message in the outbox
+    const notice = reopenLine("DS1")
+    expect(notice).toBe("[Design da utente] riaperta [k=DS1]: la scelta di prima non vale più, aspetta la nuova")
+
+    outbox = enqueue(outbox, {
+      path,
+      k: "DS1",
+      answeredAt: "2026-09-21T11:10:00Z",
+      queuedAt: 2,
+      kind: "riaperta",
+      text: notice,
+    })
+
+    expect(pendingFor(outbox, path)).toHaveLength(1)
+    expect(outbox[0]!.kind).toBe("riaperta")
+    expect(outbox[0]!.text).toBe(notice)
+
+    // While aperta and pending delivery, pruneOutbox retains the reopen message
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(1)
+
+    // Once delivered, pruneOutbox cleans it up
+    outbox = markDelivered(outbox, outbox[0]!, "Master", 100)
+    expect(pruneOutbox(outbox, path, reopened)).toHaveLength(0)
+  })
+
+  test("reopen notice goes to original recipient A even when current recipient changed to B (M1)", () => {
+    const candidates: DeliveryCandidate[] = [
+      { id: "s-a", title: "Sessione A", project: "nikcli", running: true },
+      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+    ]
+    // 1. Design DS1 was answered and delivered to Sessione A
+    let outbox = enqueue([], { path: "C:\\p\\.ade\\design.jsonl", k: "DS1", answeredAt: "2026-09-21T11:00:00Z", queuedAt: 1 })
+    outbox = markDelivered(outbox, outbox[0]!, "Sessione A", 99)
+
+    // 2. Later, current recipient changes to Sessione B
+    const recipientB: RecipientStatus = { state: "pronta", id: "s-b", title: "Sessione B" }
+
+    // 3. User reopens design DS1: onReopened sets to = "Sessione A" (deliveredTo)
+    const notice = reopenLine("DS1")
+    outbox = enqueue(outbox, {
+      path: "C:\\p\\.ade\\design.jsonl",
+      k: "DS1",
+      answeredAt: "2026-09-21T11:10:00Z",
+      queuedAt: 2,
+      kind: "riaperta",
+      text: notice,
+      to: "Sessione A",
+    })
+
+    const reopenItem = outbox.find((item) => item.k === "DS1" && item.kind === "riaperta")!
+    expect(reopenItem).toBeDefined()
+    expect(reopenItem.to).toBe("Sessione A")
+
+    // 4. resolveDeliveryTarget routes to Sessione A, NOT Sessione B
+    const target = resolveDeliveryTarget(reopenItem, candidates, recipientB)
+    expect(target).toEqual({ id: "s-a", title: "Sessione A" })
+
+    // 5. If Sessione A is closed, it falls back to current recipient (Sessione B)
+    const candidatesWithoutA: DeliveryCandidate[] = [
+      { id: "s-a", title: "Sessione A", project: "nikcli", running: false },
+      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+    ]
+    const fallbackTarget = resolveDeliveryTarget(reopenItem, candidatesWithoutA, recipientB)
+    expect(fallbackTarget).toEqual({ id: "s-b", title: "Sessione B" })
   })
 })
 
