@@ -103,6 +103,16 @@ function useAnswer() {
   return { busy, failed, run }
 }
 
+/**
+ * The line the chat always shows (C5 review): the project's saved «always»
+ * approvals come after the session's rules in nikcli and no route lists them,
+ * so a request they cover never reaches the chat. Mounted in the chat's head
+ * by C4, when the chat runs on the store.
+ */
+export function RulesNote() {
+  return <p data-slot="chat-rules-note">{t("chat.rules.always")}</p>
+}
+
 /** «Yes this once» or «no». «Always» is not offered: it would outlive the chat's own rules (`rules.ts`). */
 export function PermissionCard(props: { request: PermissionRequest; onReply: (reply: "once" | "reject") => Promise<void> }) {
   const view = () => permissionView(props.request)

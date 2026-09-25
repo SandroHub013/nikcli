@@ -603,6 +603,8 @@ export const en: Messages = {
   "chat.permission.ask": (permission) => `The model asks permission for: ${permission}`,
   "chat.permission.once": "Yes, this once",
   "chat.permission.reject": "No, refuse",
+  "chat.rules.always":
+    "The Chat asks before every command and every edit, but an «always» already given for this project (in nikcli's terminal, say) holds here too: that request will not show up.",
   "chat.question.label": "The model's question",
   "chat.question.typed": "Or type your own answer",
   "chat.question.send": "Answer",

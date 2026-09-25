@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { translate } from "../i18n"
 import { CHAT_PERMISSION, hasChatRules, type PermissionRule } from "./rules"
 
 /*
@@ -79,5 +81,14 @@ describe("the chat session's permission rules", () => {
     // Something after them would decide instead: not the chat's.
     expect(hasChatRules({ permission: [...CHAT_PERMISSION, rule("bash", "*", "allow")] })).toBe(false)
     expect(hasChatRules({ permission: CHAT_PERMISSION.slice(1) })).toBe(false)
+  })
+})
+
+describe("what the rules cannot stop", () => {
+  test("the chat says, in both languages, that a project's saved «always» holds here too", () => {
+    expect(translate("it", "chat.rules.always")).toContain("«sempre»")
+    expect(translate("en", "chat.rules.always")).toContain("«always»")
+    const parts = readFileSync(new URL("./parts.tsx", import.meta.url), "utf8")
+    expect(parts).toMatch(/export function RulesNote\(\)[\s\S]*?t\("chat\.rules\.always"\)/)
   })
 })

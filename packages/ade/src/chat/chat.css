@@ -475,6 +475,12 @@
   background: var(--ade-raised);
 }
 
+[data-slot="chat-rules-note"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
 [data-slot="chat-permission-title"],
 [data-slot="chat-question-text"] {
   margin: 0;
