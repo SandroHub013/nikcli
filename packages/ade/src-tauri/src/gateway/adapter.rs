@@ -67,8 +67,6 @@ pub struct Button {
 }
 
 /// What a platform can do beyond sending text.
-// Built by the platforms' adapters, the first of which (Telegram) is its own piece.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capabilities {
@@ -79,8 +77,6 @@ pub struct Capabilities {
     pub buttons: bool,
 }
 
-// `Transient` and `Fatal` come from the platforms' adapters, the first in its own piece.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AdapterError {
     /// The platform has no such operation.

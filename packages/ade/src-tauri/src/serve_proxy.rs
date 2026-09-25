@@ -83,7 +83,7 @@ impl Requests {
 
 /// Installs the TLS provider reqwest insists on, once; the updater does the
 /// same, and whichever comes first wins.
-fn tls_ready() {
+pub(crate) fn tls_ready() {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }

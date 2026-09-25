@@ -6,15 +6,19 @@
 //! for what a platform provides, `store.rs` for what is kept on disk and
 //! `redact.rs` for what never leaves.
 //!
-//! The platforms' adapters come in their own pieces, Telegram first: until
-//! one exists, switching a gateway on for it is refused.
+//! Telegram is the first platform (`telegram.rs`, with `chunk.rs` and
+//! `markdown_v2.rs`); Discord and Slack come in their own pieces, and until
+//! then switching a gateway on for them is refused.
 
 mod adapter;
 mod authz;
+mod chunk;
 mod hub;
 mod known;
+mod markdown_v2;
 mod redact;
 mod store;
+mod telegram;
 
 pub use adapter::Platform;
 use adapter::Adapter;
@@ -100,9 +104,13 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     Ok(state.0.get_or_init(|| Arc::new(made)).clone())
 }
 
-/// The adapter for `platform`. None exists yet: each comes with its own piece.
-fn adapter_for(platform: Platform, _token: &str, _cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
-    Err(format!("il gateway per {} non è ancora disponibile", platform.id()))
+/// The adapter for `platform`, reading on from `cursor`. Discord and Slack
+/// come in their own pieces.
+fn adapter_for(platform: Platform, token: &str, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
+    match platform {
+        Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(token, cursor)?)),
+        other => Err(format!("il gateway per {} non è ancora disponibile", other.id())),
+    }
 }
 
 /// The page listens for `gateway:message`: the gateways may start reading.
