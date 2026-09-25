@@ -235,7 +235,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
      * user can act on, while "creazione non riuscita" is not.
      */
     const said = [result.stderr.trim(), result.stdout.trim()].filter((part) => part.length > 0).join("\n")
-    return { ok: false, problem: said || t("bots.store.nikcliExited", String(result.code ?? "sconosciuto")) }
+    return { ok: false, problem: said || t("bots.store.nikcliExited", String(result.code ?? t("bots.store.unknownCode"))) }
   }
 
   /*

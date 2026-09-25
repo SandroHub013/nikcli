@@ -1295,6 +1295,7 @@ export const en: Messages = {
   "bots.store.noDir": "This host cannot read folders.",
   "bots.store.hostMissing": "No host.",
   "bots.store.nikcliExited": (code) => `nikcli exited with code ${code}.`,
+  "bots.store.unknownCode": "unknown",
   "bots.spend.plan": "subscription",
   "bots.spend.api": "API key",
   "bots.spend.free": "free",

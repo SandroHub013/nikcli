@@ -208,8 +208,7 @@ function isLimitTurn(result: TurnResult): boolean {
       s.includes("raggiunto il limite") ||
       s.includes("al limite del") ||
       s.includes("limite del tuo piano") ||
-      s.includes("reached the limit of your plan") ||
-      s.includes("does not retry")
+      s.includes("reached the limit of your plan")
     )
   }
   if (check(result.problem) || check(result.text)) return true

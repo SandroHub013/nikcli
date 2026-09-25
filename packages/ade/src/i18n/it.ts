@@ -1308,6 +1308,7 @@ export const it = {
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.nikcliExited": (code: string) => `nikcli è uscito con codice ${code}.`,
+  "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
   "bots.spend.api": "chiave API",
   "bots.spend.free": "gratis",

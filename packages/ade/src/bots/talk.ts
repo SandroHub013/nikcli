@@ -223,6 +223,8 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
     problem: undefined,
     permission: undefined,
     ended: undefined,
+    // One limit must not mark every later turn, including one reloaded from disk.
+    limited: undefined,
     pendingTurn: { tokens: 0, costUsd: 0 },
     turnSession: undefined,
   }
@@ -664,7 +666,6 @@ export function serializeTalk(talk: Talk): string {
       tokens: talk.tokens,
       costUsd: talk.costUsd,
       ...(talk.lastTurn ? { lastTurn: talk.lastTurn } : {}),
-      ...(talk.limited ? { limited: true } : {}),
       updatedAt: talk.updatedAt,
     })
   let encoded = pack(messages)
@@ -711,7 +712,6 @@ export function parseTalk(raw: string | null | undefined): Talk {
         const last = parseLastTurn(parsed.lastTurn)
         return last ? { lastTurn: last } : {}
       })(),
-      ...(parsed.limited === true ? { limited: true } : {}),
       ...(typeof parsed.updatedAt === "number" ? { updatedAt: parsed.updatedAt } : {}),
     }
   } catch {
