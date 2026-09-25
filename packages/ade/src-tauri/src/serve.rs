@@ -73,6 +73,13 @@ const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP
 /// the same for every such call. A `small_model` the user wrote — in their
 /// global config, in `NIKCLI_CONFIG` or in `NIKCLI_CONFIG_CONTENT`, even an
 /// empty one, which turns it off — is left as it is.
+///
+/// The project's config is not read here. `NIKCLI_CONFIG_CONTENT` is merged
+/// after `nikcli.json` at the project's root, so a `small_model` there gives
+/// way to this free one; `<project>/.nikcli/nikcli.json` and
+/// `NIKCLI_CONFIG_DIR` are merged after it (`config/config.ts`, the
+/// `directories` loop) and win. Should this model go away, only those calls
+/// fail, quietly: nikcli does not fall back to a paid one.
 pub(crate) const FREE_SMALL_MODEL: &str = "openrouter/nvidia/nemotron-3-super-120b-a12b:free";
 
 pub(crate) struct Serving {
