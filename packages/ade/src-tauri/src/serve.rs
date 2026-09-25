@@ -11,12 +11,16 @@
 /// such thing inside a WebView2 renderer. The renderer gets a URL from here and
 /// speaks plain `fetch` to it from then on.
 ///
-/// One server per window: the background service nikcli already runs, when
-/// `service.json` names one that answers, or else a `nikcli serve` of ADE's
-/// own, started on demand and killed — with everything it started — when ADE
-/// exits. It is deliberately not the `pty_spawn` path — that one hands a
-/// terminal to a human, and this one is a background service whose stdout is a
-/// protocol.
+/// One server per window: a `nikcli serve` of ADE's own, started on demand
+/// and killed — with everything it started — when ADE exits. It is
+/// deliberately not the `pty_spawn` path — that one hands a terminal to a
+/// human, and this one is a background service whose stdout is a protocol.
+///
+/// Never the background service nikcli registers in its state folder, even
+/// when one answers (decided in the C5 review): it was started from an
+/// environment ADE does not know, and one started with `--auto` says yes to
+/// every «ask», so the chat's permission rules would not hold there. ADE's
+/// own server is started without those flags (`AUTO_APPROVE`).
 ///
 /// The page never talks to the server itself (C1). In a release its origin is
 /// `tauri.localhost`, which the server's CORS does not list, and ADE's own
@@ -24,7 +28,6 @@
 /// makes every call from here instead; the page gets the address, never the
 /// password.
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     Condvar, Mutex, MutexGuard,
@@ -60,17 +63,13 @@ const USERNAME: &str = "nikcli";
 /// and the chat would not know.
 const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS"];
 
-/// How long a discovered service gets to prove it is alive and ours to use.
-const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
-
 pub(crate) struct Serving {
     pub(crate) url: String,
     /// Basic-auth credentials. The password never leaves this process.
     pub(crate) auth: Option<(String, String)>,
     pub(crate) version: Option<String>,
-    /// ADE's own server. `None` for the shared background service, which the
-    /// user's other clients are using too and is not ADE's to stop.
-    child: Option<Child>,
+    /// ADE's own server: always one it started, and ends.
+    child: Child,
 }
 
 impl Serving {
@@ -78,19 +77,16 @@ impl Serving {
         ServerInfo {
             url: self.url.clone(),
             version: self.version.clone(),
-            shared: self.child.is_none(),
         }
     }
 
-    /// Ends ADE's own server and whatever it started. Leaves a shared one be.
+    /// Ends ADE's own server and whatever it started.
     fn end(&mut self) {
-        if let Some(child) = self.child.as_mut() {
-            // `nikcli` can be an npm shim, and killing the shim alone would
-            // leave the real server listening.
-            crate::pty::kill_tree(child.id());
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        // `nikcli` can be an npm shim, and killing the shim alone would
+        // leave the real server listening.
+        crate::pty::kill_tree(self.child.id());
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -100,8 +96,6 @@ impl Serving {
 pub struct ServerInfo {
     pub url: String,
     pub version: Option<String>,
-    /// The user's background service rather than ADE's own.
-    pub shared: bool,
 }
 
 /*
@@ -171,22 +165,13 @@ impl Server {
     }
 
     /// Where calls go, and with which credentials, when a server is up.
-    pub(crate) fn endpoint(&self) -> Option<(String, Option<(String, String)>, bool)> {
+    pub(crate) fn endpoint(&self) -> Option<(String, Option<(String, String)>)> {
         let mut slot = self.lock();
         let Slot::Running(serving) = &mut *slot else { return None };
         if !still_alive(serving) {
             return None;
         }
-        Some((serving.url.clone(), serving.auth.clone(), serving.child.is_none()))
-    }
-
-    /// Drops a shared service that stopped answering, so the next start looks
-    /// again — and starts ADE's own if there is nothing to find.
-    pub(crate) fn forget_shared(&self, url: &str) {
-        let mut slot = self.lock();
-        if matches!(&*slot, Slot::Running(serving) if serving.child.is_none() && serving.url == url) {
-            *slot = Slot::Idle;
-        }
+        Some((serving.url.clone(), serving.auth.clone()))
     }
 }
 
@@ -228,12 +213,8 @@ fn parse_ready_line(line: &str) -> Option<String> {
 }
 
 /// True when the child is still running, rather than merely still in the map.
-/// A shared service has no child here; a call that finds it gone forgets it.
 fn still_alive(serving: &mut Serving) -> bool {
-    match serving.child.as_mut() {
-        Some(child) => matches!(child.try_wait(), Ok(None)),
-        None => true,
-    }
+    matches!(serving.child.try_wait(), Ok(None))
 }
 
 /// Takes the right to start a server, or reports what is already there.
@@ -355,99 +336,6 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str) -> Comm
     command
 }
 
-/// Where nikcli writes `service.json`: `Global.Path.state` in `@nikcli-ai/util`.
-fn state_dir() -> Option<PathBuf> {
-    if cfg!(windows) {
-        let local = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .or_else(|| dirs::home_dir().map(|home| home.join("AppData").join("Local")))?;
-        return Some(local.join("State").join("nikcli"));
-    }
-    let base = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| dirs::home_dir().map(|home| home.join(".local").join("state")))?;
-    Some(base.join("nikcli"))
-}
-
-/// The address in a service registration, if it is one ADE may call: plain
-/// HTTP on this machine. Anything else is refused, not trusted — the file is
-/// writable by any process running as the user.
-pub(crate) fn registration_url(text: &str) -> Option<String> {
-    let value: serde_json::Value = serde_json::from_str(text).ok()?;
-    let url = value.get("url")?.as_str()?.trim_end_matches('/');
-    loopback_http(url).then(|| url.to_string())
-}
-
-/// `http://` to 127.0.0.1, `localhost` or `[::1]`, with a port and nothing else.
-pub(crate) fn loopback_http(url: &str) -> bool {
-    let Ok(parsed) = reqwest::Url::parse(url) else { return false };
-    let host_ok = matches!(parsed.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
-    parsed.scheme() == "http"
-        && host_ok
-        && parsed.port().is_some()
-        && parsed.username().is_empty()
-        && parsed.password().is_none()
-        && matches!(parsed.path(), "" | "/")
-        && parsed.query().is_none()
-}
-
-/// The shared background service, if `service.json` names one that answers
-/// its health check and lets ADE in.
-///
-/// Its password, when it has one, is the user's `NIKCLI_SERVER_PASSWORD`: the
-/// service inherits it from the environment it was started in, and so does
-/// ADE. A service that still refuses is left alone, and ADE starts its own.
-fn discover() -> Option<Serving> {
-    let text = std::fs::read_to_string(state_dir()?.join("service.json")).ok()?;
-    let url = registration_url(&text)?;
-    let auth = std::env::var("NIKCLI_SERVER_PASSWORD")
-        .ok()
-        .map(|password| password.trim().to_string())
-        .filter(|password| !password.is_empty())
-        .map(|password| {
-            let user = std::env::var("NIKCLI_SERVER_USERNAME").unwrap_or_else(|_| USERNAME.to_string());
-            (user, password)
-        });
-    let version = tauri::async_runtime::block_on(probe(&url, auth.clone()))?;
-    Some(Serving {
-        url,
-        auth,
-        version: Some(version),
-        child: None,
-    })
-}
-
-/// The server's version when `/global/health` answers healthy and an
-/// authenticated call goes through; `None` otherwise.
-///
-/// Health alone is not enough: it is public, so a service with a password
-/// ADE does not know would pass it and then refuse every real call.
-pub(crate) async fn probe(url: &str, auth: Option<(String, String)>) -> Option<String> {
-    let client = crate::serve_proxy::client_with_timeout(PROBE_TIMEOUT).ok()?;
-    let health: serde_json::Value = client
-        .get(format!("{url}/global/health"))
-        .send()
-        .await
-        .ok()
-        .filter(|response| response.status().is_success())?
-        .json()
-        .await
-        .ok()?;
-    if health.get("healthy").and_then(|value| value.as_bool()) != Some(true) {
-        return None;
-    }
-    let mut check = client.get(format!("{url}/project/current"));
-    if let Some((user, password)) = auth {
-        check = check.basic_auth(user, Some(password));
-    }
-    let response = check.send().await.ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    Some(health.get("version").and_then(|value| value.as_str()).unwrap_or_default().to_string())
-}
-
 /// Starts `nikcli serve`, or returns the URL of the one already running.
 ///
 /// Idempotent on purpose: both the chat section and the voice assistant ask
@@ -463,12 +351,6 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
     // From here on the slot says `Starting`, and this guard is what puts it
     // back however the function leaves.
     let _claim = Claim(server);
-
-    // The service the user's other clients already share: its engine is warm,
-    // and a second server would load it all again.
-    if let Some(shared) = discover() {
-        return install(server, shared);
-    }
     spawn_own(server, directory)
 }
 
@@ -541,7 +423,7 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
                 url,
                 auth: Some((USERNAME.to_string(), password)),
                 version: None,
-                child: Some(child),
+                child,
             },
         ),
         Ok(Err(reason)) => {
@@ -622,8 +504,7 @@ pub async fn nikcli_serve_stop(app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        Claim, Server, ServerInfo, Serving, Slot, claim_start, install, loopback_http, parse_ready_line,
-        registration_url, serve_command,
+        Claim, Server, ServerInfo, Serving, Slot, claim_start, install, parse_ready_line, serve_command,
     };
     use std::process::{Child, Command, Stdio};
     use std::time::Duration;
@@ -673,7 +554,7 @@ mod tests {
             url: url.to_string(),
             auth: Some(("nikcli".into(), "finta".into())),
             version: None,
-            child: Some(child),
+            child,
         }
     }
 
@@ -681,7 +562,6 @@ mod tests {
         ServerInfo {
             url: url.to_string(),
             version: None,
-            shared: false,
         }
     }
 
@@ -845,84 +725,32 @@ mod tests {
     }
 
     #[test]
+    fn the_chat_never_looks_for_a_server_ade_did_not_start() {
+        // The code of both files, doc comments and this test module left out:
+        // nothing reads nikcli's service registration or makes a server
+        // without a child of ADE's.
+        let registration = ["service", ".json"].concat();
+        for (name, source) in [("serve.rs", include_str!("serve.rs")), ("serve_proxy.rs", include_str!("serve_proxy.rs"))] {
+            let code: String = source
+                .split("#[cfg(test)]")
+                .next()
+                .unwrap()
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(!code.contains(&registration), "{name} legge la registrazione del servizio");
+            assert!(!code.contains("child: None"), "{name} crea un server senza processo di ADE");
+        }
+    }
+
+    #[test]
     fn every_server_gets_its_own_random_password() {
         let one = super::random_password().unwrap();
         let two = super::random_password().unwrap();
         assert_eq!(one.len(), 64);
         assert!(one.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(one, two);
-    }
-
-    #[test]
-    fn reads_the_address_out_of_a_service_registration() {
-        let text = r#"{"id":"x","pid":1,"url":"http://127.0.0.1:49374","version":"1.384.0","startedAt":1}"#;
-        assert_eq!(registration_url(text), Some("http://127.0.0.1:49374".to_string()));
-        assert_eq!(
-            registration_url(r#"{"url":"http://localhost:4096/"}"#),
-            Some("http://localhost:4096".to_string())
-        );
-    }
-
-    #[test]
-    fn a_registration_pointing_off_this_machine_is_refused() {
-        // Any process running as the user can write service.json.
-        for text in [
-            r#"{"url":"http://evil.example:4096"}"#,
-            r#"{"url":"https://127.0.0.1:4096"}"#,
-            r#"{"url":"http://user:pw@127.0.0.1:4096"}"#,
-            r#"{"url":"http://127.0.0.1:4096/altro"}"#,
-            r#"{"url":"http://127.0.0.1"}"#,
-            r#"{"pid":1}"#,
-            "non json",
-        ] {
-            assert_eq!(registration_url(text), None, "accettato: {text}");
-        }
-        assert!(loopback_http("http://[::1]:4096"));
-    }
-
-    #[test]
-    fn a_healthy_service_that_lets_ade_in_is_used() {
-        use crate::serve_proxy::test_server::{plain, serve};
-        let (url, requests) = serve(vec![
-            plain("200 OK", r#"{"healthy":true,"version":"1.384.0"}"#),
-            plain("200 OK", r#"{"id":"p"}"#),
-        ]);
-        let version = tauri::async_runtime::block_on(super::probe(&url, Some(("nikcli".into(), "finta".into()))));
-        assert_eq!(version.as_deref(), Some("1.384.0"));
-        let _ = requests.recv_timeout(Duration::from_secs(5)).unwrap();
-        let check = requests.recv_timeout(Duration::from_secs(5)).unwrap().to_ascii_lowercase();
-        assert!(check.starts_with("get /project/current"), "{check}");
-        assert!(check.contains("authorization: basic "), "{check}");
-    }
-
-    #[test]
-    fn a_service_that_refuses_ade_is_not_used() {
-        use crate::serve_proxy::test_server::{plain, serve};
-        // Health is public, so it passes even where every real call would not.
-        let (url, _) = serve(vec![
-            plain("200 OK", r#"{"healthy":true,"version":"1.384.0"}"#),
-            plain("401 Unauthorized", "{}"),
-        ]);
-        assert_eq!(tauri::async_runtime::block_on(super::probe(&url, None)), None);
-    }
-
-    #[test]
-    fn a_shared_service_is_forgotten_not_killed_and_ades_own_is_kept() {
-        let server = Server::default();
-        *server.lock() = Slot::Running(Serving {
-            url: "http://127.0.0.1:5".into(),
-            auth: None,
-            version: Some("1".into()),
-            child: None,
-        });
-        assert_eq!(server.endpoint().map(|(_, _, shared)| shared), Some(true));
-        server.forget_shared("http://127.0.0.1:5");
-        assert!(matches!(*server.lock(), Slot::Idle));
-
-        running(&server, "http://127.0.0.1:6", sleeper());
-        server.forget_shared("http://127.0.0.1:6");
-        assert!(matches!(*server.lock(), Slot::Running(_)));
-        server.shutdown();
     }
 
     #[test]
@@ -970,7 +798,7 @@ mod tests {
     /// Status of `path` on the running server, through the proxy's own code.
     fn live_status(server: &Server, path: &str, with_auth: bool) -> u16 {
         use crate::serve_proxy::{ProxyEvent, relay, target};
-        let (base, auth, _) = server.endpoint().expect("nessun server");
+        let (base, auth) = server.endpoint().expect("nessun server");
         let client = crate::serve_proxy::client_with_timeout(Duration::from_secs(60)).unwrap();
         let mut status = 0;
         tauri::async_runtime::block_on(relay(
@@ -990,24 +818,12 @@ mod tests {
         status
     }
 
-    /// The real nikcli: its shared service when there is one, then a server
-    /// of ADE's own. Health and `provider.list` only — no model is called.
+    /// The real nikcli: a server of ADE's own. Health and `provider.list`
+    /// only — no model is called.
     /// `cargo test --lib -- --ignored live_`
     #[test]
     #[ignore]
     fn live_health_and_provider_list() {
-        let shared = Server::default();
-        match super::discover() {
-            Some(found) => {
-                *shared.lock() = Slot::Running(found);
-                assert_eq!(live_status(&shared, "/global/health", true), 200);
-                assert_eq!(live_status(&shared, "/provider", true), 200);
-                println!("servizio condiviso: {:?}", shared.lock_info());
-                shared.shutdown();
-            }
-            None => println!("nessun servizio condiviso che risponda"),
-        }
-
         let dir = std::env::temp_dir().join(format!("ade-c1-live-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let own = Server::default();
@@ -1016,7 +832,7 @@ mod tests {
             let _claim = Claim(&own);
             super::spawn_own(&own, Some(dir.to_string_lossy().into_owned())).unwrap()
         };
-        assert!(!started.shared);
+        assert_eq!(own.lock_info().as_ref(), Some(&started));
         assert_eq!(live_status(&own, "/global/health", false), 200);
         assert_eq!(live_status(&own, "/provider", true), 200);
         // Without the password it is refused: the random one is enforced.

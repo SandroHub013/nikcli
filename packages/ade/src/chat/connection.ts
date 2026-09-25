@@ -2,8 +2,7 @@
  * The chat's way to a project on the nikcli server (C2).
  *
  * A request with a directory makes the server load that folder's `.nikcli/`,
- * plugins included, which run as code; with the user's shared service, in a
- * process ADE does not control. So a folder is admitted first, as the Bots
+ * plugins included, which run as code. So a folder is admitted first, as the Bots
  * are (B3b, `project-trust.ts`): the same fingerprint, the same yes kept in
  * the same place. Until then no request leaves, the server's start included
  * (ADE's own server would start in that folder); after a no, none ever does

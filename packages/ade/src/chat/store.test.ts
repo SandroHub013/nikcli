@@ -51,7 +51,7 @@ function fakeServer() {
     }, 1)
   const bridge: ServerBridge = {
     async start() {
-      return { url: "http://127.0.0.1:49374", version: "1.389.0", shared: true }
+      return { url: "http://127.0.0.1:49374", version: "1.389.0" }
     },
     async send(request, onEvent) {
       sent.push(request)
