@@ -40,6 +40,13 @@ export function createListenGuard(deps: ListenGuardDeps) {
       const at = deps.now()
       const slept = at - last > SLEEP_GAP_MS
       last = at
+      /* Nothing is open and nothing should be: there is no state a lock could
+         change, so the question is not asked. It is a call into the OS session,
+         and with the voice off there is nothing to win by making it twelve
+         times a minute. A microphone that is open still asks, so a lock closes
+         the dictation too, and a voice the user wants listening still asks, so
+         the unlock is not missed. */
+      if (!deps.isListening() && (!deps.shouldListen() || deps.isHalted())) return
       /* Nobody can be talking to a locked PC: whatever is open closes, the
          dictation too, whether or not it listens by itself. A check that
          cannot answer is taken as a lock — an open microphone is the costly

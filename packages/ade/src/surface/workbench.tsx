@@ -4363,13 +4363,12 @@ export function Workbench() {
         await voiceEngine.start("agent", { waitForName: true, automatic: true })
       },
     })
-    let ticking = false
-    const timer = setInterval(() => {
-      if (ticking) return
-      ticking = true
-      void guard.tick().finally(() => (ticking = false))
-    }, LOCK_POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    /* `every` and not a bare interval: a hidden window has no use for the lock,
+       and it waits for the tick instead of overlapping it. What to ask the
+       guard is the guard's own decision, and it asks nothing with the voice
+       off. */
+    const stopGuard = every(LOCK_POLL_MS, () => guard.tick())
+    onCleanup(stopGuard)
   })
 
   const completionTurns = new Map<string, number>()

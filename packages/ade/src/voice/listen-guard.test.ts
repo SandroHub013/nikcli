@@ -2,10 +2,22 @@ import { describe, expect, test } from "bun:test"
 import { createListenGuard, SLEEP_GAP_MS, LOCK_POLL_MS } from "./listen-guard"
 
 function world() {
-  const state = { at: 0, locked: false, wanted: true, listening: true, paused: false, halted: false, calls: [] as string[] }
+  const state = {
+    at: 0,
+    locked: false,
+    wanted: true,
+    listening: true,
+    paused: false,
+    halted: false,
+    calls: [] as string[],
+    locks: 0,
+  }
   const guard = createListenGuard({
     now: () => state.at,
-    isLocked: async () => state.locked,
+    isLocked: async () => {
+      state.locks += 1
+      return state.locked
+    },
     shouldListen: () => state.wanted,
     isListening: () => state.listening,
     isPaused: () => state.paused,
@@ -126,6 +138,48 @@ describe("listening that stopped itself to stop spending", () => {
 
     // The user starts it again: the halt is lifted, and the guard goes back to its job.
     state.halted = false
+    await tick()
+    expect(state.calls).toEqual(["resume"])
+  })
+})
+
+describe("the lock is not asked for nothing", () => {
+  test("with the voice off and nothing open, the session is not asked at all", async () => {
+    const { state, tick } = world()
+    // Switched off by the user, and stopped by itself on top of that.
+    state.wanted = false
+    state.listening = false
+    state.halted = true
+    await tick()
+    await tick(LOCK_POLL_MS)
+    // Even a tick that looks like a wake-up asks nothing: there is no
+    // microphone to reopen and nothing the user is waiting for.
+    await tick(SLEEP_GAP_MS + 60_000)
+    expect(state.locks).toBe(0)
+    expect(state.calls).toEqual([])
+  })
+
+  test("an open microphone still asks, so a lock closes the dictation", async () => {
+    const { state, tick } = world()
+    state.wanted = false
+    state.listening = true
+    await tick()
+    expect(state.locks).toBe(1)
+    state.locked = true
+    await tick()
+    expect(state.calls).toEqual(["pause"])
+  })
+
+  test("a voice the user wants listening still asks, so the unlock is not missed", async () => {
+    const { state, tick } = world()
+    state.listening = false
+    state.paused = true
+    state.locked = true
+    await tick()
+    expect(state.locks).toBe(1)
+    // A lock while it is only paused changes nothing to close.
+    expect(state.calls).toEqual([])
+    state.locked = false
     await tick()
     expect(state.calls).toEqual(["resume"])
   })
