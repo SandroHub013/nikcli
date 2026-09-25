@@ -38,6 +38,7 @@ import { runnerAccount, runnerById, RUNNERS, type Runner } from "./runners"
 import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
+import { submitDraft } from "./composer"
 import { runTurn } from "./turn"
 import {
   createBot,
@@ -336,9 +337,10 @@ export function BotsMain(props: BotsMainProps) {
    * smallest version of "call another bot in", and the one that costs no
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
-  const send = (from: AgentFile, raw: string) => {
+  /** Resolves to whether the message went; one that did not goes back into the composer. */
+  const send = async (from: AgentFile, raw: string): Promise<boolean> => {
     const text = raw.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return false
 
     let bot = from
     let message = text
@@ -352,7 +354,7 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    void start(bot, message)
+    return start(bot, message)
   }
 
   /*
@@ -360,7 +362,7 @@ export function BotsMain(props: BotsMainProps) {
    * file as it was read and trusted just now, not the copy the roster loaded
    * earlier: a file changed in between would otherwise run unseen.
    */
-  const start = async (bot: AgentFile, message: string) => {
+  const start = async (bot: AgentFile, message: string): Promise<boolean> => {
     let read: string | undefined
     const verdict = await admit(bot, {
       store: localTrustStore(),
@@ -369,10 +371,10 @@ export function BotsMain(props: BotsMainProps) {
     })
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
-      return
+      return false
     }
     const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
-    turns.send(trusted, message, props.projectRoot)
+    return turns.send(trusted, message, props.projectRoot)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
@@ -540,7 +542,8 @@ function Thread(props: {
   talk: Talk
   others: readonly string[]
   expression: Expression
-  onSend: (text: string) => void
+  /** Whether the message went: one that did not comes back into the composer. */
+  onSend: (text: string) => boolean | Promise<boolean>
   onAnswer: (choice: PermissionAnswer) => void
   onStop: () => void
 }) {
@@ -568,8 +571,7 @@ function Thread(props: {
   const submit = () => {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
-    setDraft("")
-    props.onSend(text)
+    void submitDraft(text, props.onSend, { get: draft, set: setDraft })
   }
 
   const subagent = () => props.bot.mode === "subagent"
