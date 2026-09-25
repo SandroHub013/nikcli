@@ -36,6 +36,8 @@ function fakeServer() {
   const routes = {
     sessions: [session("ses_1")] as object[],
     messages: {} as Record<string, object[]>,
+    permissions: [] as object[],
+    questions: [] as object[],
   }
   const reply = (onEvent: (event: ProxyEvent) => void, status: number, body?: unknown) =>
     setTimeout(() => {
@@ -75,6 +77,8 @@ function fakeServer() {
       }
       if (request.method === "GET" && path === "/session") reply(onEvent, 200, routes.sessions)
       else if (request.method === "GET" && path === "/session/status") reply(onEvent, 200, {})
+      else if (request.method === "GET" && path === "/permission") reply(onEvent, 200, routes.permissions)
+      else if (request.method === "GET" && path === "/question") reply(onEvent, 200, routes.questions)
       else if (request.method === "GET" && /^\/session\/[^/]+\/message$/.test(path)) {
         reply(onEvent, 200, routes.messages[path.split("/")[2]!] ?? [])
       } else if (request.method === "POST" && path === "/session") reply(onEvent, 200, session("ses_nuova"))
@@ -164,6 +168,25 @@ describe("the chat's store", () => {
     expect(server.streams).toHaveLength(1)
     expect(server.aborted).toEqual([])
     expect(store.state.status).toBe("live")
+  })
+
+  test("requests waiting when the stream opens, or asked while it was down, are loaded; answered ones go", async () => {
+    const server = fakeServer()
+    server.routes.permissions = [{ id: "per_1", sessionID: "ses_1", permission: "bash", patterns: ["npm test"], metadata: {}, always: [] }]
+    server.routes.questions = [{ id: "que_1", sessionID: "ses_1", questions: [] }]
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    expect(store.state.data.permission.ses_1!.map((p) => p.id)).toEqual(["per_1"])
+    expect(store.state.data.question.ses_1!.map((q) => q.id)).toEqual(["que_1"])
+
+    // The stream goes down; meanwhile the first is answered elsewhere and a new one is asked.
+    server.stream().end()
+    server.routes.permissions = [{ id: "per_2", sessionID: "ses_1", permission: "edit", patterns: ["a.ts"], metadata: {}, always: [] }]
+    server.routes.questions = []
+    await live(server, store, 2)
+    expect(store.state.data.permission.ses_1!.map((p) => p.id)).toEqual(["per_2"])
+    expect(store.state.data.question.ses_1).toBeUndefined()
   })
 
   test("opening the folder already open changes nothing", async () => {

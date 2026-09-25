@@ -24,7 +24,7 @@
  * review).
  */
 
-import type { Message, Part, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
+import type { Message, Part, PermissionRequest, QuestionRequest, Session, SessionStatus } from "@nikcli-ai/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { appChatConnectionDeps, isChatRefused, openChat, type ChatConnection } from "./connection"
 import { applyChatEvent, emptyChatData, type ChatData } from "./events"
@@ -78,6 +78,13 @@ const MESSAGE_LIMIT = 100
 
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
+function bySession<T extends { id: string; sessionID: string }>(list: readonly T[]): Record<string, T[]> {
+  const grouped: Record<string, T[]> = {}
+  for (const item of list) (grouped[item.sessionID] ??= []).push(item)
+  for (const items of Object.values(grouped)) items.sort(byId)
+  return grouped
+}
+
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve()
@@ -125,10 +132,18 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   /** The folder's sessions, their status and the watched messages; false when it did not load. */
   async function bootstrap(connection: Open, mine: number): Promise<boolean> {
     try {
-      const [sessions, status] = await Promise.all([connection.client.session.list({}), connection.client.session.status()])
+      const [sessions, status, permissions, questions] = await Promise.all([
+        connection.client.session.list({}),
+        connection.client.session.status(),
+        connection.client.permission.list(),
+        connection.client.question.list(),
+      ])
       if (mine !== generation) return false
       setData("session", reconcile([...((sessions.data ?? []) as unknown as Session[])].sort(byId), { key: "id" }))
       setData("session_status", reconcile((status.data ?? {}) as unknown as Record<string, SessionStatus>))
+      // Requests still waiting: one asked while the stream was down is not sent again.
+      setData("permission", reconcile(bySession((permissions.data ?? []) as unknown as PermissionRequest[])))
+      setData("question", reconcile(bySession((questions.data ?? []) as unknown as QuestionRequest[])))
       await Promise.all([...watched].map((id) => fetchMessages(connection, id, mine)))
       return mine === generation
     } catch (error) {
