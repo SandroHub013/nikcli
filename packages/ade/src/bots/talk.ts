@@ -50,6 +50,12 @@ export interface PendingPermission {
   readonly permission: string
   readonly patterns: string
   readonly askedAt: number
+  /** Why ADE asks (B8c): the kind of danger, in words. */
+  readonly reason?: string
+  /** What «Sempre» keeps for the bot: the kind of danger, or the folder (`approval.ts`). */
+  readonly always?: string
+  /** When the question becomes a Nega. */
+  readonly expiresAt?: number
 }
 
 export interface Talk {

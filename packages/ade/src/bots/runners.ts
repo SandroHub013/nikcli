@@ -232,6 +232,14 @@ export interface TurnSpec {
    * inherited API keys. A key is the name in ADE's index, never the value.
    */
   readonly account?: BotAccount
+  /**
+   * nikcli only: the caller answers every question nikcli asks, by
+   * `approval.ts` (B8c, the Bots panel's `controller.ts`). nikcli is then told
+   * to ask about every command and every step outside the project. Off for a
+   * caller that answers nothing — the voice, a routine —, whose turn would
+   * otherwise stop on a menu nobody sees.
+   */
+  readonly approvals?: boolean
 }
 
 /**
@@ -378,11 +386,18 @@ export function turnCommand(
          * From a chat, the shell goes through `NIKCLI_PERMISSION` (G5): denied,
          * or asked about every command. The bot's own file can still grant
          * it, so such a file is refused for a chat (`gateway/policy.ts`).
+         * In ADE (B8c), nikcli asks about every command and every step
+         * outside the project, and `controller.ts` answers by `approval.ts`.
          */
         ...(() => {
+          const shell = !bot.disabledTools.includes("bash")
           const flags = [
             ...(fromRepository(bot) ? [] : ["no-project-config"]),
-            ...(spec.remote ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"] : []),
+            ...(spec.remote
+              ? [spec.remote.commands ? "remote-ask-shell" : "remote-no-shell"]
+              : spec.approvals
+                ? [shell ? "bot-ask-shell" : "bot-ask-outside"]
+                : []),
           ]
           return flags.length > 0 ? { flags } : {}
         })(),

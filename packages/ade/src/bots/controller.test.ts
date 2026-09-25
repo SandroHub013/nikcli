@@ -20,6 +20,7 @@ function machine(options: { refuse?: string } = {}) {
   const kills: { tree?: boolean }[] = []
   const exits: ((code: number | null) => void)[] = []
   const lines: ((line: string, stream: "out" | "err") => void)[] = []
+  const data: ((chunk: string) => void)[] = []
   const writes: string[] = []
   const flags: (readonly string[] | undefined)[] = []
   const secrets: (readonly string[] | undefined)[] = []
@@ -29,9 +30,11 @@ function machine(options: { refuse?: string } = {}) {
       secrets?: readonly string[]
       onExit: (code: number | null) => void
       onLine: (line: string, stream: "out" | "err") => void
+      onData?: (chunk: string) => void
     }) => {
       exits.push(spawn.onExit)
       lines.push(spawn.onLine)
+      if (spawn.onData) data.push(spawn.onData)
       flags.push(spawn.flags)
       secrets.push(spawn.secrets)
       if (options.refuse) {
@@ -55,11 +58,15 @@ function machine(options: { refuse?: string } = {}) {
     secrets,
     exit: (code: number | null, at = exits.length - 1) => exits[at]?.(code),
     say: (line: string, at = lines.length - 1) => lines[at]?.(line, "out"),
+    /** Raw output, as a pty gives it: where nikcli draws its permission menu. */
+    print: (chunk: string, at = data.length - 1) => data[at]?.(chunk),
   }
 }
 
 function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mode: "plan" } | { mode: "key"; key: string }) {
   const talks: Record<string, Talk> = {}
+  const kept: Record<string, string[]> = {}
+  const timers: { run: () => void; ms: number; cancelled: boolean }[] = []
   const turns = createBotTurns({
     runTurn: (request) => runTurn(request, m.deps),
     talkOf: (path) => talks[path] ?? emptyTalk(),
@@ -67,9 +74,24 @@ function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mo
       talks[path] = change(talks[path] ?? emptyTalk())
     },
     ...(accountOf ? { accountOf } : {}),
+    always: {
+      get: (path) => kept[path] ?? [],
+      add: (path, key) => void (kept[path] = [...(kept[path] ?? []), key]),
+    },
+    schedule: (run, ms) => {
+      const timer = { run, ms, cancelled: false }
+      timers.push(timer)
+      return () => void (timer.cancelled = true)
+    },
   })
-  return { turns, talk: (path: string) => talks[path] ?? emptyTalk() }
+  return { turns, talk: (path: string) => talks[path] ?? emptyTalk(), kept, timers }
 }
+
+/** nikcli's menu line, as its pty draws it. */
+const menu = (permission: string, patterns: string) =>
+  `\u001b[1m△ Permission required: ${permission} (${patterns})\u001b[0m\r\n  Allow once   Always   Reject`
+const ONCE = "\r"
+const REJECT = "\u001b[B\u001b[B\r"
 
 const bot = (runner: string, path = `C:/p/.nikcli/agent/${runner}.md`): AgentFile => ({
   identifier: runner,
@@ -187,8 +209,120 @@ describe("the Bots panel's turns", () => {
     const nikcli = bot("nikcli")
     p.turns.send(nikcli, "ciao")
     await tick()
+    m.print(menu("bash", "git push --force"))
     p.turns.answer(nikcli, "once")
-    expect(m.writes.length).toBe(1)
+    expect(m.writes).toEqual([ONCE])
+    // No question on screen: an answer goes nowhere.
+    p.turns.answer(nikcli, "once")
+    expect(m.writes).toEqual([ONCE])
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
+  /* B8c: approvals in the bot's chat. */
+  test("the panel's nikcli turn has nikcli ask, since the panel answers", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    expect(m.flags.at(-1)).toContain("bot-ask-shell")
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
+  test("an everyday command goes through without a question", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    m.print(menu("bash", "git status"))
+    expect(m.writes).toEqual([ONCE])
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
+  test("a blocked command never runs, whatever the bot's «Sempre» holds", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.kept[nikcli.path] = ["recursiveDelete", "deleteRoot", "disk", "power"]
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    m.print(menu("bash", "rm -rf /"))
+    expect(m.writes).toEqual([REJECT])
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    expect(p.talk(nikcli.path).messages.at(-1)).toMatchObject({ role: "error" })
+    expect(p.talk(nikcli.path).messages.at(-1)!.text).toContain("rm -rf /")
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
+  test("a dangerous command waits with its reason; «Sempre» holds for this bot and not for another", async () => {
+    const m = machine()
+    const p = panel(m)
+    const first = bot("nikcli", "C:/u/.nikcli/agent/primo.md")
+    const second = bot("nikcli", "C:/u/.nikcli/agent/secondo.md")
+    p.turns.send(first, "ciao")
+    await tick()
+    m.print(menu("bash", "git push --force origin main"))
+    expect(m.writes).toEqual([])
+    const asked = p.talk(first.path).permission!
+    expect(asked).toMatchObject({ always: "gitRewrite" })
+    expect(asked.reason).toBeTruthy()
+    expect(asked.expiresAt! - asked.askedAt).toBe(300_000)
+    p.turns.answer(first, "always")
+    // ADE's «Sempre», sent to nikcli as a once: never nikcli's own «always» (one arrow down).
+    expect(m.writes).toEqual([ONCE])
+    expect(p.kept[first.path]).toEqual(["gitRewrite"])
+
+    // The same kind again, for the same bot: through.
+    m.print(menu("bash", "git push -f"))
+    expect(m.writes).toEqual([ONCE, ONCE])
+
+    // Another bot: asked.
+    p.turns.send(second, "ciao")
+    await tick()
+    m.print(menu("bash", "git push -f"))
+    expect(m.writes).toEqual([ONCE, ONCE])
+    expect(p.talk(second.path).permission).toMatchObject({ always: "gitRewrite" })
+    p.turns.answer(second, "reject")
+    expect(m.writes).toEqual([ONCE, ONCE, REJECT])
+    expect(p.kept[second.path]).toBeUndefined()
+    p.turns.stop(first)
+    p.turns.stop(second)
+    await tick()
+  })
+
+  test("no answer in time is a Nega, said in the thread", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    m.print(menu("external_directory", "C:/Users/me/*"))
+    expect(p.talk(nikcli.path).permission).toMatchObject({ always: "outside:C:/Users/me/*" })
+    const timer = p.timers.at(-1)!
+    expect(timer.ms).toBe(300_000)
+    timer.run()
+    expect(m.writes).toEqual([REJECT])
+    expect(p.talk(nikcli.path).permission).toBeUndefined()
+    expect(p.talk(nikcli.path).messages.at(-1)!.text).toContain("C:/Users/me/*")
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
+  test("an answer in time cancels the Nega", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    m.print(menu("bash", "rm -rf build"))
+    p.turns.answer(nikcli, "once")
+    expect(p.timers.at(-1)!.cancelled).toBe(true)
     p.turns.stop(nikcli)
     await tick()
   })

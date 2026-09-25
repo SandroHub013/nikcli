@@ -31,6 +31,7 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
+import { APPROVAL_TIMEOUT_MS } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
@@ -715,14 +716,24 @@ function Thread(props: {
                   {" "}
                   {t("bots.permission.on")} <code>{asked().patterns}</code>
                 </Show>
+                {/* B8c: why ADE stops it, and that silence is a no. */}
+                <Show when={asked().reason}>
+                  {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
+                </Show>
+                <Show when={asked().expiresAt}>
+                  <span data-slot="bots-permission-why">{t("bots.approval.timeout", APPROVAL_TIMEOUT_MS / 60_000)}</span>
+                </Show>
               </span>
               <span data-slot="bots-permission-actions">
                 <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
-                  {t("bots.permission.reject")}
+                  {t("bots.permission.deny")}
                 </button>
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
-                  {t("bots.permission.always")}
-                </button>
+                {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
+                <Show when={asked().always}>
+                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
+                    {t("bots.approval.always")}
+                  </button>
+                </Show>
                 <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
                   {t("bots.permission.allow")}
                 </button>

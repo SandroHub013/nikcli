@@ -166,6 +166,12 @@ fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
 /// the user's rule whole, folders allowed one by one included, where an object
 /// would replace only its `*` (never outside the folder). The page answers
 /// every question: on the phone, or no at once with the commands off.
+///
+/// A turn in ADE (B8c) has nikcli ask about every command and about going
+/// outside the project, so that the page can answer each one: an everyday
+/// command at once, a blocked one never, a dangerous one after the user said
+/// so. A bot without a shell gets only the second. The bot's own file still
+/// wins over this, as it does for a chat's turn (`gateway/policy.ts`).
 const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
     ("no-project-config", "nikcli", "NIKCLI_DISABLE_PROJECT_CONFIG", "1"),
     (
@@ -180,6 +186,8 @@ const SPAWN_FLAGS: &[(&str, &str, &str, &str)] = &[
         "NIKCLI_PERMISSION",
         r#"{"bash":"ask","external_directory":"ask","computer":"deny","browser_control":"deny"}"#,
     ),
+    ("bot-ask-shell", "nikcli", "NIKCLI_PERMISSION", r#"{"bash":"ask","external_directory":"ask"}"#),
+    ("bot-ask-outside", "nikcli", "NIKCLI_PERMISSION", r#"{"external_directory":"ask"}"#),
 ];
 
 /// The variables `flags` stand for, or why one is refused.
@@ -2049,6 +2057,10 @@ mod tests {
             );
         }
         assert!(super::spawn_flag_env("claude", &["remote-no-shell".to_string()]).is_err());
+        // A turn in ADE (B8c): every command and every step outside asked, for the page to answer.
+        assert_eq!(permission("bot-ask-shell"), serde_json::json!({ "bash": "ask", "external_directory": "ask" }));
+        assert_eq!(permission("bot-ask-outside"), serde_json::json!({ "external_directory": "ask" }));
+        assert!(super::spawn_flag_env("claude", &["bot-ask-shell".to_string()]).is_err());
     }
 
     #[test]

@@ -14,10 +14,24 @@
  * forgotten is left behind: whatever it still says goes nowhere.
  */
 
+import { t } from "../i18n"
 import type { BotAccount } from "./account"
+import { APPROVAL_TIMEOUT_MS, decide, localAlwaysStore, type AlwaysStore } from "./approval"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
-import { answerKeys, applyExit, applyProblem, noticePermission, permissionAnswered, sendMessage, emptyTalk, type PermissionAnswer, type Talk } from "./talk"
+import {
+  answerKeys,
+  appendMessage,
+  applyExit,
+  applyProblem,
+  noticePermission,
+  permissionAnswered,
+  sendMessage,
+  emptyTalk,
+  type PendingPermission,
+  type PermissionAnswer,
+  type Talk,
+} from "./talk"
 import type { Turn, TurnRequest } from "./turn"
 
 /**
@@ -33,11 +47,21 @@ export interface BotTurnsDeps {
   readonly update: (path: string, change: (talk: Talk) => Talk) => void
   /** The bot's account in ADE. Absent is a subscription. */
   readonly accountOf?: (path: string) => BotAccount
+  /** Each bot's «Sempre» (B8c). */
+  readonly always?: AlwaysStore
+  /** Runs `run` after `ms`; the function returned cancels it. For tests. */
+  readonly schedule?: (run: () => void, ms: number) => () => void
+  readonly now?: () => number
 }
 
 export interface BotTurns {
   /** Starts a turn of `bot` on `message`; false when one is already running. */
   send: (bot: AgentFile, message: string, cwd?: string) => boolean
+  /**
+   * The user's answer to the question on screen: Consenti (`once`), Nega
+   * (`reject`), or Sempre (`always`), which is ADE's for this bot and goes to
+   * nikcli as a once: nikcli's own «always» is the project's, every bot's.
+   */
   answer: (bot: AgentFile, choice: PermissionAnswer) => void
   /** «Ferma»: the turn ends, with its child processes; the thread stays. */
   stop: (bot: AgentFile) => void
@@ -48,6 +72,57 @@ export interface BotTurns {
 
 export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const turns = new Map<string, Turn>()
+  const always = deps.always ?? localAlwaysStore()
+  const now = deps.now ?? Date.now
+  const schedule =
+    deps.schedule ??
+    ((run: () => void, ms: number) => {
+      const timer = setTimeout(run, ms)
+      return () => clearTimeout(timer)
+    })
+  /** The Nega waiting on each bot's open question. */
+  const expiries = new Map<string, () => void>()
+  const cancelExpiry = (path: string) => {
+    expiries.get(path)?.()
+    expiries.delete(path)
+  }
+
+  /** Answers nikcli's menu and closes the question; a line in the thread when there is something to say. */
+  const reply = (path: string, turn: Turn, answer: "once" | "reject", line?: string) => {
+    cancelExpiry(path)
+    turn.write?.(answerKeys(answer))
+    const at = now()
+    deps.update(path, (talk) => {
+      const answered = permissionAnswered(talk, at)
+      return line ? appendMessage(answered, { role: "error", text: line }, at) : answered
+    })
+  }
+
+  /**
+   * A question nikcli just asked (B8c): the block list refuses it, the bot's
+   * «Sempre» or an everyday command lets it through, and anything else stays
+   * on screen with Consenti, Nega and Sempre, until it expires as a Nega.
+   */
+  const settle = (bot: AgentFile, turn: Turn, asked: PendingPermission) => {
+    const path = bot.path
+    const verdict = decide(asked.permission, asked.patterns, always.get(path))
+    if (verdict.kind === "block") return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
+    if (verdict.kind === "allow") return reply(path, turn, "once")
+    const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
+    deps.update(path, (talk) =>
+      talk.permission === asked ? { ...talk, permission: { ...asked, reason: verdict.reason, always: verdict.key, expiresAt } } : talk,
+    )
+    cancelExpiry(path)
+    expiries.set(
+      path,
+      schedule(() => {
+        expiries.delete(path)
+        const still = deps.talkOf(path).permission
+        if (turns.get(path) !== turn || still?.askedAt !== asked.askedAt) return
+        reply(path, turn, "reject", t("bots.approval.expired", asked.patterns))
+      }, APPROVAL_TIMEOUT_MS),
+    )
+  }
 
   const send = (bot: AgentFile, message: string, cwd?: string): boolean => {
     const path = bot.path
@@ -69,19 +144,26 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       ...(cwd ? { cwd } : {}),
       // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).
       lean: true,
+      // nikcli asks, `settle` answers (B8c).
+      approvals: true,
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       onLine: (line) => {
         if (current()) deps.update(path, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
       },
       /* Only nikcli draws a permission menu; the others decide up front. */
       onData: (chunk) => {
-        if (current() && runner.id === "nikcli") deps.update(path, (talk) => noticePermission(talk, chunk, Date.now()))
+        if (!current() || runner.id !== "nikcli") return
+        const before = deps.talkOf(path).permission
+        deps.update(path, (talk) => noticePermission(talk, chunk, now()))
+        const asked = deps.talkOf(path).permission
+        if (asked && asked !== before) settle(bot, turn, asked)
       },
     })
     turns.set(path, turn)
     void turn.result.then((result) => {
       if (!current()) return
       turns.delete(path)
+      cancelExpiry(path)
       const at = Date.now()
       deps.update(path, (talk) => {
         if (result.status === "stopped") return applyExit(talk, null, at, runner.label)
@@ -97,6 +179,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const turn = turns.get(path)
     if (!turn) return undefined
     turns.delete(path)
+    cancelExpiry(path)
     turn.stop()
     return turn
   }
@@ -105,9 +188,10 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     send,
     answer: (bot, choice) => {
       const turn = turns.get(bot.path)
-      if (!turn) return
-      turn.write?.(answerKeys(choice))
-      deps.update(bot.path, (talk) => permissionAnswered(talk, Date.now()))
+      const asked = deps.talkOf(bot.path).permission
+      if (!turn || !asked) return
+      if (choice === "always" && asked.always) always.add(bot.path, asked.always)
+      reply(bot.path, turn, choice === "reject" ? "reject" : "once")
     },
     stop: (bot) => {
       if (!end(bot.path)) return

@@ -451,6 +451,25 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
  * it, and `project-trust.ts` asks about it.
  */
 describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
+  test("B8c: nikcli chiede di ogni comando solo a chi risponde (il pannello), mai alla voce", () => {
+    const global = { ...bot, scope: "global" as const }
+    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true }).flags).toEqual([
+      "no-project-config",
+      "bot-ask-shell",
+    ])
+    const noShell = { ...global, disabledTools: ["bash"] }
+    expect(turnCommand(runnerById("nikcli"), { bot: noShell, message: "x", approvals: true }).flags).toEqual([
+      "no-project-config",
+      "bot-ask-outside",
+    ])
+    // Without someone to answer, nothing is asked: the voice's turns stay as they were.
+    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x" }).flags).toEqual(["no-project-config"])
+    // A chat's turn keeps its own rules.
+    expect(
+      turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true, remote: { commands: false } }).flags,
+    ).toEqual(["no-project-config", "remote-no-shell"])
+  })
+
   test("il bot globale gira con no-project-config, quello di progetto no", () => {
     const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
     expect(mine.flags).toEqual(["no-project-config"])
