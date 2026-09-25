@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ChatError, streamChat } from "./client"
+import { ChatError, streamChat, DEFAULT_CHAT_MODEL, CHAT_MODELS } from "./client"
 
 const sse = (chunks: string[]): Response =>
   new Response(
@@ -127,5 +127,16 @@ describe("streamChat", () => {
     })
     expect(sent[0]).toEqual({ role: "system", content: "sii breve" })
     expect(sent[1]).toEqual({ role: "user", content: "ciao" })
+  })
+
+  test("preserves direct OpenRouter default and fallback models untouched", () => {
+    expect(DEFAULT_CHAT_MODEL).toBe("anthropic/claude-sonnet-4.5")
+    expect(CHAT_MODELS.map((m) => m.id)).toEqual([
+      "anthropic/claude-sonnet-4.5",
+      "anthropic/claude-opus-4.1",
+      "openai/gpt-5",
+      "google/gemini-2.5-pro",
+      "deepseek/deepseek-chat-v3.1",
+    ])
   })
 })
