@@ -81,6 +81,7 @@ describe("record/sensitive", () => {
     const noti = [
       { file: "secrets/keys-section.tsx", che: "la lista delle chiavi salvate (coda mascherata, variabile)" },
       { file: "secrets/keys-section.tsx", che: "il form: nome, variabile d'ambiente, valore" },
+      { file: "bots/gateway/panel.tsx", che: "il token del bot per il gateway (G6)" },
     ]
     for (const { file, che } of noti) {
       const text = readFileSync(join(src, file), "utf8")
@@ -100,7 +101,7 @@ describe("record/sensitive", () => {
     const conPassword = sources()
       .filter((path) => /type="password"|autocomplete="(new|current)-password"/.test(readFileSync(path, "utf8")))
       .map((path) => path.slice(src.length + 1).replace(/\\/g, "/"))
-    expect(conPassword).toEqual(["secrets/keys-section.tsx"])
+    expect(conPassword).toEqual(["bots/gateway/panel.tsx", "secrets/keys-section.tsx"])
   })
 
   test("a take covers them and the end of the take uncovers them", () => {

@@ -127,6 +127,11 @@ pub trait Adapter: Send + Sync {
     async fn typing(&self, _chat: &str) -> Result<(), AdapterError> {
         Ok(())
     }
+    /// The bot's own name on the platform, for the panel's «Prova»: the token
+    /// works, and it is this bot's.
+    async fn whoami(&self) -> Result<String, AdapterError> {
+        Err(AdapterError::Unsupported)
+    }
 }
 
 /// The tests' adapter: batches go in through a channel, what is sent is kept.
@@ -197,6 +202,9 @@ pub mod fake {
         }
         fn cursor(&self) -> Option<String> {
             self.position.lock().unwrap().clone()
+        }
+        async fn whoami(&self) -> Result<String, AdapterError> {
+            Ok("@finto_bot\u{202e}".into())
         }
     }
 }
