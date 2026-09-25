@@ -4789,6 +4789,22 @@ export function Workbench() {
       })().catch(() => {})
     }
 
+    // The bots' gateways: a message from a chat becomes a turn of its bot (G4).
+    // Rust reads no chat until this listens; the cleanup is registered before
+    // the await, so a reloaded workbench never answers a chat twice.
+    if (isTauriDesktop()) {
+      let gateway: { stop: () => void } | undefined
+      let gatewayGone = false
+      onCleanup(() => {
+        gatewayGone = true
+        gateway?.stop()
+      })
+      void import("../bots/gateway/bridge")
+        .then(({ startAppGatewayController }) => startAppGatewayController())
+        .then((started) => (gatewayGone ? started.stop() : (gateway = started)))
+        .catch((error) => console.warn("ADE: gateway dei bot non avviato", error))
+    }
+
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)) {
       /*
        * The cleanup is registered here, before the first await. It used to be
