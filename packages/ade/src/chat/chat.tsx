@@ -33,6 +33,7 @@ import {
 import { MessageParts, PermissionCard, QuestionCard, RulesNote } from "./parts"
 import { isOpenOn, useFolder } from "./first-use"
 import { stopAnswer } from "./stop"
+import { forgetLegacyConversation } from "./legacy"
 import { requestProblem, retryNotice } from "./errors"
 import { answerUsage, answerUsageText, sessionUsage, sessionUsageText } from "./usage"
 import { SessionList } from "./session-list"
@@ -52,6 +53,8 @@ import "./chat.css"
 
 const MODEL_KEY = "ade.chat.model"
 const AGENT_KEY = "ade.chat.agent"
+// The direct path's old conversation (`legacy.ts`) goes the first time the Chat starts in this window.
+let legacyForgotten = false
 
 const STATUS = {
   noProject: "chat.status.noProject",
@@ -140,6 +143,10 @@ export function Chat(props: ChatProps) {
   const use = () => useFolder(store, props.projectRoot, applyCatalog)
 
   onMount(() => {
+    if (!legacyForgotten) {
+      legacyForgotten = true
+      forgetLegacyConversation()
+    }
     composer?.focus()
     // Back to a folder already in use: its catalog is the store's, kept per opening.
     if (isOpenOn(store, props.projectRoot)) void use()
