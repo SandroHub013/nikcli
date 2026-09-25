@@ -66,6 +66,17 @@ impl Env for AppEnv {
     }
 }
 
+/// ADE opened: the hub is made now, and the gateways the user left on start
+/// again. Each reads once the page says it listens (`gateway_ready`).
+pub fn resume(app: &AppHandle) {
+    match hub(app) {
+        Ok(hub) => {
+            tauri::async_runtime::spawn(async move { hub.resume() });
+        }
+        Err(error) => eprintln!("ADE: gateway non avviato: {error}"),
+    }
+}
+
 fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     let state = app.state::<Gateway>();
     if let Some(hub) = state.0.get() {
@@ -92,6 +103,13 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
 /// The adapter for `platform`. None exists yet: each comes with its own piece.
 fn adapter_for(platform: Platform, _token: &str, _cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     Err(format!("il gateway per {} non è ancora disponibile", platform.id()))
+}
+
+/// The page listens for `gateway:message`: the gateways may start reading.
+#[tauri::command]
+pub async fn gateway_ready(app: AppHandle) -> Result<(), String> {
+    hub(&app)?.ready();
+    Ok(())
 }
 
 #[tauri::command]

@@ -1925,6 +1925,8 @@ pub fn run() {
             agent_link::sweep(app.handle());
             // `ade-msg` on disk before any session can look for it.
             mailbox::install(app.handle());
+            // The bots' gateways the user left on; they read once the page listens.
+            gateway::resume(app.handle());
             if let Err(error) = open_main_window(app.handle()) {
                 eprintln!("ADE: impossibile aprire la finestra: {error}");
                 return Err(Box::new(error));
@@ -1986,6 +1988,7 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             pty::pty_which,
+            gateway::gateway_ready,
             gateway::gateway_status,
             gateway::gateway_set_token,
             gateway::gateway_clear_token,

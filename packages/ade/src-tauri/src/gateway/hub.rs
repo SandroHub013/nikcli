@@ -164,6 +164,10 @@ pub struct Hub {
     /// Links switched on that could not start (no token, a platform refused):
     /// the panel shows why, and they stay on for the user to fix.
     failed: Mutex<HashMap<(String, Platform), String>>,
+    /// Whether the page listens for messages. Until it does, no gateway
+    /// reads: a message read then would be handed to nobody, and its
+    /// position saved as if it had been.
+    ready: watch::Sender<bool>,
     /// The first pause after a failed read, and the longest.
     backoff: (Duration, Duration),
 }
@@ -211,6 +215,7 @@ impl Hub {
             connect,
             links: Mutex::new(HashMap::new()),
             failed: Mutex::new(HashMap::new()),
+            ready: watch::channel(false).0,
             backoff: (Duration::from_secs(1), Duration::from_secs(300)),
         }
     }
@@ -313,6 +318,19 @@ impl Hub {
         (self.connect)(platform, &token, cursor).map_err(|error| redact(&error, &[token]))
     }
 
+    /// Starts every gateway the user left switched on: ADE opened. Each waits
+    /// for the page to listen before it reads.
+    pub fn resume(&self) {
+        for link in self.store.read().links.into_iter().filter(|link| link.enabled) {
+            self.relaunch(&link.bot, link.platform);
+        }
+    }
+
+    /// The page listens for `gateway:message`: the gateways may read.
+    pub fn ready(&self) {
+        self.ready.send_replace(true);
+    }
+
     /// Starts a link that is switched on again, from what is saved: after a
     /// new token, or when ADE opens. If it cannot, it stays on with the reason.
     fn relaunch(&self, bot: &str, platform: Platform) {
@@ -348,7 +366,7 @@ impl Hub {
             secrets: self.secrets(),
             backoff: self.backoff,
         };
-        tokio::spawn(task.run(stopped));
+        tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, live });
     }
 
@@ -580,7 +598,11 @@ impl Task {
         });
     }
 
-    async fn run(self, mut stopped: watch::Receiver<bool>) {
+    async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
+        tokio::select! {
+            _ = stopped.changed() => return,
+            _ = ready.wait_for(|ready| *ready) => {}
+        }
         let mut pause = self.backoff.0;
         loop {
             let read = tokio::select! {
@@ -797,6 +819,7 @@ mod tests {
         });
         let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
             .with_backoff(Duration::from_millis(5), Duration::from_millis(20));
+        hub.ready();
         Setup { hub, env, path, made }
     }
 
@@ -1116,6 +1139,61 @@ mod tests {
         s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
         assert_eq!(s.made.lock().unwrap().len(), 2);
         assert!(!s.hub.status()[0].running);
+    }
+
+    #[tokio::test]
+    async fn when_ade_opens_the_gateways_left_on_start_again_once_the_page_listens() {
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-resume-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state.json");
+        let vault = Arc::new(MapVault::default());
+        let before = setup_with(path.clone(), vault.clone());
+        authorize(&before, "42");
+        start(&before);
+        before.hub.store.update(BOT, Platform::Fake, |link, _| {
+            link.cursor = Some("1001".into());
+            Ok(())
+        }).unwrap();
+        // One switched on without a token, one switched off.
+        let other = "C:/progetto/.nikcli/agent/senza-token.md";
+        before.hub.store.update(other, Platform::Fake, |link, _| {
+            link.enabled = true;
+            link.project = Some("C:/progetto".into());
+            Ok(())
+        }).unwrap();
+        before.hub.store.update("C:/progetto/.nikcli/agent/spento.md", Platform::Fake, |_, _| Ok(())).unwrap();
+        before.hub.shutdown();
+
+        // ADE opens again: same state file, same keychain, a new hub.
+        let env = Arc::new(Recorder::default());
+        let made: Made = Arc::default();
+        let record = made.clone();
+        let connect: Connect = Arc::new(move |_platform, token: &str, cursor: Option<String>| {
+            let (adapter, feed) = FakeAdapter::new();
+            record.lock().unwrap().push((token.to_string(), cursor, adapter.clone(), feed));
+            Ok(adapter as Arc<dyn Adapter>)
+        });
+        let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect);
+        let s = Setup { hub, env, path, made };
+        s.hub.resume();
+        {
+            let made = s.made.lock().unwrap();
+            assert_eq!(made.len(), 1, "solo quello acceso e con il token");
+            assert_eq!((made[0].0.as_str(), made[0].1.as_deref()), (TOKEN, Some("1001")));
+        }
+        let (adapter, feed) = last_made(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "mentre ADE si apre")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert_eq!(adapter.receives.load(std::sync::atomic::Ordering::SeqCst), 0, "non legge prima che la pagina ascolti");
+        s.hub.ready();
+        eventually("il messaggio arriva quando la pagina ascolta", || s.env.messages.lock().unwrap().len() == 1).await;
+        let status = s.hub.status();
+        let running = status.iter().find(|status| status.bot == BOT).unwrap();
+        assert!(running.enabled && running.running);
+        let missing = status.iter().find(|status| status.bot == other).unwrap();
+        assert!(missing.enabled && !missing.running);
+        assert!(missing.last_error.as_deref().is_some_and(|error| error.contains("manca il token")), "{missing:?}");
+        assert!(s.env.statuses.lock().unwrap().iter().any(|status| status.bot == other && status.last_error.is_some()));
     }
 
     #[tokio::test]
