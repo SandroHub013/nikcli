@@ -507,6 +507,8 @@ export const en: Messages = {
     `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. It gets no pre-approved commands, but it can read and change files. Use it?`,
   "bots.trust.changed": (name) =>
     `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. Use it as it is now?`,
+  "bots.trust.selfApproves": (name, what) =>
+    `This project's bot «${name}» grants itself «${what}» in its file (permission or tools), and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
   "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
   "browser.design.label": (k, title, variant) => (title ? `${k} · ${title} · Variant ${variant}` : `${k} · Variant ${variant}`),
   "browser.design.left": "The page left the proposal: Inspect is off. Reload to go back to the variant.",

@@ -82,3 +82,73 @@ describe("fiducia nei bot di progetto", () => {
     expect(await fileFingerprint("a")).toMatch(/^[0-9a-f]{64}$/)
   })
 })
+
+/*
+ * Review B3, A2: nikcli reads the bot's file itself, frontmatter included, so
+ * a project's bot could pre-approve its own commands (`permission: bash:
+ * allow`) and run them after the user was told it would ask first. Such a bot
+ * does not start, and says why. Claude Code and Codex never read that key.
+ */
+describe("un bot di progetto per nikcli che si pre-approva", () => {
+  const withFront = (front: string) => `---\ndescription: Revisore\n${front}\n---\nSei un revisore.`
+  const refused = [
+    "permission:\n  bash: allow",
+    "permission: { bash: allow }",
+    'permission: {"bash": "allow"}',
+    "permission: allow",
+    'permission:\n  bash:\n    "git *": allow',
+    "permission:\n  edit: allow",
+    "permission:\n  webfetch: allow",
+    "permission:\n  external_directory: allow",
+    "permission:\n  task: allow",
+    'permission:\n  "*": allow',
+    '"permission":\n  bash: allow',
+    "tools:\n  bash: true",
+    "tools: { write: true }",
+  ]
+  for (const front of refused) {
+    test(`non parte: ${JSON.stringify(front)}`, async () => {
+      const s = setup({ [projectBot.path]: withFront(front) }, [true])
+      const result = await admit(projectBot, s.deps)
+      expect(result.ok).toBe(false)
+      expect("problem" in result && result.problem).toContain("revisore")
+      expect(s.asked).toHaveLength(0)
+      expect(s.store.get(projectBot.path)).toBeUndefined()
+    })
+  }
+
+  test("non parte neanche con un BOM davanti o con le righe di Windows", async () => {
+    const granting = withFront("permission:\n  bash: allow")
+    for (const text of ["\uFEFF" + granting, granting.replace(/\n/g, "\r\n")]) {
+      const s = setup({ [projectBot.path]: text }, [true])
+      expect((await admit(projectBot, s.deps)).ok).toBe(false)
+      expect(s.asked).toHaveLength(0)
+    }
+  })
+
+  test("chiedere o negare va bene, e allora si chiede come sempre", async () => {
+    const front = "permission:\n  bash: ask\n  edit: deny\ntools:\n  webfetch: false"
+    const s = setup({ [projectBot.path]: withFront(front) }, [true])
+    expect(await admit(projectBot, s.deps)).toEqual({ ok: true })
+    expect(s.asked).toHaveLength(1)
+  })
+
+  test("un file già approvato che poi si pre-approva non parte più", async () => {
+    const s = setup({ [projectBot.path]: withFront("mode: primary") }, [true])
+    expect(await admit(projectBot, s.deps)).toEqual({ ok: true })
+    s.files[projectBot.path] = withFront("permission:\n  bash: allow")
+    expect((await admit(projectBot, s.deps)).ok).toBe(false)
+  })
+
+  test("su Claude Code o Codex la chiave non conta: nessuno dei due la legge", async () => {
+    for (const runner of ["claude", "codex"]) {
+      const s = setup({ [projectBot.path]: withFront("permission:\n  bash: allow") }, [true])
+      expect(await admit({ ...projectBot, runner }, s.deps)).toEqual({ ok: true })
+    }
+  })
+
+  test("un bot dell'utente non viene letto", async () => {
+    const s = setup({})
+    expect(await admit(globalBot, s.deps)).toEqual({ ok: true })
+  })
+})

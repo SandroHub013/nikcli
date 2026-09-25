@@ -512,6 +512,8 @@ export const it = {
     `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. Non avrà comandi pre-approvati, ma potrà leggere e modificare file. Lo usi?`,
   "bots.trust.changed": (name: string) =>
     `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. Lo usi così com'è ora?`,
+  "bots.trust.selfApproves": (name: string, what: string) =>
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file (permission o tools), e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   "browser.design.label": (k: string, title: string, variant: number) => (title ? `${k} · ${title} · Variante ${variant}` : `${k} · Variante ${variant}`),
   "browser.design.left": "La pagina è uscita dalla proposta: Ispeziona è spento. Ricarica per tornare alla variante.",

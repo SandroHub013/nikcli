@@ -183,6 +183,8 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
  * - Codex: read-only, always. `codex exec` forces `approval_policy` to never
  *   whatever `-c` says (review B3, A1), so the sandbox is the only limit, and
  *   `workspace-write` would let it run anything inside the project.
+ * - nikcli reads the file itself, so `trust.ts` refuses one that grants
+ *   itself permissions.
  */
 function fromRepository(bot: AgentFile): boolean {
   return bot.scope === "project"
