@@ -613,6 +613,8 @@ export const it = {
   "chat.permission.once": "Sì, questa volta",
   "chat.permission.reject": "No, rifiuta",
   "chat.session.emptyTitle": "Il titolo non può essere vuoto.",
+  "chat.permission.call": (tool: string) => `Chiamata: ${tool}`,
+  "chat.permission.diff": "La modifica proposta",
   "chat.rules.always":
     "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche qui: quella richiesta non comparirà.",
   "chat.question.label": "Domanda del modello",

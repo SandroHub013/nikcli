@@ -604,6 +604,8 @@ export const en: Messages = {
   "chat.permission.once": "Yes, this once",
   "chat.permission.reject": "No, refuse",
   "chat.session.emptyTitle": "The title cannot be empty.",
+  "chat.permission.call": (tool) => `Call: ${tool}`,
+  "chat.permission.diff": "The proposed change",
   "chat.rules.always":
     "The Chat asks before every command and every edit, but an «always» already given for this project (in nikcli's terminal, say) holds here too: that request will not show up.",
   "chat.question.label": "The model's question",

@@ -510,6 +510,49 @@
   overflow: auto;
 }
 
+[data-slot="chat-permission-call"] {
+  display: grid;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="chat-permission-call-head"] {
+  margin: 0;
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
+/* The change an edit would make: every line, scrolling inside its box. */
+[data-slot="chat-permission-diff"] {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--ade-space-2) 0;
+  border-radius: var(--ade-radius-sm);
+  background: var(--ade-sunken);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="chat-diff-line"] {
+  display: block;
+  padding: 0 var(--ade-space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-slot="chat-diff-line"][data-kind="add"] {
+  background: var(--ade-done-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="del"] {
+  background: var(--ade-error-bg);
+}
+
+[data-slot="chat-diff-line"][data-kind="hunk"],
+[data-slot="chat-diff-line"][data-kind="file"] {
+  color: var(--ade-text-soft);
+}
+
 [data-slot="chat-permission-actions"],
 [data-slot="chat-question-options"] {
   display: flex;
