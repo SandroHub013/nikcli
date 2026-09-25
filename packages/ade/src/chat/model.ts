@@ -180,17 +180,22 @@ export interface ChatAgentChoice {
   readonly description?: string
 }
 
-/** Whether a model is free of charge (input tokens cost 0 or :free in ID). */
+/** Whether a model is free of charge (id ends with :free or both input and output costs are 0 numbers). */
 export function isFreeModel(model: {
   readonly id: string
   readonly providerID?: string
   readonly cost?: { readonly input?: number; readonly output?: number }
 }): boolean {
-  if (model.id.includes(":free")) return true
-  if (model.cost !== undefined) {
-    return model.cost.input === 0 && (model.cost.output === 0 || model.cost.output === undefined)
+  if (model.id.endsWith(":free")) return true
+  if (
+    model.cost !== undefined &&
+    typeof model.cost.input === "number" &&
+    typeof model.cost.output === "number" &&
+    model.cost.input === 0 &&
+    model.cost.output === 0
+  ) {
+    return true
   }
-  if (model.providerID === "nikcli") return true
   return false
 }
 

@@ -229,13 +229,37 @@ describe("isFreeModel", () => {
     expect(isFreeModel({ id: "meta-llama/llama-3.3-70b-instruct:free" })).toBe(true)
   })
 
-  test("recognises free models by zero input cost", () => {
+  test("recognises free models only when both input and output costs are zero numbers", () => {
     expect(isFreeModel({ id: "custom/local", cost: { input: 0, output: 0 } })).toBe(true)
-    expect(isFreeModel({ id: "custom/local", cost: { input: 0 } })).toBe(true)
+    expect(isFreeModel({ id: "custom/local", cost: { input: 0 } })).toBe(false)
+    expect(isFreeModel({ id: "custom/local", cost: { input: 0, output: 1 } })).toBe(false)
   })
 
-  test("recognises nikcli bundled models without cost as free", () => {
-    expect(isFreeModel({ id: "nikcli-bundled", providerID: "nikcli" })).toBe(true)
+  test("a nikcli model without cost is not free and does not enter ADE Test", () => {
+    expect(isFreeModel({ id: "nikcli-bundled", providerID: "nikcli" })).toBe(false)
+
+    const list: ProviderList = {
+      all: [
+        {
+          id: "nikcli",
+          name: "nikcli",
+          source: "custom",
+          env: [],
+          options: {},
+          models: {
+            "custom-nocost": {
+              id: "custom-nocost",
+              name: "No Cost Model",
+              providerID: "nikcli",
+            } as any,
+          },
+        },
+      ],
+      default: {},
+      connected: ["nikcli"],
+    }
+    const testModels = modelsFromProviderList(list, { isTest: true })
+    expect(testModels.some((m) => m.name === "No Cost Model")).toBe(false)
   })
 
   test("recognises paid models", () => {
