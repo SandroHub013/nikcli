@@ -197,13 +197,13 @@ const shared = createRoot(() => {
    */
   createEffect(on(projectRoot, (root) => {
     const next = root ?? ""
+    // Project bots are recognised from their path, so this runs with no project open too.
+    if (!legacyMoved) {
+      legacyMoved = true
+      migrateTalkKeys(talkDisk, next)
+    }
     if (next === openProject) return
     openProject = next
-    // The first real project, not the empty value the signal starts with: a global bot's old thread lands here.
-    if (!legacyMoved && root !== undefined) {
-      legacyMoved = true
-      migrateTalkKeys(talkDisk, next ? [next] : [], next)
-    }
     setTalks((all) => {
       const kept: Record<string, Talk> = {}
       for (const [path, talk] of Object.entries(all)) {

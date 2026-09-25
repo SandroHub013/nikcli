@@ -481,32 +481,54 @@ function dropOldestTalks(disk: TalkDisk, except: string): boolean {
   return true
 }
 
-function underRoot(path: string, root: string): boolean {
-  const norm = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-  const file = norm(path)
-  const base = norm(root)
-  return base.length > 0 && (file === base || file.startsWith(`${base}/`))
+/**
+ * The project a bot file belongs to, from the path alone.
+ *
+ * nikcli keeps a project's agents in `<root>/.nikcli/agent/` and also
+ * `<root>/.nikcli/agents/` (`agentDirs`). The root is the part before that
+ * segment. A path without it is a global bot: its folder is not a project.
+ */
+export function projectOfBotPath(path: string): string | undefined {
+  const folded = path.replace(/\\/g, "/").toLowerCase()
+  let at = -1
+  for (const mark of ["/.nikcli/agents/", "/.nikcli/agent/"]) {
+    const found = folded.lastIndexOf(mark)
+    if (found > at) at = found
+  }
+  if (at <= 0) return undefined
+  const root = path.slice(0, at).replace(/[\\/]+$/, "")
+  return root.length > 0 ? root : undefined
 }
 
 /**
- * Once, when the panel knows which project is open.
+ * Once, even when no project is open.
  *
  * Threads saved as `ade.bots.talk:<path>` filled the quota and are never read
- * again. A project bot moves under that project, scrubbed and capped. A
- * global bot moves under the project open now, without its session id: the
- * folder it was born in is not in the old key. The old key is removed either
- * way, including when the value cannot be read.
+ * again. A project bot's root comes from its path, so a thread from another
+ * project is not filed under the one open now. A global bot, a path without
+ * that segment, moves under the open project (or "" when none is open),
+ * without its session id. The old key is removed before the new one is
+ * written: at a full quota the delete is what makes the write fit.
  */
-export function migrateTalkKeys(disk: TalkDisk, projectRoots: readonly string[], openProject: string): void {
+export function migrateTalkKeys(disk: TalkDisk, openProject: string): void {
   if (!disk.keys || !disk.removeItem) return
   const legacy = disk.keys().filter(isLegacyTalkKey)
   for (const key of legacy) {
     const path = key.slice(TALK_KEY_PREFIX.length)
+    let raw: string | null = null
     try {
-      const talk = parseTalk(disk.getItem(key))
-      const root = projectRoots
-        .filter((candidate) => underRoot(path, candidate))
-        .sort((a, b) => b.length - a.length)[0]
+      raw = disk.getItem(key)
+    } catch {
+      raw = null
+    }
+    try {
+      disk.removeItem(key)
+    } catch {
+      // Still try to write what was read. The old key staying is the worse miss.
+    }
+    try {
+      const talk = parseTalk(raw)
+      const root = projectOfBotPath(path)
       if (root) {
         disk.setItem(talkKey(path, root), serializeTalk(talk))
       } else {
@@ -514,12 +536,7 @@ export function migrateTalkKeys(disk: TalkDisk, projectRoots: readonly string[],
         disk.setItem(talkKey(path, openProject), serializeTalk(rest))
       }
     } catch {
-      // Unreadable, or the new key would not fit. The old one still goes.
-    }
-    try {
-      disk.removeItem(key)
-    } catch {
-      // A key left behind is the quota problem this pass exists to close.
+      // The old key is already gone. A write that does not fit loses this thread.
     }
   }
 }
