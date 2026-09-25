@@ -50,6 +50,8 @@ pub struct MessageSender {
 pub struct LinkStatus {
     pub bot: String,
     pub platform: Platform,
+    /// False once a fatal error stopped it: it stays on, but nothing reads.
+    pub running: bool,
     pub connected: bool,
     pub last_error: Option<String>,
     pub last_message_ms: Option<u64>,
@@ -137,6 +139,8 @@ struct Live {
     connected: bool,
     last_error: Option<String>,
     last_message_ms: Option<u64>,
+    /// A fatal error ended the task: switched on, but not reading or answering.
+    stopped: bool,
 }
 
 struct Running {
@@ -321,11 +325,14 @@ impl Hub {
 
     /// The running adapter, when `chat` is one an authorized sender wrote from.
     fn reply_target(&self, bot: &str, platform: Platform, chat: &str) -> Result<Arc<dyn Adapter>, String> {
-        let adapter = self
+        let (adapter, live) = self
             .links()
             .get(&(bot.to_string(), platform))
-            .map(|running| running.adapter.clone())
+            .map(|running| (running.adapter.clone(), running.live.lock().map(|live| live.clone()).unwrap_or_default()))
             .ok_or_else(|| "il gateway di questo bot è spento".to_string())?;
+        if live.stopped {
+            return Err(format!("il gateway di questo bot si è fermato: {}", live.last_error.unwrap_or_default()));
+        }
         let known = self.store.link(bot, platform).is_some_and(|link| link.knows_chat(chat));
         if !known {
             return Err("questa chat non ha mai scritto al bot da un account autorizzato".into());
@@ -451,6 +458,8 @@ impl Hub {
             .map(|link| {
                 let running = links.get(&(link.bot.clone(), link.platform));
                 let live = running.map(|running| running.live.lock().map(|live| live.clone()).unwrap_or_default()).unwrap_or_default();
+                // A task a fatal error ended is not running, though the link stays on.
+                let running = running.filter(|_| !live.stopped);
                 StatusInfo {
                     capabilities: running.map(|running| running.adapter.capabilities()),
                     running: running.is_some(),
@@ -508,6 +517,7 @@ impl Task {
         self.env.status(&LinkStatus {
             bot: self.bot.clone(),
             platform: self.platform,
+            running: !live.stopped,
             connected: live.connected,
             last_error: live.last_error,
             last_message_ms: live.last_message_ms,
@@ -553,6 +563,7 @@ impl Task {
                     self.report(|live| {
                         live.connected = false;
                         live.last_error = Some(error);
+                        live.stopped = true;
                     });
                     break;
                 }
@@ -895,6 +906,13 @@ mod tests {
         let status = s.hub.status();
         assert_eq!(status[0].last_error.as_deref(), Some("token rifiutato dalla piattaforma"));
         assert!(status[0].enabled, "resta acceso finché l'utente non lo spegne");
+        // But it is not running: the panel says so, and nothing is answered.
+        assert!(!status[0].running);
+        assert!(status[0].capabilities.is_none());
+        assert!(!s.env.statuses.lock().unwrap().last().unwrap().running);
+        let refused = s.hub.send(BOT, Platform::Fake, "c42", "ci sei?").await.unwrap_err();
+        assert!(refused.contains("si è fermato") && refused.contains("token rifiutato"), "{refused}");
+        assert_eq!(adapter.sent.lock().unwrap().len(), 0);
     }
 
     #[tokio::test]
