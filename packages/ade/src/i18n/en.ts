@@ -1245,8 +1245,6 @@ export const en: Messages = {
   "design.noProject.short": "no project open",
 
   // Chat
-  "chat.aborted": "Stopped.",
-  "chat.error.fallback": "Something went wrong.",
   "chat.model.label": "Model",
   "chat.model.free": "free",
   "chat.model.choose": "Choose a model",
@@ -1254,9 +1252,6 @@ export const en: Messages = {
   "chat.agent.label": "Agent",
   "chat.agent.none": "No agents available",
   "chat.new": "New conversation",
-  "chat.needKey": "You need an OpenRouter key.",
-  "chat.openSettings": "Open voice settings",
-  "chat.sameAsAssistant": "— it's the same one the assistant uses.",
   "chat.empty.title": "Ask something.",
   "chat.empty.body": "A conversation with nikcli in this project: it reads files on its own, and asks you before every command or edit.",
   "chat.input.placeholder": "Type a message…",

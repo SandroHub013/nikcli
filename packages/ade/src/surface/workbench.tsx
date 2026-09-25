@@ -7389,13 +7389,7 @@ export function Workbench() {
           </Show>
 
           <Show when={wb().view === "chat" && isViewVisible("chat")}>
-            {/* The same credential the assistant uses. Asking for it twice is
-                a way to get one of the two wrong. */}
-            <Chat
-              apiKey={voiceSettings().openRouterApiKey ?? ""}
-              onOpenSettings={() => setVoiceSettingsOpen(true)}
-              projectRoot={project()?.root}
-            />
+            <Chat projectRoot={project()?.root} />
           </Show>
 
           <Show when={wb().view === "bot" && isViewVisible("bot")}>

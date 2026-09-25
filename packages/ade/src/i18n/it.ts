@@ -1256,8 +1256,6 @@ export const it = {
   "design.noProject.short": "nessun progetto aperto",
 
   // Chat
-  "chat.aborted": "Interrotto.",
-  "chat.error.fallback": "Qualcosa è andato storto.",
   "chat.model.label": "Modello",
   "chat.model.free": "gratis",
   "chat.model.choose": "Scegli un modello",
@@ -1265,9 +1263,6 @@ export const it = {
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.new": "Nuova conversazione",
-  "chat.needKey": "Serve una chiave OpenRouter.",
-  "chat.openSettings": "Aprila nelle impostazioni vocali",
-  "chat.sameAsAssistant": "— è la stessa che usa l'assistente.",
   "chat.empty.title": "Chiedi qualcosa.",
   "chat.empty.body": "Una conversazione con nikcli in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
   "chat.input.placeholder": "Scrivi un messaggio…",
