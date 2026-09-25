@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import {
   addAttachment,
   attachmentFor,
@@ -6,6 +7,7 @@ import {
   completeMention,
   fileUrl,
   isEnvFile,
+  mentionCandidates,
   insideProject,
   mentionAt,
   mimeOf,
@@ -83,6 +85,29 @@ describe("a file of the project, and nothing else", () => {
     for (const path of ["env.ts", "src/.envrc", "docs/dotenv.md", ".environment"]) {
       expect([path, isEnvFile(path)]).toEqual([path, false])
     }
+  })
+
+  test("@ offers neither binaries nor .env; images and PDFs stay, they go as media", () => {
+    expect(
+      mentionCandidates([
+        "src/app.ts",
+        "bin/ade.exe",
+        "lib/native.DLL",
+        "dist/app.wasm",
+        "release.zip",
+        "fonts/inter.woff2",
+        "data/app.sqlite",
+        "docs/schema.png",
+        "docs/spec.pdf",
+        ".env",
+        "Makefile",
+      ]),
+    ).toEqual(["src/app.ts", "docs/schema.png", "docs/spec.pdf", "Makefile"])
+  })
+
+  test("the view offers only mentionCandidates", () => {
+    const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
+    expect(view).toMatch(/setMentionResults\(mentionCandidates\(/)
   })
 
   test("the same file twice is one attachment", () => {

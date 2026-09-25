@@ -84,6 +84,32 @@ export function isEnvFile(path: string): boolean {
   return name === ".env" || name.startsWith(".env.")
 }
 
+/*
+ * Files `@` does not offer (C6 review): programs, libraries, archives,
+ * compiled output, fonts, audio and video, databases. Sent as text they are
+ * noise to the model; images and PDFs are not here, they go as media.
+ */
+const BINARY = new Set(
+  (
+    "exe dll so dylib bin o obj a lib pdb class jar war pyc pyo node wasm " +
+    "zip gz tgz bz2 xz 7z rar tar zst iso dmg msi cab deb rpm apk " +
+    "woff woff2 ttf otf eot ico " +
+    "mp3 wav flac ogg m4a aac mp4 mkv mov avi webm " +
+    "db sqlite sqlite3 mdb bak dat"
+  ).split(" "),
+)
+
+/** A file `@` should not offer: by its extension (`BINARY`). */
+export function isBinaryPath(path: string): boolean {
+  const extension = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase()
+  return extension !== undefined && BINARY.has(extension)
+}
+
+/** What `@` offers of the server's matches: not a `.env`, not a binary. */
+export function mentionCandidates(paths: readonly string[]): string[] {
+  return paths.filter((path) => !isEnvFile(path) && !isBinaryPath(path))
+}
+
 /** An attachment for `path` in `root`, or undefined when the path is outside it. */
 export function attachmentFor(root: string, path: string): Attachment | undefined {
   const absolute = insideProject(root, path)

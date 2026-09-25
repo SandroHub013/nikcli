@@ -40,6 +40,7 @@ import {
   completeMention,
   isEnvFile,
   mentionAt,
+  mentionCandidates,
   type Attachment,
 } from "./attachments"
 import { composerAction, liveAnnouncement } from "./composer"
@@ -272,7 +273,7 @@ export function Chat(props: ChatProps) {
         if (!(await use())) return
         const paths = await store.findFiles(found.query).catch(() => [] as string[])
         if (ask !== mentionAsk) return
-        setMentionResults(paths.filter((path) => !isEnvFile(path)))
+        setMentionResults(mentionCandidates(paths))
         setMentionIndex(0)
       })()
     }, 120)
