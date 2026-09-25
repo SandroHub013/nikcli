@@ -6,6 +6,12 @@
  * continues where the last turn left off, and `/nuova` forgets it. Apart
  * from the Bots panel's thread with the same bot: a message from the phone
  * does not land in the conversation on screen, nor the other way round.
+ *
+ * A session belongs to one CLI in one folder: it is kept with the project and
+ * the runner it ran in, and one saved for another is not continued (G4
+ * review, BASSO 2). The gateway switched on for another project, or the bot
+ * moved to another CLI, starts a new conversation instead of failing on
+ * every message until `/nuova`.
  */
 
 /** The one place a chat's key is made: `bot:platform:chat[:thread]`. */
@@ -13,26 +19,46 @@ export function sessionKey(bot: string, platform: string, chat: string, thread?:
   return [bot, platform, chat, ...(thread ? [thread] : [])].join(":")
 }
 
+export interface ChatSession {
+  readonly project: string
+  readonly runner: string
+  readonly sessionId: string
+}
+
 /** The CLI session each chat continues. */
 export interface SessionStore {
-  get: (key: string) => string | undefined
-  set: (key: string, sessionId: string) => void
+  get: (key: string) => ChatSession | undefined
+  set: (key: string, session: ChatSession) => void
   forget: (key: string) => void
+}
+
+/** The session id to continue, if the saved session ran in this project on this runner. */
+export function resumable(saved: ChatSession | undefined, project: string, runner: string): string | undefined {
+  return saved && saved.project === project && saved.runner === runner ? saved.sessionId : undefined
+}
+
+/** A saved session as far as it can be trusted; one saved before this shape is none. */
+function parse(value: unknown): ChatSession | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const { project, runner, sessionId } = value as Record<string, unknown>
+  return typeof project === "string" && typeof runner === "string" && typeof sessionId === "string" && sessionId
+    ? { project, runner, sessionId }
+    : undefined
 }
 
 const STORAGE_KEY = "ade.gateway.sessions"
 
 /** In the renderer's storage, so a conversation survives ADE restarting. */
 export function localSessionStore(key: string = STORAGE_KEY): SessionStore {
-  const read = (): Record<string, string> => {
+  const read = (): Record<string, unknown> => {
     try {
       const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {}
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
     } catch {
       return {}
     }
   }
-  const write = (all: Record<string, string>) => {
+  const write = (all: Record<string, unknown>) => {
     try {
       localStorage.setItem(key, JSON.stringify(all))
     } catch {
@@ -40,11 +66,8 @@ export function localSessionStore(key: string = STORAGE_KEY): SessionStore {
     }
   }
   return {
-    get: (chat) => {
-      const value = read()[chat]
-      return typeof value === "string" ? value : undefined
-    },
-    set: (chat, sessionId) => write({ ...read(), [chat]: sessionId }),
+    get: (chat) => parse(read()[chat]),
+    set: (chat, session) => write({ ...read(), [chat]: session }),
     forget: (chat) => {
       const { [chat]: _gone, ...rest } = read()
       write(rest)
@@ -53,10 +76,10 @@ export function localSessionStore(key: string = STORAGE_KEY): SessionStore {
 }
 
 export function memorySessionStore(): SessionStore {
-  const sessions = new Map<string, string>()
+  const sessions = new Map<string, ChatSession>()
   return {
     get: (key) => sessions.get(key),
-    set: (key, sessionId) => void sessions.set(key, sessionId),
+    set: (key, session) => void sessions.set(key, session),
     forget: (key) => void sessions.delete(key),
   }
 }

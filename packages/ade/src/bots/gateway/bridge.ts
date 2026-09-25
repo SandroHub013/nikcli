@@ -4,7 +4,7 @@
  */
 
 import { projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
-import { projectFs, readBotText } from "../store"
+import { projectFs, readBotText, resolveRoots } from "../store"
 import { localTrustStore } from "../trust"
 import { runTurn } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
@@ -42,12 +42,13 @@ export function startAppGatewayController(): Promise<GatewayController> {
   return startGatewayController({
     bridge: tauriGatewayBridge(),
     runTurn: (request) => runTurn(request),
-    loadBot: (path, project) =>
+    loadBot: async (path, project) =>
       recheckTrust(path, project, {
         bots: localTrustStore(),
         projects: localTrustStore(PROJECT_TRUST_KEY),
         read: readBotText,
         surface: () => projectSurface(project, projectFs),
+        globalRoot: (await resolveRoots()).global,
       }),
     sessions: localSessionStore(),
     remote: (bot) => localRemoteStore().get(bot),

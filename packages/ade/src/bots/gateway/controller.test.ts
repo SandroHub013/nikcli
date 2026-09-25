@@ -6,7 +6,7 @@ import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
 import { localRemoteStore, memoryRemoteStore, REMOTE_OFF } from "./remote"
-import { memorySessionStore, sessionKey } from "./session"
+import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 
 /*
  * G4: a message from a chat becomes a turn of its bot, with a fake Rust side
@@ -136,7 +136,7 @@ describe("the gateways' controller", () => {
     turns.started[1]!.finish({ status: "error", problem: "rete giù" })
     await until("il motivo", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.failed", "rete giù"))
-    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toBe("s-1")
+    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-1" })
   })
 
   test("/ferma ends the turn with the CLI and gives the plan's place back, and empties the queue", async () => {
@@ -183,7 +183,7 @@ describe("the gateways' controller", () => {
     const turns = fakeTurns()
     const sessions = memorySessionStore()
     const key = sessionKey(BOT.path, "telegram", "c42")
-    sessions.set(key, "s-vecchia")
+    sessions.set(key, { project: PROJECT, runner: "claude", sessionId: "s-vecchia" })
     await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions })
     b.emit("/nuova")
     await until("nuova conversazione", () => b.sent.length === 1)
@@ -202,6 +202,48 @@ describe("the gateways' controller", () => {
     none.emit("ci sei?")
     await until("nessun progetto", () => none.sent.length === 1)
     expect(none.sent[0]!.text).toBe(t("gateway.noProject"))
+  })
+
+  test("a conversation saved in another project, or on another CLI, is not continued", async () => {
+    const key = sessionKey(BOT.path, "telegram", "c42")
+    for (const saved of [
+      { project: "C:/altro-progetto", runner: "claude", sessionId: "s-altrove" },
+      { project: PROJECT, runner: "codex", sessionId: "s-codex" },
+    ]) {
+      const b = bridge()
+      const turns = fakeTurns()
+      const sessions = memorySessionStore()
+      sessions.set(key, saved)
+      await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions })
+      b.emit("ciao")
+      await until("il turno", () => turns.started.length === 1)
+      expect(turns.started[0]!.request.sessionId).toBeUndefined()
+      turns.started[0]!.finish({ text: "ok", sessionId: "s-nuova" })
+      await until("la sessione nuova", () => sessions.get(key)?.sessionId === "s-nuova")
+      expect(sessions.get(key)).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-nuova" })
+    }
+  })
+
+  test("a conversation saved before it said where it ran, or anything else found saved, is none", () => {
+    const storage = `ade.gateway.sessions.test.${Math.random()}`
+    localStorage.setItem(storage, JSON.stringify({ a: "s-vecchia", b: { project: "C:/p", runner: "claude" }, c: 7 }))
+    const sessions = localSessionStore(storage)
+    for (const key of ["a", "b", "c", "d"]) expect(sessions.get(key)).toBeUndefined()
+    sessions.set("a", { project: "C:/p", runner: "nikcli", sessionId: "s-1" })
+    expect(localSessionStore(storage).get("a")).toEqual({ project: "C:/p", runner: "nikcli", sessionId: "s-1" })
+    localStorage.removeItem(storage)
+  })
+
+  test("a message a key was taken out of keeps its place: the one after it does not go first", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: trusted, sessions: memorySessionStore() })
+    b.emit("la prima, con una chiave", { redacted: true })
+    b.emit("la seconda")
+    await until("il primo turno", () => turns.started.length === 1)
+    await until("la seconda in coda", () => b.sent.length === 2)
+    expect(turns.started[0]!.request.message.endsWith("la prima, con una chiave")).toBe(true)
+    expect(b.sent.map((sent) => sent.text)).toEqual([t("gateway.redacted"), t("gateway.queued", 1)])
   })
 
   test("a press counts only for a button ADE sent, in that chat, while its question waits, and once", async () => {

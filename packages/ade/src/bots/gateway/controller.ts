@@ -34,7 +34,7 @@ import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import { REMOTE_OFF } from "./remote"
-import { sessionKey, type SessionStore } from "./session"
+import { resumable, sessionKey, type SessionStore } from "./session"
 
 /** `gateway:message`, as Rust emits it. */
 export interface GatewayMessage {
@@ -232,7 +232,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
-      const sessionId = deps.sessions.get(key)
+      const sessionId = resumable(deps.sessions.get(key), project, runner)
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
@@ -263,7 +263,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const result = await turn.result
       clearInterval(typing)
       typing = undefined
-      if (result.sessionId) deps.sessions.set(key, result.sessionId)
+      if (result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
       if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))
@@ -289,15 +289,19 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const state = stateOf(key)
     const counted = countMessage(state.times, now())
     state.times = counted.times
+    /*
+     * Said without waiting for the send: a message that came meanwhile would
+     * otherwise be queued first, and answered first (G4 review, BASSO 1).
+     */
     if (!counted.allowed) {
       if (!state.limited) {
         state.limited = true
-        await reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
+        void reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
       }
       return
     }
     state.limited = false
-    if (message.redacted) await reply(message, t("gateway.redacted"))
+    if (message.redacted) void reply(message, t("gateway.redacted"))
     state.queue.push(message)
     const busy = state.turn !== undefined || state.starting
     if (busy) return reply(message, t("gateway.queued", state.queue.length))
