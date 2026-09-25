@@ -64,7 +64,9 @@ describe("gli argomenti di un turno", () => {
   })
 
   test("un turno leggero di Claude Code salta MCP e impostazioni utente, ma può usare ade-msg", () => {
-    const { args } = turnCommand(runnerById("claude"), { bot, message: "x", lean: true })
+    // The user's own bot: a project's gets none of this (B3, below).
+    const mine: AgentFile = { ...bot, scope: "global" }
+    const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true })
     expect(args).toContain("--strict-mcp-config")
     expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
     expect(args[args.indexOf("--setting-sources") + 1]).toBe("local")
@@ -79,7 +81,8 @@ describe("gli argomenti di un turno", () => {
   })
 
   test("un turno vocale non scrive e non esegue altro che ade-msg, su ogni motore che lo sa rifiutare", () => {
-    const voice = { ...bot, disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
+    // As `turn.ts` builds it: the voice's bot is ADE's, not a project's.
+    const voice: AgentFile = { ...bot, scope: "global", disabledTools: ["edit", "write", "bash", "webfetch", "websearch"] }
 
     const claude = turnCommand(runnerById("claude"), { bot: voice, message: "x", lean: true }).args
     const allowed = claude[claude.indexOf("--allowedTools") + 1]!.split(",")
@@ -350,5 +353,36 @@ describe("un messaggio fatto solo di un trattino", () => {
   test("un messaggio che contiene un trattino resta com'è", () => {
     const { args } = turnCommand(runnerById("codex"), { bot, message: "a - b", sessionId: "t-1" })
     expect(args.at(-1)).toBe("a - b")
+  })
+})
+
+/*
+ * B3 (audit A4): a bot from the project's `.nikcli/agent/` was run with the
+ * shell pre-approved, the project's local Claude settings (hooks included)
+ * loaded, and Codex never asking. A bot the user wrote keeps what it had.
+ */
+describe("un bot di progetto non ha pre-approvazioni", () => {
+  const fromRepo: AgentFile = { ...bot, scope: "project" }
+  const mine: AgentFile = { ...bot, scope: "global" }
+
+  test("Claude: niente shell pre-approvata, niente ade-msg, niente impostazioni locali", () => {
+    const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
+    const allowed = args[args.indexOf("--allowedTools") + 1] ?? ""
+    expect(allowed).not.toMatch(/Bash|PowerShell/)
+    expect(args.join(" ")).not.toContain("ade-msg")
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
+  })
+
+  test("Codex: niente approval_policy=\"never\"", () => {
+    const { args } = turnCommand(runnerById("codex"), { bot: fromRepo, message: "x" })
+    expect(args).not.toContain('approval_policy="never"')
+    expect(args.some((arg) => arg.startsWith("approval_policy="))).toBe(true)
+  })
+
+  test("un bot dell'utente resta com'era", () => {
+    const claude = turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args
+    expect(claude[claude.indexOf("--allowedTools") + 1]).toContain("Bash")
+    expect(claude[claude.indexOf("--setting-sources") + 1]).toBe("local")
+    expect(turnCommand(runnerById("codex"), { bot: mine, message: "x" }).args).toContain('approval_policy="never"')
   })
 })

@@ -171,6 +171,18 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   todowrite: ["TodoWrite"],
 }
 
+/*
+ * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
+ * and settings were written by whoever wrote the repository. It runs only
+ * once the user trusted that file (`trust.ts`), and even then with nothing
+ * pre-approved that runs commands: no shell or `ade-msg` for Claude Code,
+ * none of the project's local Claude settings (which may hold hooks), and
+ * Codex asking rather than `approval_policy="never"`.
+ */
+function fromRepository(bot: AgentFile): boolean {
+  return bot.scope === "project"
+}
+
 function canWrite(bot: AgentFile): boolean {
   return !bot.disabledTools.includes("edit") && !bot.disabledTools.includes("write")
 }
@@ -237,17 +249,18 @@ export function turnCommand(
        * settings file may pre-approve a command, the project's local one
        * included.
        */
-      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash")
+      const repository = fromRepository(bot)
+      const adeMsgOnly = spec.lean === true && bot.disabledTools.includes("bash") && !repository
       if (spec.lean) {
-        const sources = adeMsgOnly || !canWrite(bot) ? "" : "local"
+        const sources = repository || adeMsgOnly || !canWrite(bot) ? "" : "local"
         args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", sources)
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
-        .filter(([tool]) => !bot.disabledTools.includes(tool))
+        .filter(([tool]) => !bot.disabledTools.includes(tool) && !(repository && tool === "bash"))
         .flatMap(([, names]) => names)
-      if (spec.lean) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
+      if (spec.lean && !repository) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
@@ -260,7 +273,9 @@ export function turnCommand(
       /* `exec resume` has no `-s`; the sandbox goes through `-c`, which both take. */
       const inOutbox = !canWrite(bot) && spec.outbox !== undefined
       const sandbox = canWrite(bot) || inOutbox ? "workspace-write" : "read-only"
-      const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", 'approval_policy="never"']
+      // A repository's bot does not run commands unasked; `untrusted` still lets read-only ones through.
+      const approval = fromRepository(bot) ? "untrusted" : "never"
+      const config = ["-c", `sandbox_mode="${sandbox}"`, "-c", `approval_policy="${approval}"`]
       if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []
       const where = inOutbox ? { cwd: spec.outbox } : {}
