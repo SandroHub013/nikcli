@@ -127,12 +127,12 @@ describe("panes of several projects, and spawned worktrees, survive a restart", 
   })
 })
 describe("the Chat and Bot switches (S40)", () => {
-  test("the Bots are back and the Chat is still hidden (B7)", () => {
+  test("the Bots are back (B7), and the Chat with them (C9)", () => {
     expect(BOT_ENABLED).toBe(true)
-    expect(CHAT_ENABLED).toBe(false)
-    expect(VISIBLE_VIEWS).toEqual(["agent", "code", "bot"])
+    expect(CHAT_ENABLED).toBe(true)
+    expect(VISIBLE_VIEWS).toEqual([...ADE_VIEWS])
     expect(reachableView("bot")).toBe("bot")
-    expect(reachableView("chat")).toBe("code")
+    expect(reachableView("chat")).toBe("chat")
   })
 
   test("the visible sections follow each switch, and agent and code are always there", () => {

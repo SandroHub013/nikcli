@@ -54,15 +54,15 @@ export const ADE_VIEW_LABELS: Record<AdeView, string> = {
  * Whether Chat and Bot can be reached (S40): one switch each.
  *
  * S40 hid both behind one switch. The Bots came back first (B7), once their
- * turns were safe to run (B1-B3b); the Chat stays hidden until its own pieces
- * are in (C1-C9). Hidden is not removed: the code, the tests and the stored
+ * turns were safe to run (B1-B3b); the Chat came back with C9, once its own
+ * pieces were in (C1-C8) and opening it called nothing. Hidden is not removed: the code, the tests and the stored
  * conversations all stay, and turning a switch on brings back every way in —
  * the section bar, the palette, the section shortcut, the voice command and a
  * workbench restored into it. Nothing else in the app needs to change,
  * because everything that lists or opens a section asks `VISIBLE_VIEWS` or
  * `reachableView` rather than `ADE_VIEWS`.
  */
-export const CHAT_ENABLED = false
+export const CHAT_ENABLED = true
 export const BOT_ENABLED = true
 
 /**
