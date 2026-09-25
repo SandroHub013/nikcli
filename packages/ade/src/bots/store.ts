@@ -18,6 +18,7 @@ import { getHost, type Host } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
+import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
   agentDir,
   agentHome,
@@ -443,6 +444,21 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
  * token of tool output. The bytes are whatever disk the caller has; the panel
  * uses the WebView's localStorage, which is that disk.
  */
+/** The gateway chats' threads, in the renderer's storage, one key per bot, platform and chat. */
+export function localGatewayThreads(): GatewayThreads {
+  return createGatewayThreads({
+    getItem: (key) => {
+      try {
+        return localStorage.getItem(key)
+      } catch {
+        return null
+      }
+    },
+    setItem: (key, value) => localStorage.setItem(key, value),
+    removeItem: (key) => localStorage.removeItem(key),
+  })
+}
+
 export interface TalkDisk {
   getItem(key: string): string | null
   setItem(key: string, value: string): void

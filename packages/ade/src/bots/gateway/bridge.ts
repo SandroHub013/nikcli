@@ -9,7 +9,7 @@ import { askDialog } from "../../host/ask"
 import type { AgentFile } from "../nikcli"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
-import { projectFs, readBotText, resolveRoots } from "../store"
+import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
 import { admit, localTrustStore } from "../trust"
 import { runTurn } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
@@ -128,6 +128,7 @@ export function startAppGatewayController(): Promise<GatewayController> {
         globalRoot: (await resolveRoots()).global,
       }),
     sessions: localSessionStore(),
+    threads: localGatewayThreads(),
     remote: (bot) => localRemoteStore().get(bot),
   })
 }

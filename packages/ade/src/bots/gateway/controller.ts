@@ -35,6 +35,7 @@ import { permissionWatcher } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import { offersRemoteCommands, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, type SessionStore } from "./session"
+import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
 
 /** `gateway:message`, as Rust emits it. */
 export interface GatewayMessage {
@@ -72,6 +73,8 @@ export interface GatewayControllerDeps {
     project: string,
   ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string }>
   readonly sessions: SessionStore
+  /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
+  readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
   readonly remote?: (bot: string) => RemoteSetting
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
@@ -199,6 +202,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const running = state.turn !== undefined || state.starting
     if (which === "new") {
       deps.sessions.forget(key)
+      deps.threads?.forget(gatewayThreadKey(message.bot, message.platform, message.chat))
       return reply(message, t("gateway.fresh"))
     }
     if (which === "stop") {
@@ -268,6 +272,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       clearInterval(typing)
       typing = undefined
       if (result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
+      if (deps.threads && result.talk) {
+        const stored = gatewayThreadKey(message.bot, message.platform, message.chat)
+        deps.threads.save(stored, keptThread(deps.threads.read(stored), result.talk))
+      }
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
       if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))

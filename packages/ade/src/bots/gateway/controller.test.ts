@@ -7,6 +7,7 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
+import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
 
 /*
  * G4: a message from a chat becomes a turn of its bot, with a fake Rust side
@@ -137,6 +138,43 @@ describe("the gateways' controller", () => {
     await until("il motivo", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.failed", "rete giù"))
     expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-1" })
+  })
+
+  test("the chat's thread is kept without a secret, and /nuova drops it", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const data = new Map<string, string>()
+    const disk: ThreadDisk = {
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => void data.set(key, value),
+      removeItem: (key) => void data.delete(key),
+    }
+    const threads = createGatewayThreads(disk)
+    const secret = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      threads,
+    })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({
+      text: "ecco",
+      sessionId: "s-1",
+      talk: {
+        ...emptyTalk(),
+        messages: [{ id: "t1", role: "tool", tool: "bash", text: "env", output: secret, at: 1 }],
+        sessionId: "s-1",
+      },
+    })
+    const key = gatewayThreadKey(BOT.path, "telegram", "c42")
+    await until("il filo", () => data.has(key))
+    expect(data.get(key)).not.toContain(secret)
+    expect(createGatewayThreads(disk).read(key).messages).toHaveLength(1)
+    b.emit("/nuova")
+    await until("dimenticato", () => !data.has(key))
   })
 
   test("/ferma ends the turn with the CLI and gives the plan's place back, and empties the queue", async () => {
