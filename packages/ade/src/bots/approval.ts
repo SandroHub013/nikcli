@@ -252,7 +252,8 @@ export const DANGEROUS: readonly CommandRule[] = [
 export type Verdict =
   | { readonly kind: "allow"; readonly key?: string }
   | { readonly kind: "block"; readonly rule: CommandRule }
-  | { readonly kind: "ask"; readonly key: string; readonly reason: string }
+  /** `key` is what «Sempre» would keep; none when it cannot be kept (a command not read whole). */
+  | { readonly kind: "ask"; readonly key?: string; readonly reason: string }
 
 /** What `command` is: blocked, dangerous (with the kind), or nothing to ask about. */
 export function classifyCommand(command: string): { blocked?: CommandRule; dangerous?: CommandRule } {
@@ -272,15 +273,18 @@ const outsideKey = (patterns: string) => `outside:${patterns.trim()}`
  * The decision for one question nikcli asks (`permission` and its patterns,
  * as its menu draws them), for a bot with `always`.
  *
- * - `bash`: the block list refuses, `always` never reaches it; a dangerous
- *   kind is asked unless `always` has it; anything else goes.
+ * - `bash`: the block list refuses, `always` never reaches it; a command
+ *   maybe cut (`cut`) is asked, always; a dangerous kind is asked unless
+ *   `always` has it; anything else goes.
  * - `external_directory`: asked unless `always` has that folder.
  * - anything else nikcli asks about (the user's own «ask» rules): asked.
  */
-export function decide(permission: string, patterns: string, always: Always): Verdict {
+export function decide(permission: string, patterns: string, always: Always, cut = false): Verdict {
   if (permission === "bash") {
     const { blocked, dangerous } = classifyCommand(patterns)
     if (blocked) return { kind: "block", rule: blocked }
+    // What follows the cut is unknown: never let through unseen, nor on «Sempre».
+    if (cut) return { kind: "ask", reason: t("bots.approval.reason.cut") }
     if (!dangerous) return { kind: "allow" }
     if (always.includes(dangerous.id)) return { kind: "allow", key: dangerous.id }
     return { kind: "ask", key: dangerous.id, reason: t(dangerous.reason) }

@@ -535,3 +535,19 @@ describe("a full archive", () => {
     expect(data.has(keep)).toBe(true)
   })
 })
+
+
+describe("B8c: the command in nikcli's permission menu, read whole", () => {
+  test("a command with its own ) is read to the end of the line, not cut at the first", () => {
+    const asked = noticePermission(emptyTalk(), "Permission required: bash (echo $(date) && rm -rf build)\r\n  Allow once", 1)
+    expect(asked.permission).toMatchObject({ permission: "bash", patterns: "echo $(date) && rm -rf build" })
+    expect(asked.permission!.cut).toBeUndefined()
+  })
+
+  test("a command on more lines is read to its first ) and marked as maybe cut", () => {
+    const asked = noticePermission(emptyTalk(), "Permission required: bash (cat <<EOF\nx) && rm -rf build\nEOF)\r\n", 1)
+    expect(asked.permission).toMatchObject({ patterns: "cat <<EOF\nx", cut: true })
+    const open = noticePermission(emptyTalk(), "Permission required: bash (echo $(date\n", 1)
+    expect(open.permission).toBeUndefined()
+  })
+})

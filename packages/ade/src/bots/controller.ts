@@ -105,12 +105,14 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
    */
   const settle = (bot: AgentFile, turn: Turn, asked: PendingPermission) => {
     const path = bot.path
-    const verdict = decide(asked.permission, asked.patterns, always.get(path))
+    const verdict = decide(asked.permission, asked.patterns, always.get(path), asked.cut === true)
     if (verdict.kind === "block") return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
     if (verdict.kind === "allow") return reply(path, turn, "once")
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(path, (talk) =>
-      talk.permission === asked ? { ...talk, permission: { ...asked, reason: verdict.reason, always: verdict.key, expiresAt } } : talk,
+      talk.permission === asked
+        ? { ...talk, permission: { ...asked, reason: verdict.reason, ...(verdict.key ? { always: verdict.key } : {}), expiresAt } }
+        : talk,
     )
     cancelExpiry(path)
     expiries.set(

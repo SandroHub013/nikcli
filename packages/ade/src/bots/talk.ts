@@ -56,6 +56,8 @@ export interface PendingPermission {
   readonly always?: string
   /** When the question becomes a Nega. */
   readonly expiresAt?: number
+  /** The patterns may be cut: read to a `)` that may be the command's own. */
+  readonly cut?: boolean
 }
 
 export interface Talk {
@@ -318,7 +320,15 @@ function errorText(error: unknown): string {
  * Matches the menu `run` draws for a permission, once its colours are gone.
  * The patterns are whatever the tool asked for — a command, a path.
  */
-const PERMISSION_RE = /Permission required:\s*([^\s(]+)\s*\(([^)]*)\)/
+const PERMISSION_RE = /Permission required:\s*([^\s(]+)\s*\(([^\r\n]*)\)[ \t]*(?:\r?\n|$)/
+/*
+ * nikcli prints the patterns whole, joined by «, » (`cli/handlers/run.ts`).
+ * The line above reads them up to the last `)` of the line, so a command with
+ * its own `)` is not cut there (B8c). A command on more than one line does
+ * not fit it: this one reads up to the first `)`, and the question is marked
+ * as maybe cut.
+ */
+const PERMISSION_CUT_RE = /Permission required:\s*([^\s(]+)\s*\(([^)]*)\)/
 
 /**
  * One line of the process's output, folded into the conversation.
@@ -527,12 +537,16 @@ function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
  */
 export function noticePermission(talk: Talk, raw: string, at: number): Talk {
   if (talk.permission) return talk
-  const match = PERMISSION_RE.exec(stripAnsi(raw))
+  const text = stripAnsi(raw)
+  const whole = PERMISSION_RE.exec(text)
+  const match = whole ?? PERMISSION_CUT_RE.exec(text)
   if (!match) return talk
+  const patterns = match[2] ?? ""
+  const cut = !whole || patterns.split("(").length > patterns.split(")").length
   return {
     ...talk,
     status: "waiting",
-    permission: { permission: match[1] ?? "", patterns: match[2] ?? "", askedAt: at },
+    permission: { permission: match[1] ?? "", patterns, askedAt: at, ...(cut ? { cut: true } : {}) },
     updatedAt: at,
   }
 }

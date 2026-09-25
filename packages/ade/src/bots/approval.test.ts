@@ -130,6 +130,14 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(decide("bash", "ls", []).kind).toBe("allow")
   })
 
+  test("a command maybe cut is asked, even if what shows is harmless, and «Sempre» cannot cover it", () => {
+    const asked = decide("bash", "echo $(date", ["recursiveDelete"], true)
+    expect(asked.kind).toBe("ask")
+    expect("key" in asked && asked.key).toBeFalsy()
+    // The block list still reads what shows.
+    expect(decide("bash", "echo $(rm -rf /", [], true).kind).toBe("block")
+  })
+
   test("a write outside the project is asked, folder by folder", () => {
     const asked = decide("external_directory", "C:/Users/me/*", [])
     expect(asked).toMatchObject({ kind: "ask", key: "outside:C:/Users/me/*" })

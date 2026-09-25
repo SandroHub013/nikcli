@@ -552,6 +552,9 @@ export const en: Messages = {
     `The bot «${name}» grants itself «${what}» in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
   "gateway.approve.question": (permission, what) =>
     `The bot asks for the permission «${permission}» for:\n${what}\n\nThe command is read from the terminal and may be incomplete: if you do not recognize all of it, answer No.\nAllow it this once? No answer within 5 minutes means no.`,
+  "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,
+  "gateway.approve.blocked": (what: string, reason: string) =>
+    `I blocked «${what}»: it ${reason}. This command never runs, not even with a yes.`,
   "gateway.approve.once": "Yes, this once",
   "gateway.approve.no": "Refuse",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
@@ -1328,6 +1331,7 @@ export const en: Messages = {
   "bots.approval.reason.database": "drops database tables",
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
+  "bots.approval.reason.cut": "the command may be longer than what can be read here",
   "bots.approval.reason.outside": "works outside the project folder",
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your nikcli configuration asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,

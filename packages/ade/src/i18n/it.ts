@@ -562,6 +562,9 @@ export const it = {
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nIl comando è letto dal terminale e può essere incompleto: se non lo riconosci per intero, rispondi No.\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
+  "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
+  "gateway.approve.blocked": (what: string, reason: string) =>
+    `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>
@@ -1339,6 +1342,7 @@ export const it = {
   "bots.approval.reason.database": "cancella tabelle di un database",
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
+  "bots.approval.reason.cut": "il comando potrebbe essere più lungo di quello che si legge qui",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) => `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,

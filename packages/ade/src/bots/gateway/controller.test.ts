@@ -449,6 +449,22 @@ describe("the tools of a turn from a chat", () => {
     expect(b.sent).toHaveLength(2)
   })
 
+  /* B8c: the block list before the phone. */
+  test("a blocked command is refused before any question, and the chat is told why", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot: nikcli, sessions: memorySessionStore(), remote: () => on })
+    b.emit("formatta il disco")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onData!("Permission required: bash (rm -rf /)\r\n")
+    expect(turn.keys).toEqual([answerKeys("reject")])
+    await until("l'avviso", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.approve.blocked", "rm -rf /", t("bots.approval.reason.deleteRoot")))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.questions).toHaveLength(0)
+  })
+
   test("a Claude or Codex turn has nothing to watch", async () => {
     for (const runner of ["claude", "codex"]) {
       const b = bridge()
@@ -473,7 +489,10 @@ describe("the tools of a turn from a chat", () => {
     await until("la domanda", () => b.questions.length === 1)
     const question = b.questions[0]!
     expect(question.chat).toBe("c42")
-    expect(question.text).toBe(t("gateway.approve.question", "bash", "rm -rf build"))
+    // B8c: a dangerous command says why.
+    expect(question.text).toBe(
+      `${t("gateway.approve.question", "bash", "rm -rf build")}\n${t("gateway.approve.danger", t("bots.approval.reason.recursiveDelete"))}`,
+    )
     expect(question.buttons.map((button) => button.label)).toEqual([t("gateway.approve.once"), t("gateway.approve.no")])
     // The menu redrawn while the question waits: still one question.
     turn.request.onData!("Permission required: bash (rm -rf build)")
