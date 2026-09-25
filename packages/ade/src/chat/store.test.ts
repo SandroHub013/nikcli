@@ -228,6 +228,23 @@ describe("the chat's store", () => {
     expect(store.state.data.session_status.ses_1).toEqual({ type: "busy" })
   })
 
+  test("a message sent while another folder opens stays the first folder's", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    // The new session is being made on A when B opens.
+    const sending = store.send(undefined, "Ciao", FREE)
+    const opening = store.open(B)
+    expect(await sending).toBe("ses_nuova")
+    await opening
+    await live(server, store, 2)
+    const on = (request: ProxyRequest) =>
+      decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")
+    expect(server.calls("POST", /\/prompt_async$/).map(on)).toEqual([A])
+    expect(server.calls("GET", /^\/session\/ses_nuova\/message$/).filter((r) => on(r) === B)).toEqual([])
+  })
+
   test("opening the folder already open changes nothing", async () => {
     const server = fakeServer()
     const { store } = storeOn(server)

@@ -262,12 +262,14 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     close,
     async send(sessionID, text, model) {
       const connection = opened()
+      const mine = generation
       let id = sessionID
       if (!id) {
         const created = await connection.client.session.create({})
         id = (created.data as unknown as Session).id
       }
-      watched.add(id)
+      // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
+      if (mine === generation) watched.add(id)
       await connection.client.session.promptAsync({ sessionID: id, parts: [{ type: "text", text }], model })
       return id
     },
