@@ -63,32 +63,74 @@ export function parseModelRef(raw?: string | null): ModelRef | undefined {
   return undefined
 }
 
-/** Whether a model is free of charge (id ends with :free or both input and output costs are 0 numbers). */
+/**
+ * Providers that run on the user's own machine, where a cost of 0 means the
+ * hardware is already paid for. A hosted provider with a cost of 0 is not free
+ * of charge: ElevenLabs and the kilo/* families price most of their catalogue
+ * at 0 and bill by characters, credits or a plan instead, which is what put a
+ * thousand paid models in the selector labelled free.
+ */
+const LOCAL_PROVIDERS: ReadonlySet<string> = new Set(["ollama", "lmstudio"])
+
+/**
+ * Whether a model is free of charge: the id ends with :free, or it costs
+ * nothing to run because a local provider serves it.
+ */
 export function isFreeModel(model: {
   readonly id: string
   readonly providerID?: string
   readonly cost?: { readonly input?: number; readonly output?: number }
 }): boolean {
   if (model.id.endsWith(":free")) return true
-  if (
+  if (model.providerID === undefined || !LOCAL_PROVIDERS.has(model.providerID)) return false
+  return (
     model.cost !== undefined &&
     typeof model.cost.input === "number" &&
     typeof model.cost.output === "number" &&
     model.cost.input === 0 &&
     model.cost.output === 0
-  ) {
-    return true
-  }
-  return false
+  )
 }
 
-/** Format price in $/M tokens or "gratis" / "free" label. */
+/**
+ * Whether a model can hold a chat: it answers in text and calls tools.
+ *
+ * A model that says nothing about its capabilities stays in, because a
+ * catalogue that does not report them cannot be read as a refusal: dropping
+ * those would empty the selector on a server that sends the field only
+ * sometimes. One that reports them and fails either test is not a chat model:
+ * it cannot answer the Chat, and offering it only produces an empty turn.
+ */
+function isChatModel(model: {
+  readonly capabilities?: {
+    readonly toolcall?: boolean
+    readonly output?: { readonly text?: boolean }
+  }
+}): boolean {
+  const capabilities = model.capabilities
+  if (capabilities === undefined || capabilities === null) return true
+  if (capabilities.output !== undefined && capabilities.output.text === false) return false
+  if (capabilities.toolcall === false) return false
+  return true
+}
+
+/**
+ * Format price in $/M tokens, or the "gratis" / "free" label.
+ *
+ * Only `free` says free. A cost of 0 on its own does not, because a hosted
+ * provider that prices a model at 0 bills for it some other way and the
+ * catalogue is then saying nothing useful: a model whose per-token price is
+ * not known gets a dash, which is the honest answer in every language.
+ */
 export function formatModelPrice(
   cost?: { readonly input: number; readonly output: number },
   free?: boolean,
 ): string {
-  if (free || !cost || (cost.input === 0 && cost.output === 0)) {
+  if (free) {
     return t("chat.model.free")
+  }
+  if (!cost || (cost.input === 0 && cost.output === 0)) {
+    return "—"
   }
   if (cost.input === cost.output) {
     return `$${cost.input}/M`
@@ -112,8 +154,8 @@ export interface ModelListOptions {
 }
 
 /**
- * Extracts and filters selectable models from `provider.list`.
- * In ADE Test (`options.isTest === true`), only free models are included.
+ * Extracts and filters selectable models from `provider.list`: the chat
+ * models, and in ADE Test (`options.isTest === true`) only the free ones.
  */
 export function modelsFromProviderList(
   providerList?: ProviderList | null,
@@ -130,6 +172,9 @@ export function modelsFromProviderList(
     if (!provider || !provider.models) continue
     for (const [id, model] of Object.entries(provider.models)) {
       if (!model || model.status === "deprecated") continue
+      // The Chat asks a model for text and for tool calls: a text-to-speech or
+      // an image model answers neither, however cheap it is.
+      if (!isChatModel(model)) continue
       const modelId = model.id || id
       const providerId = model.providerID || provider.id
       const free = isFreeModel({ id: modelId, providerID: providerId, cost: model.cost })
