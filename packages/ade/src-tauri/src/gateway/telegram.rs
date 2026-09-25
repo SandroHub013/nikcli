@@ -1,8 +1,10 @@
 //! Telegram, through its Bot API: long polling, no webhook, no public address.
 //!
-//! - Reading: `deleteWebhook` once (a webhook left by another program would
-//!   make `getUpdates` fail), then `getUpdates` in a long poll of 30 s, from
-//!   the offset saved after the last batch was handed on.
+//! - Reading: `getWebhookInfo` once. A bot whose messages already go to
+//!   another service through a webhook is left alone, and the gateway stops
+//!   saying so: deleting the webhook would break that service without a word.
+//!   Then `getUpdates` in a long poll of 30 s, from the offset saved after the
+//!   last batch was handed on.
 //! - Only messages and button presses are asked for. A press is answered at
 //!   once, so the button stops spinning, and comes back as a `button` message;
 //!   the hub checks who pressed it.
@@ -45,7 +47,8 @@ pub struct Telegram {
     poll_secs: u64,
     /// The offset for the next `getUpdates`: past the last update received.
     next: Mutex<Option<i64>>,
-    webhook_off: AtomicBool,
+    /// No webhook was found on the bot: long polling may go on.
+    webhook_checked: AtomicBool,
 }
 
 /// Why a call failed, before it becomes the adapter's error.
@@ -161,7 +164,7 @@ impl Telegram {
             calls: client(call_timeout)?,
             poll_secs,
             next: Mutex::new(cursor.and_then(|cursor| cursor.parse().ok())),
-            webhook_off: AtomicBool::new(false),
+            webhook_checked: AtomicBool::new(false),
         })
     }
 
@@ -253,9 +256,14 @@ impl Adapter for Telegram {
     }
 
     async fn receive(&self) -> Result<Vec<Inbound>, AdapterError> {
-        if !self.webhook_off.load(Ordering::SeqCst) {
-            self.call(&self.calls, "deleteWebhook", &json!({})).await.map_err(Failure::for_reading)?;
-            self.webhook_off.store(true, Ordering::SeqCst);
+        if !self.webhook_checked.load(Ordering::SeqCst) {
+            let info = self.call(&self.calls, "getWebhookInfo", &json!({})).await.map_err(Failure::for_reading)?;
+            if info["url"].as_str().is_some_and(|url| !url.is_empty()) {
+                return Err(AdapterError::Fatal(
+                    "questo bot manda già i suoi messaggi a un altro servizio (un webhook): toglilo da lì, oppure usa per ADE un altro bot".into(),
+                ));
+            }
+            self.webhook_checked.store(true, Ordering::SeqCst);
         }
         let offset = *self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut body = json!({ "timeout": self.poll_secs, "allowed_updates": ["message", "callback_query"] });
@@ -440,7 +448,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_webhook_goes_first_then_a_long_poll_from_the_saved_offset_that_moves_on() {
+    async fn the_webhook_is_checked_first_then_a_long_poll_from_the_saved_offset_that_moves_on() {
         let api = FakeApi::start();
         api.then("getUpdates", 200, json!({ "ok": true, "result": [
             text_update(10, "private", 42, "ciao"),
@@ -457,14 +465,15 @@ mod tests {
         assert_eq!(telegram.cursor().as_deref(), Some("13"));
         telegram.receive().await.unwrap();
         let calls = api.calls.lock().unwrap().clone();
-        assert!(calls[0].0.ends_with("/deleteWebhook"), "{calls:?}");
+        assert!(calls[0].0.ends_with("/getWebhookInfo"), "{calls:?}");
         assert!(calls.iter().all(|(path, _)| path.starts_with(&format!("/bot{TOKEN}/"))));
         let polls = api.calls_to("getUpdates");
         assert_eq!(polls[0]["offset"], 7);
         assert_eq!(polls[0]["timeout"], 1);
         assert_eq!(polls[0]["allowed_updates"], json!(["message", "callback_query"]));
         assert_eq!(polls[1]["offset"], 13);
-        assert_eq!(api.calls_to("deleteWebhook").len(), 1, "una volta sola");
+        assert_eq!(api.calls_to("getWebhookInfo").len(), 1, "una volta sola");
+        assert!(api.calls_to("deleteWebhook").is_empty());
     }
 
     #[tokio::test]
@@ -474,12 +483,22 @@ mod tests {
         let Err(AdapterError::Fatal(error)) = adapter(&api, None).receive().await else { panic!("non fatale") };
         assert!(error.contains("in uso altrove"), "{error}");
         let api = FakeApi::start();
-        api.then("deleteWebhook", 401, json!({ "ok": false, "error_code": 401, "description": "Unauthorized" }));
+        api.then("getWebhookInfo", 401, json!({ "ok": false, "error_code": 401, "description": "Unauthorized" }));
         let Err(AdapterError::Fatal(error)) = adapter(&api, None).receive().await else { panic!("non fatale") };
         assert!(error.contains("rifiuta il token"), "{error}");
         let api = FakeApi::start();
         api.then("getUpdates", 502, json!({ "ok": false, "error_code": 502, "description": "Bad Gateway" }));
         assert!(matches!(adapter(&api, None).receive().await, Err(AdapterError::Transient(_))));
+    }
+
+    #[tokio::test]
+    async fn a_bot_whose_messages_go_to_another_service_is_left_alone_and_the_gateway_says_why() {
+        let api = FakeApi::start();
+        api.then("getWebhookInfo", 200, json!({ "ok": true, "result": { "url": "https://altro-servizio.example/hook", "pending_update_count": 3 } }));
+        let Err(AdapterError::Fatal(error)) = adapter(&api, None).receive().await else { panic!("non fatale") };
+        assert!(error.contains("altro servizio"), "{error}");
+        assert!(api.calls_to("deleteWebhook").is_empty(), "il webhook dell'altro servizio non si tocca");
+        assert!(api.calls_to("getUpdates").is_empty());
     }
 
     #[tokio::test]
