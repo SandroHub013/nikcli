@@ -53,6 +53,13 @@ const READY_PREFIX: &str = "nikcli server listening";
 /// The user name ADE's own server is started with; the password is random.
 const USERNAME: &str = "nikcli";
 
+/// Variables that make nikcli say yes to every «ask» (`util/src/flag.ts`,
+/// `permission/next.ts`): set by `--auto`, `--yolo` and
+/// `--dangerously-skip-permissions`, and inherited by ADE from any terminal
+/// that had them. With either one the chat's permission rules would not count,
+/// and the chat would not know.
+const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS"];
+
 /// How long a discovered service gets to prove it is alive and ours to use.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -329,6 +336,10 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str) -> Comm
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    for name in AUTO_APPROVE {
+        command.env_remove(name);
+    }
 
     if let Some(dir) = directory.filter(|d| !d.is_empty()) {
         command.current_dir(dir);
@@ -819,6 +830,18 @@ mod tests {
             .collect();
         assert!(envs.contains(&("NIKCLI_SERVER_PASSWORD".into(), "finta-password".into())));
         assert!(envs.contains(&("NIKCLI_SERVER_USERNAME".into(), "nikcli".into())));
+    }
+
+    #[test]
+    fn the_server_never_inherits_an_approve_everything_flag() {
+        let command = serve_command("nikcli", None, "finta-password");
+        let removed: Vec<String> = command
+            .get_envs()
+            .filter(|(_, value)| value.is_none())
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect();
+        assert!(removed.contains(&"NIKCLI_AUTO_APPROVE".to_string()), "{removed:?}");
+        assert!(removed.contains(&"NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS".to_string()), "{removed:?}");
     }
 
     #[test]
