@@ -5,8 +5,10 @@
  * signed in with the user's own account — Claude Code with an Anthropic
  * subscription, Codex with ChatGPT, nikcli with its providers — so a spoken
  * request costs the subscription the user already has, not a key billed per
- * call. The turn gets an `ade-msg` identity, which is what lets it list, ask,
- * start and close ADE's sessions: the same hook every session in a pane has.
+ * call. Dopo B10 l'agente vocale gira in account-plan e perde ANTHROPIC_API_KEY e
+ * ANTHROPIC_BASE_URL ereditati. The turn gets an `ade-msg` identity, which is
+ * what lets it list, ask, start and close ADE's sessions: the same hook every
+ * session in a pane has.
  *
  * The decisions — which CLI, what to tell it, when a conversation continues —
  * are pure and tested here; `createVoiceAgent` only holds the conversation and
@@ -240,7 +242,12 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
    */
   let latest = 0
 
-  /* Everything but the sentence: the same for a turn and for the process that waits for one. */
+  /*
+   * Everything but the sentence: the same for a turn and for the process that waits for one.
+   *
+   * Dopo B10 l'agente vocale gira in account-plan (nessun account specificato)
+   * e perde ANTHROPIC_API_KEY e ANTHROPIC_BASE_URL ereditati.
+   */
   const turnFor = (runner: RunnerId, cwd: string | undefined, speed: "fast" | "cli" | undefined): Omit<TurnRequest, "message"> => {
     const loc = currentLocale()
     return {
@@ -264,6 +271,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       if (!deps.warm) return
       const resolved = resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
       if ("problem" in resolved || resolved.runner !== "claude") return
+      // Il processo warm di Claude gira in account-plan e perde ANTHROPIC_API_KEY e ANTHROPIC_BASE_URL ereditati.
       deps.warm.prepare({ ...turnFor("claude", deps.cwd(), speed), message: "" })
     },
 
@@ -286,6 +294,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         ...(previous ? { sessionId: previous } : {}),
         ...(onText ? { onUpdate: textFollower(onText) } : {}),
       }
+      // Avvio del turno vocale: gira in account-plan e perde ANTHROPIC_API_KEY e ANTHROPIC_BASE_URL ereditati.
       const turn = warm ? warm.run(request) : deps.runTurn(request)
       const onAbort = () => turn.stop()
       signal?.addEventListener("abort", onAbort, { once: true })
