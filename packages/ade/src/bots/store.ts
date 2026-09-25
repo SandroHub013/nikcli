@@ -16,6 +16,7 @@
 import { getHost, type Host } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
+import { parseTalk, serializeTalk, type Talk } from "./talk"
 import {
   agentDir,
   agentHome,
@@ -428,5 +429,61 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
     }
     default:
       return { agentId: "nikcli", command: NIKCLI_COMMAND, args: launchArgs(bot.identifier, bot.model) }
+  }
+}
+
+/**
+ * The thread archive (B4).
+ *
+ * One entry per bot and project, written when a burst of lines stops or the
+ * turn ends — not on every line, which rewrote the whole thread for each
+ * token of tool output. The bytes are whatever disk the caller has; the panel
+ * uses the WebView's localStorage, which is that disk.
+ */
+export interface TalkDisk {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+
+export function createTalkArchive(
+  disk: TalkDisk,
+  waitMs = 400,
+  later: (run: () => void, ms: number) => () => void = (run, ms) => {
+    const id = setTimeout(run, ms)
+    return () => clearTimeout(id)
+  },
+) {
+  const pending = new Map<string, () => void>()
+  const write = (key: string, value: string) => {
+    try {
+      disk.setItem(key, value)
+    } catch {
+      // Quota, or storage blocked. The thread still works for this session.
+    }
+  }
+  return {
+    read(key: string): Talk {
+      try {
+        return parseTalk(disk.getItem(key))
+      } catch {
+        return parseTalk(null)
+      }
+    },
+    /** Remembers the latest thread and writes it once the lines stop arriving. */
+    save(key: string, talk: Talk): void {
+      const value = serializeTalk(talk)
+      pending.get(key)?.()
+      const cancel = later(() => {
+        pending.delete(key)
+        write(key, value)
+      }, waitMs)
+      pending.set(key, cancel)
+    },
+    /** Writes now. A turn that ended, or a conversation that was forgotten. */
+    flush(key: string, talk: Talk): void {
+      pending.get(key)?.()
+      pending.delete(key)
+      write(key, serializeTalk(talk))
+    },
   }
 }

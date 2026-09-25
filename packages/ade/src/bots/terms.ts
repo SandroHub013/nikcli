@@ -61,3 +61,18 @@ export function limitReached(text: string): boolean {
 export function limitNotice(label: string): string {
   return `${label} ha raggiunto il limite del tuo piano. ADE non riprova e non cambia account: attendi il reset indicato dalla CLI oppure usa una chiave API.`
 }
+
+/** What an obvious API key becomes once a thread is about to be stored (B4). */
+export const SECRET_MARK = "[nascosto]"
+
+/**
+ * Keys a tool's printout or a CLI's last line can carry in the clear.
+ * Long enough that ordinary words are left alone. The values ADE itself
+ * keeps live in the keychain and never reach this text.
+ */
+const SECRET = /sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xai-[A-Za-z0-9_-]{20,}/g
+
+/** Takes those keys out of text that would otherwise be written with the thread. */
+export function scrubSecrets(text: string): string {
+  return text.replace(SECRET, SECRET_MARK)
+}

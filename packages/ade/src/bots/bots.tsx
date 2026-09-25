@@ -44,6 +44,7 @@ import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust
 import { runTurn } from "./turn"
 import {
   createBot,
+  createTalkArchive,
   deleteBot,
   listBots,
   listModels,
@@ -58,8 +59,6 @@ import {
   formatWhen,
   lastLine,
   mentionIn,
-  parseTalk,
-  serializeTalk,
   applyProblem,
   talkKey,
   type PermissionAnswer,
@@ -84,21 +83,37 @@ const askTrust = (question: string) => askDialog(question, { ok: t("bots.ask.yes
 
 const [talks, setTalks] = createSignal<Record<string, Talk>>({})
 
+/** The open project the archive is bound to. A global bot's key includes it. */
+let openProject = ""
+/** Project pinned while a turn runs, so a switch does not file that turn under the new one. */
+const pinnedProject = new Map<string, string>()
+
+const archive = createTalkArchive({
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key, value) => localStorage.setItem(key, value),
+})
+
 function readStored(path: string): Talk {
-  try {
-    return parseTalk(localStorage.getItem(talkKey(path)))
-  } catch {
-    return emptyTalk()
-  }
+  return archive.read(talkKey(path, openProject))
 }
 
-function store(path: string, talk: Talk) {
-  try {
-    localStorage.setItem(talkKey(path), serializeTalk(talk))
-  } catch {
-    // Quota, or a browser set to block site data. The thread still works
-    // for this session; only its survival across a reload is lost.
+function remember(path: string, talk: Talk): string {
+  const busy = talk.status === "working" || talk.status === "waiting" || !!talk.partial
+  if (busy && !pinnedProject.has(path)) pinnedProject.set(path, openProject)
+  const project = pinnedProject.get(path) ?? openProject
+  const key = talkKey(path, project)
+  if (busy) archive.save(key, talk)
+  else {
+    pinnedProject.delete(path)
+    archive.flush(key, talk)
   }
+  return project
 }
 
 function talkOf(path: string): Talk {
@@ -108,7 +123,9 @@ function talkOf(path: string): Talk {
 function updateTalk(path: string, change: (talk: Talk) => Talk) {
   setTalks((all) => {
     const next = change(all[path] ?? emptyTalk())
-    store(path, next)
+    const wrote = remember(path, next)
+    const quiet = next.status !== "working" && next.status !== "waiting" && !next.partial
+    if (quiet && wrote !== openProject) return { ...all, [path]: readStored(path) }
     return { ...all, [path]: next }
   })
 }
@@ -151,6 +168,25 @@ const shared = createRoot(() => {
 
   createEffect(on(projectRoot, (root) => void resolveRoots(root).then(setRoots)))
 
+  /*
+   * A global bot's file does not change when the project does, but its
+   * session must. Idle threads are dropped so the next read takes the
+   * archive of the project just opened; a turn already running keeps
+   * writing under the project it started in.
+   */
+  createEffect(on(projectRoot, (root) => {
+    const next = root ?? ""
+    if (next === openProject) return
+    openProject = next
+    setTalks((all) => {
+      const kept: Record<string, Talk> = {}
+      for (const [path, talk] of Object.entries(all)) {
+        if (turns.running(path)) kept[path] = talk
+      }
+      return kept
+    })
+  }))
+
   // The clocks in the roster: "ora" has to become "09:12" on its own. Paused
   // while the window is hidden, like every other timer in ADE.
   every(30_000, () => setNow(Date.now()))
@@ -169,6 +205,8 @@ const shared = createRoot(() => {
   )
 
   createEffect(() => {
+    const root = projectRoot() ?? ""
+    if (root !== openProject) return
     const bots = roster()
     if (bots) ensureLoaded(bots.map((bot) => bot.path))
   })

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { createTalkArchive } from "./store"
 import {
+  TALK_ARCHIVE_MAX,
+  TOOL_OUTPUT_MAX,
   answerKeys,
+  appendMessage,
   applyExit,
   applyLine,
   emptyTalk,
@@ -13,6 +17,7 @@ import {
   runArgs,
   sendMessage,
   serializeTalk,
+  talkKey,
 } from "./talk"
 
 const T0 = Date.UTC(2026, 8, 15, 10, 0, 0)
@@ -255,5 +260,77 @@ describe("storage", () => {
     expect(parseTalk("nope").messages).toHaveLength(0)
     expect(parseTalk(null).status).toBe("idle")
     expect(parseTalk('{"messages":[{"id":1}]}').messages).toHaveLength(0)
+  })
+
+  test("a secret in tool output does not land in the archive, and the printout has a size cap", () => {
+    const key = "sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"
+    const talk = applyLine(
+      emptyTalk(),
+      event("tool_use", { part: { type: "tool", tool: "bash", state: { title: `echo ${key}`, output: `${key}\n${"x".repeat(TOOL_OUTPUT_MAX)}` } } }),
+      T0,
+    )
+    const stored = serializeTalk(talk)
+    expect(stored).not.toContain(key)
+    expect(stored).toContain("[nascosto]")
+    expect(stored).toContain("…troncato")
+    expect(stored.length).toBeLessThanOrEqual(TALK_ARCHIVE_MAX)
+  })
+
+  test("lastWords go through the same filter before they are stored", () => {
+    const key = "ghp_abcdefghijklmnopqrstuvwxyz"
+    const talk = applyExit(emptyTalk(), 1, T0, "nikcli", `untrusted: ${key}`)
+    expect(talk.messages.at(-1)?.text).not.toContain(key)
+    expect(serializeTalk(talk)).not.toContain(key)
+  })
+
+  test("the archive stays under its cap by dropping the oldest messages", () => {
+    let talk = emptyTalk()
+    for (let i = 0; i < 40; i++) {
+      talk = appendMessage(talk, { role: "tool", tool: "bash", text: `cmd ${i}`, output: "y".repeat(TOOL_OUTPUT_MAX) }, T0 + i)
+    }
+    const stored = serializeTalk(talk)
+    expect(stored.length).toBeLessThanOrEqual(TALK_ARCHIVE_MAX)
+    expect(parseTalk(stored).messages.length).toBeLessThan(40)
+  })
+
+  test("a global bot's archive in another project is empty, session included", () => {
+    const path = "C:/Users/me/AppData/nikcli/agent/revisore.md"
+    const keyA = talkKey(path, "C:/proj-a")
+    const keyB = talkKey(path, "C:/proj-b")
+    expect(keyA).not.toBe(keyB)
+    const disk = new Map<string, string>()
+    const archive = createTalkArchive({
+      getItem: (k) => disk.get(k) ?? null,
+      setItem: (k, v) => void disk.set(k, v),
+    })
+    const talk = applyLine(sendMessage(emptyTalk(), "ciao", T0), event("text", { part: { text: "Ciao." } }), T0)
+    archive.flush(keyA, talk)
+    expect(archive.read(keyA).sessionId).toBe("ses_abc")
+    expect(archive.read(keyB).sessionId).toBeUndefined()
+    expect(archive.read(keyB).messages).toHaveLength(0)
+    expect(disk.get(keyA)).not.toContain("sk-")
+  })
+
+  test("a burst of lines is one write, not one per line", () => {
+    const disk = new Map<string, string>()
+    const queued: (() => void)[] = []
+    const archive = createTalkArchive(
+      { getItem: (k) => disk.get(k) ?? null, setItem: (k, v) => void disk.set(k, v) },
+      400,
+      (run) => {
+        queued.push(run)
+        return () => {
+          const at = queued.indexOf(run)
+          if (at >= 0) queued.splice(at, 1)
+        }
+      },
+    )
+    const key = talkKey("/agent/bot.md", "C:/proj")
+    const talk = appendMessage(emptyTalk(), { role: "tool", tool: "bash", text: "ls", output: "a\n" }, T0)
+    for (let i = 0; i < 5; i++) archive.save(key, talk)
+    expect(disk.size).toBe(0)
+    expect(queued).toHaveLength(1)
+    queued[0]!()
+    expect(disk.size).toBe(1)
   })
 })

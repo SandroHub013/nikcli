@@ -27,7 +27,7 @@
  */
 
 import { stripAnsi } from "../session/stream"
-import { limitNotice, limitReached } from "./terms"
+import { limitNotice, limitReached, scrubSecrets } from "./terms"
 
 export type TalkStatus = "idle" | "working" | "waiting" | "error"
 
@@ -256,6 +256,35 @@ function parseObject(line: string): Record<string, unknown> | undefined {
   }
 }
 
+/**
+ * How much of a tool's printout is kept.
+ *
+ * The rest is what filled localStorage until a reload lost the thread (review
+ * M3). A key in the kept part is replaced; a key past the cut is dropped.
+ */
+export const TOOL_OUTPUT_MAX = 16 * 1024
+
+const TRUNCATED = "\n…troncato"
+
+/** A tool printout safe to show and to store: keys out, then the size cap. */
+export function limitToolOutput(text: string): string {
+  const clean = scrubSecrets(text)
+  if (clean.length <= TOOL_OUTPUT_MAX) return clean
+  return clean.slice(0, TOOL_OUTPUT_MAX - TRUNCATED.length) + TRUNCATED
+}
+
+function forStorage<T extends { readonly role: TalkRole; readonly text: string; readonly output?: string }>(message: T): T {
+  if (message.role === "tool") {
+    return {
+      ...message,
+      text: scrubSecrets(message.text),
+      ...(message.output !== undefined ? { output: limitToolOutput(message.output) } : {}),
+    }
+  }
+  if (message.role === "error") return { ...message, text: scrubSecrets(message.text) }
+  return message
+}
+
 /** A message put on the thread, with an id of its kind. Used by the runners' adapters. */
 export function appendMessage(
   talk: Talk,
@@ -263,7 +292,7 @@ export function appendMessage(
   at: number,
 ): Talk {
   const prefix = message.role === "user" ? "u" : message.role === "bot" ? "b" : message.role === "tool" ? "t" : "e"
-  const { id, ...rest } = message
+  const { id, ...rest } = forStorage(message)
   return {
     ...talk,
     messages: [...talk.messages, { ...rest, id: id ?? nextId(prefix, at), at }],
@@ -277,7 +306,7 @@ export function attachOutput(talk: Talk, id: string, output: string): Talk {
   const index = talk.messages.findIndex((message) => message.id === id)
   if (index < 0) return talk
   const messages = talk.messages.slice()
-  messages[index] = { ...messages[index]!, output }
+  messages[index] = { ...messages[index]!, output: limitToolOutput(output) }
   return { ...talk, messages }
 }
 
@@ -303,12 +332,13 @@ function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
     case "tool_use": {
       const tool = event.part?.tool ?? "tool"
       const state = event.part?.state
-      const title =
+      const title = scrubSecrets(
         state?.title ||
-        (state?.input && typeof state.input === "object" && Object.keys(state.input as object).length > 0
-          ? JSON.stringify(state.input)
-          : tool)
-      const output = typeof state?.output === "string" && state.output.trim().length > 0 ? state.output : undefined
+          (state?.input && typeof state.input === "object" && Object.keys(state.input as object).length > 0
+            ? JSON.stringify(state.input)
+            : tool),
+      )
+      const output = typeof state?.output === "string" && state.output.trim().length > 0 ? limitToolOutput(state.output) : undefined
       return {
         ...withSession,
         messages: [
@@ -412,7 +442,9 @@ export function applyExit(talk: Talk, code: number | null, at: number, program =
             id: nextId("e", at),
             role: "error",
             // The CLI's last plain line — its error on stderr, which shares the stream — says why.
-            text: lastWords ? `${program} è uscito con codice ${code}: ${lastWords}` : `${program} è uscito con codice ${code}.`,
+            text: lastWords
+              ? `${program} è uscito con codice ${code}: ${scrubSecrets(lastWords)}`
+              : `${program} è uscito con codice ${code}.`,
             at,
           },
         ],
@@ -518,15 +550,31 @@ export function mentionIn(
 
 const SAVED_MESSAGES = 200
 
+/**
+ * The whole archive, in characters of JSON.
+ *
+ * One key, not the whole of localStorage, and still small enough that the
+ * write fits the WebView quota. Older messages go first when it does not.
+ */
+export const TALK_ARCHIVE_MAX = 256 * 1024
+
 /** The thread as text for storage. Trimmed, and never mid-turn: a reload ends whatever was running. */
 export function serializeTalk(talk: Talk): string {
-  return JSON.stringify({
-    sessionId: talk.sessionId,
-    messages: talk.messages.slice(-SAVED_MESSAGES),
-    tokens: talk.tokens,
-    costUsd: talk.costUsd,
-    updatedAt: talk.updatedAt,
-  })
+  let messages = talk.messages.slice(-SAVED_MESSAGES).map((message) => forStorage(message))
+  const pack = (list: readonly TalkMessage[]) =>
+    JSON.stringify({
+      sessionId: talk.sessionId,
+      messages: list,
+      tokens: talk.tokens,
+      costUsd: talk.costUsd,
+      updatedAt: talk.updatedAt,
+    })
+  let encoded = pack(messages)
+  while (encoded.length > TALK_ARCHIVE_MAX && messages.length > 1) {
+    messages = messages.slice(1)
+    encoded = pack(messages)
+  }
+  return encoded
 }
 
 /** The stored thread, tolerating anything: an unreadable one is an empty one. */
@@ -558,7 +606,13 @@ export function parseTalk(raw: string | null | undefined): Talk {
   }
 }
 
-/** Where a bot's thread is kept. The path, because the identifier repeats across scopes. */
-export function talkKey(path: string): string {
-  return `ade.bots.talk:${path}`
+/**
+ * Where a bot's thread is kept.
+ *
+ * The path, because the identifier repeats across scopes, and the open
+ * project: a global bot's file is the same path in every project, and its
+ * session id must not follow it into the next one.
+ */
+export function talkKey(path: string, project = ""): string {
+  return `ade.bots.talk:${project}\n${path}`
 }
