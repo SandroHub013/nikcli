@@ -1,6 +1,7 @@
 /**
  * The folder's sessions, beside the conversation (C4): open one, or rename it
- * with a double click on its title or F2, as a pane is. What it shows is
+ * with a double click on its title or F2, as a pane is; one made outside the
+ * chat only opens. What it shows is
  * decided in `sessions.ts`; the titles are the server's, and go into text
  * nodes only.
  */
@@ -18,9 +19,11 @@ export function SessionList(props: {
   const [renaming, setRenaming] = createSignal<string>()
   const [failed, setFailed] = createSignal<string>()
 
-  const begin = (sessionID: string) => {
+  // A session made outside the chat is read, never written to (C5): not renamed either.
+  const begin = (entry: SessionEntry) => {
+    if (!entry.chat) return
     setFailed(undefined)
-    setRenaming(sessionID)
+    setRenaming(entry.id)
   }
 
   const commit = async (sessionID: string, title: string) => {
@@ -50,13 +53,13 @@ export function SessionList(props: {
                       type="button"
                       data-slot="chat-session-open"
                       aria-current={entry.id === props.current ? "true" : undefined}
-                      title={t("chat.session.renameHint")}
+                      title={entry.chat ? t("chat.session.renameHint") : undefined}
                       onClick={() => props.onOpen(entry.id)}
-                      onDblClick={() => begin(entry.id)}
+                      onDblClick={() => begin(entry)}
                       onKeyDown={(event) => {
                         if (event.key === "F2") {
                           event.preventDefault()
-                          begin(entry.id)
+                          begin(entry)
                         }
                       }}
                     >

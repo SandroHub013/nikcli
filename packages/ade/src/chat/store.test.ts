@@ -426,6 +426,20 @@ describe("the chat's store", () => {
     expect(server.calls("POST", /\/prompt_async$/).map((r) => r.path.split("?")[0])).toEqual(["/session/ses_2/prompt_async"])
   })
 
+  test("a session made elsewhere is neither renamed nor stopped: nothing reaches the server", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    const renamed = await store.rename("ses_1", "Mio").then(() => undefined, (error: unknown) => error)
+    const stopped = await store.abort("ses_1").then(() => undefined, (error: unknown) => error)
+    expect(renamed).toBeInstanceOf(ForeignSession)
+    expect(stopped).toBeInstanceOf(ForeignSession)
+    expect(server.calls("PATCH", /^\/session\//)).toEqual([])
+    expect(server.calls("POST", /\/abort$/)).toEqual([])
+    expect(store.state.data.session.find((s) => s.id === "ses_1")?.title).not.toBe("Mio")
+  })
+
   test("yes this once, no, an answer and a declined question reach the server as sent", async () => {
     const server = fakeServer()
     const { store } = storeOn(server)
@@ -462,6 +476,7 @@ describe("the chat's store", () => {
 
   test("a rename reaches the server and shows at once; an empty title sends nothing", async () => {
     const server = fakeServer()
+    server.routes.sessions = [{ ...session("ses_1"), permission: [...CHAT_PERMISSION] }]
     const { store } = storeOn(server)
     await store.open(A)
     await live(server, store)

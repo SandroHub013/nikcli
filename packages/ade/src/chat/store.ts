@@ -69,7 +69,7 @@ export interface ChatStore {
    * `agent` is the one chosen in the chat; without it the server's default.
    */
   send(sessionID: string | undefined, text: string, model: ModelRef, agent?: string): Promise<string>
-  /** Gives `sessionID` a new title; an empty one is refused before anything is sent. */
+  /** Gives `sessionID` a new title; an empty one, or a session made elsewhere, is refused before anything is sent. */
   rename(sessionID: string, title: string): Promise<void>
   /** Answers a permission request: this once, or no. «Always» is not offered (C5). */
   replyPermission(requestID: string, reply: "once" | "reject"): Promise<void>
@@ -77,7 +77,7 @@ export interface ChatStore {
   answerQuestion(requestID: string, answers: readonly (readonly string[])[]): Promise<void>
   /** Declines a question: the model goes on without an answer. */
   rejectQuestion(requestID: string): Promise<void>
-  /** Stops the answer running in `sessionID` on the server. */
+  /** Stops the answer running in `sessionID` on the server; one made elsewhere is refused with `ForeignSession`. */
   abort(sessionID: string): Promise<void>
   /** Loads a session's messages, and keeps loading them after every reconnection. */
   loadMessages(sessionID: string): Promise<void>
@@ -163,6 +163,12 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
   let catalogLoad: { mine: number; promise: Promise<ChatCatalog> } | undefined
   /** Sessions made here, with the chat's rules, before their event arrives. */
   const ours = new Set<string>()
+  // A session made outside the chat — the TUI's, the web app's — is read, never written to (C5).
+  const mustBeOurs = (id: string) => {
+    if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
+      throw new ForeignSession(t("chat.foreignSession"))
+    }
+  }
   /** One list per load in flight: the events that arrive while it runs, applied again over what it loaded. */
   const arriving = new Set<ChatEvent[]>()
 
@@ -318,9 +324,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
         const created = await connection.client.session.create({ title: titleFrom(text), permission: [...CHAT_PERMISSION] })
         id = (created.data as unknown as Session).id
         if (mine === generation) ours.add(id)
-      } else if (!ours.has(id) && !hasChatRules(state.data.session.find((session) => session.id === id))) {
-        throw new ForeignSession(t("chat.foreignSession"))
-      }
+      } else mustBeOurs(id)
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
       await connection.client.session.promptAsync({
@@ -334,6 +338,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     async rename(sessionID, title) {
       const name = title.trim()
       if (!name) throw new Error(t("chat.session.emptyTitle"))
+      mustBeOurs(sessionID)
       const mine = generation
       const result = await opened().client.session.update({ sessionID, title: name })
       // The server's event says the same; this shows it at once, stream down or not.
@@ -341,6 +346,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       if (mine === generation && updated?.id === sessionID) applyChatEvent({ type: "session.updated", properties: { info: updated } }, state.data, setData)
     },
     async abort(sessionID) {
+      mustBeOurs(sessionID)
       await opened().client.session.abort({ sessionID })
     },
     async replyPermission(requestID, reply) {

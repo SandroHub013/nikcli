@@ -401,7 +401,7 @@ export function Chat(props: ChatProps) {
               onKeyDown={onKeyDown}
             />
             <Show
-              when={answering()}
+              when={answering() && !foreign()}
               fallback={
                 <button
                   type="button"
