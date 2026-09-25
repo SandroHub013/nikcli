@@ -296,6 +296,23 @@ describe("the Bots panel's turns", () => {
     await tick()
   })
 
+  test("«Sempre» on a command Claude Code was refused: kept for the bot, and the offer goes", async () => {
+    const m = machine()
+    const p = panel(m)
+    const claude = bot("claude", "C:/u/.nikcli/agent/claude.md")
+    p.turns.send(claude, "spingi")
+    await tick()
+    m.say(
+      '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"git push -f"}}]}',
+    )
+    expect(p.talk(claude.path).offer).toMatchObject({ always: "gitRewrite" })
+    p.turns.grant(claude)
+    expect(p.kept[claude.path]).toEqual(["gitRewrite"])
+    expect(p.talk(claude.path).offer).toBeUndefined()
+    p.turns.stop(claude)
+    await tick()
+  })
+
   test("no answer in time is a Nega, said in the thread", async () => {
     const m = machine()
     const p = panel(m)

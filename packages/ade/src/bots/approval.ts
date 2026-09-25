@@ -305,12 +305,14 @@ export function withAlways(always: Always, key: string): string[] {
 }
 
 /**
- * Claude Code's refusals for a bot: every blocked prefix, and every dangerous
- * one its «Sempre» does not cover, for Bash and for PowerShell. `-p` cannot
- * ask mid-turn, so what would be a question is a refusal the thread reports.
+ * Claude Code's refusals: every blocked prefix and, for a bot's turn in the
+ * panel (`always` given), every dangerous one its «Sempre» does not cover;
+ * for Bash and for PowerShell. `-p` cannot ask mid-turn, so what would be a
+ * question is a refusal the thread reports. Without `always` (the voice),
+ * only the block list.
  */
-export function claudeRefusals(always: Always): string[] {
-  const rules = [...BLOCKED, ...DANGEROUS.filter((rule) => !always.includes(rule.id))]
+export function claudeRefusals(always?: Always): string[] {
+  const rules = [...BLOCKED, ...(always ? DANGEROUS.filter((rule) => !always.includes(rule.id)) : [])]
   return rules.flatMap((rule) => rule.prefixes.flatMap((prefix) => [`Bash(${prefix}:*)`, `PowerShell(${prefix}:*)`]))
 }
 

@@ -87,6 +87,11 @@ export interface Talk {
   /** A question nikcli is waiting on. The thread shows it; `answerKeys` answers it. */
   readonly permission?: PendingPermission
   /**
+   * A dangerous command Claude Code was refused (B8c): it cannot ask mid-turn,
+   * so the thread offers «Sempre per questo bot», for the next turn.
+   */
+  readonly offer?: { readonly always: string; readonly reason: string; readonly command: string }
+  /**
    * The turn ended because the plan's limit was reached.
    *
    * The voice reads this, not the sentence: the sentence follows the

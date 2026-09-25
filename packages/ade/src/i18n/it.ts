@@ -1350,6 +1350,9 @@ export const it = {
   "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
   "bots.approval.blocked": (command: string, reason: string) =>
     `Bloccato: «${command}» ${reason}. Questo comando non parte mai, qualunque cosa si scelga.`,
+  "bots.approval.refused": (command: string, reason: string) =>
+    `Claude Code non ha eseguito «${command}»: ${reason}. Può farlo dal prossimo turno se scegli «Sempre per questo bot».`,
+  "bots.approval.offer": (command: string) => `Consentire a questo bot comandi come «${command}», dal prossimo turno?`,
   "bots.approval.expired": (command: string) => `Nessuna risposta: «${command}» è stato negato.`,
   "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",

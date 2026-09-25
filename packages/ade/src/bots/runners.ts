@@ -24,6 +24,7 @@ import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
 import { NIKCLI_COMMAND } from "./nikcli"
 import { PLAN_RUNNERS } from "./terms"
+import { claudeRefusals, classifyCommand } from "./approval"
 import {
   appendMessage,
   applyJsonLine,
@@ -240,6 +241,8 @@ export interface TurnSpec {
    * otherwise stop on a menu nobody sees.
    */
   readonly approvals?: boolean
+  /** The bot's «Sempre» (`approval.ts`), with `approvals`: what Claude Code is not refused. */
+  readonly always?: readonly string[]
 }
 
 /**
@@ -448,6 +451,12 @@ export function turnCommand(
       if (remote && !bot.disabledTools.includes("bash")) disallowed.push("Bash", "PowerShell")
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
+      /*
+       * B8c: with a shell, the block list is refused on every turn and, for a
+       * bot's turn in the panel, every danger its «Sempre» does not cover.
+       * The thread reports the refusal (`permission_denials`).
+       */
+      if (allowed.includes("Bash")) disallowed.push(...claudeRefusals(spec.approvals ? (spec.always ?? []) : undefined))
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       if (!spec.stdin) args.push("--", message)
@@ -601,7 +610,30 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
        * not a tool to enable in the card: it is refused on purpose (review
        * B7, BASSO 2). Told apart by what Claude Code answered the call.
        */
-      const denials = list(event["permission_denials"]).map(rec)
+      /*
+       * B8c: a command refused by the block list or as a danger
+       * (`claudeRefusals`) says why; a danger offers «Sempre» for the next turn.
+       */
+      const approvalOf = (denial: Record<string, unknown> | undefined) => {
+        const tool = str(denial?.["tool_name"])
+        const command = str(rec(denial?.["tool_input"])?.["command"])
+        if ((tool !== "Bash" && tool !== "PowerShell") || !command) return undefined
+        const verdict = classifyCommand(command)
+        return verdict.blocked || verdict.dangerous ? { command, ...verdict } : undefined
+      }
+      const allDenials = list(event["permission_denials"]).map(rec)
+      for (const denial of allDenials) {
+        const found = approvalOf(denial)
+        if (!found) continue
+        if (found.blocked) {
+          next = appendMessage(next, { role: "error", text: t("bots.approval.blocked", found.command, t(found.blocked.reason)) }, at)
+        } else if (found.dangerous) {
+          const reason = t(found.dangerous.reason)
+          next = appendMessage(next, { role: "error", text: t("bots.approval.refused", found.command, reason) }, at)
+          next = { ...next, offer: { always: found.dangerous.id, reason, command: found.command } }
+        }
+      }
+      const denials = allDenials.filter((denial) => !approvalOf(denial))
       const onProtectedPath = (denial: Record<string, unknown> | undefined) => {
         const id = str(denial?.["tool_use_id"])
         const output = id ? next.messages.find((message) => message.id === `t-${id}`)?.output : undefined

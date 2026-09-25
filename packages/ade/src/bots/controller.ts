@@ -63,6 +63,8 @@ export interface BotTurns {
    * nikcli as a once: nikcli's own «always» is the project's, every bot's.
    */
   answer: (bot: AgentFile, choice: PermissionAnswer) => void
+  /** «Sempre per questo bot» on a command Claude Code was refused (`Talk.offer`): allowed from the next turn. */
+  grant: (bot: AgentFile) => void
   /** «Ferma»: the turn ends, with its child processes; the thread stays. */
   stop: (bot: AgentFile) => void
   /** «Nuova conversazione»: the turn ends and the thread starts over, session id included. */
@@ -131,10 +133,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     if (turns.has(path)) return false
     const runner = runnerById(bot.runner)
     const account = deps.accountOf?.(path) ?? { mode: "plan" as const }
-    deps.update(path, (talk) => ({
-      ...sendMessage(talk, message, Date.now()),
-      turnMode: spendKind(runner.id, bot.model, account),
-    }))
+    deps.update(path, (talk) => {
+      // An offer from the last turn is not for this one.
+      const { offer: _stale, ...rest } = talk
+      return { ...sendMessage(rest, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
+    })
     const sessionId = deps.talkOf(path).sessionId
     const current = () => turns.get(path) === turn
     const turn = deps.runTurn({
@@ -146,8 +149,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       ...(cwd ? { cwd } : {}),
       // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).
       lean: true,
-      // nikcli asks, `settle` answers (B8c).
+      // nikcli asks, `settle` answers; Claude Code is refused what the bot's «Sempre» does not cover (B8c).
       approvals: true,
+      always: always.get(path),
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       onLine: (line) => {
         if (current()) deps.update(path, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
@@ -194,6 +198,15 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       if (!turn || !asked) return
       if (choice === "always" && asked.always) always.add(bot.path, asked.always)
       reply(bot.path, turn, choice === "reject" ? "reject" : "once")
+    },
+    grant: (bot) => {
+      const offer = deps.talkOf(bot.path).offer
+      if (!offer) return
+      always.add(bot.path, offer.always)
+      deps.update(bot.path, (talk) => {
+        const { offer: _done, ...rest } = talk
+        return appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) }, now())
+      })
     },
     stop: (bot) => {
       if (!end(bot.path)) return

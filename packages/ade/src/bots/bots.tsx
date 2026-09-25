@@ -520,6 +520,7 @@ export function BotsMain(props: BotsMainProps) {
               expression={expression(bot())}
               onSend={(text) => send(bot(), text)}
               onAnswer={(choice) => answer(bot(), choice)}
+              onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
             />
           )}
@@ -655,6 +656,8 @@ function Thread(props: {
   /** Whether the message went: one that did not comes back into the composer. */
   onSend: (text: string) => boolean | Promise<boolean>
   onAnswer: (choice: PermissionAnswer) => void
+  /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
+  onGrant: () => void
   onStop: () => void
 }) {
   const [draft, setDraft] = createSignal("")
@@ -736,6 +739,20 @@ function Thread(props: {
                 </Show>
                 <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
                   {t("bots.permission.allow")}
+                </button>
+              </span>
+            </div>
+          )}
+        </Show>
+
+        {/* B8c: Claude Code cannot ask mid-turn; a refused danger is offered for the next turn. */}
+        <Show when={!props.talk.permission && props.talk.offer}>
+          {(offer) => (
+            <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
+              <span data-slot="bots-permission-text">{t("bots.approval.offer", offer().command)}</span>
+              <span data-slot="bots-permission-actions">
+                <button type="button" data-slot="bots-btn" onClick={() => props.onGrant()}>
+                  {t("bots.approval.always")}
                 </button>
               </span>
             </div>

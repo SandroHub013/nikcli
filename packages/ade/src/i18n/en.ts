@@ -1339,6 +1339,9 @@ export const en: Messages = {
   "bots.approval.timeout": (minutes: number) => `No answer within ${minutes} minutes counts as Deny.`,
   "bots.approval.blocked": (command: string, reason: string) =>
     `Blocked: «${command}» ${reason}. This command never runs, whatever is chosen.`,
+  "bots.approval.refused": (command: string, reason: string) =>
+    `Claude Code did not run «${command}»: it ${reason}. It can from the next turn if you choose «Always for this bot».`,
+  "bots.approval.offer": (command: string) => `Allow this bot commands like «${command}», from the next turn?`,
   "bots.approval.expired": (command: string) => `No answer: «${command}» was denied.`,
   "bots.approval.alwaysSet": (reason: string) => `From now on this bot no longer asks when it ${reason}.`,
   "bots.status.replying": "replying…",
