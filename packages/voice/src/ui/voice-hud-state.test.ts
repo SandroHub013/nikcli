@@ -113,15 +113,16 @@ describe("agentHudState", () => {
     expect(state.quoted).toBe(false)
   })
 
-  it("names what is being confirmed, not the raw words, when both exist", () => {
+  it("shows the current confirmation question instead of previous command text", () => {
     const state = agentHudState({
       ...base,
       status: "confirming",
-      spoken: "chiudi tutto",
-      readback: "chiudo tutte le sessioni",
+      spoken: "comando precedente",
+      readback: "apro la tavolozza",
+      confirmationPrompt: "Chiudo il pannello «ADE», va bene? Dimmi sì o no.",
     })
     expect(state.tone).toBe("asking")
-    expect(state.line).toBe("chiudo tutte le sessioni")
+    expect(state.line).toBe("Chiudo il pannello «ADE», va bene? Dimmi sì o no.")
   })
 
   // An unparsed phrase still has to say something; the words are all there is.

@@ -190,6 +190,7 @@ export function VoiceHud(props: VoiceHudProps) {
       partial: partial(),
       spoken: spoken(),
       readback: readback(),
+      confirmationPrompt: dialog().pendingAction?.confirmPrompt,
       wakeWord: props.engine.settings().wakeWord,
       ...latestExchange(props.engine.history()),
     })
