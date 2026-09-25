@@ -16,7 +16,7 @@
 import { getHost, type Host } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
-import { parseTalk, serializeTalk, type Talk } from "./talk"
+import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
 import {
   agentDir,
   agentHome,
@@ -445,6 +445,85 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
 export interface TalkDisk {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
+  removeItem?(key: string): void
+  keys?(): readonly string[]
+}
+
+function quotaExceeded(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = "name" in error ? String(error.name) : ""
+  const code = "code" in error ? Number(error.code) : 0
+  return name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED" || code === 22 || code === 1014
+}
+
+function updatedAtOf(raw: string | null): number {
+  if (!raw) return 0
+  try {
+    const parsed = JSON.parse(raw) as { updatedAt?: unknown }
+    return typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0
+  } catch {
+    return 0
+  }
+}
+
+/** Drops the least recently updated thread keys, not `except`. One generation, so a retry has room. */
+function dropOldestTalks(disk: TalkDisk, except: string): boolean {
+  if (!disk.keys || !disk.removeItem) return false
+  const ranked = disk
+    .keys()
+    .filter((key) => key.startsWith(TALK_KEY_PREFIX) && key !== except)
+    .map((key) => ({ key, at: updatedAtOf(disk.getItem(key)) }))
+    .sort((a, b) => a.at - b.at || a.key.localeCompare(b.key))
+  const oldest = ranked[0]
+  if (!oldest) return false
+  for (const item of ranked) {
+    if (item.at !== oldest.at) break
+    disk.removeItem(item.key)
+  }
+  return true
+}
+
+function underRoot(path: string, root: string): boolean {
+  const norm = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  const file = norm(path)
+  const base = norm(root)
+  return base.length > 0 && (file === base || file.startsWith(`${base}/`))
+}
+
+/**
+ * Once, when the panel knows which project is open.
+ *
+ * Threads saved as `ade.bots.talk:<path>` filled the quota and are never read
+ * again. A project bot moves under that project, scrubbed and capped. A
+ * global bot moves under the project open now, without its session id: the
+ * folder it was born in is not in the old key. The old key is removed either
+ * way, including when the value cannot be read.
+ */
+export function migrateTalkKeys(disk: TalkDisk, projectRoots: readonly string[], openProject: string): void {
+  if (!disk.keys || !disk.removeItem) return
+  const legacy = disk.keys().filter(isLegacyTalkKey)
+  for (const key of legacy) {
+    const path = key.slice(TALK_KEY_PREFIX.length)
+    try {
+      const talk = parseTalk(disk.getItem(key))
+      const root = projectRoots
+        .filter((candidate) => underRoot(path, candidate))
+        .sort((a, b) => b.length - a.length)[0]
+      if (root) {
+        disk.setItem(talkKey(path, root), serializeTalk(talk))
+      } else {
+        const { sessionId: _gone, ...rest } = talk
+        disk.setItem(talkKey(path, openProject), serializeTalk(rest))
+      }
+    } catch {
+      // Unreadable, or the new key would not fit. The old one still goes.
+    }
+    try {
+      disk.removeItem(key)
+    } catch {
+      // A key left behind is the quota problem this pass exists to close.
+    }
+  }
 }
 
 export function createTalkArchive(
@@ -459,8 +538,14 @@ export function createTalkArchive(
   const write = (key: string, value: string) => {
     try {
       disk.setItem(key, value)
-    } catch {
-      // Quota, or storage blocked. The thread still works for this session.
+    } catch (error) {
+      // One retry after the oldest threads are dropped. A second failure stays lost for this session.
+      if (!quotaExceeded(error) || !dropOldestTalks(disk, key)) return
+      try {
+        disk.setItem(key, value)
+      } catch {
+        // Still over the quota. The thread on screen is unchanged.
+      }
     }
   }
   return {
