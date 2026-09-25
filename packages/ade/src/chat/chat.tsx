@@ -60,9 +60,6 @@ const STATUS = {
 } as const
 
 export interface ChatProps {
-  /** OpenRouter key, from voice settings. No longer read here; C8 takes it out. */
-  apiKey: string
-  onOpenSettings: () => void
   /** The open project: the chat works in its folder, once it is trusted. */
   projectRoot?: string
   /** The window's store unless a caller brings one. */
