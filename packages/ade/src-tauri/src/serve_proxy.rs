@@ -151,9 +151,14 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
 ///
 /// What is here: the health and the folder's event stream, reading the
 /// configuration, providers, agents, commands and MCP servers the chat shows,
-/// the sessions and their messages, sending, stopping, going back and
-/// forking, the answers to permissions and questions, and reading files for
-/// `@file`. Each with its methods: `GET` also allows `HEAD`.
+/// the sessions and their messages, sending, stopping and going back, the
+/// answers to permissions and questions, and reading files for `@file`. Each
+/// with its methods: `GET` also allows `HEAD`.
+///
+/// Not forking (C6): nikcli's fork makes the new session without the
+/// permission rules the chat gives its own (`POST /session/:id/fork` takes a
+/// message id only, and `PATCH` cannot add rules), so a fork would run with
+/// the project's defaults and no «ask». The chat does not offer one.
 ///
 /// A pattern is matched segment by segment: `*` is any one segment, `**` at
 /// the end any rest, nothing included.
@@ -177,7 +182,6 @@ const ALLOWED: &[(&str, &str)] = &[
     ("POST", "/session/*/abort"),
     ("POST", "/session/*/revert"),
     ("POST", "/session/*/unrevert"),
-    ("POST", "/session/*/fork"),
     ("POST", "/session/*/summarize"),
     ("GET", "/session/*/todo"),
     ("GET", "/session/*/children"),
@@ -452,6 +456,17 @@ mod tests {
         ] {
             assert!(target(base, path).is_err(), "accettato: {path}");
         }
+    }
+
+    #[test]
+    fn the_chat_cannot_fork_a_session_whose_copy_would_lose_its_rules() {
+        let base = "http://127.0.0.1:4096";
+        let refused = |method: Method, path: &str| fenced(&method, &target(base, path).unwrap()).is_some();
+        assert!(refused(Method::POST, "/session/ses_1/fork"));
+        assert!(refused(Method::POST, "/Session/ses_1/Fork"));
+        // What stays: making a session, with its rules, and sending to it.
+        assert!(!refused(Method::POST, "/session"));
+        assert!(!refused(Method::POST, "/session/ses_1/prompt_async"));
     }
 
     #[test]
