@@ -43,7 +43,7 @@ import { PLAN_RUNNERS } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
-import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runTurn } from "./turn"
 import {
   createBot,
@@ -458,6 +458,15 @@ export function BotsMain(props: BotsMainProps) {
       return false
     }
     const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
+
+    // A nikcli bot that grants itself the shell would skip every question and the block list (B8c).
+    if (runnerById(trusted.runner).id === "nikcli") {
+      const granted = await grantProblem(trusted, props.projectRoot, { read: readBotText, fs: projectFs, text: read })
+      if (granted) {
+        updateTalk(bot.path, (talk) => applyProblem(talk, granted, Date.now()))
+        return false
+      }
+    }
 
     /*
      * nikcli also loads the project's own configuration, plugins included

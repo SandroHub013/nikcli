@@ -515,8 +515,14 @@ export const en: Messages = {
     "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
   "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
   "bots.trust.can.nikcli": "It can do what your nikcli configuration allows: the bot's file cannot grant itself more.",
-  "bots.trust.selfApproves": (name, what) =>
-    `This project's bot «${name}» grants itself «${what}» in its file (permission or tools), and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
+  "bots.trust.selfApproves": (name, what, line) =>
+    `This project's bot «${name}» grants itself «${what}» in its file, with the line «${line}», and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
+  "bots.trust.grantsShell": (name, line, file) =>
+    `The bot «${name}» grants itself commands or folders outside the project: its file has the line «${line}». nikcli applies it after ADE's rules, so those commands would run unasked, the block list's included. It does not start from the panel: remove that line from ${file}.`,
+  "bots.trust.configGrants": (name, key, file) =>
+    `${file} grants commands or folders outside the project with «${key}», and nikcli applies it to the bot «${name}» after ADE's rules: those commands would run unasked, the block list's included. The bot does not start from the panel: remove «${key}» from ${file}.`,
+  "bots.trust.configUnreadable": (name, file) =>
+    `${file} cannot be read, and it could grant the bot «${name}» commands unasked: it does not start from the panel. Check that it is valid JSON.`,
   "bots.projectTrust.new": (root, files) =>
     `The folder ${root} has a nikcli configuration of its own (${files}): plugins, tools and settings nikcli loads and runs on every turn, on your account, written by whoever wrote the project. Load them? If not, bots on nikcli do not start here; bots on Claude Code and Codex do, since they do not read it.`,
   "bots.projectTrust.changed": (root, files) =>
@@ -550,6 +556,10 @@ export const en: Messages = {
   "gateway.failed": (problem) => `The turn did not work: ${problem}`,
   "gateway.selfGrant": (name, what) =>
     `The bot «${name}» grants itself «${what}» in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
+  "gateway.configGrant": (name, key, file) =>
+    `This project's ${file} grants the bot «${name}» «${key}», which from a chat would override the shell's ban: not started from here. Remove it from ${file} to use it from the phone.`,
+  "gateway.configUnreadable": (name, file) =>
+    `This project's ${file} cannot be read, and it could grant the bot «${name}» the shell: not started from here.`,
   "gateway.approve.question": (permission, what) =>
     `The bot asks for the permission «${permission}» for:\n${what}\n\nThe command is read from the terminal and may be incomplete: if you do not recognize all of it, answer No.\nAllow it this once? No answer within 5 minutes means no.`,
   "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,
