@@ -117,7 +117,10 @@ pub trait Adapter: Send + Sync {
     fn cursor(&self) -> Option<String> {
         None
     }
-    async fn edit(&self, _chat: &str, _message: &str, _text: &str) -> Result<(), AdapterError> {
+    /// Changes `message` to `text`. What does not fit in one message goes on
+    /// in new ones after it; returns the id of the message that now holds the
+    /// end of the text, for an answer that keeps growing to be edited there.
+    async fn edit(&self, _chat: &str, _message: &str, _text: &str) -> Result<String, AdapterError> {
         Err(AdapterError::Unsupported)
     }
     /// «Sta scrivendo»; a platform without it does nothing.
@@ -180,9 +183,9 @@ pub mod fake {
             sent.push((chat.into(), text.into()));
             Ok(format!("m{}", sent.len()))
         }
-        async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<(), AdapterError> {
+        async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
             self.edited.lock().unwrap().push((chat.into(), message.into(), text.into()));
-            Ok(())
+            Ok(message.into())
         }
         async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
             self.typing.lock().unwrap().push(chat.into());

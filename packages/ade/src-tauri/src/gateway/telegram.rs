@@ -307,10 +307,10 @@ impl Adapter for Telegram {
         self.send_all(chat, text, Some(json!({ "inline_keyboard": rows }))).await
     }
 
-    async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<(), AdapterError> {
+    async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
         let message_id: i64 = message.parse().map_err(|_| AdapterError::Fatal("id del messaggio non valido".into()))?;
-        // One message: what does not fit is left out, the rest goes with the next send.
-        let piece = split(text, MAX_LEN, utf16).into_iter().next().ok_or_else(|| AdapterError::Fatal("il messaggio è vuoto".into()))?;
+        let mut pieces = split(text, MAX_LEN, utf16).into_iter();
+        let piece = pieces.next().ok_or_else(|| AdapterError::Fatal("il messaggio è vuoto".into()))?;
         let mut body = json!({ "chat_id": chat_id(chat), "message_id": message_id, "text": to_markdown_v2(&piece), "parse_mode": "MarkdownV2" });
         let edited = match self.call_patiently("editMessageText", &body).await {
             Err(failure) if failure.is_parse_error() => {
@@ -321,10 +321,16 @@ impl Adapter for Telegram {
             other => other,
         };
         match edited {
-            Ok(_) => Ok(()),
-            Err(Failure::Api { code: 400, description, .. }) if description.contains("message is not modified") => Ok(()),
-            Err(failure) => Err(failure.for_sending()),
+            Ok(_) => {}
+            Err(Failure::Api { code: 400, description, .. }) if description.contains("message is not modified") => {}
+            Err(failure) => return Err(failure.for_sending()),
         }
+        // Past the limit the text goes on in new messages, never cut off.
+        let mut last = message.to_string();
+        for piece in pieces {
+            last = self.send_piece(chat, &piece, None).await?;
+        }
+        Ok(last)
     }
 
     async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
@@ -574,6 +580,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_edit_past_the_limit_goes_on_in_new_messages_instead_of_being_cut() {
+        let api = FakeApi::start();
+        let text: String = (0..900).map(|n| format!("riga {n}\n")).collect();
+        let last = adapter(&api, None).edit("42", "77", &text).await.unwrap();
+        let edits = api.calls_to("editMessageText");
+        let sent = api.calls_to("sendMessage");
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0]["message_id"], 77);
+        assert!(!sent.is_empty());
+        assert_eq!(last, format!("{}", 100 + sent.len()), "l'id dell'ultimo messaggio, dove continuare");
+        // Nothing lost: every line is in exactly one message.
+        let all: String = edits.iter().chain(sent.iter()).map(|body| body["text"].as_str().unwrap().to_string()).collect::<Vec<_>>().join("\n");
+        for n in [0, 450, 899] {
+            assert_eq!(all.matches(&format!("riga {n}\n")).count() + usize::from(all.ends_with(&format!("riga {n}"))), 1, "riga {n}");
+        }
+    }
+
+    #[tokio::test]
     async fn a_press_is_answered_at_once_and_comes_back_as_a_button() {
         let api = FakeApi::start();
         api.then("getUpdates", 200, json!({ "ok": true, "result": [{ "update_id": 20, "callback_query": {
@@ -603,8 +627,8 @@ mod tests {
             ]})
         );
         api.then("editMessageText", 400, json!({ "ok": false, "error_code": 400, "description": "Bad Request: message is not modified" }));
-        telegram.edit("42", "101", "Procedo?").await.unwrap();
-        telegram.edit("42", "101", "Fatto.").await.unwrap();
+        assert_eq!(telegram.edit("42", "101", "Procedo?").await.unwrap(), "101");
+        assert_eq!(telegram.edit("42", "101", "Fatto.").await.unwrap(), "101");
         let edits = api.calls_to("editMessageText");
         assert_eq!((edits[1]["message_id"].as_i64(), edits[1]["text"].as_str()), (Some(101), Some("Fatto\\.")));
         telegram.typing("42").await.unwrap();

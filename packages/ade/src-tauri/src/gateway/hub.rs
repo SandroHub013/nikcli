@@ -457,7 +457,8 @@ impl Hub {
             .map_err(|error| redact(&error.message(), &secrets))
     }
 
-    pub async fn edit(&self, bot: &str, platform: Platform, chat: &str, message: &str, text: &str) -> Result<(), String> {
+    /// Returns the id of the message that now holds the end of `text`.
+    pub async fn edit(&self, bot: &str, platform: Platform, chat: &str, message: &str, text: &str) -> Result<String, String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         let secrets = self.secrets();
         adapter

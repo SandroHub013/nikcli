@@ -186,7 +186,7 @@ pub async fn gateway_edit(
     chat: String,
     message: String,
     text: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     hub(&app)?.edit(&bot, platform, &chat, &message, &text).await
 }
 
