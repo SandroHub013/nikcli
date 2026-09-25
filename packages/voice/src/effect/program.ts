@@ -1346,10 +1346,15 @@ export function makeVoiceProgram(
       })
     }
 
-    function handleTranscriptionUtterance(text: string): Effect.Effect<void> {
+    /**
+     * `spokenPaneId` is the pane the sentence belonged to when it began, for a
+     * sentence that was spoken. Typed text passes none and is dispatched to the
+     * pane as it is at that moment.
+     */
+    function handleTranscriptionUtterance(text: string, spokenPaneId?: string): Effect.Effect<void> {
       return Effect.gen(function* () {
         const settings = options.getSettings ? options.getSettings() : DEFAULT_VOICE_SETTINGS
-        const focusedPaneId = options.getContext?.().focusedPaneId
+        const focusedPaneId = spokenPaneId ?? options.getContext?.().focusedPaneId
         // In transcription mode, speech is strictly silenced: cancel any active TTS immediately
         yield* speaker.cancel
         // Announced before the dispatch, not after: the point of the line is to
@@ -1424,7 +1429,10 @@ export function makeVoiceProgram(
 
         // Mode separation: in transcription mode, utterance NEVER passes through parseUtterance
         if (currentSettings.mode === "transcription") {
-          yield* handleTranscriptionUtterance(trimmed)
+          // The pane is spent with the sentence it was aimed at.
+          const dictated = fromAsr ? dictatedPaneId : undefined
+          dictatedPaneId = undefined
+          yield* handleTranscriptionUtterance(trimmed, dictated)
           return
         }
 
@@ -1544,6 +1552,20 @@ export function makeVoiceProgram(
     /* The heard sentence being handled, so the next one can wait its turn. */
     let utteranceFiber: Fiber.RuntimeFiber<void, never> | null = null
 
+    /*
+     * The pane a dictation was meant for, read when the user began talking.
+     *
+     * It used to be read after the sentence had been recognised, so someone
+     * who said "detta al pannello due" and reached for the mouse while talking
+     * had the text land in the pane they had just clicked, and never in the
+     * one they named. The first partial is the moment a sentence belongs to a
+     * pane; after that the sentence is spoken, not re-aimed.
+     *
+     * Typed text has no beginning, so it is not remembered: the pane under
+     * the eyes when the words were typed is the one they meant.
+     */
+    let dictatedPaneId: string | undefined
+
     // Stream consumption loop for continuous speech recognition events
     const recognitionLoop = Stream.runForEach(transcriber.events, (ev) =>
       Effect.gen(function* () {
@@ -1559,6 +1581,8 @@ export function makeVoiceProgram(
             // Barge-in: user started speaking, cancel any active or queued speech synthesis immediately
             if (ev.text.trim().length > 0) {
               yield* speaker.cancel
+              // And the sentence now belongs to the pane under the eyes.
+              dictatedPaneId = options.getContext?.().focusedPaneId
             }
             options.onPartialTranscript?.(ev.text)
             break
