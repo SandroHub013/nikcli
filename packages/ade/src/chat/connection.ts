@@ -20,6 +20,12 @@
  * is asked again, in front of the screen. After a no the connection is closed
  * for good: every request fails with `ChatRefused`, without asking again, so
  * a stream that reconnects does not reopen the dialog each time.
+ *
+ * Requests that arrive together wait for one check, and so for one dialog
+ * (`admitProject` shares the check under way); a yes holds for `FRESH_MS`, so
+ * a bootstrap's burst reads the project's files once (C2 review, M2 and
+ * BASSO). Only a no with its reason closes the chat: an answer without one is
+ * no answer, and that request fails as one that can be tried again.
  */
 
 import { createNikcliClient, type NikcliClient } from "@nikcli-ai/sdk/client"
@@ -34,6 +40,8 @@ export interface ChatConnectionDeps {
   readonly bridge: ServerBridge
   /** The project's trust, asked with ADE's dialog if it is not given yet (`admitProject`). */
   readonly admit: (directory: string) => Promise<{ ok: true } | { ok: false; problem?: string }>
+  /** The clock for `FRESH_MS`; the tests pass their own. */
+  readonly now?: () => number
 }
 
 export type ChatConnection = { ok: true; client: NikcliClient; directory: string } | { ok: false; problem?: string }
@@ -80,13 +88,26 @@ export function boundFetch(fetch: typeof globalThis.fetch, directory: string): t
   return Object.assign(bound, { preconnect: () => {} }) as typeof globalThis.fetch
 }
 
+/** How long a yes to the project holds before the next request checks again. */
+export const FRESH_MS = 2000
+
 /** `fetch`, with the project's trust checked again before each request; closed for good after a no. */
-function trustedFetch(fetch: typeof globalThis.fetch, directory: string, admit: ChatConnectionDeps["admit"]): typeof globalThis.fetch {
+function trustedFetch(
+  fetch: typeof globalThis.fetch,
+  directory: string,
+  admit: ChatConnectionDeps["admit"],
+  now: () => number,
+): typeof globalThis.fetch {
   let refused: string | undefined
+  let trustedAt = Number.NEGATIVE_INFINITY
+  let pending: ReturnType<ChatConnectionDeps["admit"]> | undefined
   const trusted = async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (refused === undefined) {
-      const again = await admit(directory)
-      if (!again.ok) refused = again.problem ?? t("bots.projectTrust.refused", directory)
+    if (refused === undefined && now() - trustedAt >= FRESH_MS) {
+      pending ??= admit(directory).finally(() => (pending = undefined))
+      const again = await pending
+      if (again.ok) trustedAt = now()
+      else if (again.problem !== undefined) refused = again.problem
+      else throw new TypeError(t("chat.trustPending", directory))
     }
     if (refused !== undefined) throw new ChatRefused(refused)
     return fetch(input, init)
@@ -100,7 +121,7 @@ export async function openChat(directory: string, deps: ChatConnectionDeps): Pro
   if (!admitted.ok) return admitted.problem === undefined ? { ok: false } : { ok: false, problem: admitted.problem }
   const client = createNikcliClient({
     baseUrl: SERVER_BASE,
-    fetch: boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit), directory),
+    fetch: boundFetch(trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now), directory),
     directory,
     throwOnError: true,
   })

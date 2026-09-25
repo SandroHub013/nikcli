@@ -155,7 +155,12 @@ export interface AdmitProjectDeps {
 /** Where the yes to each project is kept (`localTrustStore`). */
 export const PROJECT_TRUST_KEY = "ade.projects.trusted"
 
-const asking = new Set<string>()
+/**
+ * The check under way for each project, shared: whoever asks meanwhile gets
+ * the same answer, and the user one dialog. Before, a second caller got a
+ * bare `{ ok: false }`, which the chat read as a no for good (C2 review, M2).
+ */
+const asking = new Map<string, Promise<{ ok: true } | { ok: false; problem?: string }>>()
 
 /** How the files are named in the question: the first few, then how many more. */
 function listed(files: readonly SurfaceFile[]): string {
@@ -172,7 +177,18 @@ export async function admitProject(
   root: string,
   deps: AdmitProjectDeps,
 ): Promise<{ ok: true } | { ok: false; problem?: string }> {
-  if (asking.has(root)) return { ok: false }
+  const under = asking.get(root)
+  if (under) return under
+  const check = checkProject(root, deps)
+  asking.set(root, check)
+  try {
+    return await check
+  } finally {
+    asking.delete(root)
+  }
+}
+
+async function checkProject(root: string, deps: AdmitProjectDeps): Promise<{ ok: true } | { ok: false; problem?: string }> {
   const files = await deps.surface()
   if (files.length === 0) return { ok: true }
   const fingerprint = await surfaceFingerprint(files)
@@ -182,13 +198,10 @@ export async function admitProject(
     trusted === undefined
       ? t("bots.projectTrust.new", root, listed(files))
       : t("bots.projectTrust.changed", root, listed(files))
-  asking.add(root)
   try {
     if (!(await deps.confirm(question))) return { ok: false, problem: t("bots.projectTrust.refused", root) }
   } catch {
     return { ok: false, problem: t("bots.projectTrust.failed", root) }
-  } finally {
-    asking.delete(root)
   }
   deps.store.set(root, fingerprint)
   return { ok: true }

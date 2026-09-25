@@ -590,6 +590,7 @@ export const en: Messages = {
   "gateway.panel.locked": (time) => `Too many wrong codes: pairing locked until ${time}.`,
   "gateway.panel.openPairing": "Pair another account (for 10 minutes)",
   "gateway.panel.pairingOpen": "Whoever writes to the bot now gets a code.",
+  "chat.trustPending": (directory) => `Trust in the project ${directory} is not decided yet: try again shortly.`,
   "gateway.panel.pairingAfterOn": "The gateway is off: once it is on, whoever writes to the bot gets a code.",
   "gateway.panel.needToken": "Switching on needs the bot's token: save it above.",
   "gateway.panel.previousProject": (project) => `Chat turns used to run in: ${project}`,

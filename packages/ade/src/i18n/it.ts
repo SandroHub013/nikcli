@@ -599,6 +599,7 @@ export const it = {
   "gateway.panel.locked": (time: string) => `Troppi codici sbagliati: abbinamento bloccato fino alle ${time}.`,
   "gateway.panel.openPairing": "Abbina un altro account (per 10 minuti)",
   "gateway.panel.pairingOpen": "Chi scrive al bot adesso riceve un codice.",
+  "chat.trustPending": (directory: string) => `La fiducia nel progetto ${directory} non è ancora decisa: riprova tra poco.`,
   "gateway.panel.pairingAfterOn": "Il gateway è spento: dopo l'accensione, chi scrive al bot riceve un codice.",
   "gateway.panel.needToken": "Per accendere serve il token del bot: salvalo qui sopra.",
   "gateway.panel.previousProject": (project: string) => `Prima i turni da chat giravano in: ${project}`,
