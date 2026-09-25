@@ -28,19 +28,34 @@ export interface SessionEntry {
 
 type Raw = Record<string, any>
 
-const updatedOf = (session: Session) => Number((session as unknown as Raw).time?.updated ?? (session as unknown as Raw).time?.created ?? 0)
+const updatedOf = (session: Session) =>
+  Number((session as unknown as Raw).time?.updated ?? (session as unknown as Raw).time?.created ?? 0)
 
 export function isBusy(data: ChatData, sessionID: string): boolean {
   const type = (data.session_status[sessionID] as Raw | undefined)?.type
   return type === "busy" || type === "retry"
 }
 
-/** The folder's sessions the chat lists: not archived, not a subagent's, the newest first. */
-export function sessionEntries(data: ChatData): SessionEntry[] {
+/** A folder as a key: one slash, no trailing one, and a Windows drive path in one case. */
+function folderKey(path: string): string {
+  const slashes = path.replace(/\\/g, "/").replace(/\/+$/, "")
+  return /^[A-Za-z]:\//.test(slashes) ? slashes.toLowerCase() : slashes
+}
+
+/**
+ * The folder's sessions the chat lists: not archived, not a subagent's, the
+ * newest first. Only this folder's: nikcli puts every folder that is not a git
+ * repository in one «global» project, and lists them all.
+ */
+export function sessionEntries(data: ChatData, directory: string | undefined): SessionEntry[] {
+  if (!directory) return []
+  const folder = folderKey(directory)
   return data.session
     .filter((session) => {
       const raw = session as unknown as Raw
-      return !raw.time?.archived && !raw.parentID
+      return (
+        !raw.time?.archived && !raw.parentID && typeof raw.directory === "string" && folderKey(raw.directory) === folder
+      )
     })
     .map((session) => ({
       id: session.id,

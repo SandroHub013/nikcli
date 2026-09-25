@@ -13,14 +13,33 @@ import {
 
 /* C4: the sessions the chat lists and the one it shows. */
 
+const DIR = "C:/progetto"
+
 const session = (id: string, updated: number, extra: Record<string, unknown> = {}) =>
-  ({ id, title: `Sessione ${id}`, directory: "C:/progetto", time: { created: 1, updated }, ...extra }) as never
+  ({ id, title: `Sessione ${id}`, directory: "C:\\progetto", time: { created: 1, updated }, ...extra }) as never
 
 function data(patch: Partial<ChatData>): ChatData {
   return { ...emptyChatData(), ...patch }
 }
 
 describe("the session list", () => {
+  test("only the open folder's: nikcli lists every non-git folder's sessions together", () => {
+    const list = sessionEntries(
+      data({
+        session: [
+          session("ses_here", 3),
+          session("ses_case", 2, { directory: "c:\\PROGETTO\\" }),
+          session("ses_there", 4, { directory: "C:\\altro" }),
+          session("ses_below", 5, { directory: "C:\\progetto\\sotto" }),
+          session("ses_none", 6, { directory: undefined }),
+        ],
+      }),
+      DIR,
+    )
+    expect(list.map((entry) => entry.id)).toEqual(["ses_here", "ses_case"])
+    expect(sessionEntries(data({ session: [session("ses_here", 3)] }), undefined)).toEqual([])
+  })
+
   test("newest first; archived and subagent sessions left out; the chat's own marked", () => {
     const list = sessionEntries(
       data({
@@ -32,6 +51,7 @@ describe("the session list", () => {
           session("ses_e", 5, { title: "  " }),
         ],
       }),
+      DIR,
     )
     expect(list.map((entry) => [entry.id, entry.chat])).toEqual([
       ["ses_b", false],
@@ -50,6 +70,7 @@ describe("the session list", () => {
         permission: { ses_b: [{ id: "per_1" }] } as never,
         question: { ses_c: [{ id: "que_1" }] } as never,
       }),
+      DIR,
     )
     expect(list.map((entry) => [entry.id, entry.busy, entry.waiting])).toEqual([
       ["ses_a", true, false],
@@ -59,8 +80,8 @@ describe("the session list", () => {
   })
 
   test("one just made stays open until the list has it; one that leaves the list closes", () => {
-    const empty = sessionEntries(data({}))
-    const listed = sessionEntries(data({ session: [session("ses_new", 1)] }))
+    const empty = sessionEntries(data({}), DIR)
+    const listed = sessionEntries(data({ session: [session("ses_new", 1)] }), DIR)
     // Sent: the id is back before the server's event lists the session.
     let open = followOpen(empty, { id: "ses_new", seen: false })
     expect(open).toEqual({ id: "ses_new", seen: false })
@@ -75,7 +96,8 @@ describe("the session list", () => {
 describe("the open session", () => {
   test("its messages in order, each with its parts; every part for the permission cards", () => {
     const info = (id: string) => ({ id, sessionID: "ses_a", role: "assistant", time: { created: 1 } }) as never
-    const part = (id: string, messageID: string) => ({ id, messageID, sessionID: "ses_a", type: "text", text: id }) as never
+    const part = (id: string, messageID: string) =>
+      ({ id, messageID, sessionID: "ses_a", type: "text", text: id }) as never
     const loaded = data({
       message: { ses_a: [info("msg_1"), info("msg_2")] },
       part: { msg_1: [part("prt_1", "msg_1")], msg_2: [part("prt_2", "msg_2"), part("prt_3", "msg_2")] },
@@ -89,9 +111,14 @@ describe("the open session", () => {
   })
 
   test("an answer that failed says why, as the server said it", () => {
-    const failed = { id: "msg_1", error: { name: "APIError", data: { message: "Rate limit exceeded: free-models-per-min." } } } as never
+    const failed = {
+      id: "msg_1",
+      error: { name: "APIError", data: { message: "Rate limit exceeded: free-models-per-min." } },
+    } as never
     expect(messageError(failed)).toBe("Rate limit exceeded: free-models-per-min.")
-    expect(messageError({ id: "msg_2", error: { name: "MessageAbortedError", data: {} } } as never)).toBe("MessageAbortedError")
+    expect(messageError({ id: "msg_2", error: { name: "MessageAbortedError", data: {} } } as never)).toBe(
+      "MessageAbortedError",
+    )
     expect(messageError({ id: "msg_3" } as never)).toBeUndefined()
   })
 })
@@ -112,7 +139,10 @@ describe("the connection, in words", () => {
     expect(connectionNotice({ status: "idle" })).toEqual({ kind: "noProject" })
     expect(connectionNotice({ directory: "C:/progetto", status: "admitting" })).toEqual({ kind: "admitting" })
     expect(connectionNotice({ directory: "C:/progetto", status: "retrying" })).toEqual({ kind: "retrying" })
-    expect(connectionNotice({ directory: "C:/progetto", status: "refused", problem: "No." })).toEqual({ kind: "refused", problem: "No." })
+    expect(connectionNotice({ directory: "C:/progetto", status: "refused", problem: "No." })).toEqual({
+      kind: "refused",
+      problem: "No.",
+    })
     expect(connectionNotice({ directory: "C:/progetto", status: "refused" })).toEqual({ kind: "refused" })
     expect(connectionNotice({ directory: "C:/progetto", status: "live" })).toBeUndefined()
   })
