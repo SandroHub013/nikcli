@@ -130,6 +130,7 @@ function askCloseConfirmation(message: string): Promise<boolean> {
 }
 
 import { askYesNo } from "../host/ask"
+import { createCloser } from "../editor/closer"
 import {
   createWorkbench,
   type Pane,
@@ -2486,7 +2487,7 @@ export function Workbench() {
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
     paneId: string,
     force: boolean,
-  ): Promise<{ closed: string[]; kept: string[] } | { error: string }> => {
+  ): Promise<{ closed: string[]; kept: string[]; asking: string[] } | { error: string }> => {
     const ids = [...descendants(paneId, spawnedBy), paneId].filter((id) => wb().panes.some((pane) => pane.id === id))
     const blocked = new Map<string, string>()
     for (const id of ids) {
@@ -2498,9 +2499,16 @@ export function Workbench() {
     }
     const closed: string[] = []
     const kept: string[] = []
+    const asking: string[] = []
     for (const id of ids) {
       const pane = wb().panes.find((candidate) => candidate.id === id)
       if (!pane) continue
+      // An unsaved file waits on the user's answer, and may be kept: not «closed» (review F-confirm, BASSO 1).
+      if (buffers()[id]?.dirty) {
+        close(id)
+        asking.push(pane.title)
+        continue
+      }
       for (const request of [...openRequests.values()]) {
         if (request.to === id) await settle(host, request.id, `[ade-msg] richiesta ${request.id} interrotta: la sessione "${pane.title}" è stata chiusa`)
       }
@@ -2518,7 +2526,7 @@ export function Workbench() {
       }
     }
     saveSpawned()
-    return { closed, kept }
+    return { closed, kept, asking }
   }
 
   /** Makes sure `.ade/` (where subagents put long results) is ignored by git in this project. */
@@ -3380,7 +3388,10 @@ export function Workbench() {
       }
       await answer(
         `ok: chiuse ${outcome.closed.map((title) => `"${title}"`).join(", ")}` +
-          (outcome.kept.length ? `; worktree lasciate su disco: ${outcome.kept.join(", ")}` : ""),
+          (outcome.kept.length ? `; worktree lasciate su disco: ${outcome.kept.join(", ")}` : "") +
+          (outcome.asking.length
+            ? `; aperte in attesa dell'utente (file non salvato, può tenerle): ${outcome.asking.map((title) => `"${title}"`).join(", ")}`
+            : ""),
       )
       return true
     }
@@ -5067,7 +5078,7 @@ export function Workbench() {
     } else if (id === "voice.settings") {
       setVoiceSettingsOpen(true)
     } else if (id === "panes.closeGone") {
-      for (const pane of wb().panes) if (pane.gone && !running.has(pane.id)) close(pane.id)
+      await closer.closeAll(wb().panes.filter((pane) => pane.gone && !running.has(pane.id)).map((pane) => pane.id))
     } else if (id === "recents.forgetGone") {
       const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
       if (count > 0 && (await askYesNo(t("confirm.forgetGone", count)))) {
@@ -5331,22 +5342,19 @@ export function Workbench() {
    * The buffer model has always known whether there is anything to lose;
    * nothing asked it. Closing a file pane — by the X, by Ctrl+W, or by the
    * command — dropped the draft with no warning and no way back. The question
-   * is the dialog plugin's, so it is answered later: `close` stays a plain
-   * call for its callers, and the pane goes only on the yes. A second close
-   * while the question is open does not ask twice.
+   * is the dialog plugin's, so it is answered later: `close` says whether the
+   * pane went now, and it goes only on the yes (`editor/closer.ts`).
    */
-  const askingToClose = new Set<string>()
-  const close = (id: string) => {
-    const buffer = buffers()[id]
-    if (!buffer?.dirty) return closeNow(id)
-    if (askingToClose.has(id)) return
-    askingToClose.add(id)
-    void askYesNo(t("editor.closeDirty", buffer.path))
-      .then((discard) => {
-        if (discard && wb().panes.some((pane) => pane.id === id)) closeNow(id)
-      })
-      .finally(() => askingToClose.delete(id))
-  }
+  const closer = createCloser({
+    unsaved: (id) => {
+      const buffer = buffers()[id]
+      return buffer?.dirty ? buffer.path : undefined
+    },
+    ask: (path) => askYesNo(t("editor.closeDirty", path)),
+    closeNow: (id) => closeNow(id),
+    exists: (id) => wb().panes.some((pane) => pane.id === id),
+  })
+  const close = (id: string): boolean => closer.close(id)
 
   const closeNow = (id: string) => {
     running.get(id)?.kill()
