@@ -114,7 +114,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(path, (talk) =>
       talk.permission === asked
-        ? { ...talk, permission: { ...asked, reason: verdict.reason, ...(verdict.key ? { always: verdict.key } : {}), expiresAt } }
+        ? { ...talk, permission: { ...asked, reason: verdict.reason, ...(verdict.keys ? { always: verdict.keys } : {}), expiresAt } }
         : talk,
     )
     cancelExpiry(path)
@@ -203,13 +203,14 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const turn = turns.get(bot.path)
       const asked = deps.talkOf(bot.path).permission
       if (!turn || !asked) return
-      if (choice === "always" && asked.always) always.add(bot.path, asked.always)
+      // Every danger of the command: «Sempre» on one must not let the others through (M3).
+      if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
       reply(bot.path, turn, choice === "reject" ? "reject" : "once")
     },
     grant: (bot) => {
       const offer = deps.talkOf(bot.path).offer
       if (!offer) return
-      always.add(bot.path, offer.always)
+      for (const key of offer.always) always.add(bot.path, key)
       deps.update(bot.path, (talk) => {
         const { offer: _done, ...rest } = talk
         return appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) }, now())

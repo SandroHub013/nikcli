@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./nikcli"
+import { withAlways } from "./approval"
 import { createBotTurns } from "./controller"
 import { acquireTurn, turnsRunning } from "./terms"
 import { emptyTalk, MENU_QUIET_MS, type Talk } from "./talk"
@@ -77,7 +78,7 @@ function panel(m: ReturnType<typeof machine>, accountOf?: (path: string) => { mo
     ...(accountOf ? { accountOf } : {}),
     always: {
       get: (path) => kept[path] ?? [],
-      add: (path, key) => void (kept[path] = [...(kept[path] ?? []), key]),
+      add: (path, key) => void (kept[path] = withAlways(kept[path] ?? [], key)),
     },
     schedule: (run, ms) => {
       const timer = { run, ms, cancelled: false }
@@ -253,6 +254,28 @@ describe("the Bots panel's turns", () => {
     await tick()
   })
 
+  /* B8c review, M3: every danger of the command, not the first. */
+  test("«Sempre» on the deletion does not let a forced push through with it; «Sempre» then keeps both", async () => {
+    const m = machine()
+    const p = panel(m)
+    const nikcli = bot("nikcli")
+    p.kept[nikcli.path] = ["recursiveDelete"]
+    p.turns.send(nikcli, "ciao")
+    await tick()
+    m.print(menu("bash", "rm -rf build && git push --force"))
+    p.quiet()
+    expect(m.writes).toEqual([])
+    expect(p.talk(nikcli.path).permission).toMatchObject({ always: ["recursiveDelete", "gitRewrite"] })
+    p.turns.answer(nikcli, "always")
+    expect(m.writes).toEqual([ONCE])
+    expect(p.kept[nikcli.path]).toEqual(["recursiveDelete", "gitRewrite"])
+    m.print(menu("bash", "rm -rf dist && git push -f"))
+    p.quiet()
+    expect(m.writes).toEqual([ONCE, ONCE])
+    p.turns.stop(nikcli)
+    await tick()
+  })
+
   test("a blocked command never runs, whatever the bot's «Sempre» holds", async () => {
     const m = machine()
     const p = panel(m)
@@ -281,7 +304,7 @@ describe("the Bots panel's turns", () => {
     p.quiet()
     expect(m.writes).toEqual([])
     const asked = p.talk(first.path).permission!
-    expect(asked).toMatchObject({ always: "gitRewrite" })
+    expect(asked).toMatchObject({ always: ["gitRewrite"] })
     expect(asked.reason).toBeTruthy()
     expect(asked.expiresAt! - asked.askedAt).toBe(300_000)
     p.turns.answer(first, "always")
@@ -300,7 +323,7 @@ describe("the Bots panel's turns", () => {
     m.print(menu("bash", "git push -f"))
     p.quiet()
     expect(m.writes).toEqual([ONCE, ONCE])
-    expect(p.talk(second.path).permission).toMatchObject({ always: "gitRewrite" })
+    expect(p.talk(second.path).permission).toMatchObject({ always: ["gitRewrite"] })
     p.turns.answer(second, "reject")
     expect(m.writes).toEqual([ONCE, ONCE, REJECT])
     expect(p.kept[second.path]).toBeUndefined()
@@ -318,7 +341,7 @@ describe("the Bots panel's turns", () => {
     m.say(
       '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"git push -f"}}]}',
     )
-    expect(p.talk(claude.path).offer).toMatchObject({ always: "gitRewrite" })
+    expect(p.talk(claude.path).offer).toMatchObject({ always: ["gitRewrite"] })
     p.turns.grant(claude)
     expect(p.kept[claude.path]).toEqual(["gitRewrite"])
     expect(p.talk(claude.path).offer).toBeUndefined()
@@ -334,7 +357,7 @@ describe("the Bots panel's turns", () => {
     await tick()
     m.print(menu("external_directory", "C:/Users/me/*"))
     p.quiet()
-    expect(p.talk(nikcli.path).permission).toMatchObject({ always: "outside:C:/Users/me/*" })
+    expect(p.talk(nikcli.path).permission).toMatchObject({ always: ["outside:C:/Users/me/*"] })
     const timer = p.timers.at(-1)!
     expect(timer.ms).toBe(300_000)
     timer.run()

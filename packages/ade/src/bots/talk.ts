@@ -52,8 +52,8 @@ export interface PendingPermission {
   readonly askedAt: number
   /** Why ADE asks (B8c): the kind of danger, in words. */
   readonly reason?: string
-  /** What «Sempre» keeps for the bot: the kind of danger, or the folder (`approval.ts`). */
-  readonly always?: string
+  /** What «Sempre» keeps for the bot: every kind of danger in the command, or the folder (`approval.ts`). */
+  readonly always?: readonly string[]
   /** When the question becomes a Nega. */
   readonly expiresAt?: number
   /** The patterns may be cut: read to a `)` that may be the command's own. */
@@ -90,7 +90,7 @@ export interface Talk {
    * A dangerous command Claude Code was refused (B8c): it cannot ask mid-turn,
    * so the thread offers «Sempre per questo bot», for the next turn.
    */
-  readonly offer?: { readonly always: string; readonly reason: string; readonly command: string }
+  readonly offer?: { readonly always: readonly string[]; readonly reason: string; readonly command: string }
   /**
    * The turn ended because the plan's limit was reached.
    *

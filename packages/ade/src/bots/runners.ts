@@ -623,7 +623,7 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
         const command = str(rec(denial?.["tool_input"])?.["command"])
         if ((tool !== "Bash" && tool !== "PowerShell") || !command) return undefined
         const verdict = classifyCommand(command)
-        return verdict.blocked || verdict.dangerous ? { command, ...verdict } : undefined
+        return verdict.blocked || verdict.dangers.length > 0 ? { command, ...verdict } : undefined
       }
       const allDenials = list(event["permission_denials"]).map(rec)
       for (const denial of allDenials) {
@@ -631,10 +631,10 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
         if (!found) continue
         if (found.blocked) {
           next = appendMessage(next, { role: "error", text: t("bots.approval.blocked", found.command, t(found.blocked.reason)) }, at)
-        } else if (found.dangerous) {
-          const reason = t(found.dangerous.reason)
+        } else {
+          const reason = found.dangers.map((rule) => t(rule.reason)).join("; ")
           next = appendMessage(next, { role: "error", text: t("bots.approval.refused", found.command, reason) }, at)
-          next = { ...next, offer: { always: found.dangerous.id, reason, command: found.command } }
+          next = { ...next, offer: { always: found.dangers.map((rule) => rule.id), reason, command: found.command } }
         }
       }
       const denials = allDenials.filter((denial) => !approvalOf(denial))

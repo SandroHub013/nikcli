@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { t } from "../i18n"
 import {
   APPROVAL_TIMEOUT_MS,
   BLOCKED,
@@ -14,8 +15,8 @@ import {
 /* B8c: what a bot may run without asking, what it is asked about, what never runs. */
 
 const kind = (command: string) => {
-  const { blocked, dangerous } = classifyCommand(command)
-  return blocked ? `block:${blocked.id}` : dangerous ? `ask:${dangerous.id}` : "ok"
+  const { blocked, dangers } = classifyCommand(command)
+  return blocked ? `block:${blocked.id}` : dangers.length > 0 ? `ask:${dangers.map((rule) => rule.id).join("+")}` : "ok"
 }
 
 describe("the block list", () => {
@@ -184,10 +185,10 @@ describe("nested shells and masked commands", () => {
 describe("the decision, and «Sempre» per bot", () => {
   test("a dangerous kind is asked until this bot has it on «Sempre»", () => {
     const asked = decide("bash", "git push --force", [])
-    expect(asked).toMatchObject({ kind: "ask", key: "gitRewrite" })
+    expect(asked).toMatchObject({ kind: "ask", keys: ["gitRewrite"] })
     expect(decide("bash", "git push -f origin x", withAlways([], "gitRewrite"))).toEqual({
       kind: "allow",
-      key: "gitRewrite",
+      keys: ["gitRewrite"],
     })
     // Another kind is still asked.
     expect(decide("bash", "rm -rf build", ["gitRewrite"]).kind).toBe("ask")
@@ -197,14 +198,14 @@ describe("the decision, and «Sempre» per bot", () => {
   test("a command maybe cut is asked, even if what shows is harmless, and «Sempre» cannot cover it", () => {
     const asked = decide("bash", "echo $(date", ["recursiveDelete"], true)
     expect(asked.kind).toBe("ask")
-    expect("key" in asked && asked.key).toBeFalsy()
+    expect("keys" in asked && asked.keys).toBeFalsy()
     // The block list still reads what shows.
     expect(decide("bash", "echo $(rm -rf /", [], true).kind).toBe("block")
   })
 
   test("a write outside the project is asked, folder by folder", () => {
     const asked = decide("external_directory", "C:/Users/me/*", [])
-    expect(asked).toMatchObject({ kind: "ask", key: "outside:C:/Users/me/*" })
+    expect(asked).toMatchObject({ kind: "ask", keys: ["outside:C:/Users/me/*"] })
     expect(decide("external_directory", "C:/Users/me/*", ["outside:C:/Users/me/*"]).kind).toBe("allow")
     expect(decide("external_directory", "D:/*", ["outside:C:/Users/me/*"]).kind).toBe("ask")
     expect(decide("webfetch", "https://x.test", []).kind).toBe("ask")
@@ -228,6 +229,37 @@ describe("the decision, and «Sempre» per bot", () => {
 
   test("the question waits five minutes, then it is a no", () => {
     expect(APPROVAL_TIMEOUT_MS).toBe(300_000)
+  })
+})
+
+/*
+ * B8c review, M3: a command with more than one danger is asked about for
+ * every one, and «Sempre» on one does not let the others through.
+ */
+describe("every danger of a command", () => {
+  test("a command with two dangers names both", () => {
+    expect(kind("rm -rf build && git push --force")).toBe("ask:recursiveDelete+gitRewrite")
+    expect(kind('bash -c "npm publish"')).toBe("ask:publish+nestedShell")
+    const asked = decide("bash", "rm -rf build && git push --force", [])
+    expect(asked).toMatchObject({ kind: "ask", keys: ["recursiveDelete", "gitRewrite"] })
+    if (asked.kind === "ask") {
+      expect(asked.reason).toContain(t("bots.approval.reason.recursiveDelete"))
+      expect(asked.reason).toContain(t("bots.approval.reason.gitRewrite"))
+    }
+  })
+
+  test("«Sempre» on the deletion does not let the forced push through", () => {
+    expect(decide("bash", "rm -rf build && git push --force", ["recursiveDelete"])).toMatchObject({
+      kind: "ask",
+      keys: ["recursiveDelete", "gitRewrite"],
+    })
+    expect(decide("bash", "rm -rf build && git push --force", ["recursiveDelete", "gitRewrite"])).toMatchObject({
+      kind: "allow",
+    })
+  })
+
+  test("withAlways keeps each key once", () => {
+    expect(withAlways(["gitRewrite"], "recursiveDelete", "gitRewrite")).toEqual(["gitRewrite", "recursiveDelete"])
   })
 })
 

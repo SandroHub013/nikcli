@@ -736,7 +736,7 @@ describe("B8c: Claude Code e le approvazioni", () => {
     const denied = fold("claude", [
       '{"type":"result","is_error":false,"session_id":"s","permission_denials":[{"tool_name":"Bash","tool_use_id":"toolu_1","tool_input":{"command":"git push --force origin main"}}]}',
     ])
-    expect(denied.offer).toMatchObject({ always: "gitRewrite", command: "git push --force origin main" })
+    expect(denied.offer).toMatchObject({ always: ["gitRewrite"], command: "git push --force origin main" })
     expect(denied.messages.at(-1)!.text).toContain("git push --force origin main")
     // Not mistaken for a protected folder, nor for a tool to turn on.
     expect(denied.messages.some((m) => m.text.includes(".git,"))).toBe(false)

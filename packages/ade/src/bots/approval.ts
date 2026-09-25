@@ -284,18 +284,20 @@ export const DANGEROUS: readonly CommandRule[] = [
 ]
 
 export type Verdict =
-  | { readonly kind: "allow"; readonly key?: string }
+  | { readonly kind: "allow"; readonly keys?: readonly string[] }
   | { readonly kind: "block"; readonly rule: CommandRule }
-  /** `key` is what «Sempre» would keep; none when it cannot be kept (a command not read whole). */
-  | { readonly kind: "ask"; readonly key?: string; readonly reason: string }
+  /** `keys` is what «Sempre» would keep, every one; none when it cannot be kept (a command not read whole). */
+  | { readonly kind: "ask"; readonly keys?: readonly string[]; readonly reason: string }
 
-/** What `command` is: blocked, dangerous (with the kind), or nothing to ask about. */
-export function classifyCommand(command: string): { blocked?: CommandRule; dangerous?: CommandRule } {
+/**
+ * What `command` is: blocked, or every kind of danger in it (B8c review,
+ * M3: `rm -rf x && git push --force` is two), or nothing to ask about.
+ */
+export function classifyCommand(command: string): { blocked?: CommandRule; dangers: readonly CommandRule[] } {
   const text = command.replace(/\r\n?/g, "\n")
   const blocked = BLOCKED.find((rule) => rule.pattern.test(text))
-  if (blocked) return { blocked }
-  const dangerous = DANGEROUS.find((rule) => rule.pattern.test(text))
-  return dangerous ? { dangerous } : {}
+  if (blocked) return { blocked, dangers: [] }
+  return { dangers: DANGEROUS.filter((rule) => rule.pattern.test(text)) }
 }
 
 /** A bot's «Sempre»: kinds of danger, and folders outside the project, it may go ahead with. */
@@ -308,34 +310,35 @@ const outsideKey = (patterns: string) => `outside:${patterns.trim()}`
  * as its menu draws them), for a bot with `always`.
  *
  * - `bash`: the block list refuses, `always` never reaches it; a command
- *   maybe cut (`cut`) is asked, always; a dangerous kind is asked unless
- *   `always` has it; anything else goes.
+ *   maybe cut (`cut`) is asked, always; a command with dangers is asked
+ *   unless `always` has every one of them (M3); anything else goes.
  * - `external_directory`: asked unless `always` has that folder.
  * - anything else nikcli asks about (the user's own «ask» rules): asked.
  */
 export function decide(permission: string, patterns: string, always: Always, cut = false): Verdict {
   if (permission === "bash") {
-    const { blocked, dangerous } = classifyCommand(patterns)
+    const { blocked, dangers } = classifyCommand(patterns)
     if (blocked) return { kind: "block", rule: blocked }
     // What follows the cut is unknown: never let through unseen, nor on «Sempre».
     if (cut) return { kind: "ask", reason: t("bots.approval.reason.cut") }
-    if (!dangerous) return { kind: "allow" }
-    if (always.includes(dangerous.id)) return { kind: "allow", key: dangerous.id }
-    return { kind: "ask", key: dangerous.id, reason: t(dangerous.reason) }
+    if (dangers.length === 0) return { kind: "allow" }
+    const keys = dangers.map((rule) => rule.id)
+    if (keys.every((key) => always.includes(key))) return { kind: "allow", keys }
+    return { kind: "ask", keys, reason: dangers.map((rule) => t(rule.reason)).join("; ") }
   }
   if (permission === "external_directory") {
     const key = outsideKey(patterns)
-    if (always.includes(key)) return { kind: "allow", key }
-    return { kind: "ask", key, reason: t("bots.approval.reason.outside") }
+    if (always.includes(key)) return { kind: "allow", keys: [key] }
+    return { kind: "ask", keys: [key], reason: t("bots.approval.reason.outside") }
   }
   const key = `tool:${permission}`
-  if (always.includes(key)) return { kind: "allow", key }
-  return { kind: "ask", key, reason: t("bots.approval.reason.tool", permission) }
+  if (always.includes(key)) return { kind: "allow", keys: [key] }
+  return { kind: "ask", keys: [key], reason: t("bots.approval.reason.tool", permission) }
 }
 
-/** `always` with `key` added once. The block list has no key: nothing adds it. */
-export function withAlways(always: Always, key: string): string[] {
-  return always.includes(key) ? [...always] : [...always, key]
+/** `always` with `keys` added once each. The block list has no key: nothing adds it. */
+export function withAlways(always: Always, ...keys: readonly string[]): string[] {
+  return keys.reduce<string[]>((kept, key) => (kept.includes(key) ? kept : [...kept, key]), [...always])
 }
 
 /**

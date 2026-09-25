@@ -123,7 +123,7 @@ export function permissionWatcher(deps: {
       }
       asking = true
       const danger =
-        verdict.kind === "ask" && verdict.key && !verdict.key.startsWith("tool:") ? verdict.reason : undefined
+        verdict.kind === "ask" && verdict.keys?.some((key) => !key.startsWith("tool:")) ? verdict.reason : undefined
       void approveOnPhone(pending, deps.ask, deps.signal, danger).then(({ answer, expired }) => {
         if (!deps.signal.aborted) deps.write(answerKeys(answer))
         if (expired) deps.say(t("gateway.approve.expired"))
