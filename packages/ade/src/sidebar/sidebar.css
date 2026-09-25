@@ -950,19 +950,36 @@
   color: var(--ade-text);
 }
 
+/*
+ * The name takes whatever the row has left: it is what the row is for. The
+ * badges and the count keep their width, and the name gives way last.
+ *
+ * The button that opens the project's sessions is not in that race. It is
+ * seen only on hover or focus, so it sits over the empty space right of the
+ * count — the same slot as the "add" buttons of the section headers — instead
+ * of holding 26px of the row while invisible. In 0.8.0 it did, and with the
+ * name at `flex: 0 1 auto` a project at 200px read "C…", and the active one
+ * only its badge (fix-sidebar-nomi).
+ */
 [data-slot="workspace-name"] {
-  flex: 0 1 auto;
+  flex: 1 1 0;
+}
+
+[data-component="ade-sidebar"] [data-slot="workspace-header"] {
+  position: relative;
 }
 
 [data-slot="workspace-open-project"] {
+  position: absolute;
+  top: 50%;
+  right: calc(var(--ade-space-5) + var(--ade-space-4) + 2px);
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
-  flex: 0 0 auto;
-  margin-left: var(--ade-space-1);
-  margin-right: auto;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: var(--ade-radius-sm);
@@ -986,10 +1003,6 @@
 [data-slot="workspace-open-project"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
-}
-
-[data-slot="workspace-header"]:not(:has([data-slot="workspace-open-project"])) [data-slot="workspace-name"] {
-  flex: 1;
 }
 
 /* Look and tone from `Badge` in `ui/layout`; here only where it sits in the row. */
@@ -1253,8 +1266,9 @@
 }
 
 [data-slot="agent-card-folder"] {
-  display: inline-flex;
-  align-items: center;
+  /* A block, not a flex box: `text-overflow` does not reach the text of a
+     flex container, so the name was cut without its "…". */
+  display: block;
   color: var(--ade-text-soft);
   font-weight: var(--ade-weight-medium);
   font-size: 11px;
@@ -1262,7 +1276,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
+  /* At most under half the line, and never shrunk below that: the
+     branch takes the rest. Shrinking both in proportion to their length left
+     "ni · feat/brows" at 200px (fix-sidebar-nomi). */
+  max-width: min(120px, 45%);
+  flex: 0 0 auto;
 }
 
 [data-slot="agent-card-sep"] {
@@ -1274,8 +1292,9 @@
 }
 
 [data-slot="agent-card-branch"] {
-  display: inline-flex;
-  align-items: center;
+  /* A block, not a flex box: `text-overflow` does not reach the text of a
+     flex container, so the name was cut without its "…". */
+  display: block;
   color: var(--ade-text-weak);
   font-family: var(--ade-mono);
   font-size: 10.5px;
@@ -1284,6 +1303,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100px;
+  flex: 0 1 auto;
 }
 
 [data-slot="agent-card-icon"] {
@@ -1746,6 +1766,29 @@ aside[data-component="ade-sidebar"] {
 /* A narrow column tightens the buttons before anything would overflow. */
 [data-slot="sidebar-footer"] {
   container-type: inline-size;
+}
+
+/*
+ * A narrow column gives the projects' names the room kept for alignment.
+ *
+ * Right of a project's count sat 56px, the width of the section headers'
+ * two "add" buttons, so that every count ends on one line. At 260px and less
+ * that line cost the active project its name: with its badge it had under
+ * 40px. Here the room shrinks to the open-project button alone, and the
+ * counts of the projects end a little right of the headers' ones.
+ */
+aside[data-component="ade-sidebar"] {
+  container: ade-sidebar / inline-size;
+}
+
+@container ade-sidebar (max-width: 279px) {
+  [data-component="ade-sidebar"] [data-slot="workspace-count"] {
+    margin-right: calc(18px + var(--ade-space-4));
+  }
+
+  [data-slot="workspace-open-project"] {
+    right: calc(var(--ade-space-5) + var(--ade-space-1));
+  }
 }
 
 @container (max-width: 230px) {

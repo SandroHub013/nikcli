@@ -84,3 +84,53 @@ describe("the screenshot tray", () => {
     expect(tsx).toMatch(/scrollLeft = before \+ event\.deltaY/)
   })
 })
+
+/*
+ * fix-sidebar-nomi (0.8.0): at the user's width the projects read "C…" and the
+ * active one only its badge, and the session cards "ni · feat/brows".
+ * Measured in ADE Test at 200px: the names went from 38px (0 with a badge) to
+ * 94px (34), the folder of a card keeps its name and the branch gets the "…".
+ */
+describe("the sidebar's names, when the column is narrow", () => {
+  /** Every body of the rules whose selector is exactly `selector`, comments stripped. */
+  function bodies(css: string, selector: string): string[] {
+    const found: string[] = []
+    let at = css.indexOf(`\n${selector} {`)
+    while (at >= 0) {
+      const open = css.indexOf("{", at)
+      found.push(css.slice(open + 1, css.indexOf("}", open)).replace(/\/\*[\s\S]*?\*\//g, ""))
+      at = css.indexOf(`\n${selector} {`, open)
+    }
+    return found
+  }
+
+  test("a project's name takes what the row has left", () => {
+    const flex = bodies(sidebar, '[data-slot="workspace-name"]').flatMap((body) => body.match(/flex:[^;]+/g) ?? [])
+    expect(flex.at(-1)).toBe("flex: 1 1 0")
+  })
+
+  test("the open-project button, seen only on hover, holds no room in the row", () => {
+    const body = bodies(sidebar, '[data-slot="workspace-open-project"]')[0]!
+    expect(body).toContain("position: absolute")
+    expect(body).not.toContain("margin-right: auto")
+  })
+
+  test("on a narrow column the room kept right of a project's count shrinks to that button", () => {
+    const narrow = sidebar.slice(sidebar.indexOf("@container ade-sidebar (max-width: 279px)"))
+    expect(narrow).not.toBe(sidebar)
+    expect(narrow).toMatch(/\[data-slot="workspace-count"\] \{[^}]*margin-right: calc\(18px/)
+    expect(sidebar).toMatch(/aside\[data-component="ade-sidebar"\] \{[^}]*container: ade-sidebar \/ inline-size/)
+  })
+
+  test("a card's folder is not shrunk to two letters, and both names end in «…»", () => {
+    const folder = bodies(sidebar, '[data-slot="agent-card-folder"]')[0]!
+    const branch = bodies(sidebar, '[data-slot="agent-card-branch"]')[0]!
+    expect(folder).toContain("flex: 0 0 auto")
+    expect(folder).toMatch(/max-width: min\(120px, \d+%\)/)
+    // `text-overflow` does not reach the text of a flex container.
+    for (const body of [folder, branch]) {
+      expect(body).toContain("display: block")
+      expect(body).toContain("text-overflow: ellipsis")
+    }
+  })
+})
