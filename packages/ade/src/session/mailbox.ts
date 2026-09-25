@@ -233,8 +233,8 @@ export function parseMessage(body: string): Message | undefined {
  *
  * A pane id is public — `ade-msg list` prints every one — so without this
  * any session could sign as another, and answer a request made to it. An
- * unproven sender is refused for `send`, `ask` and `spawn`; other message
- * kinds stay anonymous and are handled by their own rules.
+ * unproven sender is refused for the kinds in {@link UNVERIFIED_ACTING};
+ * the others stay anonymous and are handled by their own rules.
  */
 export function verifySender<M extends Message>(message: M, tokenOf: (paneId: string) => string | undefined): M {
   const expected = message.from ? tokenOf(message.from) : undefined
@@ -242,7 +242,7 @@ export function verifySender<M extends Message>(message: M, tokenOf: (paneId: st
   return proven ? message : { ...message, from: "" }
 }
 
-const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn"])
+const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set(["send", "ask", "spawn", "interrupt", "close"])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {
   if (message.from || !UNVERIFIED_ACTING.has(message.kind)) return undefined
