@@ -530,7 +530,13 @@ mod tests {
             assert_eq!(body["parse_mode"], "MarkdownV2");
             assert_eq!(body["chat_id"], 42);
             let text = body["text"].as_str().unwrap();
-            assert!(utf16(text) <= MAX_LEN + 1500, "i caratteri di escape non contano per Telegram");
+            // Telegram counts the text after the escapes are taken out.
+            let mut shown = String::new();
+            let mut chars = text.chars();
+            while let Some(c) = chars.next() {
+                shown.push(if c == '\\' { chars.next().unwrap_or(c) } else { c });
+            }
+            assert!(utf16(&shown) <= MAX_LEN, "{} unità dopo gli escape", utf16(&shown));
             assert_eq!(text.matches("```").count() % 2, 0, "{text}");
         }
         assert!(sent[1]["text"].as_str().unwrap().starts_with("```rust\n"));
