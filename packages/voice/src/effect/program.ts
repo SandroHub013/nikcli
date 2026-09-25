@@ -45,6 +45,8 @@ import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type Trans
 /** Intents whose result is information to hear, not an action to see. */
 const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "project.search"])
 
+const SEND_REFUSED = "Non sono riuscito a inviare la dettatura: il testo non è partito."
+
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
  * completely bypassing intent parsing and command execution.
@@ -697,7 +699,12 @@ export function makeVoiceProgram(
                 ),
               )
 
-              if (sent) yield* watchForReply(sent)
+              if (sent) {
+                yield* watchForReply(sent)
+                if (effect.readback) yield* saySendOutcome(effect.readback)
+                break
+              }
+              yield* saySendOutcome(SEND_REFUSED)
               break
             }
 
@@ -1089,6 +1096,12 @@ export function makeVoiceProgram(
           .speak(text)
           .pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
       })
+    }
+
+    function saySendOutcome(text: string): Effect.Effect<void> {
+      currentState = { ...currentState, lastSpokenText: text }
+      options.onStateChange?.(currentState)
+      return say(text)
     }
 
     let isWakeWordAwake = false

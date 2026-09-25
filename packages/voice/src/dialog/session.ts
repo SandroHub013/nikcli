@@ -113,7 +113,7 @@ export type DialogEffect =
   | { type: "execute_intent"; intent: VoiceIntentSpec; slots: Record<string, any> }
   /** `what` is the request the question read: the host answers only that one (V1-bis, ALTO 3). */
   | { type: "answer_permission"; paneId: string; answer: "allow" | "deny"; what?: string }
-  | { type: "send_prompt"; paneId?: string; text: string }
+  | { type: "send_prompt"; paneId?: string; text: string; readback?: string }
   | { type: "execute_plan"; steps: PlanStep[]; refusals: string[]; speech?: string }
   | { type: "confirm_send"; id: string; approved: boolean }
 
@@ -673,13 +673,11 @@ export function transition(
             type: "send_prompt",
             paneId: targetPane,
             text: fullPrompt,
+            readback: "Dettatura completata e inviata all'agente.",
           })
           /* A permission that arrived mid-dictation is asked now that the
            * text has gone out; it must not vanish with the buffer. */
-          return (
-            promoteQueued(finished, now, ctx, effects) ??
-            withSpoken(finished, "Dettatura completata e inviata all'agente.")
-          )
+          return promoteQueued(finished, now, ctx, effects) ?? { state: finished, effects }
         } else {
           return (
             promoteQueued(finished, now, ctx, effects) ??
