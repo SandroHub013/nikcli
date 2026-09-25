@@ -42,6 +42,8 @@ type ReasonKey =
   | "bots.approval.reason.publish"
   | "bots.approval.reason.containers"
   | "bots.approval.reason.nestedShell"
+  | "bots.approval.reason.opaqueShell"
+  | "bots.approval.reason.consoleWrite"
 
 /** Five minutes, as the phone's question (`gateway/approval.ts`): then Nega. */
 export const APPROVAL_TIMEOUT_MS = 5 * 60_000
@@ -57,6 +59,11 @@ export interface CommandRule {
    * there these are refused unless the bot's «Sempre» covers them.
    */
   readonly prefixes: readonly string[]
+  /**
+   * `false`: asked every time, never kept by «Sempre» (second review, BASSI
+   * 1-2). What it runs cannot be read, or it can draw a false menu.
+   */
+  readonly always?: false
 }
 
 /*
@@ -266,20 +273,34 @@ export const DANGEROUS: readonly CommandRule[] = [
   {
     id: "nestedShell",
     reason: "bots.approval.reason.nestedShell",
-    pattern: re(String.raw`${NESTED}|\bbase64\s+(?:-d|--decode)\b[^;&\n]*\|`),
-    prefixes: [
-      "bash -c",
-      "sh -c",
-      "zsh -c",
-      "cmd /c",
-      "cmd.exe /c",
-      "powershell -Command",
-      "powershell -c",
-      "powershell -EncodedCommand",
-      "pwsh -Command",
-      "pwsh -c",
-      "eval",
-    ],
+    pattern: re(
+      String.raw`\b(?:cmd(?:\.exe)?\s+\/[ck]|(?:ba|z|da|k|fi)?sh(?:\.exe)?\s+(?:-\w+\s+)*-\w*c|(?:pwsh|powershell)(?:\.exe)?\s+(?:-\w+\s+)*?-(?:c|command))\b`,
+    ),
+    prefixes: ["bash -c", "sh -c", "zsh -c", "cmd /c", "cmd.exe /c", "powershell -Command", "powershell -c", "pwsh -Command", "pwsh -c"],
+  },
+  {
+    /* What runs cannot be read at all: encoded, from a variable, decoded into a shell. */
+    id: "opaqueShell",
+    reason: "bots.approval.reason.opaqueShell",
+    pattern: re(
+      String.raw`\b(?:pwsh|powershell)(?:\.exe)?\s+(?:-\w+\s+)*?-(?:e|ec|encodedcommand)\b|\beval\b|\bbase64\s+(?:-d|--decode)\b[^;&\n]*\|`,
+    ),
+    prefixes: ["powershell -EncodedCommand", "powershell -e", "pwsh -EncodedCommand", "pwsh -e", "eval"],
+    always: false,
+  },
+  {
+    /*
+     * Straight to the console, past nikcli's JSON: where ADE reads the
+     * permission menu, so a command could draw a false one (second review,
+     * BASSO 1). B8d, on `nikcli serve`, closes it for good.
+     */
+    id: "consoleWrite",
+    reason: "bots.approval.reason.consoleWrite",
+    pattern: re(
+      String.raw`>\s*["']?(?:\/dev\/tty|CON|CONOUT\$)["']?(?![\w$.])|\[(?:System\.)?Console\]::|\$host\.UI\b|Permission required|Allow once`,
+    ),
+    prefixes: [],
+    always: false,
   },
 ]
 
@@ -335,8 +356,11 @@ export function decide(permission: string, patterns: string, always: Always, cut
     if (cut) return { kind: "ask", reason: t("bots.approval.reason.cut") }
     if (dangers.length === 0) return { kind: "allow" }
     const keys = dangers.map((rule) => rule.id)
+    const reason = dangers.map((rule) => t(rule.reason)).join("; ")
+    // A danger «Sempre» may not keep: asked every time, with no key to keep.
+    if (dangers.some((rule) => rule.always === false)) return { kind: "ask", reason }
     if (keys.every((key) => always.includes(key))) return { kind: "allow", keys }
-    return { kind: "ask", keys, reason: dangers.map((rule) => t(rule.reason)).join("; ") }
+    return { kind: "ask", keys, reason }
   }
   if (permission === "external_directory") {
     const key = outsideKey(patterns)

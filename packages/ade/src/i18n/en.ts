@@ -1341,6 +1341,8 @@ export const en: Messages = {
   "bots.approval.reason.database": "drops database tables",
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
+  "bots.approval.reason.opaqueShell": "runs commands no list can read: encoded, taken from a variable or decoded",
+  "bots.approval.reason.consoleWrite": "writes straight to the console, where ADE reads the permission menu",
   "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
   "bots.approval.reason.cut": "the command may go on past what it seems: it holds rows that mimic this menu",
   "bots.approval.reason.cutBlocked":

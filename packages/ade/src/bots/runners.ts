@@ -634,7 +634,9 @@ export function applyClaudeEvent(talk: Talk, event: Record<string, unknown>, at:
         } else {
           const reason = found.dangers.map((rule) => t(rule.reason)).join("; ")
           next = appendMessage(next, { role: "error", text: t("bots.approval.refused", found.command, reason) }, at)
-          next = { ...next, offer: { always: found.dangers.map((rule) => rule.id), reason, command: found.command } }
+          // «Sempre» only when every danger may be kept (second review, BASSO 2).
+          if (found.dangers.every((rule) => rule.always !== false))
+            next = { ...next, offer: { always: found.dangers.map((rule) => rule.id), reason, command: found.command } }
         }
       }
       const denials = allDenials.filter((denial) => !approvalOf(denial))

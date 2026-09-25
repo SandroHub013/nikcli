@@ -1352,6 +1352,8 @@ export const it = {
   "bots.approval.reason.database": "cancella tabelle di un database",
   "bots.approval.reason.publish": "pubblica un pacchetto o una release",
   "bots.approval.reason.containers": "cancella container o volumi di Docker",
+  "bots.approval.reason.opaqueShell": "fa girare comandi che nessuna lista può leggere: codificati, presi da una variabile o decodificati",
+  "bots.approval.reason.consoleWrite": "scrive direttamente sulla console, dove ADE legge il menu dei permessi",
   "bots.approval.reason.nestedShell": "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.cut": "il comando potrebbe continuare oltre quello che sembra: contiene righe che imitano questo menu",
   "bots.approval.reason.cutBlocked":

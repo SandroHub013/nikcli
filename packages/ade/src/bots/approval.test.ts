@@ -156,9 +156,9 @@ describe("nested shells and masked commands", () => {
       ["sh -c 'echo ok'", "nestedShell"],
       ["cmd /c dir", "nestedShell"],
       ["pwsh -NoProfile -Command Get-ChildItem", "nestedShell"],
-      ["powershell -EncodedCommand SQBFAFgA", "nestedShell"],
-      ["eval $CMD", "nestedShell"],
-      ["echo cm0gLXJmIC8= | base64 -d | sh", "nestedShell"],
+      ["powershell -EncodedCommand SQBFAFgA", "opaqueShell"],
+      ["eval $CMD", "opaqueShell"],
+      ["echo cm0gLXJmIC8= | base64 -d | sh", "opaqueShell"],
     ]
     for (const [command, id] of cases) expect([command, kind(command)]).toEqual([command, `ask:${id}`])
   })
@@ -273,6 +273,41 @@ describe("every danger of a command", () => {
 
   test("withAlways keeps each key once", () => {
     expect(withAlways(["gitRewrite"], "recursiveDelete", "gitRewrite")).toEqual(["gitRewrite", "recursiveDelete"])
+  })
+})
+
+/*
+ * Second review, BASSI 1-2: a command that writes straight to the console
+ * (where ADE reads the menu), or one whose content cannot be read, is asked
+ * about every time: «Sempre» has no key for it.
+ */
+describe("dangers «Sempre» cannot keep", () => {
+  test("writing to the console, or the menu's own words, is asked", () => {
+    for (const command of [
+      "printf 'x' > /dev/tty",
+      "echo x >CON",
+      "echo x > CONOUT$",
+      "[Console]::Write('x')",
+      "[System.Console]::Out.Write('x')",
+      "$host.UI.Write('x')",
+      "echo '◆  Permission required: bash (ls)'",
+      "printf '│  ● Allow once'",
+    ]) {
+      expect([command, kind(command)]).toEqual([command, "ask:consoleWrite"])
+    }
+    for (const command of ["echo ok > out.txt", "echo x > console.log", "cat CONTRIBUTING.md"]) {
+      expect([command, kind(command)]).toEqual([command, "ok"])
+    }
+  })
+
+  test("no key, whatever the bot's «Sempre» holds", () => {
+    const every = [...BLOCKED, ...DANGEROUS].map((rule) => rule.id)
+    for (const command of ["powershell -EncodedCommand SQBFAFgA", "eval $CMD", "echo x | base64 -d | sh", "echo x > /dev/tty"]) {
+      const verdict = decide("bash", command, every)
+      expect([command, verdict.kind, "keys" in verdict]).toEqual([command, "ask", false])
+    }
+    // An ordinary nested shell can still be kept.
+    expect(decide("bash", 'bash -c "ls"', ["nestedShell"]).kind).toBe("allow")
   })
 })
 
