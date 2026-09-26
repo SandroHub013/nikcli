@@ -17,6 +17,7 @@
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import { APPROVAL_TIMEOUT_MS, decide, localAlwaysStore, type AlwaysStore } from "./approval"
+import { applyMemoryOps, memoryPreface, takeMemoryOps, type MemoryStore } from "./memory"
 import type { AgentFile } from "./nikcli"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
@@ -53,6 +54,8 @@ export interface BotTurnsDeps {
   readonly accountOf?: (path: string) => BotAccount
   /** Each bot's «Sempre» (B8c). */
   readonly always?: AlwaysStore
+  /** Each bot's memory (B8a); absent, the bots have none. */
+  readonly memory?: MemoryStore
   /** Runs `run` after `ms`; the function returned cancels it. For tests. */
   readonly schedule?: (run: () => void, ms: number) => () => void
   readonly now?: () => number
@@ -120,7 +123,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const settle = (bot: AgentFile, turn: Turn, asked: PendingPermission) => {
     const path = bot.path
     const verdict = decide(asked.permission, asked.patterns, always.get(path), asked.cut === true)
-    if (verdict.kind === "block") return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
+    if (verdict.kind === "block")
+      return reply(path, turn, "reject", t("bots.approval.blocked", asked.patterns, t(verdict.rule.reason)))
     if (verdict.kind === "allow") return reply(path, turn, "once")
     const expiresAt = asked.askedAt + APPROVAL_TIMEOUT_MS
     deps.update(path, (talk) =>
@@ -161,6 +165,17 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
     const sessionId = deps.talkOf(path).sessionId
+    /*
+     * The bot's memory (B8a): its snapshot opens a conversation and nothing
+     * after, so it stays as it was until the next one; what the last writes
+     * came to is said once, on the turn after them.
+     */
+    const memory = deps.memory?.get(path)
+    const preface = memory ? memoryPreface(memory, !sessionId) : ""
+    if (memory?.pending && deps.memory) deps.memory.set(path, { notes: memory.notes, user: memory.user })
+    const sent = preface ? `${preface}\n\n${message}` : message
+    /* The thread's messages from here on are this turn's. */
+    const from = deps.talkOf(path).messages.length
     const current = () => turns.get(path) === turn
     const readMenu = permissionMenuReader({
       schedule,
@@ -182,7 +197,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const request: TurnRequest = {
       runner: runner.id,
       bot,
-      message,
+      message: sent,
       account,
       ...(sessionId ? { sessionId } : {}),
       ...(cwd ? { cwd } : {}),
@@ -206,6 +221,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     turns.set(path, turn)
     void turn.result.then((result) => {
       if (!current()) return
+      settleMemory(path, from)
       turns.delete(path)
       cancelExpiry(path)
       const at = Date.now()
@@ -219,6 +235,52 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   }
 
   const send = (bot: AgentFile, message: string, cwd?: string): boolean => begin(bot, message, cwd, undefined) !== undefined
+
+  /**
+   * The memory tags in what the bot said this turn: taken out of its words,
+   * applied in order, and each outcome a line in the thread. What failed
+   * reaches the bot at the start of its next turn (`memoryPreface`).
+   */
+  const settleMemory = (path: string, from: number) => {
+    const store = deps.memory
+    if (!store) return
+    const said = deps
+      .talkOf(path)
+      .messages.slice(from)
+      .filter((message) => message.role === "bot")
+    const texts = new Map<string, string>()
+    const ops: Parameters<typeof applyMemoryOps>[1][number][] = []
+    let unreadable = 0
+    for (const message of said) {
+      const taken = takeMemoryOps(message.text)
+      if (taken.ops.length === 0 && taken.unreadable === 0) continue
+      texts.set(message.id, taken.text)
+      ops.push(...taken.ops)
+      unreadable += taken.unreadable
+    }
+    if (texts.size === 0) return
+    const { memory, results } = applyMemoryOps(store.get(path), ops)
+    const failures = results.flatMap((result) => (result.ok ? [] : [result.error]))
+    if (unreadable > 0) failures.push(t("bots.memory.error.unreadable", unreadable))
+    store.set(path, { ...memory, ...(failures.length > 0 ? { pending: failures } : {}) })
+    const at = now()
+    deps.update(path, (talk) => {
+      const messages = talk.messages
+        .map((message) => (texts.has(message.id) ? { ...message, text: texts.get(message.id)! } : message))
+        .filter((message) => !(texts.has(message.id) && message.text.length === 0))
+      let next: Talk = { ...talk, messages }
+      for (const result of results) {
+        next = appendMessage(
+          next,
+          result.ok ? { role: "tool", tool: "ade", text: result.message } : { role: "error", text: result.error },
+          at,
+        )
+      }
+      if (unreadable > 0)
+        next = appendMessage(next, { role: "error", text: t("bots.memory.error.unreadable", unreadable) }, at)
+      return next
+    })
+  }
 
   /** Ends the turn of `path`, if any, and forgets it: what it still says goes nowhere. */
   const end = (path: string): Turn | undefined => {
@@ -249,7 +311,11 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       for (const key of offer.always) always.add(bot.path, key)
       deps.update(bot.path, (talk) => {
         const { offer: _done, ...rest } = talk
-        return appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) }, now())
+        return appendMessage(
+          rest,
+          { role: "tool", tool: "ade", text: t("bots.approval.alwaysSet", offer.reason) },
+          now(),
+        )
       })
     },
     stop: (bot) => {

@@ -21,7 +21,7 @@
  */
 
 import { t } from "../i18n"
-import { scrubSecrets } from "./terms"
+import { scrubSecrets, SECRET_MARK } from "./terms"
 
 export type MemoryBlock = "notes" | "user"
 
@@ -61,7 +61,8 @@ const TAG = /<\/?ade-memory\b/i
 /** Why `text` cannot be an entry; undefined when it can. */
 export function entryProblem(text: string): string | undefined {
   if (text.trim().length === 0) return t("bots.memory.error.empty")
-  if (scrubSecrets(text) !== text) return t("bots.memory.error.secret")
+  // A key, or one the thread already hid (B4): either way, not for the memory.
+  if (scrubSecrets(text) !== text || text.includes(SECRET_MARK)) return t("bots.memory.error.secret")
   if (TAG.test(text)) return t("bots.memory.error.tag")
   if (text.includes(ENTRY_SEPARATOR.trim())) return t("bots.memory.error.separator")
   return undefined

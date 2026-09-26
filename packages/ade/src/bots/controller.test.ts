@@ -3,9 +3,10 @@ import type { AgentFile } from "./nikcli"
 import { withAlways } from "./approval"
 import { createBotTurns } from "./controller"
 import { acquireTurn, turnsRunning } from "./terms"
-import { emptyTalk, MENU_QUIET_MS, type Talk } from "./talk"
+import { appendMessage, emptyTalk, MENU_QUIET_MS, type Talk } from "./talk"
+import { volatileMemoryStore } from "./memory"
 import { clackMenu } from "./testing/clack-menu"
-import { runTurn, type TurnDeps } from "./turn"
+import { runTurn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
 
 /*
  * B2 (audit A2, A3): the Bots panel's turns, without the panel.
@@ -501,5 +502,88 @@ describe("a routine's run", () => {
     // Its place on the plan back, for the tests after this one.
     p.turns.stop(claude)
     await tick()
+  })
+})
+
+/*
+ * B8a: a bot's memory. Its snapshot opens a conversation and nothing after,
+ * so what the bot writes shows from the next one; the tags leave its words.
+ */
+describe("a bot's memory in its turns", () => {
+  function memoryPanel() {
+    const talks: Record<string, Talk> = {}
+    const requests: TurnRequest[] = []
+    const finish: ((result: TurnResult) => void)[] = []
+    const memory = volatileMemoryStore()
+    const turns = createBotTurns({
+      runTurn: (request) => {
+        requests.push(request)
+        const result = new Promise<TurnResult>((resolve) => finish.push(resolve))
+        return { result, stop: () => {} }
+      },
+      talkOf: (path) => talks[path] ?? emptyTalk(),
+      update: (path, change) => {
+        talks[path] = change(talks[path] ?? emptyTalk())
+      },
+      memory,
+    })
+    const done = async () => {
+      finish.at(-1)!({ status: "done", text: "", tokens: 0, costUsd: 0, exitCode: 0, talk: emptyTalk() })
+      await tick()
+    }
+    return { talks, requests, memory, turns, done }
+  }
+
+  test("the snapshot opens the conversation only, and a write lands for the next one", async () => {
+    const p = memoryPanel()
+    const nikcli = bot("nikcli")
+    p.memory.set(nikcli.path, { notes: ["Il progetto usa bun."], user: [] })
+    p.turns.send(nikcli, "ciao")
+    expect(p.requests[0]!.message).toContain("Il progetto usa bun.")
+    expect(p.requests[0]!.message.endsWith("ciao")).toBe(true)
+    // The bot answers with a write; its session is under way.
+    p.talks[nikcli.path] = {
+      ...appendMessage(p.talks[nikcli.path]!, { role: "bot", text: 'Ciao!\n<ade-memory op="add" block="user">Si chiama Mario.</ade-memory>' }, 1),
+      sessionId: "s1",
+    }
+    await p.done()
+    const thread = p.talks[nikcli.path]!.messages
+    expect(thread.find((message) => message.role === "bot")?.text).toBe("Ciao!")
+    expect(thread.at(-1)?.role).toBe("tool")
+    expect(p.memory.get(nikcli.path).user).toEqual(["Si chiama Mario."])
+    // Same conversation: no snapshot again, whatever changed.
+    p.turns.send(nikcli, "e poi?")
+    expect(p.requests[1]!.message).toBe("e poi?")
+    await p.done()
+    // A new conversation sees the write.
+    p.turns.forget(nikcli)
+    p.turns.send(nikcli, "di nuovo")
+    expect(p.requests[2]!.message).toContain("Si chiama Mario.")
+  })
+
+  test("a refused write is said in the thread, and to the bot on its next turn", async () => {
+    const p = memoryPanel()
+    const nikcli = bot("nikcli")
+    p.turns.send(nikcli, "ricorda la chiave")
+    p.talks[nikcli.path] = {
+      ...appendMessage(
+        p.talks[nikcli.path]!,
+        { role: "bot", text: '<ade-memory op="add" block="notes">sk-abcdefghijklmnopqrstuvwxyz123456</ade-memory>' },
+        1,
+      ),
+      sessionId: "s1",
+    }
+    await p.done()
+    expect(p.memory.get(nikcli.path).notes).toEqual([])
+    const thread = p.talks[nikcli.path]!.messages
+    // The answer held only the tag: no empty bubble is left.
+    expect(thread.some((message) => message.role === "bot")).toBe(false)
+    expect(thread.at(-1)?.role).toBe("error")
+    p.turns.send(nikcli, "ok")
+    expect(p.requests[1]!.message).toContain("chiave o un token")
+    expect(p.requests[1]!.message.endsWith("ok")).toBe(true)
+    await p.done()
+    p.turns.send(nikcli, "ancora")
+    expect(p.requests[2]!.message).toBe("ancora")
   })
 })
