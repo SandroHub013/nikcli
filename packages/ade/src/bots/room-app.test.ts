@@ -6,6 +6,7 @@ import {
   endNote,
   memberName,
   memoryRoomStore,
+  payNote,
   parseRooms,
   roomThread,
   type RoomRecord,
@@ -190,6 +191,13 @@ describe("B8b: a room's run, through each bot's own turn", () => {
 })
 
 describe("B8b: the rooms as saved", () => {
+  test("beside each member the form says what it costs; a plan has no dollar cap but uses its quota (B8b review)", () => {
+    expect(payNote("plan")).toContain("quota")
+    expect(payNote("plan")).toContain("3")
+    expect(payNote("paid")).toContain("tetto per giro")
+    expect(payNote("free")).toBe("gratuito")
+  })
+
   test("a member is named by its bot, or by its file when the bot is gone", () => {
     expect(memberName([alfa], alfa.path)).toBe("alfa")
     expect(memberName([], "C:\\progetto\\.nikcli\\agent\\revisore.md")).toBe("revisore")

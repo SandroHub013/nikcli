@@ -1511,6 +1511,10 @@ export const en: Messages = {
     `Needed only if a bot is paid for (a paid model or an API key); at most ${max} $. Free models may spend nothing.`,
   "bots.room.form.capPerMessage": (perRound: string, rounds: number, total: string) =>
     `The cap is per round: a message runs up to ${rounds} rounds, so it may spend up to ${rounds} × ${perRound} $ = ${total} $.`,
+  "bots.room.form.pay.plan": (rounds: number) =>
+    `subscription: no cap in dollars, but each of its turns uses the plan's quota (up to ${rounds} turns a message)`,
+  "bots.room.form.pay.paid": "paid: within the cap per round",
+  "bots.room.form.pay.free": "free",
   "bots.room.form.cancel": "Cancel",
   "bots.room.form.create": "Create room",
   "bots.memory.confirm": "Confirm",

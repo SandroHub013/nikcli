@@ -7,12 +7,12 @@
  * waiting on is shown here, in the room, with the panel's buttons (B8c).
  */
 
-import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
 import type { AgentFile } from "./nikcli"
-import { MAX_MEMBERS, MAX_ROUNDS, messageSpendMax, MIN_MEMBERS, ROOM_ROUND_MAX_USD, type RoomSpend } from "./room"
-import { memberName, type RoomBook } from "./room-app"
+import { MAX_MEMBERS, MAX_ROUNDS, messageSpendMax, MIN_MEMBERS, ROOM_ROUND_MAX_USD, type RoomPay, type RoomSpend } from "./room"
+import { memberName, payNote, type RoomBook } from "./room-app"
 import type { PendingPermission, PermissionAnswer } from "./talk"
 
 export interface RoomDraft {
@@ -37,6 +37,8 @@ export interface RoomPanelDeps {
   readonly create: (draft: RoomDraft) => Promise<{ readonly id: string } | { readonly problem: string }>
   /** Whether it went: the user is asked first, the conversation goes with the room. */
   readonly remove: (roomId: string) => Promise<boolean>
+  /** How a bot's turns are paid for: said beside it in the form. */
+  readonly payOf: (bot: AgentFile) => Promise<RoomPay>
 }
 
 /** The rooms, under the bots in the sidebar. */
@@ -320,17 +322,21 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
         <span data-slot="bots-label">{t("bots.room.form.members", MIN_MEMBERS, MAX_MEMBERS)}</span>
         <div data-slot="room-pick">
           <For each={props.deps.bots().filter((bot) => bot.mode !== "subagent")}>
-            {(bot) => (
-              <label data-slot="room-pick-row">
-                <input
-                  type="checkbox"
-                  checked={members().includes(bot.path)}
-                  onChange={(event) => toggle(bot.path, event.currentTarget.checked)}
-                />
-                <span>@{bot.identifier}</span>
-                <span data-slot="bots-hint">{bot.model || bot.runner}</span>
-              </label>
-            )}
+            {(bot) => {
+              const [pay] = createResource(() => bot, (entry) => props.deps.payOf(entry).catch(() => undefined))
+              return (
+                <label data-slot="room-pick-row">
+                  <input
+                    type="checkbox"
+                    checked={members().includes(bot.path)}
+                    onChange={(event) => toggle(bot.path, event.currentTarget.checked)}
+                  />
+                  <span>@{bot.identifier}</span>
+                  <span data-slot="bots-hint">{bot.model || bot.runner}</span>
+                  <Show when={pay()}>{(kind) => <span data-slot="bots-hint">· {payNote(kind())}</span>}</Show>
+                </label>
+              )
+            }}
           </For>
         </div>
       </div>

@@ -19,6 +19,7 @@ import {
   EMPTY_LOG,
   LOG_KEPT,
   MAX_MEMBERS,
+  MAX_ROUNDS,
   memberBudget,
   needsYou,
   ROOM_ROUND_MAX_USD,
@@ -165,6 +166,17 @@ export function memoryRoomStore(start: RoomBook = EMPTY_ROOMS): RoomStore {
 
 export function changeRoom(book: RoomBook, id: string, change: (room: RoomRecord) => RoomRecord): RoomBook {
   return { rooms: book.rooms.map((room) => (room.id === id ? change(room) : room)) }
+}
+
+/**
+ * What the form says beside a member about its cost (B8b review): a plan has
+ * no cap in dollars, but each of its turns uses the plan's quota, up to
+ * `MAX_ROUNDS` a message; money stays within the cap per round.
+ */
+export function payNote(pay: RoomPay): string {
+  if (pay === "plan") return t("bots.room.form.pay.plan", MAX_ROUNDS)
+  if (pay === "paid") return t("bots.room.form.pay.paid")
+  return t("bots.room.form.pay.free")
 }
 
 /** What an end says under the room; nothing when it ended the way it should. */

@@ -43,6 +43,12 @@ describe("B8b: the room in the Bot section", () => {
     expect(panel).toContain('data-slot={current().noteKind === "end" ? "room-note" : "bots-problem"}')
   })
 
+  test("the form says beside each bot how it is paid for (B8b review)", () => {
+    expect(panel).toContain("props.deps.payOf(entry)")
+    expect(panel).toContain("payNote(kind())")
+    expect(bots).toContain("  payOf,\n}")
+  })
+
   test("a room goes only on the user's yes, with its members' sessions", () => {
     const remove = bots.slice(bots.indexOf("  remove: async (roomId)"))
     expect(remove).toContain('askYesNo(t("bots.room.deleteAsk"')

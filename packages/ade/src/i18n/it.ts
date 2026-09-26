@@ -1524,6 +1524,10 @@ export const it = {
     `Serve solo se un bot è a pagamento (modello a pagamento o chiave API); al massimo ${max} $. I modelli gratuiti non possono spendere nulla.`,
   "bots.room.form.capPerMessage": (perRound: string, rounds: number, total: string) =>
     `Il tetto vale per giro: un messaggio fa fino a ${rounds} giri, quindi può spendere fino a ${rounds} × ${perRound} $ = ${total} $.`,
+  "bots.room.form.pay.plan": (rounds: number) =>
+    `abbonamento: niente tetto in dollari, ma ogni suo turno consuma la quota del piano (fino a ${rounds} turni per messaggio)`,
+  "bots.room.form.pay.paid": "a pagamento: rientra nel tetto per giro",
+  "bots.room.form.pay.free": "gratuito",
   "bots.room.form.cancel": "Annulla",
   "bots.room.form.create": "Crea stanza",
   "bots.memory.confirm": "Conferma",

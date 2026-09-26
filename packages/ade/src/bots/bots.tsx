@@ -491,6 +491,7 @@ const roomDeps: RoomPanelDeps = {
     for (const path of room.members) updateTalk(roomThread(roomId, path), () => emptyTalk())
     return true
   },
+  payOf,
 }
 
 /** Brings a bot's stored thread in, once. A live one is never replaced by the disk copy. */
