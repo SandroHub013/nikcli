@@ -63,6 +63,12 @@ export interface ServeClient {
    * it now.
    */
   readonly catalog: (fresh?: boolean) => Promise<ServeCatalog>
+  /**
+   * Has the server read its configuration again (`POST /config/reload`):
+   * agents, commands and rules from the files, with the live sessions left
+   * as they are. Absent where the server cannot.
+   */
+  readonly reload?: () => Promise<void>
   /** The session, or undefined when the server has none by that id. */
   readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
   readonly create: (input: { readonly title: string; readonly permission: readonly PermissionRule[] }) => Promise<string>
@@ -254,8 +260,19 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
 
       let agentModel: { providerID: string; modelID: string } | undefined
       if (bot.identifier) {
-        const agents = await server.agents()
-        const problem = agentProblem(agents, bot)
+        let agents = await server.agents()
+        let problem = agentProblem(agents, bot)
+        /*
+         * The server reads the agent files once per folder: a bot made, or
+         * its words changed, while it runs is not there yet, or not as the
+         * file says (Verifiche, bots.serve.noAgent). It reads them again,
+         * without touching its sessions, and is asked once more.
+         */
+        if (problem && server.reload) {
+          await server.reload()
+          agents = await server.agents()
+          problem = agentProblem(agents, bot)
+        }
         if (problem) return finish("error", problem)
         agentModel = agents.find((agent) => agent.name === bot.identifier)?.model
         /*
@@ -536,6 +553,9 @@ export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_T
         ...(providers?.data ? { providerList: providers.data } : {}),
         ...(config?.data?.model ? { configModel: config.data.model } : {}),
       }
+    },
+    reload: async () => {
+      await client.config.reload()
     },
     session: async (sessionID) => {
       try {
