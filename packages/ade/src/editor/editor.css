@@ -135,7 +135,9 @@
 [data-component="editor"] [data-slot="btn"][data-variant="primary"] {
   background: var(--ade-accent);
   color: var(--ade-accent-fg);
-  border-color: var(--ade-accent-strong);
+  /* The fill is accent, as a primary button should be; its edge is not an
+     outline, it is the same button seen edge-on, so it steps with the surface. */
+  border-color: var(--ade-accent-soft);
   font-weight: var(--ade-weight-semibold);
 }
 
