@@ -114,12 +114,20 @@ pub struct LocalStatus {
 pub fn tts_local_status(app: tauri::AppHandle, provider: String) -> Result<LocalStatus, String> {
     let root = kokoro_root(&app)?;
     match provider.as_str() {
-        kokoro::KOKORO => Ok(LocalStatus {
-            supported: true,
-            installed: kokoro::ready(&root),
-            size_bytes: kokoro::download_size(&root),
-        }),
+        kokoro::KOKORO => Ok(kokoro_status(&root)),
         _ => Err(format!("{provider} non è un provider locale.")),
+    }
+}
+
+/// Kokoro's status in `root`. Supported only once the host can be fetched: the
+/// panel says «non disponibile» for an unsupported voice (`shell.ts`) instead
+/// of «Installa (219 MB)» for an install that could not speak.
+fn kokoro_status(root: &std::path::Path) -> LocalStatus {
+    let supported = kokoro::host_published();
+    LocalStatus {
+        supported,
+        installed: supported && kokoro::ready(root),
+        size_bytes: if supported { kokoro::download_size(root) } else { None },
     }
 }
 
@@ -1431,6 +1439,18 @@ fn bytes_pending(jobs: &[(&Download, PathBuf)]) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kokoro_non_si_offre_finche_l_host_non_si_puo_scaricare() {
+        // Verdetto dell'area 3, A3: senza l'host, «Installa» scaricava 219 MB per una voce muta.
+        let root = test_root("kokoro-supportato");
+        let status = kokoro_status(&root);
+        assert_eq!(status.supported, kokoro::host_published());
+        assert!(!status.supported, "senza la release dell'host Kokoro non si offre");
+        assert!(!status.installed);
+        assert_eq!(status.size_bytes, None, "nessuna dimensione accanto a un pulsante che non c'è");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn certutil_output_yields_the_digest_in_either_spelling() {
