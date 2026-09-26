@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localePreference, setLocalePreference } from "@nikcli-ai/ade/i18n";
+import { localePreference, setLocalePreference, t } from "@nikcli-ai/ade/i18n";
 import {
   KOKORO_VOICES,
   KOKORO_VOICE_CHOICES,
@@ -19,6 +19,22 @@ describe("the reply voices, by backend", () => {
   test("three backends, in the order the panel shows them", () => {
     expect(REPLY_BACKEND_CHOICES.map((choice) => choice.value)).toEqual(["piper", "kokoro", "system"]);
     for (const choice of REPLY_BACKEND_CHOICES) expect(choice.desc.length).toBeGreaterThan(10);
+  });
+
+  test("the pack names every licence it brings, and the system voice no one system (K6 review)", () => {
+    const before = localePreference();
+    for (const language of ["it", "en"] as const) {
+      setLocalePreference(language);
+      const model = t("vui.pack.kokoro.model");
+      const host = t("vui.pack.kokoro.host");
+      expect([language, model.includes("Apache-2.0"), model.includes("kokoro-onnx (MIT)")]).toEqual([language, true, true]);
+      for (const part of ["sherpa-onnx", "(Apache-2.0)", "ONNX Runtime (MIT)", "espeak-ng (GPL-3.0-or-later)"]) {
+        expect([language, part, host.includes(part)]).toEqual([language, part, true]);
+      }
+      // ADE runs on macOS and Linux too.
+      expect(t("vui.backend.system.desc")).not.toContain("Windows");
+    }
+    setLocalePreference(before);
   });
 
   test("the Kokoro voices have names, in both languages, and the model's licence", () => {
