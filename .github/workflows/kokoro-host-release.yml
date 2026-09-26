@@ -122,7 +122,8 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "release $TAG already exists; the executable will replace what is in it"
           else
-            printf 'kokoro-host %s\n\nBuild of `packages/kokoro-host`, GPL-3.0-or-later.\n' "$VERSION" > notes.md
+            printf 'kokoro-host %s\n\nBuild of `packages/kokoro-host`, GPL-3.0-or-later.\n\nSource: https://github.com/%s/tree/%s/packages/kokoro-host\n' \
+              "$VERSION" "$GITHUB_REPOSITORY" "$TAG" > notes.md
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "kokoro-host $VERSION" --notes-file notes.md --verify-tag
           fi
