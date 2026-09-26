@@ -44,7 +44,7 @@ const BLOCKED = [
 ]
 const EVERYDAY = ["git status", "ls -la", "rm -rf build", "git push --force origin x", "npm publish"]
 /** The server's configuration, as a tool that writes names it (`configDenials`). */
-const CONFIG = [".nikcli/tool/x.ts", ".NIKCLI\\tool\\x.ts", "C:\\progetto\\.nikcli\\nikcli.json", "sotto/Nikcli.Jsonc", "NIKCLI~1\\tool\\x.ts"]
+const CONFIG = [".nikcli/tool/x.ts", ".NIKCLI\\tool\\x.ts", "C:\\progetto\\.nikcli\\nikcli.json", "sotto/Nikcli.Jsonc", "NIKCLI~1\\tool\\x.ts", "nikcli.json::$DATA", "C:\\progetto\\NIKCLI.JSONC::$data"]
 const USERS: Record<string, object> = {
   "nessuna regola": {},
   "bash: allow": { bash: "allow" },

@@ -111,6 +111,11 @@ describe("B8d: the rules of a bot's session", () => {
       "NIKCLI~1\\tool\\x.ts",
       "nikcli~1/nikcli.json",
       "NIKCLI~1.JSO",
+      // The file's main stream on NTFS: the same file, under a name no pattern of it ends.
+      "nikcli.json::$DATA",
+      "NIKCLI.JSONC::$data",
+      "C:\\progetto\\nikcli.json::$DATA",
+      "sotto\\nikcli.json::$DATA",
     ]
     const PROJECT = [
       "src/index.ts",

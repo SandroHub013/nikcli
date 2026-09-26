@@ -139,7 +139,15 @@ function spellings(word: string): string[] {
  * case as the model typed it. The glob counts case and Windows does not, so
  * every casing of «nikcli» is spelled out (64), with `?` for the separator
  * and for the extension's letters, and the short 8.3 names (`NIKCLI~1`) are
- * denied too.
+ * denied too. So is any path with `::`: on NTFS `nikcli.json::$DATA` is the
+ * file's own content, and no name pattern ends there; no real path has it
+ * (bot-config-chiusa review, MEDIO).
+ *
+ * Wider than needed, on the safe side: any `nikcli.` with four or five
+ * characters after it (`nikcli.yaml`, `docs/nikcli.html`) and any `x.nikcli…`.
+ * The path is the one written, not the one resolved: a link already in the
+ * repository that points at `.nikcli` under another name is not seen. A bot
+ * cannot make one without the shell.
  *
  * They open the session's rules rather than close them: any session rule
  * comes after the bot's file and wins over it, and a routine's `edit` denied
@@ -147,7 +155,7 @@ function spellings(word: string): string[] {
  * from the model (`disabled`, ruleset.ts).
  */
 export function configDenials(): string[] {
-  const denied: string[] = []
+  const denied: string[] = ["*::*"]
   for (const name of casings("nikcli")) {
     denied.push(`*.${name}?*`, `*${name}.????`, `*${name}.?????`, `*${name}~*`)
   }
