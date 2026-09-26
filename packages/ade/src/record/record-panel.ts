@@ -8,6 +8,7 @@
 
 import type { Locale } from "../i18n"
 import type { PanelOutcome, PanelRequest, PanelVerb } from "../panels/protocol"
+import { DENIED } from "../panels/consent"
 import type { StartOptions } from "./recorder"
 import type { RecordTarget } from "./recording"
 
@@ -30,7 +31,7 @@ export interface RecordPanelDeps {
    * the room: no agent starts one on its own, and no earlier yes carries
    * over to the next take.
    */
-  confirm: (target: RecordTarget) => Promise<RecordConsent>
+  confirm: (target: RecordTarget, asker: string | undefined) => Promise<RecordConsent>
   start: (target: RecordTarget, options: StartOptions) => Promise<string | undefined>
   /** Reasons come back in `language`: here always Italian, like the other replies to agents. */
   stop: (language: Locale) => Promise<string | undefined>
@@ -39,7 +40,8 @@ export interface RecordPanelDeps {
   state: () => { recording: boolean; path?: string }
 }
 
-export async function runRecordRequest(request: PanelRequest, deps: RecordPanelDeps): Promise<PanelOutcome> {
+/** `asker`: the session that wrote the request, by name, for the question. */
+export async function runRecordRequest(request: PanelRequest, deps: RecordPanelDeps, asker?: string): Promise<PanelOutcome> {
   switch (request.verb) {
     case "start": {
       const pane = request.args[0]
@@ -51,8 +53,8 @@ export async function runRecordRequest(request: PanelRequest, deps: RecordPanelD
         target = { kind: "pane", paneId: pane, ...rect }
       }
       if (deps.state().recording) return { ok: false, reason: "una registrazione è già in corso" }
-      const consent = await deps.confirm(target)
-      if (!consent.allowed) return { ok: false, reason: "l'utente non ha acconsentito alla registrazione" }
+      const consent = await deps.confirm(target, asker)
+      if (!consent.allowed) return { ok: false, reason: DENIED }
       const problem = await deps.start(target, { mic: consent.mic, language: "it" })
       if (problem) return { ok: false, reason: problem }
       const what = pane ? `il pannello ${pane}` : "la finestra"

@@ -769,6 +769,23 @@ export function Workbench() {
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
   }
   const keysHost = (): KeysHost | undefined => (keysAvailable() ? keysService : undefined)
+
+  /** The session that wrote a request, by name: the questions say who asks. */
+  const askerOf = (from: string | undefined): string | undefined => {
+    const pane = from ? wb().panes.find((candidate) => candidate.id === from) : undefined
+    return pane?.title || undefined
+  }
+
+  /*
+   * A panel opening a page that is not this machine's, on the user's yes:
+   * once per request, never remembered (review of review-alti, 1.3). A file
+   * an agent shows can carry «@ade browser open …» as well as the agent can.
+   */
+  const confirmOpen = (panel: "browser" | "app", url: string, from: string | undefined) =>
+    askYesNo(t(panel === "browser" ? "panels.consent.browser" : "panels.consent.app", askerOf(from) ?? t("panels.consent.someone"), url), {
+      ok: t("panels.consent.allow"),
+      cancel: t("panels.consent.deny"),
+    })
   const [keyRequest, setKeyRequest] = createSignal<{ env: string; reason: string }>()
   panels.register("keys", {
     verbs: KEYS_VERBS,
@@ -822,6 +839,7 @@ export function Workbench() {
           openPane: (url, owner) => openOwnedBrowser(url, owner, false),
           navigate: (paneId, url) => setWb((w) => updatePane(w, paneId, { browserUrl: url })),
           controller: (paneId) => browserControllers.get(paneId),
+          confirmOpen: (url) => confirmOpen("browser", url, from),
         },
         request,
         from,
@@ -986,14 +1004,16 @@ export function Workbench() {
   /** An agent's take waits here for the user's answer. */
   const [recordAsk, setRecordAsk] = createSignal<{
     target: Parameters<typeof recorder.start>[0]
+    asker?: string
     answer: (consent: RecordConsent) => void
   }>()
-  const confirmRecording = (target: Parameters<typeof recorder.start>[0]) =>
+  const confirmRecording = (target: Parameters<typeof recorder.start>[0], asker: string | undefined) =>
     new Promise<RecordConsent>((resolve) => {
       // One question at a time: a second agent asking meanwhile is refused.
       if (recordAsk()) return resolve({ allowed: false, mic: false })
       setRecordAsk({
         target,
+        ...(asker ? { asker } : {}),
         answer: (consent) => {
           setRecordAsk(undefined)
           resolve(consent)
@@ -1067,7 +1087,7 @@ export function Workbench() {
 
   panels.register("record", {
     verbs: RECORD_VERBS,
-    run: (request) =>
+    run: (request, from) =>
       runRecordRequest(request, {
         confirm: confirmRecording,
         start: (target, options) => startRecording(target, { mic: options.mic === true, language: options.language }),
@@ -1090,7 +1110,7 @@ export function Workbench() {
           const now = recordState()
           return now.status === "recording" ? { recording: true, path: now.recording.path } : { recording: false }
         },
-      }).catch((failure: unknown) => ({
+      }, askerOf(from)).catch((failure: unknown) => ({
         ok: false as const,
         reason: failure instanceof Error ? failure.message : String(failure),
       })),
@@ -7290,6 +7310,7 @@ export function Workbench() {
       getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
     captureFrame,
     guessServers,
+    confirmOpen,
     decisions: decisionsHub,
     design: designHub,
     panels,
@@ -7819,7 +7840,13 @@ export function Workbench() {
         />
 
         <Show when={recordAsk()}>
-          {(ask) => <RecordConsentDialog target={ask().target} onAnswer={(consent) => ask().answer(consent)} />}
+          {(ask) => (
+            <RecordConsentDialog
+              target={ask().target}
+              {...(ask().asker ? { asker: ask().asker } : {})}
+              onAnswer={(consent) => ask().answer(consent)}
+            />
+          )}
         </Show>
 
         <Show when={updateAsk()}>

@@ -1103,6 +1103,14 @@ export const en: Messages = {
   "record.consent.label": "Recording requested by an agent",
   "record.consent.title": "Record a video?",
   "record.consent.ask": (what) => `An agent wants to record ${what}.`,
+  "record.consent.askBy": (who, what) => `«${who}» wants to record ${what}.`,
+  "panels.consent.browser": (who, url) =>
+    `«${who}» wants to open in its web panel:\n\n${url}\n\nThis is not an address on this computer. Allow, this time only?`,
+  "panels.consent.app": (who, url) =>
+    `«${who}» wants to open in the simulator:\n\n${url}\n\nThis is not an address on this computer. Allow, this time only?`,
+  "panels.consent.someone": "An agent",
+  "panels.consent.allow": "Allow",
+  "panels.consent.deny": "Deny",
   "record.consent.note": "The video captures everything on screen until you stop it with the REC button. Fields with keys and passwords are blurred.",
   "record.consent.mic": "Also record the microphone",
   "record.consent.no": "No",
