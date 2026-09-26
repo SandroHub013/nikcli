@@ -16,6 +16,7 @@ if (typeof document === "undefined") {
 compileSolidJsx()
 
 const { createComponent, render } = await import("solid-js/web")
+// A sheet is a portal with a focus trap: find it in `document`, and unmount it with the dispose `render` returns (disposing createRoot's leaves it, and its trap, on the next tests).
 const { DecisionsSheet } = await import("./decisions-sheet")
 const { DecisionsPane } = await import("./decisions-pane")
 

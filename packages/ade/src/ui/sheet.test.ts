@@ -227,6 +227,108 @@ describe("a sheet on Kobalte's Dialog", () => {
     expect(panel!.contains(document.activeElement)).toBe(true)
   })
 
+  test("closed by something that gives the focus elsewhere at once, the focus stays there (review, BASSO 1)", async () => {
+    // «Pannello completo»: the sheet closes and the pane it opens takes the focus in the same pass.
+    const opener = document.createElement("button")
+    const pane = document.createElement("textarea")
+    const root = document.createElement("div")
+    document.body.append(opener, pane, root)
+    opener.focus()
+    const [open, setOpen] = createSignal(true)
+    let panel: HTMLDivElement | undefined
+    cleanup = render(
+      () =>
+        createComponent(Show as (props: { when: boolean; children: JSX.Element }) => JSX.Element, {
+          get when() {
+            return open()
+          },
+          get children() {
+            return createComponent(Sheet, {
+              component: "design-sheet",
+              onClose: () => setOpen(false),
+              ref: (element: HTMLDivElement) => (panel = element),
+              mount: root,
+              get children() {
+                return createComponent(SheetTitle, { children: "Design" })
+              },
+            })
+          },
+        }),
+      root,
+    )
+    await tick()
+    expect(panel!.contains(document.activeElement)).toBe(true)
+    setOpen(false)
+    pane.focus()
+    await tick()
+    expect(document.activeElement).toBe(pane)
+  })
+
+  test("a sheet opened over another gives the focus back to it, and the lower one to its opener (review, BASSO 2)", async () => {
+    const opener = document.createElement("button")
+    const root = document.createElement("div")
+    document.body.append(opener, root)
+    opener.focus()
+    const [upper, setUpper] = createSignal(false)
+    const [lower, setLower] = createSignal(true)
+    let lowerPanel: HTMLDivElement | undefined
+    let upperPanel: HTMLDivElement | undefined
+    const when = Show as (props: { when: boolean; children: JSX.Element }) => JSX.Element
+    cleanup = render(
+      () => [
+        createComponent(when, {
+          get when() {
+            return lower()
+          },
+          get children() {
+            return createComponent(Sheet, {
+              component: "decisions-sheet",
+              onClose: () => setLower(false),
+              ref: (element: HTMLDivElement) => (lowerPanel = element),
+              mount: root,
+              get children() {
+                return createComponent(SheetTitle, { children: "Decisioni" })
+              },
+            })
+          },
+        }),
+        createComponent(when, {
+          get when() {
+            return upper()
+          },
+          get children() {
+            return createComponent(Sheet, {
+              component: "record-consent",
+              role: "alertdialog",
+              onClose: () => setUpper(false),
+              ref: (element: HTMLDivElement) => (upperPanel = element),
+              mount: root,
+              get children() {
+                return createComponent(SheetTitle, { children: "Registrare?" })
+              },
+            })
+          },
+        }),
+      ],
+      root,
+    )
+    await tick()
+    expect(lowerPanel!.contains(document.activeElement)).toBe(true)
+    // An agent asks while the sheet is open: the question comes on top and has the keys.
+    setUpper(true)
+    await tick()
+    expect(upperPanel!.getAttribute("role")).toBe("alertdialog")
+    expect(upperPanel!.contains(document.activeElement)).toBe(true)
+    upperPanel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await tick()
+    expect([upper(), lower()]).toEqual([false, true])
+    expect(lowerPanel!.contains(document.activeElement)).toBe(true)
+    lowerPanel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await tick()
+    expect(lower()).toBe(false)
+    expect(document.activeElement).toBe(opener)
+  })
+
   test("it is a modal dialog named by its title, drawn as ADE's overlay and surface", async () => {
     const { panel, root } = await openSheet()
     expect(panel.getAttribute("role")).toBe("dialog")

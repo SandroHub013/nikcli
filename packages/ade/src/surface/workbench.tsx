@@ -191,7 +191,7 @@ import { mayReroute, pickProvider, setProviderPicker } from "../session/provider
 import { pickByQuota } from "../session/quota-pick"
 import { freshSharedQuota } from "../session/quota-store"
 import { botLaunch } from "../bots/store"
-import { buildCommands, keepsPaletteOpen, parseDesignVariantCommand, waitsForSheet } from "./commands"
+import { buildCommands, guardedBySheet, keepsPaletteOpen, parseDesignVariantCommand } from "./commands"
 import { createRecorder, eventsPathFor, micPathFor, voicePathFor, type StartOptions } from "../record/recorder"
 import { startMicTake } from "../record/mic"
 import { exportPromo } from "../record/export"
@@ -4043,7 +4043,7 @@ export function Workbench() {
     setVoiceSettingsOpen(false)
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
-  const sheetOpen = () => decisionsOpen() || designOpen() || voiceSettingsOpen()
+  const sheetOpen = () => decisionsOpen() || designOpen() || voiceSettingsOpen() || Boolean(recordAsk()) || Boolean(keyRequest())
   const openVoiceSettings = (section?: string) => {
     setVoiceSettingsSection(section)
     setVoiceSettingsOpen(true)
@@ -5327,9 +5327,8 @@ export function Workbench() {
   })
 
   // Commands
-  const runCommand = async (id: string) => {
-    // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
-    if (sheetOpen() && waitsForSheet(id)) return
+  // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+  const runCommand = guardedBySheet(sheetOpen, async (id: string) => {
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
     if (keepsPaletteOpen(id)) {
@@ -5562,7 +5561,7 @@ export function Workbench() {
     // columns, so `SessionGrid` owns the arrow keys and answers with the real
     // geometry rather than a guess made from the window size.
     setPaletteOpen(false)
-  }
+  })
 
   const allCommands = createMemo(() => {
     // Reading the tick is what makes "uccidi processo" enable itself the moment
