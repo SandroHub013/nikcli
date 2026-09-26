@@ -310,12 +310,33 @@ describe("the permission prompt the hook says", () => {
     expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now)).toBe(false)
   })
 
-  test("a prompt nobody is answering stops holding the session, or it would hold it for ever", () => {
-    const forgotten = { state: "permission" as const, at: now - 3 * 60_000 }
-    // Silent since the prompt was written, and old: nobody is looking at it.
-    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now)).toBe(true)
-    // Old but the session is still moving: that is a live prompt.
-    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 1_000 }, now)).toBe(false)
+  test("un prompt senza risposta continua a trattenere, anche dopo ore", () => {
+    // La prima versione di questa regola dava per scontato il contrario: che un
+    // prompt aperto produca output. Non lo produce — il pannello non si
+    // ridisegna, aspetta — quindi «silenzioso» è come appare un prompt che
+    // nessuno guarda, e la regola scadeva proprio nel caso per cui esiste, con
+    // un Invio che confermava la scelta selezionata.
+    const forgotten = { state: "permission" as const, at: now - 6 * 60 * 60_000 }
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 6 * 60 * 60_000 }, now)).toBe(false)
+    // E non lo cambia il tempo che è passato in nessuna forma: un prompt
+    // dimenticato è ancora un prompt, e l'unica cosa che lo cancella è un hook
+    // più nuovo, che vuol dire che l'utente ha scritto o che il turno è finito.
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now)).toBe(false)
+    // Il prompt successivo, o il Stop, risolvono: sono loro che scrivono il file.
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(true)
+  })
+
+  test("la coda dice perché aspetta, anche quando lo sa il hook", () => {
+    const request = { id: "n1", from: "n2", at: now - 60_000 } as never
+    const running = {
+      running: true,
+      activity: { state: "permission" as const, at: now - 60_000 },
+      lastOutputAt: now - 60_000,
+    }
+    // Dal solo schermo era già così, e resta così: due fonti, una sola risposta.
+    expect(requestState(request, { ...running, permissionPending: true }, now)).toBe("attende un permesso")
+    expect(requestState(request, { ...running, permissionPending: false }, now)).toBe("attende un permesso")
   })
 
   test("the screen reading is still the fallback, and still holds the session", () => {

@@ -852,15 +852,21 @@ export const UNKNOWN_FREE_MS = 15_000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
 export const STALE_BUSY_MS = 30 * 60_000
 /**
- * A "permission" older than this, from a session that has been talking since, is a
- * prompt that was answered and no hook came to say so.
+ * A "permission" does not expire, and that is the whole point of it.
  *
- * A stuck "permission" would be worse than the screen reading it replaced: the delivery
- * would wait for ever in a pane that is free. The bound is generous because a prompt
- * somebody is thinking about is not a prompt that has gone - and the session is
- * talking while they think, which is what the second half of the rule asks for.
+ * The first version gave up after two minutes in a pane that had gone quiet, and
+ * the two halves of that rule were backwards: a prompt somebody is looking at
+ * makes no output either — the pane is not repainting, it is waiting — so "quiet"
+ * is what an *unattended* prompt looks like, and "talking" is what an answered one
+ * looks like. So the rule timed out exactly in the case it existed for: the
+ * prompt the screen reading had missed, left open while the user was away, and an
+ * Enter from a delivery confirming the choice that was selected, which is Yes.
+ *
+ * So it holds until a newer hook overwrites it. `UserPromptSubmit` and `Stop` both
+ * write the file, so one of them is the answer: the user typed, or the turn ended.
+ * What is left in between is a delivery waiting, and a wait is the smaller damage
+ * — the same order the rule about a user's half-typed line has always used.
  */
-export const STALE_PERMISSION_MS = 2 * 60_000
 
 /**
  * Whether text can be typed into a session without interrupting it.
@@ -892,11 +898,10 @@ export function isFree(
     if (!target.activity) return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
     if (target.activity.state === "idle") return true
     if (target.activity.state === "permission") {
-      // A prompt the hook is still reporting, from a session that has gone quiet
-      // since it wrote it. The pane going quiet is the part that makes it a
-      // prompt nobody is looking at: a prompt being answered is answered with
-      // keys, and those are output.
-      return now - target.activity.at > STALE_PERMISSION_MS && quietFor >= UNKNOWN_FREE_MS
+      // Not free, and not for a length of time: see the note above
+      // STALE_BUSY_MS, and the two ways that rule used to be backwards. Only a
+      // newer hook clears it.
+      return false
     }
     return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
   }
@@ -955,7 +960,10 @@ export function requestState(
   now: number,
 ): RequestState {
   if (!target.running) return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
-  if (target.permissionPending) return "attende un permesso"
+  // The reason a request is waiting on a question, from the hook or from the
+  // screen: both mean the same thing to somebody reading `ade-msg list`, and a
+  // prompt the hook reported is the one the screen usually does not.
+  if (target.permissionPending || target.activity?.state === "permission") return "attende un permesso"
   // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
   const reached = request.deliveredAt ?? request.at
   if (target.activity?.state === "idle" && target.activity.at > reached && !request.update) return "inattiva senza risposta"
