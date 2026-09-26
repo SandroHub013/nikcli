@@ -23,6 +23,8 @@ export function GatewaySection(props: {
   onMount(() => void panel.refresh())
   onCleanup(() => panel.dispose())
 
+  const onDiscord = () => panel.platform() === "discord"
+
   const state = () => {
     const link = panel.link()
     if (!link.enabled) return { tone: "off", text: t("gateway.panel.off") }
@@ -38,8 +40,31 @@ export function GatewaySection(props: {
 
   return (
     <section data-slot="bots-card-section" data-component="bot-gateway">
-      <span data-slot="bots-label">{t("gateway.panel.title")}</span>
-      <p data-slot="bots-hint">{t("gateway.panel.intro")}</p>
+      <span data-slot="bots-label">{onDiscord() ? t("gateway.panel.titleDiscord") : t("gateway.panel.title")}</span>
+
+      {/* Which platform: both links are kept, so this only chooses what is shown. */}
+      <div data-slot="gateway-row" role="group" aria-label={t("gateway.panel.platform")}>
+        <button
+          type="button"
+          data-slot="bots-btn"
+          data-tone={onDiscord() ? undefined : "primary"}
+          aria-pressed={!onDiscord()}
+          onClick={() => panel.choose("telegram")}
+        >
+          {t("gateway.panel.platformTelegram")}
+        </button>
+        <button
+          type="button"
+          data-slot="bots-btn"
+          data-tone={onDiscord() ? "primary" : undefined}
+          aria-pressed={onDiscord()}
+          onClick={() => panel.choose("discord")}
+        >
+          {t("gateway.panel.platformDiscord")}
+        </button>
+      </div>
+
+      <p data-slot="bots-hint">{onDiscord() ? t("gateway.panel.introDiscord") : t("gateway.panel.intro")}</p>
 
       <div data-slot="gateway-state" data-tone={state().tone}>
         <span data-slot="gateway-dot" aria-hidden="true" />
@@ -56,7 +81,9 @@ export function GatewaySection(props: {
         <span data-slot="gateway-subtitle">{t("gateway.panel.token")}</span>
         <Show
           when={panel.link().hasToken}
-          fallback={<p data-slot="bots-hint">{t("gateway.panel.tokenHelp")}</p>}
+          fallback={
+            <p data-slot="bots-hint">{onDiscord() ? t("gateway.panel.tokenHelpDiscord") : t("gateway.panel.tokenHelp")}</p>
+          }
         >
           <p data-slot="bots-hint" data-state="saved">
             {t("gateway.panel.tokenSaved")}
@@ -78,7 +105,13 @@ export function GatewaySection(props: {
             type="password"
             autocomplete="off"
             spellcheck={false}
-            placeholder={panel.link().hasToken ? t("gateway.panel.tokenReplace") : t("gateway.panel.tokenPlaceholder")}
+            placeholder={
+              panel.link().hasToken
+                ? t("gateway.panel.tokenReplace")
+                : onDiscord()
+                  ? t("gateway.panel.tokenPlaceholderDiscord")
+                  : t("gateway.panel.tokenPlaceholder")
+            }
             aria-label={t("gateway.panel.token")}
             value={panel.draft()}
             onInput={(event) => panel.setDraft(event.currentTarget.value)}
@@ -98,6 +131,16 @@ export function GatewaySection(props: {
           </div>
         </Show>
       </div>
+
+      <Show when={onDiscord()}>
+        <div data-slot="gateway-block">
+          <span data-slot="gateway-subtitle">{t("gateway.panel.portal")}</span>
+          <p data-slot="bots-hint">{t("gateway.panel.portalWhere")}</p>
+          <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.intents")}</p>
+          <p data-slot="bots-hint">{t("gateway.panel.invite")}</p>
+          <p data-slot="bots-hint" data-state="warn">{t("gateway.noProxy")}</p>
+        </div>
+      </Show>
 
       {/* On and off, with the project the turns run in. */}
       <div data-slot="gateway-block">
@@ -155,6 +198,9 @@ export function GatewaySection(props: {
 
         <span data-slot="gateway-subtitle">{t("gateway.panel.pairing")}</span>
         <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.onlyYours")}</p>
+        <Show when={onDiscord()}>
+          <p data-slot="bots-hint" data-state="warn">{t("gateway.channelIsPublic", t("gateway.panel.platformDiscord"))}</p>
+        </Show>
         <Show when={panel.pairing().pending.length > 0}>
           <ul data-slot="gateway-list">
             <For each={panel.pairing().pending}>
