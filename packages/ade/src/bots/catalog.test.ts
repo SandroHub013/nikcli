@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { catalogFree, parseModelCatalog } from "./catalog"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { t } from "../i18n"
+import { botModelLabel, catalogFree, parseModelCatalog } from "./catalog"
 
 /* The shape of `nikcli models opencode --verbose`, with made-up models. */
 const record = (id: string, input: number, output: number) =>
@@ -48,5 +51,21 @@ describe("whether a routine's model is free, by nikcli's catalog (B11 review, M2
   test("a catalog that cannot be read makes the model paid", async () => {
     expect(await catalogFree("opencode/mario-free", async () => "")).toBe(false)
     expect(await catalogFree("opencode/mario-free", async () => Promise.reject(new Error("no")))).toBe(false)
+  })
+})
+
+/* Prove dal vivo 2: the bot form's 385 models, free and paid, all looked alike. */
+describe("the bot form's model list", () => {
+  test("marks a free model as the Chat does, and leaves a paid one as its id", () => {
+    expect(botModelLabel("openrouter/nvidia/nemotron-3.5-lightning:free")).toBe(
+      `openrouter/nvidia/nemotron-3.5-lightning:free (${t("chat.model.free")})`,
+    )
+    expect(botModelLabel("openrouter/anthropic/claude-sonnet-5")).toBe("openrouter/anthropic/claude-sonnet-5")
+  })
+
+  test("is what the select shows, the pinned model included", () => {
+    const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
+    expect(form).toContain("<For each={props.nikcliModels}>{(id) => <option value={id}>{botModelLabel(id)}</option>}</For>")
+    expect(form).toContain('<option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>')
   })
 })

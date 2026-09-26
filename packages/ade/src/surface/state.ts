@@ -151,6 +151,11 @@ export interface Pane {
   mode: string
   agent?: string
   lines: TranscriptLine[]
+  /**
+   * ADE's notes the user must read even where the transcript is hidden: over
+   * a live terminal, until dismissed (`withPaneNotice`). Not saved.
+   */
+  notices?: readonly string[]
   browserUrl?: string
   /**
    * The browser pane's back/forward list; its current entry is `browserUrl`.
@@ -302,6 +307,21 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId
   }
+}
+
+/** How many notes stay over a terminal at once: the latest ones. */
+export const MAX_NOTICES = 3
+
+/**
+ * The notes over a pane's terminal after `text` is told.
+ *
+ * In a pane with a live terminal the transcript is hidden, so a note written
+ * only there reached nobody: that a conversation stayed with another pane,
+ * belonged to another folder, or could not be found (prove dal vivo 2,
+ * difetto A). The same note twice is one; the oldest go first.
+ */
+export function withPaneNotice(notices: readonly string[] | undefined, text: string): string[] {
+  return [...(notices ?? []).filter((notice) => notice !== text), text].slice(-MAX_NOTICES)
 }
 
 export function updatePane(workbench: Workbench, paneId: string, updates: Partial<Pane>): Workbench {

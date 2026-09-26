@@ -91,7 +91,7 @@ import {
   type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { catalogFree } from "./catalog"
+import { botModelLabel, catalogFree } from "./catalog"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
@@ -1930,9 +1930,9 @@ function EngineFields(props: {
               {/* The bot's own model stays offered when it is not in the list:
                   dropping the pin would silently move the bot to another model. */}
               <Show when={props.pinned && !props.nikcliModels.includes(props.pinned)}>
-                <option value={props.pinned}>{props.pinned}</option>
+                <option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>
               </Show>
-              <For each={props.nikcliModels}>{(id) => <option value={id}>{id}</option>}</For>
+              <For each={props.nikcliModels}>{(id) => <option value={id}>{botModelLabel(id)}</option>}</For>
             </select>
             <Show when={props.nikcliModels.length === 0}>
               <span data-slot="bots-hint">

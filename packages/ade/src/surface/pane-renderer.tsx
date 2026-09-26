@@ -101,6 +101,8 @@ export interface PaneRendererDeps {
   mailWaiting: () => Record<string, number>
   /** Shows a pane what is waiting for it, without typing anything. */
   showMail: (id: string) => void
+  /** Takes away the notes shown over a pane's terminal. */
+  dismissNotices: (id: string) => void
   /** A link clicked in a file pane's markdown preview: a web page in ADE's browser, or a file. */
   /** A link clicked in a file pane; a refused file link answers with the note to show there. */
   openFileLink: (id: string, link: { kind: "url"; url: string } | { kind: "file"; path: string }) => string | void
@@ -438,6 +440,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
           }
         })()}
         mail={deps.mailWaiting()[current().id]}
+        notices={current().notices}
+        onDismissNotices={() => deps.dismissNotices(current().id)}
         onMail={() => deps.showMail(current().id)}
         onLink={(request) => deps.openLink(current().id, request)}
         terminalId={deps.liveTerminals().has(current().id) ? current().id : undefined}

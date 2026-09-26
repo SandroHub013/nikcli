@@ -46,6 +46,7 @@ import {
 import { detectAgents } from "../session-new/availability"
 import {
   RESUME,
+  lastTakenFor,
   planFork,
   planLastHere,
   planMint,
@@ -139,6 +140,7 @@ import {
   addPane,
   closePane,
   updatePane,
+  withPaneNotice,
   isPanelPane,
   expandPane,
   setColumns,
@@ -1998,7 +2000,7 @@ export function Workbench() {
       ...inboxPending.filter((entry) => entry.paneId === paneId).map((entry) => `${named(entry.from)}: ${entry.chars} caratteri, ${entry.id}`),
     ]
     if (waiting.length === 0) return
-    for (const line of waiting) appendLine(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)), "note")
+    for (const line of waiting) tellPane(paneId, t("note.mailWaiting", asOneLine(line).slice(0, 160)))
   }
 
   /** The activity files, one call a pass; a delivery reuses the pass's read for a second (P1-C2a). */
@@ -4669,7 +4671,7 @@ export function Workbench() {
           if (sharedWith) {
             // The conversation stays with the other pane: this one must not reopen it by its saved id.
             setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
-            appendLine(session.pane.id, t("resume.shared", sharedWith.pane.title), "note")
+            tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
           }
           void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
         }
@@ -5785,6 +5787,19 @@ export function Workbench() {
     buffers.update(paneId, (now) => (now ? markSaved(now, written) : now))
   }
 
+  /**
+   * A note the user has to read: in the transcript, and over the terminal of
+   * a pane that has one, where the transcript is hidden (`withPaneNotice`).
+   */
+  const tellPane = (id: string, text: string) => {
+    appendLine(id, text, "note")
+    setWb((w) => {
+      const pane = w.panes.find((candidate) => candidate.id === id)
+      return pane ? updatePane(w, id, { notices: withPaneNotice(pane.notices, text) }) : w
+    })
+  }
+  const dismissNotices = (id: string) => setWb((w) => updatePane(w, id, { notices: undefined }))
+
   const appendLine = (id: string, text: string, kind: "step" | "shell" | "note" = "note") => {
     /*
      * What is stored is the readable form; what is inspected below is the raw
@@ -6084,15 +6099,15 @@ export function Workbench() {
     if (holder) {
       pane = { ...pane, resumeId: undefined }
       setWb((w) => updatePane(w, pane.id, { resumeId: undefined }))
-      appendLine(pane.id, t("resume.shared", holder.title), "note")
+      tellPane(pane.id, t("resume.shared", holder.title))
     }
     const missing = await conversationMissing(agentId, pane.resumeId, pane.cwd)
     const plan = planResume({
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
-      // "The most recent one here" only when this is the one pane of that
-      // agent: with two, the latest thread is as likely the other's.
-      lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
+      // "The most recent one here" unless another pane of this folder may be
+      // in it: per folder, and for nikcli only a pane without an id of its own.
+      lastTaken: lastTakenFor(pane, wb().panes),
       missing,
     })
     // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
@@ -6288,7 +6303,7 @@ export function Workbench() {
       if (found) {
         opening = { args: recipe.byId(found), resumeId: found }
         resumed = true
-      } else appendLine(paneId, t("resume.noneHere", agent.label || agentId), "note")
+      } else tellPane(paneId, t("resume.noneHere", agent.label || agentId))
     }
     if (!resumed && !opening.resumeId && launched?.resumeId && recipe?.byId) {
       // Already has one: a restart reopens it. Minting here is what made the
@@ -6303,7 +6318,7 @@ export function Workbench() {
       appendLine(paneId, t("resume.asking", agent.label || agentId), "note")
       const minted = await mintConversation(agentId, agent.command, workDir, title)
       if (minted && recipe.byId) opening = { args: recipe.byId(minted), resumeId: minted }
-      else appendLine(paneId, t("resume.noMint", agent.label || agentId), "note")
+      else tellPane(paneId, t("resume.noMint", agent.label || agentId))
     }
 
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
@@ -6334,10 +6349,10 @@ export function Workbench() {
      * one directory is the case that is not right, and that one is said.
      */
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
-    if (!resumed && promise === "none") appendLine(paneId, t("resume.none"), "note")
+    if (!resumed && promise === "none") tellPane(paneId, t("resume.none"))
     // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
     if (resumed && launched?.otherDir && mintedId === launched.resumeId) {
-      appendLine(paneId, t("resume.otherFolder", launched.otherDir), "note")
+      tellPane(paneId, t("resume.otherFolder", launched.otherDir))
     }
 
     /*
@@ -6550,8 +6565,8 @@ export function Workbench() {
             const holder = wb().panes.find(
               (other) => other.id !== paneId && (other.agent ?? other.model) === agentId && other.resumeId === report.sessionId,
             )
-            if (holder) appendLine(paneId, t("resume.alsoOpen", holder.title), "note")
-            if (elsewhere) appendLine(paneId, t("resume.otherFolder", elsewhere), "note")
+            if (holder) tellPane(paneId, t("resume.alsoOpen", holder.title))
+            if (elsewhere) tellPane(paneId, t("resume.otherFolder", elsewhere))
           },
         })
       }
@@ -6986,6 +7001,7 @@ export function Workbench() {
     panels,
     mailWaiting,
     showMail,
+    dismissNotices,
     openLink: (id, request) => void openLink(id, request),
     openFileLink: (id, link) => {
       // Refused: the note goes back to the file pane, which flashes it (it has no transcript to append to).
