@@ -53,12 +53,14 @@ import {
   restoreClaims,
   claimedByRestore,
   openedConversation,
+  LIST_COLS,
   planResume,
   planStart,
   resumePromise,
   type ResumePlan,
 } from "../session-new/resume"
 import { countingLines, followReports, followedFolder, lastReportedId, newNonce, otherFolder, parseReport } from "../session-new/agent-link"
+import { sameFolder } from "../session-new/folder"
 import { HOOK_TARGETS, HOOK_TIMEOUT, hookTarget, readHookStatus, refreshHookScript, type HookHost, type HookStatus } from "../session-new/agent-hooks"
 import { AgentHooksSection } from "../session-new/agent-hooks-panel"
 import { BotSection, GridSection, LanguageSection, ProviderSection, RoutineSection, SkillsSection, ThemeSection } from "../settings/sections"
@@ -6134,9 +6136,11 @@ export function Workbench() {
           args: plan.args,
           cwd,
           // A terminal, like every other agent: pipes are Claude Code's alone
-          // (`pty.rs`). Wide enough that the printed JSON is not wrapped
-          // through the middle of the id.
-          cols: 400,
+          // (`pty.rs`). Wide enough that no line of the printed JSON is
+          // wrapped: at 80 the id was cut, and a line past 400 (a long UNC
+          // folder, a long permission rule) broke the parse and lost the
+          // conversation (lettura di Mimo, F8).
+          cols: LIST_COLS,
           rows: 12,
           onLine: read,
           onExit: () => finish(plan.read(text)),
@@ -6432,7 +6436,7 @@ export function Workbench() {
      * new conversation with the old title.
      */
     const others = wb().panes.some(
-      (pane) => pane.id !== paneId && (pane.agent ?? pane.model) === agentId && (pane.cwd || p.root) === workDir,
+      (pane) => pane.id !== paneId && (pane.agent ?? pane.model) === agentId && sameFolder(pane.cwd || p.root, workDir),
     )
     /*
      * Said only where there is something to say: "the most recent one here" is

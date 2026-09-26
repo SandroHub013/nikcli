@@ -1,3 +1,4 @@
+import { folderKey, sameFolder } from "./folder"
 import { isBotSession } from "../bots/serve-rules"
 
 /**
@@ -121,12 +122,6 @@ function joinHome(home: string, ...segments: string[]): string {
   return [home.replace(/[\\/]+$/, ""), ...segments].join(sep)
 }
 
-/** Windows hands the same directory back with either slash and any case. */
-function sameDir(a: string, b: string): boolean {
-  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-  return norm(a) === norm(b)
-}
-
 /**
  * agy's `cache/last_conversations.json`: `{ "<directory>": "<conversation id>" }`,
  * read off this machine. Conversations live in `conversations/<id>.db`.
@@ -140,7 +135,7 @@ function agyLatest(text: string, cwd: string): string | undefined {
   }
   if (!map || typeof map !== "object" || Array.isArray(map)) return undefined
   for (const [dir, id] of Object.entries(map)) {
-    if (typeof id === "string" && id && sameDir(dir, cwd)) return id
+    if (typeof id === "string" && id && sameFolder(dir, cwd)) return id
   }
   return undefined
 }
@@ -202,7 +197,7 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
         // A bot's conversation is the bot's, however recent: not a pane's to take.
         !isBotSession(entry) &&
         typeof entry["directory"] === "string" &&
-        sameDir(entry["directory"], cwd) &&
+        sameFolder(entry["directory"], cwd) &&
         !taken.has(entry["id"]),
     )
     .sort((a, b) => updated(b) - updated(a))
@@ -216,6 +211,9 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
  * pane's own.
  */
 export const LAST_HERE_LIMIT = 50
+
+/** The width of the terminal `session.list` and `session.create` print into: no line of their JSON is wrapped. */
+export const LIST_COLS = 4000
 
 /**
  * Claude Code's project folder: every character that is not a letter or digit
@@ -494,11 +492,6 @@ export function planResume(request: ResumeRequest): ResumePlan {
   return { kind: "fresh" }
 }
 
-/** A folder as a key: one spelling for the same place, on Windows too. */
-function folderKey(cwd: string | undefined): string {
-  return (cwd ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-}
-
 /**
  * Whether "the most recent conversation here" is already spoken for when
  * `pane` is reopened on its own (not in a whole restore, see `planRestore`).
@@ -597,14 +590,14 @@ export function planRestore<T extends { agentId: string; cwd: string; resumeId?:
   const claimed = new Set<string>()
   const holders = new Map<string, T>()
   return sessions.map((session) => {
-    const key = `${session.agentId} ${session.cwd}`
-    const held = session.resumeId !== undefined ? holders.get(`${session.agentId} ${session.resumeId}`) : undefined
+    const key = claimKey(session.agentId, session.cwd)
+    const held = session.resumeId !== undefined ? holders.get(`${session.agentId}\u0000${session.resumeId}`) : undefined
     if (held) {
       const plan: ResumePlan = RESUME[session.agentId]?.lastHere && !claimed.has(key) ? { kind: "here" } : { kind: "fresh" }
       if (plan.kind === "here") claimed.add(key)
       return { session, plan, sharedWith: held }
     }
-    if (session.resumeId !== undefined) holders.set(`${session.agentId} ${session.resumeId}`, session)
+    if (session.resumeId !== undefined) holders.set(`${session.agentId}\u0000${session.resumeId}`, session)
     const plan = planResume({
       agentId: session.agentId,
       ...(session.resumeId !== undefined ? { resumeId: session.resumeId } : {}),

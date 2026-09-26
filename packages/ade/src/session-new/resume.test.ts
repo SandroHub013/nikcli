@@ -19,6 +19,7 @@ import {
   restoreClaims,
   claimedByRestore,
   openedConversation,
+  LIST_COLS,
 } from "./resume"
 
 describe("planStart", () => {
@@ -506,5 +507,30 @@ describe("the conversation a start opens", () => {
     expect(workbench).not.toContain("mintedId === launched.resumeId")
     expect(workbench).toContain("otherDir: followedFolder(report, workDir, followed ?? {})")
     expect(workbench).toContain("followedFolder(report, pane.cwd, pane)")
+  })
+})
+
+/* Lettura di Mimo, BASSI F5, F6 and F8. */
+describe("one folder rule, and a source the tools can read", () => {
+  test("two panes of one folder spelled otherwise share its claim", () => {
+    const planned = planRestore([
+      { agentId: "nikcli", cwd: "C:\\Progetti\\uno" },
+      { agentId: "nikcli", cwd: "c:/progetti/uno/" },
+    ])
+    expect(planned.map((entry) => entry.plan.kind)).toEqual(["here", "fresh"])
+  })
+
+  test("resume.ts has no raw NUL byte: grep and rg read it as text", () => {
+    const bytes = readFileSync(join(import.meta.dir, "resume.ts"))
+    expect(bytes.includes(0)).toBe(false)
+  })
+
+  test("the workbench compares folders by the same rule, and prints the lists wide", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("sameFolder(pane.cwd || p.root, workDir)")
+    expect(workbench).not.toContain("(pane.cwd || p.root) === workDir")
+    expect(workbench).toContain("cols: LIST_COLS,")
+    expect(workbench).not.toContain("cols: 400,")
+    expect(LIST_COLS).toBeGreaterThanOrEqual(2000)
   })
 })

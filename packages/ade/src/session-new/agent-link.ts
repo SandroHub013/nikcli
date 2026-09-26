@@ -36,6 +36,8 @@
  * for one, which is the only thing the user ever notices going wrong.
  */
 
+import { sameFolder } from "./folder"
+
 /** The directory a hook drops its report into. */
 export const LINK_DIR_ENV = "ADE_SESSION_DIR"
 
@@ -346,8 +348,7 @@ export async function followReports(follow: LinkFollow): Promise<void> {
  */
 export function otherFolder(report: LinkReport, cwd: string): string | undefined {
   if (!report.sessionDir || !cwd) return undefined
-  const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
-  return norm(report.sessionDir) === norm(cwd) ? undefined : report.sessionDir
+  return sameFolder(report.sessionDir, cwd) ? undefined : report.sessionDir
 }
 
 /**
