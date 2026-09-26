@@ -1,6 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
+import { LIST_MS, MINT_MS, MINT_SLOW_MS, waitForAnswer } from "../session-new/ask-cli"
 import { every, pageHidden, watchDue } from "../host/every"
 import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions, isWorkingAgentPane } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
@@ -49,6 +50,7 @@ import {
   planFork,
   planLastHere,
   planMint,
+  startingState,
   mintMark,
   MintLedger,
   lastHereBesideMints,
@@ -6100,16 +6102,6 @@ export function Workbench() {
   }
 
   /**
-   * How long to wait for a CLI asked to open a conversation for ADE.
-   *
-   * `nikcli api session.create` answers in a couple of seconds warm, and
-   * takes longer the first time it looks at a large repository. Past this the
-   * session starts anyway without an id: a pane that opens late is worse than
-   * a pane that says it cannot promise to come back.
-   */
-  const MINT_MS = 15_000
-
-  /**
    * Asking a CLI for a conversation, for the ones that refuse an invented id.
    *
    * The command prints the new conversation and then stays up — it holds the
@@ -6120,8 +6112,11 @@ export function Workbench() {
   const mintConversation = async (agentId: string, command: string, cwd: string, title: string, paneId: string) => {
     const plan = planMint(agentId, title)
     if (!plan) return undefined
+    // Past `MINT_SLOW_MS` the pane says it is still waiting; past `MINT_MS` it starts without an id.
+    const label = agentById(agentId)?.label || agentId
+    const timing = { timeoutMs: MINT_MS, slow: { afterMs: MINT_SLOW_MS, say: () => tellPane(paneId, t("resume.slowMint", label)) } }
     return await mints.track(
-      askCli(command, plan.args, cwd, plan.read).then((id) => id ?? undefined),
+      askCli(command, plan.args, cwd, plan.read, timing).then((id) => id ?? undefined),
       paneId,
     )
   }
@@ -6145,7 +6140,7 @@ export function Workbench() {
     const plan = planLastHere(agentId, cwd, taken, marks)
     if (!plan) return undefined
     return await lastHereBesideMints(
-      (read) => askCli(command, plan.args, cwd, read),
+      (read) => askCli(command, plan.args, cwd, read, { timeoutMs: LIST_MS }),
       (output, excluded) => planLastHere(agentId, cwd, excluded, marks)!.read(output),
       taken,
       mints,
@@ -6155,39 +6150,24 @@ export function Workbench() {
 
   /**
    * Runs a short CLI command under a pty until `read` finds its answer in the
-   * output, then kills it: `null` from `read` is a final "nothing", undefined
-   * means "not yet". Gives up after `MINT_MS`.
+   * output, then kills it (`waitForAnswer`, which says what the answers mean).
    */
   const askCli = async (
     command: string,
     args: string[],
     cwd: string,
-    readAnswer: (output: string) => string | null | undefined,
+    read: (output: string) => string | null | undefined,
+    timing: { timeoutMs: number; slow?: { afterMs: number; say: () => void } },
   ): Promise<string | null | undefined> => {
     const host = await getHost()
     if (!host) return undefined
-    const plan = { args, read: readAnswer }
-    return await new Promise<string | null | undefined>((resolve) => {
-      let text = ""
-      let settled = false
-      let child: SpawnedSession | undefined
-      const finish = (id?: string | null) => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        child?.kill({ tree: true })
-        resolve(id)
-      }
-      const timer = setTimeout(() => finish(undefined), MINT_MS)
-      const read = (line: string) => {
-        text += `${stripAnsi(line)}\n`
-        const id = plan.read(text)
-        if (id !== undefined) finish(id)
-      }
-      host
-        .spawn({
+    return await waitForAnswer({
+      ...timing,
+      read,
+      start: (onLine, onExit) =>
+        host.spawn({
           command,
-          args: plan.args,
+          args,
           cwd,
           // A terminal, like every other agent: pipes are Claude Code's alone
           // (`pty.rs`). Wide enough that no line of the printed JSON is
@@ -6196,14 +6176,9 @@ export function Workbench() {
           // conversation (lettura di Mimo, F8).
           cols: LIST_COLS,
           rows: 12,
-          onLine: read,
-          onExit: () => finish(plan.read(text)),
-        })
-        .then((spawned) => {
-          child = spawned
-          if (settled) spawned.kill({ tree: true })
-        })
-        .catch(() => finish(undefined))
+          onLine: (line) => onLine(stripAnsi(line)),
+          onExit,
+        }),
     })
   }
 
@@ -6539,15 +6514,15 @@ export function Workbench() {
      * they make it in the terminal like anywhere else. The worktree board still
      * lists and integrates the trees that exist — it just stops making them.
      */
+    const starting = startingState({ task, resumed, typeIntoResumed })
     try {
-      const hasTask = Boolean(task.trim())
       setWb(w => updatePane(w, paneId, {
         cwd: workDir,
         tree: launched?.worktree && launched.tree
           ? launched.tree
           : p.branch ? { branch: p.branch, fidelity: "project" } : undefined,
-        status: hasTask ? "working" : "idle",
-        activity: resumed ? "resumed" : (hasTask ? "running" : "ready"),
+        status: starting.status,
+        activity: starting.activity,
         // Saved, so the next start can read what this spawn reported last.
         linkNonce: nonce,
         // Another conversation than the one followed: its folder no longer applies.
@@ -6745,7 +6720,7 @@ export function Workbench() {
       // Not typed when the session was resumed: the agent already has the
       // thread, and sending the original prompt again would ask for the whole
       // job a second time.
-      if (task.trim() && (!resumed || typeIntoResumed)) {
+      if (starting.typesTask) {
         const startedAt = Date.now()
         const poll = setInterval(() => {
           // The pane was closed, or the process died, while we were waiting.
