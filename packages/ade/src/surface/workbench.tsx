@@ -1,7 +1,7 @@
 import { onMount, onCleanup, on, createSignal, createEffect, createMemo, createResource, Show, For } from "solid-js"
 import { createStore, produce, reconcile, unwrap } from "solid-js/store"
 import { getHost, stripAnsi, type SpawnedSession } from "../host/shell"
-import { LIST_MS, MINT_MS, MINT_SLOW_LEFT_S, MINT_SLOW_MS, mintTrace, waitForAnswer } from "../session-new/ask-cli"
+import { EXISTS_MS, LIST_MS, MINT_MS, MINT_SLOW_LEFT_S, MINT_SLOW_MS, mintTrace, waitForAnswer } from "../session-new/ask-cli"
 import { every, pageHidden, watchDue } from "../host/every"
 import { mustConfirmLeaving, shouldConfirmWindowClose, closeConfirmationMessage, countWorkingSessions, isWorkingAgentPane } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
@@ -6266,7 +6266,13 @@ export function Workbench() {
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
-    return path ? !(await host.exists(path)) : false
+    if (path) return !(await host.exists(path))
+    // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
+    const exists = RESUME[agentId]?.exists
+    const command = agentById(agentId)?.command
+    if (!exists || !command) return false
+    const answer = await askCli(command, exists.args(resumeId), root, (output) => exists.read(output, resumeId), { timeoutMs: EXISTS_MS })
+    return answer === "gone"
   }
 
   /**
@@ -6619,7 +6625,17 @@ export function Workbench() {
         resumed = true
       } else tellPane(paneId, t("resume.noneHere", agent.label || agentId))
     }
-    if (!resumed && !opening.resumeId && launched?.resumeId && recipe?.byId) {
+    /*
+     * A conversation the CLI no longer has (deleted from nikcli): not reopened,
+     * which failed on the raw NotFoundError, and not kept, or every restart
+     * would ask for it again. The pane starts a new one and says so.
+     */
+    const conversationGone = resume?.kind === "fresh" && resume.gone === true && launched?.resumeId !== undefined
+    if (conversationGone) {
+      setWb((w) => updatePane(w, paneId, { resumeId: undefined }))
+      tellPane(paneId, t("resume.gone", agent.label || agentId))
+    }
+    if (!resumed && !opening.resumeId && launched?.resumeId && !conversationGone && recipe?.byId) {
       // Already has one: a restart reopens it. Minting here is what made the
       // pane lose its conversation on the second start.
       opening = { args: recipe.byId(launched.resumeId), resumeId: launched.resumeId }
