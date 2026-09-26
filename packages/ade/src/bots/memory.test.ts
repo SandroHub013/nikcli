@@ -216,21 +216,35 @@ describe("B8a: the tags in an answer", () => {
 })
 
 describe("B8a review: where the memory goes", () => {
+  /*
+   * Read here, while the file loads, not in the tests. This is the suite's
+   * first open of the voice sources, and on Windows the first open of a file
+   * a checkout has just written waits for the antivirus to scan it: about
+   * 10 ms a file when the machine is idle, 6.7 s for the nine of them after
+   * a checkout under load, which the 5 s timeout of a test charged to this
+   * one. Loading is not timed per test.
+   */
+  const { readdirSync } = require("node:fs") as typeof import("node:fs")
+  const voice = new URL("../voice/", import.meta.url)
+  const voiceSources = readdirSync(voice)
+    .filter((file: string) => /\.tsx?$/.test(file) && !file.includes(".test."))
+    .map((name: string) => [name, readFileSync(new URL(name, voice), "utf8")] as const)
+  const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8")
+  const bridge = source("./gateway/bridge.ts")
+  const bots = source("./bots.tsx")
+  const controller = source("./gateway/controller.ts")
+
   test("the voice has none: the voice agent is not a bot, and a snapshot would lengthen every turn", () => {
-    const { readdirSync } = require("node:fs") as typeof import("node:fs")
-    const voice = new URL("../voice/", import.meta.url)
-    for (const name of readdirSync(voice).filter((file: string) => /\.tsx?$/.test(file) && !file.includes(".test."))) {
-      const source = readFileSync(new URL(name, voice), "utf8")
+    expect(voiceSources.length).toBeGreaterThan(0)
+    for (const [name, source] of voiceSources) {
       expect([name, /bots\/memory|memoryPreface|memorySnapshot/.test(source)]).toEqual([name, false])
     }
   })
 
   test("the gateway reads it and only proposes", () => {
-    const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
     // The same store as the panel's, so the Memoria section sees a chat's proposals at once.
     expect(bridge).toContain("memory: appMemoryStore,")
-    expect(readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")).toContain("const memories = appMemoryStore")
-    const controller = readFileSync(new URL("./gateway/controller.ts", import.meta.url), "utf8")
+    expect(bots).toContain("const memories = appMemoryStore")
     expect(controller).toContain("propose: () => true,")
     expect(controller).not.toContain("applyMemoryOp")
   })
