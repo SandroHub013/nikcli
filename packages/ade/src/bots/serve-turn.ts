@@ -17,16 +17,19 @@
  * The project is admitted before anything is sent (`admitProject`), as for
  * the Chat: with its dialog when someone is in front of the screen, refused
  * otherwise. A project agent with the bot's name would take its place on the
- * server, with its own prompt and rules: the turn is refused instead.
+ * server, with its own prompt and rules: the turn is refused instead. So is a
+ * turn whose model the server's catalog does not have: nikcli would end it
+ * without a word (`catalogHasModel`).
  *
  * Stop, the time limit and the spend cap abort the session's turn on the
  * server; nothing of it keeps running.
  */
 
-import type { Agent, NikcliClient } from "@nikcli-ai/sdk/client"
+import type { Agent, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import { appChatConnectionDeps, openChat, type ChatConnectionDeps } from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
+import { catalogHasModel, parseModelRef, serializeModelRef } from "../chat/model"
 import { readEvents } from "../chat/stream"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
@@ -53,7 +56,9 @@ import type { PermissionRule } from "../chat/rules"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
 export interface ServeClient {
-  readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt">[]>
+  readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt" | "model">[]>
+  /** The server's models and its configured one; `providerList` absent when it could not be read. */
+  readonly catalog: () => Promise<{ readonly providerList?: ProviderList; readonly configModel?: string }>
   /** The session, or undefined when the server has none by that id. */
   readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
   readonly create: (input: { readonly title: string; readonly permission: readonly PermissionRule[] }) => Promise<string>
@@ -212,10 +217,12 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       client = connection.client
       const server = client
 
+      let agentModel: { providerID: string; modelID: string } | undefined
       if (bot.identifier) {
         const agents = await server.agents()
         const problem = agentProblem(agents, bot)
         if (problem) return finish("error", problem)
+        agentModel = agents.find((agent) => agent.name === bot.identifier)?.model
         /*
          * A user's bot and a project's agent of its name, with the same words:
          * the server runs the project's file, whose rules and model are its
@@ -224,6 +231,18 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         if (bot.scope === "global" && (await deps.projectHasAgent?.(cwd, bot.identifier)))
           return finish("error", t("bots.serve.agentTaken", bot.identifier))
       }
+
+      /*
+       * The model the server would use, as it picks it: the bot's, else its
+       * agent's, else the configured one. One the catalog does not have is
+       * refused here, before any session: nikcli would end the turn without
+       * a word. A catalog that cannot be read lets the server decide.
+       */
+      const model = modelRef(bot.model)
+      const catalog = await server.catalog()
+      const wanted = model ?? agentModel ?? parseModelRef(catalog.configModel)
+      if (wanted && catalogHasModel(catalog.providerList, wanted) === false)
+        return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
 
       const profile = profileFor({
         ...(request.remote ? { remote: { commands: request.remote.commands } } : {}),
@@ -398,7 +417,6 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
 
       // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
       const text = !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
-      const model = modelRef(bot.model)
       if (stopped) return settled({ kind: "stopped" })
       sent = true
       await server.prompt({
@@ -470,6 +488,16 @@ export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = ap
 export function serveClientOf(client: NikcliClient): ServeClient {
   return {
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
+    catalog: async () => {
+      const [providers, config] = await Promise.all([
+        client.provider.list().catch(() => undefined),
+        client.config.get().catch(() => undefined),
+      ])
+      return {
+        ...(providers?.data ? { providerList: providers.data } : {}),
+        ...(config?.data?.model ? { configModel: config.data.model } : {}),
+      }
+    },
     session: async (sessionID) => {
       try {
         return (await client.session.get({ sessionID })).data as { permission?: unknown } | undefined

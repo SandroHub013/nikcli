@@ -42,6 +42,7 @@ function server() {
   const created: (readonly unknown[])[] = []
   const client: ServeClient = {
     agents: async () => [{ name: "alfa", prompt: "Sei alfa." }],
+    catalog: async () => ({}),
     session: async () => undefined,
     create: async (input) => (created.push(input.permission), SESSION),
     prompt: async (input) => void prompts.push(input.text),
