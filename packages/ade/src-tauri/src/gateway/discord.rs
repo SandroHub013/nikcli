@@ -70,24 +70,83 @@ const USER_AGENT: &str = concat!("nikcli-ade/", env!("CARGO_PKG_VERSION"), " (ga
 /// arrive with their text without it. A test holds this number.
 const INTENTS: u64 = (1 << 0) | (1 << 9) | (1 << 12);
 
-/// Close codes that stop the gateway, with what the user is told.
+/// What to do about a close code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// Go round again, resuming the session as it is.
+    Again,
+    /// Go round again with a **new** session: this one is spent, and resuming
+    /// it would only be refused the same way.
+    Fresh,
+    /// Stop, and tell the user why, because trying again cannot help.
+    Stop(&'static str),
+}
+
+/// Every close code of the Gateway event, what it means, and what is done
+/// about it, from
+/// <https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes>.
 ///
-/// The list is deliberately short and holds only codes that could be sourced
-/// rather than remembered. Discord publishes the whole table at
-/// <https://docs.discord.com/developers/events/gateway#close-codes> and it is
-/// to be transcribed from there. A code not on this list is treated as worth
-/// another try, which costs an identify only when there is no session to
-/// resume with, and the budget above stops that loop.
-const FATAL_CLOSE: &[(u16, &str)] = &[
+/// A code not on this list is treated as Verdict::Again: the cost is an
+/// identify only when there is no session to resume with, and the budget above
+/// stops that loop.
+const CLOSE_CODES: &[(u16, &str, Verdict)] = &[
+    (4000, "errore sconosciuto", Verdict::Again),
+    (4001, "opcode sconosciuto", Verdict::Again),
+    (4002, "errore nella decodifica", Verdict::Again),
+    // A socket that authenticated nothing: another connection of ours may have
+    // taken the session. Worth another go.
+    (4003, "non autenticato", Verdict::Again),
     // The token is wrong, revoked, or belongs to no bot.
-    (4004, "Discord rifiuta il token del bot: controllalo nella pagina del bot"),
+    (
+        4004,
+        "autenticazione fallita",
+        Verdict::Stop("Discord rifiuta il token del bot: controllalo nella pagina del bot"),
+    ),
+    (4005, "già autenticato", Verdict::Again),
+    // The sequence number was refused, so this session is spent.
+    (4007, "numero di sequenza non valido", Verdict::Fresh),
+    (4008, "troppo veloce, attento al rate limit", Verdict::Again),
+    // The session expired on Discord's side: it will not be resumed.
+    (4009, "sessione scaduta", Verdict::Fresh),
+    (
+        4010,
+        "shard non valido",
+        Verdict::Stop("Discord ha rifiutato lo shard del bot, e questo bot non ne chiede uno"),
+    ),
+    (
+        4011,
+        "shard obbligatorio",
+        Verdict::Stop("Discord vuole che il bot sia diviso in shard, e questo bot gira su una connessione sola"),
+    ),
+    (
+        4012,
+        "versione della API non valida",
+        Verdict::Stop("Discord ha rifiutato la versione della API con cui parlo: è un problema di ADE, non del tuo bot"),
+    ),
+    (
+        4013,
+        "intent non validi",
+        Verdict::Stop("Discord ha rifiutato gli intent del bot: sono richiesti solo quelli di base, apri la pagina del bot e controlla"),
+    ),
     // A privileged intent is off in the developer portal. This adapter asks for
     // none, so seeing it means the portal changed under it.
     (
         4014,
-        "Discord ha rifiutato gli intent del bot: nella pagina del bot gli intent privilegiati sono chiusi, e questo bot non ne chiede",
+        "intent privilegiati non consentiti",
+        Verdict::Stop(
+            "Discord ha rifiutato gli intent del bot: nella pagina del bot gli intent privilegiati sono chiusi, e questo bot non ne chiede",
+        ),
     ),
 ];
+
+/// What a close code means in Discord's words, and what is done about it.
+fn close_code(code: u16) -> (&'static str, Verdict) {
+    match CLOSE_CODES.iter().find(|(known, _, _)| *known == code) {
+        Some((_, what, verdict)) => (*what, *verdict),
+        // A code nobody has written down is not a reason to give up.
+        None => ("codice sconosciuto", Verdict::Again),
+    }
+}
 
 /// A frame as Discord sends it.
 #[derive(Debug, Deserialize)]
@@ -543,11 +602,6 @@ enum Ending {
     Dropped,
 }
 
-/// What the user is told about a close code, if it is one to stop for.
-fn fatal_close(code: u16) -> Option<&'static str> {
-    FATAL_CLOSE.iter().find(|(known, _)| *known == code).map(|(_, why)| *why)
-}
-
 /// One run of the socket: connect, resume or identify, read, heartbeat, until
 /// the socket closes or the user is told why it cannot go on.
 async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inbound, AdapterError>>, first: &str) -> Ending {
@@ -634,13 +688,17 @@ async fn socket_session(adapter: &Arc<Discord>, sender: &mpsc::Sender<Result<Inb
                     };
                     match frame {
                         Message::Close(close) => {
-                            if let Some(CloseFrame { code, .. }) = close {
-                                return match fatal_close(u16::from(code)) {
-                                    Some(why) => Ending::Stopped(why.to_string()),
-                                    None => Ending::Dropped,
-                                };
-                            }
-                            break;
+                            let Some(CloseFrame { code, .. }) = close else { break };
+                            return match close_code(u16::from(code)).1 {
+                                Verdict::Stop(why) => Ending::Stopped(why.to_string()),
+                                // The session is spent: resuming it again would
+                                // be refused the same way.
+                                Verdict::Fresh => {
+                                    adapter.shared.forget_session();
+                                    Ending::Dropped
+                                }
+                                Verdict::Again => Ending::Dropped,
+                            };
                         }
                         Message::Ping(payload) => {
                             let _ = sink.send(Message::Pong(payload)).await;
@@ -1623,5 +1681,115 @@ mod tests {
         assert!(!first.mentioned);
         assert_eq!(first.sender.id, "u1");
         assert!(!first.sender.is_bot);
+    }
+    /* The close codes, one row at a time. */
+
+    /// One test per row of the table, so that a row cannot be changed, dropped
+    /// or given the wrong meaning without one of these turning red.
+    #[test]
+    fn every_close_code_is_told_apart() {
+        // (code, what Discord calls it, reconnects, needs a new session)
+        let rows: &[(u16, &str, bool, bool)] = &[
+            (4000, "errore sconosciuto", true, false),
+            (4001, "opcode sconosciuto", true, false),
+            (4002, "errore nella decodifica", true, false),
+            (4003, "non autenticato", true, false),
+            (4004, "autenticazione fallita", false, false),
+            (4005, "già autenticato", true, false),
+            (4007, "numero di sequenza non valido", true, true),
+            (4008, "troppo veloce, attento al rate limit", true, false),
+            (4009, "sessione scaduta", true, true),
+            (4010, "shard non valido", false, false),
+            (4011, "shard obbligatorio", false, false),
+            (4012, "versione della API non valida", false, false),
+            (4013, "intent non validi", false, false),
+            (4014, "intent privilegiati non consentiti", false, false),
+        ];
+        assert_eq!(rows.len(), CLOSE_CODES.len(), "una riga della tabella non ha un test, o un test non ha una riga");
+        for (code, what, reconnects, fresh) in rows {
+            let (found, verdict) = close_code(*code);
+            assert_eq!(found, *what, "il codice {code} non ha il nome che Discord gli dà");
+            match verdict {
+                Verdict::Again => {
+                    assert!(*reconnects, "il codice {code} deve essere ritentato");
+                    assert!(!*fresh, "il codice {code} non può chiedere una sessione nuova");
+                }
+                Verdict::Fresh => {
+                    assert!(*reconnects, "il codice {code} deve essere ritentato");
+                    assert!(*fresh, "il codice {code} deve aprire una sessione nuova");
+                }
+                Verdict::Stop(why) => {
+                    assert!(!*reconnects, "il codice {code} non deve essere ritentato");
+                    assert!(!*fresh, "il codice {code} non deve aprire una sessione nuova");
+                    // Whatever the user is told, the token is not in it.
+                    assert!(!why.contains(TOKEN), "il token compare nel messaggio del codice {code}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_code_nobody_wrote_down_is_not_a_reason_to_give_up() {
+        // 4999 is not in Discord's table. Retrying costs an identify only when
+        // there is no session to resume, and the budget stops that loop.
+        let (what, verdict) = close_code(4999);
+        assert_eq!(what, "codice sconosciuto");
+        assert_eq!(verdict, Verdict::Again);
+        // A 1000 is a normal close: also worth another go.
+        assert_eq!(close_code(1001).1, Verdict::Again);
+    }
+
+    #[tokio::test]
+    async fn a_spent_session_opens_a_new_one_instead_of_being_resumed() {
+        // 4009 is "session timed out": the session is gone on Discord's side, so
+        // resuming it would be refused the same way. The next attempt has to
+        // identify again.
+        for (code, name) in [(4007u16, "sequenza rifiutata"), (4009, "sessione scaduta")] {
+            let rest = FakeRest::start(vec![]);
+            let gateway = FakeGateway::start(vec![]);
+            gateway.push(vec![hello(60), ready("S1", &gateway.address), closed(code)]);
+            gateway.push(vec![hello(60)]);
+            let discord = adapter(&rest, &gateway);
+            set_jitter(&discord, 500);
+            start(&discord).await;
+            // A second identify, and no resume: the session was spent.
+            assert!(gateway.wait_for(2, 1).await, "{name}: il gateway si identifica di nuovo");
+            assert_eq!(gateway.op(6), None, "{name}: la sessione spesa non viene ripresa");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_code_that_stops_the_gateway_says_what_to_do_about_it() {
+        for (code, name) in [
+            (4004u16, "autenticazione fallita"),
+            (4010, "shard non valido"),
+            (4011, "shard obbligatorio"),
+            (4012, "versione della API non valida"),
+            (4013, "intent non validi"),
+            (4014, "intent privilegiati non consentiti"),
+        ] {
+            let rest = FakeRest::start(vec![]);
+            let gateway = FakeGateway::start(vec![vec![hello(60), closed(code)]]);
+            let discord = adapter(&rest, &gateway);
+            let text = discord.receive().await.err().expect("il gateway si ferma").message();
+            assert!(!text.is_empty(), "{name}: il fermo deve dire qualcosa");
+            assert!(!text.contains(TOKEN), "{name}: il token non compare");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_code_that_is_only_a_bad_moment_goes_on_being_tried() {
+        for code in [4000u16, 4001, 4002, 4003, 4005, 4008] {
+            let rest = FakeRest::start(vec![]);
+            let gateway = FakeGateway::start(vec![]);
+            gateway.push(vec![hello(60), ready("S1", &gateway.address), closed(code)]);
+            gateway.push(vec![hello(60)]);
+            let discord = adapter(&rest, &gateway);
+            set_jitter(&discord, 500);
+            start(&discord).await;
+            // The session was not spent, so it is resumed rather than started
+            // over: an identify here would spend one of the thousand a day.
+            assert!(gateway.wait_for(6, 1).await, "il codice {code} deve essere ritentato con la ripresa");
+        }
     }
 }
