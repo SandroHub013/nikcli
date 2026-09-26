@@ -96,6 +96,7 @@ import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
 import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, type RoomPay } from "./room"
+import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
 import { createRoomRunner, localRoomStore, memberName, roomThread, type RoomBook, type RoomRecord, type RoomSeat } from "./room-app"
 import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
 import { isAdeTestBuild } from "../chat/model"
@@ -618,6 +619,26 @@ const shared = createRoot(() => {
     void refetch()
   }
 
+  /*
+   * And changed from outside ADE: looked at again when the window comes back
+   * and every ROSTER_CHECK_MS while it shows, moved only when the files differ
+   * (`roster-sync.ts`).
+   */
+  let checking = false
+  const checkFiles = async () => {
+    if (checking || roster.loading) return
+    checking = true
+    try {
+      if (rosterChanged(roster(), await listBots(roots()))) reload()
+    } catch {
+      // Unreadable now: the roster shown stays until the next look.
+    } finally {
+      checking = false
+    }
+  }
+  every(ROSTER_CHECK_MS, () => void checkFiles())
+  if (typeof window !== "undefined") window.addEventListener("focus", () => void checkFiles())
+
   const current = () => (roster() ?? []).find((bot) => bot.path === openId())
   const identifiers = () => (roster() ?? []).map((bot) => bot.identifier)
 
@@ -629,6 +650,8 @@ const shared = createRoot(() => {
   }
 
   const openRoom = (id: string | undefined, form = false) => {
+    // The form says how each bot is paid for: from the files as they are now.
+    if (form) void checkFiles()
     setOpenRoomId(id)
     setRoomComposing(form)
     setOpenId(undefined)
