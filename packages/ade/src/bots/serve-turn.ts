@@ -57,8 +57,12 @@ import type { PermissionRule } from "../chat/rules"
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
 export interface ServeClient {
   readonly agents: () => Promise<readonly Pick<Agent, "name" | "prompt" | "model">[]>
-  /** The server's models and its configured one; `providerList` absent when it could not be read. */
-  readonly catalog: () => Promise<{ readonly providerList?: ProviderList; readonly configModel?: string }>
+  /**
+   * The server's models and its configured one; `providerList` absent when
+   * it could not be read. It may be one read a little earlier; `fresh` reads
+   * it now.
+   */
+  readonly catalog: (fresh?: boolean) => Promise<ServeCatalog>
   /** The session, or undefined when the server has none by that id. */
   readonly session: (sessionID: string) => Promise<{ readonly permission?: unknown } | undefined>
   readonly create: (input: { readonly title: string; readonly permission: readonly PermissionRule[] }) => Promise<string>
@@ -72,6 +76,37 @@ export interface ServeClient {
   readonly abort: (sessionID: string) => Promise<void>
   readonly reply: (requestID: string, reply: "once" | "reject") => Promise<void>
   readonly rejectQuestion: (requestID: string) => Promise<void>
+}
+
+export interface ServeCatalog {
+  readonly providerList?: ProviderList
+  readonly configModel?: string
+}
+
+/** How long a bot's catalog is kept for the next turns in the same folder. */
+export const CATALOG_FRESH_MS = 60_000
+
+/**
+ * The catalog per folder, kept for `CATALOG_FRESH_MS` (modello assente
+ * review, B3): a room's round or a routine's runs do not read it again for
+ * every turn. `fresh` reads it now, as a turn does before refusing a model;
+ * one that could not be read is not kept.
+ */
+export function catalogCache(ttlMs = CATALOG_FRESH_MS, now: () => number = Date.now) {
+  const kept = new Map<string, { at: number; value: Promise<ServeCatalog> }>()
+  return (directory: string, read: () => Promise<ServeCatalog>, fresh = false): Promise<ServeCatalog> => {
+    const entry = kept.get(directory)
+    if (!fresh && entry && now() - entry.at < ttlMs) return entry.value
+    const value = read()
+    kept.set(directory, { at: now(), value })
+    void value.then(
+      (catalog) => {
+        if (!catalog.providerList && kept.get(directory)?.value === value) kept.delete(directory)
+      },
+      () => kept.delete(directory),
+    )
+    return value
+  }
 }
 
 export type ServeConnection =
@@ -241,8 +276,11 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       const model = modelRef(bot.model)
       const catalog = await server.catalog()
       const wanted = model ?? agentModel ?? parseModelRef(catalog.configModel)
-      if (wanted && catalogHasModel(catalog.providerList, wanted) === false)
-        return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
+      // The catalog may be one read a little earlier: read now before refusing.
+      if (wanted && catalogHasModel(catalog.providerList, wanted) === false) {
+        if (catalogHasModel((await server.catalog(true)).providerList, wanted) === false)
+          return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
+      }
 
       const profile = profileFor({
         ...(request.remote ? { remote: { commands: request.remote.commands } } : {}),
@@ -538,6 +576,9 @@ export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_T
  * for its files as they are: asked once, and again only when they change.
  * With nobody in front of the screen, a project not admitted is refused.
  */
+/** The bots' catalogs, one per folder, for the whole window. */
+const botCatalogs = catalogCache()
+
 export function appServeTurnDeps(
   connection: () => ChatConnectionDeps = appChatConnectionDeps,
   trust: (directory: string) => Omit<AdmitProjectDeps, "confirm"> = appProjectTrust,
@@ -562,7 +603,12 @@ export function appServeTurnDeps(
       const base = connection()
       const opened = await openChat(directory, interactive ? base : { ...base, admit: unattended })
       if (!opened.ok) return opened
-      return { ok: true, client: serveClientOf(opened.client), events: (signal) => readEvents(opened.fetch, directory, signal) }
+      const client = serveClientOf(opened.client)
+      return {
+        ok: true,
+        client: { ...client, catalog: (fresh) => botCatalogs(directory, () => client.catalog(), fresh) },
+        events: (signal) => readEvents(opened.fetch, directory, signal),
+      }
     },
   }
 }

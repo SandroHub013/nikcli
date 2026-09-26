@@ -6,7 +6,7 @@ import type { NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { botPermission } from "./serve-rules"
-import { agentProblem, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
+import { agentProblem, catalogCache, modelRef, runServeTurn, serveClientOf, type ServeClient, type ServeConnection } from "./serve-turn"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -503,5 +503,53 @@ describe("the bot's catalog read has a time limit", () => {
     const started = Date.now()
     expect(await serveClientOf(client, 20).catalog()).toEqual({})
     expect(Date.now() - started).toBeLessThan(1000)
+  })
+})
+
+/* Modello assente review, B3: the bots' catalog is kept per folder for a while. */
+describe("the bots' catalog is kept", () => {
+  test("read once per folder while fresh; `fresh` reads again; an unread one is not kept; old ones are read again", async () => {
+    let at = 0
+    const cache = catalogCache(1_000, () => at)
+    let reads = 0
+    const good = async () => (reads++, { providerList: catalogOf("openrouter/a/b:free") })
+    await cache("C:/p", good)
+    await cache("C:/p", good)
+    expect(reads).toBe(1)
+    await cache("C:/altro", good)
+    expect(reads).toBe(2)
+    await cache("C:/p", good, true)
+    expect(reads).toBe(3)
+    at = 1_500
+    await cache("C:/p", good)
+    expect(reads).toBe(4)
+    let unread = 0
+    const none = async () => (unread++, {})
+    await cache("C:/q", none)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await cache("C:/q", none)
+    expect(unread).toBe(2)
+  })
+
+  test("a turn reads the catalog again before refusing: a model connected since the last read goes", async () => {
+    const fake = server({ events: FIRST, session: FIRST_SESSION })
+    const reads: boolean[] = []
+    const client = (await fake.deps.connect("C:/progetto", true)) as Extract<ServeConnection, { ok: true }>
+    const deps = {
+      ...fake.deps,
+      connect: async () => ({
+        ...client,
+        client: {
+          ...client.client,
+          catalog: async (fresh?: boolean) => {
+            reads.push(fresh === true)
+            return { providerList: fresh ? catalogOf(BOT.model!) : catalogOf("openrouter/x/y:free") }
+          },
+        },
+      }),
+    }
+    const result = await runServeTurn(panel(), deps).result
+    expect(result.status).toBe("done")
+    expect(reads).toEqual([false, true])
   })
 })
