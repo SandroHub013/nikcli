@@ -351,6 +351,7 @@ export {
   isKokoroVoice,
   kokoroVoice,
   replyVoiceChain,
+  replyVoiceChainFrom,
   replyLocale,
   replyVoiceFor,
   replyVoiceChoicesForLocale,

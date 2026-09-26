@@ -1,4 +1,4 @@
-import type { ReplyBackend, ReplyVoice, TtsLocale } from "./model";
+import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type TtsLocale } from "./model";
 import { t, type Locale } from "@nikcli-ai/ade/i18n";
 
 /*
@@ -152,6 +152,26 @@ export function replyVoiceChain(chosen: ReplyVoice, locale: TtsLocale): ReplyVoi
   if (first === "system") return ["system"];
   if (!isKokoroVoice(first)) return [first, "system"];
   return [first, piperVoiceFor("lessac", locale), "system"];
+}
+
+/** Whether a plain string is one of the voices the catalog knows. */
+function isReplyVoice(voice: string): voice is ReplyVoice {
+  return (REPLY_VOICES as readonly string[]).includes(voice);
+}
+
+/**
+ * The same chain, from a voice id that has already been decided and may not be in
+ * the catalog.
+ *
+ * The speaker is handed a voice, not a setting, so the chain it walks is the one
+ * of that voice: a Kokoro id gets Piper after it, a Piper id does not get a
+ * Kokoro one before it, and an id nothing knows is the only step there is. The
+ * remap is not applied twice because `replyVoiceFor` is idempotent on an id it
+ * already resolved, which is what makes this safe to call on a spoken voice.
+ */
+export function replyVoiceChainFrom(voice: string, locale: TtsLocale): string[] {
+  if (isReplyVoice(voice)) return replyVoiceChain(voice, locale);
+  return voice === "system" ? ["system"] : [voice];
 }
 
 /** The backend that reads a voice, for the panel and the bridge. */

@@ -154,6 +154,171 @@ describe("il taglio che spetta alla voce", () => {
   });
 });
 
+describe("la catena è quella che si prova davvero", () => {
+  const italian = "Ho aperto la sessione Codex sul parser e adesso i test sono verdi.";
+
+  /**
+   * A host where Kokoro is the voice the settings ask for and the host has never
+   * heard of it: `status` refuses, exactly as it does on a build where the 219 MB
+   * runtime is not there.
+   */
+  function withoutKokoro(chosen: ReplyVoice) {
+    const h = host(chosen, {
+      status: async (voice) => (voice.startsWith("af_") || voice.startsWith("am_") || voice.startsWith("bf_") || voice.startsWith("bm_")
+        ? { supported: false, installed: false }
+        : { supported: true, installed: true }),
+    });
+    return h
+  }
+
+  test("Kokoro non c'è: parla Piper, e non la voce di sistema", async () => {
+    const h = withoutKokoro("af_heart")
+    await createNaturalSpeaker(h.deps).speak(italian)
+    // La voce di Kokoro non è mai stata chiesto al bridge, e niente è andato
+    // nella voce di sistema: la catena si è fermata a Piper.
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["paola"])
+    expect(h.asked.map((unit) => unit.text)).toEqual([italian])
+    expect(h.played).toEqual([italian])
+    expect(h.fallback.spoken).toEqual([])
+  })
+
+  test("e la lingua che arriva al bridge è quella della risposta, non quella del pannello", async () => {
+    const h = withoutKokoro("af_heart")
+    await createNaturalSpeaker(h.deps).speak(italian)
+    expect(h.asked.map((unit) => unit.locale)).toEqual(["it-IT"])
+  })
+
+  test("un Kokoro maschio ripiega su Ugo, e la domanda di Ugo non porta a un Kokoro", async () => {
+    const h = withoutKokoro("am_fenrir")
+    await createNaturalSpeaker(h.deps).speak(italian)
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["ugo"])
+  })
+
+  test("una risposta inglese con Kokoro scelto ripiega su Lessac", async () => {
+    const h = withoutKokoro("bf_emma")
+    await createNaturalSpeaker(h.deps).speak("I opened the session and the tests are green.")
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["lessac"])
+    expect(h.asked.map((unit) => unit.locale)).toEqual(["en-GB"])
+  })
+
+  test("una risposta italiana con Kokoro scelto non scarica i 219 MB", async () => {
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async (voice) => {
+        asked.push(`status:${voice}`)
+        return { supported: true, installed: true }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(italian)
+    // Kokoro non può dire l'italiano, quindi non viene neppure chiesto: la
+    // risposta è di Paola e i 219 MB non servono a nessuno.
+    expect(asked).toEqual(["status:paola"])
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["paola"])
+  })
+
+  test("Kokoro scelto, non ancora installato: si scarica in background e la risposta è di Lessac", async () => {
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async (voice) => {
+        asked.push(`status:${voice}`)
+        return voice === "af_heart" ? { supported: true, installed: false } : { supported: true, installed: true }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    const english = "I opened the session on the parser and the tests are green."
+    await createNaturalSpeaker(h.deps).speak(english)
+    // La domanda è fatta, la scaricazione parte senza che nessuno la chieda, e la
+    // risposta non aspetta: è di Lessac, in inglese, offline.
+    expect(asked).toEqual(["status:af_heart", "install:af_heart", "status:lessac"])
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["lessac"])
+    expect(h.played).toEqual([english])
+    expect(h.fallback.spoken).toEqual([])
+  })
+
+  test("Kokoro che risponde non viene ripetuto: la catena non viene percorsa", async () => {
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async (voice) => {
+        asked.push(voice)
+        return { supported: true, installed: true }
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak("I opened the session and the tests are green.")
+    expect(asked).toEqual(["af_heart"])
+    expect(new Set(h.asked.map((unit) => unit.voice))).toEqual(new Set(["af_heart"]))
+  })
+
+  test("Kokoro e Piper assenti: la voce di sistema, e la notizia una volta sola", async () => {
+    const h = host("af_heart", {
+      status: async () => ({ supported: false, installed: false }),
+      fallbackNotice: () => "La voce naturale non è pronta.",
+    })
+    const speaker = createNaturalSpeaker(h.deps)
+    await speaker.speak(italian)
+    await speaker.speak("E adesso guardo i numeri del worktree.")
+    // Le parole escono dalla voce di sistema, che è l'ultimo ripiego, e la notifica
+    // che è scesa di gradino non ripete quello che ha già detto una volta.
+    expect(h.fallback.spoken).toEqual([
+      "La voce naturale non è pronta.",
+      italian,
+      "E adesso guardo i numeri del worktree.",
+    ]);
+  })
+
+  test("Kokoro pronto che poi fallisce: Piper risponde tutto, senza la voce di sistema", async () => {
+    // `ready` ricorda che Kokoro era installato, e il bridge lo rifiuta: è la
+    // catena che deve accorgersene, non la cache.
+    const asked: string[] = []
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: true }),
+      synthesize: async (voice, text) => {
+        asked.push(voice)
+        if (voice === "af_heart") throw new Error("Failed to set eSpeak-ng voice")
+        return wav(text)
+      },
+    })
+    const english = "I opened the session and the tests are green."
+    await createNaturalSpeaker(h.deps).speak(english)
+    // Kokoro è stato provato e non ha risposto, e la risposta è interamente di
+    // Lessac: una voce sola per una risposta sola. Le unità di Kokoro sono state
+    // chieste tutte insieme, quindi lo si vede più di una volta.
+    expect(new Set(asked)).toEqual(new Set(["af_heart", "lessac"]))
+    expect(asked.at(-1)).toBe("lessac")
+    expect(h.played).toEqual([english])
+    expect(h.fallback.spoken).toEqual([])
+  })
+
+  test("Kokoro che parte a metà: la voce non cambia sotto una risposta già iniziata", async () => {
+    const english = [
+      "I opened the session on the parser and the toolchain.",
+      "Then I ran the whole suite on the worktree, twice, because the first run looked green.",
+      "Now I am reading the diff and the numbers again.",
+    ].join(" ")
+    let asked = 0
+    const h = host("af_heart", {
+      status: async () => ({ supported: true, installed: true }),
+      synthesize: async (voice, text) => {
+        // I primi due pezzi funzionano, il terzo no: la risposta è già iniziata.
+        if (voice === "af_heart" && ++asked > 2) throw new Error("runtime crash")
+        return wav(text)
+      },
+    })
+    await createNaturalSpeaker(h.deps).speak(english)
+    // Due pezzi suonati, e il terzo non è mai arrivato: la catena non ha
+    // ricominciato da Lessac sopra una risposta già iniziata.
+    expect(h.played.length).toBe(2)
+    expect(english.startsWith(h.played.join(" "))).toBe(true)
+    // Il resto non è perduto, ed è nella voce di sotto, che è l'ultimo ripiego.
+    expect(h.fallback.spoken.length).toBe(1)
+    expect(h.fallback.spoken[0]).toContain("Now I am reading the diff")
+  })
+});
+
 describe("la catena di ripiego è quella del dominio", () => {
   test("Kokoro, poi Piper nella stessa lingua, poi il sistema", () => {
     expect(replyVoiceChain("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"]);

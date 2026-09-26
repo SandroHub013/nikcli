@@ -18,7 +18,7 @@
 
 import { markVoice } from "../timing"
 import { cleanForSpeech } from "./clean"
-import { detectReplyLanguage, isKokoroVoice, type ReplyLanguage } from "../settings/reply-voices"
+import { detectReplyLanguage, isKokoroVoice, replyVoiceChainFrom, type ReplyLanguage } from "../settings/reply-voices"
 import type { ReplyVoice, TtsLocale } from "../settings/model"
 import type { Speaker } from "./speaker"
 
@@ -543,6 +543,72 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   }
 
   /**
+   * The voices a reply can be read by, in the order they are tried.
+   *
+   * The middle step is the point of it: a Kokoro voice that is still downloading
+   * 219 MB hands the reply to Piper in the same language, so the answer is still
+   * offline and still in the voice the user chose for its gender, and the
+   * download goes on in the background. `usable` is what starts it, so asking is
+   * what warms it.
+   *
+   * `system` is not a step here: it is not asked for through the bridge at all,
+   * it is the Web Speech speaker underneath, and reaching it is the caller's
+   * decision because reaching it is worth telling the user about.
+   */
+  function chainOf(voice: string, locale: TtsLocale): string[] {
+    return replyVoiceChainFrom(voice, locale).filter((candidate) => candidate !== "system");
+  }
+
+  /** Where in the chain the reading starts: the first voice that can speak. */
+  async function firstUsable(chain: string[], mine: number): Promise<number> {
+    for (let step = 0; step < chain.length; step++) {
+      if (await usable(chain[step]!)) return step;
+      // An abandoned reply stops asking: the next step belongs to whoever is
+      // speaking now.
+      if (mine !== generation) return -1;
+    }
+    return -1;
+  }
+
+  /**
+   * A reply through one voice, and the unit it gave up at.
+   *
+   * `units.length` means the whole reply was said. Anything else is the index of
+   * the unit that failed, whether the host refused it or the player would not
+   * play it: the two are the same to the caller, which is the rest of the reply
+   * in another voice.
+   */
+  async function speakWith(voice: string, units: string[], locale: TtsLocale, mine: number): Promise<number> {
+    // Requested together, played in order: the host works through them while the first plays.
+    const audio = units.map((unit) => synthesize(voice, locale, unit));
+    audio.forEach((pending) => pending.catch(() => {}));
+    for (let i = 0; i < units.length; i++) {
+      let wav: ArrayBuffer;
+      try {
+        // Timed from when this unit is due, not when it was queued behind the others.
+        wav = await withinLimit(audio[i]!, limitMs());
+      } catch {
+        // Synthesised nothing: the rest of the reply goes out in another voice
+        // rather than not at all.
+        return i;
+      }
+      if (mine !== generation) return i;
+      const controller = new AbortController();
+      playing = controller;
+      markVoice("audio-start", units[i]);
+      try {
+        await deps.play(wav, controller.signal);
+      } catch {
+        // Synthesised but not playable: the old voice still gets the words out.
+        return i;
+      }
+      if (mine !== generation) return i;
+    }
+    playing = undefined;
+    return units.length;
+  }
+
+  /**
    * The reply as the units this voice is played in.
    *
    * Whole sentences for Piper, which answers one in a fraction of a second, and
@@ -590,7 +656,14 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         // text it is made of: a reply in Italian on an English voice is read in
         // Italian, which is the whole point of asking the text and not the panel.
         const { voice, locale } = deps.voiceFor(detectReplyLanguage(text))
-        if (!(await usable(voice))) {
+        // The chain of this reply, and where the reading starts: the voice that
+        // was asked for if it can speak, the next one in its chain if it cannot.
+        // The units are cut for whichever voice ends up reading, because a reply
+        // read by Piper in Kokoro pieces pays Piper fixed cost per piece and
+        // answers later than it needs to.
+        const chain = chainOf(voice, locale)
+        let step = await firstUsable(chain, mine)
+        if (step < 0) {
           if (mine === generation) {
             await announceFallbackOnce(voice)
             if (mine !== generation) return
@@ -601,42 +674,26 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         fallbackNotified = false
         if (mine !== generation) return
 
-        const sentences = unitsOf(voice, clean)
-        // Requested together, played in order: the host works through them while the first plays.
-        const audio = sentences.map((sentence) => synthesize(voice, locale, sentence))
-        audio.forEach((pending) => pending.catch(() => {}))
-        for (let i = 0; i < sentences.length; i++) {
-          let wav: ArrayBuffer
-          try {
-            // Timed from when this sentence is due, not when it was queued behind the others.
-            wav = await withinLimit(audio[i]!, limitMs())
-          } catch {
-            // The rest of the reply goes out in the old voice rather than not at all.
-            if (mine === generation) {
-              await announceFallbackOnce(voice)
-              if (mine !== generation) return
-              await deps.fallback.speak(sentences.slice(i).join(" "))
-            }
-            return
-          }
+        // What is still to be said, and it is the whole reply until a unit has
+        // been heard: each voice of the chain is asked for all of it.
+        let pending = clean
+        for (; step < chain.length; step++) {
+          const units = unitsOf(chain[step]!, pending)
+          const given = await speakWith(chain[step]!, units, locale, mine)
           if (mine !== generation) return
-          const controller = new AbortController()
-          playing = controller
-          markVoice("audio-start", sentences[i])
-          try {
-            await deps.play(wav, controller.signal)
-          } catch {
-            // Synthesised but not playable: the old voice still gets the words out.
-            if (mine === generation) {
-              await announceFallbackOnce(voice)
-              if (mine !== generation) return
-              await deps.fallback.speak(sentences.slice(i).join(" "))
-            }
-            return
-          }
-          if (mine !== generation) return
+          if (given === units.length) return
+          pending = units.slice(given).join(" ")
+          // Nothing of this reply has been heard yet, so the next voice in the
+          // chain reads all of it and the user hears one voice for one reply.
+          // Once a unit has been played the voice does not change under it, and
+          // what is left goes to the voice underneath.
+          if (given > 0) break
         }
-        playing = undefined
+        // The chain is over: the last resort, which is also the one worth a word
+        // of explanation, so the user is told once instead of finding out.
+        await announceFallbackOnce(voice)
+        if (mine !== generation) return
+        await deps.fallback.speak(pending)
       } finally {
         activeTasks--
         if (activeTasks === 0) {
@@ -660,14 +717,19 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
       // too: warming a voice in the language the reply is not in is warming the
       // wrong one.
       const { voice, locale } = deps.voiceFor(detectReplyLanguage(text))
-      if (voice === "system" || !ready.has(voice)) return
+      // And it warms the voice that will answer, not the one that was asked for:
+      // a Kokoro voice that is not installed yet is not the one reading this
+      // reply, and Piper is. `ready` is what is known installed here, so no
+      // status call is made on a sentence that has not been asked for.
+      const speaking = replyVoiceChainFrom(voice, locale).find((candidate) => candidate !== "system" && ready.has(candidate))
+      if (speaking === undefined) return
       cancelIdleTimer()
-      for (const sentence of unitsOf(voice, clean)) {
-        const key = aheadKey(voice, sentence)
+      for (const sentence of unitsOf(speaking, clean)) {
+        const key = aheadKey(speaking, sentence)
         if (ahead.has(key)) continue
         residentStarted = true
         activeTasks++
-        const { token, pending } = invokeSynthesize(voice, locale, sentence)
+        const { token, pending } = invokeSynthesize(speaking, locale, sentence)
         const tracked = pending.finally(() => {
           activeTasks--
           if (activeTasks === 0) scheduleIdleStop()
