@@ -91,7 +91,8 @@ import {
   type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { botModelLabel, catalogFree } from "./catalog"
+import { botModelLabel, catalogFree, nikcliModelVariants } from "./catalog"
+import { effortChoices } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
@@ -1798,6 +1799,20 @@ function EngineFields(props: {
   onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
+  // A nikcli model's efforts are its variants, from nikcli's catalog; undefined while not known.
+  const [variants] = createResource(
+    () => (runner().id === "nikcli" && props.model ? props.model : null),
+    (model) => nikcliModelVariants(model, loadCatalog),
+  )
+  const efforts = createMemo(() =>
+    effortChoices({
+      nikcli: runner().id === "nikcli",
+      fixed: runner().efforts,
+      // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
+      variants: runner().id === "nikcli" && props.model && !variants.loading ? variants() : undefined,
+      saved: props.effort,
+    }),
+  )
   const [pickingKey, setPickingKey] = createSignal(false)
   const [assigned] = createResource(
     () => (props.onAccount && PLAN_RUNNERS.includes(runner().id) ? runner().command : null),
@@ -1945,23 +1960,32 @@ function EngineFields(props: {
         <label data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.effort")}</span>
           <Show
-            when={runner().efforts.length > 0}
+            when={!efforts().none}
             fallback={<input data-slot="bots-input" value="" placeholder={t("bots.engine.effortNotSupported")} disabled />}
           >
             <select
               data-slot="bots-input"
-              value={props.effort}
+              value={efforts().stale ? "" : props.effort}
               onChange={(event) => props.onEffort(event.currentTarget.value)}
             >
               <option value="">{t("bots.engine.effortDefault")}</option>
-              <Show when={props.effort && !runner().efforts.includes(props.effort)}>
-                <option value={props.effort}>{props.effort}</option>
+              <Show when={efforts().kept}>
+                <option value={efforts().kept}>{efforts().kept}</option>
               </Show>
-              <For each={runner().efforts}>{(value) => <option value={value}>{value}</option>}</For>
+              <For each={efforts().options}>{(value) => <option value={value}>{value}</option>}</For>
             </select>
           </Show>
         </label>
       </div>
+      {/* Under the row, the whole width: in the effort's narrow column the words were cut to «predef». */}
+      <Show when={efforts().stale}>
+        <span data-slot="bots-hint" data-state="warn">
+          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}
+        </span>
+      </Show>
+      <Show when={runner().id === "nikcli" && !props.model}>
+        <span data-slot="bots-hint">{t("bots.engine.effortPickModel")}</span>
+      </Show>
     </>
   )
 }

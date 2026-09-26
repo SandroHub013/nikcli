@@ -25,7 +25,7 @@
  * server; nothing of it keeps running.
  */
 
-import type { Agent, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
+import type { Agent, ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
 import { t } from "../i18n"
 import { appChatConnectionDeps, CATALOG_TIMEOUT_MS, openChat, within, type ChatConnectionDeps } from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
@@ -51,6 +51,7 @@ import {
   type Talk,
 } from "./talk"
 import { acquireTurn } from "./terms"
+import { effortToSend, modelVariants } from "./effort"
 import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
 import type { PermissionRule } from "../chat/rules"
 
@@ -87,6 +88,8 @@ export interface ServeClient {
 export interface ServeCatalog {
   readonly providerList?: ProviderList
   readonly configModel?: string
+  /** `GET /config/providers`: the models with their variants after the configuration's overrides. */
+  readonly configProviders?: ConfigProviders
 }
 
 /** How long a bot's catalog is kept for the next turns in the same folder. */
@@ -326,6 +329,13 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         if (catalogHasModel((await server.catalog(true)).providerList, wanted) === false)
           return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
       }
+      /*
+       * The effort, only when that model has it: nikcli drops a variant it
+       * does not know without a word, and the turn ran at the default as if
+       * the bot's effort had been used (chat-bot-facili, pezzo 0).
+       */
+      const variants = modelVariants(catalog.configProviders, wanted)
+      const effort = effortToSend(bot.effort, variants)
 
       const profile = profileFor({
         ...(request.remote ? { remote: { commands: request.remote.commands } } : {}),
@@ -502,13 +512,18 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       // A bot made on the spot (not a file) has its instructions before the message, as `turnCommand` puts them.
       const text = !request.bot && request.instructions ? `${request.instructions}\n\n${request.message}` : request.message
       if (stopped) return settled({ kind: "stopped" })
+      if (effort.dropped && wanted) {
+        const note = t("bots.serve.effortDropped", effort.dropped, serializeModelRef(wanted), (variants ?? []).join(", "))
+        const at = now()
+        change((thread) => appendMessage(thread, { role: "tool", tool: "ade", text: note }, at))
+      }
       sent = true
       await server.prompt({
         sessionID: session,
         text,
         ...(bot.identifier ? { agent: bot.identifier } : {}),
         ...(model ? { model } : {}),
-        ...(bot.effort ? { variant: bot.effort } : {}),
+        ...(effort.variant ? { variant: effort.variant } : {}),
       })
       prompted = true
       const how = await ended
@@ -574,13 +589,15 @@ export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_T
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
     catalog: async () => {
       // Unread within the time, it is unknown and the server decides (modello assente review, M4).
-      const [providers, config] = await Promise.all([
+      const [providers, config, configured] = await Promise.all([
         within(client.provider.list(), catalogTimeoutMs),
         within(client.config.get(), catalogTimeoutMs),
+        within(client.config.providers(), catalogTimeoutMs),
       ])
       return {
         ...(providers?.data ? { providerList: providers.data } : {}),
         ...(config?.data?.model ? { configModel: config.data.model } : {}),
+        ...(configured?.data ? { configProviders: configured.data } : {}),
       }
     },
     reload: async () => {
