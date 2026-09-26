@@ -875,6 +875,14 @@
 
 [data-slot="routine-consent"] input { margin-top: 3px; }
 
+[data-slot="routine-item"] [data-slot="gateway-row"] [data-slot="bots-link"] { margin-left: 0; }
+
+[data-slot="routine-source"] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ade-space-2);
+}
+
 [data-slot="bots-hint"][data-state="warn"] {
   color: var(--ade-warning, var(--ade-text-soft));
 }

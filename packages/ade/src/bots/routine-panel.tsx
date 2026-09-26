@@ -114,12 +114,14 @@ export function RoutineSection(props: {
   const Source = () => (
     <Show when={offer().source}>
       {(url) => (
-        <span data-slot="gateway-meta">
+        <div data-slot="routine-source">
           <button type="button" data-slot="bots-link" onClick={() => props.deps.openSource(url())}>
             {t("bots.routine.source")}
           </button>
-          <Show when={offer().checked}>{(date) => <> · {t("bots.routine.checked", date())}</>}</Show>
-        </span>
+          <Show when={offer().checked}>
+            {(date) => <span data-slot="gateway-meta">{t("bots.routine.checked", date())}</span>}
+          </Show>
+        </div>
       )}
     </Show>
   )
@@ -234,39 +236,41 @@ export function RoutineSection(props: {
                 onInput={(event) => setPrompt(event.currentTarget.value)}
               />
             </label>
-            <span data-slot="gateway-row">
-              <select
-                data-slot="bots-input"
-                value={kind()}
-                onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
-              >
-                <option value="hours">{t("bots.routine.kind.hours")}</option>
-                <option value="daily">{t("bots.routine.kind.daily")}</option>
-              </select>
-              <Show
-                when={kind() === "hours"}
-                fallback={
+            <select
+              data-slot="bots-input"
+              value={kind()}
+              onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
+            >
+              <option value="hours">{t("bots.routine.kind.hours")}</option>
+              <option value="daily">{t("bots.routine.kind.daily")}</option>
+            </select>
+            <Show
+              when={kind() === "hours"}
+              fallback={
+                <label data-slot="bots-field">
+                  <span data-slot="bots-label">{t("bots.routine.time")}</span>
                   <input
                     data-slot="bots-input"
                     type="time"
-                    aria-label={t("bots.routine.time")}
                     value={time()}
                     onInput={(event) => setTime(event.currentTarget.value)}
                   />
-                }
-              >
+                </label>
+              }
+            >
+              <label data-slot="bots-field">
+                <span data-slot="bots-label">{t("bots.routine.hours")}</span>
                 <input
                   data-slot="bots-input"
                   type="number"
                   min="1"
                   max="168"
                   step="1"
-                  aria-label={t("bots.routine.hours")}
                   value={hours()}
                   onInput={(event) => setHours(Number(event.currentTarget.value))}
                 />
-              </Show>
-            </span>
+              </label>
+            </Show>
             <Show when={offer().cap?.spendCapRequired}>
               <span data-slot="gateway-row">
                 <label data-slot="bots-field">
