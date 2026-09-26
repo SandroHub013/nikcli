@@ -197,6 +197,12 @@ describe("B11: the caps, checked before every run", () => {
     book = recordResult(book, routine, key, { status: "done", costUsd: 0.04 }, at(10, 1))
     const third = checkRoutine(book, routine, { context: claudeKey, consent: routine.consent, busy: false }, at(11, 5))
     expect(third.kind === "wait" && third.note).toContain("0.10 $")
+    // The cap per run goes with the run, to stop it during the turn (review, M1); a plan has none.
+    const first = checkRoutine(addRoutine(EMPTY_BOOK, routine), routine, { context: claudeKey, consent: routine.consent, busy: false }, at(9))
+    expect(first.kind === "run" && first.run).toEqual({ maxCostUsd: 0.05 })
+    const plan = await made(claudePlan)
+    const planRun = checkRoutine(addRoutine(EMPTY_BOOK, plan), plan, { context: claudePlan, consent: plan.consent, busy: false }, at(9))
+    expect(planRun.kind === "run" && planRun.run).toEqual({})
     book = recordResult(book, routine, key, { status: "done", costUsd: 0.07 }, at(11, 6))
     expect(book.logs[routine.id]?.suspended).toContain("0.07 $")
     expect(checkRoutine(book, routine, { context: claudeKey, consent: routine.consent, busy: false }, at(20))).toEqual({

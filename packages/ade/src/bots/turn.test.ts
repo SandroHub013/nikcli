@@ -151,6 +151,25 @@ describe("runTurn", () => {
     expect(turnsRunning("nikcli")).toBe(0)
   })
 
+  test("a turn with a spending cap is stopped as soon as it passes it, not after (B11 review, M1)", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "nikcli", message: "ciao", maxCostUsd: 0.1 }, m.deps)
+    open.push(turn)
+    await tick()
+    const step =
+      '{"type":"step_finish","sessionID":"ses_1","part":{"type":"step-finish","reason":"tool-calls","tokens":{"input":10,"output":1},"cost":0.04}}'
+    m.say(step)
+    m.say(step)
+    expect(m.kills).toEqual([])
+    m.say(step)
+    const result = await turn.result
+    expect(m.kills).toEqual([{ tree: true }])
+    expect(result.status).toBe("error")
+    expect(result.costUsd).toBeCloseTo(0.12)
+    expect(result.problem).toContain("0.10 $")
+    expect(turnsRunning("nikcli")).toBe(0)
+  })
+
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {
     const m = machine()
     const running = Array.from({ length: MAX_PARALLEL_TURNS }, () => start(m))

@@ -1459,6 +1459,8 @@ export const en: Messages = {
   "bots.when.weekday": (index) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][index] ?? `day ${index}`,
   "bots.when.month": (index) => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][index] ?? `month ${index}`,
   "bots.turn.timeout": (label, span) => `${label} did not finish the turn in ${span}: I stopped it.`,
+  "bots.turn.overBudget": (label, cost, max) =>
+    `${label} spent ${cost}, over the ${max} cap for this run: I stopped it.`,
   "bots.turn.minute": "minute",
   "bots.turn.minutes": "minutes",
   "bots.turn.seconds": "seconds",

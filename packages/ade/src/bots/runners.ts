@@ -249,6 +249,8 @@ export interface TurnSpec {
    * `bot-no-shell`, Claude Code is refused Bash, Codex runs read-only.
    */
   readonly unattended?: boolean
+  /** Claude Code only: the dollars the turn may spend (`--max-budget-usd`, B11). */
+  readonly maxBudgetUsd?: number
 }
 
 /**
@@ -471,6 +473,8 @@ export function turnCommand(
       if (allowed.includes("Bash")) disallowed.push(...claudeRefusals(spec.approvals ? (spec.always ?? []) : undefined))
       if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
       if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
+      const budget = spec.maxBudgetUsd
+      if (budget !== undefined && Number.isFinite(budget) && budget > 0) args.push("--max-budget-usd", String(budget))
       if (!spec.stdin) args.push("--", message)
       return { command: runner.command, args, ...accountLaunch(spec.account) }
     }

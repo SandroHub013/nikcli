@@ -760,4 +760,13 @@ describe("a turn nobody watches (B11, a routine)", () => {
     expect(allowed).not.toContain("Bash")
     expect(allowed).not.toContain("ade-msg")
   })
+
+  test("Claude Code is told the run's cap, before the message (B11 review, M1)", () => {
+    const own = { ...bot, scope: "global" as const, runner: "claude" }
+    const capped = turnCommand(runnerById("claude"), { bot: own, message: "x", unattended: true, maxBudgetUsd: 0.05 })
+    const at = capped.args.indexOf("--max-budget-usd")
+    expect(capped.args[at + 1]).toBe("0.05")
+    expect(at).toBeLessThan(capped.args.indexOf("--"))
+    expect(turnCommand(runnerById("claude"), { bot: own, message: "x" }).args).not.toContain("--max-budget-usd")
+  })
 })

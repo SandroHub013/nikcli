@@ -469,15 +469,18 @@ describe("a routine's run", () => {
       const args = m.argv[at] ?? []
       return args[args.indexOf("--allowedTools") + 1] ?? ""
     }
-    const turn = p.turns.routine(claude, "fai il punto")
+    const turn = p.turns.routine(claude, "fai il punto", undefined, { maxCostUsd: 0.05 })
     await tick()
     expect(disallowed(0).split(",")).toContain("Bash")
+    // The run's cap reaches Claude Code (review, M1); the panel's own turn has none.
+    expect(m.argv[0]).toContain("--max-budget-usd")
     expect(allowed(0).split(",")).not.toContain("Bash")
     m.exit(0)
     await turn!.result
     p.turns.send(claude, "a mano")
     await tick()
     expect(allowed(1).split(",")).toContain("Bash")
+    expect(m.argv[1]).not.toContain("--max-budget-usd")
     // Its place on the plan back, for the tests after this one.
     p.turns.stop(claude)
     await tick()

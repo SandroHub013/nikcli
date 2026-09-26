@@ -179,7 +179,7 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
 const accounts = localAccountStore()
 const turns = createBotTurns({
   runTurn: (request) => runTurn(request),
-  runRoutine: (request) => runRoutine(request),
+  runRoutine: (request, run) => runRoutine(request, run),
   talkOf,
   update: updateTalk,
   accountOf: (path) => accounts.get(path),
@@ -283,12 +283,12 @@ const routineScheduler = createRoutineScheduler({
     clearedBots.set(routine.id, verdict.bot)
     return { ok: true }
   },
-  start: (routine) => {
+  start: (routine, run) => {
     const bot = clearedBots.get(routine.id)
     clearedBots.delete(routine.id)
     if (!bot) return undefined
     ensureLoaded([bot.path])
-    return turns.routine(bot, routine.prompt, routine.cwd)
+    return turns.routine(bot, routine.prompt, routine.cwd, run)
   },
   running: (path) => turns.running(path),
   changed: setRoutineBook,

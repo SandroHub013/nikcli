@@ -31,11 +31,17 @@ import {
 import { applyProblem, emptyTalk } from "./talk"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "./turn"
 
+/** What the scheduler cleared one run for. */
+export interface RoutineRun {
+  /** Dollars the run may spend; past them it is stopped (`TurnRequest.maxCostUsd`). Absent on a plan. */
+  readonly maxCostUsd?: number
+}
+
 /**
  * The gate one execution passes at spawn: a runner and mode off the list
  * never start, whatever the scheduler thought a moment before.
  */
-export function runRoutine(request: TurnRequest, deps: TurnDeps = {}): Turn {
+export function runRoutine(request: TurnRequest, _run: RoutineRun = {}, deps: TurnDeps = {}): Turn {
   const model = request.model ?? request.bot?.model
   const mode = routineModeOf(request.runner, request.account?.mode, model)
   const policy = routinePolicy(request.runner, mode, model)
@@ -406,7 +412,13 @@ export interface RoutineCheck {
 }
 
 export type RoutineVerdict =
-  | { readonly kind: "run"; readonly missed: number; readonly plan: string; readonly cap: RoutineCap }
+  | {
+      readonly kind: "run"
+      readonly missed: number
+      readonly plan: string
+      readonly cap: RoutineCap
+      readonly run: RoutineRun
+    }
   | { readonly kind: "wait"; readonly note?: string }
   | { readonly kind: "suspend"; readonly reason: string }
 
@@ -461,7 +473,15 @@ export function checkRoutine(book: RoutineBook, routine: Routine, check: Routine
       return { kind: "wait", note: t("bots.routine.note.spendDay", usd(cap.perDayUsd)) }
     }
   }
-  return { kind: "run", missed: dueAt(routine, log, now).missed, plan: key, cap }
+  /* Money is capped per run where it is money: a paid model, a key. A plan's figure is not a charge. */
+  const maxCostUsd = offer.mode === "paid" || offer.mode === "key" ? routine.spend?.perRunUsd : undefined
+  return {
+    kind: "run",
+    missed: dueAt(routine, log, now).missed,
+    plan: key,
+    cap,
+    run: maxCostUsd !== undefined ? { maxCostUsd } : {},
+  }
 }
 
 /* ── writing it down ──────────────────────────────────────────────────── */
@@ -585,8 +605,8 @@ export interface RoutineSchedulerDeps {
    * project), with no dialog: a routine never asks. A problem suspends it.
    */
   readonly prepare: (routine: Routine) => Promise<{ ok: true } | { ok: false; problem: string }>
-  /** Starts the run as the bot's own turn; undefined when the bot is busy. */
-  readonly start: (routine: Routine) => Turn | undefined
+  /** Starts the run as the bot's own turn, within `run`; undefined when the bot is busy. */
+  readonly start: (routine: Routine, run: RoutineRun) => Turn | undefined
   /** Whether the bot has a turn under way. */
   readonly running: (path: string) => boolean
   readonly now?: () => number
@@ -648,7 +668,7 @@ export function createRoutineScheduler(deps: RoutineSchedulerDeps): RoutineSched
           write((latest) => noteRoutine(latest, routine.id, now(), { suspended: prepared.problem }))
           continue
         }
-        const turn = deps.start(routine)
+        const turn = deps.start(routine, verdict.run)
         if (!turn) continue
         current = { id: routine.id, turn }
         write((latest) => recordStart(latest, routine, verdict.plan, verdict.missed, now()))

@@ -1472,6 +1472,8 @@ export const it = {
   "bots.when.month": (index: number) =>
     ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"][index] ?? `mese ${index}`,
   "bots.turn.timeout": (label: string, span: string) => `${label} non ha finito il turno in ${span}: l'ho fermato.`,
+  "bots.turn.overBudget": (label: string, cost: string, max: string) =>
+    `${label} ha speso ${cost}, oltre il tetto di ${max} per questa esecuzione: l'ho fermato.`,
   "bots.turn.minute": "minuto",
   "bots.turn.minutes": "minuti",
   "bots.turn.seconds": "secondi",

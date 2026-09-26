@@ -113,7 +113,7 @@ describe("una routine parte come gli altri spawn", () => {
           },
         }) as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
     }
-    const turn = runRoutine({ runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } }, deps)
+    const turn = runRoutine({ runner: "claude", message: "ciao", bot: bot("claude"), account: { mode: "key", key: "lavoro" } }, {}, deps)
     while (seen.length === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     exit(0)
     await turn.result
@@ -122,6 +122,7 @@ describe("una routine parte come gli altri spawn", () => {
 
     const refused = await runRoutine(
       { runner: "codex", message: "ciao", bot: bot("codex"), account: { mode: "key", key: "lavoro" } },
+      {},
       deps,
     ).result
     expect(seen).toHaveLength(1)
