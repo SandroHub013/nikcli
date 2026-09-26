@@ -314,7 +314,22 @@ function choicesOf(
     }
   }
 
-  return result
+  return namedApart(result)
+}
+
+/**
+ * Two providers serving one model under one name, told apart by the provider:
+ * OpenCode Zen and OpenRouter both list «Nemotron 3 Ultra», and the list said
+ * it twice alike (composer-chip, A occhio).
+ */
+function namedApart(models: readonly ChatModelChoice[]): readonly ChatModelChoice[] {
+  const count = new Map<string, number>()
+  for (const model of models) count.set(model.name, (count.get(model.name) ?? 0) + 1)
+  return models.map((model) => {
+    if ((count.get(model.name) ?? 0) < 2) return model
+    const name = `${model.name} · ${model.providerName}`
+    return { ...model, name, label: formatModelLabel(name, model.cost, model.free) }
+  })
 }
 
 /** A variant the configuration turned off is not one (`disabled: true`). */

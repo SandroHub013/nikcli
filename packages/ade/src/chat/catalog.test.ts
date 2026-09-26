@@ -141,3 +141,21 @@ describe("the Chat reads the one catalog", () => {
     expect(view).toContain("rememberModel(localStorage, props.projectRoot, validated)")
   })
 })
+
+describe("models of one name", () => {
+  test("told apart by their provider, the others left as they are", () => {
+    const configured = {
+      providers: [
+        { id: "opencode", name: "OpenCode Zen", models: { "nemotron-free": { id: "nemotron-free", name: "Nemotron 3 Ultra", cost: { input: 0, output: 0 } } } },
+        { id: "openrouter", name: "OpenRouter", models: { "nvidia/nemotron:free": { id: "nvidia/nemotron:free", name: "Nemotron 3 Ultra (free)" }, "x/solo:free": { id: "x/solo:free", name: "Solo" } } },
+      ],
+      default: {},
+    } as unknown as ConfigProviders
+    expect(modelsFromConfigProviders(configured).map((model) => model.name)).toEqual([
+      "Nemotron 3 Ultra · OpenCode Zen",
+      "Nemotron 3 Ultra · OpenRouter",
+      "Solo",
+    ])
+    expect(modelsFromConfigProviders(configured)[1]!.label).toBe(`Nemotron 3 Ultra · OpenRouter (${t("chat.model.free")})`)
+  })
+})
