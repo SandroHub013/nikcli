@@ -583,6 +583,22 @@ export const it = {
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>
     `Il bot ha chiesto il permesso «${permission}» per:\n${what}\n\nDa remoto non è concesso: ho detto di no.`,
+  "gateway.panel.platform": "Piattaforma del bot",
+  "gateway.panel.platformTelegram": "Telegram",
+  "gateway.panel.platformDiscord": "Discord",
+  "gateway.panel.titleDiscord": "Gateway · Discord",
+  "gateway.panel.introDiscord":
+    "Scrivi a questo bot da Discord, mentre ADE è aperta. Ogni bot ha il suo bot Discord, creato nel portale sviluppatori.",
+  "gateway.panel.tokenHelpDiscord":
+    "Incolla il token che il portale sviluppatori ti ha dato, nella sezione Bot. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+  "gateway.panel.tokenPlaceholderDiscord": "TOKEN-DEL-BOT…",
+  "gateway.panel.portal": "Nel portale sviluppatori",
+  "gateway.panel.portalWhere":
+    "Nella tua applicazione su discord.com/developers/applications, apri il tuo bot. Serve un'applicazione nuova solo se non ne hai ancora una per il bot.",
+  "gateway.panel.intents":
+    "Gli intent del bot devono essere quelli di base, senza «Message Content»: una chat privata e una menzione nel tuo messaggio arrivano con il testo anche senza. Con «Message Content» chiuso il bot non si collega e te lo dice.",
+  "gateway.panel.invite":
+    "Invita il bot nel tuo server da OAuth2 › URL Generator, con gli scope bot e applications.commands. In una chat privata non serve nessun invito.",
   "gateway.panel.title": "Gateway · Telegram",
   "gateway.panel.intro": "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
   "gateway.panel.off": "Spento",

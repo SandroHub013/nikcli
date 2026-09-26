@@ -306,4 +306,110 @@ describe("the Gateway section of a bot's card", () => {
     expect(gatewayVisible(false, true)).toBe(true)
     expect(gatewayVisible(true, false)).toBe(true)
   })
+  /*
+   * Two platforms in one card. The Rust side keeps a link per platform, so
+   * choosing one here never touches the other: what a test must show is that
+   * the panel reads and writes the platform it is showing, and that the other
+   * platform's link is still as it was.
+   */
+  test("the card shows one platform at a time and keeps the other", async () => {
+    await createRoot(async () => {
+      const seen: string[] = []
+      const api: GatewayPanelApi = {
+        status: async () => [
+          { bot: BOT.path, platform: "telegram", enabled: true, running: true, connected: true, hasToken: true, authorized: [] },
+          { bot: BOT.path, platform: "discord", enabled: false, running: false, connected: false, hasToken: true, authorized: [] },
+        ],
+        setToken: async (bot, platform) => void seen.push("setToken:" + platform),
+        clearToken: async (bot, platform) => void seen.push("clearToken:" + platform),
+        probe: async (bot, platform) => "@" + platform,
+        setEnabled: async (bot, platform, enabled) => void seen.push("setEnabled:" + platform + ":" + enabled),
+        pairingList: async (bot, platform) => {
+          seen.push("pairingList:" + platform)
+          return { open: false, pending: [], authorized: [], attemptsLeft: 0 }
+        },
+        pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
+        pairingReject: async () => {},
+        pairingRevoke: async () => {},
+        pairingOpen: async () => 0,
+        listen: async () => () => {},
+      }
+      const panel = createGatewayPanel({
+        bot: () => BOT,
+        api,
+        project: () => PROJECT,
+        remote: memoryRemoteStore(),
+        approve: async () => ({ ok: true, fingerprint: "f" }),
+        confirm: async () => true,
+      })
+      try {
+        // Telegram is the default, and it is the one it reads.
+        expect(panel.platform()).toBe("telegram")
+        await panel.refresh()
+        expect(panel.link().enabled).toBe(true)
+        expect(panel.link().hasToken).toBe(true)
+
+        // Discord is the other link, and it is a different one.
+        panel.choose("discord")
+        expect(panel.platform()).toBe("discord")
+        await panel.refresh()
+        expect(panel.link().enabled).toBe(false)
+        expect(panel.link().hasToken).toBe(true)
+
+        // What it writes goes to the platform it is showing.
+        panel.setDraft("  token-di-prova  ")
+        await panel.saveToken()
+        await panel.probe()
+        expect(seen).toContain("setToken:discord")
+        expect(panel.probed()).toBe("@discord")
+        // A token typed for Discord is never shown against Telegram.
+        expect(panel.draft()).toBe("")
+
+        // And Telegram's link is still as it was.
+        panel.choose("telegram")
+        await panel.refresh()
+        expect(panel.link().enabled).toBe(true)
+        expect(seen).toContain("pairingList:discord")
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
+
+  test("a name probed for one platform is dropped when the other is shown", async () => {
+    await createRoot(async () => {
+      const api: GatewayPanelApi = {
+        status: async () => [],
+        setToken: async () => {},
+        clearToken: async () => {},
+        probe: async () => "@bot_di_prova",
+        setEnabled: async () => {},
+        pairingList: async () => ({ open: false, pending: [], authorized: [], attemptsLeft: 0 }),
+        pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
+        pairingReject: async () => {},
+        pairingRevoke: async () => {},
+        pairingOpen: async () => 0,
+        listen: async () => () => {},
+      }
+      const panel = createGatewayPanel({
+        bot: () => BOT,
+        api,
+        project: () => PROJECT,
+        remote: memoryRemoteStore(),
+        approve: async () => ({ ok: true, fingerprint: "f" }),
+        confirm: async () => true,
+      })
+      try {
+        await panel.probe()
+        expect(panel.probed()).toBe("@bot_di_prova")
+        // A probe that failed on one platform says nothing about the other, so
+        // the name is dropped rather than shown against the wrong one.
+        panel.choose("discord")
+        expect(panel.probed()).toBeUndefined()
+      } finally {
+        panel.dispose()
+      }
+    })
+  })
+
 })

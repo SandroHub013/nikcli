@@ -574,6 +574,22 @@ export const en: Messages = {
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>
     `The bot asked for the permission «${permission}» for:\n${what}\n\nNot granted from a chat: I said no.`,
+  "gateway.panel.platform": "The bot's platform",
+  "gateway.panel.platformTelegram": "Telegram",
+  "gateway.panel.platformDiscord": "Discord",
+  "gateway.panel.titleDiscord": "Gateway · Discord bot",
+  "gateway.panel.introDiscord":
+    "Write to this bot from Discord, while ADE is open. Every bot has its own Discord bot, made in the developer portal.",
+  "gateway.panel.tokenHelpDiscord":
+    "Paste the token the developer portal gave you, in the Bot section. It stays in the system keychain: ADE never shows it again.",
+  "gateway.panel.tokenPlaceholderDiscord": "THE-BOT-TOKEN…",
+  "gateway.panel.portal": "In the developer portal",
+  "gateway.panel.portalWhere":
+    "In your application at discord.com/developers/applications, open your bot. A new application is only needed if you do not have one for the bot yet.",
+  "gateway.panel.intents":
+    "The bot's intents must be the base ones, without «Message Content»: a private chat and a mention inside your message arrive with their text even without it. With «Message Content» off the bot does not connect, and it says so.",
+  "gateway.panel.invite":
+    "Invite the bot to your server from OAuth2 › URL Generator, with the bot and applications.commands scopes. A private chat needs no invite.",
   "gateway.panel.title": "Gateway · Telegram bot",
   "gateway.panel.intro": "Write to this bot from Telegram while ADE is open. Each bot has its own Telegram bot, made with BotFather.",
   "gateway.panel.off": "Off",

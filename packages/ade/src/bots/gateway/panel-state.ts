@@ -110,12 +110,14 @@ const NO_PAIRING: PairingInfo = { open: false, pending: [], authorized: [], atte
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export function createGatewayPanel(deps: GatewayPanelDeps) {
-  const platform = deps.platform ?? "telegram"
   const now = deps.now ?? Date.now
   const path = () => deps.bot().path
-  const mine = (item: { bot: string; platform: string }) => item.bot === path() && item.platform === platform
+  // Which platform this card is looking at. Both links are kept by the Rust
+  // side, so switching here never loses the other one.
+  const [platform, setPlatform] = createSignal(deps.platform ?? "telegram")
+  const mine = (item: { bot: string; platform: string }) => item.bot === path() && item.platform === platform()
 
-  const [link, setLink] = createSignal<GatewayStatus>({ ...OFF, bot: path(), platform })
+  const [link, setLink] = createSignal<GatewayStatus>({ ...OFF, bot: path(), platform: platform() })
   const [pairing, setPairing] = createSignal<PairingInfo>(NO_PAIRING)
   const [draft, setDraft] = createSignal("")
   const [busy, setBusy] = createSignal(false)
@@ -128,8 +130,8 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const refresh = async () => {
     try {
       const all = await deps.api.status()
-      setLink(all.find(mine) ?? { ...OFF, bot: path(), platform })
-      setPairing(await deps.api.pairingList(path(), platform))
+      setLink(all.find(mine) ?? { ...OFF, bot: path(), platform: platform() })
+      setPairing(await deps.api.pairingList(path(), platform()))
       setRemote(deps.remote.get(path()))
     } catch (error) {
       setProblem(reason(error))
@@ -188,6 +190,21 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
 
   return {
     platform,
+    setPlatform,
+    /**
+     * Shows the other platform. The typed token and the name it probed are the
+     * other platform's, so they are dropped rather than shown against the wrong
+     * one; a token already saved is in the keychain and stays there.
+     */
+    choose: (next: string) => {
+      if (next === platform()) return
+      setPlatform(next)
+      setDraft("")
+      setProbed(undefined)
+      setProblem(undefined)
+      setRedactedAt(undefined)
+      void refresh()
+    },
     link,
     pairing,
     draft,
@@ -214,19 +231,19 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setDraft("")
       if (!token) return Promise.resolve()
       setProbed(undefined)
-      return act(() => deps.api.setToken(path(), platform, token))
+      return act(() => deps.api.setToken(path(), platform(), token))
     },
-    clearToken: () => act(() => deps.api.clearToken(path(), platform)),
+    clearToken: () => act(() => deps.api.clearToken(path(), platform())),
     probe: () =>
       act(async () => {
         setProbed(undefined)
-        setProbed(await deps.api.probe(path(), platform))
+        setProbed(await deps.api.probe(path(), platform()))
       }),
 
     /** On: the trust asked, the project fixed. Off: at once. */
     setEnabled: (on: boolean) =>
       act(async () => {
-        if (!on) return deps.api.setEnabled(path(), platform, false)
+        if (!on) return deps.api.setEnabled(path(), platform(), false)
         const project = deps.project()
         if (!project) throw new Error(t("gateway.panel.noProject"))
         if (!link().hasToken) throw new Error(t("gateway.panel.needToken"))
@@ -237,13 +254,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           if (trusted.problem) throw new Error(trusted.problem)
           return
         }
-        await deps.api.setEnabled(path(), platform, true, project)
+        await deps.api.setEnabled(path(), platform(), true, project)
       }),
 
-    approve: (code: string) => act(() => deps.api.pairingApprove(path(), platform, code.trim())),
-    reject: (request: string) => act(() => deps.api.pairingReject(path(), platform, request)),
-    revoke: (sender: string) => act(() => deps.api.pairingRevoke(path(), platform, sender)),
-    openPairing: () => act(() => deps.api.pairingOpen(path(), platform)),
+    approve: (code: string) => act(() => deps.api.pairingApprove(path(), platform(), code.trim())),
+    reject: (request: string) => act(() => deps.api.pairingReject(path(), platform(), request)),
+    revoke: (sender: string) => act(() => deps.api.pairingRevoke(path(), platform(), sender)),
+    openPairing: () => act(() => deps.api.pairingOpen(path(), platform())),
 
     /** The first step: the panel says what turning them on means, and waits for the yes. */
     askRemote: () => {
