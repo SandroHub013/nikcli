@@ -188,15 +188,50 @@ function readOp(attributes: string, body: string): MemoryOp | undefined {
   }
 }
 
+/** Where fenced code runs in `text` (```` ``` ```` or `~~~`), from its opening line to its closing one or the end. */
+function fencedRanges(text: string): Array<readonly [number, number]> {
+  const ranges: Array<readonly [number, number]> = []
+  let open: { at: number; fence: string } | undefined
+  let at = 0
+  for (const line of text.split("\n")) {
+    const fence = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1]
+    if (fence && !open) open = { at, fence }
+    else if (fence && open && fence[0] === open.fence[0] && fence.length >= open.fence.length && line.trim() === fence) {
+      ranges.push([open.at, at + line.length])
+      open = undefined
+    }
+    at += line.length + 1
+  }
+  if (open) ranges.push([open.at, text.length])
+  return ranges
+}
+
 /**
- * The writes in `text`, in order, and the text without them. A tag ADE
- * cannot read is taken out too and counted, so it never reaches the user
- * as if it were an answer.
+ * Whether the tag at `start`..`end` of `text` is the bot's own write: on
+ * lines of its own, outside fenced code. A tag inside a quote (`>`), inline
+ * code or a sentence has something else on its line, so it stays text: a
+ * README the bot quotes, or an example of the syntax, writes nothing (B8a
+ * review, M1 a).
+ */
+function ownLines(text: string, start: number, end: number, fenced: ReadonlyArray<readonly [number, number]>): boolean {
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1
+  const lineEnd = text.indexOf("\n", end) < 0 ? text.length : text.indexOf("\n", end)
+  if (text.slice(lineStart, start).trim() !== "" || text.slice(end, lineEnd).trim() !== "") return false
+  return !fenced.some(([from, to]) => start >= from && start < to)
+}
+
+/**
+ * The writes in `text`, in order, and the text without them. Only a tag on
+ * lines of its own, outside code, is a write (`ownLines`); any other stays
+ * in the text as it was. A write ADE cannot read is taken out too and
+ * counted, so it never reaches the user as if it were an answer.
  */
 export function takeMemoryOps(text: string): { text: string; ops: MemoryOp[]; unreadable: number } {
   const ops: MemoryOp[] = []
   let unreadable = 0
-  const rest = text.replace(OP_TAG, (_whole, attributes: string, body: string | undefined) => {
+  const fenced = fencedRanges(text)
+  const rest = text.replace(OP_TAG, (whole: string, attributes: string, body: string | undefined, offset: number) => {
+    if (!ownLines(text, offset, offset + whole.length, fenced)) return whole
     const op = readOp(attributes, body ?? "")
     if (op) ops.push(op)
     else unreadable++
