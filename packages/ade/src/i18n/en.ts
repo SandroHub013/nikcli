@@ -1389,6 +1389,8 @@ export const en: Messages = {
   "bots.routine.cap.money": (run: number, day: number) => `at most ${run} $ per run and ${day} $ a day`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `I agree: this routine runs on its own with ${runner} (${mode}, ${model}), without a shell, only while ADE is open and within the cap above.`,
+  "bots.routine.consentReadOnly": (runner: string, mode: string, model: string) =>
+    `I agree: this routine runs on its own with ${runner} (${mode}, ${model}), without a shell and read-only (it reads files, it does not change them), only while ADE is open and within the cap above.`,
   "bots.routine.save": "Save the routine",
   "bots.routine.cancel": "Cancel",
   "bots.routine.everyHours": (hours: number) => (hours === 1 ? "every hour" : `every ${hours} hours`),

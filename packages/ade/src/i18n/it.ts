@@ -1400,6 +1400,8 @@ export const it = {
   "bots.routine.cap.money": (run: number, day: number) => `al massimo ${run} $ per esecuzione e ${day} $ al giorno`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `Acconsento: questa routine gira da sola con ${runner} (${mode}, ${model}), senza shell, solo mentre ADE è aperta ed entro il tetto qui sopra.`,
+  "bots.routine.consentReadOnly": (runner: string, mode: string, model: string) =>
+    `Acconsento: questa routine gira da sola con ${runner} (${mode}, ${model}), senza shell e in sola lettura (legge i file, non li modifica), solo mentre ADE è aperta ed entro il tetto qui sopra.`,
   "bots.routine.save": "Salva la routine",
   "bots.routine.cancel": "Annulla",
   "bots.routine.everyHours": (hours: number) => (hours === 1 ? "ogni ora" : `ogni ${hours} ore`),

@@ -246,7 +246,8 @@ export interface TurnSpec {
   /**
    * A turn nobody watches (B11, a routine): no shell at all, not even
    * `ade-msg`, which can open a session with a shell of its own. nikcli gets
-   * `bot-no-shell`, Claude Code is refused Bash, Codex runs read-only.
+   * `bot-no-shell`, Claude Code and Codex run read-only (B11 review:
+   * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
    */
   readonly unattended?: boolean
   /** Claude Code only: the dollars the turn may spend (`--max-budget-usd`, B11). */
@@ -294,6 +295,9 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   task: ["Task"],
   todowrite: ["TodoWrite"],
 }
+
+/** What a routine's Claude Code turn is refused besides the shell: it reads, it does not write. */
+const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
 
 /*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
@@ -454,15 +458,20 @@ export function turnCommand(
         args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
         args.push("--settings", '{"autoMemoryEnabled":false}')
       }
-      args.push("--permission-mode", canWrite(bot) ? "acceptEdits" : "default")
+      args.push("--permission-mode", canWrite(bot) && !unattended ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
         .filter(([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote || unattended) && tool === "bash"))
+        .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
         .flatMap(([, names]) => names)
       if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
         .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
       if ((remote || unattended) && !disallowed.includes("Bash")) disallowed.push("Bash", "PowerShell")
+      // A routine is read-only, like Codex's (B11 review, the Master's decision).
+      if (unattended)
+        for (const name of READ_ONLY_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
+          if (!disallowed.includes(name)) disallowed.push(name)
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       /*

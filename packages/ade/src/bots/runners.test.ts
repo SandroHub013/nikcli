@@ -761,6 +761,21 @@ describe("a turn nobody watches (B11, a routine)", () => {
     expect(allowed).not.toContain("ade-msg")
   })
 
+  test("a routine on Claude Code is read-only, like Codex's (B11 review)", () => {
+    const own = { ...bot, scope: "global" as const, runner: "claude" }
+    const routine = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true, unattended: true })
+    const option = (name: string) => (routine.args[routine.args.indexOf(name) + 1] ?? "").split(",")
+    expect(option("--permission-mode")).toEqual(["default"])
+    for (const name of ["Edit", "NotebookEdit", "Write"]) {
+      expect(option("--allowedTools")).not.toContain(name)
+      expect(option("--disallowedTools")).toContain(name)
+    }
+    expect(option("--allowedTools")).toContain("Read")
+    // The panel's own turn still writes.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true })
+    expect(panel.args[panel.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+  })
+
   test("Claude Code is told the run's cap, before the message (B11 review, M1)", () => {
     const own = { ...bot, scope: "global" as const, runner: "claude" }
     const capped = turnCommand(runnerById("claude"), { bot: own, message: "x", unattended: true, maxBudgetUsd: 0.05 })

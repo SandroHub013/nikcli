@@ -17,6 +17,7 @@ import {
   logOn,
   modeLabel,
   nextRun,
+  routineReadOnly,
   routineOffer,
   routineProblem,
   type Routine,
@@ -108,7 +109,12 @@ export function RoutineSection(props: {
   }
 
   const consentText = () =>
-    t("bots.routine.consent", runner().label, modeLabel(offer().mode), props.bot.model ?? t("bots.defaultModel"))
+    t(
+      routineReadOnly(runner().id) ? "bots.routine.consentReadOnly" : "bots.routine.consent",
+      runner().label,
+      modeLabel(offer().mode),
+      props.bot.model ?? t("bots.defaultModel"),
+    )
 
   const state = (routine: Routine) => {
     const log = logOn(props.deps.book(), routine.id, props.deps.now())

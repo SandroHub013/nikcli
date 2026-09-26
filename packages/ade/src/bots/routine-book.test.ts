@@ -14,10 +14,12 @@ import {
   routineConsent,
   routineOffer,
   routineProblem,
+  routineReadOnly,
   type Routine,
   type RoutineBook,
   type RoutineContext,
 } from "./routine"
+import { t } from "../i18n"
 import { ROUTINE_POLICY } from "./terms"
 import { emptyTalk } from "./talk"
 import type { Turn, TurnResult } from "./turn"
@@ -125,6 +127,16 @@ describe("B11 review, M2: ADE Test spends nothing", () => {
     book = recordResult(book, routine, key, { status: "error", costUsd: 0.02 }, at(10, 1))
     expect(book.logs[routine.id]?.suspended).toContain("non è gratuito")
     expect(book.logs[routine.id]?.suspended).toContain("0.02 $")
+  })
+})
+
+describe("B11 review: routines on Claude Code and Codex only read", () => {
+  test("the consent says so where it holds, and not for nikcli", () => {
+    expect(routineReadOnly("claude")).toBe(true)
+    expect(routineReadOnly("codex")).toBe(true)
+    expect(routineReadOnly("nikcli")).toBe(false)
+    expect(t("bots.routine.consentReadOnly", "Claude Code", "abbonamento", "sonnet")).toContain("sola lettura")
+    expect(t("bots.routine.consent", "nikcli", "modello gratuito", "x:free")).not.toContain("sola lettura")
   })
 })
 
