@@ -168,6 +168,12 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
 
   let idleTimer: ReturnType<typeof setTimeout> | undefined
   let stopping: Promise<void> | undefined
+  /**
+   * Whether a sentence of a reply is waiting for the voice, which is also what
+   * the stop in flight is about: a stop that is only retrying gives up, because
+   * it is freeing a process somebody is asking to speak through.
+   */
+  let askedFor = false
   let activeTasks = 0
   let residentStarted = false
   /**
@@ -201,6 +207,14 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
         warmed = undefined
         return true
       }
+      /* The voice is being asked for again, so this stop has nothing left to
+         free. It was worth one request: the process it frees is the one the
+         sentence is about to need, and a request already at the host cannot be
+         un-made — which is why the sentence still goes out behind it, a round
+         trip away. What must not happen is the retries: they used to sit
+         inside the sentence's own limit, so a stop that never confirmed could
+         spend the whole of it and the reply left in the system voice. */
+      if (askedFor) return false
       if (Date.now() - startedAt < deadlineMs) {
         await new Promise<void>((resolve) => setTimeout(resolve, retryMs))
         return ask()
@@ -214,6 +228,9 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
     if (stopping) return
     const pending: Promise<void> = confirmStop().then((confirmed) => {
       if (stopping === pending) stopping = undefined
+      // The next stop starts from nothing: a voice asked for once is not a
+      // voice that must never be freed again.
+      askedFor = false
       if (confirmed) return
       residentStarted = true
       if (activeTasks === 0) scheduleIdleStop()
@@ -280,6 +297,8 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   const ahead = new Map<string, { token: number; pending: Promise<ArrayBuffer> }>()
   const aheadKey = (voice: string, sentence: string) => `${voice}\u0000${sentence}`
   function synthesize(voice: string, sentence: string): Promise<ArrayBuffer> {
+    // The voice is needed again, so a stop in flight has nothing left to free.
+    askedFor = true
     residentStarted = true
     const key = aheadKey(voice, sentence)
     const early = ahead.get(key)
@@ -344,6 +363,10 @@ export function createNaturalSpeaker(deps: NaturalSpeakerDeps): NaturalSpeaker {
   return {
     async speak(text: string): Promise<void> {
       cancelIdleTimer()
+      // Said before the wait below, which is the whole point: a reply that finds
+      // a stop still confirming is a voice that is needed again, and the stop
+      // must stop being asked for rather than hold the first sentence behind it.
+      askedFor = true
       activeTasks++
       try {
         await ensureNotStopping()

@@ -430,7 +430,7 @@ describe("tts/natural-speaker", () => {
     }
   })
 
-  test("a stop the host calls busy is asked again: no speech before the confirmation, and the voice is forgotten after it", async () => {
+  test("a stop the host calls busy does not hold a sentence that is already on its way, and the voice is freed after it", async () => {
     const events: string[] = []
     let busy = true
     const h = harness({
@@ -450,13 +450,17 @@ describe("tts/natural-speaker", () => {
     const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
     await speaker.speak("Prima frase della risposta.")
     expect(h.played).toEqual(["Prima frase della risposta."])
-    expect(events).toEqual(["stop", "stop", "Prima frase della risposta."])
+    // One request at the host, which reported busy, and then the sentence: it
+    // is not asked again, because what it would be freeing is the voice the
+    // sentence is being made with.
+    expect(events).toEqual(["stop", "Prima frase della risposta."])
 
+    // And the voice is still freed later, when the silence comes back.
     await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(events).toEqual(["stop", "stop", "Prima frase della risposta.", "stop"])
+    expect(events).toEqual(["stop", "Prima frase della risposta.", "stop"])
     speaker.prepare()
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(events).toEqual(["stop", "stop", "Prima frase della risposta.", "stop", "Pronto."])
+    expect(events).toEqual(["stop", "Prima frase della risposta.", "stop", "Pronto."])
   })
 
   test("a stop that never confirms is given up on at its deadline, and the voice is not forgotten", async () => {
@@ -487,6 +491,30 @@ describe("tts/natural-speaker", () => {
     const before = stops.length
     await new Promise((resolve) => setTimeout(resolve, 80))
     expect(stops.length).toBeGreaterThan(before)
+  })
+
+  test("a sentence arriving while a busy stop is in flight does not wait the stop out", async () => {
+    const stops: number[] = []
+    const h = harness({
+      stopRetryMs: 5,
+      // Long enough that waiting it out would mean hundreds of requests, and
+      // short enough that a regression costs the suite two seconds, not a hang.
+      stopDeadlineMs: 2_000,
+      stop: async () => {
+        stops.push(stops.length)
+        return { busy: true }
+      },
+    })
+    const speaker = createNaturalSpeaker({ ...h.deps, stopOnCreate: true })
+    // The page was still speaking when this speaker was made, so its stop finds
+    // the host busy — and a reply is already on its way.
+    await speaker.speak("Prima frase della risposta.")
+
+    expect(h.played).toEqual(["Prima frase della risposta."])
+    // One request, and then it is given up: the retries used to sit inside the
+    // sentence's own limit, and a stop that never confirmed could spend all of
+    // it and leave the reply in the system voice.
+    expect(stops.length).toBeLessThanOrEqual(2)
   })
 
   test("a stop the host refuses does not silence the reply, and is asked again", async () => {
