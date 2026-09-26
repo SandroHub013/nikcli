@@ -1933,7 +1933,15 @@ pub fn run() {
     #[cfg(unix)]
     import_login_path();
 
-    tauri::Builder::default()
+    let context = tauri::generate_context!();
+    let builder = tauri::Builder::default();
+    // The first plugin: a second ADE of this identity ends before anything of its own starts.
+    let builder = if tray::single_instance(&context.config().identifier, std::env::var("ADE_SINGLE_INSTANCE").ok().as_deref()) {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+    } else {
+        builder
+    };
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -2117,7 +2125,7 @@ pub fn run() {
             glass::ade_glass_status,
             glass::ade_window_set_glass,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running ADE")
         /*
          * Every process this window started is a child of it, so they die

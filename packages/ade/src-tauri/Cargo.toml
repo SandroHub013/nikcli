@@ -52,6 +52,9 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# One ADE per identity: a second start brings the first one's window forward,
+# out of the tray too, instead of a second gateway on the same bots (G11).
+tauri-plugin-single-instance = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }

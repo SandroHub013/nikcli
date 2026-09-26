@@ -8,6 +8,10 @@
 //! started with it — sessions left running where no one sees them would
 //! spend on the user's accounts.
 //!
+//! One ADE per identity (`single_instance`): opened again while it sits in
+//! the tray, it brings the window back rather than start a second gateway on
+//! the same bots, which would answer every message twice.
+//!
 //! The tray has two items: Apri, and Esci, which goes through the same close
 //! the window's X had before, the page's question about running sessions
 //! included. The test build's tray has its own icon (the bundle's, from
@@ -49,6 +53,16 @@ pub(crate) fn hides_on_close(gateway_on: bool, quitting: bool) -> bool {
 /// The tray's id: one per product, so ADE Test's is never the official one's.
 pub(crate) fn tray_id(identifier: &str) -> String {
     format!("{identifier}.tray")
+}
+
+/// Whether this ADE is the only one of its identity: a second start of it
+/// brings the first one's window forward and ends. The official ADE and ADE
+/// Test have different identifiers, so they never stop each other. Always for
+/// the official build; a test build only when asked (`ADE_SINGLE_INSTANCE=1`),
+/// since every worktree's ADE Test shares one identifier and runs beside the
+/// others.
+pub(crate) fn single_instance(identifier: &str, asked: Option<&str>) -> bool {
+    !identifier.ends_with(".test") || asked == Some("1")
 }
 
 /// The main window, back on screen and in front.
@@ -118,6 +132,15 @@ mod tests {
     fn the_test_build_has_a_tray_of_its_own() {
         assert_eq!(tray_id("ai.nikcli.ade"), "ai.nikcli.ade.tray");
         assert_ne!(tray_id("ai.nikcli.ade.test"), tray_id("ai.nikcli.ade"));
+    }
+
+    #[test]
+    fn one_official_ade_and_as_many_test_ones_as_worktrees_unless_asked() {
+        assert!(single_instance("ai.nikcli.ade", None));
+        assert!(single_instance("ai.nikcli.ade", Some("0")), "l'ufficiale è sempre una sola");
+        assert!(!single_instance("ai.nikcli.ade.test", None), "le ADE Test delle cartelle girano insieme");
+        assert!(!single_instance("ai.nikcli.ade.test", Some("0")));
+        assert!(single_instance("ai.nikcli.ade.test", Some("1")));
     }
 
     #[test]
