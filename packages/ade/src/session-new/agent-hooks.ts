@@ -414,6 +414,8 @@ export interface HookHost {
     scriptPresent: boolean
     /** For a plugin: whether the file on disk is this version's. */
     scriptCurrent?: boolean
+    /** For a hook: the SHA-256 of the script on disk, lowercase hex. */
+    scriptDigest?: string
   }>
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
   /** The first line of `claude --version`, or null. See `usesExecForm`. */
@@ -441,6 +443,20 @@ export interface HookStatus {
   readonly error?: string
   /** Installed by an earlier ADE, whose plugin is not this one's: the panel offers the update. */
   readonly outdated?: boolean
+}
+
+/** SHA-256, lowercase hex, as Rust reports the script on disk (`scriptDigest`). */
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+/**
+ * Whether the hook's script on disk is an earlier ADE's: rewriting it opens
+ * the confirmation dialog. Unknown (no digest from the host) is not outdated.
+ */
+async function scriptOutdated(target: HookTarget, digest: string | undefined): Promise<boolean> {
+  return digest !== undefined && digest !== (await sha256(hookScript(target.agent)))
 }
 
 /** What ADE has installed for this CLI right now. */
@@ -471,12 +487,14 @@ export async function readHookStatus(host: HookHost, target: HookTarget): Promis
     }
     const command = installedCommand(files.configText ?? undefined)
     const wanted = hookCommand(files.scriptPath)
+    const installed = command === wanted && files.scriptPresent
     return {
       target,
-      installed: command === wanted && files.scriptPresent,
+      installed,
       broken: command !== undefined && (command !== wanted || !files.scriptPresent),
       configPath: files.configPath,
       scriptPath: files.scriptPath,
+      ...(installed && (await scriptOutdated(target, files.scriptDigest)) ? { outdated: true } : {}),
     }
   } catch (error) {
     return {
@@ -556,6 +574,14 @@ export async function refreshHookScript(
   const script = hookScript(target.agent)
   const command = installedCommand(files.configText ?? undefined)
   if (files.configText === null || !files.scriptPresent || command !== hookCommand(files.scriptPath)) return undefined
+  /*
+   * An earlier ADE's script is not rewritten here, for the same reason as the
+   * plugin above: this runs at start, and a new script is shown to the user
+   * in a native dialog first. The status says it is outdated; the panel's
+   * button updates it. A configuration to bring up to date with the same
+   * script asks nothing, and is still written.
+   */
+  if (await scriptOutdated(target, files.scriptDigest)) return undefined
   // An install from before the activity events gets them too; otherwise the config goes back as it was read.
   const missing = missingActivityEvents(files.configText, target.activityEvents)
   const exec = await usesExecForm(host, target)

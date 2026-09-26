@@ -364,6 +364,8 @@ export interface AgentHookFiles {
   scriptPresent: boolean
   /** For a plugin: whether the file on disk is the one this ADE writes. */
   scriptCurrent?: boolean
+  /** For a hook: the SHA-256 of the script on disk, lowercase hex. */
+  scriptDigest?: string
 }
 
 // Moved to `./ansi` so `./line-stream` can use it without importing the host,

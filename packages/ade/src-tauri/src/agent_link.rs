@@ -236,6 +236,18 @@ pub struct HookFiles {
     /// For a plugin: whether the file on disk is the one this ADE writes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script_current: Option<bool>,
+    /// For a hook: the SHA-256 of the script on disk, lowercase hex. The page
+    /// builds the script, so only it can say whether this is its version; a
+    /// different one would be rewritten behind the confirmation dialog.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script_digest: Option<String>,
+}
+
+/// The SHA-256 of a file, lowercase hex, or `None` when it cannot be read.
+fn file_digest(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = fs::read(path).ok()?;
+    Some(Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn target(agent: &str) -> Result<&'static HookTarget, String> {
@@ -309,6 +321,7 @@ pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
             config_text: None,
             script_present: script.is_file(),
             script_current: Some(fs::read_to_string(&script).ok().as_deref() == Some(PLUGIN_TEXT)),
+            script_digest: None,
             script_path: script.to_string_lossy().to_string(),
         });
     }
@@ -318,6 +331,7 @@ pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
         config_path: config.to_string_lossy().to_string(),
         script_present: script.is_file(),
         script_current: None,
+        script_digest: file_digest(&script),
         script_path: script.to_string_lossy().to_string(),
     })
 }
@@ -974,6 +988,18 @@ mod tests {
             assert!(config.starts_with(&home), "{} escaped", config.display());
             assert!(script.starts_with(&home), "{} escaped", script.display());
         }
+    }
+
+    #[test]
+    fn a_hook_script_is_read_back_as_its_sha256_only() {
+        let dir = std::env::temp_dir().join(format!("ade-hook-digest-{}", std::process::id()));
+        fs::create_dir_all(&dir).expect("a directory");
+        let path = dir.join("ade-session-link.ps1");
+        fs::write(&path, b"abc").expect("a file");
+        // SHA-256("abc"), the standard test vector: what the page computes of the script it built.
+        assert_eq!(file_digest(&path).as_deref(), Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+        assert_eq!(file_digest(&dir.join("assente.ps1")), None);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

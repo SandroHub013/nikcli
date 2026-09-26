@@ -247,7 +247,7 @@ export const it = {
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.update": "Aggiorna",
-  "hooks.outdated": "Il plugin installato è di una versione precedente di ADE: premi Aggiorna per mettere quello nuovo.",
+  "hooks.outdated": "Quello installato è di una versione precedente di ADE: premi Aggiorna per mettere quello nuovo.",
   "hooks.remove": "Rimuovi",
   "hooks.outside": "Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova, quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.",
   "agent.mic.start": "Avvia il microfono",
