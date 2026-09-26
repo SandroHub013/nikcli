@@ -31,6 +31,16 @@ export function followInstall(
   return watch(() => read(provider), onProgress)
 }
 
+/**
+ * Whether the last install of `provider` ended because the user cancelled it:
+ * the download then fails, and saying «non riuscito» for what was asked for
+ * would be wrong. No host or no answer: not a cancel.
+ */
+export async function installCancelled(host: VoicePackHost | undefined, provider: LocalProvider): Promise<boolean> {
+  const last = await host?.ttsInstallStatus?.(provider).catch(() => undefined)
+  return last?.cancelled === true
+}
+
 export interface PackController {
   /** Asks the host again what it has. */
   refresh(): Promise<void>

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { InstallProgress, PackState } from "@nikcli-ai/voice"
-import { createPackController, followInstall, type VoicePackHost } from "./voice-pack-controller"
+import { createPackController, followInstall, installCancelled, type VoicePackHost } from "./voice-pack-controller"
 
 const MB = 1024 * 1024
 
@@ -118,6 +118,13 @@ describe("the Kokoro pack, driven from the panel", () => {
     expect(state().busy).toBeUndefined()
   })
 
+  test("a cancelled Piper download is told apart from a failed one", async () => {
+    expect(await installCancelled({ ttsInstallStatus: async () => progress({ provider: "piper", running: false, cancelled: true }) }, "piper")).toBe(true)
+    expect(await installCancelled({ ttsInstallStatus: async () => progress({ provider: "piper", running: false, error: "rete" }) }, "piper")).toBe(false)
+    expect(await installCancelled({ ttsInstallStatus: async () => Promise.reject(new Error("no")) }, "piper")).toBe(false)
+    expect(await installCancelled(undefined, "piper")).toBe(false)
+  })
+
   test("the Piper download is followed with the same reading, and without one nothing is", () => {
     const log: string[] = []
     const seen: number[] = []
@@ -165,5 +172,8 @@ describe("K3's progress and cancel have a caller", () => {
     expect(workbench).toContain("kokoroPack={kokoroPack()}")
     expect(workbench).toContain("sizeBytes: KOKORO_DOWNLOAD_BYTES,")
     expect(workbench).toContain("onTestVoice={testReplyVoice}")
+    // Both ways a Piper download fails ask first whether it was cancelled.
+    expect(workbench).toContain('if (!(await installCancelled(host, "piper"))) failNaturalVoice(v, error)')
+    expect(workbench).toContain('if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)')
   })
 })

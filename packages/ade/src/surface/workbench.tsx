@@ -415,7 +415,7 @@ import {
   kokoroVoice,
   KOKORO_DOWNLOAD_BYTES,
 } from "@nikcli-ai/voice"
-import { createPackController, followInstall } from "./voice-pack-controller"
+import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import { disposeTerminal, hasTerminal, noteInTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
@@ -4193,7 +4193,10 @@ export function Workbench() {
       } else if (state === "failed") {
         setVoiceInstalled(false)
         setVoiceDownloading(false)
-        failNaturalVoice(voice, problem)
+        // A download the user cancelled from the panel is not a failure (K6 review).
+        void getHost().then(async (host) => {
+          if (!(await installCancelled(host, "piper"))) failNaturalVoice(voice, problem)
+        })
       }
     },
   })
@@ -4274,8 +4277,8 @@ export function Workbench() {
       return
     }
     let stopFollowing = () => {}
+    const host = await getHost()
     try {
-      const host = await getHost()
       if (!host?.ttsPiperInstall) throw new Error(t("voice.noHost.download"))
       // K3's progress, read while the install runs: the command answers only at the end.
       stopFollowing = followInstall(host, "piper", setPiperProgress)
@@ -4286,7 +4289,8 @@ export function Workbench() {
     } catch (error) {
       if (activePiperVoice() !== v) return
       setVoiceInstalled(false)
-      failNaturalVoice(v, error)
+      // Annulla in the panel ends the download with an error: it was asked for, it is not one.
+      if (!(await installCancelled(host, "piper"))) failNaturalVoice(v, error)
     } finally {
       stopFollowing()
       setPiperProgress(undefined)
