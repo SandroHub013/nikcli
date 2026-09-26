@@ -42,6 +42,25 @@ export interface SheetProps {
   readonly surface?: boolean
   /** The id of the title, for a panel whose title is not a `SheetTitle`. */
   readonly labelledBy?: string
+  /** `alertdialog` for a question that must be answered (the recording consent). */
+  readonly role?: "dialog" | "alertdialog"
+}
+
+/*
+ * Another layer's focus is not the opener's: a sheet opened over this one, or,
+ * once menus move to Kobalte, a menu in a portal of its own. It is gone by the
+ * time this sheet closes, and the focus would fall to `body` (review, BASSO 2).
+ */
+const OTHER_LAYER = '[data-layout="overlay"], [data-kb-top-layer], [data-popper-positioner]'
+
+/**
+ * Whether the focus still needs somewhere to go when a sheet has gone: it fell
+ * to `body` with the panel, or sits in a panel no longer in the page. Anything
+ * else took it on purpose (the pane «Pannello completo» opens) and keeps it
+ * (review, BASSO 1).
+ */
+export function focusIsLost(active: Element | null, body: Element): boolean {
+  return !active || active === body || !active.isConnected
 }
 
 /** The shell, where the theme's tokens are; `body` outside ADE (the tests). */
@@ -51,7 +70,7 @@ function shell(): Node | undefined {
 }
 
 export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
-  const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "surface", "labelledBy", "children"])
+  const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "surface", "labelledBy", "role", "children"])
   // What had the focus before: the button, the palette, the terminal. It gets it back.
   let opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
   let panel: HTMLDivElement | undefined
@@ -60,13 +79,18 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
   // is where it belongs when the sheet goes, not `body`.
   const handedOut = (event: FocusEvent) => {
     const target = event.target
-    if (panel && target instanceof HTMLElement && !panel.contains(target) && !target.hasAttribute("data-focus-trap")) opener = target
+    if (!panel || !(target instanceof HTMLElement) || panel.contains(target) || target.hasAttribute("data-focus-trap")) return
+    if (target.closest(OTHER_LAYER)) return
+    opener = target
   }
   if (typeof document !== "undefined") document.addEventListener("focusin", handedOut, true)
   onCleanup(() => {
     document.removeEventListener("focusin", handedOut, true)
     const back = opener
-    if (back && back !== document.body && back.isConnected) queueMicrotask(() => back.focus())
+    if (back && back !== document.body && back.isConnected)
+      queueMicrotask(() => {
+        if (focusIsLost(document.activeElement, document.body) || panel?.contains(document.activeElement)) back.focus()
+      })
   })
   /*
    * The panel itself, not its first button: the sheets read their keys on it.
@@ -116,6 +140,9 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
                 },
                 get "aria-labelledby"() {
                   return own.labelledBy
+                },
+                get role() {
+                  return own.role
                 },
                 get "data-size"() {
                   return own.size ?? "md"

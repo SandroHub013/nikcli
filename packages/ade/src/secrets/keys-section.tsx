@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { agentLabel, type AgentOption } from "../session-new/agents"
-import { Overlay, Surface } from "../ui/layout"
+import { Sheet, SheetTitle } from "../ui/sheet"
 import {
   addedLabel,
   billingWarning,
@@ -345,6 +345,10 @@ export function KeyForm(props: {
  * An agent asked for a key (`@ade keys ask ENV motivo`): the same form, with
  * the variable filled in and the reason shown. Never opens a second time for
  * the same request while one is on screen.
+ *
+ * On `Sheet`: the request comes when the agent sends it, possibly with another
+ * sheet open, and on the old Overlay it opened under that sheet's focus trap,
+ * visible and deaf. Kobalte stacks it on top, with the keys.
  */
 export function KeyRequestDialog(props: {
   host: KeysHost
@@ -364,42 +368,32 @@ export function KeyRequestDialog(props: {
   const existing = () => keys().find((key) => key.env === props.env)
 
   return (
-    <Overlay data-component="key-request" onClose={() => props.onClose(undefined)}>
-      <Surface
-        size="md"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("keys.request")}
-        onKeyDown={(event: KeyboardEvent) => {
-          if (event.key === "Escape") props.onClose(undefined)
-        }}
-      >
-        <header data-slot="keys-dialog-head">
-          <strong>{text().title}</strong>
-          {/* The agent's words, as the agent's: not a line of ADE's. */}
-          <Show when={text().says}>
-            {(says) => (
-              <blockquote data-slot="keys-dialog-says">
-                <span data-slot="keys-dialog-says-who">{t("keys.request.says")}</span> «{says()}»
-              </blockquote>
-            )}
-          </Show>
-          <span>{text().goes}</span>
-        </header>
-        <div data-slot="keys-dialog-body">
-          <Show
-            when={existing()}
-            keyed
-            fallback={
-              <KeyForm host={props.host} agents={props.agents} others={keys()} initialEnv={props.env} initialAgents={given()} onDone={props.onClose} />
-            }
-          >
-            {(key) => (
-              <KeyForm host={props.host} agents={props.agents} existing={key} others={keys()} initialAgents={given(key)} onDone={props.onClose} />
-            )}
-          </Show>
-        </div>
-      </Surface>
-    </Overlay>
+    <Sheet component="key-request" size="md" onClose={() => props.onClose(undefined)}>
+      <header data-slot="keys-dialog-head">
+        <SheetTitle as="strong">{text().title}</SheetTitle>
+        {/* The agent's words, as the agent's: not a line of ADE's. */}
+        <Show when={text().says}>
+          {(says) => (
+            <blockquote data-slot="keys-dialog-says">
+              <span data-slot="keys-dialog-says-who">{t("keys.request.says")}</span> «{says()}»
+            </blockquote>
+          )}
+        </Show>
+        <span>{text().goes}</span>
+      </header>
+      <div data-slot="keys-dialog-body">
+        <Show
+          when={existing()}
+          keyed
+          fallback={
+            <KeyForm host={props.host} agents={props.agents} others={keys()} initialEnv={props.env} initialAgents={given()} onDone={props.onClose} />
+          }
+        >
+          {(key) => (
+            <KeyForm host={props.host} agents={props.agents} existing={key} others={keys()} initialAgents={given(key)} onDone={props.onClose} />
+          )}
+        </Show>
+      </div>
+    </Sheet>
   )
 }

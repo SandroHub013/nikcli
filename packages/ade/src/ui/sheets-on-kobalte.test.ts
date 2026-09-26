@@ -11,6 +11,8 @@ import { join } from "node:path"
 const SHEETS = [
   ["decisions/decisions-sheet.tsx", "decisions-sheet"],
   ["design/design-sheet.tsx", "design-sheet"],
+  ["record/consent-dialog.tsx", "record-consent"],
+  ["secrets/keys-section.tsx", "key-request"],
 ] as const
 
 describe("lint: the sheets are Kobalte dialogs", () => {
@@ -47,5 +49,8 @@ describe("lint: the sheets are Kobalte dialogs", () => {
     const shown = [...workbench.matchAll(/<Show when=\{(\w+)\(\)\}>\s*(?:\{\/\*[^*]*\*\/\}\s*)?<(?:DecisionsSheet|DesignSheet|Sheet)\b/g)].map((match) => match[1]!)
     expect(shown.length).toBe(3)
     for (const signal of shown) expect([signal, open.includes(`${signal}()`)]).toEqual([signal, true])
+    // The agents' questions (M2), which are sheets too and open by themselves.
+    expect(open.includes("recordAsk()")).toBe(true)
+    expect(open.includes("keyRequest()")).toBe(true)
   })
 })

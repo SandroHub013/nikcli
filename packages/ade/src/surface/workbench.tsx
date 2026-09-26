@@ -4043,7 +4043,7 @@ export function Workbench() {
     setVoiceSettingsOpen(false)
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
-  const sheetOpen = () => decisionsOpen() || designOpen() || voiceSettingsOpen()
+  const sheetOpen = () => decisionsOpen() || designOpen() || voiceSettingsOpen() || Boolean(recordAsk()) || Boolean(keyRequest())
   const openVoiceSettings = (section?: string) => {
     setVoiceSettingsSection(section)
     setVoiceSettingsOpen(true)
