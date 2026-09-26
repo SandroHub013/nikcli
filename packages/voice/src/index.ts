@@ -316,6 +316,11 @@ export {
   AGENT_ENGINES,
   REPLY_VOICES,
   type ReplyVoice,
+  REPLY_BACKENDS,
+  type ReplyBackend,
+  REPLY_BACKEND_BY_VOICE,
+  TTS_LOCALES,
+  type TtsLocale,
   DEFAULT_VOICE_SETTINGS,
   WAKE_PHRASE,
   WAKE_WORD_ENABLED,
@@ -338,8 +343,18 @@ export {
 
 export {
   REPLY_VOICE_CHOICES,
+  KOKORO_VOICES,
   activeReplyVoice,
+  backendOf,
+  g2pLocale,
+  isKokoroVoice,
+  kokoroVoice,
+  replyVoiceChain,
+  replyVoiceFor,
   replyVoiceChoicesForLocale,
+  speakingReplyVoice,
+  type KokoroVoice,
+  type KokoroVoiceId,
 } from "./settings/reply-voices"
 
 export {
