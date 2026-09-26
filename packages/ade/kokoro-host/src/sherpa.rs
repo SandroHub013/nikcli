@@ -61,7 +61,6 @@ mod loader {
     #[link(name = "kernel32")]
     extern "system" {
         fn LoadLibraryExW(name: *const u16, file: HModule, flags: u32) -> HModule;
-        fn LoadLibraryW(name: *const u16) -> HModule;
         fn FreeLibrary(module: HModule) -> i32;
         fn GetProcAddress(module: HModule, name: *const u8) -> *const core::ffi::c_void;
     }
@@ -563,12 +562,15 @@ mod loader {
             if !module.is_null() {
                 return Ok(module);
             }
-            let module = LoadLibraryW(wide.as_ptr());
-            if !module.is_null() {
-                return Ok(module);
-            }
+            // There is no second attempt through LoadLibraryW. That call
+            // searches the working directory and the PATH, which is exactly
+            // the order this load exists to close, and on a missing
+            // dependency it would happily bind whatever a hijacker left
+            // there. The error the loader left stands instead: 126 means a
+            // dependency is not beside the DLL, and it is what reaches the
+            // wire so K4b can say so to the user.
+            Err(LoadError::OpenDll(io::Error::last_os_error()))
         }
-        Err(LoadError::OpenDll(io::Error::last_os_error()))
     }
 
     /// Resolve one of the four calls the host makes. The name is a literal and
@@ -667,6 +669,131 @@ mod tests {
         assert!(
             code.starts_with("open-dll:"),
             "expected open-dll, got {code}"
+        );
+    }
+
+    /// The smallest PE Windows will take for a DLL and then refuse to bind:
+    /// one section, no entry point, and an import of a dependency that exists
+    /// nowhere on the search path. The loader fails while resolving that
+    /// import, before any instruction of the module runs.
+    #[cfg(windows)]
+    fn unbindable_dll() -> Vec<u8> {
+        const HEADERS: usize = 0x200;
+        let mut image = vec![0u8; HEADERS + 0x200];
+
+        fn put(image: &mut [u8], at: usize, bytes: &[u8]) {
+            image[at..at + bytes.len()].copy_from_slice(bytes);
+        }
+
+        // DOS header, with e_lfanew at 0x3C pointing at the PE header.
+        image[0] = 0x4D;
+        image[1] = 0x5A;
+        put(&mut image, 0x3C, &0x80u32.to_le_bytes());
+
+        // PE signature and COFF header: an AMD64 DLL with one section, a 240
+        // byte optional header (PE32 plus sixteen data directories), and the
+        // relocations marked stripped so the loader never looks for them.
+        put(&mut image, 0x80, b"PE\0\0");
+        put(&mut image, 0x84, &0x8664u16.to_le_bytes());
+        put(&mut image, 0x86, &1u16.to_le_bytes());
+        put(&mut image, 0x94, &0x00F0u16.to_le_bytes());
+        put(&mut image, 0x96, &0x2023u16.to_le_bytes());
+
+        // Optional header. The only data directory with anything in it is the
+        // import table, and the entry point is zero: the load fails before
+        // anything would be called anyway.
+        const O: usize = 0x98;
+        put(&mut image, O + 0, &0x020Bu16.to_le_bytes());
+        put(&mut image, O + 4, &0x200u32.to_le_bytes());
+        put(&mut image, O + 8, &0x200u32.to_le_bytes());
+        put(&mut image, O + 16, &0u32.to_le_bytes());
+        put(&mut image, O + 20, &0x1000u32.to_le_bytes());
+        put(&mut image, O + 24, &0x180000000u64.to_le_bytes());
+        put(&mut image, O + 32, &0x1000u32.to_le_bytes());
+        put(&mut image, O + 36, &0x200u32.to_le_bytes());
+        put(&mut image, O + 40, &6u16.to_le_bytes());
+        put(&mut image, O + 48, &6u16.to_le_bytes());
+        put(&mut image, O + 56, &0x2000u32.to_le_bytes());
+        put(&mut image, O + 60, &0x200u32.to_le_bytes());
+        put(&mut image, O + 68, &3u16.to_le_bytes());
+        put(&mut image, O + 70, &0x0100u16.to_le_bytes());
+        put(&mut image, O + 72, &0x100000u64.to_le_bytes());
+        put(&mut image, O + 80, &0x1000u64.to_le_bytes());
+        put(&mut image, O + 88, &0x100000u64.to_le_bytes());
+        put(&mut image, O + 96, &0x1000u64.to_le_bytes());
+        put(&mut image, O + 108, &16u32.to_le_bytes());
+        put(&mut image, O + 112 + 8, &0x1000u32.to_le_bytes());
+        put(&mut image, O + 112 + 12, &40u32.to_le_bytes());
+
+        // The one section: a data page holding the import table, readable and
+        // writable for the addresses the loader fills in.
+        const S: usize = O + 0xF0;
+        put(&mut image, S, b".rdata\0\0");
+        put(&mut image, S + 8, &0x1000u32.to_le_bytes());
+        put(&mut image, S + 12, &0x1000u32.to_le_bytes());
+        put(&mut image, S + 16, &0x200u32.to_le_bytes());
+        put(&mut image, S + 20, &0x200u32.to_le_bytes());
+        put(&mut image, S + 36, &0xC0000040u32.to_le_bytes());
+
+        // The section's contents, where RVA 0x1000 is file offset 0x200: one
+        // import descriptor followed by the null terminator, then the two
+        // tables it points at and the dependency that is not there.
+        const D: usize = HEADERS;
+        put(&mut image, D + 0, &0x1060u32.to_le_bytes());
+        put(&mut image, D + 12, &0x1080u32.to_le_bytes());
+        put(&mut image, D + 16, &0x1070u32.to_le_bytes());
+        put(&mut image, D + 0x60, &0x10B0u32.to_le_bytes());
+        put(&mut image, D + 0x70, &0x10B0u32.to_le_bytes());
+        put(&mut image, D + 0x80, b"kokoro-host-no-such-dependency.dll\0");
+        put(&mut image, D + 0xB0, &0u16.to_le_bytes());
+        put(&mut image, D + 0xB2, b"Symbol\0");
+        image
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_missing_dependency_is_reported_and_the_module_is_never_loaded() {
+        let directory = std::env::temp_dir().join("kokoro-host-missing-dependency");
+        std::fs::create_dir_all(&directory).expect("a folder for the shell");
+        let dll = directory.join("kokoro-shell.dll");
+        std::fs::write(&dll, unbindable_dll()).expect("write the shell");
+
+        let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let mut config = config();
+        config.dll = dll;
+        config.model = crate_dir.join("Cargo.toml");
+        config.voices = crate_dir.join("Cargo.toml");
+        config.tokens = crate_dir.join("Cargo.toml");
+        config.espeak_data = crate_dir;
+        let error = match load(&config) {
+            Ok(_) => panic!("a module whose dependency is missing was loaded"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "open-dll:126", "ERROR_MOD_NOT_FOUND");
+    }
+
+    #[test]
+    fn the_fallback_that_widens_the_search_is_gone() {
+        let source = std::fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join("sherpa.rs"),
+        )
+        .expect("read the loader");
+        // The needles are assembled here so this file's own text cannot
+        // satisfy them.
+        let call = ["LoadLibraryW", "("].concat();
+        let declared = ["fn ", "LoadLibraryW"].concat();
+        let proper = ["LoadLibraryExW", "("].concat();
+        assert!(
+            !source.contains(&call),
+            "the widened search is called again: the flags on the Ex call exist \
+             to close exactly that order"
+        );
+        assert!(!source.contains(&declared), "the widened search is declared again");
+        assert!(
+            source.contains(&proper),
+            "the runtime is opened through the Ex call"
         );
     }
 }

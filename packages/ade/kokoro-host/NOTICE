@@ -32,8 +32,8 @@ espeak-ng and espeak-ng-data
 
 sherpa-onnx
   License: Apache License 2.0
-  The C API exported by sherpa-onnx-c-api.dll, opened with LoadLibraryW when
-  the process starts.
+  The C API exported by sherpa-onnx-c-api.dll, opened with LoadLibraryExW
+  when the process starts.
 
 ONNX Runtime
   License: MIT

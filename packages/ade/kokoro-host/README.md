@@ -116,7 +116,11 @@ cargo test
 The tests run with no DLL, no model and no runtime anywhere near them: the
 part that calls sherpa sits behind a trait, and the tests use a stand-in. What
 they cover is the parsing of the protocol, the error answers, the WAV header,
-the first line, and the loop.
+the first line, and the loop. Two tests are about the loader: one writes a
+small PE shell to the temp folder whose dependency exists nowhere, and checks
+the load answers `open-dll:126` with no module loaded; the other checks that
+the source stays on `LoadLibraryExW` and never falls back to `LoadLibraryW`,
+which would search the working directory and the `PATH`.
 
 ## Licence
 
