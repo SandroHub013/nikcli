@@ -285,7 +285,7 @@ export function selectionText(terminal: Terminal): string {
 }
 
 /** What `copyOnRelease` needs from a terminal: little enough to fake in a test. */
-export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange">
+export type CopySource = Pick<Terminal, "hasSelection" | "onSelectionChange" | "clearSelection">
 
 /**
  * Copies a selection the moment the button that made it comes up.
@@ -322,7 +322,18 @@ export function copyOnRelease(
     decision = setTimeout(() => {
       decision = undefined
       pressed = false
-      if (changed && terminal.hasSelection()) copy()
+      /*
+       * Copied and then cleared, in the same decision and not in the handler:
+       * xterm reports the selection's last change after the mouseup, so a clear
+       * taken there would wipe the selection the copy was about to read. Left
+       * standing, it was worse than a stale highlight: a resize repainted the
+       * teal block over different text, and only Ctrl+C took it away — which is
+       * what the key path has always done here.
+       */
+      if (changed && terminal.hasSelection()) {
+        copy()
+        terminal.clearSelection()
+      }
     }, 0)
   }
   const selection = terminal.onSelectionChange(() => {
