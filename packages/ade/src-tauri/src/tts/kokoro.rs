@@ -612,6 +612,11 @@ pub fn speaker_of(voice: &str) -> Option<(u32, &'static str)> {
 /// joined with the G2P locale of the reply, which came out as `en-us-en-us` and
 /// would have made every sentence an error — Kokoro would never have spoken a
 /// word, and the chain would have fallen to Piper without saying why.
+/// `allow(dead_code)`: this is the list the tests hold the two sides of the
+/// protocol against each other with, and nothing in the running host reads it —
+/// the language that goes out is the voice's, and the host is the one that says
+/// no.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const HOST_LANGS: &[&str] = &["en-us", "en", "en-gb", "en-uk"];
 
 /// Whether ADE can write a line to the child and read one back, right now.

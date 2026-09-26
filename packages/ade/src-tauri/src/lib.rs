@@ -972,6 +972,13 @@ fn first_line_of(out: &[u8]) -> Option<String> {
 /// This is the part both callers share, and it is a function of its own so a test
 /// can hand it a reader that misbehaves on purpose — one that sends a line in
 /// pieces, one that never finishes — instead of a process to arrange.
+///
+/// `cfg(test)` because this is the seam the tests use and nothing else calls it:
+/// the two callers read their own pipe and go through `collect_until` directly,
+/// because each has its own deadline to honour. It stays as a function so the
+/// behaviour that matters — a line in pieces, a reader that never finishes — is
+/// tested on the same code the callers use and not on a copy of it.
+#[cfg(test)]
 fn first_line_from(reader: Box<dyn std::io::Read + Send>, limit: std::time::Duration) -> Option<String> {
     let rx = read_on_a_thread(reader);
     let out = collect_until(rx, limit)?;
@@ -1244,6 +1251,11 @@ fn login_shell_path() -> Option<String> {
 /// `__ADE_END__` after it is the end of ours. Bytes, not a String, because the
 /// reader gives bytes and `rfind` on a `Vec<u8>` does not exist — which is how a
 /// line that could not compile got committed once.
+///
+/// `allow(dead_code)` off unix: the only caller is `login_shell_path`, which is
+/// `cfg(unix)`, so on Windows this exists for its four tests and nothing should
+/// warn about a function that tests use.
+#[cfg_attr(not(unix), allow(dead_code))]
 fn path_between_markers(out: &[u8]) -> Option<String> {
     const START: &[u8] = b"__ADE_PATH__";
     const END: &[u8] = b"__ADE_END__";
@@ -2484,18 +2496,21 @@ mod tests {
     }
 
     #[test]
-    fn un_lettore_che_tace_dopo_una_riga_non_fa_aspettare() {
+    fn un_lettore_che_tace_dopo_una_riga_non_fa_aspettare_oltre_il_tempo() {
         use std::io::Read;
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
 
-        /// Says a beginning and then stops without ending: the reader that goes
-        /// quiet while the pipe is still open.
+        /// Says one line and then goes quiet without ending: the reader whose pipe
+        /// somebody else is holding, which is the case the deadline exists for.
         struct ThenSilence {
             said: bool,
         }
         impl Read for ThenSilence {
             fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
                 if self.said {
+                    // Silent, not finished: this is the difference that was being
+                    // papered over by a reader that just ended the stream.
+                    std::thread::sleep(Duration::from_secs(60));
                     return Ok(0);
                 }
                 self.said = true;
@@ -2505,12 +2520,15 @@ mod tests {
             }
         }
 
-        // What arrived is a line, and the silence after it must not cost the whole
-        // allowance.
-        assert_eq!(
-            first_line_from(Box::new(ThenSilence { said: false }), Duration::from_secs(2)).as_deref(),
-            Some("/usr/local/bin")
-        );
+        // Four hundred milliseconds allowed, and three seconds tolerated: the
+        // reader is never going to say anything else, so the answer is the line
+        // that already arrived, and the wait ends when the allowance does rather
+        // than when the pipe does.
+        let started = Instant::now();
+        let answer = first_line_from(Box::new(ThenSilence { said: false }), Duration::from_millis(400));
+        let took = started.elapsed();
+        assert_eq!(answer.as_deref(), Some("/usr/local/bin"), "la riga arrivata e' la risposta");
+        assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
     }
 
     #[test]
