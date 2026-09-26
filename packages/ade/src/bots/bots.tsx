@@ -93,7 +93,7 @@ import {
   type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants } from "./catalog"
+import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
 import { effortChoices, effortToSave } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
@@ -118,6 +118,7 @@ import "./bots.css"
 import { ModelPicker } from "../chat/model-picker"
 import { EffortPicker } from "../chat/effort-picker"
 import { ChipMenu } from "../chat/chip-menu"
+import { readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 
 /*
@@ -1190,6 +1191,7 @@ function Thread(props: {
   const model = () => shown()?.model ?? props.bot.model ?? ""
   const effort = () => shown()?.effort ?? props.bot.effort ?? ""
   const efforts = createEfforts(() => ({ runner: props.bot.runner, model: model(), effort: effort(), models: props.models }))
+  const gone = createGone(() => ({ runner: props.bot.runner, model: model() }))
   const change = async (changes: BotChanges) => {
     setShown({
       model: "model" in changes ? (changes.model ?? "") : model(),
@@ -1368,6 +1370,7 @@ function Thread(props: {
             <ModelPicker
               label={t("bots.engine.model")}
               value={model()}
+              gone={gone()}
               models={props.models}
               {...(props.catalog ? { state: props.catalog.state() } : {})}
               recent={props.catalog?.recent() ?? []}
@@ -1573,6 +1576,7 @@ function BotCard(props: {
   onOpenKeys?: () => void
 }) {
   const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
+  const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
   const [editing, setEditing] = createSignal(false)
   const [confirming, setConfirming] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
@@ -1602,9 +1606,13 @@ function BotCard(props: {
         <h2 data-slot="bots-card-name">{props.bot.identifier}</h2>
         <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
         <span data-slot="bots-card-meta">
-          {runnerById(props.bot.runner).label} · {props.bot.model ?? t("bots.defaultModel")}
-          {" · "}
-          {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
+          {runnerById(props.bot.runner).label} ·{" "}
+          {/* A model the catalog no longer has: its name in words and why, the id in the tooltip (bot-riquadro, a). */}
+          <Show when={modelIsGone()} fallback={<>{props.bot.model ?? t("bots.defaultModel")} · {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}</>}>
+            <span data-slot="bots-card-gone" title={t("picker.goneTitle", props.bot.model ?? "")}>
+              {t("picker.gone", readableModelName(props.bot.model ?? ""))}
+            </span>
+          </Show>
           {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
           {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
         </span>
@@ -2005,6 +2013,21 @@ function createEfforts(input: () => {
   )
 }
 
+/**
+ * Whether a nikcli bot's model has left its provider's catalog, as the card,
+ * the composer's chip and the form say it (review of bot-riquadro, a). Read
+ * with the provider's catalog the efforts already read; false while it is
+ * read, and for the other runners.
+ */
+function createGone(input: () => { readonly runner: string | undefined; readonly model: string }) {
+  const [gone] = createResource(
+    () => (runnerById(input().runner).id === "nikcli" && input().model ? input().model : null),
+    (model) => modelGone(model, loadCatalog),
+  )
+  // A resource keeps the last model's answer: only this model's, read.
+  return () => runnerById(input().runner).id === "nikcli" && Boolean(input().model) && !gone.loading && gone() === true
+}
+
 function EngineFields(props: {
   listId: string
   runner: string
@@ -2027,6 +2050,7 @@ function EngineFields(props: {
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
   const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))
+  const gone = createGone(() => ({ runner: props.runner, model: props.model }))
   createEffect(() => props.onStale?.(efforts().stale))
   const [pickingKey, setPickingKey] = createSignal(false)
   const [assigned] = createResource(
@@ -2157,6 +2181,7 @@ function EngineFields(props: {
               below
               label={t("bots.engine.model")}
               value={props.model}
+              gone={gone()}
               models={props.nikcliModels}
               {...(props.catalog ? { state: props.catalog.state() } : {})}
               recent={props.catalog?.recent() ?? []}

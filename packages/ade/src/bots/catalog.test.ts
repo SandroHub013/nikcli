@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { t } from "../i18n"
-import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants, parseModelCatalog } from "./catalog"
+import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants, parseModelCatalog } from "./catalog"
 import { modelsFromConfigProviders } from "../chat/model"
 
 /* The shape of `nikcli models opencode --verbose`, with made-up models. */
@@ -162,5 +162,22 @@ describe("the whole CLI catalog as the one catalog", () => {
 
   test("nothing read is an empty catalog", () => {
     expect(catalogFromText("")).toEqual({ providers: [] })
+  })
+})
+
+/* Review of bot-riquadro, a: nex-n2.5-mini:free left the catalog, and a bot pinned to it answers mute. */
+describe("a bot's model gone from its provider's catalog", () => {
+  const OPENROUTER = ["openrouter/google/gemma-4-31b-it:free", "{", '  "id": "google/gemma-4-31b-it:free"', "}"].join("\n")
+
+  test("a model the provider's catalog lacks is gone; one it lists is not", async () => {
+    const load = async (provider: string) => (provider === "openrouter" ? OPENROUTER : "")
+    expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", load)).toBe(true)
+    expect(await modelGone("openrouter/google/gemma-4-31b-it:free", load)).toBe(false)
+  })
+
+  test("a catalog that cannot be read, or is empty, or a name without a provider: not known", async () => {
+    expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => "")).toBeUndefined()
+    expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => { throw new Error("no nikcli") })).toBeUndefined()
+    expect(await modelGone("sonnet", async () => OPENROUTER)).toBeUndefined()
   })
 })

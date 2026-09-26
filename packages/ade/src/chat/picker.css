@@ -199,6 +199,13 @@
 [data-slot="chip-footer"] { border-top: 1px solid var(--ade-border-subtle); }
 
 [data-slot="chip-note"][data-state="error"] { color: var(--ade-error); }
+[data-slot="chip-note"][data-state="warn"] { color: var(--ade-warning); }
+
+/* A model the catalog no longer has: the chip says it in the warning's colour, the id is in its tooltip. */
+[data-slot="chip-menu"][data-tone="warn"] > [data-slot="chip"] {
+  border-color: color-mix(in srgb, var(--ade-warning) 60%, var(--ade-border));
+  color: var(--ade-warning);
+}
 
 [data-slot="chip-retry"] {
   padding: 0;

@@ -30,6 +30,10 @@ export interface ChipMenuProps {
   readonly footer?: JSX.Element
   /** Said when the list has no option. */
   readonly empty?: string
+  /** The chip's tooltip, when it says more than its text (a model's id). */
+  readonly title?: string
+  /** «warn»: the choice cannot be used as it is (a model the catalog no longer has). */
+  readonly tone?: "warn"
   readonly onOpen?: () => void
   readonly onChoose: (value: string) => void
 }
@@ -102,7 +106,7 @@ export function ChipMenu(props: ChipMenuProps) {
   }
 
   return (
-    <div data-slot="chip-menu" data-kind={props.kind} data-below={props.below ? "" : undefined} ref={root}>
+    <div data-slot="chip-menu" data-kind={props.kind} data-below={props.below ? "" : undefined} data-tone={props.tone} ref={root}>
       <button
         type="button"
         data-slot="chip"
@@ -111,7 +115,7 @@ export function ChipMenu(props: ChipMenuProps) {
         aria-haspopup="listbox"
         aria-expanded={open()}
         aria-label={`${props.label}: ${props.text}`}
-        title={props.text}
+        title={props.title ?? props.text}
         onClick={() => (open() ? hide(true) : show())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" && !open()) {

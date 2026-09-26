@@ -540,6 +540,9 @@
 
 [data-slot="bots-composer-gap"] { flex: 1 1 auto; }
 
+/* The card's line for a model the catalog no longer has (bot-riquadro, a). */
+[data-slot="bots-card-gone"] { color: var(--ade-warning); }
+
 /* The caption gives way to the chips and Invia: it shrinks, and wraps on its own lines. */
 [data-slot="bots-composer-cap"] {
   flex: 0 1 auto;

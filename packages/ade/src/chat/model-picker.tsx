@@ -12,7 +12,7 @@ import { t } from "../i18n"
 import { ChipMenu } from "./chip-menu"
 import type { ModelSourceState } from "./model-source"
 import type { ChatModelChoice, ModelRef } from "./model"
-import { chipText, modelMenuItems, pickerSections } from "./picker"
+import { chipText, modelGoneFrom, modelMenuItems, pickerSections, readableModelName } from "./picker"
 import "./picker.css"
 
 export interface ModelPickerProps {
@@ -27,6 +27,12 @@ export interface ModelPickerProps {
   readonly fallback?: (value: string) => string
   /** A value the list may lack, offered first as itself: a bot's saved model is not dropped unseen. */
   readonly kept?: string
+  /**
+   * The value has left the catalog, as known before the list is read (a
+   * bot's model, by its provider's catalog). Once the list is read, a value
+   * it lacks is gone anyway (`modelGoneFrom`).
+   */
+  readonly gone?: boolean
   readonly label: string
   readonly disabled?: boolean
   readonly below?: boolean
@@ -41,6 +47,13 @@ export function ModelPicker(props: ModelPickerProps) {
   const sections = createMemo(() =>
     pickerSections({ models: props.models, query: query(), recent: props.recent ?? [], showPaid: showPaid() }),
   )
+  /*
+   * A model that left the catalog: its name in words and «non più
+   * disponibile» on the chip, the id only in the tooltip, and the menu says
+   * to pick another (review of bot-riquadro, a).
+   */
+  const gone = () => Boolean(props.value) && (props.gone === true || (props.state ? modelGoneFrom(props.value, props.state) : false))
+  const goneLabel = (value: string) => t("picker.gone", readableModelName(value))
   const items = createMemo(() =>
     modelMenuItems({
       sections: sections(),
@@ -48,11 +61,13 @@ export function ModelPicker(props: ModelPickerProps) {
       query: query(),
       ...(props.defaultLabel !== undefined ? { defaultLabel: props.defaultLabel } : {}),
       ...(props.kept ? { kept: props.kept } : {}),
-      ...(props.fallback ? { keptLabel: props.fallback } : {}),
+      ...(gone() && props.kept === props.value ? { keptLabel: goneLabel } : props.fallback ? { keptLabel: props.fallback } : {}),
     }),
   )
   const text = () =>
-    chipText(props.value, props.models, props.fallback ?? ((value) => value), props.defaultLabel ?? t("chat.model.choose"))
+    gone()
+      ? goneLabel(props.value)
+      : chipText(props.value, props.models, props.fallback ?? ((value) => value), props.defaultLabel ?? t("chat.model.choose"))
   const state = () => props.state ?? { kind: "ready" as const, models: props.models }
 
   return (
@@ -60,6 +75,7 @@ export function ModelPicker(props: ModelPickerProps) {
       kind="model"
       label={props.label}
       text={text()}
+      {...(gone() ? { title: t("picker.goneTitle", props.value), tone: "warn" as const } : {})}
       value={props.value}
       items={items()}
       disabled={props.disabled}
@@ -68,7 +84,7 @@ export function ModelPicker(props: ModelPickerProps) {
       empty={state().kind === "ready" ? t("picker.none") : undefined}
       status={
         // Nothing to say once the list is there: an empty line would sit over it.
-        state().kind === "ready" ? undefined : <Switch>
+        state().kind === "ready" ? (gone() ? <span data-slot="chip-note" data-state="warn">{t("picker.goneNote", readableModelName(props.value))}</span> : undefined) : <Switch>
           <Match when={state().kind === "loading" || state().kind === "idle"}>
             <span data-slot="chip-note">{t("picker.loading")}</span>
           </Match>

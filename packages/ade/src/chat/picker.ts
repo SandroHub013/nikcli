@@ -182,3 +182,30 @@ export function effortLabel(level: string): string {
   const key = EFFORT_NAMES[level]
   return key ? t(key) : level
 }
+
+/**
+ * A model id as a name, for a model the catalog no longer lists: its last
+ * part, without the `:free` kind of suffix, in words. The id is what nikcli
+ * reads; this is what the user reads (review of bot-riquadro, a).
+ * «openrouter/nex-agi/nex-n2.5-mini:free» reads «Nex N2.5 Mini».
+ */
+export function readableModelName(id: string): string {
+  const last = id.trim().split("/").pop() ?? ""
+  const words = last
+    .replace(/:[^:]*$/, "")
+    .split(/[-_\s]+/)
+    .filter((word) => word.length > 0)
+    .map((word) => (/^\d+(\.\d+)?[bkmt]$/i.test(word) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+  return words.length > 0 ? words.join(" ") : id.trim()
+}
+
+/**
+ * Whether the chosen model has left the catalog: the list is read, and it
+ * does not have it. nikcli answers such a turn mute («prompt loop failed»),
+ * so the chip says so. Not read yet, or no model chosen: not known, false.
+ */
+export function modelGoneFrom(value: string, state: { readonly kind: string; readonly models?: readonly ChatModelChoice[] }): boolean {
+  // An empty list judges nothing: every model would look gone.
+  if (!value || state.kind !== "ready" || !state.models || state.models.length === 0) return false
+  return !state.models.some((model) => serializeModelRef(model) === value)
+}
