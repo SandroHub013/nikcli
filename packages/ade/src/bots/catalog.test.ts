@@ -64,20 +64,22 @@ describe("the bot form's model list", () => {
     expect(botModelLabel("openrouter/anthropic/claude-sonnet-5")).toBe("openrouter/anthropic/claude-sonnet-5")
   })
 
-  test("is what the select shows, the pinned model included", () => {
+  /* Composer-chip, pezzo 2: the order and the hidden paid ones are `chat/picker.test.ts`'s. */
+  test("lint: the bot form's model field is the shared ModelPicker, the saved model kept (composer-chip, pezzo 2)", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
-    expect(form).toContain('<option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>')
+    expect(form).toContain("<ModelPicker")
+    expect(form).toContain("{...(props.pinned ? { kept: props.pinned } : {})}")
+    expect(form).toContain("fallback={(value) => botModelLabel(value)}")
   })
 
-  /* Composer-chip, pezzo 1: the Chat's catalog, names to read, free first and paid apart. */
-  test("comes from the one catalog: free first, paid in a group of their own", () => {
+  /* The read itself, kept and retried, is `chat/model-source.test.ts`'s; why it fails, `model-read.test.ts`'s. */
+  test("lint: the bot section reads the catalog when a model menu opens, not as it mounts (catalogo-modelli review, BASSO)", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
-    expect(form).toContain("(cwd) => botModels(cwd || undefined),")
-    expect(form).toContain("if (configured) return modelsFromConfigProviders(configured, options)")
-    expect(form).toContain("return modelsFromConfigProviders(catalogFromText(await modelCatalogText(undefined, cwd)), options)")
-    expect(form).toContain("<For each={props.nikcliModels.filter((choice) => choice.free)}>")
-    expect(form).toContain('<optgroup label={t("bots.engine.paidModels")}>')
-    expect(form).toContain("<option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>")
+    expect(form).toContain("const botModelSource = createModelSource(botModels)")
+    expect(form).toContain("onOpen={() => props.catalog?.open()}")
+    expect(form).toContain("onRetry={() => props.catalog?.retry()}")
+    expect(form).toContain("if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }")
+    expect(form).not.toMatch(/createResource\(\s*\(\) => projectRoot\(\) \?\? "",\s*\(cwd\) => botModels/)
   })
 })
 
@@ -110,14 +112,14 @@ describe("a nikcli model's efforts, from its catalog", () => {
     expect(await nikcliModelVariants("openrouter/x", async () => Promise.reject(new Error("no")))).toBeUndefined()
   })
 
-  test("the form offers them, not a fixed list", () => {
+  test("lint: the form offers the model's variants, not a fixed list (chat-bot-facili, pezzo 0)", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     expect(form).toContain("(model) => nikcliModelVariants(model, loadCatalog),")
     // This model's only: a resource keeps the last model's value when the model is cleared (A occhio).
     expect(form).toContain('variants: runner().id === "nikcli" && props.model ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,')
     // The catalog's first: the provider's CLI only for a model it does not list.
     expect(form).toContain("variantsOf(props.nikcliModels, parseModelRef(props.model))")
-    expect(form).toContain("<For each={efforts().options}>")
+    expect(form).toContain("levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}")
     expect(form).not.toContain("when={runner().efforts.length > 0}")
     // Said under the row, the whole width: the effort's column cut it to «predef» (A occhio).
     expect(form).toContain('<span data-slot="bots-hint" data-state="warn">\n          {t("bots.engine.effortStaleHint", efforts().stale ?? "")}')

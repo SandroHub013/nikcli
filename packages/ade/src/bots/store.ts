@@ -14,7 +14,7 @@
  */
 
 import { t } from "../i18n"
-import { getHost, type Host } from "../host/shell"
+import { getHost, type Host, type RunResult } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
@@ -444,14 +444,35 @@ export async function listModels(cwd?: string, hostOf: () => Promise<Host | unde
  * models --verbose`, the bot form's models). Empty when it cannot be read.
  */
 export async function modelCatalogText(provider: string | undefined, cwd?: string): Promise<string> {
-  const host = await getHost()
-  if (!host?.nikcliBot) return ""
+  const read = await readModelCatalog(provider, cwd)
+  return read.ok ? read.text : ""
+}
+
+/**
+ * The same read, with why it failed: the bot form said «serve nikcli nel
+ * PATH» for a nikcli that was there and exited with an error, and for a host
+ * that cannot run it (review 4, MEDIO 2). The reason is nikcli's first line
+ * of error, cut short, never its whole output.
+ */
+export async function readModelCatalog(
+  provider: string | undefined,
+  cwd?: string,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string }> {
+  const host = await hostOf().catch(() => undefined)
+  if (!host?.nikcliBot) return { ok: false, reason: t("bots.models.noHost") }
+  let result: RunResult
   try {
-    const result = await host.nikcliBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
-    return result.code === 0 ? result.stdout : ""
+    result = await host.nikcliBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
   } catch {
-    return ""
+    return { ok: false, reason: t("bots.models.notFound") }
   }
+  if (result.code !== 0) {
+    const detail = (result.stderr.split(/\r?\n/).find((line) => line.trim()) ?? "").trim().slice(0, 160)
+    return { ok: false, reason: t("bots.models.exit", String(result.code ?? "?"), detail) }
+  }
+  if (!result.stdout.trim()) return { ok: false, reason: t("bots.models.empty") }
+  return { ok: true, text: result.stdout }
 }
 
 /** What to run to open a session as this bot. */
