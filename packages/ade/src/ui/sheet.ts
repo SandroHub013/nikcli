@@ -20,7 +20,7 @@
  * `layout.css` and each sheet's own CSS apply unchanged. Plain TypeScript and
  * not JSX: a `.tsx` file cannot load under `bun test`, and this one is tested.
  */
-import { onCleanup, splitProps, type JSX, type ParentProps } from "solid-js"
+import { onCleanup, onMount, splitProps, type JSX, type ParentProps } from "solid-js"
 import { createComponent, Dynamic } from "solid-js/web"
 import { Dialog } from "@kobalte/core/dialog"
 
@@ -46,10 +46,37 @@ function shell(): Node | undefined {
 export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
   const [own] = splitProps(props, ["component", "onClose", "size", "place", "ref", "onKeyDown", "mount", "children"])
   // What had the focus before: the button, the palette, the terminal. It gets it back.
-  const opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
+  let opener = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null
   let panel: HTMLDivElement | undefined
+  // The palette's input opens a sheet and goes, handing the focus back to the
+  // terminal it came from; the trap pulls it into the sheet, but that terminal
+  // is where it belongs when the sheet goes, not `body`.
+  const handedOut = (event: FocusEvent) => {
+    const target = event.target
+    if (panel && target instanceof HTMLElement && !panel.contains(target) && !target.hasAttribute("data-focus-trap")) opener = target
+  }
+  if (typeof document !== "undefined") document.addEventListener("focusin", handedOut, true)
   onCleanup(() => {
-    if (opener && opener !== document.body && opener.isConnected) queueMicrotask(() => opener.focus())
+    document.removeEventListener("focusin", handedOut, true)
+    const back = opener
+    if (back && back !== document.body && back.isConnected) queueMicrotask(() => back.focus())
+  })
+  /*
+   * The panel itself, not its first button: the sheets read their keys on it.
+   * After a tick, as Kobalte's own: the trap has to be listening to see it. A
+   * sheet that focused itself on mount did so before the trap listened, and
+   * then Kobalte asks nothing (`onOpenAutoFocus` runs only when the focus is
+   * still outside): the trap never learnt where to bring the focus back, and
+   * the palette, handing it to the terminal it came from, took it out of the
+   * sheet for good. So the trap is told where it is.
+   */
+  onMount(() => {
+    setTimeout(() => {
+      if (!panel) return
+      const active = document.activeElement
+      if (active instanceof HTMLElement && panel.contains(active)) active.dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+      else panel.focus()
+    }, 0)
   })
 
   return createComponent(Dialog, {
@@ -90,12 +117,8 @@ export function Sheet(props: ParentProps<SheetProps>): JSX.Element {
                 get onKeyDown() {
                   return own.onKeyDown
                 },
-                // The panel itself, not its first button: the sheets read their keys on it.
-                // After a tick, as Kobalte's own: the trap has to be listening to see it.
-                onOpenAutoFocus: (event: Event) => {
-                  event.preventDefault()
-                  setTimeout(() => panel?.focus(), 0)
-                },
+                // Not the first button: the focus is placed by `settle` above.
+                onOpenAutoFocus: (event: Event) => event.preventDefault(),
                 // Given back by the cleanup above, to the opener rather than to `body`.
                 onCloseAutoFocus: (event: Event) => event.preventDefault(),
                 get children() {

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
-import { createSignal, Show, type JSX } from "solid-js"
+import { createSignal, onMount, Show, type JSX } from "solid-js"
 import { createComponent, render } from "solid-js/web"
 import { Sheet, SheetTitle } from "./sheet"
 
@@ -129,6 +129,73 @@ describe("a sheet on Kobalte's Dialog", () => {
     panel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     await tick()
     expect(document.activeElement).toBe(opener)
+  })
+
+  test("a sheet that focuses its own panel on mount still keeps the focus when the opener takes it back", async () => {
+    // The Decisions sheet: it focuses the panel in its own onMount, before the trap listens,
+    // and the palette then gives the focus back to the terminal it came from.
+    const opener = document.createElement("button")
+    const root = document.createElement("div")
+    document.body.append(opener, root)
+    opener.focus()
+    let panel: HTMLDivElement | undefined
+    function Own() {
+      onMount(() => panel?.focus())
+      return createComponent(Sheet, {
+        component: "decisions-sheet",
+        onClose: () => {},
+        ref: (element: HTMLDivElement) => (panel = element),
+        mount: root,
+        get children() {
+          return createComponent(SheetTitle, { children: "Decisioni" })
+        },
+      })
+    }
+    cleanup = render(() => createComponent(Own, {}), root)
+    await tick()
+    opener.focus()
+    await tick()
+    expect(panel).toBeDefined()
+    expect(panel!.contains(document.activeElement)).toBe(true)
+  })
+
+  test("opened from the palette, closed, the focus goes to where the palette sent it, not to body", async () => {
+    // The palette's input opens the sheet, goes away, and gives the focus back to the terminal.
+    const terminal = document.createElement("textarea")
+    const palette = document.createElement("input")
+    const root = document.createElement("div")
+    document.body.append(terminal, palette, root)
+    palette.focus()
+    const [open, setOpen] = createSignal(true)
+    let panel: HTMLDivElement | undefined
+    cleanup = render(
+      () =>
+        createComponent(Show as (props: { when: boolean; children: JSX.Element }) => JSX.Element, {
+          get when() {
+            return open()
+          },
+          get children() {
+            return createComponent(Sheet, {
+              component: "decisions-sheet",
+              onClose: () => setOpen(false),
+              ref: (element: HTMLDivElement) => (panel = element),
+              mount: root,
+              get children() {
+                return createComponent(SheetTitle, { children: "Decisioni" })
+              },
+            })
+          },
+        }),
+      root,
+    )
+    palette.remove()
+    terminal.focus()
+    await tick()
+    expect(panel!.contains(document.activeElement)).toBe(true)
+    panel!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await tick()
+    expect(open()).toBe(false)
+    expect(document.activeElement).toBe(terminal)
   })
 
   test("it is a modal dialog named by its title, drawn as ADE's overlay and surface", async () => {
