@@ -3,17 +3,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /*
- * DS-chat 1, «campo nero»: il campo in cui si scrive a un bot, e quello della
- * Chat, non si colorano di verde al focus. Il bordo sale di una sfumatura
- * rispetto a quello di riposo e l'alone che tiene visibile il focus da
- * tastiera è grigio. Niente anello teal, niente bordo accent, niente ombra
- * colorata.
+ * DS-chat 1, "black field": the field one writes a bot in, and the Chat's, do not
+ * turn green at the focus. The border steps up one shade from the resting one and
+ * the halo that keeps the keyboard focus visible is grey. No teal ring, no accent
+ * border, no coloured shadow.
  *
- * È un `lint:` sul foglio di stile, non una prova di comportamento: la regola
- * riguarda ciò che il foglio dice, quindi si controlla il foglio (TEAM.md,
- * regola 22). I colori che la regola indica sono token di tema, ed è questo il
- * motivo per cui vale anche nel tema chiaro: `--ade-border-strong` è un grigio
- * in entrambi, mentre `--ade-accent` e `--ade-focus-ring` sono teal in entrambi.
+ * This is a `lint:` on the stylesheet, not a proof of behaviour: the rule is about
+ * what the sheet says, so the sheet is what gets checked (TEAM.md, rule 22). The
+ * colours the rule names are theme tokens, and that is why it holds in the light
+ * theme too: `--ade-border-strong` is a grey in both, while `--ade-accent` and
+ * `--ade-focus-ring` are teal in both.
  */
 
 /** The stylesheet, comments out: a note about the rule is not the rule. */
@@ -40,7 +39,7 @@ function rule(css: string, selector: string): string {
 const BOT_FOCUS = '[data-slot="bots-composer"]:focus-within';
 const CHAT_FOCUS = '[data-slot="chat-input"]:focus-visible';
 
-describe("lint: i due composer non si colorano al focus", () => {
+describe("lint: neither composer takes colour at the focus", () => {
   test("lint: the bot's composer draws no accent at the focus, only a grey border", () => {
     const body = rule(bots, BOT_FOCUS);
     expect([body, body.includes("--ade-accent")]).toEqual([body, false]);

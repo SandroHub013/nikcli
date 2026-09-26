@@ -496,9 +496,9 @@
 }
 
 /*
- * Come il composer del bot: al focus il bordo è il grigio neutro
- * `--ade-border-strong`, non l'accent, e l'alone è grigio anche lui. Nel tema
- * chiaro il token resta un grigio (composer-nero, DS-chat 1).
+ * As the bot's composer: at the focus the border is the neutral grey
+ * `--ade-border-strong`, not the accent, and the halo is grey as well. In the
+ * light theme the token is still a grey (composer-nero, DS-chat 1).
  */
 [data-slot="chat-input"]:focus-visible {
   outline: none;

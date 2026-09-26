@@ -486,10 +486,10 @@
 }
 
 /*
- * Il campo resta nero e semplice: al focus il bordo sale di una sfumatura,
- * `--ade-border-strong`, che è un grigio neutro in entrambi i temi, e l'alone
- * che lo rende visibile è grigio. Niente anello teal, niente ombra colorata
- * (composer-nero, DS-chat 1: «lo voglio semplice base nero»).
+ * The field stays black and plain: at the focus the border steps up one shade,
+ * `--ade-border-strong`, a neutral grey in both themes, and the halo that keeps
+ * it visible is grey too. No teal ring, no coloured shadow (composer-nero,
+ * DS-chat 1: "I want it simple, black base").
  */
 [data-slot="bots-composer"]:focus-within {
   border-color: var(--ade-border-strong);
