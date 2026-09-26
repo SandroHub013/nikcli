@@ -65,8 +65,11 @@ const MAX_PIECES: usize = 8;
 /// What a section block holds: a question with buttons longer than this goes
 /// as text, and the buttons in a message of their own under it.
 const SECTION_MAX: usize = 3_000;
-/// Events and envelopes remembered to recognise one Slack sends again.
-const SEEN_EVENTS: usize = 256;
+/// Events and envelopes remembered to recognise one Slack sends again. Both
+/// go in the one list, an event twice (its envelope and its own id), so a
+/// busy minute of a few hundred must not push out what Slack may still send
+/// again (G10 delta, BASSO).
+const SEEN_EVENTS: usize = 512;
 /// How long a sender's name is waited for. It is asked inside the socket's
 /// reading loop, where every moment spent holds the acks of the envelopes
 /// behind it, and Slack's limit for those is three seconds.
@@ -1257,6 +1260,21 @@ mod tests {
         let again = Instant::now();
         assert_eq!(slack.inner.name_of("U9").await, "U9");
         assert!(again.elapsed() < Duration::from_millis(300), "aspettato di nuovo: {:?}", again.elapsed());
+    }
+
+    #[tokio::test]
+    async fn a_repeat_is_still_known_after_two_hundred_events_between() {
+        let socket = FakeSocket::start(vec![], 100);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+        // Two hundred messages, each an envelope and an event: four hundred names.
+        assert!(slack.inner.first_time("envelope:primo"));
+        assert!(slack.inner.first_time("Ev-primo"));
+        for n in 0..199 {
+            assert!(slack.inner.first_time(&format!("envelope:e{n}")));
+            assert!(slack.inner.first_time(&format!("Ev{n}")));
+        }
+        assert!(!slack.inner.first_time("envelope:primo"), "il primo è già dimenticato");
     }
 
     #[tokio::test]
