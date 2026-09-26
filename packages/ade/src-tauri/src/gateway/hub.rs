@@ -1095,6 +1095,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn switching_off_lets_go_of_the_adapter() {
+        // A socket adapter closes its connection when nobody holds it any more
+        // (`discord.rs`): switching off has to be that moment, for the link
+        // and for its reading task alike.
+        let s = setup("let-go");
+        let (adapter, _feed) = start(&s);
+        // Here: the list of adapters made, this test, the link, its task.
+        eventually("il task tiene l'adapter", || Arc::strong_count(&adapter) == 4).await;
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        eventually("spento, restano solo la lista e il test", || Arc::strong_count(&adapter) == 2).await;
+    }
+
+    #[tokio::test]
     async fn the_same_token_on_a_second_bot_is_refused_and_a_cleared_one_is_gone() {
         let s = setup("tokens");
         s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
