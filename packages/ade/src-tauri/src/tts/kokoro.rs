@@ -317,12 +317,13 @@ fn unpack_runtime(root: &Path) -> Result<(), String> {
             .map(str::to_string);
         match member {
             Some(member) => {
-                let member = format!("{member}\0");
-                // `tar -xf archive member -C lib` keeps the paths inside, so the
-                // files land under lib/<the path they had in the archive>.
+                // `tar -xf archive -C lib member` keeps the paths inside, so the
+                // files land under lib/<the path they had in the archive>. `-C`
+                // before the member: Windows' tar (bsdtar) takes a `-C` after it
+                // for two more members to find, and fails on them.
                 super::run(
                     system_tool("tar.exe"),
-                    &["-xf".as_ref(), archive.as_os_str(), member.as_ref(), "-C".as_ref(), lib.as_os_str()],
+                    &["-xf".as_ref(), archive.as_os_str(), "-C".as_ref(), lib.as_os_str(), member.as_ref()],
                 )?;
                 let extracted = lib.join(&member);
                 if extracted.is_file() && extracted != lib.join(name) {
@@ -1187,6 +1188,40 @@ mod tests {
         // cartella non resta a meta' come se fosse installata.
         let unpacked = unpack_espeak(&root);
         assert!(unpacked.is_err(), "un archivio che non si spacchetta non e' un install riuscita");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn il_runtime_si_estrae_dall_archivio_con_i_tre_file_che_l_host_carica() {
+        // Review, MEDIO 6: a `tar` arrivava il nome del file con un NUL in fondo,
+        // non lo trovava nell'archivio, e l'installazione non finiva mai. Qui un
+        // archivio vero, fatto con lo stesso `tar.exe`, con DLL finte.
+        let root = test_root("kokoro-runtime-estratto");
+        let _ = std::fs::remove_dir_all(&root);
+        let staging = root.join("sorgente");
+        let inside = staging.join("sherpa-onnx-v1.13.8-win-x64-shared").join("lib");
+        std::fs::create_dir_all(&inside).unwrap();
+        let wanted = ["sherpa-onnx-c-api.dll", "onnxruntime.dll", "onnxruntime_providers_shared.dll"];
+        for name in wanted {
+            std::fs::write(inside.join(name), format!("finta {name}")).unwrap();
+        }
+        std::fs::write(inside.join("non-serve.lib"), b"resta fuori").unwrap();
+        let rev = home(&root);
+        std::fs::create_dir_all(&rev).unwrap();
+        let archive = rev.join("sherpa-onnx-1.13.8.tar.bz2");
+        super::super::run(
+            system_tool("tar.exe"),
+            &["-cjf".as_ref(), archive.as_os_str(), "-C".as_ref(), staging.as_os_str(), "sherpa-onnx-v1.13.8-win-x64-shared".as_ref()],
+        )
+        .expect("archivio di prova");
+        unpack_runtime(&root).expect("il runtime si estrae");
+        let lib = rev.join("lib");
+        for name in wanted {
+            let bytes = std::fs::read(lib.join(name)).unwrap_or_default();
+            assert_eq!(String::from_utf8_lossy(&bytes), format!("finta {name}"), "{name} non e' in lib");
+        }
+        assert!(!lib.join("non-serve.lib").exists(), "si estrae solo quello che l'host carica");
         let _ = std::fs::remove_dir_all(&root);
     }
 
