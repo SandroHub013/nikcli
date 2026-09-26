@@ -273,7 +273,7 @@ export function Chat(props: ChatProps) {
         if (!(await use())) return
         const paths = await store.findFiles(found.query).catch(() => [] as string[])
         if (ask !== mentionAsk) return
-        setMentionResults(mentionCandidates(paths))
+        setMentionResults(mentionCandidates(paths, found.query))
         setMentionIndex(0)
       })()
     }, 120)

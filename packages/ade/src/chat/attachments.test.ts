@@ -107,7 +107,16 @@ describe("a file of the project, and nothing else", () => {
 
   test("the view offers only mentionCandidates", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
-    expect(view).toMatch(/setMentionResults\(mentionCandidates\(/)
+    expect(view).toContain("setMentionResults(mentionCandidates(paths, found.query))")
+  })
+
+  /* chat-bot-facili, prove: nikcli's finder forgives typos, and `@som` offered README.md. */
+  test("@ offers only what has the typed letters in order, case aside", () => {
+    const found = ["README.md", "somma.ts", "src/Somma.test.ts", "docs/sommario.md", "mos.ts"]
+    expect(mentionCandidates(found, "som")).toEqual(["somma.ts", "src/Somma.test.ts", "docs/sommario.md"])
+    expect(mentionCandidates(found, "src/sm")).toEqual(["src/Somma.test.ts"])
+    expect(mentionCandidates(found, "src\\som")).toEqual(["src/Somma.test.ts"])
+    expect(mentionCandidates(found, "")).toEqual(found)
   })
 
   test("the same file twice is one attachment", () => {
