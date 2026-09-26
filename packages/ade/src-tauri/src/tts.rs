@@ -1838,12 +1838,28 @@ mod tests {
         // The interface's own way in: the cancel arrives while the transfer runs.
         let installer = std::sync::Arc::new(installer);
         let (started, seen) = std::sync::mpsc::channel();
-        let scripted = Scripted::new(body, Ending::Whole).signalling(started);
+        let (release, released) = std::sync::mpsc::channel();
+        // The gate, and it is the whole fix.
+        //
+        // The body is ten bytes and a chunk is eight: two pieces, and nothing that
+        // made the transfer stop. The cancelling thread was told the transfer had
+        // started and then had to be scheduled before the second piece was
+        // written — a race between two threads with no meeting point, and the
+        // transfer won it often enough to fail. With the gate the transfer cannot
+        // reach the second piece until the cancel has been recorded, so `stop()`
+        // is read at the next piece every time instead of whenever the scheduler
+        // is kind, and the assertion that the cancel found an install in flight
+        // means what it says.
+        let scripted = Scripted::new(body, Ending::Whole).signalling(started).gated(released);
         let cancelling = {
             let installer = installer.clone();
             std::thread::spawn(move || {
                 seen.recv_timeout(std::time::Duration::from_secs(5)).expect("il trasferimento deve partire");
-                installer.cancel_of(PIPER)
+                let cancelled = installer.cancel_of(PIPER);
+                // Only now may the transfer go on, and it goes on into a cancel
+                // that is already recorded.
+                let _ = release.send(());
+                cancelled
             })
         };
         let problem = run_install(&installer, PIPER, &jobs, &scripted).unwrap_err();
