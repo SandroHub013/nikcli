@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { t } from "../i18n"
 import { emptyChatData, type ChatData } from "./events"
 import { CHAT_PERMISSION } from "./rules"
+import { BOT_SESSION_MARK, botPermission } from "../bots/serve-rules"
 import { connectionNotice, conversationOf, messageError, followOpen, partsOf, sessionEntries } from "./sessions"
 
 /* C4: the sessions the chat lists and the one it shows. */
@@ -53,6 +54,20 @@ describe("the session list", () => {
     ])
     // A blank title shows the id rather than nothing.
     expect(list.at(-1)!.title).toBe("ses_e")
+  })
+
+  test("a bot's conversation is the bot's: not listed, with the mark or its profile's rules", () => {
+    const list = sessionEntries(
+      data({
+        session: [
+          session("ses_bot", 50, { title: "rinominata", permission: [BOT_SESSION_MARK, ...botPermission("ask")] }),
+          session("ses_old_bot", 40, { permission: [...botPermission("read-only")] }),
+          session("ses_mine", 30),
+        ],
+      }),
+      DIR,
+    )
+    expect(list.map((entry) => entry.id)).toEqual(["ses_mine"])
   })
 
   test("says which session is answering and which waits for the user", () => {

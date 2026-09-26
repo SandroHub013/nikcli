@@ -12,6 +12,7 @@ import type { Message, Part, Session } from "@nikcli-ai/sdk/httpapi"
 import { answerError, type ErrorView } from "./errors"
 import type { ChatData } from "./events"
 import { hasChatRules } from "./rules"
+import { isBotSession } from "../bots/serve-rules"
 import type { ChatState } from "./store"
 
 export interface SessionEntry {
@@ -49,8 +50,8 @@ export function folderKey(path: string): string {
 }
 
 /**
- * The folder's sessions the chat lists: not archived, not a subagent's, the
- * newest first. Only this folder's: nikcli puts every folder that is not a git
+ * The folder's sessions the chat lists: not archived, not a subagent's, not a
+ * bot's (the bots' server makes them in the same folder), the newest first. Only this folder's: nikcli puts every folder that is not a git
  * repository in one «global» project, and lists them all.
  */
 export function sessionEntries(data: ChatData, directory: string | undefined): SessionEntry[] {
@@ -60,7 +61,11 @@ export function sessionEntries(data: ChatData, directory: string | undefined): S
     .filter((session) => {
       const raw = session as unknown as Raw
       return (
-        !raw.time?.archived && !raw.parentID && typeof raw.directory === "string" && folderKey(raw.directory) === folder
+        !raw.time?.archived &&
+        !raw.parentID &&
+        !isBotSession(raw) &&
+        typeof raw.directory === "string" &&
+        folderKey(raw.directory) === folder
       )
     })
     .map((session) => ({
