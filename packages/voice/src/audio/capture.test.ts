@@ -416,4 +416,34 @@ describe("audio/capture pre-roll", () => {
     expect(levels.at(-1)).toBeGreaterThan(0.5)
     capture.stop()
   })
+
+  test("a microphone opened again inside the interval publishes its first level at once", async () => {
+    let simulatedTime = 10_000
+    const levels: number[] = []
+    // `stop` lets the stream go, so reopening asks for one again — the way it
+    // does in the app, where the microphone is opened and closed with the
+    // listening.
+    const capture = createMicCapture({
+      now: () => simulatedTime,
+      getUserMedia: async () => new MockMediaStream([new MockMediaStreamTrack()]) as any,
+      mediaRecorderClass: MockMediaRecorder as any,
+      isTypeSupported: () => true,
+      levelIntervalMs: 50,
+      levelEpsilon: LEVEL_EPSILON,
+      speechDetectorConfig: { speechThreshold: 0.9 },
+      onLevel: (level) => levels.push(level),
+    })
+    await capture.start()
+    capture.processAudioFrame(new Float32Array(320).fill(0.5))
+    capture.stop()
+
+    // Reopened before the interval of the stop has passed: the zero that closed
+    // it is not a level the new run has to wait behind.
+    simulatedTime += 10
+    levels.length = 0
+    await capture.start()
+    capture.processAudioFrame(new Float32Array(320).fill(0.5))
+    expect(levels).toEqual([0.5])
+    capture.stop()
+  })
 })

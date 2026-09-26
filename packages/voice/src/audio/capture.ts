@@ -786,6 +786,15 @@ export function createMicCapture(options: MicCaptureOptions = {}): MicCapture {
     async start(): Promise<void> {
       if (running) return
 
+      /*
+       * The throttle is for one run of the microphone, not for the object.
+       * `stop` ends with a forced zero, and that zero is what the first level
+       * after a restart was being measured against — so a mic opened again
+       * within an interval of the stop it was closed had its first level
+       * swallowed, which is the one thing the ring is there to show.
+       */
+      lastLevelAt = Number.NEGATIVE_INFINITY
+
       let stream = mediaStream
       if (!stream) {
         const getUserMediaFn =
