@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createNaturalSpeaker, type NaturalSpeakerDeps } from "./natural-speaker";
 import { createFakeSpeaker } from "./speaker";
-import { detectReplyLanguage, replyLocale, replyVoiceChain, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
+import { detectReplyLanguage, replyLocale, replyVoiceChain, replyVoiceChainFrom, speakingReplyVoice, type ReplyLanguage } from "../settings/reply-voices";
 import type { ReplyVoice, TtsLocale } from "../settings/model";
 
 const wav = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -337,6 +337,42 @@ describe("la catena è quella che si prova davvero", () => {
     // Il resto non è perduto, ed è nella voce di sotto, che è l'ultimo ripiego.
     expect(h.fallback.spoken.length).toBe(1)
     expect(h.fallback.spoken[0]).toContain("Now I am reading the diff")
+  })
+});
+
+describe("il profilo di default non si rimappa da solo", () => {
+  test("Ugo, finestra italiana, risposta inglese: resta Ugo e non scarica Lessac", async () => {
+    // La voce è già stata risolta dalla lingua dell'interfaccia. Se la catena la
+    // risolvesse di nuovo, chiederebbe Lessac, ne avvierebbe il download senza
+    // che nessuno l'abbia chiesto, e per intanto la risposta la leggerebbe la
+    // voce di sistema.
+    const asked: string[] = []
+    const h = host("ugo", {
+      status: async (voice) => {
+        asked.push(`status:${voice}`)
+        return { supported: true, installed: voice === "ugo" }
+      },
+      install: async (voice) => {
+        asked.push(`install:${voice}`)
+      },
+    })
+    const line = "I opened the session and the toolchain is ready."
+    await createNaturalSpeaker(h.deps).speak(line)
+    expect(asked).toEqual(["status:ugo"])
+    expect(h.asked.map((unit) => unit.voice)).toEqual(["ugo"])
+    expect(h.played).toEqual([line])
+    // E la voce di sistema non è coinvolta: nessun avviso, nessun ripiego.
+    expect(h.fallback.spoken).toEqual([])
+  })
+
+  test("una catena non rimappa mai un id Piper", () => {
+    for (const id of ["ugo", "paola", "lessac"] as const) {
+      for (const locale of ["it-IT", "en-US", "en-GB"] as const) {
+        expect(replyVoiceChainFrom(id, locale)).toEqual([id, "system"])
+      }
+    }
+    // Mentre per un id Kokoro la catena scende, che è il suo punto.
+    expect(replyVoiceChainFrom("af_heart", "en-US")).toEqual(["af_heart", "lessac", "system"])
   })
 });
 

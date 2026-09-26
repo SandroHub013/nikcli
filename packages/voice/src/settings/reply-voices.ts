@@ -163,15 +163,24 @@ function isReplyVoice(voice: string): voice is ReplyVoice {
  * The same chain, from a voice id that has already been decided and may not be in
  * the catalog.
  *
- * The speaker is handed a voice, not a setting, so the chain it walks is the one
- * of that voice: a Kokoro id gets Piper after it, a Piper id does not get a
- * Kokoro one before it, and an id nothing knows is the only step there is. The
- * remap is not applied twice because `replyVoiceFor` is idempotent on an id it
- * already resolved, which is what makes this safe to call on a spoken voice.
+ * The speaker is handed a voice, not a setting, and for a Piper voice that voice
+ * has already been resolved by the interface-language rule — so this does not
+ * resolve it again. That is the whole difference from `replyVoiceChain`, and it
+ * is not a detail: resolving it again turns a default profile (Ugo, an Italian
+ * window) into Lessac on the first reply that is recognised as English, which
+ * starts a 63 MB download of a voice nobody chose, and then reads the reply in
+ * the system voice because the download is not finished. The rule that made
+ * Piper follow the reply's language is the one that would need a decision, and
+ * it is not this function's to take.
+ *
+ * A Kokoro id does go through the chain, because there the middle step is the
+ * point: the same language on the small local voice, while the 219 MB download
+ * goes on. An id nothing knows is the only step there is.
  */
 export function replyVoiceChainFrom(voice: string, locale: TtsLocale): string[] {
-  if (isReplyVoice(voice)) return replyVoiceChain(voice, locale);
-  return voice === "system" ? ["system"] : [voice];
+  if (!isReplyVoice(voice)) return voice === "system" ? ["system"] : [voice];
+  if (isKokoroVoice(voice)) return replyVoiceChain(voice, locale);
+  return [voice, "system"];
 }
 
 /** The backend that reads a voice, for the panel and the bridge. */
