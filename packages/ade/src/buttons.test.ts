@@ -152,8 +152,7 @@ describe("the button scale", () => {
     '[data-slot="new-launch-btn"]': 32,
     '[data-slot="bots-btn"]': 26,
     '[data-slot="settings-choice"]': 26,
-    '[data-slot="decisions-badge"]': 26,
-    '[data-slot="design-badge"]': 26,
+    '[data-slot="bar-queue"]': 26,
   }
 
   for (const [selector, height] of Object.entries(SCALED)) {

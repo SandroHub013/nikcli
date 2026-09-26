@@ -313,20 +313,12 @@ describe("preview type security detection and path resolution", () => {
 })
 
 describe("top bar narrow window layout and 420px document scrollWidth", () => {
-  test("design.css specifies 22px compact button with count badge on icon under 640px", () => {
-    const cssPath = join(__dirname, "design.css")
-    const css = readFileSync(cssPath, "utf-8")
-
-    // Checks that badge is kept at 24px height on desktop, and 22px on narrow
-    expect(css).toContain('height: 24px;')
-    expect(css).toContain('@media (max-width: 640px)')
-    expect(css).toContain('width: 22px;')
-    expect(css).toContain('height: 22px;')
-    expect(css).toContain('margin: 0;')
-    expect(css).toContain('[data-slot="design-badge-count"]')
-    expect(css).toContain('position: absolute;')
-    expect(css).toContain('[data-slot="design-badge-label"]')
-    expect(css).toContain('display: none;')
+  test("under 1100px the queue buttons keep the vial and the pill, and the project's facts go in the «i»", () => {
+    const css = readFileSync(join(__dirname, "../dev.css"), "utf-8")
+    const narrow = css.slice(css.indexOf("@media (max-width: 1099.98px)"))
+    expect(narrow).toContain('[data-slot="bar-queue-name"],\n  [data-slot="bar-queue-aside"] {\n    display: none;')
+    expect(narrow).toContain('[data-slot="ade-project-meta"] {\n    display: none;')
+    expect(narrow).toContain('[data-slot="ade-project-info"] {\n    display: inline-block;')
   })
 
   test("dev.css compacts ade-view-tab and ade-bar-center under 640px, and aligns window controls margin", () => {
@@ -339,7 +331,6 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     expect(css).toContain('[data-slot="ade-window-controls"]')
     expect(css).toContain('margin-right: calc(-1 * var(--ade-space-3));')
     expect(css).toContain('[data-slot="ade-bar-center"]')
-    expect(css).toContain('max-width: calc(100% - 16px);')
     expect(css).toContain('[data-slot="ade-view-tab"]')
     expect(css).toContain('padding: 0 var(--ade-space-3);')
   })

@@ -6,47 +6,6 @@
  * badge, the same one a busy session wears.
  */
 
-/* The badge: hidden at zero, so at rest the bar is as it was. */
-[data-slot="decisions-badge"] {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ade-space-3);
-  /* `md`, like every other button of its weight. */
-  height: 26px;
-  margin-left: var(--ade-space-2);
-  padding: 0 var(--ade-space-5);
-  border: 1px solid var(--ade-working);
-  border-radius: var(--ade-radius-full);
-  background: var(--ade-working-bg);
-  color: var(--ade-working);
-  font: inherit;
-  font-size: var(--ade-font-sm);
-  font-weight: var(--ade-weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: var(--ade-btn-transition);
-}
-
-/*
- * `filter: brightness` was doing the work of a hover here, which is why the
- * badge changed in a way nothing else in the app did: it lightens the border,
- * the ground and the text at once, and on glass it lightens whatever shows
- * through. The ground alone, mixed from the same tone, is the house rule.
- */
-[data-slot="decisions-badge"]:hover {
-  background: color-mix(in srgb, var(--ade-working) 22%, transparent);
-}
-
-[data-slot="decisions-badge"]:active {
-  background: color-mix(in srgb, var(--ade-working) 22%, transparent);
-  transform: var(--ade-press);
-}
-
-[data-slot="decisions-badge"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
 /* The window. */
 [data-component="decisions-sheet"] [data-layout="surface"] {
   outline: none;
@@ -530,12 +489,6 @@ button[data-slot="decision-row"]:hover {
   flex: 1 1 12rem;
 }
 
-/* «· N in coda» on the bar button: answers recorded that nobody has received. */
-[data-slot="badge-queued"][data-tone="warn"] {
-  color: var(--ade-warning, #b7791f);
-  font-weight: var(--ade-weight-semibold);
-}
-
 /* The inline "who receives" select, when the answer would otherwise go nowhere. */
 /* The select above its sentence, as S75 asks; in the DOM the sentence comes first, as its label. */
 [data-slot="recipient-inline-wrap"] {
@@ -560,12 +513,6 @@ button[data-slot="decision-row"]:hover {
   border: 1px solid var(--ade-warning, #b7791f);
   border-radius: var(--ade-radius-sm);
   padding: 2px 6px;
-}
-
-/* «· N scartate»: lines of the register nobody will see otherwise. */
-[data-slot="badge-discarded"][data-tone="error"] {
-  color: var(--ade-error);
-  font-weight: var(--ade-weight-semibold);
 }
 
 /* «puoi sceglierne più d'una», under the title of a multiple question. */
