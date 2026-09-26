@@ -887,6 +887,14 @@
   align-items: flex-start;
 }
 
+[data-slot="memory-actions"] {
+  display: flex;
+  gap: var(--ade-space-3);
+  flex: 0 0 auto;
+}
+
+[data-slot="memory-actions"] [data-slot="bots-link"] { margin-left: 0; }
+
 [data-slot="memory-text"] {
   flex: 1 1 auto;
   min-width: 0;
