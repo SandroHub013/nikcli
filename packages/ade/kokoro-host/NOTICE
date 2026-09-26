@@ -1,0 +1,47 @@
+kokoro-host
+Copyright (C) 2026 The nikcli authors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full text this program is under is in the LICENSE file beside this one.
+
+
+Third-party components
+======================
+
+This program bundles no third-party code. It opens the runtime at run time,
+from the path its command line was given, and the model files come from
+elsewhere too. What it reaches through that runtime:
+
+espeak-ng and espeak-ng-data
+  License: GPL-3.0-or-later
+  Phonemization, statically linked inside sherpa-onnx-c-api.dll and reached
+  from there. This is the reason this crate is GPL-3.0-or-later, and the
+  reason it is kept in its own directory: ADE talks to it over a pipe and
+  stays MIT.
+
+sherpa-onnx
+  License: Apache License 2.0
+  The C API exported by sherpa-onnx-c-api.dll, opened with LoadLibraryW when
+  the process starts.
+
+ONNX Runtime
+  License: MIT
+  The execution provider sherpa-onnx runs the model with, loaded by it.
+
+Kokoro-82M weights, voices and vocabulary (model.onnx, voices.bin, tokens.txt)
+  License: Apache License 2.0
+  Packaged by kokoro-onnx (MIT); the weights themselves remain Apache-2.0.
+
+The Apache License 2.0 and the MIT License texts are the upstream ones and are
+not reproduced here.
