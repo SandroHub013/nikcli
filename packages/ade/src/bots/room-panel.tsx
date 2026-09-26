@@ -27,6 +27,8 @@ export interface RoomPanelDeps {
   readonly bots: () => readonly AgentFile[]
   /** The member speaking in a room now, by its file. */
   readonly speaking: (roomId: string) => string | undefined
+  /** Whether the room waits on a trust dialog before its first turn. */
+  readonly asking?: (roomId: string) => boolean
   /** The question a member's turn in a room is waiting on. */
   readonly permission: (roomId: string, path: string) => PendingPermission | undefined
   /** With the id of the question shown (B8d review, M1): an answer to one no longer there goes nowhere. */
@@ -210,6 +212,12 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                   </button>
                 </div>
               )}
+            </Show>
+
+            <Show when={props.deps.asking?.(current().id)}>
+              <div data-slot="bots-typing">
+                <span>{t("bots.room.askingTrust")}</span>
+              </div>
             </Show>
 
             <Show when={current().note}>

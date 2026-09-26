@@ -401,6 +401,8 @@ const roomStore = localRoomStore()
 const [roomBook, setRoomBook] = createSignal<RoomBook>(roomStore.get())
 /** The member speaking in each room, by its file. */
 const [roomSpeaking, setRoomSpeaking] = createSignal<Record<string, string>>({})
+/** The rooms waiting on a trust dialog before their first turn. */
+const [roomAsking, setRoomAsking] = createSignal<Record<string, true>>({})
 /** The file each member was trusted as, for answering its questions. */
 const seatBots = new Map<string, AgentFile>()
 /** The project open in the main area: where a global bot's room turns run. */
@@ -413,12 +415,21 @@ async function payOf(bot: AgentFile): Promise<RoomPay> {
 
 const roomRunner = createRoomRunner({
   store: roomStore,
-  seats: async (room) => {
+  seats: async (room, asking) => {
     const seats: RoomSeat[] = []
+    // The dialog is native and may be behind the window: the room says what it waits for.
+    const ask = async (question: string) => {
+      asking(true)
+      try {
+        return await askTrust(question)
+      } finally {
+        asking(false)
+      }
+    }
     for (const path of room.members) {
       const read = await readBotFile(path)
       if (!read) return { problem: t("bots.room.missingBot", memberName([], path)) }
-      const verdict = await admitTurn(read, roomProject, askTrust)
+      const verdict = await admitTurn(read, roomProject, ask)
       if (!verdict.ok) return { problem: verdict.problem ?? t("bots.room.notTrusted", read.identifier) }
       const bot = verdict.bot
       seatBots.set(path, bot)
@@ -431,6 +442,14 @@ const roomRunner = createRoomRunner({
   turns,
   testBuild: isAdeTestBuild,
   changed: setRoomBook,
+  onAsking: (roomId, waiting) =>
+    setRoomAsking((all) => {
+      if (Boolean(all[roomId]) === waiting) return all
+      const next = { ...all }
+      if (waiting) next[roomId] = true
+      else delete next[roomId]
+      return next
+    }),
   onTurn: (roomId, path) =>
     setRoomSpeaking((all) => {
       const next = { ...all }
@@ -450,6 +469,7 @@ const roomDeps: RoomPanelDeps = {
   book: roomBook,
   bots: () => shared.roster() ?? [],
   speaking: (roomId) => roomSpeaking()[roomId],
+  asking: (roomId) => Boolean(roomAsking()[roomId]),
   permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
   answer: (path, choice, requestID) => {
     const bot = seatBots.get(path)

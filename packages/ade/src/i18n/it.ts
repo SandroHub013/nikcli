@@ -1548,6 +1548,7 @@ export const it = {
   "bots.room.notTrusted": (name: string) => `@${name} non ha la tua fiducia: la stanza non parte.`,
   "bots.room.empty": "Scrivi un messaggio: rispondono tutti, o solo chi citi con @nome (@tutti per tutti). Un giro in cui nessuno ha niente da dire chiude lo scambio.",
   "bots.room.speaking": (name: string) => `@${name} sta scrivendo…`,
+  "bots.room.askingTrust": "Aspetto la tua risposta nella finestra di fiducia di ADE: può essere dietro la finestra principale.",
   "bots.room.stop": "Ferma",
   "bots.room.everyone": "tutti",
   "bots.room.user": "utente",

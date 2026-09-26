@@ -1535,6 +1535,7 @@ export const en: Messages = {
   "bots.room.notTrusted": (name: string) => `@${name} does not have your trust: the room does not start.`,
   "bots.room.empty": "Write a message: everyone answers, or only whoever you name with @name (@everyone for all). A round in which nobody has anything to say ends the exchange.",
   "bots.room.speaking": (name: string) => `@${name} is writing…`,
+  "bots.room.askingTrust": "Waiting for your answer in ADE's trust dialog: it may be behind the main window.",
   "bots.room.stop": "Stop",
   "bots.room.everyone": "everyone",
   "bots.room.user": "user",
