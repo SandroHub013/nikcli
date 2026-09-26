@@ -13,6 +13,7 @@
 import { FitAddon } from "@xterm/addon-fit"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
+import { rowsInside, terminalBox } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
 export interface SessionTerminal {
@@ -547,6 +548,17 @@ export function placementFor(drawn: { parentElement: unknown } | null | undefine
  * and its scrollback still matters, so leaving a pane must cost nothing more
  * than the DOM it was drawn in.
  */
+/**
+ * The height of a cell as the renderer drew it. The same private field
+ * FitAddon reads (`_core._renderService.dimensions`); undefined before the
+ * first render, and then the fit is left as FitAddon made it.
+ */
+function cellHeightOf(terminal: Terminal): number | undefined {
+  const core = (terminal as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })._core
+  const height = core?._renderService?.dimensions?.css?.cell?.height
+  return height && height > 0 ? height : undefined
+}
+
 export function attachTerminal(id: string, element: HTMLElement, options: AttachOptions = {}): () => void {
   const session = getTerminal(id)
   session.detach?.()
@@ -621,6 +633,12 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     if (element.clientWidth < 2 || element.clientHeight < 2) return
     try {
       session.fit.fit()
+      // FitAddon counts the box's padding as rows: the last ones, the statusline, fell below it (`fit-rows.ts`).
+      const cell = cellHeightOf(session.terminal)
+      if (cell) {
+        const rows = rowsInside(terminalBox(getComputedStyle(element)), cell)
+        if (rows < session.terminal.rows) session.terminal.resize(session.terminal.cols, rows)
+      }
     } catch {
       return
     }
