@@ -59,7 +59,7 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
 
   test("a sign-in pane keeps its arguments, and its restart runs them again", () => {
     expect(body("const openLoginSession = ")).toContain("signIn: [...runner.login]")
-    const reopen = body("const reopen = async ")
+    const reopen = body("const reopenPane = async ")
     expect(reopen).toContain("if (given.signIn) return startProcess(given.id, agentId, \"\", undefined, [...given.signIn])")
     // Before anything that would plan a resume of a conversation it does not have.
     expect(reopen.indexOf("given.signIn")).toBeLessThan(reopen.indexOf("planResume"))

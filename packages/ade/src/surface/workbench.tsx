@@ -21,6 +21,7 @@ import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { SessionNew } from "../session-new/session-new"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
+import { oneAtATime } from "./one-at-a-time"
 import { KeyRequestDialog, KeysSection, type KeysHost } from "../secrets/keys-section"
 import { KEYS_VERBS, runKeysCommand } from "../secrets/keys"
 import {
@@ -1733,6 +1734,8 @@ export function Workbench() {
   }
 
   const running = new Map<string, SpawnedSession>()
+  // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
+  const reopening = oneAtATime()
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick(n => n + 1)
   const isRunning = (id: string) => { runningTick(); return running.has(id) }
@@ -4903,7 +4906,7 @@ export function Workbench() {
             setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
             tellPane(session.pane.id, t("resume.shared", sharedWith.pane.title))
           }
-          void startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan)
+          void reopening.run(session.pane.id, () => startProcess(session.pane.id, session.pane.agent, session.pane.task ?? "", plan))
         }
 
         /*
@@ -6355,8 +6358,13 @@ export function Workbench() {
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
   const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
-    const agentId = given.agent ?? given.model
     if (running.has(given.id)) return
+    // One at a time: its awaits left room for a second one to start the same pane twice (ALTO 3).
+    await reopening.run(given.id, () => reopenPane(given, line, claims))
+  }
+
+  const reopenPane = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
+    const agentId = given.agent ?? given.model
     // A sign-in runs its sign-in again: the bare agent would start a session, on the default model.
     if (given.signIn) return startProcess(given.id, agentId, "", undefined, [...given.signIn])
     const reported = await adoptLastReport(given)
