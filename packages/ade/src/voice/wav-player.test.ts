@@ -89,6 +89,26 @@ describe("la voce sul dispositivo scelto", () => {
     }
   })
 
+  test("un dispositivo che torna e poi si stacca di nuovo si dice due volte", async () => {
+    const w = world()
+    try {
+      const lost: string[] = []
+      const signal = new AbortController().signal
+      // Headphones unplugged: said once.
+      w.state.refuse = true
+      await playWav(wav, signal, "cuffie-di-greta", undefined, (device) => lost.push(device))
+      // Plugged back in: the notice is not standing any more.
+      w.state.refuse = false
+      await playWav(wav, signal, "cuffie-di-greta", undefined, (device) => lost.push(device))
+      // And unplugged a second time, that is news again.
+      w.state.refuse = true
+      await playWav(wav, signal, "cuffie-di-greta", undefined, (device) => lost.push(device))
+      expect(lost).toEqual(["cuffie-di-greta", "cuffie-di-greta"])
+    } finally {
+      w.restore()
+    }
+  })
+
   test("il dispositivo di sistema non viene mai detto mancante", async () => {
     const w = world()
     try {
