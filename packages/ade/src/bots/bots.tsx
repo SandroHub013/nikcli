@@ -53,6 +53,7 @@ import {
   projectOfBotPath,
   listBots,
   modelCatalogText,
+  readModelCatalog,
   projectFs,
   readBotText,
   resolveRoots,
@@ -104,13 +105,18 @@ import {
   isAdeTestBuild,
   modelsFromConfigProviders,
   parseModelRef,
+  recentModels,
   serializeModelRef,
   variantsOf,
   type ChatModelChoice,
+  type ModelRef,
 } from "../chat/model"
 import { isOpenOn } from "../chat/first-use"
 import { appChatStore } from "../chat/store"
 import "./bots.css"
+import { ModelPicker } from "../chat/model-picker"
+import { EffortPicker } from "../chat/effort-picker"
+import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 
 /*
  * The conversations, outside any component.
@@ -295,14 +301,29 @@ const loadCatalog = (provider: string) => {
  * form used to list nikcli's 385 bare ids, free and paid alike. Nothing is
  * started for it: opening a folder asks for its trust, and a form cannot.
  */
-async function botModels(cwd: string | undefined): Promise<readonly ChatModelChoice[]> {
+async function botModels(cwd: string): Promise<ModelRead> {
   const options = { isTest: isAdeTestBuild() }
   const chat = appChatStore()
   if (cwd && isOpenOn(chat, cwd)) {
     const configured = (await chat.catalog().catch(() => undefined))?.configProviders
-    if (configured) return modelsFromConfigProviders(configured, options)
+    if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }
   }
-  return modelsFromConfigProviders(catalogFromText(await modelCatalogText(undefined, cwd)), options)
+  const read = await readModelCatalog(undefined, cwd || undefined)
+  if (!read.ok) return read
+  return { ok: true, models: modelsFromConfigProviders(catalogFromText(read.text), options) }
+}
+
+/* Read when a model menu opens, kept for the session per folder; a failure is not kept (`model-source.ts`). */
+const botModelSource = createModelSource(botModels)
+
+/** The bot forms' view of the catalog: its state, and the two ways to read it. */
+export interface BotCatalog {
+  readonly state: () => ModelSourceState
+  /** The menu opened: read, unless the list is there or on its way. */
+  readonly open: () => void
+  readonly retry: () => void
+  /** The folder's recent models, the Chat's too (`rememberModel`). */
+  readonly recent: () => readonly ModelRef[]
 }
 
 /** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
@@ -625,11 +646,51 @@ const shared = createRoot(() => {
     if (bots) ensureLoaded(bots.map((bot) => bot.path))
   })
 
-  /* The models a bot can be pinned to: the one catalog, the Chat's (`botModels`). */
-  const [models] = createResource(
-    () => projectRoot() ?? "",
-    (cwd) => botModels(cwd || undefined),
-  )
+  /*
+   * The models a bot can be pinned to: the one catalog, the Chat's
+   * (`botModels`), read when a model menu opens. As a resource it was read
+   * as the section mounted, even for no folder at all (review of
+   * catalogo-modelli, BASSO): `nikcli models --verbose`, 2.6 s, for a user
+   * who never opened the menu.
+   */
+  const [catalogState, setCatalogState] = createSignal<ModelSourceState>({ kind: "idle" })
+  let catalogFor: string | undefined
+  const readModels = () => {
+    const cwd = projectRoot() ?? ""
+    catalogFor = cwd
+    const kept = botModelSource.kept(cwd)
+    if (kept) return void setCatalogState({ kind: "ready", models: kept })
+    setCatalogState({ kind: "loading" })
+    void botModelSource.read(cwd).then((read) => {
+      if (catalogFor === cwd) setCatalogState(stateOf(read))
+    })
+  }
+  // Another folder has its own list: the one kept for it, or none until its menu opens.
+  createEffect(on(() => projectRoot() ?? "", (cwd) => {
+    if (cwd === catalogFor) return
+    catalogFor = undefined
+    const kept = botModelSource.kept(cwd)
+    setCatalogState(kept ? { kind: "ready", models: kept } : { kind: "idle" })
+  }, { defer: true }))
+  const catalog: BotCatalog = {
+    state: catalogState,
+    open: () => {
+      const now = catalogState()
+      if (now.kind === "idle" || now.kind === "failed") readModels()
+    },
+    retry: readModels,
+    recent: () => {
+      try {
+        return recentModels(localStorage, projectRoot())
+      } catch {
+        return []
+      }
+    },
+  }
+  const models = (): readonly ChatModelChoice[] => {
+    const now = catalogState()
+    return now.kind === "ready" ? now.models : []
+  }
 
   /*
    * By activity, the way a contact list is ordered: whoever spoke last is
@@ -696,6 +757,7 @@ const shared = createRoot(() => {
     roots,
     roster,
     models,
+    catalog,
     ordered,
     openId,
     setOpenId,
@@ -832,7 +894,7 @@ export function BotsMain(props: BotsMainProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
   createEffect(() => void (roomProject = props.projectRoot))
 
-  const { roster, roots, models, composing, current, identifiers, expression, reload } = shared
+  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload } = shared
 
   /*
    * One message, one process.
@@ -892,7 +954,8 @@ export function BotsMain(props: BotsMainProps) {
           <div data-slot="bots-main-scroll">
             <BotForm
               roots={roots()}
-              models={models() ?? []}
+              models={models()}
+              catalog={catalog}
               hasProject={Boolean(props.projectRoot)}
               onCreated={(path) => {
                 shared.setComposing(false)
@@ -948,7 +1011,8 @@ export function BotsMain(props: BotsMainProps) {
             <BotCard
               bot={bot()}
               talk={talkOf(bot().path)}
-              models={models() ?? []}
+              models={models()}
+              catalog={catalog}
               expression={expression(bot())}
               {...(gateway ? { gateway } : {})}
               {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
@@ -1404,6 +1468,7 @@ function BotCard(props: {
   bot: AgentFile
   talk: Talk
   models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
   expression: Expression
   /** The Gateway section's dependencies; absent, no section. */
   gateway?: Omit<GatewayPanelDeps, "bot">
@@ -1582,6 +1647,7 @@ function BotCard(props: {
         <BotSettings
           bot={props.bot}
           models={props.models}
+          {...(props.catalog ? { catalog: props.catalog } : {})}
           account={account()}
           onAccount={(next) => {
             accounts.set(props.bot.path, next)
@@ -1612,6 +1678,7 @@ function BotCard(props: {
 function BotForm(props: {
   roots: BotRoots
   models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
   hasProject: boolean
   onCreated: (path: string) => void
   onCancel: () => void
@@ -1733,6 +1800,7 @@ function BotForm(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        {...(props.catalog ? { catalog: props.catalog } : {})}
         onStale={setStaleEffort}
         onRunner={(id) => {
           setRunner(id)
@@ -1821,6 +1889,8 @@ function EngineFields(props: {
   model: string
   effort: string
   nikcliModels: readonly ChatModelChoice[]
+  /** How the list is read: when the model menu opens (`BotCatalog`). */
+  catalog?: BotCatalog
   /** The model the file already names, kept selectable when a list lacks it. */
   pinned?: string
   onRunner: (id: string) => void
@@ -1956,7 +2026,8 @@ function EngineFields(props: {
       </Show>
 
       <div data-slot="bots-row-fields">
-        <label data-slot="bots-field">
+        {/* A div, not a label: a click on the menu's headings would reach the chip and close it. */}
+        <div data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.model")}</span>
           <Show
             when={runner().id === "nikcli"}
@@ -1964,6 +2035,7 @@ function EngineFields(props: {
               <>
                 <input
                   data-slot="bots-input"
+                  aria-label={t("bots.engine.model")}
                   list={`${props.listId}-models`}
                   value={props.model}
                   placeholder={t("bots.engine.modelDefaultOf", runner().label)}
@@ -1975,55 +2047,38 @@ function EngineFields(props: {
               </>
             }
           >
-            <select
-              data-slot="bots-input"
+            <ModelPicker
+              below
+              label={t("bots.engine.model")}
               value={props.model}
-              onChange={(event) => props.onModel(event.currentTarget.value)}
-            >
-              <option value="">{t("bots.engine.nikcliDefault")}</option>
-              {/* The bot's own model stays offered when it is not in the list:
-                  dropping the pin would silently move the bot to another model. */}
-              <Show when={props.pinned && !props.nikcliModels.some((choice) => serializeModelRef(choice) === props.pinned)}>
-                <option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>
-              </Show>
-              <For each={props.nikcliModels.filter((choice) => choice.free)}>
-                {(choice) => <option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>}
-              </For>
-              <Show when={props.nikcliModels.some((choice) => !choice.free)}>
-                <optgroup label={t("bots.engine.paidModels")}>
-                  <For each={props.nikcliModels.filter((choice) => !choice.free)}>
-                    {(choice) => <option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>}
-                  </For>
-                </optgroup>
-              </Show>
-            </select>
-            <Show when={props.nikcliModels.length === 0}>
-              <span data-slot="bots-hint">
-                {t("bots.engine.modelsUnavailable")}
-              </span>
-            </Show>
+              models={props.nikcliModels}
+              {...(props.catalog ? { state: props.catalog.state() } : {})}
+              recent={props.catalog?.recent() ?? []}
+              defaultLabel={t("bots.engine.nikcliDefault")}
+              {...(props.pinned ? { kept: props.pinned } : {})}
+              fallback={(value) => botModelLabel(value)}
+              onOpen={() => props.catalog?.open()}
+              onRetry={() => props.catalog?.retry()}
+              onChoose={props.onModel}
+            />
           </Show>
-        </label>
+        </div>
 
-        <label data-slot="bots-field">
+        <div data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.effort")}</span>
           <Show
             when={!efforts().none}
-            fallback={<input data-slot="bots-input" value="" placeholder={t("bots.engine.effortNotSupported")} disabled />}
+            fallback={<input data-slot="bots-input" aria-label={t("bots.engine.effort")} value="" placeholder={t("bots.engine.effortNotSupported")} disabled />}
           >
-            <select
-              data-slot="bots-input"
+            <EffortPicker
+              below
+              label={t("bots.engine.effort")}
               value={efforts().stale ? "" : props.effort}
-              onChange={(event) => props.onEffort(event.currentTarget.value)}
-            >
-              <option value="">{t("bots.engine.effortDefault")}</option>
-              <Show when={efforts().kept}>
-                <option value={efforts().kept}>{efforts().kept}</option>
-              </Show>
-              <For each={efforts().options}>{(value) => <option value={value}>{value}</option>}</For>
-            </select>
+              levels={[...(efforts().kept ? [efforts().kept!] : []), ...efforts().options]}
+              onChoose={props.onEffort}
+            />
           </Show>
-        </label>
+        </div>
       </div>
       {/* Under the row, the whole width: in the effort's narrow column the words were cut to «predef». */}
       <Show when={efforts().stale}>
@@ -2041,6 +2096,7 @@ function EngineFields(props: {
 function BotSettings(props: {
   bot: AgentFile
   models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
   account: BotAccount
   onAccount: (account: BotAccount) => void
   onOpenKeys?: () => void
@@ -2147,6 +2203,7 @@ function BotSettings(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        {...(props.catalog ? { catalog: props.catalog } : {})}
         onStale={setStaleEffort}
         {...(props.bot.model ? { pinned: props.bot.model } : {})}
         onRunner={(id) => {
