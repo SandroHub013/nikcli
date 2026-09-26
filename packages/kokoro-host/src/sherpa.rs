@@ -48,7 +48,7 @@ mod loader {
     use crate::protocol::normalize_lang;
     use std::ffi::{c_char, CStr, CString};
     use std::io;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::time::Instant;
 
     /// sherpa-onnx looks for its own dependencies beside itself, and ADE puts
@@ -57,10 +57,15 @@ mod loader {
     const SEARCH_DEFAULT_DIRS: u32 = 0x0000_1000;
 
     type HModule = *mut core::ffi::c_void;
+    /// What `AddDllDirectory` hands back. Holding on to it is what keeps the
+    /// folder registered for the life of the process.
+    type DirectoryCookie = *mut core::ffi::c_void;
 
     #[link(name = "kernel32")]
     extern "system" {
         fn LoadLibraryExW(name: *const u16, file: HModule, flags: u32) -> HModule;
+        fn SetDefaultDllDirectories(flags: u32) -> i32;
+        fn AddDllDirectory(path: *const u16) -> DirectoryCookie;
         fn FreeLibrary(module: HModule) -> i32;
         fn GetProcAddress(module: HModule, name: *const u8) -> *const core::ffi::c_void;
     }
@@ -266,6 +271,7 @@ mod loader {
     /// The resident model, created once and spoken to one request at a time.
     pub struct SherpaEngine {
         _module: Module,
+        _dll_directory: DirectoryCookie,
         tts: *const Tts,
         symbols: Symbols,
         destroy_tts: Option<DestroyTtsFn>,
@@ -372,6 +378,12 @@ mod loader {
         if let Some(path) = &config.dict_dir {
             check("dict-dir", path, false)?;
         }
+
+        // The first thing that loads: the flags on `LoadLibraryExW` bind the
+        // runtime's own dependencies, but a DLL the runtime opens afterwards
+        // would go back to the process defaults. Narrow those first, with the
+        // runtime's folder among the places left to look.
+        let dll_directory = restrict_dll_search(&config.dll)?;
 
         let strings = Strings {
             empty: plain()?,
@@ -497,6 +509,7 @@ mod loader {
 
         Ok(SherpaEngine {
             _module: module,
+            _dll_directory: dll_directory,
             tts,
             symbols: Symbols {
                 generate,
@@ -531,30 +544,63 @@ mod loader {
         CString::new(text).map_err(|_| LoadError::BadPath(name))
     }
 
+    /// The path the loader is to be given: absolute, because the search flags
+    /// are dropped without a word when the path carries forward slashes.
+    fn absolute_path(path: &Path) -> Result<PathBuf, LoadError> {
+        if path.is_absolute() {
+            return Ok(path.to_path_buf());
+        }
+        Ok(std::env::current_dir()
+            .map_err(|_| LoadError::BadPath("dll"))?
+            .join(path))
+    }
+
+    /// The same path in the form the loader reads: backslashes, because with
+    /// forward slashes `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` is silently ignored,
+    /// the loader finds a "sherpa" dependency by the usual order and binds the
+    /// System32 copy, whose API is far too old for what sherpa asks for. ADE
+    /// hands over whatever path it holds, so it is converted here.
+    fn wide_units(path: &Path) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_os_str()
+            .encode_wide()
+            .map(|unit| if unit == u16::from(b'/') { u16::from(b'\\') } else { unit })
+            .collect()
+    }
+
+    /// Narrow the DLL search of this process and register the runtime's own
+    /// folder among the few places left to look, before anything is loaded.
+    ///
+    /// The flags on `LoadLibraryExW` bind the runtime's dependencies at load
+    /// time only: a DLL the runtime opens afterwards (a provider, an
+    /// extension) would go back to the process defaults, which without this
+    /// call are the working directory and the `PATH` — the very order the
+    /// load exists to close. The cookie this returns is kept by the engine,
+    /// because it is what keeps the folder registered until the process ends.
+    fn restrict_dll_search(dll: &Path) -> Result<DirectoryCookie, LoadError> {
+        if unsafe { SetDefaultDllDirectories(SEARCH_DEFAULT_DIRS) } == 0 {
+            return Err(LoadError::OpenDll(io::Error::last_os_error()));
+        }
+        let absolute = absolute_path(dll)?;
+        let directory = absolute.parent().ok_or(LoadError::BadPath("dll"))?;
+        let mut wide = wide_units(directory);
+        wide.push(0);
+        let cookie = unsafe { AddDllDirectory(wide.as_ptr()) };
+        if cookie.is_null() {
+            return Err(LoadError::OpenDll(io::Error::last_os_error()));
+        }
+        Ok(cookie)
+    }
+
     /// Load the runtime, keeping its dependencies bound to the copies that sit
     /// beside it rather than to the `onnxruntime.dll` Windows ships in System32.
     ///
     /// `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` is only honoured when the path is a
-    /// plain Windows path: given forward slashes the loader drops the flag
-    /// without failing, finds a "sherpa" dependency by the usual order and binds
-    /// the System32 copy, whose API is far too old for what sherpa asks for. ADE
-    /// hands over whatever path it holds, so make it absolute and backslashed
-    /// before asking for the flag.
+    /// plain Windows path, which [`absolute_path`] and [`wide_units`] see to;
+    /// the search for everything loaded after this call is narrowed by
+    /// [`restrict_dll_search`].
     fn open_library(path: &Path) -> Result<HModule, LoadError> {
-        use std::os::windows::ffi::OsStrExt;
-
-        let absolute = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .map_err(|_| LoadError::BadPath("dll"))?
-                .join(path)
-        };
-        let mut wide: Vec<u16> = absolute
-            .as_os_str()
-            .encode_wide()
-            .map(|unit| if unit == u16::from(b'/') { u16::from(b'\\') } else { unit })
-            .collect();
+        let mut wide = wide_units(&absolute_path(path)?);
         wide.push(0);
         unsafe {
             let module =
@@ -601,6 +647,33 @@ mod loader {
             "only function pointers are resolved through the loader"
         );
         unsafe { core::mem::transmute_copy::<*const core::ffi::c_void, T>(&address) }
+    }
+
+    #[cfg(test)]
+    mod search {
+        use super::*;
+
+        #[test]
+        fn the_runtime_folder_is_added_to_the_narrowed_search() {
+            let directory = std::env::temp_dir().join("kokoro-host-search-test");
+            std::fs::create_dir_all(&directory).expect("a folder for the runtime");
+            let cookie = restrict_dll_search(&directory.join("sherpa-onnx-c-api.dll"))
+                .expect("Windows takes the flags and the folder");
+            assert!(!cookie.is_null(), "the cookie keeps the folder registered");
+        }
+
+        #[test]
+        fn a_folder_that_is_not_there_is_not_added() {
+            let missing = std::env::temp_dir().join("kokoro-host-search-missing");
+            let _ = std::fs::remove_dir_all(&missing);
+            let error = restrict_dll_search(&missing.join("x.dll"))
+                .expect_err("there is no folder to add");
+            let code = error.code();
+            assert!(
+                code.starts_with("open-dll:"),
+                "the loader error stands, got {code}"
+            );
+        }
     }
 }
 
