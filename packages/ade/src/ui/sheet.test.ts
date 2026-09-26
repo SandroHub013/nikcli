@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
 import { createSignal, onMount, Show, type JSX } from "solid-js"
 import { createComponent, render } from "solid-js/web"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { Sheet, SheetTitle } from "./sheet"
 
 /*
@@ -103,6 +105,37 @@ describe("a sheet on Kobalte's Dialog", () => {
     await tick()
     expect(panel.contains(document.activeElement)).toBe(true)
     expect(document.activeElement).toBe(buttons[0])
+  })
+
+  test("Shift+Tab right after it opens, on the panel itself, goes to the last control (Verifiche, kobalte-overlay-scatti)", async () => {
+    const { panel } = await openSheet()
+    expect(document.activeElement).toBe(panel)
+    const event = new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })
+    panel.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    const buttons = [...panel.querySelectorAll("button")]
+    expect(document.activeElement).toBe(buttons.at(-1)!)
+    expect(document.activeElement?.textContent).toBe("Invia")
+  })
+
+  test("a plain Tab on the panel, and Shift+Tab from a control, are left to the browser and the trap", async () => {
+    const { panel } = await openSheet()
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })
+    panel.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
+    const first = panel.querySelector("button")!
+    first.focus()
+    const back = new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })
+    first.dispatchEvent(back)
+    expect(back.defaultPrevented).toBe(false)
+  })
+
+  test("lint: the bare frame is rounded like a surface, so the focus ring follows the panel's corners", () => {
+    const css = readFileSync(join(import.meta.dir, "layout.css"), "utf8")
+    const start = css.indexOf(':where([data-layout="frame"]) {')
+    expect(start).toBeGreaterThan(-1)
+    const rule = css.slice(start, css.indexOf("}", start))
+    expect(rule.includes("border-radius: var(--ade-radius-xl);")).toBe(true)
   })
 
   test("Esc closes it", async () => {

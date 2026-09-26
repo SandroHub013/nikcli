@@ -152,6 +152,12 @@
   width: 100%;
   max-width: var(--ade-surface-max, 560px);
   outline: none;
+  /*
+   * The panel inside is rounded, and the focus ring drawn on this frame when
+   * the sheet opens followed a square corner around it (Verifiche,
+   * kobalte-overlay-scatti). The same radius as a surface's.
+   */
+  border-radius: var(--ade-radius-xl);
 }
 
 @keyframes ade-surface-in {
