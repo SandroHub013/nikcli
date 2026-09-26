@@ -67,4 +67,17 @@ describe("lint: the bot's Invia", () => {
       expect(body(bots, `[data-slot="bots-send"]${state}`)).toBe(body(chat, `[data-slot="chat-send"]${state}`))
     }
   })
+
+  test("lint: no teal on either Invia: no --ade-accent in any of their rules, at rest, hovered or focused", () => {
+    const rules = (css: string, slot: string) => {
+      const found = [...css.matchAll(new RegExp(`\\[data-slot="${slot}"\\][^{]*\\{[^}]*\\}`, "g"))].map((match) => match[0])
+      expect(found.length).toBeGreaterThan(0)
+      return found
+    }
+    for (const rule of [...rules(bots, "bots-send"), ...rules(chat, "chat-send")]) {
+      expect([rule, rule.includes("--ade-accent")]).toEqual([rule, false])
+      expect([rule, rule.includes("--ade-focus-ring")]).toEqual([rule, false])
+    }
+    expect(body(bots, '[data-slot="bots-send"]')).toContain("background: var(--ade-text);")
+  })
 })

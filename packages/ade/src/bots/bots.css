@@ -544,6 +544,7 @@
  * Invia as the Chat's (`chat-send`), not the form's primary button: neutral
  * while there is nothing to send, the same size and shape (review of
  * bot-riquadro, b: the bot's was a full teal where the Chat's was not).
+ * With something to send, no teal either: the strong text's colour.
  */
 [data-slot="bots-send"] {
   flex: 0 0 auto;
@@ -551,8 +552,9 @@
   padding: 0 var(--ade-space-7);
   border: 1px solid transparent;
   border-radius: var(--ade-radius-lg);
-  background: var(--ade-accent);
-  color: var(--ade-accent-fg);
+  /* No teal (the user): the strong text's colour as the ground, the surface's as the words. */
+  background: var(--ade-text);
+  color: var(--ade-surface);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-medium);
@@ -561,7 +563,7 @@
 }
 
 [data-slot="bots-send"]:active:not(:disabled) { transform: var(--ade-press); }
-[data-slot="bots-send"]:hover:not(:disabled) { background: var(--ade-accent-strong); }
+[data-slot="bots-send"]:hover:not(:disabled):not([data-stop]) { background: color-mix(in srgb, var(--ade-text) 85%, var(--ade-surface)); }
 
 [data-slot="bots-send"]:disabled {
   background: var(--ade-surface);
@@ -572,7 +574,7 @@
 
 [data-slot="bots-send"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ade-border-strong) 70%, transparent);
 }
 
 /* The card's line for a model the catalog no longer has (bot-riquadro, a). */
