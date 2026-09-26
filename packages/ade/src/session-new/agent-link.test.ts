@@ -57,6 +57,16 @@ describe("parseReport", () => {
   })
 })
 
+describe("the conversation's folder", () => {
+  test("read when the CLI says it, left out when it does not or is not a path", () => {
+    const withDir = JSON.stringify({ ...JSON.parse(good), source: "switch", sessionDir: "C:\\Users\\me\\altro" })
+    expect(parseReport(withDir)?.sessionDir).toBe("C:\\Users\\me\\altro")
+    expect(parseReport(good)?.sessionDir).toBeUndefined()
+    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: 7 }))?.sessionDir).toBeUndefined()
+    expect(parseReport(JSON.stringify({ ...JSON.parse(good), sessionDir: "x".repeat(5000) }))?.sessionDir).toBeUndefined()
+  })
+})
+
 describe("acceptsReport", () => {
   const report = parseReport(good)
 
@@ -238,6 +248,19 @@ describe("followReports", () => {
 
   test("the same id reported again is not a move", async () => {
     expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
+  })
+
+  test("nikcli's switch of tab, /new or /sessions moves the pane", async () => {
+    expect(await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")])).toEqual([
+      "ses_first",
+      "ses_new",
+      "ses_tab",
+    ])
+  })
+
+  test("a switch written under another spawn's nonce does not", async () => {
+    const foreign = JSON.stringify({ ...JSON.parse(report("ses_other", "switch")), nonce: "ffffff" })
+    expect(await run([report("ses_first", "switch"), foreign])).toEqual(["ses_first"])
   })
 })
 describe("followReports slows down when nothing comes (P1-C2b)", () => {
