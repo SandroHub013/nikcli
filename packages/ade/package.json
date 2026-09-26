@@ -55,6 +55,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@kobalte/core": "catalog:",
     "@nikcli-ai/plugin": "workspace:*",
     "@nikcli-ai/sdk": "workspace:*",
     "@nikcli-ai/ui": "workspace:*",

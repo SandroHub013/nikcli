@@ -55,6 +55,7 @@
       "name": "@nikcli-ai/ade",
       "version": "1.287.0",
       "dependencies": {
+        "@kobalte/core": "catalog:",
         "@nikcli-ai/plugin": "workspace:*",
         "@nikcli-ai/sdk": "workspace:*",
         "@nikcli-ai/ui": "workspace:*",
