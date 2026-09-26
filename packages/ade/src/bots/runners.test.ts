@@ -451,30 +451,19 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
  * it, and `project-trust.ts` asks about it.
  */
 describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
-  test("B8c: nikcli chiede di ogni comando solo a chi risponde (il pannello), mai alla voce", () => {
+  /* B8d: nikcli's rules are its session's on ADE's server (`serve-rules.ts`), not a spawn flag. */
+  test("B8d: il comando di nikcli non porta nessun flag", () => {
     const global = { ...bot, scope: "global" as const }
-    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true }).flags).toEqual([
-      "no-project-config",
-      "bot-ask-shell",
-    ])
-    const noShell = { ...global, disabledTools: ["bash"] }
-    expect(turnCommand(runnerById("nikcli"), { bot: noShell, message: "x", approvals: true }).flags).toEqual([
-      "no-project-config",
-      "bot-ask-outside",
-    ])
-    // Without someone to answer, nothing is asked: the shell is denied (second check, ALTO).
-    expect(turnCommand(runnerById("nikcli"), { bot: global, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
-    // A chat's turn keeps its own rules.
-    expect(
-      turnCommand(runnerById("nikcli"), { bot: global, message: "x", approvals: true, remote: { commands: false } }).flags,
-    ).toEqual(["no-project-config", "remote-no-shell"])
-  })
-
-  test("il bot globale gira con no-project-config, quello di progetto no", () => {
-    const mine = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "global" }, message: "x" })
-    expect(mine.flags).toEqual(["no-project-config", "bot-no-shell"])
-    const fromRepo = turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x" })
-    expect(fromRepo.flags).toEqual(["bot-no-shell"])
+    for (const spec of [
+      { bot: global, message: "x" },
+      { bot: { ...bot, scope: "project" as const }, message: "x" },
+      { bot: global, message: "x", approvals: true },
+      { bot: { ...global, disabledTools: ["bash"] }, message: "x", approvals: true },
+      { bot: global, message: "x", remote: { commands: true } },
+      { bot: global, message: "x", unattended: true },
+    ]) {
+      expect(turnCommand(runnerById("nikcli"), spec).flags).toBeUndefined()
+    }
   })
 
   test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
@@ -538,37 +527,10 @@ describe("un turno da chat non ha la shell", () => {
     }
   })
 
-  test("nikcli: la shell negata, o chiesta per ogni comando quando i comandi sono accesi", () => {
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).toEqual(["no-project-config", "remote-no-shell"])
-    expect(turnCommand(runnerById("nikcli"), { bot: { ...bot, scope: "project" }, message: "x", remote: off }).flags).toEqual(["remote-no-shell"])
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: on }).flags).toEqual([
-      "no-project-config",
-      "remote-ask-shell",
-    ])
-  })
-
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x" }).flags).toEqual(["no-project-config", "bot-no-shell"])
   })
 
-  test("M1: ogni turno su nikcli ha un solo flag sui permessi, che nega la shell o la chiede", () => {
-    const withBlock = ["bot-no-shell", "bot-read-only", "bot-ask-shell", "bot-ask-outside", "remote-ask-shell", "remote-no-shell"]
-    const cases = [
-      { bot: mine, message: "x" },
-      { bot: { ...bot, scope: "project" as const }, message: "x" },
-      { bot: mine, message: "x", approvals: true },
-      { bot: { ...mine, disabledTools: ["bash"] }, message: "x", approvals: true },
-      { bot: mine, message: "x", remote: on },
-      { bot: mine, message: "x", approvals: true, unattended: true },
-    ]
-    for (const spec of cases) {
-      const flags = turnCommand(runnerById("nikcli"), spec).flags ?? []
-      // Exactly one: two flags on NIKCLI_PERMISSION are refused by Rust.
-      expect(flags.filter((flag) => withBlock.includes(flag))).toHaveLength(1)
-    }
-    expect(turnCommand(runnerById("nikcli"), { bot: mine, message: "x", remote: off }).flags).not.toContain("bot-no-shell")
-  })
 })
 
 describe("abbonamento o chiave", () => {
@@ -750,11 +712,9 @@ describe("B8c: Claude Code e le approvazioni", () => {
 })
 
 describe("a turn nobody watches (B11, a routine)", () => {
-  test("no shell on any runner: nikcli without its shell, Codex read-only", () => {
+  /* nikcli's routine runs on ADE's server with the `read-only` rules (B8d, `serve-rules.test.ts`). */
+  test("no shell on Claude Code or Codex, Codex read-only", () => {
     const own = { ...bot, scope: "global" as const }
-    const nikcli = turnCommand(runnerById("nikcli"), { bot: own, message: "x", approvals: true, unattended: true })
-    // Read-only as well (B11 review): nothing that writes, whatever the user's rules.
-    expect(nikcli.flags).toEqual(["no-project-config", "bot-read-only"])
     const codex = turnCommand(runnerById("codex"), { bot: { ...own, runner: "codex" }, message: "x", unattended: true })
     expect(codex.args.join(" ")).toContain('sandbox_mode="read-only"')
     const claude = turnCommand(runnerById("claude"), { bot: { ...own, runner: "claude" }, message: "x", lean: true, unattended: true })

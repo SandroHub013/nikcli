@@ -210,8 +210,8 @@ async function checkProject(root: string, deps: AdmitProjectDeps): Promise<{ ok:
 
 /*
  * The configuration nikcli reads in the project whatever the bot: the root
- * `nikcli.json` (dropped for the user's own bots by `no-project-config`, read
- * anyway: stricter) and `.nikcli/nikcli.json`, which that flag does not drop.
+ * `nikcli.json` and `.nikcli/nikcli.json`. ADE's server loads both for every
+ * bot's turn (B8d).
  */
 const CONFIG_FILES = ["nikcli.json", "nikcli.jsonc", ".nikcli/nikcli.json", ".nikcli/nikcli.jsonc"]
 
@@ -282,7 +282,7 @@ function grantIn(kind: "permission" | "tools", value: unknown, at: string): stri
  * What a project's nikcli configuration grants the bot `identifier` that
  * reaches the shell or a folder outside (B8c): its own `permission` and
  * `tools`, and those of `agent.<identifier>` (and the older `mode`), which
- * nikcli merges with the bot's file, after `NIKCLI_PERMISSION`. A path to
+ * nikcli merges with the bot's file. A path to
  * take out, `null` when the file cannot be read (a refusal too), or
  * `undefined`.
  */
@@ -308,11 +308,11 @@ export function configGrant(text: string, identifier: string): string | null | u
 /**
  * Why the nikcli bot `bot` does not start from the panel, or `undefined`
  * (B8c): its file, or the project's configuration, grants the shell or a
- * folder outside. The panel's `bot-ask-shell` sends every command through
- * ADE's questions and block list; nikcli merges those grants after it and
- * keeps the last rule that matches, so a bot with one would run commands no
- * one is asked about. The user's own bots too: the message names the line to
- * take out. `text` is the file as just read, when it was.
+ * folder outside. A bot's session on ADE's server has its rules after these
+ * grants, and the last rule that matches wins (B8d, `serve-rules.ts`): the
+ * refusal stays from B8c as a second guard, and so that what the file says
+ * and what the bot does agree. The user's own bots too: the message names
+ * the line to take out. `text` is the file as just read, when it was.
  */
 export async function grantProblem(
   bot: AgentFile,

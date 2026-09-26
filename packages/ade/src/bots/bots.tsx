@@ -44,7 +44,7 @@ import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
 import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
-import { runTurn } from "./turn"
+import { runBotTurn } from "./serve-turn"
 import {
   createBot,
   createTalkArchive,
@@ -181,7 +181,7 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
 }
 
 /*
- * The running turns, one per bot, through `runTurn` (B2): a stop ends the
+ * The running turns, one per bot, through `runBotTurn` (B2, B8d): a stop ends the
  * turn with its child processes and gives the plan's place back, and a
  * runner that does not start says so in the thread. See `controller.ts`.
  */
@@ -194,7 +194,7 @@ const accounts = localAccountStore()
 const memories = appMemoryStore
 
 const turns = createBotTurns({
-  runTurn: (request) => runTurn(request),
+  runTurn: (request) => runBotTurn(request),
   runRoutine: (request, run) => runRoutine(request, run),
   talkOf,
   update: updateTalk,
@@ -206,9 +206,8 @@ const turns = createBotTurns({
  * The checks every turn of a bot passes before it starts: a project's bot
  * is asked about first (B3, `trust.ts`), and what runs is the file as it was
  * read and trusted just now, not the copy the roster loaded earlier; a nikcli
- * bot that grants itself the shell does not start (B8c); a project's nikcli
- * bot loads the project's own configuration, so the project is asked about
- * (B3b). `confirm` is the dialog; a routine passes one that always says no.
+ * bot that grants itself the shell does not start (B8c); a nikcli bot loads
+ * the project's own configuration, so the project is asked about (B3b, B8d). `confirm` is the dialog; a routine passes one that always says no.
  */
 async function admitTurn(
   bot: AgentFile,
@@ -228,7 +227,8 @@ async function admitTurn(
     const granted = await grantProblem(trusted, root, { read: readBotText, fs: projectFs, text: read })
     if (granted) return { ok: false, problem: granted }
   }
-  if (root && trusted.scope === "project" && nikcli) {
+  // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
+  if (root && nikcli) {
     const project = await admitProject(root, {
       store: localTrustStore(PROJECT_TRUST_KEY),
       surface: () => projectSurface(root, projectFs),
@@ -450,9 +450,9 @@ const roomDeps: RoomPanelDeps = {
   bots: () => shared.roster() ?? [],
   speaking: (roomId) => roomSpeaking()[roomId],
   permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission,
-  answer: (path, choice) => {
+  answer: (path, choice, requestID) => {
     const bot = seatBots.get(path)
-    if (bot) turns.answer(bot, choice)
+    if (bot) turns.answer(bot, choice, requestID)
   },
   send: async (roomId, text) => {
     // The run goes on after the message is in: its end and its problems are the room's note.
@@ -801,7 +801,7 @@ export function BotsMain(props: BotsMainProps) {
     return turns.send(verdict.bot, message, props.projectRoot)
   }
 
-  const answer = (bot: AgentFile, choice: PermissionAnswer) => turns.answer(bot, choice)
+  const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => turns.answer(bot, choice, requestID)
 
   // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
   const gateway =
@@ -841,7 +841,7 @@ export function BotsMain(props: BotsMainProps) {
               others={identifiers().filter((name) => name !== bot().identifier)}
               expression={expression(bot())}
               onSend={(text) => send(bot(), text)}
-              onAnswer={(choice) => answer(bot(), choice)}
+              onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
               onGrant={() => turns.grant(bot())}
               onStop={() => stop(bot())}
             />
@@ -992,7 +992,8 @@ function Thread(props: {
   expression: Expression
   /** Whether the message went: one that did not comes back into the composer. */
   onSend: (text: string) => boolean | Promise<boolean>
-  onAnswer: (choice: PermissionAnswer) => void
+  /** With the id of the question the card shows (B8d review, M1). */
+  onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
   onGrant: () => void
   onStop: () => void
@@ -1028,6 +1029,9 @@ function Thread(props: {
 
   return (
     <div data-slot="bots-thread">
+      <Show when={runnerById(props.bot.runner).id === "nikcli"}>
+        <p data-slot="bots-rules-note">{t("bots.serve.rulesNote")}</p>
+      </Show>
       <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
         <Show when={props.talk.messages.length === 0 && !props.talk.problem}>
           <div data-slot="bots-thread-empty">
@@ -1069,20 +1073,18 @@ function Thread(props: {
                 </Show>
               </span>
               <span data-slot="bots-permission-actions">
-                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject")}>
+                <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
                   {t("bots.permission.deny")}
                 </button>
                 {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
-                <Show when={!asked().denyOnly && (asked().always?.length ?? 0) > 0}>
-                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always")}>
+                <Show when={(asked().always?.length ?? 0) > 0}>
+                  <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("always", asked().requestID)}>
                     {t("bots.approval.always")}
                   </button>
                 </Show>
-                <Show when={!asked().denyOnly}>
-                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once")}>
-                    {t("bots.permission.allow")}
-                  </button>
-                </Show>
+                <button type="button" data-slot="bots-btn" data-tone="primary" onClick={() => props.onAnswer("once", asked().requestID)}>
+                  {t("bots.permission.allow")}
+                </button>
               </span>
             </div>
           )}

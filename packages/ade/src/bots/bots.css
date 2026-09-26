@@ -285,6 +285,16 @@
   min-height: 0;
 }
 
+/* The Chat's `chat-rules-note`: what a bot's rules on ADE's server do not cover (B8d). */
+[data-slot="bots-rules-note"] {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-8);
+  border-bottom: 1px solid var(--ade-border-subtle);
+  color: var(--ade-text-soft);
+  font-size: var(--ade-font-sm);
+}
+
 [data-slot="bots-messages"] {
   display: flex;
   flex-direction: column;

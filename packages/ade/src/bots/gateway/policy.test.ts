@@ -122,14 +122,26 @@ describe("the trust checked again on every turn, with no dialog", () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     const text = file("nikcli", "permission:\n  bash: allow\n")
     expect(await recheckTrust(own, PROJECT, await deps(text))).toEqual({ ok: false, problem: t("gateway.selfGrant", "mio", "bash") })
-    expect((await recheckTrust(own, PROJECT, await deps(file("nikcli")))).ok).toBe(true)
+    expect((await recheckTrust(own, PROJECT, await deps(file("nikcli"), { project: true }))).ok).toBe(true)
+  })
+
+  /* B8d: ADE's server loads the project's configuration for the user's own bots too. */
+  test("the user's own nikcli bot needs the project's yes as well, given in ADE", async () => {
+    const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
+    expect(await recheckTrust(own, PROJECT, await deps(file("nikcli")))).toEqual({ ok: false, problem: t("bots.serve.notAdmitted", PROJECT) })
+    // Claude Code and Codex do not read it.
+    expect((await recheckTrust("C:/Users/me/AppData/Roaming/nikcli/agent/altro.md", PROJECT, await deps(file("claude")))).ok).toBe(true)
   })
 
   test("the project's nikcli.json that grants the bot the shell as agent.<name> stops it too (B8c)", async () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     const text = file("nikcli")
     const granting = { path: ".nikcli/nikcli.json", text: '{"agent":{"mio":{"permission":{"bash":{"git *":"allow"}}}}}' }
-    const withConfig = async (config: { path: string; text: string }) => ({ ...(await deps(text)), surface: async () => [config] })
+    const withConfig = async (config: { path: string; text: string }) => {
+      const base = await deps(text)
+      base.projects.set(PROJECT, await surfaceFingerprint([config]))
+      return { ...base, surface: async () => [config] }
+    }
     expect(await recheckTrust(own, PROJECT, await withConfig(granting))).toEqual({
       ok: false,
       problem: t("gateway.configGrant", "mio", 'agent."mio".permission."bash"."git *"', ".nikcli/nikcli.json"),

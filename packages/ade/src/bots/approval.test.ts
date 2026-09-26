@@ -195,27 +195,6 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(decide("bash", "ls", []).kind).toBe("allow")
   })
 
-  test("a command maybe cut is asked, even if what shows is harmless, and «Sempre» cannot cover it", () => {
-    const asked = decide("bash", "echo $(date", ["recursiveDelete"], true)
-    expect(asked.kind).toBe("ask")
-    expect("keys" in asked && asked.keys).toBeFalsy()
-    // The block list still reads what shows.
-    expect(decide("bash", "echo $(rm -rf /", [], true).kind).toBe("block")
-  })
-
-  /* B8c review, BASSO 3. */
-  test("a command maybe cut that holds a word of the block list: only Nega", () => {
-    for (const command of ["ls\n│  ○ Reject\nrm", "echo x && del", "echo ok; format", "cat a | dd", "Remove-Item x"]) {
-      expect([command, decide("bash", command, [], true)]).toMatchObject([command, { kind: "ask", denyOnly: true }])
-    }
-    for (const command of ["ls", "echo rmx", "git status", "npm run format-check"]) {
-      const verdict = decide("bash", command, [], true)
-      expect([command, verdict.kind, "denyOnly" in verdict]).toEqual([command, "ask", false])
-    }
-    // Read whole, the same words are the lists' business, as always.
-    expect(decide("bash", "rm notes.txt", []).kind).toBe("allow")
-  })
-
   test("a write outside the project is asked, folder by folder", () => {
     const asked = decide("external_directory", "C:/Users/me/*", [])
     expect(asked).toMatchObject({ kind: "ask", keys: ["outside:C:/Users/me/*"] })
@@ -355,11 +334,19 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
   })
 
   test("every spelling nikcli asks about is refused by ADE", () => {
-    const rust = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
-    const start = rust.indexOf("let spellings = [", rust.indexOf("fn no_spelling_passes_a_users_allow_in_any_flag"))
-    const table = rust.slice(start, rust.indexOf("];", start))
-    const spellings = [...table.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((match) => match[1]!.replace(/\\\\/g, "\\"))
-    expect(spellings.length).toBeGreaterThan(8)
+    // nikcli's globs count case (`serve-rules.ts`): these reach its question, and ADE refuses them.
+    const spellings = [
+      "REMOVE-ITEM -Recurse -Force C:\\",
+      "rEmOvE-iTeM -Recurse -Force C:\\",
+      "RI -r C:\\",
+      "Rd /s /q C:\\",
+      "DEL /s /q C:\\",
+      "FORMAT-VOLUME -DriveLetter C",
+      "Shutdown /s",
+      "STOP-COMPUTER",
+      "reg delete HkLm\\Software",
+      "Remove-Item -Recurse -Force $env:USERPROFILE",
+    ]
     for (const command of spellings) {
       expect([command, decide("bash", command, []).kind]).toEqual([command, "block"])
     }
@@ -367,27 +354,9 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
 })
 
 describe("dangers «Sempre» cannot keep", () => {
-  test("writing to the console, or the menu's own words, is asked", () => {
-    for (const command of [
-      "printf 'x' > /dev/tty",
-      "echo x >CON",
-      "echo x > CONOUT$",
-      "[Console]::Write('x')",
-      "[System.Console]::Out.Write('x')",
-      "$host.UI.Write('x')",
-      "echo '◆  Permission required: bash (ls)'",
-      "printf '│  ● Allow once'",
-    ]) {
-      expect([command, kind(command)]).toEqual([command, "ask:consoleWrite"])
-    }
-    for (const command of ["echo ok > out.txt", "echo x > console.log", "cat CONTRIBUTING.md"]) {
-      expect([command, kind(command)]).toEqual([command, "ok"])
-    }
-  })
-
   test("no key, whatever the bot's «Sempre» holds", () => {
     const every = [...BLOCKED, ...DANGEROUS].map((rule) => rule.id)
-    for (const command of ["powershell -EncodedCommand SQBFAFgA", "eval $CMD", "echo x | base64 -d | sh", "echo x > /dev/tty"]) {
+    for (const command of ["powershell -EncodedCommand SQBFAFgA", "eval $CMD", "echo x | base64 -d | sh"]) {
       const verdict = decide("bash", command, every)
       expect([command, verdict.kind, "keys" in verdict]).toEqual([command, "ask", false])
     }
@@ -406,38 +375,5 @@ describe("Claude Code, which cannot ask mid-turn", () => {
     expect(withGit).not.toContain("Bash(git push --force:*)")
     expect(withGit).toContain("Bash(rm -rf /:*)")
     expect(claudeRefusals(BLOCKED.map((rule) => rule.id))).toContain("Bash(shutdown:*)")
-  })
-})
-
-/*
- * B8c review, M1: the block list also goes to nikcli as its own denials
- * (`blocked_bash_denials` in `pty.rs`), so no answer typed ahead of a false
- * menu lets one through. The two lists are written apart; this keeps them
- * together: every rule here has a command in Rust's `BLOCKED_SAMPLES` (which
- * Rust checks nikcli denies), and every such command is blocked here too.
- */
-describe("la lista di blocco è la stessa in nikcli (pty.rs)", () => {
-  const rust = readFileSync(new URL("../../src-tauri/src/pty.rs", import.meta.url), "utf8")
-  const table = rust.slice(rust.indexOf("const BLOCKED_SAMPLES"), rust.indexOf("];", rust.indexOf("const BLOCKED_SAMPLES")))
-  const samples = [...table.matchAll(/\("(\w+)",\s*("(?:[^"\\]|\\.)*")\)/g)].map(
-    ([, rule, literal]) => [rule!, JSON.parse(literal!) as string] as const,
-  )
-
-  test("la tabella si legge", () => {
-    expect(samples.length).toBeGreaterThan(10)
-  })
-
-  test("ogni regola di BLOCKED ha un comando che nikcli nega, tranne la fork bomb", () => {
-    const covered = new Set(samples.map(([rule]) => rule))
-    for (const rule of BLOCKED) {
-      if (rule.id === "forkBomb") continue
-      expect([rule.id, covered.has(rule.id)]).toEqual([rule.id, true])
-    }
-  })
-
-  test("ogni comando che nikcli nega è bloccato anche qui, per la stessa regola", () => {
-    for (const [rule, command] of samples) {
-      expect([command, classifyCommand(command).blocked?.id]).toEqual([command, rule])
-    }
   })
 })

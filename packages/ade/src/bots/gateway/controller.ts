@@ -20,7 +20,8 @@
  *   likes. Anything else pressed is ignored.
  * - the turn gets the tools of a turn from a chat (G5, `RemoteTools`): no
  *   shell unless the owner turned on the bot's remote commands, and then
- *   nikcli's permission menu becomes a question on the phone (`approval.ts`).
+ *   nikcli's question, an event with its id on ADE's server (B8d), goes to
+ *   the phone (`approval.ts`).
  *
  * Nothing is read from a chat before this listens: `gateway_ready` is called
  * once the listener is in place, and Rust holds every gateway until then.
@@ -33,7 +34,7 @@ import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
 import type { Talk } from "../talk"
-import { permissionWatcher } from "./approval"
+import { permissionAnswerer } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, remoteTools, type RemoteSetting } from "./remote"
@@ -91,8 +92,6 @@ export interface GatewayControllerDeps {
   readonly memory?: MemoryStore
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
-  /** How long nikcli's output stays quiet before its menu is taken (`MENU_QUIET_MS`); for tests. */
-  readonly menuQuietMs?: number
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
@@ -259,16 +258,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
       const remote = remoteTools(offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined, loaded.fingerprint)
       let turn: Turn | undefined
-      // nikcli stops on its permission menu: answered on the phone, or no at once.
-      const onData =
+      // nikcli's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
+      const onPermission =
         runner === "nikcli"
-          ? permissionWatcher({
+          ? permissionAnswerer({
               ask: (question, choices, signal) => ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
               refuse: !remote.commands,
-              write: (keys) => turn?.write?.(keys),
+              answer: (requestID, reply) => {
+                if (requestID !== undefined) turn?.answer?.(requestID, reply)
+              },
               say: (text) => void reply(message, text),
               signal: ended.signal,
-              ...(deps.menuQuietMs !== undefined ? { quietMs: deps.menuQuietMs } : {}),
             })
           : undefined
       const framed = framedMessage(message.platform, message.sender.name, message.text)
@@ -283,7 +283,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         remote,
         account: deps.account?.(message.bot) ?? { mode: "plan" },
         ...(sessionId ? { sessionId } : {}),
-        ...(onData ? { onData } : {}),
+        ...(onPermission ? { onPermission } : {}),
       })
       state.turn = turn
       state.starting = false

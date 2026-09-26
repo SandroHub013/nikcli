@@ -5,7 +5,9 @@
  * agent hands over what the local grammar could not do, and reads the answer
  * aloud. Same runners and adapters as a bot conversation (`runners.ts`), so a
  * turn here is exactly a bot turn: Claude Code with the user's Anthropic
- * subscription, Codex with ChatGPT, nikcli with its providers.
+ * subscription, Codex with ChatGPT. A nikcli bot's turn runs on ADE's nikcli
+ * server instead (`serve-turn.ts`, B8d), with its session's rules: here it is
+ * refused.
  *
  * With `mailbox`, the process gets its own `ade-msg` identity for the length
  * of the turn (`session/senders.ts`), so it can list, ask, spawn and close
@@ -26,7 +28,7 @@ import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./nikcli"
 import { applyRunnerLine, enforcesDisabledTools, finalText, runnerById, spendKind, turnCommand, type RemoteTools, type RunnerId } from "./runners"
-import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
+import { applyExit, applyProblem, emptyTalk, sendMessage, type PendingPermission, type Talk } from "./talk"
 
 export interface TurnRequest {
   readonly runner: RunnerId
@@ -62,8 +64,6 @@ export interface TurnRequest {
   readonly bot?: AgentFile
   /** Every line the CLI writes, as it comes: the panel folds them into its own thread. */
   readonly onLine?: (line: string) => void
-  /** The raw output, for a permission menu drawn in place (nikcli). */
-  readonly onData?: (chunk: string) => void
   /** A turn from a chat, through a bot's gateway: its tools (G5, `RemoteTools`). */
   readonly remote?: RemoteTools
   /** Claude Code and Codex: subscription or one key name. Absent is a subscription. */
@@ -81,6 +81,19 @@ export interface TurnRequest {
    * (`TurnSpec.maxBudgetUsd`).
    */
   readonly maxCostUsd?: number
+  /**
+   * nikcli on ADE's server (B8d): each change the turn makes to a thread, as
+   * it happens, for the caller to make to its own. Not the user's message,
+   * which the caller put there already.
+   */
+  readonly onChange?: (change: (talk: Talk) => Talk) => void
+  /**
+   * nikcli on ADE's server (B8d): a question to answer with `Turn.answer`,
+   * one at a time. Absent, every question is refused as it comes.
+   */
+  readonly onPermission?: (asked: PendingPermission) => void
+  /** Someone is in front of the screen: a project not admitted yet is asked about, not refused (B8d). */
+  readonly interactive?: boolean
 }
 
 /**
@@ -147,8 +160,11 @@ export interface Turn {
   readonly result: Promise<TurnResult>
   /** Ends the turn early, with the CLI's child processes; the result resolves as `stopped`. */
   readonly stop: () => void
-  /** Keystrokes to the CLI, exactly as given: the answer to nikcli's permission menu. Absent where nothing can be typed. */
-  readonly write?: (keys: string) => void
+  /**
+   * The answer to the question `onPermission` gave, by its id: nikcli on ADE's
+   * server (B8d). An answer to a question no longer on screen goes nowhere.
+   */
+  readonly answer?: (requestID: string, reply: "once" | "reject") => void
 }
 
 /* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */
@@ -161,7 +177,6 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
   let kill: (() => void) | undefined
-  let write: ((keys: string) => void) | undefined
   /*
    * Ends the wait for the exit. A killed session unlistens before it could
    * report one, so a stopped or timed-out turn resolved here or never.
@@ -188,6 +203,11 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       talk,
     })
 
+    // Its rules are its session's on ADE's server, and nothing here would carry them (B8d).
+    if (runner.id === "nikcli") {
+      update(applyProblem(talk, t("bots.turn.nikcliOnServer"), Date.now()))
+      return finish("error", talk.problem)
+    }
     const host = await (deps.host ?? getHost)()
     if (!host?.spawn) {
       update(applyProblem(talk, t("bots.turn.noHost"), Date.now()))
@@ -270,7 +290,6 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
             ...(request.mailbox && token ? { pane: request.mailbox.id, paneToken: token } : {}),
             ...(flags ? { flags } : {}),
             ...(secrets && secrets.length > 0 ? { secrets: [...secrets] } : {}),
-            ...(request.onData ? { onData: request.onData } : {}),
             onLine: (line, stream) => {
               if (stream === "err") {
                 notStarted = notStarted ? `${notStarted} ${line}` : line
@@ -315,7 +334,6 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
           .then((session) => {
             markTurn("cli-spawned")
             kill = () => session.kill({ tree: true })
-            write = (keys) => session.write(keys)
             if (stopped || timedOut || overBudget) {
               kill()
               resolve(null)
@@ -364,6 +382,5 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       kill?.()
       settle?.(null)
     },
-    write: (keys) => write?.(keys),
   }
 }

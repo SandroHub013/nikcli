@@ -565,7 +565,7 @@ export const en: Messages = {
   "gateway.configUnreadable": (name, file) =>
     `This project's ${file} cannot be read, and it could grant the bot «${name}» the shell: not started from here.`,
   "gateway.approve.question": (permission, what) =>
-    `The bot asks for the permission «${permission}» for:\n${what}\n\nThe command is read from the terminal and may be incomplete: if you do not recognize all of it, answer No.\nAllow it this once? No answer within 5 minutes means no.`,
+    `The bot asks for the permission «${permission}» for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
   "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `I blocked «${what}»: it ${reason}. This command never runs, not even with a yes.`,
@@ -1376,11 +1376,7 @@ export const en: Messages = {
   "bots.approval.reason.publish": "publishes a package or a release",
   "bots.approval.reason.containers": "deletes Docker containers or volumes",
   "bots.approval.reason.opaqueShell": "runs commands no list can read: encoded, taken from a variable or decoded",
-  "bots.approval.reason.consoleWrite": "writes straight to the console, where ADE reads the permission menu",
   "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
-  "bots.approval.reason.cut": "the command may go on past what it seems: it holds rows that mimic this menu",
-  "bots.approval.reason.cutBlocked":
-    "the command may go on past what it seems, and it holds a command of the block list: it can only be denied",
   "bots.approval.reason.outside": "works outside the project folder",
   "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your nikcli configuration asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,
@@ -1578,6 +1574,20 @@ export const en: Messages = {
   "bots.turn.noHost": "No host: a turn only runs in the desktop app.",
   "bots.turn.cannotRefuse": (label) => `${label} cannot refuse the tools this turn leaves out.`,
   "bots.turn.didNotStart": (label, why) => `${label} did not start: ${why}`,
+  "bots.turn.nikcliOnServer": "A nikcli turn runs on ADE's nikcli server, with its session's rules: it does not start here.",
+  "bots.serve.noFolder": "A nikcli bot answers from a project: open a folder to talk to it.",
+  "bots.serve.notAdmitted": (root) =>
+    `The project ${root} is not admitted for nikcli yet, or it changed: open the bot in the panel, answer the question and try again.`,
+  "bots.serve.noAgent": (name) => `The nikcli server does not see the bot «${name}» in this folder.`,
+  "bots.serve.agentTaken": (name) =>
+    `The project has its own agent «${name}», different from this bot: on the server it would answer in its place, so the turn does not start. Rename one of the two.`,
+  "bots.serve.newSession":
+    "New conversation: the previous one was «nikcli run»'s, or had other rules, and on ADE's server every bot conversation starts with its own. The bot does not remember what came before.",
+  "bots.serve.refused": (permission, patterns) =>
+    `Refused: nikcli asked for «${permission}» (${patterns}) and nobody here can answer.`,
+  "bots.serve.rulesNote":
+    "The bot asks before every command, but an «always» already given for this project (in nikcli's terminal, say) holds for it too, as in the Chat: that request will not show up.",
+  "bots.serve.lost": "The nikcli server closed the event stream before the turn ended.",
   "bots.runner.protectedPath": (paths) =>
     `Claude Code could not write on a path protected for project bots (${paths}): a write there becomes code that runs later, so it is refused on purpose.`,
   "bots.runner.permissionDenied": (names) =>

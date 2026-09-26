@@ -15,15 +15,11 @@
  * The price is a few hundred milliseconds of startup per message, which a
  * conversation does not notice.
  *
- * The one thing `run` still asks through the terminal is permission. It draws
- * a menu — "Permission required: bash (…)", allow once / always / reject — and
- * waits on stdin. So the raw pty output is watched for that line, the thread
- * shows it as a question with three buttons, and the answer is keystrokes:
- * Enter for the first option, arrow-down before it for the others. See
- * `answerKeys`.
+ * A bot's nikcli turn runs on ADE's nikcli server now (B8d, `serve-turn.ts`),
+ * where a question is an event with an id, answered by that id: no menu is
+ * read off a terminal. The thread and its question are the same.
  *
- * Pure, in a `.ts`: a JSON line misread is a message lost, and a permission
- * prompt unnoticed is a turn that waits forever with nothing on screen.
+ * Pure, in a `.ts`: a JSON line misread is a message lost.
  */
 
 import { t } from "../i18n"
@@ -49,6 +45,8 @@ export interface TalkMessage {
 }
 
 export interface PendingPermission {
+  /** nikcli's id for the question, on ADE's server (B8d): the answer goes to it, not to a menu. */
+  readonly requestID?: string
   readonly permission: string
   readonly patterns: string
   readonly askedAt: number
@@ -58,10 +56,6 @@ export interface PendingPermission {
   readonly always?: readonly string[]
   /** When the question becomes a Nega. */
   readonly expiresAt?: number
-  /** The patterns may go on past what shows: the question holds rows that mimic the menu. */
-  readonly cut?: boolean
-  /** Nega is the only answer (`approval.ts`, `denyOnly`). */
-  readonly denyOnly?: boolean
 }
 
 export interface Talk {
@@ -88,7 +82,7 @@ export interface Talk {
   readonly pendingTurn?: LastTurn
   /** When anything last happened, for the roster's clock. */
   readonly updatedAt?: number
-  /** A question nikcli is waiting on. The thread shows it; `answerKeys` answers it. */
+  /** A question nikcli is waiting on. The thread shows it; `controller.ts` answers it, by its id (B8d). */
   readonly permission?: PendingPermission
   /**
    * A dangerous command Claude Code was refused (B8c): it cannot ask mid-turn,
@@ -325,148 +319,11 @@ function errorText(error: unknown): string {
   return "Errore sconosciuto."
 }
 
-/** A permission menu nikcli drew, read whole (B8c review, M1). */
-export interface MenuSeen {
-  readonly permission: string
-  /** The command or paths asked about, as the menu printed them, lines and all. */
-  readonly patterns: string
-  /**
-   * The question holds rows that look like the menu's own: a command written
-   * to mimic the menu. It is read whole all the same, but asked about.
-   */
-  readonly cut: boolean
-}
-
-/**
- * How long the output must stay quiet after a menu's last row before it is
- * taken. The menu is one write of the prompt library; a command inside the
- * question can hold rows that look like the menu's end, and the real end
- * comes after them, in the same write.
- */
-export const MENU_QUIET_MS = 150
-
-/*
- * The menu of `select` in @clack/prompts, as `nikcli run` draws it
- * (`cli/handlers/run.ts`): the step symbol and the question, then the three
- * options behind a bar, then the bar's end. With and without unicode (`◆`
- * or `*`, `│` or `|`, `●`/`○` or `>`/space, `└` or `—`).
- */
-const MENU_QUESTION = /^\s*(?:◆|\*)\s+Permission required:/
-const MENU_OPTION = String.raw`^\s*(?:│|\|)\s+(?:●|○|>)?\s*`
-const MENU_ONCE = new RegExp(`${MENU_OPTION}Allow once\\s*$`)
-const MENU_ALWAYS = new RegExp(`${MENU_OPTION}Always allow:`)
-const MENU_REJECT = new RegExp(`${MENU_OPTION}Reject\\s*$`)
-const MENU_END = /^\s*(?:└|—)\s*$/
-const MENU_WHOLE = /^\s*(?:◆|\*)\s+Permission required:\s*([^\s(]+)\s*\(([\s\S]*)\)\s*$/
-/** Rows kept for one question: a heredoc can be long, but not endless. */
-const MENU_MAX_ROWS = 2000
-
-/** A row as the terminal shows it: no escape sequences, and what a carriage return drew over dropped. */
-function visibleRow(raw: string): string {
-  return stripAnsi(raw).replace(/\r+$/, "").split("\r").at(-1) ?? ""
-}
-
-/*
- * The menu in `rows` (from its question on), or undefined. The last options
- * seen are the menu's own: a command can hold rows like them, and they come
- * before. The question is everything from its first row to those options.
- */
-function readMenu(rows: readonly string[]): MenuSeen | undefined {
-  const reject = rows.findLastIndex((row) => MENU_REJECT.test(row))
-  let always = reject - 1
-  while (always > 0 && !MENU_ALWAYS.test(rows[always]!)) always--
-  const once = always - 1
-  if (reject < 0 || once < 1 || !MENU_ONCE.test(rows[once]!)) return undefined
-  const question = rows.slice(0, once)
-  const whole = MENU_WHOLE.exec(question.join("\n"))
-  if (!whole) return undefined
-  const mimic = question
-    .slice(1)
-    .some((row) => [MENU_QUESTION, MENU_ONCE, MENU_ALWAYS, MENU_REJECT, MENU_END].some((menu) => menu.test(row)))
-  return { permission: whole[1] ?? "", patterns: whole[2] ?? "", cut: mimic }
-}
-
-/**
- * Reads nikcli's permission menu out of the raw output (B8c review, M1).
- *
- * `nikcli run --format json` prints the model's words only inside JSON
- * events, and a JSON string holds no line break and no escape, so a row of an
- * event — glued back like `applyJsonLine` does when the terminal cut it — is
- * never read as the menu. Anything else is read by whole rows: a menu is its
- * question, the three options and the bar's end, taken once the output has
- * been quiet for `MENU_QUIET_MS`. A line «Permission required: …» alone, as
- * a model could write it, is not a menu.
- *
- * What remains: a program that prints the whole menu outside an event — a
- * plugin of the project's, say — could still be answered. The block list does
- * not depend on this: nikcli denies it itself (`pty.rs`).
- */
-export function permissionMenuReader(deps: {
-  readonly onMenu: (seen: MenuSeen) => void
-  readonly schedule?: (run: () => void, ms: number) => () => void
-  readonly quietMs?: number
-}): (chunk: string) => void {
-  const schedule =
-    deps.schedule ??
-    ((run: () => void, ms: number) => {
-      const timer = setTimeout(run, ms)
-      return () => clearTimeout(timer)
-    })
-  const quiet = deps.quietMs ?? MENU_QUIET_MS
-  let pending = ""
-  let event: string | undefined
-  let rows: string[] | undefined
-  let cancel: (() => void) | undefined
-
-  const take = () => {
-    cancel = undefined
-    const seen = rows && readMenu(rows)
-    if (!seen) return
-    rows = undefined
-    deps.onMenu(seen)
-  }
-  const arm = () => {
-    cancel?.()
-    cancel = schedule(take, quiet)
-  }
-  const row = (raw: string) => {
-    const clean = visibleRow(raw)
-    if (rows !== undefined) {
-      // nikcli waits on the menu: nothing else prints while a question is open.
-      rows.push(clean)
-      if (rows.length > MENU_MAX_ROWS) rows = undefined
-      else if (MENU_END.test(clean)) arm()
-      return
-    }
-    if (event !== undefined) {
-      event += clean
-      if (parseObject(event) || event.length > MAX_PARTIAL) event = undefined
-      return
-    }
-    if (clean.trimStart().startsWith("{")) {
-      if (!parseObject(clean)) event = clean
-      return
-    }
-    if (MENU_QUESTION.test(clean)) rows = [clean]
-  }
-
-  return (chunk) => {
-    const parts = (pending + chunk).split("\n")
-    pending = parts.pop() ?? ""
-    for (const part of parts) row(part)
-    // The bar's end with no line break after it yet: the menu is drawn all the same.
-    if (rows !== undefined && MENU_END.test(visibleRow(pending))) arm()
-    // More output while a menu waits to be taken: it waits for quiet again.
-    else if (cancel) arm()
-  }
-}
-
 /**
  * One line of the process's output, folded into the conversation.
  *
  * A JSON line is an event; any other line is ignored — nikcli's own logging,
- * a stray warning, the permission menu, which `permissionMenuReader` reads
- * whole from the raw output (B8c review, M1).
+ * a stray warning.
  */
 export function applyLine(talk: Talk, line: string, at: number): Talk {
   return applyJsonLine(talk, line, at, (current, parsed, when) => {
@@ -479,7 +336,7 @@ export function applyLine(talk: Talk, line: string, at: number): Talk {
  * One line of a process that prints one JSON object per line, folded in by
  * `onEvent`. Shared by every runner: the reassembly of an event ConPTY cut
  * into rows is the same whoever wrote it. `onOther` sees the lines that are
- * not JSON (nikcli uses it for its permission menu).
+ * not JSON.
  */
 export function applyJsonLine(
   talk: Talk,
@@ -579,6 +436,24 @@ export function appendMessage(
   }
 }
 
+/**
+ * A message put on the thread, or put in place of the one with its id: nikcli's
+ * server sends a part whole each time it changes (B8d), a text as it grows and
+ * a tool from running to done. Stored as `appendMessage` stores it; the first
+ * time it came stays its time.
+ */
+export function upsertMessage(
+  talk: Talk,
+  message: { readonly id: string; readonly role: TalkRole; readonly text: string; readonly tool?: string; readonly output?: string },
+  at: number,
+): Talk {
+  const index = talk.messages.findIndex((existing) => existing.id === message.id)
+  if (index < 0) return appendMessage(talk, message, at)
+  const messages = talk.messages.slice()
+  messages[index] = { ...forStorage(message), at: messages[index]!.at }
+  return { ...talk, messages, updatedAt: at }
+}
+
 /** Adds what a tool printed to the tool message with that id, when it is on the thread. */
 export function attachOutput(talk: Talk, id: string, output: string): Talk {
   if (output.trim().length === 0) return talk
@@ -667,32 +542,9 @@ function applyEvent(talk: Talk, event: RunEvent, at: number): Talk {
   }
 }
 
-/** The menu `permissionMenuReader` read, on the thread; one at a time. */
-export function noticePermission(talk: Talk, seen: MenuSeen, at: number): Talk {
-  if (talk.permission) return talk
-  return {
-    ...talk,
-    status: "waiting",
-    permission: { permission: seen.permission, patterns: seen.patterns, askedAt: at, ...(seen.cut ? { cut: true } : {}) },
-    updatedAt: at,
-  }
-}
-
 export type PermissionAnswer = "once" | "always" | "reject"
 
-/**
- * The keystrokes that pick an answer in the menu.
- *
- * The menu starts on "Allow once"; "Always" is one arrow-down below it and
- * "Reject" two. Arrow-down is the CSI sequence a terminal sends for the key.
- */
-export function answerKeys(answer: PermissionAnswer): string {
-  const down = "[B"
-  const steps = answer === "once" ? 0 : answer === "always" ? 1 : 2
-  return down.repeat(steps) + "\r"
-}
-
-/** After the keystrokes are sent: the question is gone, the turn goes on. */
+/** After the answer is sent: the question is gone, the turn goes on. */
 export function permissionAnswered(talk: Talk, at: number): Talk {
   return { ...talk, permission: undefined, status: "working", updatedAt: at }
 }

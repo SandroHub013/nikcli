@@ -26,11 +26,12 @@ describe("B8b: the room in the Bot section", () => {
   })
 
   test("the member on turn's question is answered in the room, with the panel's three answers", () => {
-    expect(panel).toContain('props.deps.answer(speaking()!, "reject")')
-    expect(panel).toContain('props.deps.answer(speaking()!, "once")')
-    expect(panel).toContain('props.deps.answer(speaking()!, "always")')
+    // With the id of the question shown (B8d review, M1).
+    expect(panel).toContain('props.deps.answer(speaking()!, "reject", pending().requestID)')
+    expect(panel).toContain('props.deps.answer(speaking()!, "once", pending().requestID)')
+    expect(panel).toContain('props.deps.answer(speaking()!, "always", pending().requestID)')
     expect(bots).toContain("permission: (roomId, path) => talkOf(roomThread(roomId, path)).permission")
-    expect(bots).toContain("if (bot) turns.answer(bot, choice)")
+    expect(bots).toContain("if (bot) turns.answer(bot, choice, requestID)")
   })
 
   test("«ti serve» shows in the list and in the room; «Ferma» stops the run", () => {

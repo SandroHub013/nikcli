@@ -149,9 +149,14 @@ export async function recheckTrust(
   const never = () => false
   const verdict = await admit(bot, { store: deps.bots, read: async () => text, confirm: never })
   if (!verdict.ok) return { ok: false, problem: verdict.problem ?? retrust }
-  if (scope === "project" && runnerById(bot.runner).id === "nikcli") {
+  /*
+   * nikcli runs a chat's turn on ADE's server, which loads the project's
+   * configuration whoever's the bot (B8d): the user's own bots need the
+   * project's yes too, given in ADE.
+   */
+  if (runnerById(bot.runner).id === "nikcli") {
     const configuration = await admitProject(project, { store: deps.projects, surface: deps.surface, confirm: never })
-    if (!configuration.ok) return { ok: false, problem: retrust }
+    if (!configuration.ok) return { ok: false, problem: scope === "project" ? retrust : t("bots.serve.notAdmitted", project) }
   }
   // The file as it was read: what the remote commands were turned on for is compared with it.
   return { ok: true, bot, fingerprint: await fileFingerprint(text) }

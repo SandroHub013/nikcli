@@ -115,9 +115,8 @@ export interface Host {
      */
     secrets?: string[]
     /**
-     * Named switches the host turns into one fixed variable each, for one
-     * agent (`SPAWN_FLAGS` in `pty.rs`). `no-project-config`: nikcli without
-     * the open project's `.nikcli/`.
+     * An account's switch for Claude Code or Codex (`account-plan`,
+     * `account-key`, `spawn_flag_effect` in `pty.rs`); nothing else is taken.
      */
     flags?: readonly string[]
   }) => Promise<SpawnedSession>
