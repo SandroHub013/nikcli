@@ -71,6 +71,10 @@ const SEEN_EVENTS: usize = 256;
 /// reading loop, where every moment spent holds the acks of the envelopes
 /// behind it, and Slack's limit for those is three seconds.
 const NAME_WAIT: Duration = Duration::from_secs(1);
+/// How long an id whose name did not come stands for it before Slack is asked
+/// again. Without it every message from that sender waited `NAME_WAIT` anew,
+/// holding the acks behind it each time (G10 delta, BASSO).
+const NAME_RETRY: Duration = Duration::from_secs(5 * 60);
 const MAX_WAIT: Duration = Duration::from_secs(60);
 const RETRIES: usize = 3;
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
@@ -406,6 +410,8 @@ struct Inner {
     bot_user: Mutex<Option<String>>,
     /// Senders' names by id, from `users.info`.
     names: Mutex<HashMap<String, String>>,
+    /// Senders whose name did not come, and when: not asked again for `NAME_RETRY`.
+    unnamed: Mutex<HashMap<String, std::time::Instant>>,
     /// What a message last showed, per `chat/ts`: an edit that changes nothing is not sent.
     preview: Mutex<HashMap<String, String>>,
     /// The last events handed on, to drop one Slack sends again.
@@ -541,10 +547,17 @@ impl Inner {
         if user.is_empty() || !user.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
             return user.to_string();
         }
+        if hold(&self.unnamed).get(user).is_some_and(|since| since.elapsed() < NAME_RETRY) {
+            return user.to_string();
+        }
         let path = format!("/users.info?user={user}");
         let Ok(Ok(answer)) = tokio::time::timeout(NAME_WAIT, self.call(reqwest::Method::GET, &path, Token::Bot, None)).await else {
+            let mut unnamed = hold(&self.unnamed);
+            unnamed.retain(|_, since| since.elapsed() < NAME_RETRY);
+            unnamed.insert(user.to_string(), std::time::Instant::now());
             return user.to_string();
         };
+        hold(&self.unnamed).remove(user);
         let person = &answer.body["user"];
         let name = [&person["profile"]["display_name"], &person["real_name"], &person["name"]]
             .iter()
@@ -822,6 +835,7 @@ impl Slack {
                 calls,
                 bot_user: Mutex::new(None),
                 names: Mutex::new(HashMap::new()),
+                unnamed: Mutex::new(HashMap::new()),
                 preview: Mutex::new(HashMap::new()),
                 seen: Mutex::new(VecDeque::new()),
             }),
@@ -1229,6 +1243,20 @@ mod tests {
         eventually("i due ack", || socket.acks().len() == 2).await;
         let second = socket.connections()[0].received[1].0;
         assert!(second.duration_since(started) < Duration::from_millis(2_500), "l'ack dietro al nome e' arrivato dopo {:?}", second.duration_since(started));
+    }
+
+    #[tokio::test]
+    async fn a_name_that_did_not_come_in_time_is_not_waited_for_again() {
+        let socket = FakeSocket::start(vec![], 100);
+        let mut queues = HashMap::new();
+        queues.insert("/users.info", vec![with_header(ok(json!({ "ok": true, "user": { "name": "lento" } })), LATE, "3000")]);
+        let api = FakeApi::start(&socket.address, queues);
+        let slack = adapter(&api);
+        assert_eq!(slack.inner.name_of("U9").await, "U9");
+        // The next message from the same sender: its id at once, not another second.
+        let again = Instant::now();
+        assert_eq!(slack.inner.name_of("U9").await, "U9");
+        assert!(again.elapsed() < Duration::from_millis(300), "aspettato di nuovo: {:?}", again.elapsed());
     }
 
     #[tokio::test]
