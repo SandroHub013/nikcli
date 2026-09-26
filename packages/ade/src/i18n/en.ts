@@ -517,12 +517,6 @@ export const en: Messages = {
   "bots.trust.can.nikcli": "It can do what your nikcli configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what, line) =>
     `This project's bot «${name}» grants itself «${what}» in its file, with the line «${line}», and nikcli would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
-  "bots.trust.grantsShell": (name, line, file) =>
-    `The bot «${name}» grants itself commands or folders outside the project: its file has the line «${line}». nikcli applies it after ADE's rules, so those commands would run unasked, the block list's included. It does not start from the panel: remove that line from ${file}.`,
-  "bots.trust.configGrants": (name, key, file) =>
-    `${file} grants commands or folders outside the project with «${key}», and nikcli applies it to the bot «${name}» after ADE's rules: those commands would run unasked, the block list's included. The bot does not start from the panel: remove «${key}» from ${file}.`,
-  "bots.trust.configUnreadable": (name, file) =>
-    `${file} cannot be read, and it could grant the bot «${name}» commands unasked: it does not start from the panel. Check that it is valid JSON.`,
   "bots.projectTrust.new": (root, files) =>
     `The folder ${root} has a nikcli configuration of its own (${files}): plugins, tools and settings nikcli loads and runs on every turn, on your account, written by whoever wrote the project. Load them? If not, bots on nikcli do not start here; bots on Claude Code and Codex do, since they do not read it.`,
   "bots.projectTrust.changed": (root, files) =>

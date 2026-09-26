@@ -43,7 +43,7 @@ import { PLAN_RUNNERS, routineModeOf } from "./terms"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
-import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runBotTurn } from "./serve-turn"
 import {
   createBot,
@@ -223,10 +223,11 @@ async function admitTurn(
   if (!verdict.ok) return verdict
   const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
   const nikcli = runnerById(trusted.runner).id === "nikcli"
-  if (nikcli) {
-    const granted = await grantProblem(trusted, root, { read: readBotText, fs: projectFs, text: read })
-    if (granted) return { ok: false, problem: granted }
-  }
+  /*
+   * A grant in the bot's file or the project's nikcli.json no longer stops
+   * it: its session's rules come after them (B8d, `serve-rules.ts`), so the
+   * shell and folders outside are asked about, the block list denied.
+   */
   // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
   if (root && nikcli) {
     const project = await admitProject(root, {

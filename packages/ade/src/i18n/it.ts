@@ -524,12 +524,6 @@ export const it = {
     "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string, line: string) =>
     `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
-  "bots.trust.grantsShell": (name: string, line: string, file: string) =>
-    `Il bot «${name}» si concede da solo i comandi o le cartelle fuori dal progetto: nel suo file c'è la riga «${line}». nikcli la applica dopo le regole di ADE, quindi quei comandi partirebbero senza domanda, anche quelli della lista di blocco. Dal pannello non parte: togli quella riga da ${file}.`,
-  "bots.trust.configGrants": (name: string, key: string, file: string) =>
-    `${file} concede i comandi o le cartelle fuori dal progetto con «${key}», e nikcli lo applica al bot «${name}» dopo le regole di ADE: quei comandi partirebbero senza domanda, anche quelli della lista di blocco. Dal pannello il bot non parte: togli «${key}» da ${file}.`,
-  "bots.trust.configUnreadable": (name: string, file: string) =>
-    `Non riesco a leggere ${file}, che potrebbe concedere i comandi al bot «${name}» senza domanda: dal pannello non parte. Controlla che sia un JSON valido.`,
   "bots.projectTrust.new": (root: string, files: string) =>
     `La cartella ${root} ha una configurazione di nikcli sua (${files}): plugin, strumenti e impostazioni che nikcli carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su nikcli non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>

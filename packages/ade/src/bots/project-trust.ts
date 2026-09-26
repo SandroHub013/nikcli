@@ -18,7 +18,7 @@
 import { joinPath } from "../host/path"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
-import { fileFingerprint, reachesShell, selfApproval, shellGrant, type TrustStore } from "./trust"
+import { fileFingerprint, reachesShell, selfApproval, type TrustStore } from "./trust"
 
 /** The two calls this needs from the host, as `host/shell.ts` has them. */
 export interface ProjectFs {
@@ -284,7 +284,8 @@ function grantIn(kind: "permission" | "tools", value: unknown, at: string): stri
  * `tools`, and those of `agent.<identifier>` (and the older `mode`), which
  * nikcli merges with the bot's file. A path to
  * take out, `null` when the file cannot be read (a refusal too), or
- * `undefined`.
+ * `undefined`. The gateway's check (`gateway/policy.ts`); in the panel the
+ * session's rules on ADE's server come after it (B8d, `serve-rules.ts`).
  */
 export function configGrant(text: string, identifier: string): string | null | undefined {
   const config = parseJsonc(text)
@@ -301,42 +302,6 @@ export function configGrant(text: string, identifier: string): string | null | u
     const at = `${section}.${JSON.stringify(identifier)}`
     const own = grantIn("permission", agent["permission"], `${at}.permission`) ?? grantIn("tools", agent["tools"], `${at}.tools`)
     if (own) return own
-  }
-  return undefined
-}
-
-/**
- * Why the nikcli bot `bot` does not start from the panel, or `undefined`
- * (B8c): its file, or the project's configuration, grants the shell or a
- * folder outside. A bot's session on ADE's server has its rules after these
- * grants, and the last rule that matches wins (B8d, `serve-rules.ts`): the
- * refusal stays from B8c as a second guard, and so that what the file says
- * and what the bot does agree. The user's own bots too: the message names
- * the line to take out. `text` is the file as just read, when it was.
- */
-export async function grantProblem(
-  bot: AgentFile,
-  root: string | undefined,
-  deps: { readonly read: (path: string) => Promise<string>; readonly fs: ProjectFs; readonly text?: string },
-): Promise<string | undefined> {
-  let text = deps.text
-  if (text === undefined) {
-    try {
-      text = await deps.read(bot.path)
-    } catch {
-      return t("bots.trust.unreadable", bot.identifier)
-    }
-  }
-  const own = shellGrant(text)
-  if (own) return t("bots.trust.grantsShell", bot.identifier, own.line, bot.path)
-  if (!root) return undefined
-  for (const name of CONFIG_FILES) {
-    const path = joinPath(root, name)
-    const config = await readOrMark(deps.fs, path)
-    if (config === undefined) continue
-    const granted = configGrant(config, bot.identifier)
-    if (granted === null) return t("bots.trust.configUnreadable", bot.identifier, path)
-    if (granted !== undefined) return t("bots.trust.configGrants", bot.identifier, granted, path)
   }
   return undefined
 }
