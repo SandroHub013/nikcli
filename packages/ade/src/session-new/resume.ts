@@ -170,8 +170,15 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
   const text = output.replace(/\r/g, "")
   // A line that is the array opening, not a "[warn] …" above it.
   const start = text.search(/^\[(?:\]|[ \t]*$)/m)
-  const end = text.lastIndexOf("]")
-  if (start < 0 || end < start) return undefined
+  if (start < 0) return undefined
+  /*
+   * And the line that closes it: `[]`, or the first `]` at the start of a
+   * line after it (pretty-printed, the ones inside are indented). Not the
+   * last `]` of the output: a "[warn] …" line after the list would move it.
+   */
+  const closing = text.startsWith("[]", start) ? start : text.slice(start).search(/^\]/m)
+  if (closing < 0) return undefined
+  const end = text.startsWith("[]", start) ? start + 1 : start + closing
   let list: unknown
   try {
     list = JSON.parse(text.slice(start, end + 1))

@@ -353,6 +353,12 @@ describe("nikcli's latest conversation in this folder", () => {
     expect(lastNikcliHere("", HERE, none)).toBeUndefined()
   })
 
+  test("a log line with a bracket after the list does not hide it (review, BASSO 3)", () => {
+    const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20)) + "[warn] plugin loaded [tui]\r\n"
+    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastNikcliHere("[]\r\n[warn] x [y]\r\n", HERE, none)).toBeNull()
+  })
+
   test("a warning line above the list does not hide it", () => {
     const output = "[warn] something about plugins\r\n" + listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20))
     expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
