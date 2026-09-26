@@ -383,10 +383,14 @@ fn small_model_content(inherited: Option<&str>, user_files: &[String], model: &s
 }
 
 /// Whether a model of the catalog can title and summarise for free: free by
-/// its id, a text model that calls tools, not on its way out.
+/// its id and with no price above 0 where the catalog gives one (modello
+/// assente review, B1), a text model that calls tools, not on its way out.
 fn fit_small_model(id: &str, model: &serde_json::Value) -> bool {
     let capabilities = &model["capabilities"];
+    let priced = |side: &str| model["cost"][side].as_f64().is_some_and(|cost| cost > 0.0);
     id.ends_with(":free")
+        && !priced("input")
+        && !priced("output")
         && model["status"].as_str() != Some("deprecated")
         && capabilities["toolcall"].as_bool() == Some(true)
         && capabilities["output"]["text"].as_bool() != Some(false)
@@ -1024,6 +1028,9 @@ mod tests {
         // A known one that no longer calls tools is not taken for its name.
         let unfit = catalog(&["openrouter"], &[(KNOWN_FREE_SMALL[0], serde_json::json!({ "capabilities": { "toolcall": false } })), ("openrouter/b/beta:free", plain.clone())]);
         assert_eq!(pick_small_model(&unfit).as_deref(), Some("openrouter/b/beta:free"));
+        // Free by its name but with a price: not taken (B1).
+        let priced = catalog(&["openrouter"], &[(KNOWN_FREE_SMALL[0], serde_json::json!({ "cost": { "input": 0.5, "output": 0 } })), ("openrouter/c/gamma:free", serde_json::json!({ "cost": { "input": 0, "output": 0 } }))]);
+        assert_eq!(pick_small_model(&priced).as_deref(), Some("openrouter/c/gamma:free"));
         // A provider that is not connected runs nothing.
         let unplugged = catalog(&[], &[(KNOWN_FREE_SMALL[0], plain.clone())]);
         assert_eq!(pick_small_model(&unplugged), None);
