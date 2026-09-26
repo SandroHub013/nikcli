@@ -117,6 +117,14 @@ export function waitsForSheet(commandId: string): boolean {
   return commandId === "palette.open" || commandId === "session.new" || commandId === "pane.rename"
 }
 
+/** `run`, doing nothing for the commands that `waitsForSheet` while a sheet is open. */
+export function guardedBySheet(sheetOpen: () => boolean, run: (id: string) => Promise<void>): (id: string) => Promise<void> {
+  return async (id) => {
+    if (sheetOpen() && waitsForSheet(id)) return
+    await run(id)
+  }
+}
+
 /**
  * Every command the palette can offer, given what is true right now.
  *
