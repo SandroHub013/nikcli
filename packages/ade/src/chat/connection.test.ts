@@ -206,11 +206,11 @@ describe("the chat on a folder", () => {
 describe("a catalog read has a time limit", () => {
   test("a server that never answers gives an unknown catalog, in time", async () => {
     const never = () => new Promise<never>(() => {})
-    const client = { provider: { list: never }, app: { agents: never }, config: { get: never } } as unknown as NikcliClient
+    const client = { app: { agents: never }, config: { get: never, providers: never } } as unknown as NikcliClient
     const started = Date.now()
     const catalog = await loadChatCatalog(client, 20)
     expect(Date.now() - started).toBeLessThan(1000)
-    expect(catalog).toEqual({ providerList: undefined, agents: undefined, configModel: undefined })
+    expect(catalog).toEqual({ configProviders: undefined, agents: undefined, configModel: undefined })
   })
 
   test("within: the value in time, undefined when late or failed", async () => {

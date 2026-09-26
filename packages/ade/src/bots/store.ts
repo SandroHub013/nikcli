@@ -440,13 +440,14 @@ export async function listModels(cwd?: string, hostOf: () => Promise<Host | unde
 
 /**
  * One provider's catalog, with its prices (`nikcli models <provider>
- * --verbose`), for `catalog.ts`. Empty when it cannot be read.
+ * --verbose`), for `catalog.ts`; every provider's without one (`nikcli
+ * models --verbose`, the bot form's models). Empty when it cannot be read.
  */
-export async function modelCatalogText(provider: string, cwd?: string): Promise<string> {
+export async function modelCatalogText(provider: string | undefined, cwd?: string): Promise<string> {
   const host = await getHost()
   if (!host?.nikcliBot) return ""
   try {
-    const result = await host.nikcliBot(["models", provider, "--verbose"], cwd)
+    const result = await host.nikcliBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
     return result.code === 0 ? result.stdout : ""
   } catch {
     return ""

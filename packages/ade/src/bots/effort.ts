@@ -80,3 +80,15 @@ export function effortChoices(input: {
   if (input.variants.length === 0) return { options: [], ...(saved ? { stale: saved } : {}), none: true }
   return { options: input.variants, ...(saved && !input.variants.includes(saved) ? { stale: saved } : {}), none: false }
 }
+
+/**
+ * What a save writes of the effort: nothing for one the model does not have.
+ * The form showed «predefinito» over it, but a save with nothing touched put
+ * the old value back, and every turn said again that it was dropped (review
+ * of bot-sforzo, BASSO 2).
+ */
+export function effortToSave(effort: string, stale: string | undefined): string | undefined {
+  const value = effort.trim()
+  if (!value || value === stale?.trim()) return undefined
+  return value
+}

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { ConfigProviders } from "@nikcli-ai/sdk/client"
-import { effortChoices, effortToSend, modelVariants } from "./effort"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { effortChoices, effortToSave, effortToSend, modelVariants } from "./effort"
 
 const providers = {
   providers: [
@@ -68,5 +70,26 @@ describe("the efforts the bot form offers", () => {
     const flags = ["low", "medium", "high", "xhigh", "max"]
     expect(effortChoices({ nikcli: false, fixed: flags, variants: undefined, saved: "" })).toEqual({ options: flags, none: false })
     expect(effortChoices({ nikcli: false, fixed: flags, variants: undefined, saved: "ultra" })).toEqual({ options: flags, kept: "ultra", none: false })
+  })
+})
+
+/* Review of bot-sforzo, BASSO 2: a save with nothing touched put back a level the model does not have. */
+describe("what a save writes of the effort", () => {
+  test("nothing for a level the model does not have, nor for the default", () => {
+    expect(effortToSave("high", "high")).toBeUndefined()
+    expect(effortToSave(" high ", "high")).toBeUndefined()
+    expect(effortToSave("", undefined)).toBeUndefined()
+    expect(effortToSave("low", undefined)).toBe("low")
+    // A level chosen after the stale one goes.
+    expect(effortToSave("low", "high")).toBe("low")
+  })
+
+  test("both forms save through it, told by the field which level is stale", () => {
+    const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
+    expect(form.split("onStale={setStaleEffort}").length - 1).toBe(2)
+    expect(form).toContain("effort: effortToSave(effort(), staleEffort()),")
+    expect(form).toContain("...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),")
+    expect(form).toContain("createEffect(() => props.onStale?.(efforts().stale))")
+    expect(form).toContain("staleEffort() !== undefined ||")
   })
 })

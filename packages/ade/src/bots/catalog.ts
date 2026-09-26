@@ -9,7 +9,7 @@
  * counts there, and nikcli is not asked.
  */
 
-import { formatModelLabel, hasReliableCost, isFreeModel } from "../chat/model"
+import { formatModelLabel, hasReliableCost, isFreeModel, type CatalogEntry, type CatalogProvider, type CatalogSource } from "../chat/model"
 
 export interface CatalogModel {
   readonly id: string
@@ -26,6 +26,29 @@ export interface CatalogModel {
  */
 export function parseModelCatalog(stdout: string): ReadonlyMap<string, CatalogModel> {
   const models = new Map<string, CatalogModel>()
+  for (const [name, record] of catalogRecords(stdout)) {
+    const cost = record["cost"] as Record<string, unknown> | undefined
+    const variants = record["variants"]
+    models.set(name, {
+      variants: variants && typeof variants === "object" && !Array.isArray(variants) ? Object.keys(variants) : [],
+      id: typeof record["id"] === "string" ? record["id"] : name.slice(name.indexOf("/") + 1),
+      ...(typeof record["providerID"] === "string" ? { providerID: record["providerID"] } : {}),
+      ...(cost && typeof cost === "object"
+        ? {
+            cost: {
+              ...(typeof cost["input"] === "number" ? { input: cost["input"] } : {}),
+              ...(typeof cost["output"] === "number" ? { output: cost["output"] } : {}),
+            },
+          }
+        : {}),
+    })
+  }
+  return models
+}
+
+/** Each record of `nikcli models [provider] --verbose`, with its `provider/id`; one that does not read is skipped. */
+function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
+  const records: [string, Record<string, unknown>][] = []
   const lines = stdout.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
     const name = lines[i]!.trim()
@@ -33,28 +56,34 @@ export function parseModelCatalog(stdout: string): ReadonlyMap<string, CatalogMo
     const end = lines.findIndex((line, at) => at > i && line === "}")
     if (end < 0) break
     try {
-      const record = JSON.parse(lines.slice(i + 1, end + 1).join("\n")) as Record<string, unknown>
-      const cost = record["cost"] as Record<string, unknown> | undefined
-      const variants = record["variants"]
-      models.set(name, {
-        variants: variants && typeof variants === "object" && !Array.isArray(variants) ? Object.keys(variants) : [],
-        id: typeof record["id"] === "string" ? record["id"] : name.slice(name.indexOf("/") + 1),
-        ...(typeof record["providerID"] === "string" ? { providerID: record["providerID"] } : {}),
-        ...(cost && typeof cost === "object"
-          ? {
-              cost: {
-                ...(typeof cost["input"] === "number" ? { input: cost["input"] } : {}),
-                ...(typeof cost["output"] === "number" ? { output: cost["output"] } : {}),
-              },
-            }
-          : {}),
-      })
+      const record = JSON.parse(lines.slice(i + 1, end + 1).join("\n")) as unknown
+      if (record && typeof record === "object" && !Array.isArray(record)) records.push([name, record as Record<string, unknown>])
     } catch {
       // Not a record: the next name starts over.
     }
     i = end
   }
-  return models
+  return records
+}
+
+/**
+ * The whole of `nikcli models --verbose` as a catalog shaped like
+ * `GET /config/providers`, for `modelsFromConfigProviders`: the bot form's
+ * models when ADE's server is not open on the bot's folder (composer-chip,
+ * pezzo 1). The records are the same `Model` the server gives, variants
+ * after the configuration's overrides included; the provider's name is not
+ * in them, so it is its id.
+ */
+export function catalogFromText(stdout: string): CatalogSource {
+  const byProvider = new Map<string, Record<string, CatalogEntry>>()
+  for (const [name, record] of catalogRecords(stdout)) {
+    const provider = typeof record["providerID"] === "string" ? record["providerID"] : name.slice(0, name.indexOf("/"))
+    const id = typeof record["id"] === "string" ? record["id"] : name.slice(name.indexOf("/") + 1)
+    const models = byProvider.get(provider) ?? {}
+    models[id] = record as CatalogEntry
+    byProvider.set(provider, models)
+  }
+  return { providers: [...byProvider].map(([id, models]): CatalogProvider => ({ id, name: id, models })) }
 }
 
 /**

@@ -52,7 +52,6 @@ import {
   deleteBot,
   projectOfBotPath,
   listBots,
-  listModels,
   modelCatalogText,
   projectFs,
   readBotText,
@@ -92,8 +91,8 @@ import {
   type RoutineContext,
 } from "./routine"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { botModelLabel, catalogFree, nikcliModelVariants } from "./catalog"
-import { effortChoices } from "./effort"
+import { botModelLabel, catalogFree, catalogFromText, nikcliModelVariants } from "./catalog"
+import { effortChoices, effortToSave } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
 import type { GatewayPanelDeps } from "./gateway/panel-state"
@@ -101,7 +100,16 @@ import { describeProblem, EMPTY_LOG, roomPay, roomProblem, roomSpendProblem, typ
 import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
 import { createRoomRunner, localRoomStore, memberName, roomThread, type RoomBook, type RoomRecord, type RoomSeat } from "./room-app"
 import { RoomForm, RoomMain, RoomsRoster, type RoomPanelDeps } from "./room-panel"
-import { isAdeTestBuild } from "../chat/model"
+import {
+  isAdeTestBuild,
+  modelsFromConfigProviders,
+  parseModelRef,
+  serializeModelRef,
+  variantsOf,
+  type ChatModelChoice,
+} from "../chat/model"
+import { isOpenOn } from "../chat/first-use"
+import { appChatStore } from "../chat/store"
 import "./bots.css"
 
 /*
@@ -278,6 +286,23 @@ const loadCatalog = (provider: string) => {
     if (!read) catalogs.delete(provider)
   })
   return text
+}
+
+/**
+ * The models a bot can be pinned to, from the Chat's catalog (composer-chip,
+ * pezzo 1): `/config/providers` when ADE's server is already open on the
+ * folder, otherwise the same records from `nikcli models --verbose`. The
+ * form used to list nikcli's 385 bare ids, free and paid alike. Nothing is
+ * started for it: opening a folder asks for its trust, and a form cannot.
+ */
+async function botModels(cwd: string | undefined): Promise<readonly ChatModelChoice[]> {
+  const options = { isTest: isAdeTestBuild() }
+  const chat = appChatStore()
+  if (cwd && isOpenOn(chat, cwd)) {
+    const configured = (await chat.catalog().catch(() => undefined))?.configProviders
+    if (configured) return modelsFromConfigProviders(configured, options)
+  }
+  return modelsFromConfigProviders(catalogFromText(await modelCatalogText(undefined, cwd)), options)
 }
 
 /** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
@@ -600,10 +625,10 @@ const shared = createRoot(() => {
     if (bots) ensureLoaded(bots.map((bot) => bot.path))
   })
 
-  /* Asked of nikcli, once. These are the models a bot can be pinned to. */
+  /* The models a bot can be pinned to: the one catalog, the Chat's (`botModels`). */
   const [models] = createResource(
     () => projectRoot() ?? "",
-    (cwd) => listModels(cwd || undefined),
+    (cwd) => botModels(cwd || undefined),
   )
 
   /*
@@ -1378,7 +1403,7 @@ function generationNotice(model: string): string {
 function BotCard(props: {
   bot: AgentFile
   talk: Talk
-  models: readonly string[]
+  models: readonly ChatModelChoice[]
   expression: Expression
   /** The Gateway section's dependencies; absent, no section. */
   gateway?: Omit<GatewayPanelDeps, "bot">
@@ -1586,7 +1611,7 @@ function BotCard(props: {
  */
 function BotForm(props: {
   roots: BotRoots
-  models: readonly string[]
+  models: readonly ChatModelChoice[]
   hasProject: boolean
   onCreated: (path: string) => void
   onCancel: () => void
@@ -1597,6 +1622,8 @@ function BotForm(props: {
   const [persona, setPersona] = createSignal("")
   const [model, setModel] = createSignal("")
   const [effort, setEffort] = createSignal("")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>("nikcli")
   const [objectives, setObjectives] = createSignal("")
   const [avatar, setAvatar] = createSignal<string>()
@@ -1638,7 +1665,7 @@ function BotForm(props: {
         description: description().trim(),
         ...(generating() ? {} : { persona: persona() }),
         ...(model() ? { model: model() } : {}),
-        ...(effort().trim() ? { effort: effort().trim() } : {}),
+        ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
         ...(runner() !== "nikcli" ? { runner: runner() } : {}),
         objectives: objectives()
@@ -1706,6 +1733,7 @@ function BotForm(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        onStale={setStaleEffort}
         onRunner={(id) => {
           setRunner(id)
           setModel("")
@@ -1792,21 +1820,26 @@ function EngineFields(props: {
   runner: string
   model: string
   effort: string
-  nikcliModels: readonly string[]
+  nikcliModels: readonly ChatModelChoice[]
   /** The model the file already names, kept selectable when a list lacks it. */
   pinned?: string
   onRunner: (id: string) => void
   onModel: (value: string) => void
   onEffort: (value: string) => void
+  /** The saved level the model does not have, or undefined: the form saves it as none (`effortToSave`). */
+  onStale?: (stale: string | undefined) => void
   /** Present on a saved bot. The create form has no path yet, so no account. */
   account?: BotAccount
   onAccount?: (account: BotAccount) => void
   onOpenKeys?: () => void
 }) {
   const runner = createMemo<Runner>(() => runnerById(props.runner))
-  // A nikcli model's efforts are its variants, from nikcli's catalog; undefined while not known.
+  // A nikcli model's efforts are its variants: the catalog's, or its provider's for a model the catalog lacks.
+  const listed = createMemo(() =>
+    runner().id === "nikcli" && props.model ? variantsOf(props.nikcliModels, parseModelRef(props.model)) : undefined,
+  )
   const [variants] = createResource(
-    () => (runner().id === "nikcli" && props.model ? props.model : null),
+    () => (runner().id === "nikcli" && props.model && listed() === undefined ? props.model : null),
     (model) => nikcliModelVariants(model, loadCatalog),
   )
   const efforts = createMemo(() =>
@@ -1814,10 +1847,11 @@ function EngineFields(props: {
       nikcli: runner().id === "nikcli",
       fixed: runner().efforts,
       // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
-      variants: runner().id === "nikcli" && props.model && !variants.loading ? variants() : undefined,
+      variants: runner().id === "nikcli" && props.model ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
       saved: props.effort,
     }),
   )
+  createEffect(() => props.onStale?.(efforts().stale))
   const [pickingKey, setPickingKey] = createSignal(false)
   const [assigned] = createResource(
     () => (props.onAccount && PLAN_RUNNERS.includes(runner().id) ? runner().command : null),
@@ -1949,10 +1983,19 @@ function EngineFields(props: {
               <option value="">{t("bots.engine.nikcliDefault")}</option>
               {/* The bot's own model stays offered when it is not in the list:
                   dropping the pin would silently move the bot to another model. */}
-              <Show when={props.pinned && !props.nikcliModels.includes(props.pinned)}>
+              <Show when={props.pinned && !props.nikcliModels.some((choice) => serializeModelRef(choice) === props.pinned)}>
                 <option value={props.pinned}>{botModelLabel(props.pinned ?? "")}</option>
               </Show>
-              <For each={props.nikcliModels}>{(id) => <option value={id}>{botModelLabel(id)}</option>}</For>
+              <For each={props.nikcliModels.filter((choice) => choice.free)}>
+                {(choice) => <option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>}
+              </For>
+              <Show when={props.nikcliModels.some((choice) => !choice.free)}>
+                <optgroup label={t("bots.engine.paidModels")}>
+                  <For each={props.nikcliModels.filter((choice) => !choice.free)}>
+                    {(choice) => <option value={serializeModelRef(choice)} title={serializeModelRef(choice)}>{choice.label}</option>}
+                  </For>
+                </optgroup>
+              </Show>
             </select>
             <Show when={props.nikcliModels.length === 0}>
               <span data-slot="bots-hint">
@@ -1997,7 +2040,7 @@ function EngineFields(props: {
 
 function BotSettings(props: {
   bot: AgentFile
-  models: readonly string[]
+  models: readonly ChatModelChoice[]
   account: BotAccount
   onAccount: (account: BotAccount) => void
   onOpenKeys?: () => void
@@ -2008,6 +2051,8 @@ function BotSettings(props: {
   const [description, setDescription] = createSignal(props.bot.description)
   const [model, setModel] = createSignal(props.bot.model ?? "")
   const [effort, setEffort] = createSignal(props.bot.effort ?? "")
+  // A level the chosen model does not have: shown as the default, and saved as none.
+  const [staleEffort, setStaleEffort] = createSignal<string>()
   const [runner, setRunner] = createSignal<string>(runnerById(props.bot.runner).id)
   const [objectives, setObjectives] = createSignal(parts().objectives.join("\n"))
   const [persona, setPersona] = createSignal(parts().persona)
@@ -2041,6 +2086,8 @@ function BotSettings(props: {
       description() !== props.bot.description ||
       model() !== (props.bot.model ?? "") ||
       effort() !== (props.bot.effort ?? "") ||
+      // Saving clears it: the save is offered.
+      staleEffort() !== undefined ||
       runner() !== runnerById(props.bot.runner).id ||
       persona() !== parts().persona ||
       objectives() !== parts().objectives.join("\n") ||
@@ -2056,7 +2103,7 @@ function BotSettings(props: {
     const problem = await updateBot(props.bot, {
       description: description().trim(),
       model: model() || undefined,
-      effort: effort().trim() || undefined,
+      effort: effortToSave(effort(), staleEffort()),
       runner: runner() === "nikcli" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
@@ -2100,6 +2147,7 @@ function BotSettings(props: {
         model={model()}
         effort={effort()}
         nikcliModels={props.models}
+        onStale={setStaleEffort}
         {...(props.bot.model ? { pinned: props.bot.model } : {})}
         onRunner={(id) => {
           setRunner(id)

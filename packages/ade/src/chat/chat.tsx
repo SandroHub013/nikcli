@@ -15,14 +15,15 @@
 
 import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
 import { t } from "../i18n"
-import type { Agent, ProviderList } from "@nikcli-ai/sdk/client"
+import type { Agent, ConfigProviders } from "@nikcli-ai/sdk/client"
 import type { ChatCatalog } from "./connection"
 import {
   agentsFromList,
   defaultAgentChoice,
   defaultModelChoice,
   isAdeTestBuild,
-  modelsFromProviderList,
+  modelsFromConfigProviders,
+  rememberModel,
   sameModel,
   serializeModelRef,
   validateSelectedModel,
@@ -80,8 +81,8 @@ export interface ChatProps {
   projectRoot?: string
   /** The window's store unless a caller brings one. */
   store?: ChatStore
-  /** Injected by tests or callers */
-  providerList?: ProviderList
+  /** Injected by tests or callers: the catalog `/config/providers` gives. */
+  configProviders?: ConfigProviders
   /** Injected by tests or callers */
   agents?: readonly Agent[]
   /** Override for ADE Test mode (auto-detected if undefined) */
@@ -115,7 +116,7 @@ export function Chat(props: ChatProps) {
   const isTest = () => props.isTest ?? isAdeTestBuild()
   const [draft, setDraft] = createSignal("")
   const [models, setModels] = createSignal<readonly ChatModelChoice[]>(
-    modelsFromProviderList(props.providerList, { isTest: isTest() }),
+    modelsFromConfigProviders(props.configProviders, { isTest: isTest() }),
   )
   const [agents, setAgents] = createSignal<readonly ChatAgentChoice[]>(agentsFromList(props.agents))
   const [model, setModel] = createSignal<ModelRef | undefined>(loadStoredModel(models(), isTest()))
@@ -144,7 +145,7 @@ export function Chat(props: ChatProps) {
    */
   const applyCatalog = (catalog: ChatCatalog) => {
     const testBuild = isTest()
-    const resolvedModels = modelsFromProviderList(catalog.providerList ?? props.providerList, { isTest: testBuild })
+    const resolvedModels = modelsFromConfigProviders(catalog.configProviders ?? props.configProviders, { isTest: testBuild })
     setModels(resolvedModels)
     const resolvedAgents = agentsFromList(catalog.agents ?? props.agents)
     setAgents(resolvedAgents)
@@ -361,6 +362,8 @@ export function Chat(props: ChatProps) {
     setModel(validated)
     try {
       localStorage.setItem(MODEL_KEY, JSON.stringify(validated))
+      // The project's recent models, for the picker (composer-chip).
+      rememberModel(localStorage, props.projectRoot, validated)
     } catch {
       // This session keeps the choice regardless.
     }
