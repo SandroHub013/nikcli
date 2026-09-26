@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test"
 import { createSignal, onMount, Show, type JSX } from "solid-js"
 import { createComponent, render } from "solid-js/web"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { Sheet, SheetTitle } from "./sheet"
 
 /*
@@ -103,6 +105,14 @@ describe("a sheet on Kobalte's Dialog", () => {
     await tick()
     expect(panel.contains(document.activeElement)).toBe(true)
     expect(document.activeElement).toBe(buttons[0])
+  })
+
+  test("lint: the bare frame is rounded like a surface, so the focus ring follows the panel's corners", () => {
+    const css = readFileSync(join(import.meta.dir, "layout.css"), "utf8")
+    const start = css.indexOf(':where([data-layout="frame"]) {')
+    expect(start).toBeGreaterThan(-1)
+    const rule = css.slice(start, css.indexOf("}", start))
+    expect(rule.includes("border-radius: var(--ade-radius-xl);")).toBe(true)
   })
 
   test("Esc closes it", async () => {
