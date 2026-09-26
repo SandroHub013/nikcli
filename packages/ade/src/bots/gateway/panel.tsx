@@ -136,7 +136,7 @@ export function GatewaySection(props: {
         <div data-slot="gateway-block">
           <span data-slot="gateway-subtitle">{t("gateway.panel.portal")}</span>
           <p data-slot="bots-hint">{t("gateway.panel.portalWhere")}</p>
-          <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.intents")}</p>
+          <p data-slot="bots-hint" data-state="warn">{t("gateway.panel.intentsOff")}</p>
           <p data-slot="bots-hint">{t("gateway.panel.invite")}</p>
           <p data-slot="bots-hint" data-state="warn">{t("gateway.noProxy")}</p>
         </div>

@@ -585,7 +585,9 @@ export const en: Messages = {
   "gateway.panel.tokenPlaceholderDiscord": "THE-BOT-TOKEN…",
   "gateway.panel.portal": "In the developer portal",
   "gateway.panel.portalWhere":
-    "In your application at discord.com/developers/applications, open your bot. A new application is only needed if you do not have one for the bot yet.",
+    "Create the bot at discord.com/developers/applications: the «New Application» button, then «Add Bot». The bot is born inside the application and right under its name is the token: that is the one to paste in the field above, and there is no second one.",
+  "gateway.panel.intentsOff":
+    "Three intents are to be left off, and all three are off on purpose: «Message Content», «Server Members Intent» and «Presence Intent». None of them is needed. «Message Content» stays off: a private chat and a mention inside your message arrive with their text even without it, while with the intent off the bot does not connect at all and it says so.",
   "gateway.panel.intents":
     "The bot's intents must be the base ones, without «Message Content»: a private chat and a mention inside your message arrive with their text even without it. With «Message Content» off the bot does not connect, and it says so.",
   "gateway.panel.invite":
