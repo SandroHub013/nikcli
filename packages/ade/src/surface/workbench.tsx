@@ -415,7 +415,7 @@ import {
 } from "@nikcli-ai/voice"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
-import { disposeTerminal, hasTerminal, noteInTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
+import { disposeTerminal, ptySize, refreshTerminalThemes, startOnCleanScreen, writeToTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
 import { decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
@@ -1625,7 +1625,7 @@ export function Workbench() {
     const failure = await host.writeTextFile(details, formatRequestDetails(request, { at, shot }))
     if (failure) return { ok: false, reason: failure }
     heldLines.push({ paneId: to, text: formatRequestLine(request, details) })
-    appendLine(to, t("note.browserRequest", request.paneTitle), "note", "ade")
+    tellPane(to, t("note.browserRequest", request.paneTitle))
     return { ok: true }
   }
 
@@ -2680,7 +2680,7 @@ export function Workbench() {
         if (request.from && running.has(request.from)) {
           heldLines.push({ paneId: request.from, text: formatWedged(request, panes.find((pane) => pane.id === request.to), now) })
         }
-        appendLine(request.to, t("pane.maybeStuck", request.id), "note", "ade")
+        tellPane(request.to, t("pane.maybeStuck", request.id))
       }
       if (statesWritten.get(request.id) !== state) {
         statesWritten.set(request.id, state)
@@ -2893,9 +2893,11 @@ export function Workbench() {
       if (request?.autoClose) {
         setTimeout(() => {
           void closeTree(host, request.to, false).then((outcome) => {
+            // A pane that should have closed and did not is said over the terminal; one that closed, only in the transcript.
+            const say = "error" in outcome ? tellPane : (id: string, text: string) => appendLine(id, text, "note", "ade")
             const note = "error" in outcome ? t("note.keptOpen", outcome.error) : t("note.closedAfterReply", outcome.closed.join(", "))
-            appendLine(request.to, note, "note", "ade")
-            if (caller) appendLine(caller.id, note, "note", "ade")
+            say(request.to, note)
+            if (caller) say(caller.id, note)
           })
         }, AUTO_CLOSE_DELAY_MS)
       }
@@ -3331,7 +3333,7 @@ export function Workbench() {
       session.write(interruptKeys(pane?.agent ?? pane?.model))
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
-      appendLine(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")), "note", "ade")
+      tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
       await answer(
@@ -3392,7 +3394,7 @@ export function Workbench() {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
         if (updated) void reopen(updated)
       }
-      appendLine(pane.id, t(message.fresh ? "note.restartedFresh" : "note.restarted", sender?.title ?? t("note.someSession"), message.model ?? ""), "note", "ade")
+      tellPane(pane.id, t(message.fresh ? "note.restartedFresh" : "note.restarted", sender?.title ?? t("note.someSession"), message.model ?? ""))
       // The note is typed once the new process is up, like any held line; given up after a minute.
       const noteText = `[Nota di ripresa da ${sender?.title ?? "una sessione"}]: ${message.note.trim()}`
       const waitStart = Date.now()
@@ -4000,6 +4002,7 @@ export function Workbench() {
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
+    tellPane: (id, text) => tellPane(id, text),
     permissions,
     answerPermission: (id, ans) => answerPermission(id, ans),
     confirmVoiceSend: (id, approved) => {
@@ -5761,7 +5764,7 @@ export function Workbench() {
 
   const openLink = async (paneId: string, request: LinkRequest) => {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
-    const say = (text: string) => (hasTerminal(paneId) ? noteInTerminal(paneId, text) : appendLine(paneId, text, "note", "ade"))
+    const say = (text: string) => tellPane(paneId, text)
     if (request.kind === "url") {
       if (!request.external) {
         openOwnedBrowser(request.target, { id: paneId, title: pane?.title ?? "" }, true)
@@ -6222,7 +6225,7 @@ export function Workbench() {
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !offersSuspend(pane)) return
     const refuse = (check: SuspendCheck) => {
-      if (!check.ok) appendLine(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])), "note", "ade")
+      if (!check.ok) tellPane(paneId, t("note.suspendRefused", t(SUSPEND_REASON[check.reason])))
     }
     const missing = await conversationMissing(pane.agent ?? pane.model, pane.resumeId, pane.cwd)
     const first = canSuspend(pane, suspendContext(pane, missing))
@@ -6246,7 +6249,7 @@ export function Workbench() {
       // Tracked again, so the mark goes; but deaf (see `stopForSuspend`), so the note asks for the pane to be closed and reopened.
       setWb((w) => updatePane(w, paneId, { suspended: undefined }))
       saveSuspendedMail()
-      appendLine(paneId, t("note.suspendKillFailed"), "note", "ade")
+      tellPane(paneId, t("note.suspendKillFailed"))
       return
     }
     forgetQuiet(paneId)
@@ -6265,7 +6268,7 @@ export function Workbench() {
     if (!pane?.suspended) return
     await reopen(pane)
     if (!running.has(paneId)) {
-      appendLine(paneId, t("note.resumeFailed"), "note", "ade")
+      tellPane(paneId, t("note.resumeFailed"))
       return
     }
     setWb((w) => updatePane(w, paneId, { suspended: undefined }))
@@ -6497,7 +6500,7 @@ export function Workbench() {
           secretNames = assigned.map((key) => key.name)
           if (assigned.length > 0) appendLine(paneId, t("keys.passed", assigned.map((key) => key.env).join(", ")), "note", "ade")
         } catch (failure) {
-          appendLine(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)), "note", "ade")
+          tellPane(paneId, t("keys.unread", failure instanceof Error ? failure.message : String(failure)))
         }
       }
 
@@ -6562,6 +6565,8 @@ export function Workbench() {
         onExit: (code) => {
           if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
         },
+        // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
+        onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
@@ -6713,17 +6718,14 @@ export function Workbench() {
             status: "idle",
             activity: "ready",
           }))
-          noteInTerminal(
-            paneId,
-            t("task.notSent"),
-          )
-          appendLine(paneId, t("task.notSent.short"), "note", "ade")
+          tellPane(paneId, t("task.notSent"))
         }, 100)
         openingPolls.add(poll)
       }
 
     } catch (e) {
-      appendLine(paneId, String(e))
+      // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
+      tellPane(paneId, t("pane.startFailed", String(e)))
       setWb(w => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
@@ -6784,6 +6786,7 @@ export function Workbench() {
         onExit: (code) => {
           if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
         },
+        onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
@@ -6817,7 +6820,7 @@ export function Workbench() {
         if (decision === "wait") return
         if (decision === "abandon") {
           stopOpeningPoll(poll)
-          noteInTerminal(paneId, t("task.stepNotSent", String(steps[index])))
+          tellPane(paneId, t("task.stepNotSent", String(steps[index])))
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
@@ -6834,7 +6837,7 @@ export function Workbench() {
       }, 150)
       openingPolls.add(poll)
     } catch (e) {
-      appendLine(paneId, String(e))
+      tellPane(paneId, t("pane.connectFailed", String(e)))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
@@ -7055,6 +7058,7 @@ export function Workbench() {
     isRunning,
     sessionFor: (id) => running.get(id),
     appendLine,
+    tellPane,
     close,
     saveFile: (id) => void saveFile(id),
     answerPermission,

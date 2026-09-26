@@ -38,6 +38,7 @@ const UI_ATTRIBUTES = new Set([
 /** Calls whose text arguments end up on screen. */
 const SINKS = new Set([
   "appendLine",
+  "tellPane",
   "noteInTerminal",
   "report",
   "addNotice",

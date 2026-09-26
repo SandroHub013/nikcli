@@ -68,6 +68,8 @@ export interface PaneRendererDeps {
   /** The live process behind a pane, if there is one. */
   sessionFor: (id: string) => SpawnedSession | undefined
   appendLine: (id: string, text: string, kind?: "step" | "shell" | "note") => void
+  /** A note the user has to read, over the terminal as well as in the transcript. */
+  tellPane: (id: string, text: string) => void
   close: (id: string) => void
   saveFile: (id: string) => void
   answerPermission: (id: string, answer: PermissionAnswer) => void
@@ -490,11 +492,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
             deps.typeAsUser(current().id, `${text} `)
             return
           }
-          deps.appendLine(
-            current().id,
-            t("pane.notDelivered", text),
-            "note",
-          )
+          deps.tellPane(current().id, t("pane.notDelivered", text))
         }}
         onResize={(cols, rows) => deps.sessionFor(current().id)?.resize(cols, rows)}
         onSubmit={

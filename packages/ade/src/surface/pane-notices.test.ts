@@ -90,3 +90,93 @@ describe("ADE's own notes are not the agent's report", () => {
     expect(agentNotes).toEqual([])
   })
 })
+
+/*
+ * The general rule (note-pannelli): a note of ADE's that is an error, or
+ * something the user has to do or know, goes over the terminal too. A pane's
+ * terminal stays live from its first output until the pane is closed, so a
+ * suspended, exited or restarted pane hides its transcript as well; and a
+ * line written into xterm is wiped by the agent's next redraw.
+ */
+describe("the notes that go over the terminal", () => {
+  const workbench = read("surface", "workbench.tsx")
+  const lines = workbench.split("\n")
+  const told = (key: string) => lines.filter((line) => line.includes(`"${key}"`) && /tellPane\(|\bsay\(/.test(line))
+  const onlyWritten = (key: string) => lines.filter((line) => line.includes(`"${key}"`) && line.includes("appendLine("))
+
+  test("errors, and what the user has to do, are told, not only written", () => {
+    const keys = [
+      "pane.startFailed",
+      "pane.connectFailed",
+      "keys.unread",
+      "task.notSent",
+      "task.stepNotSent",
+      "note.suspendRefused",
+      "note.suspendKillFailed",
+      "note.resumeFailed",
+      "pane.maybeStuck",
+      "note.interruptedBy",
+      "note.restartedFresh",
+      "note.browserRequest",
+    ]
+    for (const key of keys) {
+      expect([key, told(key).length > 0, onlyWritten(key)]).toEqual([key, true, []])
+    }
+    // The failed auto-close is told; the one that closed is only written.
+    expect(workbench).toContain('const say = "error" in outcome ? tellPane : (id: string, text: string) => appendLine(id, text, "note", "ade")')
+  })
+
+  test("a start that failed says why, and no bare error goes to the transcript alone", () => {
+    expect(workbench).toContain('tellPane(paneId, t("pane.startFailed", String(e)))')
+    expect(workbench).toContain('tellPane(paneId, t("pane.connectFailed", String(e)))')
+    // A start the host refused (a program not found) comes back as a reason, not as the agent's stderr.
+    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),')
+    expect(workbench).toContain('onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),')
+    const shell = read("host", "shell.ts")
+    expect(shell).toContain("if (onRefused) onRefused(reason)")
+    expect(workbench).not.toMatch(/appendLine\(paneId, String\(e\)\)/)
+  })
+
+  test("nothing is written into the terminal itself, where the agent's redraw wipes it", () => {
+    expect(workbench).not.toContain("noteInTerminal(")
+    expect(workbench).toContain("const say = (text: string) => tellPane(paneId, text)")
+  })
+
+  test("the drop with nobody listening and the spoken «no» with no refusal are told", () => {
+    const renderer = read("surface", "pane-renderer.tsx")
+    expect(renderer).toContain('deps.tellPane(current().id, t("pane.notDelivered", text))')
+    expect(workbench).toMatch(/\n    tellPane,\n/)
+    const host = read("voice", "host.ts")
+    expect(host).toContain('if (answer === "deny") deps.tellPane(paneId, t("voice.permission.notRefusal"))')
+    expect(workbench).toContain("tellPane: (id, text) => tellPane(id, text),")
+  })
+
+  test("the traffic between sessions stays in the transcript: over the terminal it would never leave", () => {
+    const traffic = [
+      "note.askFrom",
+      "note.askTo",
+      "note.messageFrom",
+      "note.messageTo",
+      "note.replyFrom",
+      "note.replySentTo",
+      "note.updateFrom",
+      "note.viaNative",
+      "note.viaNativeAck",
+      "note.viaTyped",
+      "note.viaFallback",
+      "note.rang",
+      "note.nudged",
+      "note.resent",
+      "note.resentRequest",
+      "note.enterHeld",
+      "note.inboxLost",
+      "note.subagent",
+      "note.memory",
+      "resume.lookingHere",
+      "resume.asking",
+      "keys.passed",
+      "note.suspended",
+    ]
+    for (const key of traffic) expect([key, told(key)]).toEqual([key, []])
+  })
+})
