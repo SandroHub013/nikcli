@@ -62,7 +62,7 @@ export interface ResumeRecipe {
    */
   readonly lastHere?: {
     readonly args: (cwd: string) => string[]
-    readonly read: (output: string, cwd: string, taken: ReadonlySet<string>) => string | null | undefined
+    readonly read: (output: string, cwd: string, taken: ReadonlySet<string>, marks?: readonly string[]) => string | null | undefined
   }
   /**
    * A command that asks the CLI itself for a new conversation, for a CLI that
@@ -154,8 +154,26 @@ export function mintedNikcliId(output: string): string | undefined {
 }
 
 /**
+ * The end of the title ADE gives a conversation it mints for a pane, which
+ * says the pane it was asked for: panes are often all called "Sessione 1 —
+ * nikcli", and inside the CLI the conversations are listed together.
+ */
+export function mintMark(paneId: string): string {
+  return ` · ${paneId.slice(-8)}`
+}
+
+/**
  * The most recent root conversation of `cwd` in what `nikcli api
- * session.list` printed, leaving out the ones in `taken`.
+ * session.list` printed, leaving out the ones in `taken` and the ones whose
+ * title ends with one of `marks`.
+ *
+ * `marks` are the other open panes' (`mintMark`): a conversation minted for
+ * one of them is that pane's even when it does not hold the id. That is the
+ * case of a mint past `MINT_MS`: the command is killed, nikcli may have
+ * written the conversation anyway, and ADE never read its id. Empty and the
+ * newest of the folder, it was the other pane's "here" (review of
+ * ripristino-quater, BASSO 2). `session.list` says nothing of a
+ * conversation's messages, so the title is what tells it.
  *
  * The list is a pretty-printed JSON array, most recent first; it is parsed
  * only once it is whole, which is what tells a list still arriving from an
@@ -163,7 +181,12 @@ export function mintedNikcliId(output: string): string | undefined {
  * the shape of its id, so a server that ignored the filter would still not
  * hand over another folder's conversation.
  */
-export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<string>): string | null | undefined {
+export function lastNikcliHere(
+  output: string,
+  cwd: string,
+  taken: ReadonlySet<string>,
+  marks: readonly string[] = [],
+): string | null | undefined {
   const text = output.replace(/\r/g, "")
   // A line that is the array opening, not a "[warn] …" above it.
   const start = text.search(/^\[(?:\]|[ \t]*$)/m)
@@ -198,7 +221,8 @@ export function lastNikcliHere(output: string, cwd: string, taken: ReadonlySet<s
         !isBotSession(entry) &&
         typeof entry["directory"] === "string" &&
         sameFolder(entry["directory"], cwd) &&
-        !taken.has(entry["id"]),
+        !taken.has(entry["id"]) &&
+        !(typeof entry["title"] === "string" && marks.some((mark) => (entry["title"] as string).endsWith(mark))),
     )
     .sort((a, b) => updated(b) - updated(a))
   return (mine[0]?.["id"] as string | undefined) ?? null
@@ -335,9 +359,10 @@ export function planLastHere(
   agentId: string,
   cwd: string,
   taken: ReadonlySet<string>,
+  marks: readonly string[] = [],
 ): { args: string[]; read: (output: string) => string | null | undefined } | undefined {
   const lastHere = RESUME[agentId]?.lastHere
-  return lastHere ? { args: lastHere.args(cwd), read: (output) => lastHere.read(output, cwd, taken) } : undefined
+  return lastHere ? { args: lastHere.args(cwd), read: (output) => lastHere.read(output, cwd, taken, marks) } : undefined
 }
 
 /**
@@ -553,17 +578,20 @@ function claimKey(agentId: string, cwd: string | undefined): string {
  * pane looking for "the most recent conversation here" in the same folder
  * got it from `session.list` as the newest: two panes on one conversation
  * (prova dal vivo 7, 1b). A minted conversation is its pane's, never
- * another's "here".
+ * another's "here" while that pane is open. Closed, the conversation is free
+ * again, and a later "here" of the same run can reopen it (review of
+ * ripristino-quater, BASSO 1): each id is kept with the pane that asked.
  */
 export class MintLedger {
-  readonly minted = new Set<string>()
+  /** Each minted conversation, with the pane that asked for it. */
+  readonly minted = new Map<string, string>()
   private readonly pending = new Set<Promise<void>>()
 
   /** Follows one mint: its id joins `minted` before the mint counts as settled. */
-  track<T extends string | undefined>(mint: Promise<T>): Promise<T> {
+  track<T extends string | undefined>(mint: Promise<T>, owner: string): Promise<T> {
     const recorded: Promise<void> = mint.then(
       (id) => {
-        if (id) this.minted.add(id)
+        if (id) this.minted.set(id, owner)
       },
       () => undefined,
     )
@@ -580,7 +608,8 @@ export class MintLedger {
 
 /**
  * "The most recent conversation here", leaving out the ones other panes hold
- * (`taken`) and the ones ADE minted.
+ * (`taken`) and the ones ADE minted for a pane still open (`open`, which the
+ * pane asking answers false for itself).
  *
  * A mint under way when the list answers can be in the list, the newest,
  * before its id reaches ADE: those are waited for, and the same list is read
@@ -592,8 +621,13 @@ export async function lastHereBesideMints(
   read: (output: string, taken: ReadonlySet<string>) => string | null | undefined,
   taken: ReadonlySet<string>,
   mints: MintLedger,
+  open: (owner: string) => boolean,
 ): Promise<string | undefined> {
-  const excluded = () => new Set([...taken, ...mints.minted])
+  const excluded = () => {
+    const out = new Set(taken)
+    for (const [id, owner] of mints.minted) if (open(owner)) out.add(id)
+    return out
+  }
   let answered = ""
   let underWay: readonly Promise<void>[] = []
   const found = await ask((output) => {
@@ -606,8 +640,9 @@ export async function lastHereBesideMints(
   })
   if (!found) return undefined
   await Promise.all(underWay)
-  if (!mints.minted.has(found)) return found
-  return read(answered, excluded()) ?? undefined
+  const now = excluded()
+  if (!now.has(found)) return found
+  return read(answered, now) ?? undefined
 }
 
 /**
