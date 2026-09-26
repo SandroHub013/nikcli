@@ -127,6 +127,14 @@ export interface ServeTurnDeps {
   readonly now?: () => number
   /** How long the server's reload is waited for: the catalog's `CATALOG_TIMEOUT_MS` when absent. */
   readonly reloadTimeoutMs?: number
+  /** A diagnostic line, never a message's text: `console.warn` when absent. */
+  readonly warn?: (line: string) => void
+}
+
+/** An error as one short line: the reason, not a body to dump. */
+function brief(error: unknown): string {
+  const text = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error) ?? String(error)
+  return text.replace(/\s+/g, " ").slice(0, 200)
 }
 
 /** `provider/model` as the server wants it; the model's own id may hold more slashes. */
@@ -269,12 +277,29 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
          * its words changed, while it runs is not there yet, or not as the
          * file says (Verifiche, bots.serve.noAgent). It reads them again,
          * without touching its sessions, and is asked once more. Waited for
-         * as the catalog is: late or failed, the refusal stays as it was.
+         * as the catalog is: late or failed, the refusal stays as it was,
+         * and the log says why. A reload the proxy refused used to vanish
+         * here, and the bot stayed unknown with nothing to say what failed.
          */
         const reload = server.reload
-        if (problem && reload && (await within(reload().then(() => true), deps.reloadTimeoutMs ?? CATALOG_TIMEOUT_MS))) {
-          agents = await server.agents()
-          problem = agentProblem(agents, bot)
+        if (problem && reload) {
+          const limit = deps.reloadTimeoutMs ?? CATALOG_TIMEOUT_MS
+          const warn = deps.warn ?? ((line: string) => console.warn(line))
+          const reloaded = await within(
+            reload().then(
+              () => true,
+              (error: unknown) => {
+                warn(`ADE: il server di nikcli non ha riletto i bot: ${brief(error)}`)
+                return false
+              },
+            ),
+            limit,
+          )
+          if (reloaded === undefined) warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
+          if (reloaded) {
+            agents = await server.agents()
+            problem = agentProblem(agents, bot)
+          }
         }
         if (problem) return finish("error", problem)
         agentModel = agents.find((agent) => agent.name === bot.identifier)?.model
