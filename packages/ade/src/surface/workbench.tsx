@@ -388,6 +388,7 @@ import {
   createFakeSpeaker,
   createNaturalSpeaker,
   activeReplyVoice,
+  speakingReplyVoice,
   isOpenRouterKeyRemoved,
   loadVoiceSettings,
   saveVoiceSettings,
@@ -4046,6 +4047,13 @@ export function Workbench() {
   const [voiceFailure, setVoiceFailure] = createSignal<NaturalVoiceFailure>()
 
   const activePiperVoice = () => activeReplyVoice(voiceSettings().replyVoice, locale())
+  /*
+   * The voice the speaker is actually asking the host for, which is not always
+   * the one the panel shows: a Kokoro voice on an Italian reply is spoken by
+   * Piper, and it is Piper's download that has to be tracked. The panel's own
+   * choice stays `activePiperVoice`, and K6 is where the two are put together.
+   */
+  const speakingVoice = () => speakingReplyVoice(voiceSettings().replyVoice, voiceSettings().ttsLocale, locale())
   const voiceError = createMemo(() => naturalVoiceFailureFor(voiceFailure(), activePiperVoice()))
   const clearVoiceFailure = (voice: string) => {
     setVoiceFailure((current) => clearNaturalVoiceFailure(current, voice))
@@ -4053,11 +4061,11 @@ export function Workbench() {
   const failNaturalVoice = (voice: string, problem: unknown) => {
     const message = (problem instanceof Error ? problem.message : String(problem ?? "")).trim() || t("voice.download.failed")
     setVoiceFailure({ voice, problem: message })
-    if (voice === activePiperVoice()) report(t("voice.download.report", message))
+    if (voice === speakingVoice()) report(t("voice.download.report", message))
   }
 
   const checkVoiceInstalled = async () => {
-    const v = activePiperVoice()
+    const v = speakingVoice()
     if (v === "system") {
       setVoiceInstalled(true)
       clearVoiceFailure(v)
@@ -4066,15 +4074,15 @@ export function Workbench() {
     try {
       const host = await getHost()
       if (!host?.ttsPiperStatus) {
-        if (activePiperVoice() === v) setVoiceInstalled(true)
+        if (speakingVoice() === v) setVoiceInstalled(true)
         return
       }
       const st = await host.ttsPiperStatus(v)
-      if (activePiperVoice() !== v) return
+      if (speakingVoice() !== v) return
       setVoiceInstalled(Boolean(st.installed))
       if (st.installed) clearVoiceFailure(v)
     } catch {
-      if (activePiperVoice() === v) setVoiceInstalled(false)
+      if (speakingVoice() === v) setVoiceInstalled(false)
     }
   }
 
@@ -4084,7 +4092,11 @@ export function Workbench() {
    * looked up per call, so the browser harness simply never gets past status.
    */
   const naturalSpeaker = createNaturalSpeaker({
-    voice: () => activePiperVoice(),
+    // Which voice speaks: a Kokoro one only when the reply's language is one it
+    // can speak, a Piper one as the interface language has always decided. See
+    // `speakingReplyVoice`.
+    voice: () => speakingReplyVoice(voiceSettings().replyVoice, voiceSettings().ttsLocale, locale()),
+    ttsLocale: () => voiceSettings().ttsLocale,
     status: async (voice) => {
       const host = await getHost()
       return host?.ttsPiperStatus ? host.ttsPiperStatus(voice) : { supported: false, installed: false }
@@ -4120,7 +4132,7 @@ export function Workbench() {
     fallback: systemSpeaker,
     fallbackNotice: () => t("vui.reply.fallbackNotice"),
     onInstall: (voice, state, problem) => {
-      if (voice !== activePiperVoice()) return
+      if (voice !== speakingVoice()) return
       if (state === "ready") {
         setVoiceInstalled(true)
         setVoiceDownloading(false)
