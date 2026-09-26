@@ -114,8 +114,18 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const path = () => deps.bot().path
   // Which platform this card is looking at. Both links are kept by the Rust
   // side, so switching here never loses the other one.
+  //
+  // A caller can pin the platform; otherwise the card opens on the one whose
+  // link is on, and on Telegram when neither is. Which platform that is can
+  // only be known once the status has arrived, so it is decided on the first
+  // refresh, and a choice the user makes is never taken back.
   const [platform, setPlatform] = createSignal(deps.platform ?? "telegram")
+  const pinned = deps.platform !== undefined
+  let chosen = false
   const mine = (item: { bot: string; platform: string }) => item.bot === path() && item.platform === platform()
+  /** The platform a link of which is on: enabled, or running. */
+  const openOf = (all: readonly GatewayStatus[]) =>
+    all.find((link) => link.bot === path() && (link.enabled || link.running))?.platform
 
   const [link, setLink] = createSignal<GatewayStatus>({ ...OFF, bot: path(), platform: platform() })
   const [pairing, setPairing] = createSignal<PairingInfo>(NO_PAIRING)
@@ -130,6 +140,11 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const refresh = async () => {
     try {
       const all = await deps.api.status()
+      if (!pinned && !chosen) {
+        // Before anything else: the card opens on the platform that is on.
+        const open = openOf(all)
+        if (open !== undefined && open !== platform()) setPlatform(open)
+      }
       setLink(all.find(mine) ?? { ...OFF, bot: path(), platform: platform() })
       setPairing(await deps.api.pairingList(path(), platform()))
       setRemote(deps.remote.get(path()))
@@ -197,6 +212,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
      * one; a token already saved is in the keychain and stays there.
      */
     choose: (next: string) => {
+      chosen = true
       if (next === platform()) return
       setPlatform(next)
       setDraft("")
