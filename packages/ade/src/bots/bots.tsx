@@ -44,7 +44,7 @@ import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { submitDraft } from "./composer"
 import { admitProject, grantProblem, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
-import { runTurn } from "./turn"
+import { runBotTurn } from "./serve-turn"
 import {
   createBot,
   createTalkArchive,
@@ -181,7 +181,7 @@ function updateTalk(path: string, change: (talk: Talk) => Talk) {
 }
 
 /*
- * The running turns, one per bot, through `runTurn` (B2): a stop ends the
+ * The running turns, one per bot, through `runBotTurn` (B2, B8d): a stop ends the
  * turn with its child processes and gives the plan's place back, and a
  * runner that does not start says so in the thread. See `controller.ts`.
  */
@@ -194,7 +194,7 @@ const accounts = localAccountStore()
 const memories = appMemoryStore
 
 const turns = createBotTurns({
-  runTurn: (request) => runTurn(request),
+  runTurn: (request) => runBotTurn(request),
   runRoutine: (request, run) => runRoutine(request, run),
   talkOf,
   update: updateTalk,
@@ -1028,6 +1028,9 @@ function Thread(props: {
 
   return (
     <div data-slot="bots-thread">
+      <Show when={runnerById(props.bot.runner).id === "nikcli"}>
+        <p data-slot="bots-rules-note">{t("bots.serve.rulesNote")}</p>
+      </Show>
       <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
         <Show when={props.talk.messages.length === 0 && !props.talk.problem}>
           <div data-slot="bots-thread-empty">

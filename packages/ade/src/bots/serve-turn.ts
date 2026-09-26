@@ -28,7 +28,7 @@ import { t } from "../i18n"
 import { appChatConnectionDeps, openChat, type ChatConnectionDeps } from "../chat/connection"
 import type { ChatEvent } from "../chat/events"
 import { readEvents } from "../chat/stream"
-import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
+import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
 import { localTrustStore } from "./trust"
 import type { AgentFile } from "./nikcli"
@@ -47,7 +47,7 @@ import {
   type Talk,
 } from "./talk"
 import { acquireTurn } from "./terms"
-import { timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnRequest, type TurnResult } from "./turn"
+import { runTurn, timeoutProblem, TURN_TIMEOUT_MS, type Turn, type TurnRequest, type TurnResult } from "./turn"
 import type { PermissionRule } from "../chat/rules"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
@@ -436,13 +436,20 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
   }
 }
 
-/** A project nobody is there to admit: the Chat's connection, with a no for its dialog. */
-const unattendedAdmit = (directory: string) =>
-  admitProject(directory, {
-    store: localTrustStore(PROJECT_TRUST_KEY),
-    surface: () => projectSurface(directory, projectFs),
-    confirm: () => false,
-  }).then((admitted) => (admitted.ok ? admitted : { ok: false as const, problem: t("bots.serve.notAdmitted", directory) }))
+/** Where a project's yes is kept and what it covers: the Bots' own (`project-trust.ts`), as the Chat has it. */
+export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "confirm"> {
+  return { store: localTrustStore(PROJECT_TRUST_KEY), surface: () => projectSurface(directory, projectFs) }
+}
+
+/**
+ * A bot's turn, on the runner it names: nikcli's on ADE's server, where a
+ * question has an id (B8d), the panel's and a room's for now; the others as
+ * `runTurn` runs them.
+ */
+export function runBotTurn(request: TurnRequest, serve: () => ServeTurnDeps = appServeTurnDeps): Turn {
+  if (request.runner === "nikcli" && request.approvals) return runServeTurn(request, serve())
+  return runTurn(request)
+}
 
 /** The calls of `ServeClient` on the SDK's client. */
 export function serveClientOf(client: NikcliClient): ServeClient {
@@ -481,12 +488,24 @@ export function serveClientOf(client: NikcliClient): ServeClient {
   }
 }
 
-/** In the app: the Chat's server and its admitted connection, per folder. */
-export function appServeTurnDeps(connection: () => ChatConnectionDeps = appChatConnectionDeps): ServeTurnDeps {
+/**
+ * In the app: the Chat's server and its admitted connection, per folder, on
+ * every turn. The yes is the one the Chat and the panel keep, per project and
+ * for its files as they are: asked once, and again only when they change.
+ * With nobody in front of the screen, a project not admitted is refused.
+ */
+export function appServeTurnDeps(
+  connection: () => ChatConnectionDeps = appChatConnectionDeps,
+  trust: (directory: string) => Omit<AdmitProjectDeps, "confirm"> = appProjectTrust,
+): ServeTurnDeps {
+  const unattended = (directory: string) =>
+    admitProject(directory, { ...trust(directory), confirm: () => false }).then((admitted) =>
+      admitted.ok ? admitted : { ok: false as const, problem: t("bots.serve.notAdmitted", directory) },
+    )
   return {
     connect: async (directory, interactive) => {
       const base = connection()
-      const opened = await openChat(directory, interactive ? base : { ...base, admit: unattendedAdmit })
+      const opened = await openChat(directory, interactive ? base : { ...base, admit: unattended })
       if (!opened.ok) return opened
       return { ok: true, client: serveClientOf(opened.client), events: (signal) => readEvents(opened.fetch, directory, signal) }
     },

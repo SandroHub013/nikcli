@@ -129,10 +129,12 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     expiries.delete(path)
   }
 
-  /** Answers nikcli's menu and closes the question; a line in the thread when there is something to say. */
+  /** Answers nikcli's question and closes it; a line in the thread when there is something to say. */
   const reply = (path: string, turn: Turn, answer: "once" | "reject", line?: string) => {
     cancelExpiry(path)
-    turn.write?.(answerKeys(answer))
+    // On ADE's server the question has an id (B8d); in a terminal, the menu takes keys.
+    if (turn.answer) turn.answer(answer)
+    else turn.write?.(answerKeys(answer))
     const at = now()
     deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
@@ -213,6 +215,15 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     /* The thread's messages from here on are this turn's. */
     const from = deps.talkOf(thread).messages.length
     const current = () => turns.get(path) === turn
+    /*
+     * A question on the thread, then settled. Nobody is there to answer a
+     * routine (B11 review, BASSO 1): whatever nikcli asks is refused at once,
+     * not left waiting until the turn runs out of time.
+     */
+    const ask = (asked: PendingPermission) => {
+      if (routine) return reply(path, turn, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
+      settle(bot, turn, asked)
+    }
     const readMenu = permissionMenuReader({
       schedule,
       onMenu: (seen) => {
@@ -221,13 +232,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         deps.update(thread, (talk) => noticePermission(talk, seen, now()))
         const asked = deps.talkOf(thread).permission
         if (!asked || asked === before) return
-        /*
-         * Nobody is there to answer a routine (B11 review, BASSO 1): whatever
-         * nikcli asks is refused at once, not left on a menu until the turn
-         * runs out of time.
-         */
-        if (routine) return reply(path, turn, "reject", t("bots.routine.refused", asked.permission, asked.patterns))
-        settle(bot, turn, asked)
+        ask(asked)
       },
     })
     const request: TurnRequest = {
@@ -245,6 +250,18 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       // A routine's cap per run holds during the turn, not after it (B11 review, M1).
       ...((routine ?? room)?.maxCostUsd !== undefined ? { maxCostUsd: (routine ?? room)!.maxCostUsd! } : {}),
       timeoutMs: BOT_TURN_TIMEOUT_MS,
+      // Someone is watching the panel and a room: a project not admitted yet is asked about (B8d).
+      interactive: !routine,
+      /* nikcli on ADE's server (B8d): its events as changes to the thread, and its questions by id, one at a time. */
+      onChange: (change) => {
+        if (current()) deps.update(thread, change)
+      },
+      onPermission: (question) => {
+        if (!current()) return
+        const asked: PendingPermission = { ...question, askedAt: now() }
+        deps.update(thread, (talk) => ({ ...talk, status: "waiting", permission: asked, updatedAt: asked.askedAt }))
+        ask(asked)
+      },
       onLine: (line) => {
         if (current()) deps.update(thread, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
       },

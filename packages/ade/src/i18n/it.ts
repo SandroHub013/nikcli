@@ -1602,6 +1602,8 @@ export const it = {
     "Conversazione nuova: la precedente era di «nikcli run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
   "bots.serve.refused": (permission: string, patterns: string) =>
     `Rifiutato: nikcli ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
+  "bots.serve.rulesNote":
+    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche per lui, come nella Chat: quella richiesta non comparirà.",
   "bots.serve.lost": "Il server di nikcli ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,

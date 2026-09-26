@@ -1588,6 +1588,8 @@ export const en: Messages = {
     "New conversation: the previous one was «nikcli run»'s, or had other rules, and on ADE's server every bot conversation starts with its own. The bot does not remember what came before.",
   "bots.serve.refused": (permission, patterns) =>
     `Refused: nikcli asked for «${permission}» (${patterns}) and nobody here can answer.`,
+  "bots.serve.rulesNote":
+    "The bot asks before every command, but an «always» already given for this project (in nikcli's terminal, say) holds for it too, as in the Chat: that request will not show up.",
   "bots.serve.lost": "The nikcli server closed the event stream before the turn ended.",
   "bots.runner.protectedPath": (paths) =>
     `Claude Code could not write on a path protected for project bots (${paths}): a write there becomes code that runs later, so it is refused on purpose.`,
