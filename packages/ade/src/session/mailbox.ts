@@ -788,7 +788,18 @@ export type RequestState =
 
 /** Whether an agent is in a turn, from its CLI's own hooks. Absent means unknown, never idle. */
 export interface Activity {
-  state: "busy" | "idle"
+  /**
+   * `permission` is what a `Notification` hook says, and it is a state of its own
+   * rather than a flavour of busy: it is the one state where typing is not merely
+   * unhelpful but answers something. The Enter of a delivery would confirm
+   * whichever choice the prompt has selected, so nothing is typed there.
+   *
+   * It comes from the hook and not from reading the screen. The screen is what we
+   * did before, and a CLI update can change the glyphs; the hook is the CLI
+   * telling us. The screen reading stays as the fallback for a session whose hooks
+   * were never installed.
+   */
+  state: "busy" | "idle" | "permission"
   at: number
   /**
    * Where the agent is working, from the hook's own input: a session that
@@ -820,7 +831,12 @@ export function statusFromActivity(
 ): "working" | "idle" | undefined {
   if (!activity) return undefined
   if (status !== "idle" && status !== "working") return undefined
-  if (activity.state === "busy") return status === "working" ? undefined : "working"
+  // A prompt is work: the session is stopped on a question, and a pane that says
+  // "Disponibile" while a permission question stands is a pane someone will send
+  // a message into. Same as busy, and never downgraded to idle by it.
+  if (activity.state === "busy" || activity.state === "permission") {
+    return status === "working" ? undefined : "working"
+  }
   if (status !== "working") return undefined
   return workingSince === undefined || activity.at >= workingSince ? "idle" : undefined
 }
@@ -835,6 +851,22 @@ export const QUIET_FREE_MS = 4000
 export const UNKNOWN_FREE_MS = 15_000
 /** A "busy" older than this, from a session silent for a minute, is a Stop hook that never ran. */
 export const STALE_BUSY_MS = 30 * 60_000
+/**
+ * A "permission" does not expire, and that is the whole point of it.
+ *
+ * The first version gave up after two minutes in a pane that had gone quiet, and
+ * the two halves of that rule were backwards: a prompt somebody is looking at
+ * makes no output either — the pane is not repainting, it is waiting — so "quiet"
+ * is what an *unattended* prompt looks like, and "talking" is what an answered one
+ * looks like. So the rule timed out exactly in the case it existed for: the
+ * prompt the screen reading had missed, left open while the user was away, and an
+ * Enter from a delivery confirming the choice that was selected, which is Yes.
+ *
+ * So it holds until a newer hook overwrites it. `UserPromptSubmit` and `Stop` both
+ * write the file, so one of them is the answer: the user typed, or the turn ended.
+ * What is left in between is a delivery waiting, and a wait is the smaller damage
+ * — the same order the rule about a user's half-typed line has always used.
+ */
 
 /**
  * Whether text can be typed into a session without interrupting it.
@@ -865,6 +897,12 @@ export function isFree(
     // Nothing known at all, neither a turn nor a byte of output: not a reason to type.
     if (!target.activity) return target.lastOutputAt !== undefined && quietFor >= UNKNOWN_FREE_MS
     if (target.activity.state === "idle") return true
+    if (target.activity.state === "permission") {
+      // Not free, and not for a length of time: see the note above
+      // STALE_BUSY_MS, and the two ways that rule used to be backwards. Only a
+      // newer hook clears it.
+      return false
+    }
     return now - target.activity.at > STALE_BUSY_MS && quietFor > 60_000
   }
   return quietFor >= QUIET_FREE_MS
@@ -881,22 +919,62 @@ export function parseActivity(text: string | null | undefined, sessionId?: strin
   if (!text) return undefined
   try {
     const raw = JSON.parse(text.replace(/^\ufeff/, "")) as Record<string, unknown>
-    if ((raw.state !== "busy" && raw.state !== "idle") || typeof raw.at !== "number") return undefined
+    const state = raw.state
+    if (state !== "busy" && state !== "idle" && state !== "permission") return undefined
+    if (typeof raw.at !== "number") return undefined
     if (sessionId && typeof raw.sessionId === "string" && raw.sessionId !== sessionId) return undefined
-    return { state: raw.state, at: raw.at, ...(typeof raw.cwd === "string" && raw.cwd.trim() ? { cwd: raw.cwd } : {}) }
+    return { state, at: raw.at, ...(typeof raw.cwd === "string" && raw.cwd.trim() ? { cwd: raw.cwd } : {}) }
   } catch {
     return undefined
   }
 }
 
+/** All `isQuestionOpen` needs from a prompt found by reading the screen: that there is one. */
+type ScreenPrompt = { what: string } | undefined
+
+/**
+ * Whether a question is open in a pane: the prompt the screen found, or the one a
+ * `Notification` hook reported. Every path that holds a line, an Enter or a nudge
+ * back asks this, and not one of the two sources alone.
+ *
+ * The screen alone was a hole the size of the thing the hook was added for: the
+ * prompt the reading does not recognise — an option list, a counter, a frame that
+ * changed since the pane was sampled — is exactly the prompt a delivery then Enters
+ * over, confirming whichever choice was selected. The hook alone is not enough
+ * either, because it is a coarse "something is open" where the screen also knows
+ * what the question is and what its answers are; it is a gate, not a reader.
+ */
+export function isQuestionOpen(screen: ScreenPrompt, activity: Activity | undefined): boolean {
+  return screen !== undefined || activity?.state === "permission"
+}
+
+/**
+ * Whether an activity state means the pane is still occupied, so silence in it is
+ * not the end of anything.
+ *
+ * `permission` is in here for the same reason it is its own state: a pane sitting
+ * on a prompt is not going to print until somebody answers, so a quiet pane is a
+ * question waiting, and settling it would offer an idle pane that is in fact
+ * waiting on a key.
+ */
+export function activityOccupiesPane(state: Activity["state"] | undefined): boolean {
+  return state === "busy" || state === "permission"
+}
+
 /**
  * The activity to keep after a read: what was read, or, when nothing could be
- * read, a busy seen before. A read that fails mid-turn does not end the turn;
- * the stale-busy rule of `isFree` still frees a session whose Stop never came.
- * An old idle is dropped: it would let mail in mid-turn.
+ * read, a busy or a permission seen before.
+ *
+ * A read that fails mid-turn does not end the turn, and it does not answer a
+ * question: only a hook that writes the file can do either, and `Stop` and
+ * `UserPromptSubmit` both write it. So a prompt survives a failed read the way a
+ * busy does — and unlike a busy it survives for ever, because a busy has the
+ * stale-busy rule of `isFree` to free a session whose Stop never came, and a
+ * prompt has nothing of the sort: see the note above `STALE_BUSY_MS`. An old idle
+ * is dropped: it would let mail in mid-turn.
  */
 export function keptActivity(previous: Activity | undefined, read: Activity | undefined): Activity | undefined {
-  return read ?? (previous?.state === "busy" ? previous : undefined)
+  return read ?? (previous?.state === "busy" || previous?.state === "permission" ? previous : undefined)
 }
 
 /** How long a freshly spawned session has to come up before "not running" means closed. */
@@ -920,7 +998,10 @@ export function requestState(
   now: number,
 ): RequestState {
   if (!target.running) return target.suspended ? "sessione sospesa" : now - request.at < SPAWN_GRACE_MS ? "in avvio" : "sessione chiusa"
-  if (target.permissionPending) return "attende un permesso"
+  // The reason a request is waiting on a question, from the hook or from the
+  // screen: both mean the same thing to somebody reading `ade-msg list`, and a
+  // prompt the hook reported is the one the screen usually does not.
+  if (target.permissionPending || target.activity?.state === "permission") return "attende un permesso"
   // Its turn ended after the request reached it, and no reply came: it answered somewhere else, or forgot.
   const reached = request.deliveredAt ?? request.at
   if (target.activity?.state === "idle" && target.activity.at > reached && !request.update) return "inattiva senza risposta"

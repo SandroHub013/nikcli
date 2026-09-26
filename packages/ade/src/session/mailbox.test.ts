@@ -40,6 +40,8 @@ import {
   formatUpdate,
   parseActivity,
   keptActivity,
+  isQuestionOpen,
+  activityOccupiesPane,
   parseOpenRequests,
   shouldRering,
   requestState,
@@ -288,6 +290,99 @@ describe("when a session can be written to", () => {
 
   test("a permission prompt is never free", () => {
     expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
+  })
+})
+
+describe("the permission prompt the hook says", () => {
+  const now = 10_000_000
+
+  test("a Notification with a permission question parses as that state", () => {
+    // What the hook writes when Claude Code stops to ask: not busy, and a state of
+    // its own, because the Enter of a delivery would answer it.
+    const read = parseActivity('{"state":"permission","sessionId":"s","cwd":"","at":5}', "s")
+    expect(read).toEqual({ state: "permission", at: 5 })
+  })
+
+  test("and a delivery does not press Enter there", () => {
+    const permission = { state: "permission" as const, at: now - 5_000 }
+    // A session that is talking — the user is answering it — is the strongest
+    // case for waiting.
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 500 }, now)).toBe(false)
+    // And a silent one is not free either: silence is not an answer.
+    expect(isFree({ hooked: true, permissionPending: false, activity: permission, lastOutputAt: now - 5_000 }, now)).toBe(false)
+  })
+
+  test("un prompt senza risposta continua a trattenere, anche dopo ore", () => {
+    // La prima versione di questa regola dava per scontato il contrario: che un
+    // prompt aperto produca output. Non lo produce — il pannello non si
+    // ridisegna, aspetta — quindi «silenzioso» è come appare un prompt che
+    // nessuno guarda, e la regola scadeva proprio nel caso per cui esiste, con
+    // un Invio che confermava la scelta selezionata.
+    const forgotten = { state: "permission" as const, at: now - 6 * 60 * 60_000 }
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 6 * 60 * 60_000 }, now)).toBe(false)
+    // E non lo cambia il tempo che è passato in nessuna forma: un prompt
+    // dimenticato è ancora un prompt, e l'unica cosa che lo cancella è un hook
+    // più nuovo, che vuol dire che l'utente ha scritto o che il turno è finito.
+    expect(isFree({ hooked: true, permissionPending: false, activity: forgotten, lastOutputAt: now - 3 * 60_000 }, now)).toBe(false)
+    // Il prompt successivo, o il Stop, risolvono: sono loro che scrivono il file.
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(false)
+    expect(isFree({ hooked: true, permissionPending: false, activity: { state: "idle", at: now - 1_000 } }, now)).toBe(true)
+  })
+
+  test("una lettura fallita non libera un prompt, e un prompt non lascia il pannello disponibile", () => {
+    const permission = { state: "permission" as const, at: now - 60_000 }
+    // Il file non si e' potuto leggere: nessun hook ha risposto, quindi nessuno ha
+    // risolto niente. Un busy si libera dopo trenta minuti, un prompt no.
+    expect(keptActivity(permission, undefined)).toEqual(permission)
+    // Un idle letto davvero e' un idle: la risposta e' arrivata.
+    expect(keptActivity(permission, { state: "idle", at: now })).toEqual({ state: "idle", at: now })
+    // E il pannello su un prompt non e' disponibile: `settleWhenQuiet` chiede
+    // questo, e un prompt occupa il pannello esattamente come un turno.
+    expect(activityOccupiesPane("permission")).toBe(true)
+    expect(activityOccupiesPane("busy")).toBe(true)
+    expect(activityOccupiesPane("idle")).toBe(false)
+    expect(activityOccupiesPane(undefined)).toBe(false)
+    // Il silenzio di un pannello fermo su una domanda e' attesa, non fine turno:
+    // con gli hook `busy` tiene il pannello working invece di assestarlo.
+    expect(quietOutcome({ hooked: true, busy: activityOccupiesPane("permission"), owesAnswer: false })).toBe("wait")
+  })
+
+  test("una domanda aperta si vede con lo schermo o con l'hook, e con l'hook da solo", () => {
+    const onScreen = { what: "Bash(rm -rf)", answers: ["Yes", "No"] }
+    const asking = { state: "permission" as const, at: now }
+    // Lo schermo da solo: la lettura, come prima dell'hook.
+    expect(isQuestionOpen(onScreen, undefined)).toBe(true)
+    expect(isQuestionOpen(onScreen, { state: "idle", at: now })).toBe(true)
+    // L'hook da solo: il caso che lo schermo non riconosce, e per cui esiste.
+    expect(isQuestionOpen(undefined, asking)).toBe(true)
+    // Nessuna delle due: il pannello e' libero, e si scrive.
+    expect(isQuestionOpen(undefined, { state: "busy", at: now })).toBe(false)
+    expect(isQuestionOpen(undefined, undefined)).toBe(false)
+  })
+
+  test("la coda dice perché aspetta, anche quando lo sa il hook", () => {
+    const request = { id: "n1", from: "n2", at: now - 60_000 } as never
+    const running = {
+      running: true,
+      activity: { state: "permission" as const, at: now - 60_000 },
+      lastOutputAt: now - 60_000,
+    }
+    // Dal solo schermo era già così, e resta così: due fonti, una sola risposta.
+    expect(requestState(request, { ...running, permissionPending: true }, now)).toBe("attende un permesso")
+    expect(requestState(request, { ...running, permissionPending: false }, now)).toBe("attende un permesso")
+  })
+
+  test("the screen reading is still the fallback, and still holds the session", () => {
+    // A session whose hooks were never installed has no permission state at all:
+    // it is the regex, exactly as before, and it does not need this to be wrong
+    // for the installed case to be right.
+    expect(isFree({ hooked: true, permissionPending: true, activity: { state: "busy", at: now - 5 } }, now)).toBe(false)
+    expect(isFree({ hooked: false, permissionPending: true }, now)).toBe(false)
+  })
+
+  test("the status in the sidebar says working while a prompt stands", () => {
+    // The pane is not free, so it is not idle, whatever the previous state said.
+    expect(statusFromActivity("idle", { state: "permission", at: now - 1_000 }, undefined)).toBe("working")
   })
 })
 

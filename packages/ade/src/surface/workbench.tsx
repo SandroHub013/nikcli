@@ -252,6 +252,8 @@ import {
   holdsForAnswer,
   quietOutcome,
   isFree,
+  isQuestionOpen,
+  activityOccupiesPane,
   statusFromActivity,
   sameDir,
   formatLateReply,
@@ -1730,7 +1732,7 @@ export function Workbench() {
       if (
         options.unlessBusy &&
         paneId !== undefined &&
-        lineIsTaken({ typing: isTyping(records.typed.get(paneId)), permissionPending: Boolean(permissions()[paneId]) })
+        lineIsTaken({ typing: isTyping(records.typed.get(paneId)), permissionPending: paneId !== undefined && questionOpen(paneId) })
       )
         return "not-typed"
       return typeLineNow(session, text)
@@ -1774,7 +1776,7 @@ export function Workbench() {
         }
       },
       alive,
-      permissionOpen: () => paneId !== undefined && Boolean(permissions()[paneId]),
+      permissionOpen: () => paneId !== undefined && questionOpen(paneId),
     })
     if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
@@ -1815,7 +1817,7 @@ export function Workbench() {
       const deadline = confirmDeadline(sentAt, HOOK_TIMEOUT)
       while (true) {
         await new Promise((resolve) => setTimeout(resolve, 500))
-        if (running.get(paneId) !== session || permissions()[paneId]) return
+        if (running.get(paneId) !== session || questionOpen(paneId)) return
         const resumeId = wb().panes.find((pane) => pane.id === paneId)?.resumeId
         const activity = parseActivity(await host.readAgentActivity(nonce), resumeId)
         const check = submitCheck({ typedAt, activity, now: Date.now(), deadline })
@@ -1852,7 +1854,7 @@ export function Workbench() {
       write: (data) => session.write(data),
       alive: () => running.get(paneId) === session,
       typing: () => isTyping(records.typed.get(paneId)),
-      permissionOpen: () => Boolean(permissions()[paneId]),
+      permissionOpen: () => questionOpen(paneId),
     })
 
   /** Messages held for a busy recipient, whose sender has already been told. */
@@ -2058,7 +2060,7 @@ export function Workbench() {
     return isFree(
       {
         hooked: isHooked,
-        permissionPending: Boolean(permissions()[paneId]),
+        permissionPending: questionOpen(paneId),
         // A line the user began is not the agent being busy, but it is just
         // as much a reason not to type: see `session/typing.ts`.
         typing: isTyping(records.typed.get(paneId)),
@@ -2145,7 +2147,7 @@ export function Workbench() {
     const session = running.get(paneId)
     if (!session) return "closed"
     // A prompt open now takes no text at all: the message waits for it to go (`deliveryResult`).
-    if (permissions()[paneId]) return "held"
+    if (questionOpen(paneId)) return "held"
     // Given even when a prompt held its Enter back; the sender is told it is waiting.
     const given = (outcome: LineOutcome, stored = false) => {
       if (outcome === "typed-no-enter" && meta.from) {
@@ -2285,6 +2287,25 @@ export function Workbench() {
   }
 
   /*
+   * Whether a question is open in a pane, and so nothing may be typed into it or
+   * Entered into it: the prompt the screen found, or the one a `Notification` hook
+   * reported (`isQuestionOpen`, which says why both are needed).
+   *
+   * Every place that holds a line, an Enter or a nudge back asks this, and not one
+   * of the two sources alone. Reading only the screen is what the first version of
+   * the hook did, and it is a hole the size of the thing the hook was added for: the
+   * prompt the reading does not recognise — an option list, a live-updating counter,
+   * a frame that changed since the pane was sampled — is precisely the prompt a
+   * delivery then Enters over, confirming whichever choice was selected. The nudge
+   * after 45 s of silence, the re-ring, the Enter of `confirmSubmitted`, the line's
+   * own Enter, the free test, the held line, the target of a request, the cancel
+   * note, the suspension and the voice alert all come through here. The first time
+   * this was reviewed the miss was in `isFree` alone, and the Architect says he had
+   * missed the rest here too on the first pass.
+   */
+  const questionOpen = (paneId: string) => isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
+
+  /*
    * One secret per spawn, in that process tree's environment only. A pane id
    * is public — `ade-msg list` prints them — so a `from` counts as the sender
    * only when the token that came with it is this pane's.
@@ -2326,7 +2347,7 @@ export function Workbench() {
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
     suspended: isSuspendedPane(request.to),
-    permissionPending: Boolean(permissions()[request.to]),
+    permissionPending: questionOpen(request.to),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
     hooked: hooked(request.to),
@@ -2982,7 +3003,7 @@ export function Workbench() {
       await settle(host, request.id, `[ade-msg] richiesta ${request.id} annullata`)
       // The session stays: it may have other work, and closing is `ade-msg close`'s decision.
       const session = running.get(request.to)
-      if (session && !permissions()[request.to]) void typeLine(session, formatCancel(request.id, sender))
+      if (session && !questionOpen(request.to)) void typeLine(session, formatCancel(request.id, sender))
       await answer(`ok: richiesta ${request.id} annullata; la sessione resta aperta (chiudila con ade-msg close se non serve più)`)
       return true
     }
@@ -3514,7 +3535,7 @@ export function Workbench() {
     }
 
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
-    if (permissions()[target.pane.id]) return false
+    if (questionOpen(target.pane.id)) return false
 
     /*
      * In the background: a note or a request waits for the recipient's turn
@@ -4464,7 +4485,7 @@ export function Workbench() {
     openResponseWindow: async (options) => {
       await voiceEngine.openResponseWindow(options)
     },
-    isPermissionPending: (paneId) => Boolean(permissions()[paneId]),
+    isPermissionPending: (paneId) => questionOpen(paneId),
     isDecisionOpen: (k) => {
       const decs = decisionsRegister.state()?.decisions
       return Boolean(decs?.some((d) => d.k === k && d.status === "aperta"))
@@ -5455,9 +5476,11 @@ export function Workbench() {
       quietTimers.delete(paneId)
       if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") return
       // Without turn hooks, a session that owes an answer is working until it answers (S14).
+      // A prompt counts as work here too, so a pane waiting on a key is not offered
+      // as idle: see `activityOccupiesPane`.
       const outcome = quietOutcome({
         hooked: hooked(paneId),
-        busy: activityOf.get(paneId)?.state === "busy",
+        busy: activityOccupiesPane(activityOf.get(paneId)?.state),
         owesAnswer: holdsForAnswer([...openRequests.values()], paneId, Date.now()),
       })
       // The hold has to be re-armed: it ends with time passing, and nothing
@@ -5651,7 +5674,7 @@ export function Workbench() {
     running.delete(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
-    if (permissions()[id]) {
+    if (questionOpen(id)) {
       permissions.forget(id)
       if (voiceEngine.isRunning()) void voiceEngine.handlePermissionResolved(id)
     }
@@ -6246,7 +6269,7 @@ export function Workbench() {
   const suspendContext = (pane: Pane, conversationMissing: boolean): SuspendContext => ({
     running: running.has(pane.id),
     conversationMissing,
-    permission: Boolean(permissions()[pane.id]),
+    permission: questionOpen(pane.id),
     openRequests: openRequests.values(),
     heldLines,
     typing: isTyping(records.typed.get(pane.id)),
@@ -6734,7 +6757,7 @@ export function Workbench() {
             firstByteAt,
             lastByteAt,
             now: Date.now(),
-            permissionPending: Boolean(permissions()[paneId]),
+      permissionPending: questionOpen(paneId),
           })
           if (decision === "wait") return
 
@@ -6869,7 +6892,7 @@ export function Workbench() {
           firstByteAt: stepFirst,
           lastByteAt: stepFirst === undefined ? undefined : last,
           now: Date.now(),
-          permissionPending: sshAsking(lastLine) || Boolean(permissions()[paneId]),
+          permissionPending: sshAsking(lastLine) || questionOpen(paneId),
           // The first step waits out a password typed by hand.
           ...(index === 0 ? { timeoutMs: 180_000 } : {}),
         })

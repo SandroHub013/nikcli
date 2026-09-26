@@ -582,7 +582,10 @@ describe("hookScript", () => {
 })
 
 describe("activity events", () => {
-  const events = ["UserPromptSubmit", "Stop"]
+  // Notification is in the list for the permission questions, and the test above
+  // says it: the two events that were already there stay, so an install from
+  // before this one gets the new event without losing the old two.
+  const events = ["UserPromptSubmit", "Stop", "Notification"]
   const command = hookCommand(CLAUDE_SCRIPT)
 
   test("claude-code asks for them, codex does not", () => {

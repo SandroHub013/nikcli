@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createLineQueue } from "./line-queue"
-import { lineIsTaken, timeNoteFor, type OpenRequest } from "./mailbox"
-import { lineGiven, pressEnter, typeThenEnter, type LineOutcome } from "./enter"
+import { isQuestionOpen, lineIsTaken, timeNoteFor, type OpenRequest } from "./mailbox"
+import { enterAgain, lineGiven, pressEnter, ringAgain, typeThenEnter, type LineOutcome } from "./enter"
 
 /*
  * Audit 0.7.7, B1: the time note was typed over an open permission prompt,
@@ -73,6 +73,75 @@ describe("a time note never goes over a permission prompt (B1)", () => {
     expect(await first).toBe("typed-no-enter")
     expect(await note).toBe("not-typed")
     expect(written).toEqual(["[Promemoria] A"])
+  })
+})
+
+/*
+ * The tests above feed the paths a `permissionPending` boolean, which is what they
+ * have always been given and the only thing they can act on. What none of them
+ * could catch is the caller: every one of these paths was reached in the workbench
+ * through `permissions()[paneId]` — the screen alone — so a prompt the screen had
+ * not recognised arrived here as `false` and the Enter went. The hook's `permission`
+ * had to reach all of them, and the way to show that is a hook permission with an
+ * empty screen, which is the exact shape the screen reading misses.
+ */
+describe("a prompt only the hook knows about holds every Enter (P1)", () => {
+  const now = Date.now()
+  const hookSaysPermission = { state: "permission" as const, at: now }
+  const screen = undefined
+  // What the workbench asks, and what it used to ask.
+  const asking = () => isQuestionOpen(screen, hookSaysPermission)
+  const screenOnly = () => Boolean(screen)
+
+  test("the nudge: the time note is not due, so nothing is typed at all", () => {
+    // The regression, stated as an assertion: the old expression said no.
+    expect(screenOnly()).toBe(false)
+    expect(asking()).toBe(true)
+    // `unlessBusy`'s check, in the line queue, at the moment of writing.
+    expect(lineIsTaken({ typing: false, permissionPending: asking() })).toBe(true)
+    const request: Pick<OpenRequest, "at" | "deliveredAt" | "budget" | "timeNotes"> = { at: 0, deliveredAt: 0, budget: 120 }
+    expect(timeNoteFor(request, 61_000, { typing: false, permissionPending: asking() })).toBeUndefined()
+    // A draft is not what is holding it, so the two are not confused.
+    expect(lineIsTaken({ typing: true, permissionPending: asking() })).toBe(true)
+  })
+
+  test("a line of ADE's own: not typed, and no Enter over the prompt", async () => {
+    const written: string[] = []
+    const outcome = await typeThenEnter({
+      text: "Esegui: ade-msg list",
+      write: (data) => written.push(data),
+      wait: async () => {},
+      alive: () => true,
+      permissionOpen: asking,
+    })
+    // Not even the text: the prompt's input box is not a place for a message.
+    expect(outcome).toBe("not-typed")
+    expect(written).toEqual([])
+  })
+
+  test("the re-ring: enterAgain counts it, presses nothing, and gives the ring back", async () => {
+    const written: string[] = []
+    const request = { rings: 0 }
+    const queue = createLineQueue()
+    // The workbench's re-ring, with the count put back when no Enter went.
+    const pressed = await ringAgain(request, () =>
+      enterAgain({
+        queue,
+        key: "p1",
+        write: (data) => written.push(data),
+        alive: () => true,
+        typing: () => false,
+        permissionOpen: asking,
+      }),
+    () => {},
+    )
+    expect(pressed).toBe(false)
+    expect(written).toEqual([])
+    // A skipped ring does not use one up, so the next round still rings.
+    expect(request.rings).toBe(0)
+    // The same path with the screen's own reading: the Enter goes, as it always did.
+    expect(pressEnter((data) => written.push(data), () => false)).toBe(true)
+    expect(written).toEqual(["\r"])
   })
 })
 
