@@ -532,6 +532,35 @@ export function lastTakenFor<P extends { id: string; agent?: string; model?: str
   )
 }
 
+/** The key of "the most recent conversation" of an agent in a folder. */
+function claimKey(agentId: string, cwd: string | undefined): string {
+  return `${agentId}\u0000${folderKey(cwd)}`
+}
+
+/**
+ * The folders whose "most recent conversation" a restore has handed out, per
+ * agent: the claims `planRestore` made.
+ *
+ * The panes it plans are not the only ones that start: the ones whose agent
+ * had already exited are reopened in the same breath (`exitedToReopen`), and
+ * `lastTakenFor` only sees the ids panes hold, not a claim made a moment ago
+ * whose `session.list` has not answered yet. A reopened pane placed before
+ * the planned one took `here` too, and the two could open one conversation
+ * (lettura di Mimo, F3).
+ */
+export function restoreClaims(planned: readonly { session: { agentId: string; cwd: string }; plan: ResumePlan }[]): Set<string> {
+  const claims = new Set<string>()
+  for (const { session, plan } of planned) {
+    if (plan.kind === "here" || (plan.kind === "resume" && plan.via === "last")) claims.add(claimKey(session.agentId, session.cwd))
+  }
+  return claims
+}
+
+/** Whether a restore already handed out this folder's "most recent conversation" (`restoreClaims`). */
+export function claimedByRestore(claims: ReadonlySet<string> | undefined, agentId: string, cwd: string | undefined): boolean {
+  return Boolean(claims?.has(claimKey(agentId, cwd)))
+}
+
 /**
  * Plans a whole restore, so the "most recent" claim is handed out once.
  *

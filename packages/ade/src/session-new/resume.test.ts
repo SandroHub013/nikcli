@@ -16,6 +16,8 @@ import {
   lastTakenFor,
   planLastHere,
   LAST_HERE_LIMIT,
+  restoreClaims,
+  claimedByRestore,
 } from "./resume"
 
 describe("planStart", () => {
@@ -433,5 +435,44 @@ describe("nikcli's latest conversation in this folder", () => {
     }
     const sent = request(planLastHere("nikcli", HERE, none)!.args)
     expect(sent).toEqual({ query: { roots: "true", limit: String(LAST_HERE_LIMIT) }, body: undefined })
+  })
+})
+
+/*
+ * Lettura di Mimo, F3: two nikcli panes of one folder, neither with an id.
+ * The live one is planned `here`; the exited one, earlier in the list, is
+ * reopened at the same time, and `lastTakenFor` cannot see a claim whose
+ * `session.list` has not answered: both asked for the same conversation.
+ */
+describe("a restore's claims reach the panes it reopens", () => {
+  const folder = "C:\\Progetti\\uno"
+  const exited = { id: "p1", agent: "nikcli", cwd: folder }
+  const live = { id: "p2", agent: "nikcli", cwd: folder }
+
+  test("the folder planned `here` is taken for the exited pane placed before it", () => {
+    const planned = planRestore([{ agentId: "nikcli", cwd: folder, pane: live }])
+    expect(planned[0]!.plan.kind).toBe("here")
+    // What the pane saw alone: nobody without an id before it.
+    expect(lastTakenFor(exited, [exited, live])).toBe(false)
+    const claims = restoreClaims(planned)
+    expect(claimedByRestore(claims, "nikcli", exited.cwd)).toBe(true)
+    // The same folder spelled otherwise is the same claim; another folder or agent is not.
+    expect(claimedByRestore(claims, "nikcli", "c:/progetti/uno/")).toBe(true)
+    expect(claimedByRestore(claims, "nikcli", "C:/Progetti/due")).toBe(false)
+    expect(claimedByRestore(claims, "codex", folder)).toBe(false)
+    expect(claimedByRestore(undefined, "nikcli", folder)).toBe(false)
+  })
+
+  test("a pane reopened by its own id claims nothing", () => {
+    const planned = planRestore([{ agentId: "nikcli", cwd: folder, resumeId: "ses_abcdefgh12345678", pane: live }])
+    expect(planned[0]!.plan.kind).toBe("resume")
+    expect(claimedByRestore(restoreClaims(planned), "nikcli", folder)).toBe(false)
+  })
+
+  test("the restore hands its claims to the exited panes it reopens", () => {
+    const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
+    expect(workbench).toContain("const claims = restoreClaims(planned)")
+    expect(workbench).toContain("void reopen(pane, undefined, claims)")
+    expect(workbench).toContain("lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root)")
   })
 })

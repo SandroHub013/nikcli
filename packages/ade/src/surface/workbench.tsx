@@ -50,6 +50,8 @@ import {
   planLastHere,
   planMint,
   planRestore,
+  restoreClaims,
+  claimedByRestore,
   planResume,
   planStart,
   resumePromise,
@@ -4739,7 +4741,8 @@ export function Workbench() {
             }
           }),
         )
-        for (const { session, plan, sharedWith } of planRestore(sessions)) {
+        const planned = planRestore(sessions)
+        for (const { session, plan, sharedWith } of planned) {
           if (sharedWith) {
             // The conversation stays with the other pane: this one must not reopen it by its saved id.
             setWb((w) => updatePane(w, session.pane.id, { resumeId: undefined }))
@@ -4756,8 +4759,10 @@ export function Workbench() {
          * asks for the conversation by id when there is one, and starts the
          * agent fresh when there is not.
          */
-        const planned = new Set(sessions.map((session) => session.pane.id))
-        for (const pane of exitedToReopen(wb().panes, planned)) void reopen(pane)
+        // With the claims just handed out: a pane planned `here` has not reported its id yet.
+        const claims = restoreClaims(planned)
+        const plannedIds = new Set(sessions.map((session) => session.pane.id))
+        for (const pane of exitedToReopen(wb().panes, plannedIds)) void reopen(pane, undefined, claims)
       }
     }
 
@@ -6172,7 +6177,7 @@ export function Workbench() {
    * pane had no way to reach it. Now the pane reopens it by id when it can,
    * and `line`, when the user typed one, is sent once the agent is ready.
    */
-  const reopen = async (given: Pane, line?: string) => {
+  const reopen = async (given: Pane, line?: string, claims?: ReadonlySet<string>) => {
     const agentId = given.agent ?? given.model
     if (running.has(given.id)) return
     const reported = await adoptLastReport(given)
@@ -6192,7 +6197,7 @@ export function Workbench() {
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
       // "The most recent one here" unless another pane of this folder may be
       // in it: per folder, and for nikcli only a pane without an id of its own.
-      lastTaken: lastTakenFor(pane, wb().panes),
+      lastTaken: lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root),
       missing,
     })
     // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
