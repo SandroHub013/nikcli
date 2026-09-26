@@ -334,7 +334,7 @@ import { createAutosave } from "./autosave"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
 import { createPanelRouter, createPendingPanelReplies, dictationHold, panelReplyHold } from "../panels/router"
-import { panelsHelp } from "../panels/protocol"
+import { acceptsRequests, panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
 import { devServerUrl, offerKey, shouldOffer, type DevServerOffer } from "../browser/dev-server"
@@ -6733,7 +6733,8 @@ export function Workbench() {
            * works with every CLI ADE runs: they read keystrokes and write
            * text, and this is text.
            */
-          void handlePanelRequest(paneId, line)
+          // Only from an agent: a terminal's output is the user's own, and may be anything (`acceptsRequests`).
+          if (acceptsRequests(agentId)) void handlePanelRequest(paneId, line)
           noticeDevServer(paneId, line)
         },
         /*

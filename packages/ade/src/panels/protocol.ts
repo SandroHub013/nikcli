@@ -23,6 +23,24 @@
  * `bun test` here and this grammar is the part that must not be wrong.
  */
 
+import { AGENTS } from "../session-new/agents"
+
+/**
+ * The sessions whose lines may be requests: the agent CLIs ADE knows, and
+ * nothing else (review of the frontend, ALTO 1).
+ *
+ * Every pane's output used to be read, and a line is only text: `cat` of a
+ * file in a plain terminal printed `@ade browser open 3000/x;calc;#`, ADE
+ * opened the browser and typed back an answer holding the URL, with Enter,
+ * into the shell, which ran `calc`. A terminal is the user's own shell, with
+ * no agent to ask anything; a command the user added is not known to be one.
+ */
+const REQUESTERS: ReadonlySet<string> = new Set(AGENTS.filter((agent) => agent.id !== "terminal").map((agent) => agent.id))
+
+export function acceptsRequests(agentId: string | undefined): boolean {
+  return agentId !== undefined && REQUESTERS.has(agentId)
+}
+
 /**
  * The sentinel that opens a request.
  *
@@ -117,7 +135,19 @@ export type PanelOutcome =
  */
 export function formatReply(request: PanelRequest, outcome: PanelOutcome): string {
   const head = `${REPLY_PREFIX} ${request.panel} ${request.verb}`
-  return outcome.ok ? `${head} ok — ${outcome.detail}` : `${head} errore — ${outcome.reason}`
+  return inert(outcome.ok ? `${head} ok — ${outcome.detail}` : `${head} errore — ${outcome.reason}`)
+}
+
+/**
+ * A reply that no shell runs: it is typed with Enter, and it repeats what the
+ * request carried (a URL, a name, a reason). Control characters go, line
+ * breaks included; the characters a shell reads as its own are written in
+ * percent form, which a URL reads the same (review of the frontend, ALTO 1).
+ */
+export function inert(text: string): string {
+  return text
+    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ")
+    .replace(/[;&|`$<>]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`)
 }
 
 export interface PanelVerb {
