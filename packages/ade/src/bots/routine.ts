@@ -638,8 +638,12 @@ export interface RoutineSchedulerDeps {
   /**
    * The checks a turn of the bot passes (trust, the bot's own grants, the
    * project), with no dialog: a routine never asks. A problem suspends it.
+   * `context` is the bot as the file that will run says, read and trusted
+   * just now: the consent is asked of it again.
    */
-  readonly prepare: (routine: Routine) => Promise<{ ok: true } | { ok: false; problem: string }>
+  readonly prepare: (
+    routine: Routine,
+  ) => Promise<{ ok: true; context: RoutineContext } | { ok: false; problem: string }>
   /** Starts the run as the bot's own turn, within `run`; undefined when the bot is busy. */
   readonly start: (routine: Routine, run: RoutineRun) => Turn | undefined
   /** Whether the bot has a turn under way. */
@@ -701,6 +705,15 @@ export function createRoutineScheduler(deps: RoutineSchedulerDeps): RoutineSched
         const prepared = await deps.prepare(routine)
         if (!prepared.ok) {
           write((latest) => noteRoutine(latest, routine.id, now(), { suspended: prepared.problem }))
+          continue
+        }
+        /*
+         * The file may have changed since `botOf` read it (B11 review,
+         * BASSO 2): what runs is what `prepare` read, so the consent must hold
+         * for that.
+         */
+        if ((await routineConsent(routine, prepared.context)) !== routine.consent) {
+          write((latest) => noteRoutine(latest, routine.id, now(), { suspended: t("bots.routine.suspended.consent") }))
           continue
         }
         const turn = deps.start(routine, verdict.run)

@@ -315,7 +315,7 @@ describe("B11: the scheduler", () => {
       now: () => clock,
       botOf: async () => nikcliFree,
       prepare: async (routine) =>
-        refuse === routine.id ? { ok: false, problem: "progetto non fidato" } : { ok: true },
+        refuse === routine.id ? { ok: false, problem: "progetto non fidato" } : { ok: true, context: nikcliFree },
       start: (routine) => {
         started.push(routine.id)
         const fake = fakeTurn()
@@ -343,11 +343,32 @@ describe("B11: the scheduler", () => {
       store,
       now: () => clock,
       botOf: async () => undefined,
-      prepare: async () => ({ ok: true }),
+      prepare: async () => ({ ok: true, context: nikcliFree }),
       start: () => undefined,
       running: () => false,
     })
     await gone.tick()
     expect(store.get().logs["a"]?.suspended).toContain("file del bot")
+  })
+
+  test("the consent is asked again of the file prepare read, not the one botOf saw (review, BASSO 2)", async () => {
+    const routine = await made(nikcliFree)
+    const store = memoryRoutineStore(addRoutine(EMPTY_BOOK, routine))
+    const started: string[] = []
+    const scheduler = createRoutineScheduler({
+      store,
+      now: () => at(10),
+      botOf: async () => nikcliFree,
+      // Between the two reads the file was changed to a paid model.
+      prepare: async () => ({ ok: true, context: nikcliPaid }),
+      start: (routine) => {
+        started.push(routine.id)
+        return fakeTurn().turn
+      },
+      running: () => false,
+    })
+    await scheduler.tick()
+    expect(started).toEqual([])
+    expect(store.get().logs[routine.id]?.suspended).toContain("ridai il consenso")
   })
 })

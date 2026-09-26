@@ -304,7 +304,7 @@ const routineScheduler = createRoutineScheduler({
     const verdict = await admitTurn(bot, routine.cwd, () => false)
     if (!verdict.ok) return { ok: false, problem: verdict.problem ?? t("bots.routine.suspended.trust") }
     clearedBots.set(routine.id, verdict.bot)
-    return { ok: true }
+    return { ok: true, context: await botContext(verdict.bot) }
   },
   start: (routine, run) => {
     const bot = clearedBots.get(routine.id)
