@@ -5626,7 +5626,12 @@ export function Workbench() {
     setWb(w => closePane(w, id))
   }
 
-  const finish = (id: string, code: number | null) => {
+  /*
+   * `failed`: the host refused to start it (`onRefused`). There is no exit
+   * code to show — «Uscito con ?» read as a process that ran and died — so
+   * the header says what happened instead.
+   */
+  const finish = (id: string, code: number | null, failed?: "startFailed" | "connectFailed") => {
     running.delete(id)
     touchRunning()
     forgetQuiet(id)
@@ -5636,8 +5641,8 @@ export function Workbench() {
     // Suspended: the exit is the one asked for, not the session ending (P1-C6).
     if (wb().panes.find((pane) => pane.id === id)?.suspended) return
     setWb(w => updatePane(w, id, {
-      status: code === 0 ? "done" : "error",
-      activity: code === 0 ? "done" : exitedActivity(code)
+      status: code === 0 && !failed ? "done" : "error",
+      activity: failed ?? (code === 0 ? "done" : exitedActivity(code))
     }))
   }
 
@@ -6456,6 +6461,8 @@ export function Workbench() {
     activityOf.delete(paneId)
     bracketedPaste.delete(paneId)
     let spawned: SpawnedSession | undefined
+    // The host refused to start it: said by `onRefused`, then the exit that follows.
+    let refused = false
 
     /*
      * The project itself, not a worktree cut for the session.
@@ -6563,10 +6570,13 @@ export function Workbench() {
          * must not mark the new session finished.
          */
         onExit: (code) => {
-          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code, refused ? "startFailed" : undefined)
         },
         // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
-        onRefused: (reason) => tellPane(paneId, t("pane.startFailed", reason)),
+        onRefused: (reason) => {
+          refused = true
+          tellPane(paneId, t("pane.startFailed", reason))
+        },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
         paneToken: mintPaneToken(paneId),
@@ -6767,6 +6777,8 @@ export function Workbench() {
 
     let tail = ""
     let spawned: SpawnedSession | undefined
+    // The host refused to start it: said by `onRefused`, then the exit that follows.
+    let refused = false
     try {
       startOnCleanScreen(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
@@ -6784,9 +6796,12 @@ export function Workbench() {
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
-          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code)
+          if (!running.has(paneId) || running.get(paneId) === spawned) finish(paneId, code, refused ? "connectFailed" : undefined)
         },
-        onRefused: (reason) => tellPane(paneId, t("pane.connectFailed", reason)),
+        onRefused: (reason) => {
+          refused = true
+          tellPane(paneId, t("pane.connectFailed", reason))
+        },
         pane: paneId,
         paneToken: mintPaneToken(paneId),
       })
