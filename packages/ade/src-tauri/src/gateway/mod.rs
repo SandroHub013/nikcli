@@ -6,9 +6,8 @@
 //! for what a platform provides, `store.rs` for what is kept on disk and
 //! `redact.rs` for what never leaves.
 //!
-//! Telegram is the first platform (`telegram.rs`, with `chunk.rs` and
-//! `markdown_v2.rs`); Discord and Slack come in their own pieces, and until
-//! then switching a gateway on for them is refused.
+//! Telegram (`telegram.rs`, with `chunk.rs` and `markdown_v2.rs`), Discord
+//! (`discord.rs`) and Slack (`slack.rs`, which needs a second token).
 
 mod adapter;
 mod authz;
@@ -18,12 +17,13 @@ mod hub;
 mod known;
 mod markdown_v2;
 mod redact;
+mod slack;
 mod store;
 mod telegram;
 
 pub use adapter::Platform;
 use adapter::Adapter;
-use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo};
+use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo, TokenKind, Tokens};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -118,13 +118,15 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     Ok(state.0.get_or_init(|| Arc::new(made)).clone())
 }
 
-/// The adapter for `platform`, reading on from `cursor`. Slack comes in
-/// its own piece.
-fn adapter_for(platform: Platform, token: &str, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
+/// The adapter for `platform`, reading on from `cursor`.
+fn adapter_for(platform: Platform, tokens: &Tokens, cursor: Option<String>) -> Result<Arc<dyn Adapter>, String> {
     match platform {
-        Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(token, cursor)?)),
+        Platform::Telegram => Ok(Arc::new(telegram::Telegram::new(&tokens.bot, cursor)?)),
         // `new` already hands back a reference, as the socket task keeps one too.
-        Platform::Discord => Ok(discord::Discord::new(token, cursor)? as Arc<dyn Adapter>),
+        Platform::Discord => Ok(discord::Discord::new(&tokens.bot, cursor)? as Arc<dyn Adapter>),
+        // Slack keeps no position: an event not acknowledged comes again.
+        Platform::Slack => Ok(slack::Slack::new(&tokens.bot, tokens.app.as_deref())? as Arc<dyn Adapter>),
+        #[cfg(test)]
         other => Err(format!("il gateway per {} non è ancora disponibile", other.id())),
     }
 }
@@ -141,10 +143,21 @@ pub async fn gateway_status(app: AppHandle) -> Result<Vec<StatusInfo>, String> {
     Ok(hub(&app)?.status())
 }
 
-/// Saves the bot's token in the keychain. It is never read back by the page.
+/// Saves the bot's token in the keychain, or with `kind: "app"` Slack's
+/// App-Level Token. Neither is ever read back by the page.
 #[tauri::command]
-pub async fn gateway_set_token(app: AppHandle, bot: String, platform: Platform, token: String) -> Result<(), String> {
-    hub(&app)?.set_token(&bot, platform, &token)
+pub async fn gateway_set_token(
+    app: AppHandle,
+    bot: String,
+    platform: Platform,
+    token: String,
+    kind: Option<TokenKind>,
+) -> Result<(), String> {
+    let hub = hub(&app)?;
+    match kind.unwrap_or(TokenKind::Bot) {
+        TokenKind::Bot => hub.set_token(&bot, platform, &token),
+        TokenKind::App => hub.set_app_token(&bot, platform, &token),
+    }
 }
 
 /// The panel's «Prova»: the bot's name on the platform, with the saved token.
@@ -233,6 +246,13 @@ pub async fn gateway_pairing_revoke(app: AppHandle, bot: String, platform: Platf
 #[tauri::command]
 pub async fn gateway_pairing_open(app: AppHandle, bot: String, platform: Platform) -> Result<u64, String> {
     hub(&app)?.pairing_open(&bot, platform)
+}
+
+/// The manifest of a Slack app for the bot called `name`, to paste in Slack's
+/// «Create New App › From a manifest». Its scopes are the ones the probe checks.
+#[tauri::command]
+pub fn gateway_slack_manifest(name: String) -> String {
+    slack::manifest(&name)
 }
 
 #[tauri::command]

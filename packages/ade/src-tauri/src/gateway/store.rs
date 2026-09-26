@@ -35,6 +35,10 @@ pub struct LinkState {
     /// SHA-256 of the token, hex. Never the token.
     #[serde(default)]
     pub token_hash: Option<String>,
+    /// The same for Slack's App-Level Token, the second secret its socket
+    /// needs; never set for the other platforms.
+    #[serde(default)]
+    pub app_token_hash: Option<String>,
     #[serde(default)]
     pub authorized: Vec<Authorized>,
     /// Chats an authorized sender wrote from: the only ones a reply may go to.
@@ -62,6 +66,7 @@ impl LinkState {
             enabled: false,
             project: None,
             token_hash: None,
+            app_token_hash: None,
             authorized: Vec::new(),
             chats: Vec::new(),
             cursor: None,

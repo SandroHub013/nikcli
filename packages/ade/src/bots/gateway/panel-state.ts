@@ -5,6 +5,9 @@
  * The token goes one way: typed here, handed to Rust, forgotten. Nothing in
  * this state holds it after `saveToken`, the draft included, so the page can
  * never show it again; Rust says only whether there is one (`hasToken`).
+ * Slack has a second one, the App-Level Token that opens its socket, which
+ * goes the same way (`hasAppToken`); the manifest of the user's Slack app is
+ * made by Rust, with the scopes its probe checks.
  *
  * Switching on asks for the trust the turns need (`approve`: the dialogs of
  * B3/B3b, then the check every chat turn repeats), with the project fixed
@@ -32,6 +35,8 @@ export interface GatewayStatus {
   readonly running: boolean
   readonly connected: boolean
   readonly hasToken: boolean
+  /** Slack's App-Level Token is saved; absent on the other platforms. */
+  readonly hasAppToken?: boolean
   readonly project?: string | null
   readonly lastError?: string | null
   readonly lastMessageMs?: number | null
@@ -67,10 +72,15 @@ export interface PairingInfo {
   readonly attemptsLeft: number
 }
 
+/** Which of a link's secrets: the bot's token, or Slack's App-Level Token. */
+export type TokenKind = "bot" | "app"
+
 /** The Rust side, as the panel sees it. Tests pass a fake. */
 export interface GatewayPanelApi {
   status: () => Promise<readonly GatewayStatus[]>
-  setToken: (bot: string, platform: string, token: string) => Promise<void>
+  setToken: (bot: string, platform: string, token: string, kind?: TokenKind) => Promise<void>
+  /** The manifest of a Slack app for the bot called `name`. */
+  slackManifest?: (name: string) => Promise<string>
   clearToken: (bot: string, platform: string) => Promise<void>
   probe: (bot: string, platform: string) => Promise<string>
   setEnabled: (bot: string, platform: string, enabled: boolean, project?: string) => Promise<void>
@@ -130,6 +140,8 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const [link, setLink] = createSignal<GatewayStatus>({ ...OFF, bot: path(), platform: platform() })
   const [pairing, setPairing] = createSignal<PairingInfo>(NO_PAIRING)
   const [draft, setDraft] = createSignal("")
+  const [appDraft, setAppDraft] = createSignal("")
+  const [manifest, setManifest] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
   const [probed, setProbed] = createSignal<string>()
@@ -202,6 +214,10 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     const before = link().project
     return !link().enabled && before && before !== deps.project() ? before : undefined
   }
+  /** Slack reads through a socket opened with a second token. */
+  const needsAppToken = () => platform() === "slack"
+  /** Every token the platform needs is saved. */
+  const tokensReady = () => link().hasToken && (!needsAppToken() || link().hasAppToken === true)
 
   return {
     platform,
@@ -216,6 +232,8 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       if (next === platform()) return
       setPlatform(next)
       setDraft("")
+      setAppDraft("")
+      setManifest(undefined)
       setProbed(undefined)
       setProblem(undefined)
       setRedactedAt(undefined)
@@ -225,6 +243,11 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     pairing,
     draft,
     setDraft,
+    appDraft,
+    setAppDraft,
+    manifest,
+    needsAppToken,
+    tokensReady,
     busy,
     problem,
     probed,
@@ -249,6 +272,21 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setProbed(undefined)
       return act(() => deps.api.setToken(path(), platform(), token))
     },
+    /** Slack's App-Level Token, the same way: the draft emptied first. */
+    saveAppToken: () => {
+      const token = appDraft().trim()
+      setAppDraft("")
+      if (!token) return Promise.resolve()
+      setProbed(undefined)
+      return act(() => deps.api.setToken(path(), platform(), token, "app"))
+    },
+    /** The Slack app's manifest, made by Rust for this bot's name. */
+    showManifest: () =>
+      act(async () => {
+        const make = deps.api.slackManifest
+        if (!make) throw new Error(t("gateway.panel.slackManifestMissing"))
+        setManifest(await make(deps.bot().identifier))
+      }),
     clearToken: () => act(() => deps.api.clearToken(path(), platform())),
     probe: () =>
       act(async () => {
@@ -263,6 +301,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         const project = deps.project()
         if (!project) throw new Error(t("gateway.panel.noProject"))
         if (!link().hasToken) throw new Error(t("gateway.panel.needToken"))
+        if (!tokensReady()) throw new Error(t("gateway.panel.needAppToken"))
         const before = previous()
         if (before && !(await deps.confirm(t("gateway.panel.moveProject", before, project)))) return
         const trusted = await deps.approve(deps.bot(), project)

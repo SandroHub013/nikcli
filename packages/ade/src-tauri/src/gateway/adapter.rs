@@ -31,6 +31,13 @@ impl Platform {
             Platform::Fake => "fake",
         }
     }
+
+    /// Slack reads through a socket opened with a second secret, the
+    /// App-Level Token (`xapp-`), besides the bot's token (`xoxb-`) that
+    /// every other call uses. The other platforms need one token only.
+    pub fn needs_app_token(self) -> bool {
+        matches!(self, Platform::Slack)
+    }
 }
 
 /// Who wrote: the platform's fixed id, never the user name, which can change hands.
