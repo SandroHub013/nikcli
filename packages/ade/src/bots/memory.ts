@@ -137,8 +137,18 @@ function holdsCommand(text: string): boolean {
   return false
 }
 
+/** Who writes an entry: the bot, from its answer, or the user, by hand in the Memoria section. */
+export interface EntryAuthor {
+  /**
+   * The user's own entry skips the heuristic on commands, addresses and
+   * injection phrases: the user wants it there (the Master's decision on the
+   * B8a review). A key is refused whoever writes it.
+   */
+  readonly byUser?: boolean
+}
+
 /** Why `text` cannot be an entry; undefined when it can. */
-export function entryProblem(text: string): string | undefined {
+export function entryProblem(text: string, author: EntryAuthor = {}): string | undefined {
   if (text.trim().length === 0) return t("bots.memory.error.empty")
   // A key, or one the thread already hid (B4): either way, not for the memory.
   if (scrubSecrets(text) !== text || text.includes(SECRET_MARK)) return t("bots.memory.error.secret")
@@ -146,9 +156,11 @@ export function entryProblem(text: string): string | undefined {
   const lower = text.toLowerCase()
   if (FRAME_MARKS.some((mark) => lower.includes(mark)) || FRAME_LINE.test(text) || ROLE_LINE.test(text))
     return t("bots.memory.error.frame")
-  if (holdsCommand(text)) return t("bots.memory.error.command")
-  if (URL.test(text)) return t("bots.memory.error.url")
-  if (INJECTION.some((phrase) => phrase.test(text))) return t("bots.memory.error.injection")
+  if (!author.byUser) {
+    if (holdsCommand(text)) return t("bots.memory.error.command")
+    if (URL.test(text)) return t("bots.memory.error.url")
+    if (INJECTION.some((phrase) => phrase.test(text))) return t("bots.memory.error.injection")
+  }
   if (text.includes(ENTRY_SEPARATOR.trim())) return t("bots.memory.error.separator")
   return undefined
 }
@@ -191,7 +203,7 @@ const withBlock = (memory: BotMemory, block: MemoryBlock, entries: readonly stri
 })
 
 /** One write: an error leaves the memory as it was. */
-export function applyMemoryOp(memory: BotMemory, op: MemoryOp): MemoryResult {
+export function applyMemoryOp(memory: BotMemory, op: MemoryOp, author: EntryAuthor = {}): MemoryResult {
   const entries = memory[op.block]
   if (op.op === "remove") {
     const at = pick(op.block, entries, op.match)
@@ -207,7 +219,7 @@ export function applyMemoryOp(memory: BotMemory, op: MemoryOp): MemoryResult {
     }
   }
   const text = op.text.trim()
-  const problem = entryProblem(text)
+  const problem = entryProblem(text, author)
   if (problem) return { ok: false, memory, error: problem }
   if (op.op === "add") {
     if (entries.some((entry) => same(entry, text)))

@@ -25,7 +25,8 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
   const memory = () => props.store.get(props.bot)
 
   const write = (block: MemoryBlock, op: Parameters<typeof applyMemoryOp>[1]) => {
-    const result = applyMemoryOp(memory(), op)
+    // The user's own entry: the heuristic on commands, addresses and phrases does not apply, a key still does.
+    const result = applyMemoryOp(memory(), op, { byUser: true })
     if (!result.ok) return void setProblem(result.error)
     setProblem(undefined)
     props.store.set(props.bot, { ...result.memory, ...(memory().pending ? { pending: memory().pending } : {}) })
