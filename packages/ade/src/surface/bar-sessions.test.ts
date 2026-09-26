@@ -52,7 +52,7 @@ describe("the sessions the top bar counts", () => {
     expect(barSessionCount([pane(), pane({ workspaceId: "altro", projectRoot: "C:\\altro" })], undefined, closed)).toBe(2)
   })
 
-  test("is what the bar shows", () => {
+  test("lint: the bar's session count comes from barSessionCount", () => {
     expect(WORKBENCH).toContain("sessions={barSessionCount(wb().panes, project(), chatStore)}")
   })
 })

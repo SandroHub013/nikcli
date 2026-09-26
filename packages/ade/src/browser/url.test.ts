@@ -284,7 +284,7 @@ describe("a take on the browser pane (D78)", () => {
     expect(addressNeedsCover("http://localhost:3000")).toBe(false)
   })
 
-  test("recording veil CSS: flex and frame hidden under data-ade-recording; veil none and frame visible without", () => {
+  test("lint: under data-ade-recording the browser veil is a full-bleed flex layer and the frame is hidden", () => {
     const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
 
     // Verify rules exist in index.css
@@ -338,7 +338,7 @@ describe("a take on the browser pane (D78)", () => {
     document.body.innerHTML = ""
   })
 
-  test("recording veil DOM: present on initial render of BrowserPane without Show", () => {
+  test("lint: the recording veil is drawn unconditionally, with the reduced address, marked data-sensitive when the address needs cover", () => {
     // Structural check: the veil is a direct child of browser-viewport-container and not wrapped in a conditional <Show>
     const source = readFileSync(join(import.meta.dir, "browser-pane.tsx"), "utf8")
     expect(source).toMatch(/data-slot="browser-viewport-container">\s*<div data-slot="browser-record-veil"/)
@@ -366,7 +366,7 @@ describe("a take on the browser pane (D78)", () => {
     document.body.innerHTML = ""
   })
 
-  test("recording veil under glass theme: veil background is solid #131111 (alpha 1) while light/dark keep var(--ade-bg)", () => {
+  test("lint: the glass recording veil keeps a solid background, light and dark keep var(--ade-bg)", () => {
     const css = readFileSync(join(import.meta.dir, "..", "index.css"), "utf8")
 
     // In [data-theme="glass"], container background is explicitly transparent:

@@ -63,7 +63,7 @@ describe("C9: showing the Chat calls nothing", () => {
     expect(connects).toEqual([A])
   })
 
-  test("the view calls sectionShown on mount, and nothing else of the store's", () => {
+  test("lint: on mount the view calls only sectionShown, never use() or another store method", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
     const mount = view.slice(view.indexOf("onMount(() => {"), view.indexOf("})", view.indexOf("onMount(() => {")))
     expect(mount).toMatch(/sectionShown\(store, props\.projectRoot, applyCatalog\)/)

@@ -134,7 +134,7 @@ describe("pane chrome", () => {
     }
   })
 
-  test("the pill's clearance follows the header, never a list of body slots (S67.1)", () => {
+  test("lint: the pill's clearance is granted once, to the siblings of the lifted header, and never to a named body slot", () => {
     /*
      * The 42px under the floating pill used to be granted to three bodies by
      * name — terminal, transcript, plugin — so the fourth view of the pane

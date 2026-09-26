@@ -84,7 +84,7 @@ describe("what a save writes of the effort", () => {
     expect(effortToSave("low", "high")).toBe("low")
   })
 
-  test("both forms save through it, told by the field which level is stale", () => {
+  test("lint: both bot forms save the effort through effortToSave and tell the field which level is stale", () => {
     const form = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     expect(form.split("onStale={setStaleEffort}").length - 1).toBe(2)
     expect(form).toContain("effort: effortToSave(effort(), staleEffort()),")

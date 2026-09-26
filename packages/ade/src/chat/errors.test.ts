@@ -66,7 +66,7 @@ describe("an answer that fails mid-stream", () => {
     expect(view.detail).not.toMatch(/user_id|is_byok|provider_name/)
   })
 
-  test("the chat's view draws the error of a turn and the retry line", () => {
+  test("lint: the Chat's view draws the turn's error detail and the retry line", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
     expect(view).toMatch(/messageError\(props\.turn\.info\)/)
     expect(view).toMatch(/retryNotice\(/)

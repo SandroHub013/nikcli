@@ -28,7 +28,7 @@ describe("B8b: the room in the Bot section", () => {
     expect(seats).toContain("pay: await payOf(bot)")
   })
 
-  test("the member on turn's question is answered in the room, with the panel's three answers", () => {
+  test("lint: the three answers a room's pending question offers all carry that question's requestID", () => {
     // With the id of the question shown (B8d review, M1).
     expect(panel).toContain('props.deps.answer(speaking()!, "reject", pending().requestID)')
     expect(panel).toContain('props.deps.answer(speaking()!, "once", pending().requestID)')
@@ -37,17 +37,17 @@ describe("B8b: the room in the Bot section", () => {
     expect(bots).toContain("if (bot) turns.answer(bot, choice, requestID)")
   })
 
-  test("«ti serve» shows in the list and in the room; «Ferma» stops the run", () => {
+  test("lint: «ti serve» is shown both in the list and in the room, and «Ferma» stops the run from the panel", () => {
     expect(panel.match(/room\.needsYou|current\(\)\.needsYou/g)?.length).toBeGreaterThanOrEqual(2)
     expect(panel).toContain("props.deps.stop(current().id)")
     expect(bots).toContain("stop: (roomId) => void roomRunner.stop(roomId)")
   })
 
-  test("how a run ended is drawn plain; only a problem is drawn as one (B8b review)", () => {
+  test("lint: a room's outcome is drawn as a plain note, and only a problem as a problem (B8b review)", () => {
     expect(panel).toContain('data-slot={current().noteKind === "end" ? "room-note" : "bots-problem"}')
   })
 
-  test("the form says beside each bot how it is paid for (B8b review)", () => {
+  test("lint: the room's form says beside each member bot how it is paid for, and the panel hands it that note (B8b review)", () => {
     expect(panel).toContain("props.deps.payOf(entry)")
     expect(panel).toContain("payNote(kind())")
     expect(bots).toContain("  payOf,\n}")

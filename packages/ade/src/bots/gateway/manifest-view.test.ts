@@ -10,7 +10,7 @@ const css = readFileSync(join(import.meta.dir, "..", "bots.css"), "utf8")
 const panel = readFileSync(join(import.meta.dir, "panel.tsx"), "utf8")
 
 describe("the Slack manifest in the panel", () => {
-  test("reads as code, one line per line", () => {
+  test("lint: the Slack manifest is shown in the panel's mono font, one JSON line per line", () => {
     expect(panel).toContain('data-role="manifest"')
     const rule = /\[data-component="bot-gateway"\] \[data-role="manifest"\]\s*\{([^}]*)\}/.exec(css)
     expect(rule).not.toBeNull()

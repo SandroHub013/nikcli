@@ -313,7 +313,7 @@ describe("preview type security detection and path resolution", () => {
 })
 
 describe("top bar narrow window layout and 420px document scrollWidth", () => {
-  test("under 1100px the queue buttons keep the vial and the pill, and the project's facts go in the «i»", () => {
+  test("lint: under 1100px the queue buttons keep the vial and the pill, and the project's facts go in the «i»", () => {
     const css = readFileSync(join(__dirname, "../dev.css"), "utf-8")
     const narrow = css.slice(css.indexOf("@media (max-width: 1099.98px)"))
     expect(narrow).toContain('[data-slot="bar-queue-name"],\n  [data-slot="bar-queue-aside"] {\n    display: none;')
@@ -321,7 +321,7 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     expect(narrow).toContain('[data-slot="ade-project-info"] {\n    display: inline-block;')
   })
 
-  test("dev.css compacts ade-view-tab and ade-bar-center under 640px, and aligns window controls margin", () => {
+  test("lint: under 640px the bar, the view tab and the window controls are compacted, with the controls' margin pulled back to the bar's padding", () => {
     const devCssPath = join(__dirname, "../dev.css")
     const css = readFileSync(devCssPath, "utf-8")
 
@@ -335,7 +335,7 @@ describe("top bar narrow window layout and 420px document scrollWidth", () => {
     expect(css).toContain('padding: 0 var(--ade-space-3);')
   })
 
-  test("variant-preview-source is rendered outside variant-preview-wrap so overflow:hidden does not clip it", () => {
+  test("lint: variant-preview-source sits outside variant-preview-wrap, so overflow: hidden cannot clip it", () => {
     const cardTsxPath = join(__dirname, "design-card.tsx")
     const tsx = readFileSync(cardTsxPath, "utf-8")
 
@@ -620,7 +620,7 @@ describe("a variant's preview", () => {
     expect("style" in props).toBe(false)
   })
 
-  test("the component loads by src as a scaled thumbnail with loading lazy and pointer-events none (D3)", () => {
+  test("lint: the miniature is a frame loaded by src — no srcdoc, no allow-same-origin, scaled with pointer-events none", () => {
     const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
     const code = tsx.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\/.*$/gm, "")
     expect(code).not.toContain("srcdoc")
@@ -671,7 +671,7 @@ describe("a variant's preview", () => {
     expect(Math.round(resizedBox.frameWidth * resizedBox.scale)).toBe(285)
   })
 
-  test("DesignPreview calculates thumbnail scale based on measured container width and ResizeObserver", () => {
+  test("lint: DesignPreview re-measures with a ResizeObserver and scales the thumbnail to the measured width", () => {
     const tsx = readFileSync(join(__dirname, "design-preview.tsx"), "utf-8")
     expect(tsx).toContain("ResizeObserver")
     expect(tsx).toContain("thumbnailScale(measured(), measuredWidth() > 0 ? measuredWidth() : 330)")

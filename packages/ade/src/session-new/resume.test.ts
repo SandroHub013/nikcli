@@ -475,7 +475,7 @@ describe("a restore's claims reach the panes it reopens", () => {
     expect(claimedByRestore(restoreClaims(planned), "nikcli", folder)).toBe(false)
   })
 
-  test("the restore hands its claims to the exited panes it reopens", () => {
+  test("lint: the restore hands its claims to the exited panes it reopens", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const claims = restoreClaims(planned)")
     expect(workbench).toContain("void reopen(pane, undefined, claims)")
@@ -503,7 +503,7 @@ describe("the conversation a start opens", () => {
     expect(openedConversation(undefined, undefined, "ses_salvata")).toBeUndefined()
   })
 
-  test("the start says the other folder again, and keeps it, for the conversation it reopens", () => {
+  test("lint: the other-folder note is kept for the conversation the start actually reopened", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const openedId = openedConversation(resume, mintedId, launched?.resumeId)")
     expect(workbench).toContain("if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {")
@@ -637,12 +637,12 @@ describe("a conversation being minted is not another pane's «here»", () => {
     expect(await here).toBe(older)
   })
 
-  test("the patience is the list's time", () => {
+  test("lint: the patience of a here waiting on a mint is the list's own LIST_MS, never a hand-written number", () => {
     const source = readFileSync(join(import.meta.dir, "resume.ts"), "utf8")
     expect(source).toContain("patience: { ms: number; timers?: Timers } = { ms: LIST_MS },")
   })
 
-  test("the workbench mints through the ledger and asks «here» beside it", () => {
+  test("lint: the workbench mints through the ledger and asks «here» beside it", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const mints = new MintLedger()")
     expect(workbench).toContain("askCli(command, plan.args, cwd, read, timing).then((id) => {")
@@ -676,7 +676,7 @@ describe("a conversation minted for another open pane is not «here»", () => {
     expect(lastNikcliHere(output, HERE, new Set())).toBe(orphan)
   })
 
-  test("the workbench titles a mint and reads the list by the same mark", () => {
+  test("lint: the workbench titles a mint with its pane's mark and reads the list by the same marks", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`")
     expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .map((pane) => mintMark(pane.id))")
@@ -717,7 +717,7 @@ describe("a resumed start that types nothing is idle, and says it was resumed", 
     })
   })
 
-  test("the workbench sets the pane and types the task by the same rule", () => {
+  test("lint: the workbench sets the pane and types the task by the same rule", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const starting = startingState({ task, resumed, typeIntoResumed })")
     expect(workbench).toContain("status: starting.status,")

@@ -289,7 +289,7 @@ describe("terminal selection & copy (S50)", () => {
     })
   })
 
-  it("the registry never reads the clipboard", () => {
+  it("lint: the registry never reads the clipboard", () => {
     const source = readFileSync(join(import.meta.dir, "registry.ts"), "utf8")
     expect(source).not.toContain("readText(")
   })

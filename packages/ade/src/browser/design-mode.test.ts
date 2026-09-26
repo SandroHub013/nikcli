@@ -134,7 +134,7 @@ describe("watchDesign counts a second handshake as leaving", () => {
  * Design mode. `hidden` lost to the slot's own `display: grid`.
  */
 describe("the hidden nav buttons", () => {
-  test("a hidden nav button is not displayed", async () => {
+  test("lint: [hidden] on a browser nav button must win over the slot's own display: grid", async () => {
     const { readFileSync } = await import("node:fs")
     const { join } = await import("node:path")
     const css = readFileSync(join(import.meta.dir, "browser.css"), "utf8").replace(/\s+/g, " ")

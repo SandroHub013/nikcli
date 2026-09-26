@@ -31,7 +31,7 @@ describe("the composer's keys", () => {
     expect(composerAction({ key: "ArrowDown" }, false)).toBe("none")
   })
 
-  test("the view asks composerAction on every key, and does not send on its own", () => {
+  test("lint: every key goes through composerAction, no hand-written Enter, and the view declares an aria-live region", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
     expect(view).toMatch(/composerAction\(/)
     expect(view).not.toMatch(/event\.key === "Enter" && !event\.shiftKey/)

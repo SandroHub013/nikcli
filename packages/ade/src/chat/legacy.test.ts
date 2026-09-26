@@ -37,7 +37,7 @@ describe("the direct path's old conversation", () => {
     expect(() => forgetLegacyConversation(undefined)).not.toThrow()
   })
 
-  test("the Chat removes it when it starts", () => {
+  test("lint: the Chat calls forgetLegacyConversation when it starts", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1")

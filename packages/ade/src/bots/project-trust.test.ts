@@ -213,7 +213,7 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
   })
 
   /* B8d: the session's rules on ADE's server come after any grant, so the panel admits the project and nothing else. */
-  test("il pannello non ferma più un bot nikcli per un permesso concesso: ammette il progetto", () => {
+  test("lint: admitTurn admits the project and never reads a grant; the panel's turn and a routine's run pass through it", () => {
     const view = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
     const checks = view.slice(view.indexOf("async function admitTurn"), view.indexOf("return { ok: true, bot: trusted }"))
     expect(checks).not.toContain("grantProblem")

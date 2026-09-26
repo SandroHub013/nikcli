@@ -183,7 +183,7 @@ describe("createPanelRouter", () => {
     expect(model.asked).toEqual(["state", "state"])
   })
 
-  test("opening a panel types nothing into the sessions (six prompts queued in Claude Code, 0.5.0 trial)", () => {
+  test("lint: opening a panel types nothing into the sessions", () => {
     const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
     const start = source.indexOf("const announcePanels = ")
     expect(start).toBeGreaterThan(-1)

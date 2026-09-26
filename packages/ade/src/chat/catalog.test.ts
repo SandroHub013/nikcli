@@ -130,7 +130,7 @@ describe("the recent models, per project", () => {
 })
 
 describe("the Chat reads the one catalog", () => {
-  test("from /config/providers, and checks a model against it before a send", () => {
+  test("lint: the Chat reads the catalog from /config/providers and validates the model against it before a send", () => {
     const connection = readFileSync(join(import.meta.dir, "connection.ts"), "utf8")
     expect(connection).toContain("within(client.config.providers(), timeoutMs)")
     expect(connection).not.toContain("client.provider.list()")

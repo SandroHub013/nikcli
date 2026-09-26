@@ -78,7 +78,7 @@ describe("chiudere un pannello con un file non salvato", () => {
     expect(closed).toEqual([])
   })
 
-  test("il workbench chiude i pannelli spariti con closeAll, e ade-msg close non conta come chiuso un file in attesa", () => {
+  test("lint: the workbench goes through closeAll, asks before it closes, and never closes a vanished pane directly for an ade-msg", () => {
     const source = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(source).toContain("await closer.closeAll(")
     expect(source).not.toMatch(/pane\.gone && !running\.has\(pane\.id\)\) close\(pane\.id\)/)

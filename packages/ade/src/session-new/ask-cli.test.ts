@@ -138,7 +138,7 @@ describe("the mint's time", () => {
     expect(en["resume.slowMint"]("nikcli", 7)).toContain("up to 7 more seconds")
   })
 
-  test("the workbench gives the mint its time and its note, and the list its own", () => {
+  test("lint: the workbench passes the mint and list times to askCli as the exported constants", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain('say: () => tellPane(paneId, t("resume.slowMint", label, MINT_SLOW_LEFT_S))')
     expect(workbench).toContain("askCli(command, plan.args, cwd, read, timing)")
@@ -184,7 +184,7 @@ describe("the mint's trace", () => {
     expect(long).not.toContain("a".repeat(201))
   })
 
-  test("the workbench traces every mint, fast or slow", () => {
+  test("lint: the workbench logs a mint trace for every mint", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("console.info(mintTrace({ agent: agentId, ms: performance.now() - began, outcome, first, title }))")
   })

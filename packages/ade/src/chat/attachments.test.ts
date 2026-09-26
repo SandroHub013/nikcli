@@ -105,7 +105,7 @@ describe("a file of the project, and nothing else", () => {
     ).toEqual(["src/app.ts", "docs/schema.png", "docs/spec.pdf", "Makefile"])
   })
 
-  test("the view offers only mentionCandidates", () => {
+  test("lint: the @ list the view shows is exactly what mentionCandidates returned", () => {
     const view = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
     expect(view).toContain("setMentionResults(mentionCandidates(paths, found.query))")
   })
