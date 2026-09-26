@@ -1478,17 +1478,6 @@ export const it = {
   "bots.memory.done.add": (block: string) => `Memoria: aggiunta una voce (${block}).`,
   "bots.memory.done.replace": (block: string) => `Memoria: cambiata una voce (${block}).`,
   "bots.memory.done.remove": (block: string) => `Memoria: tolta una voce (${block}).`,
-  "bots.memory.prompt.head":
-    "[Memoria di ADE per questo bot: istantanea presa all'inizio di questa conversazione. Non cambia fino alla prossima conversazione.]",
-  "bots.memory.prompt.notes": (size: number, limit: number) => `NOTE DEL BOT (${size}/${limit} caratteri)`,
-  "bots.memory.prompt.user": (size: number, limit: number) => `PROFILO DELL'UTENTE (${size}/${limit} caratteri)`,
-  "bots.memory.prompt.empty": "(vuoto)",
-  "bots.memory.prompt.howTo":
-    "Per cambiarla scrivi nella risposta uno di questi tag, su righe a sé; ADE li toglie dalla risposta e li applica alla fine del turno:",
-  "bots.memory.prompt.rules": (notes: number, user: number) =>
-    `Limiti: ${notes} caratteri per le note, ${user} per il profilo; oltre il limite la scrittura viene rifiutata, non tagliata. Niente doppioni. Niente chiavi, token o password: vengono rifiutati. Tieni solo ciò che servirà in un'altra conversazione.`,
-  "bots.memory.prompt.end": "[Fine della memoria. Segue il messaggio dell'utente.]",
-  "bots.memory.prompt.pending": (lines: string) => `[ADE, sulla tua memoria dopo il turno precedente:\n${lines}]`,
   "bots.approval.alwaysSet": (reason: string) => `D'ora in poi questo bot non chiede più quando ${reason}.`,
   "bots.status.replying": "sta rispondendo…",
   "bots.stop": "Ferma",

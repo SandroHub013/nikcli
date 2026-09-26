@@ -243,25 +243,43 @@ export function takeMemoryOps(text: string): { text: string; ops: MemoryOp[]; un
 
 /* ── what the bot is told ─────────────────────────────────────────────── */
 
+/**
+ * What the bot reads about its memory. Text for the model, not for the
+ * user: fixed, in Italian like the bots' prompts, outside the i18n, so it
+ * does not change with the interface's language (S41; B8a review, BASSO 1).
+ */
+export const MEMORY_PROMPT = {
+  head: "[Memoria di ADE per questo bot: istantanea presa all'inizio di questa conversazione. Non cambia fino alla prossima conversazione.]",
+  notes: (size: number, limit: number) => `NOTE DEL BOT (${size}/${limit} caratteri)`,
+  user: (size: number, limit: number) => `PROFILO DELL'UTENTE (${size}/${limit} caratteri)`,
+  empty: "(vuoto)",
+  howTo:
+    "Per cambiarla scrivi nella risposta uno di questi tag, su righe a sé; ADE li toglie dalla risposta e li applica alla fine del turno:",
+  rules: (notes: number, user: number) =>
+    `Limiti: ${notes} caratteri per le note, ${user} per il profilo; oltre il limite la scrittura viene rifiutata, non tagliata. Niente doppioni. Niente chiavi, token o password: vengono rifiutati. Tieni solo ciò che servirà in un'altra conversazione.`,
+  end: "[Fine della memoria. Segue il messaggio dell'utente.]",
+  pending: (lines: string) => `[ADE, sulla tua memoria dopo il turno precedente:\n${lines}]`,
+} as const
+
 function renderBlock(block: MemoryBlock, entries: readonly string[]): string {
   const size = memorySize(entries)
   const limit = MEMORY_LIMITS[block]
-  const title = t(block === "notes" ? "bots.memory.prompt.notes" : "bots.memory.prompt.user", size, limit)
-  return `== ${title} ==\n${entries.length > 0 ? entries.join(ENTRY_SEPARATOR) : t("bots.memory.prompt.empty")}`
+  const title = block === "notes" ? MEMORY_PROMPT.notes(size, limit) : MEMORY_PROMPT.user(size, limit)
+  return `== ${title} ==\n${entries.length > 0 ? entries.join(ENTRY_SEPARATOR) : MEMORY_PROMPT.empty}`
 }
 
 /** Both blocks as they are now, with how to change them. */
 export function memorySnapshot(memory: BotMemory): string {
   return [
-    t("bots.memory.prompt.head"),
+    MEMORY_PROMPT.head,
     renderBlock("notes", memory.notes),
     renderBlock("user", memory.user),
-    t("bots.memory.prompt.howTo"),
+    MEMORY_PROMPT.howTo,
     '<ade-memory op="add" block="notes">…</ade-memory>',
     '<ade-memory op="replace" block="user" match="…">…</ade-memory>',
     '<ade-memory op="remove" block="notes" match="…"></ade-memory>',
-    t("bots.memory.prompt.rules", MEMORY_LIMITS.notes, MEMORY_LIMITS.user),
-    t("bots.memory.prompt.end"),
+    MEMORY_PROMPT.rules(MEMORY_LIMITS.notes, MEMORY_LIMITS.user),
+    MEMORY_PROMPT.end,
   ].join("\n")
 }
 
@@ -273,7 +291,7 @@ export function memoryPreface(memory: BotMemory, conversationStarts: boolean): s
   const parts: string[] = []
   if (conversationStarts) parts.push(memorySnapshot(memory))
   if (memory.pending && memory.pending.length > 0)
-    parts.push(t("bots.memory.prompt.pending", memory.pending.join("\n")))
+    parts.push(MEMORY_PROMPT.pending(memory.pending.join("\n")))
   return parts.join("\n\n")
 }
 

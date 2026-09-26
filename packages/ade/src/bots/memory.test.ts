@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { resetLocaleForTests } from "../i18n"
 import {
   applyMemoryOp,
   applyMemoryOps,
@@ -150,6 +151,20 @@ describe("B8a: the snapshot", () => {
     const told = memoryPreface({ ...memory, pending: ["Memoria piena."] }, false)
     expect(told).toContain("Memoria piena.")
     expect(told).not.toContain("Il progetto usa bun.")
+  })
+
+  test("the bot reads it in Italian, whatever the interface's language (review, BASSO 1)", () => {
+    resetLocaleForTests("en")
+    try {
+      const told = memoryPreface({ notes: [], user: [], pending: ["x"] }, true)
+      expect(told).toContain("[Memoria di ADE per questo bot")
+      expect(told).toContain("NOTE DEL BOT")
+      expect(told).toContain("[Fine della memoria. Segue il messaggio dell'utente.]")
+      expect(told).toContain("[ADE, sulla tua memoria dopo il turno precedente:")
+      expect(told).not.toMatch(/End of memory|characters|NOTES/)
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 
   test("what was saved is read strictly: a block over its limit is not read", () => {
