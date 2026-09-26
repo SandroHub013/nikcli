@@ -231,14 +231,21 @@ fn blocked_bash_denials() -> Vec<String> {
     const BARE: &[&str] = &[
         "-r", "-rf", "-fr", "-R", "-Rf", "-fR", "-r -f", "-f -r", "--recursive", "--recursive --force", "--force --recursive",
     ];
-    const WINDOWS_DELETE: &[&str] = &["Remove-Item", "remove-item", "ri", "rd", "rmdir", "del", "erase"];
+    /*
+     * Windows reads these in any case, and nikcli's patterns count it (second
+     * review, BASSO 3): each is denied as written, in lower case, in upper
+     * case and with a capital first letter. Other mixes (`rEmOvE-ItEm`) reach
+     * nikcli's menu, where ADE's list, which ignores case, refuses them.
+     */
+    const WINDOWS_DELETE: &[&str] = &["Remove-Item", "ri", "rd", "rmdir", "del", "erase"];
     const DRIVES: &[&str] = &["?:", "?:\\", "?:/", "?:\\?", "?:/?"];
-    const WORDS: &[&str] = &[
-        "mkfs", "diskpart", "fdisk", "wipefs", "parted", "Format-Volume", "format-volume", "Clear-Disk", "clear-disk",
-        "Remove-Partition", "remove-partition", "Initialize-Disk", "initialize-disk", "shutdown", "reboot", "poweroff",
-        "halt", "Stop-Computer", "stop-computer", "Restart-Computer", "restart-computer", "bcdedit", "vssadmin delete",
-        "reg delete HKLM", "reg delete hklm", "wmic shadowcopy delete",
+    const WINDOWS_WORDS: &[&str] = &[
+        "diskpart", "Format-Volume", "Clear-Disk", "Remove-Partition", "Initialize-Disk", "shutdown", "Stop-Computer",
+        "Restart-Computer", "bcdedit", "vssadmin delete", "reg delete HKLM", "wmic shadowcopy delete",
     ];
+    const WINDOWS_OTHER: &[&str] = &["format ?:*", "cipher /w*", "reg delete HKLM\\*"];
+    const UNIX_WORDS: &[&str] = &["mkfs", "fdisk", "wipefs", "parted", "shutdown", "reboot", "poweroff", "halt"];
+    const UNIX_OTHER: &[&str] = &["mkfs.*", "dd *of=/dev/*", "init 0", "init 6"];
     let mut denied = Vec::new();
     for prefix in PREFIXES {
         for root in ROOTS {
@@ -252,7 +259,7 @@ fn blocked_bash_denials() -> Vec<String> {
         }
         denied.push(format!("{prefix}rm *--no-preserve-root*"));
     }
-    for command in WINDOWS_DELETE {
+    for command in WINDOWS_DELETE.iter().flat_map(|word| spellings(word)) {
         for drive in DRIVES {
             for quote in &QUOTES[..2] {
                 denied.push(format!("{command} * {quote}{drive}{quote}"));
@@ -260,25 +267,43 @@ fn blocked_bash_denials() -> Vec<String> {
             }
         }
     }
+    for word in WINDOWS_WORDS.iter().flat_map(|word| spellings(word)) {
+        denied.push(word.clone());
+        denied.push(format!("{word} *"));
+    }
+    denied.extend(WINDOWS_OTHER.iter().flat_map(|other| spellings(other)));
     for prefix in &PREFIXES[..2] {
-        for word in WORDS {
+        for word in UNIX_WORDS {
             denied.push(format!("{prefix}{word}"));
             denied.push(format!("{prefix}{word} *"));
         }
-        for other in [
-            "mkfs.*",
-            "format ?:*",
-            "dd *of=/dev/*",
-            "cipher /w*",
-            "init 0",
-            "init 6",
-            "reg delete HKLM\\*",
-            "reg delete hklm\\*",
-        ] {
+        for other in UNIX_OTHER {
             denied.push(format!("{prefix}{other}"));
         }
     }
+    let mut seen = std::collections::HashSet::new();
+    denied.retain(|pattern| seen.insert(pattern.clone()));
     denied
+}
+
+/*
+ * `word` as written, in lower case, in upper case and, past five letters,
+ * with only its first letter a capital (`Remove-item`); each once. `Rd` and
+ * `Del` are left out: the list must stay well under what a variable holds.
+ */
+fn spellings(word: &str) -> Vec<String> {
+    let lower = word.to_lowercase();
+    let mut all = vec![word.to_string(), lower.clone(), word.to_uppercase()];
+    if word.len() > 5 {
+        let mut capital = lower;
+        if let Some(first) = capital.get_mut(0..1) {
+            first.make_ascii_uppercase();
+        }
+        all.push(capital);
+    }
+    let mut seen = std::collections::HashSet::new();
+    all.retain(|spelling| seen.insert(spelling.clone()));
+    all
 }
 
 /*
@@ -2257,6 +2282,10 @@ mod tests {
         ("system", "bcdedit /deletevalue"),
         ("system", "vssadmin delete shadows /all"),
         ("system", "reg delete HKLM\\Software\\X"),
+        ("deleteDrive", "Remove-item -Recurse -Force C:\\"),
+        ("deleteDrive", "RD /S /Q C:\\"),
+        ("power", "SHUTDOWN /s /t 0"),
+        ("disk", "FORMAT C:"),
     ];
 
     #[test]
