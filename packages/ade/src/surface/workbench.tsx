@@ -331,7 +331,7 @@ import { createPaneRecords } from "./pane-records"
 import { createAutosave } from "./autosave"
 import { createPaneRenderer } from "./pane-renderer"
 import { Splash } from "../splash/splash"
-import { createPanelRouter } from "../panels/router"
+import { createPanelRouter, panelReplyHold } from "../panels/router"
 import { panelsHelp } from "../panels/protocol"
 import { BROWSER_VERBS, runBrowserCommand, type BrowserController } from "../browser/binding"
 import { formatRequestDetails, formatRequestLine, requestStem, type BrowserRequest, type Rect } from "../browser/request"
@@ -1587,6 +1587,18 @@ export function Workbench() {
     return path
   }
 
+  /*
+   * Panel answers waiting for their pane, keyed by pane.
+   *
+   * Not `heldLines`: those are mail, they are persisted so a suspended session
+   * finds them on the next start, and a panel answer persisted would be typed
+   * into a session that stopped waiting minutes ago — a stale answer arriving as
+   * a new turn of the user's. This one lives minutes at most, and only while the
+   * pane is not free: the agent is blocked on its stdin until it goes, so the
+   * retry is not politeness, it is the delivery.
+   */
+  const pendingPanelReplies = new Map<string, string>()
+
   /**
    * Acts on one line of agent output, if it was addressed to a panel.
    *
@@ -1602,8 +1614,51 @@ export function Workbench() {
     // Written to the transcript too, because what an agent did to a panel is
     // something the user has to be able to see afterwards.
     appendLine(paneId, handled.reply, "note", "ade")
-    panels.typed(paneId, handled.reply)
-    running.get(paneId)?.write(asSubmittedLine(handled.reply))
+    const session = running.get(paneId)
+    if (!session) return
+    /*
+     * Typed like every other line, and that is the whole of the change: the road
+     * through `typeLine` is the line queue, the paste, the wait, `questionOpen` and
+     * the Enter check, and writing the pty here went past all of them. An agent
+     * that printed an `@ade` line and then asked for a permission used to have
+     * this answer typed over the prompt, and its Enter confirmed the selected
+     * choice — a numbered option list makes it worse, because a reply beginning
+     * with a digit picks one.
+     */
+    const hold = panelReplyHold({
+      alive: running.get(paneId) === session,
+      typing: isTyping(records.typed.get(paneId)),
+      questionOpen: questionOpen(paneId),
+    })
+    if (hold) {
+      pendingPanelReplies.set(paneId, handled.reply)
+      return appendLine(paneId, t("note.panelReplyHeld", hold), "note", "ade")
+    }
+    // Counted as waiting before it is typed, so the round below cannot type it a
+    // second time while this one is still in the queue; given back if it was not
+    // given after all.
+    pendingPanelReplies.delete(paneId)
+    void typeLine(session, handled.reply, { unlessBusy: true }).then((given) => {
+      if (given || !pendingPanelReplies.has(paneId)) return
+      pendingPanelReplies.set(paneId, handled.reply)
+    })
+  }
+
+  /** Types the panel answers whose pane has gone free, and keeps the others. */
+  const flushPanelReplies = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
+    for (const [paneId, reply] of [...pendingPanelReplies]) {
+      const session = running.get(paneId)
+      if (!session) {
+        pendingPanelReplies.delete(paneId)
+        continue
+      }
+      if (!(await freeNow(host, paneId))) continue
+      pendingPanelReplies.delete(paneId)
+      const given = await typeLineOutcome(session, reply, { unlessBusy: true })
+      // Still not given — a prompt opened again, or the user is typing: back in
+      // the waiting, and the next round asks again.
+      if (deliveryResult(given, running.get(paneId) === session) === "held") pendingPanelReplies.set(paneId, reply)
+    }
   }
 
   /*
@@ -2765,6 +2820,7 @@ export function Workbench() {
     }
 
     await followInbox(host, now)
+    await flushPanelReplies(host)
     settleHandoffs(now)
     refreshMailWaiting()
 

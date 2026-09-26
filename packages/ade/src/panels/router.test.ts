@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { createPanelRouter, ECHO_WINDOW_MS, REPEAT_WINDOW_MS, type HandledRequest, type PanelHandler } from "./router"
+import { createPanelRouter, panelReplyHold, ECHO_WINDOW_MS, REPEAT_WINDOW_MS, type HandledRequest, type PanelHandler } from "./router"
+import { isQuestionOpen } from "../session/mailbox"
 import { REPLY_PREFIX } from "./protocol"
 
 const replyOf = (handled: HandledRequest | undefined) => (handled && "reply" in handled ? handled.reply : undefined)
@@ -201,5 +202,45 @@ describe("createPanelRouter", () => {
     // Every line is prefixed, so the greeting cannot be read back as requests.
     expect(lines.every((line) => line.startsWith(REPLY_PREFIX))).toBe(true)
     expect(lines.join("\n")).toContain("play")
+  })
+})
+
+/*
+ * A panel's answer used to go into the pty with its Enter, past the line queue,
+ * past the draft check and past the permission check. So an agent that printed
+ * an `@ade` line and then asked for a permission had its answer typed over the
+ * prompt and confirmed the selected choice — and where the options are numbered,
+ * a reply that begins with a digit picks one of them instead. It was there
+ * before P1 and P1 did not touch it: the hook made the state right and this road
+ * never asked the state.
+ */
+describe("a panel reply waits for the pane like any other line", () => {
+  const now = Date.now()
+  const hookSaysPermission = { state: "permission" as const, at: now }
+  const held = (over: Partial<{ alive: boolean; typing: boolean; questionOpen: boolean }> = {}) =>
+    panelReplyHold({ alive: true, typing: false, questionOpen: false, ...over })
+
+  test("a prompt only the hook knows about holds the reply", () => {
+    // The screen saw nothing, the hook said there is a question: the reply waits.
+    const questionOpen = isQuestionOpen(undefined, hookSaysPermission)
+    expect(questionOpen).toBe(true)
+    expect(held({ questionOpen })).toBe("prompt aperto")
+    // The same prompt found by reading the screen holds it too, as it always did.
+    expect(held({ questionOpen: isQuestionOpen({ what: "Bash(rm -rf)" }, undefined) })).toBe("prompt aperto")
+  })
+
+  test("a line the user began holds it, and a session that is gone ends it", () => {
+    expect(held({ typing: true })).toBe("riga iniziata")
+    // Both at once: the user's own line is the nearer reason.
+    expect(held({ typing: true, questionOpen: true })).toBe("riga iniziata")
+    // A session that went away cannot be typed into, and there is nobody to
+    // retry for: the reply is dropped rather than kept for a pane that is not there.
+    expect(panelReplyHold({ alive: false, typing: false, questionOpen: false })).toBe("sessione chiusa")
+  })
+
+  test("a free pane is given the reply, as before", () => {
+    expect(held()).toBeUndefined()
+    // A turn in progress is not a question: the reply goes in, behind the queue.
+    expect(held({ questionOpen: isQuestionOpen(undefined, { state: "busy", at: now }) })).toBeUndefined()
   })
 })

@@ -83,6 +83,32 @@ export interface PanelRouter {
 
 /** A request line seen again this soon after its last sighting is a redraw, not a new request. */
 export const REPEAT_WINDOW_MS = 30_000
+
+/**
+ * Why a panel's answer may not be typed into its session right now, or
+ * `undefined` when it may.
+ *
+ * A panel reply is a line like any other, and it used not to be one: it went
+ * straight into the pty with its Enter, past the line queue, past the draft
+ * check and past the permission check. So an agent that printed an `@ade` line
+ * and then asked for a permission had its answer typed over the prompt and
+ * Entered, which confirms the selected choice — and when the options are
+ * numbered, a reply that starts with a digit picks one of them instead. The
+ * answer is the one thing here that cannot be late: the agent is blocked on its
+ * own stdin, waiting for it, which is also why a held reply is retried instead
+ * of dropped.
+ *
+ * The three reasons, in the order they are asked: there is no session to type
+ * into, the user has a line of their own begun in the box, or a question is open
+ * — from the screen or from the hook, which is the same question the screen
+ * sometimes misses (`isQuestionOpen`).
+ */
+export function panelReplyHold(from: { alive: boolean; typing: boolean; questionOpen: boolean }): string | undefined {
+  if (!from.alive) return "sessione chiusa"
+  if (from.typing) return "riga iniziata"
+  if (from.questionOpen) return "prompt aperto"
+  return undefined
+}
 /**
  * How long text ADE typed into a session can come back as its echo.
  *
