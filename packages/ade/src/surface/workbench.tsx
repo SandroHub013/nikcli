@@ -47,6 +47,7 @@ import { detectAgents } from "../session-new/availability"
 import {
   RESUME,
   planFork,
+  planLastHere,
   planMint,
   planRestore,
   planResume,
@@ -5965,13 +5966,40 @@ export function Workbench() {
    */
   const mintConversation = async (agentId: string, command: string, cwd: string, title: string) => {
     const plan = planMint(agentId, title)
+    if (!plan) return undefined
+    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+  }
+
+  /**
+   * The most recent conversation of `cwd` that no other pane holds, asked of
+   * the CLI (`ResumeRecipe.lastHere`). Undefined when there is none or the
+   * command did not answer in time.
+   */
+  const lastConversationHere = async (agentId: string, command: string, cwd: string, taken: ReadonlySet<string>) => {
+    const plan = planLastHere(agentId, cwd, taken)
+    if (!plan) return undefined
+    return (await askCli(command, plan.args, cwd, plan.read)) ?? undefined
+  }
+
+  /**
+   * Runs a short CLI command under a pty until `read` finds its answer in the
+   * output, then kills it: `null` from `read` is a final "nothing", undefined
+   * means "not yet". Gives up after `MINT_MS`.
+   */
+  const askCli = async (
+    command: string,
+    args: string[],
+    cwd: string,
+    readAnswer: (output: string) => string | null | undefined,
+  ): Promise<string | null | undefined> => {
     const host = await getHost()
-    if (!plan || !host) return undefined
-    return await new Promise<string | undefined>((resolve) => {
+    if (!host) return undefined
+    const plan = { args, read: readAnswer }
+    return await new Promise<string | null | undefined>((resolve) => {
       let text = ""
       let settled = false
       let child: SpawnedSession | undefined
-      const finish = (id?: string) => {
+      const finish = (id?: string | null) => {
         if (settled) return
         settled = true
         clearTimeout(timer)
@@ -5982,7 +6010,7 @@ export function Workbench() {
       const read = (line: string) => {
         text += `${stripAnsi(line)}\n`
         const id = plan.read(text)
-        if (id) finish(id)
+        if (id !== undefined) finish(id)
       }
       host
         .spawn({
@@ -6026,7 +6054,8 @@ export function Workbench() {
       lastTaken: wb().panes.some((other) => other.id !== pane.id && (other.agent ?? other.model) === agentId),
       missing,
     })
-    const text = line?.trim() ? line : plan.kind === "fresh" ? (pane.task ?? "") : ""
+    // A `here` plan may start a new conversation, which then gets the task; a found one is not typed into.
+    const text = line?.trim() ? line : plan.kind === "fresh" || plan.kind === "here" ? (pane.task ?? "") : ""
     await startProcess(pane.id, agentId, text, plan, undefined, Boolean(line?.trim()))
   }
 
@@ -6172,9 +6201,11 @@ export function Workbench() {
      * because a pane that is running under an id ADE did not write down is
      * a session that cannot be resumed and looks like one that can.
      */
-    const resumed = resume?.kind === "resume"
+    let resumed = resume?.kind === "resume"
     let opening: { args: string[]; resumeId?: string } =
-      resume?.kind === "resume" ? { args: resume.args } : planStart(agentId, resume?.resumeId)
+      resume?.kind === "resume"
+        ? { args: resume.args }
+        : planStart(agentId, resume?.kind === "fresh" ? resume.resumeId : undefined)
     /*
      * The `ade-msg` notice first: `codex -c …` has to precede a `resume`
      * subcommand, and for the rest the order does not matter. The shell has
@@ -6199,6 +6230,25 @@ export function Workbench() {
      * than discovering at the next restart.
      */
     const recipe = RESUME[agentId]
+    /*
+     * "The most recent conversation here", asked of the CLI for this folder
+     * rather than left to its `--continue`, which for nikcli is the whole
+     * repository's latest: another worktree's conversation. The ids other
+     * panes hold are left out. None found: a new one, asked for below.
+     */
+    if (resume?.kind === "here" && recipe?.byId) {
+      appendLine(paneId, t("resume.lookingHere", agent.label || agentId), "note")
+      const taken = new Set(
+        wb()
+          .panes.filter((pane) => pane.id !== paneId && pane.resumeId)
+          .map((pane) => pane.resumeId as string),
+      )
+      const found = await lastConversationHere(agentId, agent.command, workDir, taken)
+      if (found) {
+        opening = { args: recipe.byId(found), resumeId: found }
+        resumed = true
+      } else appendLine(paneId, t("resume.noneHere", agent.label || agentId), "note")
+    }
     if (!resumed && !opening.resumeId && launched?.resumeId && recipe?.byId) {
       // Already has one: a restart reopens it. Minting here is what made the
       // pane lose its conversation on the second start.

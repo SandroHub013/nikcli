@@ -1134,6 +1134,8 @@ export const it = {
   "resume.noMint": (agent: string) =>
     `${agent} non ha aperto una conversazione da ritrovare: se ADE si chiude, questa sessione riparte da zero`,
   "resume.asking": (agent: string) => `Chiedo a ${agent} una conversazione da poter ritrovare…`,
+  "resume.lookingHere": (agent: string) => `Cerco l'ultima conversazione di ${agent} in questa cartella…`,
+  "resume.noneHere": (agent: string) => `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.none":
     "Questa conversazione non può essere ritrovata: al riavvio la sessione riparte da zero, con il compito riscritto",
   "note.resent": "Invio ripetuto: il messaggio non era partito",

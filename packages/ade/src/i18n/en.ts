@@ -1124,6 +1124,8 @@ export const en: Messages = {
   "note.someSession": "a session",
   "resume.noMint": (agent) => `${agent} opened no conversation to come back to: if ADE closes, this session starts over`,
   "resume.asking": (agent) => `Asking ${agent} for a conversation that can be found again…`,
+  "resume.lookingHere": (agent) => `Looking for ${agent}'s latest conversation in this folder…`,
+  "resume.noneHere": (agent) => `No ${agent} conversation of this folder to reopen: a new one starts`,
   "resume.none": "This conversation cannot be found again: on a restart the session starts over, with the task retyped",
   "note.resent": "Pressed Enter again: the message hadn't been sent",
   "note.enterHeld": "Typed, Enter not pressed: a permission prompt is open",
